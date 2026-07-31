@@ -31,6 +31,7 @@ import {
   Voicemail,
   Phone,
   Lock,
+  Megaphone,
 } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
 import { filterNavItemsByFeatures } from "@/lib/sidebar-nav";
@@ -287,6 +288,11 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
     //   href: "/dashboard/reporting",
     //   icon: <BarChart3 className="w-5 h-5" />
     // },
+    {
+      name: "Sales Coach",
+      href: "/dashboard/sales-coach",
+      icon: <Megaphone className="w-5 h-5" />
+    },
     {
       name: "Part Cross-Ref",
       href: "/dashboard/parts",

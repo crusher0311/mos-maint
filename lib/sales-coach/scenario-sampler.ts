@@ -28,7 +28,7 @@ const CANDIDATE_POOL = 2000;
 // query stays well inside the shared DB's ~2 min statement timeout.
 const DECLINED_ID_SCAN_CAP = 2000;
 
-interface CandidateRow {
+export interface CandidateRow {
   id: string;
   shop_id: number;
   work_order_number: string | null;
@@ -56,7 +56,7 @@ function moneyScale(sourceSystem: string | null | undefined): number {
 
 const GRAND_TOTAL_DOLLARS = sql`(wo.grand_total::numeric * CASE WHEN wo.provenance->>'sourceSystem' = 'tekmetric' THEN 0.01 ELSE 1 END)`;
 
-async function fetchJobs(workOrderId: string): Promise<SalesCoachScenarioJob[]> {
+export async function fetchJobs(workOrderId: string): Promise<SalesCoachScenarioJob[]> {
   const db = getDb();
   const rows: any[] = await db.execute(sql`
     SELECT title, status, total, labor_total, parts_total,
@@ -84,7 +84,7 @@ async function fetchJobs(workOrderId: string): Promise<SalesCoachScenarioJob[]> 
   }));
 }
 
-function buildContext(row: CandidateRow, jobs: SalesCoachScenarioJob[]): SalesCoachScenarioContext {
+export function buildContext(row: CandidateRow, jobs: SalesCoachScenarioJob[]): SalesCoachScenarioContext {
   const vehicle = row.vehicle
     ? { year: row.vehicle.year, make: row.vehicle.make, model: row.vehicle.model }
     : null;

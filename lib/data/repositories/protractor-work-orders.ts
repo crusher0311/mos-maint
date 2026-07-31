@@ -106,6 +106,66 @@ export async function findCachedWorkOrderByLegacyRoNumber(
   } as Filter<ProtractorWorkOrderCacheDoc>);
 }
 
+// Open (non-completed) WOs in a sellable workflow stage that carry pricing —
+// used by the dashboard Sales Coach. Deduped by workOrderId, newest first.
+const SELLABLE_STAGES = [
+  "EstimateCompleted",
+  "WorkAuthorized",
+  "InspectionInProgress",
+  "InspectionComplete",
+  "Unassigned",
+];
+
+export async function listOpenWorkOrdersWithPricing(
+  shopId: number,
+  limit = 25,
+): Promise<ProtractorWorkOrderCacheDoc[]> {
+  if (isProtractorCachePgCanonical()) {
+    return (await pg.listOpenWorkOrdersWithPricing(
+      shopId,
+      limit,
+    )) as ProtractorWorkOrderCacheDoc[];
+  }
+  const col = await collection();
+  const docs = await col
+    .find({
+      shopId,
+      completed: { $ne: true },
+      workflowStage: { $in: SELLABLE_STAGES },
+      "pricing.grandTotal": { $gt: 0 },
+    } as Filter<ProtractorWorkOrderCacheDoc>)
+    .project({ rawPayload: 0, servicePackages: 0 })
+    .sort({ fetchedAt: -1 })
+    .limit(limit * 3)
+    .toArray();
+  const seen = new Set<string>();
+  const out: ProtractorWorkOrderCacheDoc[] = [];
+  for (const d of docs as ProtractorWorkOrderCacheDoc[]) {
+    if (!d.workOrderId || seen.has(d.workOrderId)) continue;
+    seen.add(d.workOrderId);
+    out.push(d);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+export async function findCachedWorkOrderById(
+  shopId: number,
+  workOrderId: string,
+): Promise<ProtractorWorkOrderCacheDoc | null> {
+  if (isProtractorCachePgCanonical()) {
+    return (await pg.findCachedWorkOrderById(
+      shopId,
+      workOrderId,
+    )) as ProtractorWorkOrderCacheDoc | null;
+  }
+  const col = await collection();
+  return col.findOne(
+    { shopId, workOrderId } as Filter<ProtractorWorkOrderCacheDoc>,
+    { projection: { rawPayload: 0, servicePackages: 0 }, sort: { fetchedAt: -1 } },
+  );
+}
+
 export async function listCachedWorkOrdersForServiceItem(
   shopId: number,
   serviceItemId: string,

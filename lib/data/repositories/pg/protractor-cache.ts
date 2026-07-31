@@ -116,6 +116,45 @@ export async function findCachedWorkOrderByLegacyRoNumber(
   return rows.length ? reconstructWorkOrder(rows[0]) : null;
 }
 
+export async function listOpenWorkOrdersWithPricing(
+  shopId: number,
+  limit = 25,
+): Promise<AnyDoc[]> {
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(protractorWorkOrders)
+    .where(
+      and(
+        eq(protractorWorkOrders.shopId, shopId),
+        ne(protractorWorkOrders.completed, true),
+        sql`${protractorWorkOrders.workflowStage} IN ('EstimateCompleted','WorkAuthorized','InspectionInProgress','InspectionComplete','Unassigned')`,
+        sql`(${protractorWorkOrders.payload} #>> '{pricing,grandTotal}')::numeric > 0`,
+      ),
+    )
+    .orderBy(desc(protractorWorkOrders.fetchedAt))
+    .limit(limit);
+  return rows.map(reconstructWorkOrder);
+}
+
+export async function findCachedWorkOrderById(
+  shopId: number,
+  workOrderId: string,
+): Promise<AnyDoc | null> {
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(protractorWorkOrders)
+    .where(
+      and(
+        eq(protractorWorkOrders.shopId, shopId),
+        eq(protractorWorkOrders.workOrderId, workOrderId),
+      ),
+    )
+    .limit(1);
+  return rows.length ? reconstructWorkOrder(rows[0]) : null;
+}
+
 export async function listCachedWorkOrdersForServiceItem(
   shopId: number,
   serviceItemId: string,

@@ -72,6 +72,32 @@ export interface SalesCoachFeedback {
   suggestedPhrasing: string;
 }
 
+// Dashboard sales-script feature: structured script generated from an open
+// estimate, cached per (workOrderId, contextHash) so repeat views are free
+// and a changed estimate regenerates.
+export interface SalesScript {
+  opening: string;
+  concernAcknowledgment: string | null;
+  valuePoints: { job: string; talkingPoint: string }[];
+  totalPresentation: string;
+  deferredRecovery: string | null;
+  close: string;
+  fullScript: string;
+}
+
+export const salesScriptCache = pgTable("sales_script_cache", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  shopId: integer("shop_id").notNull(),
+  workOrderId: varchar("work_order_id").notNull(),
+  contextHash: text("context_hash").notNull(),
+  script: jsonb("script").$type<SalesScript>().notNull(),
+  model: text("model"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => ({
+  woHashIdx: uniqueIndex("ssc_wo_hash_idx").on(t.workOrderId, t.contextHash),
+  shopIdIdx: index("ssc_shop_id_idx").on(t.shopId),
+}));
+
 export const salesCoachSessions = pgTable("sales_coach_sessions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   scenarioId: varchar("scenario_id").notNull().references(() => salesCoachScenarios.id),
