@@ -45,16 +45,18 @@ function utcToday(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-// Money units differ by provider in the normalized store: Tekmetric rows are
-// stored in CENTS, other providers in dollars (verified against live data).
-// Scenario context is always snapshotted in dollars.
+// Money units differ by table AND provider in the normalized store
+// (live-verified): normalized_work_orders.grand_total is CENTS for Tekmetric
+// (dollars for others), while normalized_service_jobs money columns are
+// DOLLARS for every provider. Scenario context is always snapshotted in
+// dollars, so only the WO grand total needs scaling.
 function moneyScale(sourceSystem: string | null | undefined): number {
   return sourceSystem === "tekmetric" ? 0.01 : 1;
 }
 
 const GRAND_TOTAL_DOLLARS = sql`(wo.grand_total::numeric * CASE WHEN wo.provenance->>'sourceSystem' = 'tekmetric' THEN 0.01 ELSE 1 END)`;
 
-async function fetchJobs(workOrderId: string, scale: number): Promise<SalesCoachScenarioJob[]> {
+async function fetchJobs(workOrderId: string): Promise<SalesCoachScenarioJob[]> {
   const db = getDb();
   const rows: any[] = await db.execute(sql`
     SELECT title, status, total, labor_total, parts_total,
@@ -68,9 +70,10 @@ async function fetchJobs(workOrderId: string, scale: number): Promise<SalesCoach
   return rows.map((r) => ({
     title: r.title,
     status: r.status,
-    total: Math.round((Number(r.total) || 0) * scale * 100) / 100,
-    laborTotal: Math.round((Number(r.labor_total) || 0) * scale * 100) / 100,
-    partsTotal: Math.round((Number(r.parts_total) || 0) * scale * 100) / 100,
+    // Service-job money columns are dollars for every provider — no scaling.
+    total: Math.round((Number(r.total) || 0) * 100) / 100,
+    laborTotal: Math.round((Number(r.labor_total) || 0) * 100) / 100,
+    partsTotal: Math.round((Number(r.parts_total) || 0) * 100) / 100,
     laborHours: r.labor_hours_billed != null
       ? Number(r.labor_hours_billed)
       : r.labor_hours_estimated != null
@@ -260,7 +263,7 @@ export async function generateDailyScenarios(target = 5): Promise<GenerateResult
 
   let created = 0;
   for (const { row, type } of picked) {
-    const jobs = await fetchJobs(row.id, moneyScale(row.provenance?.sourceSystem));
+    const jobs = await fetchJobs(row.id);
     if (jobs.length === 0) continue; // nothing to pitch
     const context = buildContext(row, jobs);
     try {
