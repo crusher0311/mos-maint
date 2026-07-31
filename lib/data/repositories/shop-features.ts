@@ -1,4 +1,10 @@
 // Repository for the `shop_features` collection.
+//
+// METADATA-ONLY: this collection holds per-feature settings and Stripe
+// subscription metadata. Per-shop feature enable/disable state lives in the
+// resolver-backed `shops.enabledFeatures` store (see lib/featureResolver.ts).
+// Do NOT add enable/disable/set helpers here or gate features on this
+// collection's `enabledFeatures` field — it is a dead, legacy store.
 import type { Collection } from "mongodb";
 import { getDb } from "@/lib/data/db";
 
@@ -28,55 +34,6 @@ export async function findByShopId<T extends ShopFeaturesDoc = ShopFeaturesDoc>(
 ): Promise<T | null> {
   const col = await collection();
   return (await col.findOne({ shopId })) as T | null;
-}
-
-export async function addEnabledFeature(shopId: number, featureId: string): Promise<void> {
-  const col = await collection();
-  await col.updateOne(
-    { shopId },
-    {
-      $addToSet: { enabledFeatures: featureId },
-      $set: { updatedAt: new Date() },
-      $setOnInsert: {
-        shopId,
-        featureSettings: {},
-        subscriptions: [],
-        createdAt: new Date(),
-      },
-    },
-    { upsert: true },
-  );
-}
-
-export async function removeEnabledFeature(shopId: number, featureId: string): Promise<void> {
-  const col = await collection();
-  await col.updateOne(
-    { shopId },
-    {
-      $pull: { enabledFeatures: featureId },
-      $set: { updatedAt: new Date() },
-    },
-  );
-}
-
-export async function setEnabledFeatures(
-  shopId: number,
-  featureIds: string[],
-): Promise<void> {
-  const col = await collection();
-  await col.updateOne(
-    { shopId },
-    {
-      $set: { enabledFeatures: featureIds, updatedAt: new Date() },
-      $setOnInsert: {
-        shopId,
-        featureSettings: {},
-        subscriptions: [],
-        createdAt: new Date(),
-      },
-    },
-    { upsert: true },
-  );
 }
 
 export async function setFeatureSettings(
