@@ -125,7 +125,29 @@ const FEATURE_SLUG_TO_KEY: Record<string, FeatureKey> = {
   "enhance_notes": "enhance_notes",
 };
 
-async function getPlanFeaturesFromDatabase(plan: BillingPlan): Promise<FeatureSettings> {
+/**
+ * Normalize a shop's raw `enabledFeatures` field into the override-object
+ * shape the resolver expects. Very old shops stored a `string[]` of enabled
+ * feature ids; spreading an array into an object merge would corrupt it
+ * (numeric keys), so every reader/writer goes through this instead.
+ */
+export function normalizeShopFeatureOverrides(raw: unknown): Partial<FeatureSettings> {
+  if (Array.isArray(raw)) {
+    const out: Partial<FeatureSettings> = {};
+    for (const key of raw) {
+      if ((FEATURE_KEYS as readonly string[]).includes(key)) {
+        out[key as FeatureKey] = true;
+      }
+    }
+    return out;
+  }
+  if (raw && typeof raw === "object") {
+    return raw as Partial<FeatureSettings>;
+  }
+  return {};
+}
+
+export async function getPlanFeaturesFromDatabase(plan: BillingPlan): Promise<FeatureSettings> {
   // Founder plan is a wildcard — every current and future feature is on.
   // Read FEATURE_KEYS at call time so newly added features are picked up
   // automatically without anyone editing this file.
@@ -245,7 +267,9 @@ export async function getFeatureEntitlements(
   const plan: BillingPlan = shop.billing?.plan || "trial";
   const status: BillingStatus = shop.billing?.status || "trial";
 
-  const shopFeatures: Partial<FeatureSettings> = shop.enabledFeatures || {};
+  const shopFeatures: Partial<FeatureSettings> = normalizeShopFeatureOverrides(
+    shop.enabledFeatures,
+  );
 
   // Founder plan is a wildcard: every current AND future feature key is
   // on, regardless of per-shop or per-enterprise overrides. Read
@@ -331,7 +355,7 @@ export async function updateShopFeatures(
   // W4 cutover (#346): write PG first, optional Mongo shadow.
   if (isIdentityPgCanonical()) {
     const shop: MongoShapedShop | null = await pgFindShop(shopId);
-    const existingFeatures = (shop?.enabledFeatures as Partial<FeatureSettings>) || {};
+    const existingFeatures = normalizeShopFeatureOverrides(shop?.enabledFeatures);
     const mergedFeatures = { ...existingFeatures, ...features };
     await pgUpdateShopFields(shopId, { enabledFeatures: mergedFeatures });
     await shadowWriteMongoIdentity("shops.enabledFeatures", async () => {
@@ -345,7 +369,7 @@ export async function updateShopFeatures(
   }
   const db = await __deps.getDb();
   const shop = await db.collection("shops").findOne({ shopId });
-  const existingFeatures = shop?.enabledFeatures || {};
+  const existingFeatures = normalizeShopFeatureOverrides(shop?.enabledFeatures);
   const mergedFeatures = { ...existingFeatures, ...features };
   await db.collection("shops").updateOne(
     { shopId },

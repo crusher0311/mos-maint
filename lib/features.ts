@@ -3,6 +3,11 @@
 
 import "@/lib/sms-adapters/protractor-adapter";
 import * as repo from "@/lib/data/repositories/shop-features";
+import {
+  getFeatureEntitlements,
+  updateShopFeatures,
+  type FeatureKey,
+} from "@/lib/featureResolver";
 
 export type FeatureId = 
   | "maintenance"      // OEM schedules, recommendations, DVI insights
@@ -126,42 +131,61 @@ export function getAllFeatureIds(): FeatureId[] {
   return FEATURES.map(f => f.id);
 }
 
+/**
+ * Legacy read of the standalone `shop_features` collection. Kept ONLY for
+ * per-feature settings/subscriptions metadata — the enabled/disabled state
+ * now lives in the resolver-backed `shops.enabledFeatures` store (see
+ * `getFeatureEntitlements` / `updateShopFeatures` in lib/featureResolver).
+ * Do not use this to decide whether a feature is on.
+ */
 export async function getShopFeatures(shopId: number): Promise<ShopFeatures | null> {
   return repo.findByShopId<ShopFeatures>(shopId);
 }
 
+/**
+ * Resolver-backed feature check: merges per-shop overrides
+ * (`shops.enabledFeatures`), enterprise settings, and plan defaults —
+ * identical semantics to the entitlement checks used everywhere else.
+ * Previously this read the standalone `shop_features` collection, which
+ * the /platform-admin editor never wrote, so admin toggles didn't apply.
+ */
 export async function isFeatureEnabled(shopId: number, featureId: FeatureId): Promise<boolean> {
   if (isDevEnvironment()) {
     return true;
   }
-  const features = await getShopFeatures(shopId);
-  if (!features) {
-    return featureId === "maintenance";
-  }
-  return features.enabledFeatures.includes(featureId);
+  const entitlements = await getFeatureEntitlements(shopId);
+  return entitlements.effectiveFeatures[featureId as FeatureKey] === true;
 }
 
 export async function getEnabledFeatures(shopId: number): Promise<FeatureId[]> {
   if (isDevEnvironment()) {
     return getAllFeatureIds();
   }
-  const features = await getShopFeatures(shopId);
-  if (!features) {
-    return ["maintenance"];
-  }
-  return features.enabledFeatures;
+  const entitlements = await getFeatureEntitlements(shopId);
+  return getAllFeatureIds().filter(
+    id => entitlements.effectiveFeatures[id as FeatureKey] === true,
+  );
 }
 
 export async function enableFeature(shopId: number, featureId: FeatureId): Promise<void> {
-  await repo.addEnabledFeature(shopId, featureId);
+  await updateShopFeatures(shopId, { [featureId as FeatureKey]: true });
 }
 
 export async function disableFeature(shopId: number, featureId: FeatureId): Promise<void> {
-  await repo.removeEnabledFeature(shopId, featureId);
+  await updateShopFeatures(shopId, { [featureId as FeatureKey]: false });
 }
 
+/**
+ * Set the full per-shop override map from an enabled-id array: listed
+ * features become explicit `true` overrides, unlisted ones explicit
+ * `false`. Writes the resolver-backed `shops.enabledFeatures` store.
+ */
 export async function setShopFeatures(shopId: number, featureIds: FeatureId[]): Promise<void> {
-  await repo.setEnabledFeatures(shopId, featureIds);
+  const overrides: Partial<Record<FeatureKey, boolean>> = {};
+  for (const id of getAllFeatureIds()) {
+    overrides[id as FeatureKey] = featureIds.includes(id);
+  }
+  await updateShopFeatures(shopId, overrides);
 }
 
 export async function getFeatureSettings<T = Record<string, any>>(

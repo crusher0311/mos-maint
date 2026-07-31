@@ -12,7 +12,25 @@ import {
   FEATURES,
 } from "@/lib/features";
 import { getDb } from "@/lib/mongo";
-import { isFounderPlan } from "@/lib/featureResolver";
+import {
+  getFeatureEntitlements,
+  isFounderPlan,
+  type FeatureKey,
+} from "@/lib/featureResolver";
+
+// Task #975: enabled/disabled state is read from and written to the
+// resolver-backed store (`shops.enabledFeatures` via lib/features →
+// lib/featureResolver), not the standalone `shop_features` collection,
+// so toggles here actually take effect. The legacy collection is only
+// consulted for featureSettings/subscriptions metadata.
+
+/** Effective enabled-feature ids as the entitlement resolver sees them. */
+async function getEffectiveEnabledIds(shopId: number): Promise<FeatureId[]> {
+  const entitlements = await getFeatureEntitlements(shopId);
+  return FEATURES
+    .map(f => f.id)
+    .filter(id => entitlements.effectiveFeatures[id as FeatureKey] === true);
+}
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +62,7 @@ export async function GET(
   }
 
   const founder = await isShopOnFounderPlan(shopId);
+  // Legacy collection: featureSettings / subscriptions metadata only.
   const features = await getShopFeatures(shopId);
 
   if (founder) {
@@ -65,15 +84,17 @@ export async function GET(
     });
   }
 
+  const enabledFeatures = await getEffectiveEnabledIds(shopId);
+
   return NextResponse.json({
     ok: true,
     shopId,
     planLocked: false,
-    features: features || {
+    features: {
       shopId,
-      enabledFeatures: ["maintenance"],
-      featureSettings: {},
-      subscriptions: [],
+      enabledFeatures,
+      featureSettings: features?.featureSettings || {},
+      subscriptions: features?.subscriptions || [],
     },
     availableFeatures: FEATURES,
   });
@@ -169,11 +190,11 @@ export async function POST(
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   }
 
-  const features = await getShopFeatures(shopId);
+  const enabledFeatures = await getEffectiveEnabledIds(shopId);
 
   return NextResponse.json({
     ok: true,
     shopId,
-    enabledFeatures: features?.enabledFeatures || [],
+    enabledFeatures,
   });
 }
