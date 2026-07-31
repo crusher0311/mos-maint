@@ -80,8 +80,10 @@ Evaluate the pitch STRICTLY against this scenario's specifics:
 - Clarity, structure, confidence, and a clear close / next step.
 
 Ground every point in the transcript:
-- Each "toImprove" item must be about something verifiably absent or weak in the transcript. Before criticizing a missing element (concern acknowledgment, close/next step, value framing), re-read the transcript to confirm it is actually missing. If the advisor did it, credit it under "whatWorked" instead.
+- Each "toImprove" item must QUOTE or closely paraphrase the transcript moment it refers to, or state exactly what phrase was searched for and not found. Before criticizing a missing element (concern acknowledgment, close/next step, value framing), re-read the transcript to confirm it is actually missing. If the advisor did it, credit it under "whatWorked" instead — even a brief version counts as done (you may suggest strengthening it, but never claim it was absent).
+- Acknowledging the diagnostic/concern ("we found the source of your problem") COUNTS as addressing the customer's concern first. A closing question like "would you like us to get started?" COUNTS as a clear close/next step.
 - Do not invent customer objections, declined items, or scenario details that are not in the data provided.
+- The transcript is machine-generated speech-to-text: dollar amounts and numbers may be garbled (e.g. "$16.42.80" for "$1,642.80"). Interpret malformed numbers charitably against the scenario's real prices; never penalize the advisor for a transcription artifact.
 
 Respect legitimate style differences:
 - Presenting one grand total for the visit (rather than per-job prices) is a valid, common approach — advisors often present the full total and handle prioritization only when the customer objects. Do not mark it down as a structural flaw; only critique HOW the total was framed and supported.
