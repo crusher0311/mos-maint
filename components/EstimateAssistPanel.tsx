@@ -102,13 +102,17 @@ export default function EstimateAssistPanel({
   const [activeTab, setActiveTab] = useState<"audit" | "builder" | "history">("audit");
   const [builtEstimates, setBuiltEstimates] = useState<Record<string, Record<string, unknown>>>({});
   const [buildingFindingId, setBuildingFindingId] = useState<string | null>(null);
-  // Push-to-RO (Protractor only for now): the audit report carries the
-  // provider + the SMS's own RO id, and /api/jobs/add-to-ro does the write.
+  // Push-to-RO: the audit report carries the provider + the SMS's own RO id,
+  // and /api/jobs/add-to-ro does the write (Protractor) or returns a guided
+  // hand-off deep link (Tekmetric — its API can't create arbitrary jobs).
   const [pushingFindingId, setPushingFindingId] = useState<string | null>(null);
   const [pushedFindings, setPushedFindings] = useState<Record<string, boolean>>({});
+  // Tekmetric hand-off: RO deep link per finding once opened (Task #978).
+  const [handoffFindings, setHandoffFindings] = useState<Record<string, string>>({});
   // Push state for the Smart Job Builder result (same write path as findings).
   const [pushingBuilder, setPushingBuilder] = useState(false);
   const [pushedBuilder, setPushedBuilder] = useState(false);
+  const [builderHandoffUrl, setBuilderHandoffUrl] = useState("");
   const [pushBuilderError, setPushBuilderError] = useState("");
   const [pushErrors, setPushErrors] = useState<Record<string, string>>({});
   const [jobBuilderError, setJobBuilderError] = useState("");
@@ -276,6 +280,7 @@ export default function EstimateAssistPanel({
     if (!query) return;
     // A new build is a new package — clear the previous push state.
     setPushedBuilder(false);
+    setBuilderHandoffUrl("");
     setPushBuilderError("");
     setJobBuilderLoading(true);
     setJobBuilderResult(null);
@@ -329,14 +334,24 @@ export default function EstimateAssistPanel({
     setBuildingFindingId(null);
   };
 
-  // Push a built estimate onto the audited RO. Only offered when the RO
-  // came from a provider with a server-side write path (Protractor). Labor
-  // is priced by the add-to-RO route's labor-rate chain; parts go in at $0
-  // so the shop sets real pricing in the SMS.
-  const canPushToRo =
+  // Push a built estimate onto the audited RO.
+  // - Protractor: server-side write via /api/jobs/add-to-ro. Labor is priced
+  //   by the route's labor-rate chain; parts go in at $0 so the shop sets
+  //   real pricing in the SMS.
+  // - Tekmetric (Task #978): the same route verifies the RO is still open
+  //   (posted ROs reject adds) and returns a deep link; we open the RO in
+  //   Tekmetric so the user adds the built package there.
+  const pushProvider: "protractor" | "tekmetric" | null =
     report?.provider === "protractor" &&
     !!report?.smsWorkOrderId &&
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(report.smsWorkOrderId);
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(report.smsWorkOrderId)
+      ? "protractor"
+      : report?.provider === "tekmetric" &&
+          !!report?.smsWorkOrderId &&
+          /^\d+$/.test(report.smsWorkOrderId)
+        ? "tekmetric"
+        : null;
+  const canPushToRo = pushProvider !== null;
 
   const pushToRo = async (finding: AuditFinding) => {
     const be = builtEstimates[finding.id];
@@ -377,7 +392,13 @@ export default function EstimateAssistPanel({
       });
       const data = await response.json();
       if (response.ok && !data.error) {
-        setPushedFindings(prev => ({ ...prev, [finding.id]: true }));
+        if (data.mode === "handoff" && data.openUrl) {
+          // Tekmetric hand-off: the RO is open — jump straight to it.
+          window.open(String(data.openUrl), "_blank", "noopener");
+          setHandoffFindings(prev => ({ ...prev, [finding.id]: String(data.openUrl) }));
+        } else {
+          setPushedFindings(prev => ({ ...prev, [finding.id]: true }));
+        }
       } else {
         setPushErrors(prev => ({ ...prev, [finding.id]: data.error || "Couldn't add the job to the work order." }));
       }
@@ -429,7 +450,13 @@ export default function EstimateAssistPanel({
       });
       const data = await response.json();
       if (response.ok && !data.error) {
-        setPushedBuilder(true);
+        if (data.mode === "handoff" && data.openUrl) {
+          // Tekmetric hand-off: the RO is open — jump straight to it.
+          window.open(String(data.openUrl), "_blank", "noopener");
+          setBuilderHandoffUrl(String(data.openUrl));
+        } else {
+          setPushedBuilder(true);
+        }
       } else {
         setPushBuilderError(data.error || "Couldn't add the job to the work order.");
       }
@@ -731,20 +758,28 @@ export default function EstimateAssistPanel({
                                   }`}
                                 >
                                   {pushingFindingId === finding.id
-                                    ? "Adding to RO..."
+                                    ? (pushProvider === "tekmetric" ? "Checking RO..." : "Adding to RO...")
                                     : pushedFindings[finding.id]
                                       ? `Added to RO${report?.workOrderNumber ? ` #${report.workOrderNumber}` : ""} ✓`
-                                      : `Add to RO${report?.workOrderNumber ? ` #${report.workOrderNumber}` : ""}`}
+                                      : pushProvider === "tekmetric"
+                                        ? (handoffFindings[finding.id]
+                                            ? `Reopen RO${report?.workOrderNumber ? ` #${report.workOrderNumber}` : ""} in Tekmetric ↗`
+                                            : `Open RO${report?.workOrderNumber ? ` #${report.workOrderNumber}` : ""} in Tekmetric ↗`)
+                                        : `Add to RO${report?.workOrderNumber ? ` #${report.workOrderNumber}` : ""}`}
                                 </button>
                                 {!pushedFindings[finding.id] && (
                                   <span className="text-xs text-gray-400">
-                                    Labor uses your shop rate; parts are added at $0 — set pricing in Protractor.
+                                    {pushProvider === "tekmetric"
+                                      ? handoffFindings[finding.id]
+                                        ? "Add this package on the RO in Tekmetric — its API doesn't allow adding jobs directly."
+                                        : "Tekmetric's API doesn't allow adding jobs directly — this checks the RO is open, then opens it in Tekmetric so you can add the package there."
+                                      : "Labor uses your shop rate; parts are added at $0 — set pricing in Protractor."}
                                   </span>
                                 )}
                               </div>
                             ) : report?.provider && report.provider !== "protractor" ? (
                               <p className="mt-3 text-xs text-gray-400">
-                                Adding this job to the RO from the dashboard is available for Protractor shops. In Tekmetric, use the MOS browser extension to push jobs.
+                                Adding this job to the RO from the dashboard is available for Protractor and Tekmetric shops. For other systems, use the MOS browser extension to push jobs.
                               </p>
                             ) : null}
                             {pushErrors[finding.id] && (
@@ -852,9 +887,19 @@ export default function EstimateAssistPanel({
                           ? "bg-green-100 text-green-700 cursor-default"
                           : "bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
                       }`}
-                      title={`Add this job package to RO ${report?.workOrderNumber || ""}`}
+                      title={
+                        pushProvider === "tekmetric"
+                          ? `Tekmetric's API doesn't allow adding jobs directly — this checks RO ${report?.workOrderNumber || ""} is open, then opens it in Tekmetric so you can add the package there`
+                          : `Add this job package to RO ${report?.workOrderNumber || ""}`
+                      }
                     >
-                      {pushingBuilder ? "Adding..." : pushedBuilder ? "✓ Added to Work Order" : "Add to Work Order"}
+                      {pushingBuilder
+                        ? (pushProvider === "tekmetric" ? "Checking RO..." : "Adding...")
+                        : pushedBuilder
+                          ? "✓ Added to Work Order"
+                          : pushProvider === "tekmetric"
+                            ? (builderHandoffUrl ? "Reopen in Tekmetric ↗" : "Open RO in Tekmetric ↗")
+                            : "Add to Work Order"}
                     </button>
                   )}
                 </div>

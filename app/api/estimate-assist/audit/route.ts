@@ -228,6 +228,13 @@ export async function POST(req: NextRequest) {
         } else {
           const cached = await findWebhookCachedWorkOrder(db, shopId, String(workOrderId));
           if (cached?.workOrderNumber != null) workOrderNumber = String(cached.workOrderNumber);
+          // Task #978 — the webhook cache is Tekmetric-only and carries the
+          // internal Tekmetric RO id, so a cache hit is enough provenance
+          // for the push/hand-off button even before normalization.
+          if (!provider && cached?.workOrderId != null) {
+            provider = "tekmetric";
+            smsWorkOrderId = String(cached.workOrderId);
+          }
           if (!vehicleInfo && cached && (cached.vehicleYear || cached.vehicleMake)) {
             vehicleInfo = {
               year: cached.vehicleYear,
@@ -303,6 +310,12 @@ export async function POST(req: NextRequest) {
           if (cachedItems.length > 0) {
             lineItems = cachedItems;
             if (cached.workOrderNumber != null) workOrderNumber = String(cached.workOrderNumber);
+            // Task #978 — same as the enrichment branch above: a webhook-
+            // cache hit is Tekmetric by definition and knows the internal id.
+            if (!provider && cached.workOrderId != null) {
+              provider = "tekmetric";
+              smsWorkOrderId = String(cached.workOrderId);
+            }
             if (!vehicleInfo && (cached.vehicleYear || cached.vehicleMake)) {
               vehicleInfo = {
                 year: cached.vehicleYear,

@@ -43,6 +43,81 @@ type JobPayload = {
   lines: JobLine[];
 };
 
+/**
+ * Task #978 — Tekmetric branch of add-to-RO. Returns a NextResponse when the
+ * shop is a Tekmetric shop (handled — either a hand-off payload or a clear
+ * error), or null when the shop has no Tekmetric config so the caller can
+ * fall through to the generic "not configured" error.
+ *
+ * Tekmetric's public API cannot create arbitrary jobs, so instead of a
+ * server-side write this verifies the RO is open and returns a deep link:
+ *   200 { ok, mode: "handoff", openUrl, roStatus }  → open RO in Tekmetric
+ *   400 { error, roPosted: true }                   → RO is posted/closed
+ */
+async function tryTekmetricHandoff(
+  shopId: number,
+  workOrderGuid: string,
+  requestId: string,
+): Promise<NextResponse | null> {
+  const { getDb } = await import("@/lib/mongo");
+  const db = await getDb();
+  const shop = await db.collection("shops").findOne(
+    { shopId },
+    { projection: { tekmetric: 1, tekmetricShopId: 1 } }
+  );
+  const tekShopId = Number(shop?.tekmetric?.shopId ?? shop?.tekmetricShopId) || 0;
+  if (!tekShopId) return null; // not a Tekmetric shop either
+
+  // Tekmetric RO ids are numeric — a non-numeric id means the caller sent
+  // something that can't be resolved against Tekmetric at all.
+  if (!/^\d+$/.test(String(workOrderGuid))) {
+    return NextResponse.json(
+      { error: "Invalid Tekmetric repair order id" },
+      { status: 400 }
+    );
+  }
+
+  const openUrl = `https://shop.tekmetric.com/shop/${tekShopId}/repair-orders/${workOrderGuid}`;
+
+  // Posted (closed) ROs reject every job add with a 400 in Tekmetric, so
+  // check the status up front and give one clear message instead of sending
+  // the user into Tekmetric to hit a wall. Status lookup is best-effort —
+  // if it fails we still hand off (Tekmetric itself will say no if posted).
+  let roStatus: string | null = null;
+  try {
+    const { getTekmetricWorkOrderStatus } = await import("@/lib/integrations/tekmetric/api");
+    roStatus = await getTekmetricWorkOrderStatus(tekShopId, String(workOrderGuid));
+  } catch (err: any) {
+    console.warn(`[Add-to-RO:${requestId}] Tekmetric RO status check failed (non-fatal): ${err?.message || err}`);
+  }
+
+  const statusLower = String(roStatus || "").toLowerCase();
+  // Trust the status name/code when present. "posted" is the terminal state
+  // that rejects adds; a deleted RO can't take jobs either.
+  if (statusLower === "posted" || statusLower === "deleted") {
+    console.log(`[Add-to-RO:${requestId}] Tekmetric RO ${workOrderGuid} is ${statusLower} — blocking hand-off`);
+    return NextResponse.json(
+      {
+        error: statusLower === "posted"
+          ? "This repair order is posted (closed) — Tekmetric only allows adding jobs to open repair orders. Open or create an active RO for this vehicle first."
+          : "This repair order was deleted in Tekmetric, so jobs can no longer be added to it.",
+        roPosted: true,
+      },
+      { status: 400 }
+    );
+  }
+
+  console.log(`[Add-to-RO:${requestId}] Tekmetric hand-off for RO ${workOrderGuid} (status=${roStatus || "unknown"})`);
+  return NextResponse.json({
+    ok: true,
+    mode: "handoff",
+    openUrl,
+    roStatus,
+    message:
+      "Tekmetric doesn't allow adding custom jobs through its API — the repair order has been opened in Tekmetric so you can add this package there.",
+  });
+}
+
 export async function POST(req: NextRequest) {
   const requestId = Math.random().toString(36).substring(7);
   const startTime = Date.now();
@@ -55,13 +130,6 @@ export async function POST(req: NextRequest) {
 
   const shopId = Number(session.shopId);
   const config = await resolveProtractorConfig(shopId);
-  
-  if (!config.configured) {
-    return NextResponse.json(
-      { error: "Protractor is not configured for this shop" },
-      { status: 400 }
-    );
-  }
 
   const body = await req.json();
   const { workOrderGuid, job, source, vehicle } = body as { 
@@ -77,6 +145,23 @@ export async function POST(req: NextRequest) {
 
   if (!job || !job.title) {
     return NextResponse.json({ error: "Job details are required" }, { status: 400 });
+  }
+
+  if (!config.configured) {
+    // Task #978 — Tekmetric shops get a guided hand-off instead of a missing
+    // button. Tekmetric's public API has no arbitrary job-create endpoint
+    // (only canned-jobs by id; real job writes happen extension-side via the
+    // page session), so the dashboard can't push the package directly. What
+    // we CAN do server-side: verify the RO is still open (a posted/closed RO
+    // rejects every job add with a 400) and hand back a deep link into the
+    // exact RO so the user lands one click away from adding the package.
+    const tekmetricHandoff = await tryTekmetricHandoff(shopId, workOrderGuid, requestId);
+    if (tekmetricHandoff) return tekmetricHandoff;
+
+    return NextResponse.json(
+      { error: "Protractor is not configured for this shop" },
+      { status: 400 }
+    );
   }
 
   console.log(`[Add-to-RO:${requestId}] Fetching WO ${workOrderGuid} for shop ${shopId}...`);
