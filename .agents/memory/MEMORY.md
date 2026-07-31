@@ -1,3 +1,4 @@
+- [GitHub push vs credential helper](github-push-credential-helper.md) — managed gitPush rejects any configured credential.helper (DANGEROUS_CONFIG); unset → push → restore.
 - [Dev Mongo is Prod Mongo](dev-mongo-is-prod.md) — this repl's dev MongoDB == the production cluster; any write/createIndex from dev hits prod live.
 - [Long-running jobs need a workflow](long-running-jobs-need-workflow.md) — shell `&`/nohup/setsid jobs are reaped when the bash tool returns; run multi-min backfills via a console workflow (sleep-infinity tail + sentinel), poll getWorkflowStatus.
 - [job_index retirement blocked](job-index-retirement-blocked.md) — legacy Mongo job_index still has live readers (job-search fallback, plan-build, parts, dashboard); cannot drop until PG backfill+soak done.
