@@ -5665,7 +5665,7 @@ async function addCompanionJobToRo(btn) {
         name: est.title || title,
         description: desc,
         note: desc,
-        laborItems: [{ name: est.title || title, hours: est.laborHours?.typical || typicalHours }],
+        laborItems: [{ name: est.title || title, hours: est.laborHours?.recommended || est.laborHours?.typical || typicalHours }],
         parts: (est.requiredParts || []).map(p => ({ name: p, quantity: 1 }))
       };
     }
@@ -5746,10 +5746,14 @@ async function runEstimateBuilder() {
         <p style="font-size:12px; color:var(--gray-600); margin:0 0 10px 0; line-height:1.4;">${escEstimate(desc)}</p>
         
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:10px;">
-          <div style="background:var(--gray-50); border-radius:6px; padding:8px;">
-            <div style="font-size:10px; color:var(--gray-500);">Labor (typical)</div>
-            <div style="font-size:16px; font-weight:700; color:var(--gray-900);">${escEstimate(est.laborHours.typical)}h</div>
-            <div style="font-size:10px; color:var(--gray-400);">${escEstimate(est.laborHours.min)}-${escEstimate(est.laborHours.max)}h range</div>
+          <div style="background:${est.laborHours.recommendedSource && est.laborHours.recommendedSource !== 'typical' ? '#ecfdf5' : 'var(--gray-50)'}; border-radius:6px; padding:8px;">
+            <div style="font-size:10px; color:var(--gray-500);">Labor (recommended)</div>
+            <div style="font-size:16px; font-weight:700; color:var(--gray-900);">${escEstimate(est.laborHours.recommended ?? est.laborHours.typical)}h</div>
+            <div style="font-size:10px; color:var(--gray-400);" title="${escEstimate(est.laborHours.aiVehicleRationale || '')}">${
+              est.laborHours.recommendedSource === 'shop_vehicle_history' ? 'Shop history (this vehicle)'
+              : est.laborHours.recommendedSource === 'ai_vehicle' ? 'AI-adjusted for vehicle'
+              : est.laborHours.recommendedSource === 'shop_history' ? 'Shop history'
+              : `${escEstimate(est.laborHours.min)}-${escEstimate(est.laborHours.max)}h range`}</div>
           </div>
           ${est.laborHours.shopAverage ? `
           <div style="background:#f0fdf4; border-radius:6px; padding:8px;">
@@ -5781,7 +5785,7 @@ async function runEstimateBuilder() {
     }
 
     html += `
-        <button class="estimate-send-to-ro-btn" data-job-title="${escEstimate(est.title)}" data-job-desc="${escEstimate(desc)}" data-labor-hours="${escEstimate(est.laborHours.typical)}" data-parts="${escEstimate(JSON.stringify(est.requiredParts || []))}" style="width:100%; margin-top:6px; padding:8px; background:#2563eb; color:white; border:none; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer;">Send to RO</button>
+        <button class="estimate-send-to-ro-btn" data-job-title="${escEstimate(est.title)}" data-job-desc="${escEstimate(desc)}" data-labor-hours="${escEstimate(est.laborHours.recommended ?? est.laborHours.typical)}" data-parts="${escEstimate(JSON.stringify(est.requiredParts || []))}" style="width:100%; margin-top:6px; padding:8px; background:#2563eb; color:white; border:none; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer;">Send to RO</button>
       </div>`;
 
     if (est.companionJobs && est.companionJobs.length > 0) {

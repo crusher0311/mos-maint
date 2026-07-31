@@ -3216,7 +3216,14 @@ async function queryHistoricalAverage(
 ): Promise<{ avgHours: number; avgTotal: number; avgLaborTotal: number; avgPartsTotal: number; count: number } | null> {
     const base = db
       .select({
-        avgHours: sql<string | null>`avg(coalesce(${normalizedServiceJobs.laborHoursBilled}, ${normalizedServiceJobs.laborHoursActual}))`,
+        // Protractor leaves the job-level hours fields NULL but its labor
+        // LINES carry hours — fall back to summing those per job.
+        avgHours: sql<string | null>`avg(coalesce(
+          ${normalizedServiceJobs.laborHoursBilled},
+          ${normalizedServiceJobs.laborHoursActual},
+          (SELECT sum(li.labor_hours) FROM normalized_line_items li
+           WHERE li.service_job_id = "normalized_service_jobs"."id" AND li.line_type = 'labor')
+        ))`,
         avgTotal: sql<string | null>`avg(${normalizedServiceJobs.total})`,
         avgLaborTotal: sql<string | null>`avg(${normalizedServiceJobs.laborTotal})`,
         avgPartsTotal: sql<string | null>`avg(${normalizedServiceJobs.partsTotal})`,
