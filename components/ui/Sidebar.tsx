@@ -30,6 +30,7 @@ import {
   MessageSquare,
   Voicemail,
   Phone,
+  Lock,
 } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
 import { filterNavItemsByFeatures } from "@/lib/sidebar-nav";
@@ -49,6 +50,11 @@ interface NavItem {
   icon: React.ReactNode;
   featureId?: string;
   isModal?: boolean;
+  // Opt-in: keep this item visible (muted + lock icon) when its feature is
+  // off, instead of hiding it. Set only on items whose destination page
+  // shows an upgrade CTA when un-entitled. `locked` is set by the filter.
+  showWhenLocked?: boolean;
+  locked?: boolean;
   children?: NavChild[];
 }
 
@@ -292,6 +298,9 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
       href: "/dashboard/estimate-audit",
       icon: <ClipboardCheck className="w-5 h-5" />,
       featureId: "estimate_assist",
+      // Un-entitled shops see a locked entry; clicking it lands on the
+      // estimate-audit page, whose gate shows the upgrade CTA.
+      showWhenLocked: true,
     },
     {
       name: "Protection Plans",
@@ -561,15 +570,19 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
                 <Link
                   href={item.href}
                   className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    isActive(item.href)
-                      ? "bg-white/20 text-white"
-                      : "text-white/80 hover:bg-white/10 hover:text-white"
+                    item.locked
+                      ? "text-white/40 hover:bg-white/5 hover:text-white/60"
+                      : isActive(item.href)
+                        ? "bg-white/20 text-white"
+                        : "text-white/80 hover:bg-white/10 hover:text-white"
                   }`}
+                  title={item.locked ? `${item.name} is not included in your plan — click to learn more` : undefined}
                 >
                   <div className="flex items-center gap-3">
                     {item.icon}
                     <span>{item.name}</span>
                   </div>
+                  {item.locked && <Lock className="w-4 h-4 flex-shrink-0" aria-label="Locked feature" />}
                   {item.name === "Booking Review" && showBookingBadge && pendingBookingsCount > 0 && (
                     <span className="flex items-center justify-center min-w-[20px] h-5 px-1.5 text-xs font-bold bg-red-500 text-white rounded-full">
                       {pendingBookingsCount > 99 ? "99+" : pendingBookingsCount}

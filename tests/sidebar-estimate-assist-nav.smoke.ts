@@ -57,6 +57,24 @@ function main() {
   assert.ok(!settings!.children!.some((c: any) => c.name === "Keytags"), "gated child hidden");
   assert.ok(settings!.children!.some((c: any) => c.name === "Users"), "ungated child kept");
 
+  // Locked treatment (task 971): a gated item that opts in via
+  // showWhenLocked stays visible with locked:true when un-entitled,
+  // and stays unlocked (no `locked` flag) when entitled.
+  const lockedNav = [
+    { name: "Estimate Assist", href: "/dashboard/estimate-audit", featureId: "estimate_assist", showWhenLocked: true },
+    { name: "Quick Sticker", href: "#quick-sticker", featureId: "oil_sticker", showWhenLocked: true, isModal: true },
+    { name: "Grp", href: "#", featureId: "keytags", showWhenLocked: true, children: [{ name: "x", href: "#" }] },
+  ];
+  const lockedOut = filterNavItemsByFeatures(lockedNav, []);
+  const lockedEa = lockedOut.find(i => i.name === "Estimate Assist");
+  assert.ok(lockedEa, "showWhenLocked item must stay visible when un-entitled");
+  assert.strictEqual((lockedEa as any).locked, true, "un-entitled showWhenLocked item must be marked locked");
+  assert.ok(!lockedOut.some(i => i.name === "Quick Sticker"), "modal gated items never render locked");
+  assert.ok(!lockedOut.some(i => i.name === "Grp"), "gated groups never render locked (would leak children)");
+  const lockedIn = filterNavItemsByFeatures(lockedNav, ["estimate_assist"]);
+  const unlockedEa = lockedIn.find(i => i.name === "Estimate Assist");
+  assert.ok(unlockedEa && !(unlockedEa as any).locked, "entitled item must not be marked locked");
+
   // Group whose children are ALL gated away is dropped.
   const allGated = filterNavItemsByFeatures(
     [{ name: "G", href: "#", children: [{ name: "x", href: "#", featureId: "keytags" }] }],
