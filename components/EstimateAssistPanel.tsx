@@ -105,6 +105,10 @@ export default function EstimateAssistPanel({
   // provider + the SMS's own RO id, and /api/jobs/add-to-ro does the write.
   const [pushingFindingId, setPushingFindingId] = useState<string | null>(null);
   const [pushedFindings, setPushedFindings] = useState<Record<string, boolean>>({});
+  // Push state for the Smart Job Builder result (same write path as findings).
+  const [pushingBuilder, setPushingBuilder] = useState(false);
+  const [pushedBuilder, setPushedBuilder] = useState(false);
+  const [pushBuilderError, setPushBuilderError] = useState("");
   const [pushErrors, setPushErrors] = useState<Record<string, string>>({});
   const [jobBuilderError, setJobBuilderError] = useState("");
   // null = still checking; fail open on transient errors so a hiccup in the
@@ -266,8 +270,11 @@ export default function EstimateAssistPanel({
   };
 
   const runJobBuilder = async (queryOverride?: string) => {
-    const query = (queryOverride || jobBuilderQuery).trim();
+    const query = String(queryOverride ?? jobBuilderQuery ?? "").trim();
     if (!query) return;
+    // A new build is a new package — clear the previous push state.
+    setPushedBuilder(false);
+    setPushBuilderError("");
     setJobBuilderLoading(true);
     setJobBuilderResult(null);
     setJobBuilderError("");
@@ -376,6 +383,58 @@ export default function EstimateAssistPanel({
       setPushErrors(prev => ({ ...prev, [finding.id]: "Couldn't add the job to the work order. Check your connection and try again." }));
     }
     setPushingFindingId(null);
+  };
+
+  // Push the Smart Job Builder's built package onto the audited RO. Uses the
+  // same add-to-RO write path (labor priced by the route's labor-rate chain,
+  // parts at $0 so the shop sets real pricing in the SMS).
+  const pushBuilderToRo = async () => {
+    const be = jobBuilderResult;
+    if (!be || !report?.smsWorkOrderId) return;
+    setPushingBuilder(true);
+    setPushBuilderError("");
+    try {
+      const lh = be.laborHours as Record<string, unknown> | undefined;
+      const laborHours = Number(lh?.typical) || Number(lh?.min) || 1;
+      const requiredParts = Array.isArray(be.requiredParts) ? (be.requiredParts as string[]) : [];
+      const lines = [
+        {
+          lineType: "labor",
+          description: String(be.title || jobBuilderQuery || "Labor"),
+          quantity: laborHours,
+          unitPrice: 0,
+          extendedPrice: 0,
+        },
+        ...requiredParts.map(part => ({
+          lineType: "part",
+          description: part,
+          quantity: 1,
+          unitPrice: 0,
+          extendedPrice: 0,
+        })),
+      ];
+      const response = await fetch("/api/jobs/add-to-ro", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workOrderGuid: report.smsWorkOrderId,
+          job: {
+            title: String(be.title || jobBuilderQuery || ""),
+            description: String(be.customerDescription || be.technicalDescription || ""),
+            lines,
+          },
+        }),
+      });
+      const data = await response.json();
+      if (response.ok && !data.error) {
+        setPushedBuilder(true);
+      } else {
+        setPushBuilderError(data.error || "Couldn't add the job to the work order.");
+      }
+    } catch {
+      setPushBuilderError("Couldn't add the job to the work order. Check your connection and try again.");
+    }
+    setPushingBuilder(false);
   };
 
   const filteredFindings = report?.findings.filter(f =>
@@ -780,7 +839,26 @@ export default function EstimateAssistPanel({
                     </span>
                   )}
                 </div>
-                <h3 className="text-lg font-bold text-gray-900 mb-2">{String(est.title || "")}</h3>
+                <div className="flex items-start justify-between gap-3 mb-2">
+                  <h3 className="text-lg font-bold text-gray-900">{String(est.title || "")}</h3>
+                  {canPushToRo && (
+                    <button
+                      onClick={pushBuilderToRo}
+                      disabled={pushingBuilder || pushedBuilder}
+                      className={`shrink-0 px-4 py-2 text-sm font-medium rounded-lg ${
+                        pushedBuilder
+                          ? "bg-green-100 text-green-700 cursor-default"
+                          : "bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+                      }`}
+                      title={`Add this job package to RO ${report?.workOrderNumber || ""}`}
+                    >
+                      {pushingBuilder ? "Adding..." : pushedBuilder ? "✓ Added to Work Order" : "Add to Work Order"}
+                    </button>
+                  )}
+                </div>
+                {pushBuilderError && (
+                  <p className="text-red-600 text-sm mb-2">{pushBuilderError}</p>
+                )}
 
                 <div className="mb-4">
                   <h4 className="text-sm font-semibold text-gray-500 uppercase mb-1">
