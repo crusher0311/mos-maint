@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { resolvePrefill } from "@/lib/estimate-assist-prefill";
 
 interface AuditFinding {
   id: string;
@@ -170,12 +171,13 @@ export default function EstimateAssistPanel({
   // passes the row's normalized id + vehicle context directly.
   useEffect(() => {
     if (initialVin) setJobBuilderVin(String(initialVin));
-    // Coerce defensively: dashboard rows can carry RO numbers as numbers.
-    const wo = String(initialWorkOrderId ?? "").trim();
-    if (wo) {
+    // Coerce defensively: dashboard rows can carry RO numbers as numbers
+    // (Task #979 — shared logic in lib/estimate-assist-prefill.ts).
+    const { auditId, inputDisplay } = resolvePrefill(initialWorkOrderId, initialRoDisplay);
+    if (auditId) {
       setActiveTab("audit");
-      setWorkOrderId(String(initialRoDisplay ?? wo).trim() || wo);
-      runAudit(wo);
+      setWorkOrderId(inputDisplay);
+      runAudit(auditId);
     }
     // Run once on mount only — deliberately not reactive to state changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps

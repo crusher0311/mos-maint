@@ -22,6 +22,7 @@ import {
   type IntervalsConfig,
 } from "@/lib/sticker-defaults";
 import { resolveVehicleFields, splitDisplayVehicle } from "@/lib/vehicle-display";
+import { hasAuditableIdentifier, pickEstimateAssistIdentifier } from "@/lib/estimate-assist-prefill";
 
 function getRowMake(r: any): string | undefined {
   const direct = r?.vehicle?.make || r?.vehicleMake || r?.make;
@@ -1393,18 +1394,17 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                             </span>
                           )}
                           {data.enabledFeatures?.includes('estimate_assist') ? (
-                            (r.normalizedId || r.displayRo || r.workOrderGuid || r.workOrderId || r.roId) ? (
+                            hasAuditableIdentifier(r) ? (
                               <button
                                 onClick={() => {
+                                  // Identifier preference + String() coercion live in
+                                  // lib/estimate-assist-prefill.ts (Task #979: numeric
+                                  // displayRo from the legacy data route crashed the
+                                  // modal prefill's .trim()).
+                                  const picked = pickEstimateAssistIdentifier(r);
                                   setEstimateAssist({
-                                    // Prefer opaque ids the audit API can always
-                                    // resolve: normalized _id, then the provider
-                                    // source id (open Protractor ROs only carry
-                                    // their GUID in normalized data — the human
-                                    // RO number is attached at close). The RO
-                                    // number is the last resort.
-                                    workOrderId: String(r.normalizedId || r.workOrderGuid || r.workOrderId || r.roId || r.displayRo || ''),
-                                    roDisplay: r.displayRo != null && r.displayRo !== '' ? String(r.displayRo) : undefined,
+                                    workOrderId: picked.workOrderId,
+                                    roDisplay: picked.roDisplay,
                                     vin,
                                     vehicleDisplay: r.displayVehicle || '',
                                     customerName: r.displayName || undefined,
