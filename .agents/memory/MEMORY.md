@@ -118,4 +118,5 @@
 - [CARFAX empty-ok snapshot TTL](carfax-empty-snapshot-ttl.md) — ok:true + zero serviceRecords is a real degraded state; empty snapshots get short TTL (6h), never 7d fresh; ok:true ≠ has data.
 - [platform_features tier resolution](platform-features-tier-resolution.md) — plan features come from PG rows, not the static map; unseeded features are off everywhere & `demo` needs the elite-tier mapping.
 - [Feature override stores](feature-override-stores.md) — shops.enabledFeatures is the ONLY resolver-read override store; legacy shop_features = metadata-only, never gate on it; normalize legacy string[] before merging.
+- [Estimate labor-hour sources](estimate-labor-hours-sources.md) — no Mitchell feed; recommended hours = vehicle-scoped shop history → AI vehicle pass → shop-wide → KB typical; Protractor service jobs have NULL labor hours.
 - [Vehicle specs cache](vehicle-specs-cache.md) — Specs tab caches per `<VIN>|<hintKey>` (not squish) + `hint|<VIN>` CARFAX-hint rows; never cache ok:false; use pingDataOne + warming-503 instead of blocking on endpoint wake.

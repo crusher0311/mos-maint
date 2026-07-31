@@ -1,6 +1,6 @@
 import { getDb } from "@/lib/mongo";
 import { getDb as getPgDb } from "@/lib/db/drizzle";
-import { normalizedServiceJobs } from "@/lib/db/schema/normalized";
+import { normalizedServiceJobs, normalizedWorkOrders } from "@/lib/db/schema/normalized";
 import { eq, and, inArray, ilike, sql } from "drizzle-orm";
 import { tokenizeQueryWords } from "@/lib/job-scoring";
 
@@ -3161,7 +3161,7 @@ export async function getShopHistoricalAverage(
   shopId: number,
   jobTitle: string,
   vehicleAttributes?: { make?: string; model?: string; year?: number }
-): Promise<{ avgHours: number; avgTotal: number; avgLaborTotal: number; avgPartsTotal: number; count: number } | null> {
+): Promise<{ avgHours: number; avgTotal: number; avgLaborTotal: number; avgPartsTotal: number; count: number; vehicleScoped: boolean } | null> {
   try {
     const db = getPgDb();
 
@@ -3177,7 +3177,38 @@ export async function getShopHistoricalAverage(
       conditions.push(ilike(normalizedServiceJobs.title, pattern));
     }
 
-    const rows = await db
+    // Same-vehicle history is far more predictive of labor hours than a
+    // shop-wide average (a Traverse water pump ≠ a Civic water pump). Try the
+    // vehicle-scoped average first; fall back to shop-wide when the shop
+    // hasn't done this job on this make/model enough times.
+    if (vehicleAttributes?.make && vehicleAttributes?.model) {
+      // Vehicle make/model live on the work order's vehicle jsonb, so the
+      // scoped pass joins through normalized_work_orders. Escape LIKE
+      // wildcards so a make like "R%" can't broaden the match.
+      const escLike = (s: string) => s.replace(/[\\%_]/g, "\\$&");
+      const scoped = await queryHistoricalAverage(db, [
+        ...conditions,
+        sql`${normalizedWorkOrders.vehicle}->>'make' ILIKE ${escLike(vehicleAttributes.make.trim())}`,
+        sql`${normalizedWorkOrders.vehicle}->>'model' ILIKE ${escLike(vehicleAttributes.model.trim())}`,
+      ], true);
+      if (scoped && scoped.count >= 2) {
+        return { ...scoped, vehicleScoped: true };
+      }
+    }
+
+    const shopWide = await queryHistoricalAverage(db, conditions);
+    return shopWide ? { ...shopWide, vehicleScoped: false } : null;
+  } catch {
+    return null;
+  }
+}
+
+async function queryHistoricalAverage(
+  db: ReturnType<typeof getPgDb>,
+  conditions: any[],
+  joinWorkOrders = false,
+): Promise<{ avgHours: number; avgTotal: number; avgLaborTotal: number; avgPartsTotal: number; count: number } | null> {
+    const base = db
       .select({
         avgHours: sql<string | null>`avg(coalesce(${normalizedServiceJobs.laborHoursBilled}, ${normalizedServiceJobs.laborHoursActual}))`,
         avgTotal: sql<string | null>`avg(${normalizedServiceJobs.total})`,
@@ -3185,8 +3216,12 @@ export async function getShopHistoricalAverage(
         avgPartsTotal: sql<string | null>`avg(${normalizedServiceJobs.partsTotal})`,
         count: sql<number>`count(*)::int`,
       })
-      .from(normalizedServiceJobs)
-      .where(and(...conditions));
+      .from(normalizedServiceJobs);
+    const rows = joinWorkOrders
+      ? await base
+          .innerJoin(normalizedWorkOrders, eq(normalizedServiceJobs.workOrderId, normalizedWorkOrders.id))
+          .where(and(...conditions))
+      : await base.where(and(...conditions));
 
     const r = rows[0];
     if (!r || !r.count) return null;
@@ -3198,7 +3233,4 @@ export async function getShopHistoricalAverage(
       avgPartsTotal: Math.round((Number(r.avgPartsTotal) || 0) * 100) / 100,
       count: Number(r.count),
     };
-  } catch {
-    return null;
-  }
 }

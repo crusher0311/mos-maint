@@ -343,7 +343,7 @@ export default function EstimateAssistPanel({
     setPushErrors(prev => ({ ...prev, [finding.id]: "" }));
     try {
       const lh = be.laborHours as Record<string, unknown> | undefined;
-      const laborHours = Number(lh?.typical) || Number(lh?.min) || 1;
+      const laborHours = Number(lh?.recommended) || Number(lh?.typical) || Number(lh?.min) || 1;
       const requiredParts = Array.isArray(be.requiredParts) ? (be.requiredParts as string[]) : [];
       const lines = [
         {
@@ -395,7 +395,7 @@ export default function EstimateAssistPanel({
     setPushBuilderError("");
     try {
       const lh = be.laborHours as Record<string, unknown> | undefined;
-      const laborHours = Number(lh?.typical) || Number(lh?.min) || 1;
+      const laborHours = Number(lh?.recommended) || Number(lh?.typical) || Number(lh?.min) || 1;
       const requiredParts = Array.isArray(be.requiredParts) ? (be.requiredParts as string[]) : [];
       const lines = [
         {
@@ -874,16 +874,24 @@ export default function EstimateAssistPanel({
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                   {(() => {
                     const lh = est.laborHours as Record<string, unknown> | undefined;
+                    const source = String(lh?.recommendedSource || "typical");
+                    const sourceLabel =
+                      source === "shop_vehicle_history" ? "From your shop's history on this vehicle" :
+                      source === "ai_vehicle" ? "AI-adjusted for this vehicle" :
+                      source === "shop_history" ? "From your shop's history" :
+                      "Generic typical";
+                    const rationale = lh?.aiVehicleRationale ? String(lh.aiVehicleRationale) : "";
                     return (
                       <>
-                        <div className="bg-gray-50 rounded-lg p-3">
-                          <p className="text-xs text-gray-500">Labor Hours (typical)</p>
-                          <p className="text-lg font-bold text-gray-900">{String(lh?.typical || 0)}h</p>
-                          <p className="text-xs text-gray-400">Range: {String(lh?.min || 0)}-{String(lh?.max || 0)}h</p>
+                        <div className={`rounded-lg p-3 ${source === "typical" ? "bg-gray-50" : "bg-emerald-50"}`}>
+                          <p className="text-xs text-gray-500">Labor Hours (recommended)</p>
+                          <p className="text-lg font-bold text-gray-900">{String(lh?.recommended ?? lh?.typical ?? 0)}h</p>
+                          <p className="text-xs text-gray-400" title={rationale || undefined}>{sourceLabel}</p>
+                          <p className="text-xs text-gray-400">Generic: {String(lh?.typical || 0)}h (range {String(lh?.min || 0)}-{String(lh?.max || 0)}h)</p>
                         </div>
                         {lh?.shopAverage && (
                           <div className="bg-green-50 rounded-lg p-3">
-                            <p className="text-xs text-gray-500">Shop Average</p>
+                            <p className="text-xs text-gray-500">{lh?.shopAverageVehicleScoped ? "Shop Average (this vehicle)" : "Shop Average"}</p>
                             <p className="text-lg font-bold text-green-700">{String(lh.shopAverage)}h</p>
                           </div>
                         )}

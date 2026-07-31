@@ -208,6 +208,68 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // VIN-aware AI labor pass (Task follow-up): the KB "typical" is a
+    // cross-vehicle generic. When we know the vehicle, ask the model for
+    // vehicle-specific hours (e.g. a 2012 Traverse 3.6L water pump books
+    // well above the generic 2.5h). Result is clamped to a sane band around
+    // the KB range so a hallucination can't produce absurd hours; any
+    // failure falls back silently to the KB numbers.
+    // Mutually exclusive with the description-fallback AI call below: a
+    // thin-KB job routes to the fallback (which already asks for hours), so
+    // running both would double-bill one build.
+    let aiVehicleHours: { hours: number; rationale: string } | null = null;
+    if (knowledgeBaseJob && !shouldUseAiFallback(knowledgeBaseJob) && vehicleContext.make && vehicleContext.model) {
+      try {
+        const openai = __deps.getOpenAI();
+        const startTime = Date.now();
+        const vehicleStr = [
+          vehicleContext.year, vehicleContext.make, vehicleContext.model, vehicleContext.submodel,
+          vehicleContext.engineDescription || (vehicleContext.engineCylinders ? `${vehicleContext.engineCylinders}-cyl` : null),
+          vehicleContext.drivetrain,
+        ].filter(Boolean).join(" ");
+        const completion = await withUpstreamTimeout(
+          openai.chat.completions.create({
+            model: "gpt-4o-mini",
+            messages: [
+              {
+                role: "system",
+                content: "You are an automotive labor-time estimator. Given a repair job and a specific vehicle, return realistic book labor hours for THAT vehicle configuration (consider engine layout, access difficulty, known quirks). Return JSON: { \"laborHours\": number, \"rationale\": \"one short sentence\" }",
+              },
+              {
+                role: "user",
+                content: `Job: "${knowledgeBaseJob.title}". Vehicle: ${vehicleStr}. Generic cross-vehicle range is ${knowledgeBaseJob.laborHoursMin}-${knowledgeBaseJob.laborHoursMax}h (typical ${knowledgeBaseJob.laborHoursTypical}h).`,
+              },
+            ],
+            temperature: 0.2,
+            max_tokens: 120,
+            response_format: { type: "json_object" },
+          }),
+          AI_TIMEOUT_MS,
+          "estimate-job-builder-vehicle-hours",
+          null,
+        );
+        if (completion) {
+          __deps.trackOpenAiCall(shopId, "/api/estimate-assist/job-builder", completion, Date.now() - startTime);
+          const content = completion.choices[0]?.message?.content;
+          if (content) {
+            const parsed = JSON.parse(content);
+            const hours = Number(parsed.laborHours);
+            // Clamp: within [half the KB min, 1.5x the KB max] and positive.
+            const lo = Math.max(0.2, knowledgeBaseJob.laborHoursMin * 0.5);
+            const hi = knowledgeBaseJob.laborHoursMax * 1.5;
+            if (Number.isFinite(hours) && hours > 0) {
+              aiVehicleHours = {
+                hours: Math.round(Math.min(hi, Math.max(lo, hours)) * 10) / 10,
+                rationale: String(parsed.rationale || "").slice(0, 200),
+              };
+            }
+          }
+        }
+      } catch (aiHoursErr) {
+        console.warn("[Estimate Job Builder] Vehicle-hours AI pass failed:", aiHoursErr);
+      }
+    }
+
     let aiResult: AIEnhancedJobResult | null = null;
     if (shouldUseAiFallback(knowledgeBaseJob)) {
       try {
@@ -285,6 +347,26 @@ export async function POST(req: NextRequest) {
     const baseHoursMax = knowledgeBaseJob?.laborHoursMax || baseHoursMin;
     const baseHoursTypical = knowledgeBaseJob?.laborHoursTypical || baseHoursMin;
 
+    // Recommended hours precedence:
+    //   1. The shop's own history for this job on this make/model (real data,
+    //      vehicle-scoped, >=2 occurrences — see getShopHistoricalAverage).
+    //   2. The AI vehicle-specific estimate (clamped above).
+    //   3. Shop-wide history for this job (>=3 occurrences).
+    //   4. The generic KB typical (+ attribute adjustments).
+    const typicalAdjusted = Math.round((baseHoursTypical + laborHoursAdjust) * 10) / 10;
+    let recommendedHours = typicalAdjusted;
+    let recommendedSource: "shop_vehicle_history" | "ai_vehicle" | "shop_history" | "typical" = "typical";
+    if (shopHistory?.vehicleScoped && shopHistory.avgHours > 0.2) {
+      recommendedHours = shopHistory.avgHours;
+      recommendedSource = "shop_vehicle_history";
+    } else if (aiVehicleHours) {
+      recommendedHours = aiVehicleHours.hours;
+      recommendedSource = "ai_vehicle";
+    } else if (shopHistory && !shopHistory.vehicleScoped && shopHistory.count >= 3 && shopHistory.avgHours > 0.2) {
+      recommendedHours = shopHistory.avgHours;
+      recommendedSource = "shop_history";
+    }
+
     const result = {
       jobId: knowledgeBaseJob?.jobId || null,
       title: knowledgeBaseJob?.title || jobNameOrId,
@@ -297,8 +379,13 @@ export async function POST(req: NextRequest) {
       laborHours: {
         min: Math.round((baseHoursMin + laborHoursAdjust) * 10) / 10,
         max: Math.round((baseHoursMax + laborHoursAdjust) * 10) / 10,
-        typical: Math.round((baseHoursTypical + laborHoursAdjust) * 10) / 10,
+        typical: typicalAdjusted,
         shopAverage: shopHistory?.avgHours || null,
+        shopAverageVehicleScoped: shopHistory?.vehicleScoped || false,
+        recommended: recommendedHours,
+        recommendedSource,
+        aiVehicleEstimate: aiVehicleHours?.hours ?? null,
+        aiVehicleRationale: aiVehicleHours?.rationale || null,
       },
       requiredParts: [
         ...(knowledgeBaseJob?.requiredParts || aiResult?.requiredParts || []),

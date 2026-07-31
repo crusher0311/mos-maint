@@ -493,12 +493,16 @@ async function run() {
     ok("  → names the required field", (body.error || "").includes("jobNameOrId"), body.error);
   }
 
-  console.log("\nPOST /api/estimate-assist/job-builder — KB hit (no AI call):");
+  console.log("\nPOST /api/estimate-assist/job-builder — KB hit (AI only for vehicle hours):");
   {
     restoreAll();
     stubCommon(builderDeps);
     const aiCalls = { n: 0 };
-    builderDeps.getOpenAI = () => bannedOpenAI(aiCalls);
+    // KB jobs no longer skip AI entirely: when the vehicle is known, ONE
+    // bounded call estimates vehicle-specific labor hours. Descriptions
+    // still come from the KB (aiEnhanced stays false).
+    builderDeps.getOpenAI = () =>
+      fakeOpenAI(JSON.stringify({ laborHours: 1.4, rationale: "AWD access adds time" }), aiCalls);
     builderDeps.getShopHistoricalAverage = (async () => ({
       avgHours: 1.1,
       avgTotal: 350,
@@ -522,7 +526,14 @@ async function run() {
     const body = await res.json();
     ok("  → estimate from knowledge base", body.ok === true && body.estimate.jobId === "differential-fluid");
     ok("  → NOT AI-enhanced", body.estimate.aiEnhanced === false);
-    ok("  → OpenAI never called for a rich KB job", aiCalls.n === 0);
+    ok("  → exactly one AI call (vehicle-hours pass only)", aiCalls.n === 1, String(aiCalls.n));
+    ok(
+      "  → AI vehicle hours drive the recommendation (shop history not vehicle-scoped)",
+      body.estimate.laborHours.recommended === 1.4 &&
+        body.estimate.laborHours.recommendedSource === "ai_vehicle" &&
+        body.estimate.laborHours.aiVehicleEstimate === 1.4,
+      JSON.stringify(body.estimate.laborHours),
+    );
     ok(
       "  → AWD VIN adjustment applied to labor hours",
       body.estimate.vehicleContext.vinAdjustments?.laborHoursAdded === 0.3,
