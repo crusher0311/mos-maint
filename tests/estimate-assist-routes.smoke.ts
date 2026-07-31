@@ -105,6 +105,7 @@ function stubCommon(deps: any) {
   if ("isPlatformAdmin" in deps) deps.isPlatformAdmin = async () => false;
   if ("enforceAiBudget" in deps) deps.enforceAiBudget = async () => null;
   if ("trackOpenAiCall" in deps) deps.trackOpenAiCall = () => {};
+  if ("getEnterpriseByShopId" in deps) deps.getEnterpriseByShopId = async () => null;
 }
 
 async function run() {
@@ -546,6 +547,29 @@ async function run() {
     );
     ok("  → shop history surfaced", body.estimate.shopHistory?.occurrences === 12);
     ok("  → shop average on laborHours", body.estimate.laborHours.shopAverage === 1.1);
+  }
+
+  console.log("\nPOST /api/estimate-assist/job-builder — enterprise history scope:");
+  {
+    restoreAll();
+    stubCommon(builderDeps);
+    builderDeps.getOpenAI = () => fakeOpenAI(null, { n: 0 });
+    builderDeps.lookupVehicleByVin = (async () => null) as any;
+    builderDeps.getEnterpriseByShopId = (async () => ({ shopIds: [42, 77, 91] })) as any;
+    let receivedShopIds: unknown = null;
+    builderDeps.getShopHistoricalAverage = (async (ids: unknown) => {
+      receivedShopIds = ids;
+      return null;
+    }) as any;
+    const res = await builderPOST(
+      jsonReq("/api/estimate-assist/job-builder", { jobNameOrId: "differential-fluid" }),
+    );
+    ok("enterprise shop → 200", res.status === 200);
+    ok(
+      "  → history queried across all enterprise locations",
+      JSON.stringify(receivedShopIds) === JSON.stringify([42, 77, 91]),
+      JSON.stringify(receivedShopIds),
+    );
   }
 
   console.log("\nPOST /api/estimate-assist/job-builder — AI fallback:");

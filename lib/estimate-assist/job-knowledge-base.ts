@@ -3158,15 +3158,21 @@ export async function seedJobKnowledgeBase(): Promise<{ inserted: number }> {
 }
 
 export async function getShopHistoricalAverage(
-  shopId: number,
+  shopId: number | number[],
   jobTitle: string,
   vehicleAttributes?: { make?: string; model?: string; year?: number }
 ): Promise<{ avgHours: number; avgTotal: number; avgLaborTotal: number; avgPartsTotal: number; count: number; vehicleScoped: boolean } | null> {
   try {
     const db = getPgDb();
 
+    // Enterprise callers pass every location's shopId so history from all
+    // stores counts (a Traverse water pump at the sister location is just as
+    // predictive as one here).
+    const shopIds = Array.isArray(shopId) ? shopId : [shopId];
+    if (shopIds.length === 0) return null;
+
     const conditions: any[] = [
-      eq(normalizedServiceJobs.shopId, shopId),
+      inArray(normalizedServiceJobs.shopId, shopIds),
       sql`(${normalizedServiceJobs.softDelete}->>'isDeleted')::boolean = false`,
       inArray(normalizedServiceJobs.status, ['completed', 'authorized']),
     ];

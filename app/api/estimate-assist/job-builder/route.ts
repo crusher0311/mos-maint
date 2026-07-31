@@ -11,6 +11,7 @@ import {
   JobKnowledgeEntry,
 } from "@/lib/estimate-assist/job-knowledge-base";
 import { getDb } from "@/lib/db/drizzle";
+import { getEnterpriseByShopId } from "@/lib/enterprise";
 import { normalizedVehicles } from "@/lib/db/schema/normalized";
 import { eq, and } from "drizzle-orm";
 import {
@@ -42,6 +43,7 @@ export const __deps = {
   getOpenAI,
   trackOpenAiCall,
   getShopHistoricalAverage,
+  getEnterpriseByShopId,
   lookupVehicleByVin,
 };
 
@@ -183,7 +185,18 @@ export async function POST(req: NextRequest) {
       transmission: vehicleInfo?.transmission,
     };
 
-    const shopHistory = await __deps.getShopHistoricalAverage(shopId, knowledgeBaseJob?.title || jobNameOrId, {
+    // Enterprise shops share labor history across all their locations.
+    let historyShopIds: number[] = [shopId];
+    try {
+      const enterprise = await __deps.getEnterpriseByShopId(shopId);
+      if (enterprise?.shopIds?.length) {
+        historyShopIds = Array.from(new Set([shopId, ...enterprise.shopIds]));
+      }
+    } catch (entErr) {
+      console.warn("[Estimate Job Builder] Enterprise lookup failed, using single shop:", entErr);
+    }
+
+    const shopHistory = await __deps.getShopHistoricalAverage(historyShopIds, knowledgeBaseJob?.title || jobNameOrId, {
       make: vehicleContext.make,
       model: vehicleContext.model,
       year: vehicleContext.year,
