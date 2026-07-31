@@ -18,7 +18,15 @@ import {
 const LARGE_ESTIMATE_MIN = 1500;
 const ROUTINE_MIN = 100;
 const ROUTINE_MAX = 600;
-const LOOKBACK_DAYS = 365;
+const LOOKBACK_DAYS = 120;
+// The shared PG has a ~2 min statement timeout; `ORDER BY random()` over the
+// full lookback window blows past it. Instead each bucket walks the
+// created_at index backwards (newest first) into a bounded candidate pool,
+// then randomizes within that pool — cheap and index-friendly.
+const CANDIDATE_POOL = 2000;
+// Declined-work ROs are sparse; cap the declined-job id scan so the daily
+// query stays well inside the shared DB's ~2 min statement timeout.
+const DECLINED_ID_SCAN_CAP = 2000;
 
 interface CandidateRow {
   id: string;
@@ -37,7 +45,16 @@ function utcToday(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-async function fetchJobs(workOrderId: string): Promise<SalesCoachScenarioJob[]> {
+// Money units differ by provider in the normalized store: Tekmetric rows are
+// stored in CENTS, other providers in dollars (verified against live data).
+// Scenario context is always snapshotted in dollars.
+function moneyScale(sourceSystem: string | null | undefined): number {
+  return sourceSystem === "tekmetric" ? 0.01 : 1;
+}
+
+const GRAND_TOTAL_DOLLARS = sql`(wo.grand_total::numeric * CASE WHEN wo.provenance->>'sourceSystem' = 'tekmetric' THEN 0.01 ELSE 1 END)`;
+
+async function fetchJobs(workOrderId: string, scale: number): Promise<SalesCoachScenarioJob[]> {
   const db = getDb();
   const rows: any[] = await db.execute(sql`
     SELECT title, status, total, labor_total, parts_total,
@@ -51,9 +68,9 @@ async function fetchJobs(workOrderId: string): Promise<SalesCoachScenarioJob[]> 
   return rows.map((r) => ({
     title: r.title,
     status: r.status,
-    total: Number(r.total) || 0,
-    laborTotal: Number(r.labor_total) || 0,
-    partsTotal: Number(r.parts_total) || 0,
+    total: Math.round((Number(r.total) || 0) * scale * 100) / 100,
+    laborTotal: Math.round((Number(r.labor_total) || 0) * scale * 100) / 100,
+    partsTotal: Math.round((Number(r.parts_total) || 0) * scale * 100) / 100,
     laborHours: r.labor_hours_billed != null
       ? Number(r.labor_hours_billed)
       : r.labor_hours_estimated != null
@@ -77,7 +94,7 @@ function buildContext(row: CandidateRow, jobs: SalesCoachScenarioJob[]): SalesCo
     customerConcern: row.customer_concern,
     odometerIn: row.odometer_in,
     workOrderNumber: row.work_order_number,
-    grandTotal: Number(row.grand_total) || 0,
+    grandTotal: Math.round((Number(row.grand_total) || 0) * moneyScale(row.provenance?.sourceSystem) * 100) / 100,
     jobs,
     declinedTotal: jobs.filter((j) => j.declined).reduce((s, j) => s + j.total, 0),
     provider: row.provenance?.sourceSystem ?? null,
@@ -100,50 +117,97 @@ const SELECT_COLS = sql`
   wo.customer_concern, wo.odometer_in, wo.grand_total, wo.closed_date, wo.provenance
 `;
 
+/**
+ * Two-stage sampling that keeps the planner honest:
+ *  1. `poolFilter` (cheap, per-row predicates only) runs inside a
+ *     created_at-DESC index walk capped at CANDIDATE_POOL rows.
+ *  2. `postFilter` (e.g. the declined-jobs EXISTS) runs only against that
+ *     bounded pool, so any subquery probes hit at most a few thousand rows
+ *     via nsj_work_order_id_idx instead of seq-scanning the jobs table.
+ */
+// Every candidate must have at least one non-deleted, priced service job —
+// otherwise there is nothing to pitch and the row would be discarded later.
+const HAS_JOBS = sql`EXISTS (
+  SELECT 1 FROM normalized_service_jobs sj
+  WHERE sj.work_order_id = wo.id
+    AND (sj.soft_delete->>'isDeleted')::boolean IS NOT TRUE
+    AND sj.total::numeric > 0
+)`;
+
+async function samplePool(
+  poolFilter: ReturnType<typeof sql>,
+  postFilter: ReturnType<typeof sql>,
+  limit: number,
+  excludeIds: string[],
+  poolSize = CANDIDATE_POOL,
+): Promise<CandidateRow[]> {
+  const db = getDb();
+  const excludeClause = excludeIds.length
+    ? sql`AND wo.id NOT IN (${sql.join(excludeIds.map((id) => sql`${id}`), sql`, `)})`
+    : sql``;
+  // Pool stage carries ids only so a deep pool stays cheap; full columns are
+  // fetched for the handful of finalists at the end.
+  const rows: any[] = await db.execute(sql`
+    WITH pool AS (
+      SELECT wo.id
+      FROM normalized_work_orders wo
+      WHERE ${BASE_FILTER}
+        AND ${poolFilter}
+        ${excludeClause}
+      ORDER BY wo.created_at DESC
+      LIMIT ${poolSize}
+    ),
+    finalists AS (
+      SELECT wo.id FROM pool wo
+      WHERE ${HAS_JOBS} AND ${postFilter}
+      ORDER BY random()
+      LIMIT ${limit}
+    )
+    SELECT ${SELECT_COLS}
+    FROM normalized_work_orders wo
+    WHERE wo.id IN (SELECT id FROM finalists)
+  `);
+  return rows as CandidateRow[];
+}
+
+/**
+ * Declined-work ROs are too sparse (<1% of service jobs, and heavily
+ * backfilled so import order doesn't help) for the pooled index walk.
+ * Instead: grab a capped batch of declined-job work_order_ids (bounded seq
+ * scan, ~30-90s once a day), dedupe in JS, then randomly pick qualifying
+ * work orders from that id set — the second query is instant.
+ * Note: declined jobs often carry $0 totals (known upstream data quirk), so
+ * no price floor is applied here.
+ */
 async function sampleDeclined(limit: number): Promise<CandidateRow[]> {
   const db = getDb();
+  const idRows: any[] = await db.execute(sql`
+    SELECT sj.work_order_id FROM normalized_service_jobs sj
+    WHERE sj.status = 'declined'
+    LIMIT ${DECLINED_ID_SCAN_CAP}
+  `);
+  const uniq = [...new Set(idRows.map((r) => String(r.work_order_id)))]
+    .filter((id) => /^[A-Za-z0-9_:-]+$/.test(id));
+  if (uniq.length === 0) return [];
+  const idArrayLiteral = sql.raw(`'{${uniq.map((id) => `"${id}"`).join(",")}}'::varchar[]`);
   const rows: any[] = await db.execute(sql`
     SELECT ${SELECT_COLS}
     FROM normalized_work_orders wo
-    WHERE ${BASE_FILTER}
-      AND EXISTS (
-        SELECT 1 FROM normalized_service_jobs sj
-        WHERE sj.work_order_id = wo.id
-          AND (sj.status = 'declined' OR sj.declined_at IS NOT NULL)
-          AND sj.total::numeric > 50
-      )
+    WHERE wo.id = ANY(${idArrayLiteral})
+      AND ${BASE_FILTER}
+      AND ${HAS_JOBS}
     ORDER BY random()
     LIMIT ${limit}
   `);
   return rows as CandidateRow[];
 }
 
-async function sampleLargeEstimate(limit: number, excludeIds: string[]): Promise<CandidateRow[]> {
-  const db = getDb();
-  const rows: any[] = await db.execute(sql`
-    SELECT ${SELECT_COLS}
-    FROM normalized_work_orders wo
-    WHERE ${BASE_FILTER}
-      AND wo.grand_total::numeric >= ${LARGE_ESTIMATE_MIN}
-      AND wo.id != ALL(${excludeIds.length ? excludeIds : [""]}::varchar[])
-    ORDER BY random()
-    LIMIT ${limit}
-  `);
-  return rows as CandidateRow[];
+function sampleLargeEstimate(limit: number, excludeIds: string[]): Promise<CandidateRow[]> {
+  return samplePool(sql`${GRAND_TOTAL_DOLLARS} >= ${LARGE_ESTIMATE_MIN}`, sql`true`, limit, excludeIds);
 }
 
-async function sampleRoutine(limit: number, excludeIds: string[]): Promise<CandidateRow[]> {
-  const db = getDb();
-  const rows: any[] = await db.execute(sql`
-    SELECT ${SELECT_COLS}
-    FROM normalized_work_orders wo
-    WHERE ${BASE_FILTER}
-      AND wo.grand_total::numeric BETWEEN ${ROUTINE_MIN} AND ${ROUTINE_MAX}
-      AND wo.id != ALL(${excludeIds.length ? excludeIds : [""]}::varchar[])
-    ORDER BY random()
-    LIMIT ${limit}
-  `);
-  return rows as CandidateRow[];
+function sampleRoutine(limit: number, excludeIds: string[]): Promise<CandidateRow[]> {
+  return samplePool(sql`${GRAND_TOTAL_DOLLARS} BETWEEN ${ROUTINE_MIN} AND ${ROUTINE_MAX}`, sql`true`, limit, excludeIds);
 }
 
 export interface GenerateResult {
@@ -196,7 +260,7 @@ export async function generateDailyScenarios(target = 5): Promise<GenerateResult
 
   let created = 0;
   for (const { row, type } of picked) {
-    const jobs = await fetchJobs(row.id);
+    const jobs = await fetchJobs(row.id, moneyScale(row.provenance?.sourceSystem));
     if (jobs.length === 0) continue; // nothing to pitch
     const context = buildContext(row, jobs);
     try {
