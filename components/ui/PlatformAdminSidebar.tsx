@@ -41,6 +41,7 @@ import {
   CreditCard,
   Printer,
   Boxes,
+  GraduationCap,
 } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
 
@@ -227,6 +228,7 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
           </CollapsibleSection>
 
           <NavLink href="/platform-admin/knowledge-base" icon={BookOpen} label="Knowledge Base" />
+          <NavLink href="/platform-admin/sales-coach" icon={GraduationCap} label="Sales Coach" />
 
           <CollapsibleSection label="Settings" icon={Settings} expanded={settingsExpanded} onToggle={() => setSettingsExpanded(!settingsExpanded)} isSection={isSettingsSection}>
             <NavLink href="/platform-admin/settings" icon={Settings} label="General" indent />

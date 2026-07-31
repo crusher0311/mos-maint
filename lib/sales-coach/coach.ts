@@ -1,0 +1,118 @@
+// Transcription + AI coaching for the sales trainer (task #987).
+//
+// Transcription prefers Deepgram (already a dependency, DEEPGRAM_API_KEY on
+// prod) and falls back to OpenAI audio via the central lib/ai client.
+// Coaching runs through the same OpenAI client with token usage recorded via
+// trackOpenAiCall so it shows up in api_usage / the AI budget telemetry.
+import { getOpenAI, trackOpenAiCall } from "@/lib/ai";
+import type { SalesCoachScenarioContext, SalesCoachFeedback } from "@/lib/db/schema/sales-coach";
+
+const ROUTE = "/api/platform-admin/sales-coach/sessions";
+
+export async function transcribeAudio(
+  audio: Buffer,
+  mime: string,
+): Promise<{ transcript: string; provider: string }> {
+  if (process.env.DEEPGRAM_API_KEY) {
+    try {
+      const { createClient } = await import("@deepgram/sdk");
+      const dg = createClient(process.env.DEEPGRAM_API_KEY);
+      const { result, error } = await dg.listen.prerecorded.transcribeFile(audio, {
+        model: "nova-2",
+        smart_format: true,
+        mimetype: mime,
+      } as any);
+      if (error) throw new Error(String((error as any)?.message || error));
+      const transcript =
+        result?.results?.channels?.[0]?.alternatives?.[0]?.transcript?.trim() || "";
+      if (transcript) return { transcript, provider: "deepgram" };
+      console.warn("[SalesCoach] Deepgram returned empty transcript; falling back to OpenAI");
+    } catch (err: any) {
+      console.warn(`[SalesCoach] Deepgram transcription failed, falling back to OpenAI: ${err?.message || err}`);
+    }
+  }
+
+  const openai = getOpenAI();
+  const ext = mime.includes("ogg") ? "ogg" : mime.includes("mp4") ? "mp4" : mime.includes("mpeg") ? "mp3" : "webm";
+  const file = new File([new Uint8Array(audio)], `pitch.${ext}`, { type: mime });
+  const res = await openai.audio.transcriptions.create({
+    model: "whisper-1",
+    file,
+  });
+  return { transcript: (res.text || "").trim(), provider: "openai-whisper" };
+}
+
+function describeScenario(ctx: SalesCoachScenarioContext): string {
+  const vehicle = ctx.vehicle
+    ? `${ctx.vehicle.year ?? ""} ${ctx.vehicle.make ?? ""} ${ctx.vehicle.model ?? ""}`.trim()
+    : "Unknown vehicle";
+  const jobs = ctx.jobs.map((j, i) =>
+    `${i + 1}. ${j.title} — $${j.total.toFixed(2)} (labor $${j.laborTotal.toFixed(2)}${j.laborHours ? ` / ${j.laborHours}h` : ""}, parts $${j.partsTotal.toFixed(2)})${j.declined ? ` [DECLINED${j.declineReason ? `: ${j.declineReason}` : ""}]` : ""}`
+  ).join("\n");
+  return [
+    `Vehicle: ${vehicle}${ctx.odometerIn ? ` at ${ctx.odometerIn.toLocaleString()} miles` : ""}`,
+    ctx.customerFirstName ? `Customer: ${ctx.customerFirstName}` : null,
+    ctx.customerConcern ? `Customer concern: ${ctx.customerConcern}` : null,
+    `Estimate total: $${ctx.grandTotal.toFixed(2)}`,
+    ctx.declinedTotal > 0 ? `Declined work total: $${ctx.declinedTotal.toFixed(2)}` : null,
+    `Recommended jobs:\n${jobs}`,
+  ].filter(Boolean).join("\n");
+}
+
+export async function coachPitch(
+  ctx: SalesCoachScenarioContext,
+  transcript: string,
+): Promise<SalesCoachFeedback> {
+  const openai = getOpenAI();
+  const start = Date.now();
+  const completion = await openai.chat.completions.create({
+    model: "gpt-4o",
+    messages: [
+      {
+        role: "system",
+        content: `You are an elite automotive service-advisor sales coach. A service advisor is practicing the phone/counter pitch for a real repair order. You are given the RO's actual jobs, prices, and declined items, plus a transcript of the advisor's spoken pitch.
+
+Evaluate the pitch STRICTLY against this scenario's specifics:
+- Did they mention the actual recommended jobs and use real prices (or reasonable roundings) rather than vague amounts?
+- Did they build value (safety, reliability, cost-of-delay) before price?
+- Did they address the customer's stated concern first?
+- Did they attempt to recover declined items with empathy rather than pressure?
+- Clarity, structure, confidence, and a clear close / next step.
+
+NEVER judge whether the shop's pricing is high or low — evaluate only how the advisor communicates it.
+
+Return ONLY a JSON object:
+{
+  "score": 0-100 integer,
+  "summary": "2-3 sentence overall assessment",
+  "whatWorked": ["specific strength", ...],   // 2-4 items
+  "toImprove": ["specific, actionable improvement", ...],   // 2-4 items
+  "suggestedPhrasing": "A short example of stronger phrasing for the weakest moment of the pitch, tailored to this RO's actual jobs and prices."
+}`,
+      },
+      {
+        role: "user",
+        content: `SCENARIO (real repair order):\n${describeScenario(ctx)}\n\nADVISOR'S PITCH TRANSCRIPT:\n"""${transcript}"""`,
+      },
+    ],
+    temperature: 0.4,
+    max_tokens: 900,
+    response_format: { type: "json_object" },
+  });
+  trackOpenAiCall(null, ROUTE, completion, Date.now() - start);
+
+  let parsed: any = {};
+  try {
+    parsed = JSON.parse(completion.choices[0]?.message?.content || "{}");
+  } catch {
+    // fall through to defaults below
+  }
+  const score = Math.max(0, Math.min(100, Math.round(Number(parsed.score) || 0)));
+  return {
+    score,
+    summary: typeof parsed.summary === "string" ? parsed.summary : "No summary produced.",
+    whatWorked: Array.isArray(parsed.whatWorked) ? parsed.whatWorked.map(String).slice(0, 6) : [],
+    toImprove: Array.isArray(parsed.toImprove) ? parsed.toImprove.map(String).slice(0, 6) : [],
+    suggestedPhrasing: typeof parsed.suggestedPhrasing === "string" ? parsed.suggestedPhrasing : "",
+  };
+}
