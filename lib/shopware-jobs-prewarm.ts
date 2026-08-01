@@ -5,6 +5,7 @@ import {
 } from "@/lib/integrations/shopware/client";
 import { computeJobHash } from "@/lib/job-index";
 import { maybeAlertOnPrewarmAnomalies } from "@/lib/jobs-prewarm-alerter";
+import { updateShopwareBackfillProgress } from "@/lib/data/repositories/shopware-ops";
 import type {
   ShopWareRepairOrder,
   ShopWareVehicle,
@@ -335,10 +336,10 @@ export async function prewarmShopWareJobsCacheForOnboarding(
       // skipping the prewarmed `[fromDate, today]` window entirely.
       // `logicVersion: 2` is required for the cron to honour the
       // cursor (see app/api/cron/shopware-backfill/route.ts:320).
-      await db.collection("shopware_backfill_progress").updateOne(
-        { shopId },
+      await updateShopwareBackfillProgress(
+        shopId,
         {
-          $set: {
+          set: {
             shopId,
             inProgress: false,
             completed: false,
@@ -349,7 +350,7 @@ export async function prewarmShopWareJobsCacheForOnboarding(
             prewarmCoveredFrom: fromDate,
             prewarmCoveredTo: today,
           },
-          $setOnInsert: {
+          setOnInsert: {
             startedAt: new Date(),
           },
         },

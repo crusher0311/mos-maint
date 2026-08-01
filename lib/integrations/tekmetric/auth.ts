@@ -1,4 +1,8 @@
-import { getDb } from "@/lib/mongo";
+import {
+  getCurrentToken,
+  upsertCurrentToken,
+  deleteCurrentToken,
+} from "@/lib/data/repositories/tekmetric-ops";
 
 const TEKMETRIC_BASE_URL = 'https://shop.tekmetric.com';
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
@@ -81,22 +85,13 @@ async function fetchNewToken(): Promise<TekmetricToken> {
 
 async function persistToken(token: TekmetricToken): Promise<void> {
   try {
-    const db = await getDb();
-    await db.collection("tekmetric_tokens").updateOne(
-      { tokenKey: "current" },
-      {
-        $set: {
-          tokenKey: "current",
-          accessToken: token.accessToken,
-          tokenType: token.tokenType,
-          scope: token.scope,
-          expiresAt: token.expiresAt,
-          createdAt: token.createdAt,
-          updatedAt: new Date(),
-        }
-      },
-      { upsert: true }
-    );
+    await upsertCurrentToken({
+      accessToken: token.accessToken,
+      tokenType: token.tokenType,
+      scope: token.scope,
+      expiresAt: token.expiresAt,
+      createdAt: token.createdAt,
+    });
   } catch (err) {
     console.error('[Tekmetric Auth] Failed to persist token:', err);
   }
@@ -104,11 +99,10 @@ async function persistToken(token: TekmetricToken): Promise<void> {
 
 async function loadPersistedToken(): Promise<TekmetricToken | null> {
   try {
-    const db = await getDb();
-    const doc = await db.collection("tekmetric_tokens").findOne({ tokenKey: "current" }) as TokenDocument | null;
-    
+    const doc = (await getCurrentToken()) as TokenDocument | null;
+
     if (!doc) return null;
-    
+
     return {
       accessToken: doc.accessToken,
       tokenType: doc.tokenType,
@@ -158,8 +152,7 @@ export async function invalidateToken(): Promise<void> {
   cachedToken = null;
   
   try {
-    const db = await getDb();
-    await db.collection("tekmetric_tokens").deleteOne({ tokenKey: "current" });
+    await deleteCurrentToken();
   } catch (err) {
     console.error('[Tekmetric Auth] Failed to invalidate token:', err);
   }

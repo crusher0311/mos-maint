@@ -166,3 +166,33 @@ before retrying.
   decommission (map task, currently BLOCKED on the 487-file audit).
 - It does **not** change the canonical store for CRM or Rescue Rover (excluded —
   separate back-out).
+
+---
+
+
+## Addendum (2026-08-01, task #999) — integration operational stores
+
+The integration operational stores now have flag-gated PG repositories (see
+`db-migration-map.md` §13). Cutover per domain, same ground rules as above:
+
+1. Apply `drizzle/0023_task999_integration_ops.sql` (idempotent) to Supabase.
+   Tables from `drizzle/0012` / `drizzle/0014` must already exist.
+2. **No-backfill flips (transient state):** drain locks, backfill-progress
+   heartbeats/leases, mileage progress, template cache, deferred-work snapshots,
+   `api_rate_limits`. Flip the domain flag off-peak, watch one full
+   backfill/drain cycle, done.
+3. **Durable logs — backfill first, then flip, then soak:**
+   - Tekmetric webhook logs/subs, alerts, skipped-RO archive, catchup runs:
+     `scripts/wave2-mongo-to-pg-backfill.ts`.
+   - protractor_callback_events / shopware_webhook_logs / autovitals_imports:
+     `scripts/backfill-mongo-to-supabase.ts`.
+   - api_usage, tekmetric_tokens, protractor_webhook_subscriptions,
+     autovitals_appointments/inspections: `scripts/backfill-integration-ops.ts`
+     (resumable; safe to re-run; run `--only=api_usage` off-peak — it is large).
+4. Flags: `TEKMETRIC_OPS_PG_CANONICAL`, `PROTRACTOR_OPS_PG_CANONICAL`,
+   `SHOPWARE_OPS_PG_CANONICAL`, `API_USAGE_PG_CANONICAL` (+ existing
+   `AUTOVITALS_CACHE_PG_CANONICAL`); shadow-write kill switches
+   `WRITE_MONGO_<DOMAIN>=0` only after soak. One domain at a time.
+5. Verify after each flip: drain script still exits 75 when the lease is held,
+   backfill progress `complete`/`completed` read identically in
+   admin/sync-health, webhook-health sweeps stay deduped.

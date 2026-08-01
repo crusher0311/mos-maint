@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
+import {
+  insertAutoVitalsInspectionDoc,
+  countAutoVitalsInspections,
+} from "@/lib/data/repositories/autovitals-inspections";
 
 export const runtime = "nodejs";
 
@@ -82,7 +86,7 @@ export async function POST(req: NextRequest) {
       customerName: vehicle?.customerName || null,
     };
 
-    const insertResult = await db.collection("autovitals_inspections").insertOne(inspectionDoc);
+    const insertedId = await insertAutoVitalsInspectionDoc(inspectionDoc);
 
     if (vin) {
       await db.collection("vehicles").updateOne(
@@ -91,13 +95,13 @@ export async function POST(req: NextRequest) {
           $set: {
             lastDviDate: now,
             lastDviSource: "autovitals",
-            lastDviId: insertResult.insertedId,
+            lastDviId: insertedId,
           }
         }
       );
     }
 
-    const totalInspections = await db.collection("autovitals_inspections").countDocuments({ shopId });
+    const totalInspections = await countAutoVitalsInspections(shopId);
     const immediateCount = (inspection?.results || []).filter((r: any) => r.status === "immediate").length;
     const cautionCount = (inspection?.results || []).filter((r: any) => r.status === "caution").length;
 
@@ -117,7 +121,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       message: "DVI data synced successfully",
-      inspectionId: insertResult.insertedId.toString(),
+      inspectionId: insertedId.toString(),
       itemsCount: inspection?.results?.length || 0,
       immediateCount,
       cautionCount,

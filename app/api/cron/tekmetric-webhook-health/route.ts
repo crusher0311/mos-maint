@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { sendEmail } from "@/lib/email";
+import {
+  insertWebhookHealthAlert,
+  listWebhookSubscriptions,
+} from "@/lib/data/repositories/tekmetric-ops";
 
 /**
  * Test seam: the route handler dereferences `__deps.getDb` /
@@ -12,6 +16,8 @@ import { sendEmail } from "@/lib/email";
 export const __deps = {
   getDb,
   sendEmail,
+  listWebhookSubscriptions,
+  insertWebhookHealthAlert,
 };
 
 export const runtime = "nodejs";
@@ -204,10 +210,7 @@ export async function GET(req: NextRequest) {
     process.env.TEKMETRIC_WEBHOOK_AUTO_SUBSCRIBE === "true";
   const missingSubs: Array<{ tekmetricShopId: number; mosShopId: any; name: string }> = [];
   if (autoSubscribeEnabled) {
-    const subRows = await db.collection("tekmetric_webhook_subscriptions").find(
-      { tekmetricShopId: { $in: tekShopIds } },
-      { projection: { tekmetricShopId: 1, lastResult: 1 } },
-    ).toArray();
+    const subRows = await __deps.listWebhookSubscriptions(tekShopIds);
     const subscribedOk = new Set<number>();
     for (const row of subRows as any[]) {
       if (row?.lastResult?.ok === true) subscribedOk.add(Number(row.tekmetricShopId));
@@ -247,29 +250,22 @@ export async function GET(req: NextRequest) {
   const latencyAlertFiring =
     latencyP95 !== null && latencyP95 > P95_LATENCY_MS_THRESHOLD;
 
-  // Filter out shops we've already alerted today (idempotency).
-  const alertsCollection = db.collection("tekmetric_webhook_health_alerts");
-  await alertsCollection.createIndex(
-    { tekmetricShopId: 1, alertDate: 1 },
-    { unique: true, name: "uniq_shop_date" }
-  ).catch(() => {});
-
+  // Filter out shops we've already alerted today (idempotency). The repo
+  // preserves the (tekmetricShopId, alertDate) insert-if-absent semantics
+  // (Mongo unique-index / PG ON CONFLICT DO NOTHING) behind the cutover flag.
   const toAlertSilent: typeof silent = [];
   for (const s of silent) {
     try {
-      await alertsCollection.insertOne({
+      const inserted = await __deps.insertWebhookHealthAlert({
         tekmetricShopId: s.tekmetricShopId,
         mosShopId: s.mosShopId,
         alertDate: today,
         alertKind: "silent",
         createdAt: new Date(),
       });
-      toAlertSilent.push(s);
+      if (inserted) toAlertSilent.push(s);
     } catch (err: any) {
-      // Duplicate key = already alerted today, skip silently.
-      if (err?.code !== 11000) {
-        console.error(`[TekmetricWebhookHealth] Alert dedup failed for shop ${s.tekmetricShopId}:`, err?.message);
-      }
+      console.error(`[TekmetricWebhookHealth] Alert dedup failed for shop ${s.tekmetricShopId}:`, err?.message);
     }
   }
 
@@ -281,7 +277,7 @@ export async function GET(req: NextRequest) {
   const toAlertDrop: typeof drops = [];
   for (const d of drops) {
     try {
-      await alertsCollection.insertOne({
+      const inserted = await __deps.insertWebhookHealthAlert({
         tekmetricShopId: -d.tekmetricShopId, // separate namespace from silent
         mosShopId: d.mosShopId,
         alertDate: today,
@@ -291,11 +287,9 @@ export async function GET(req: NextRequest) {
         expectedDailyAverage: d.expectedDailyAverage,
         createdAt: new Date(),
       });
-      toAlertDrop.push(d);
+      if (inserted) toAlertDrop.push(d);
     } catch (err: any) {
-      if (err?.code !== 11000) {
-        console.error(`[TekmetricWebhookHealth] Drop alert dedup failed for shop ${d.tekmetricShopId}:`, err?.message);
-      }
+      console.error(`[TekmetricWebhookHealth] Drop alert dedup failed for shop ${d.tekmetricShopId}:`, err?.message);
     }
   }
 
@@ -305,7 +299,7 @@ export async function GET(req: NextRequest) {
   let latencyAlertNew = false;
   if (latencyAlertFiring) {
     try {
-      await alertsCollection.insertOne({
+      latencyAlertNew = await __deps.insertWebhookHealthAlert({
         tekmetricShopId: 0,
         mosShopId: null,
         alertDate: today,
@@ -315,11 +309,8 @@ export async function GET(req: NextRequest) {
         thresholdMs: P95_LATENCY_MS_THRESHOLD,
         createdAt: new Date(),
       });
-      latencyAlertNew = true;
     } catch (err: any) {
-      if (err?.code !== 11000) {
-        console.error(`[TekmetricWebhookHealth] Latency alert dedup failed:`, err?.message);
-      }
+      console.error(`[TekmetricWebhookHealth] Latency alert dedup failed:`, err?.message);
     }
   }
 
@@ -331,18 +322,16 @@ export async function GET(req: NextRequest) {
   const toAlertMissing: typeof missingSubs = [];
   for (const m of missingSubs) {
     try {
-      await alertsCollection.insertOne({
+      const inserted = await __deps.insertWebhookHealthAlert({
         tekmetricShopId: m.tekmetricShopId + 1_000_000,
         mosShopId: m.mosShopId,
         alertDate: today,
         alertKind: "missing_subscription",
         createdAt: new Date(),
       });
-      toAlertMissing.push(m);
+      if (inserted) toAlertMissing.push(m);
     } catch (err: any) {
-      if (err?.code !== 11000) {
-        console.error(`[TekmetricWebhookHealth] Missing-subscription alert dedup failed for shop ${m.tekmetricShopId}:`, err?.message);
-      }
+      console.error(`[TekmetricWebhookHealth] Missing-subscription alert dedup failed for shop ${m.tekmetricShopId}:`, err?.message);
     }
   }
 

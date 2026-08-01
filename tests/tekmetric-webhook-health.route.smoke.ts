@@ -36,11 +36,52 @@ function ok(name: string, cond: boolean, detail?: string) {
   }
 }
 
-function installFakes(db: any, sentEmails: any[]) {
+function installFakes(fake: any, sentEmails: any[]) {
+  const db = fake.db;
   __deps.getDb = (async () => db) as any;
   __deps.sendEmail = (async (args: any) => {
     sentEmails.push(args);
     return { ok: true };
+  }) as any;
+  // The route now reads subscriptions and writes dedup rows through
+  // flag-gated repository functions instead of hitting `db.collection(...)`
+  // directly. Back both seams with the SAME fake collections the test
+  // seeds so the alert-dedup + subscription semantics are preserved.
+  __deps.listWebhookSubscriptions = (async (ids?: number[]) => {
+    fake.ops.push({
+      op: "find",
+      collection: "tekmetric_webhook_subscriptions",
+      filter: ids ? { tekmetricShopId: { $in: ids } } : {},
+    });
+    const rows = fake.collections.tekmetric_webhook_subscriptions || [];
+    const filtered = ids
+      ? rows.filter((r: any) => ids.includes(Number(r.tekmetricShopId)))
+      : rows;
+    return filtered.map((d: any) => ({ ...d }));
+  }) as any;
+  // Simulate the Mongo unique-index dedup on (tekmetricShopId, alertDate):
+  // if a row with the same key already exists, the real insert throws
+  // E11000 and the repo returns false; otherwise the row is inserted and
+  // the repo returns true. Record an insertOne op so op-count assertions
+  // that tracked the dedup write still have a seam to inspect.
+  __deps.insertWebhookHealthAlert = (async (doc: any) => {
+    fake.ops.push({
+      op: "insertOne",
+      collection: "tekmetric_webhook_health_alerts",
+      doc,
+    });
+    const rows = fake.collections.tekmetric_webhook_health_alerts || [];
+    const exists = rows.some(
+      (r: any) =>
+        Number(r.tekmetricShopId) === Number(doc.tekmetricShopId) &&
+        r.alertDate === doc.alertDate,
+    );
+    if (exists) return false;
+    if (!fake.collections.tekmetric_webhook_health_alerts) {
+      fake.collections.tekmetric_webhook_health_alerts = [];
+    }
+    fake.collections.tekmetric_webhook_health_alerts.push({ ...doc });
+    return true;
   }) as any;
 }
 
@@ -57,7 +98,7 @@ async function run() {
     process.env.CRON_SECRET = "shhh";
     const fake = makeFakeDb({});
     const sent: any[] = [];
-    installFakes(fake.db, sent);
+    installFakes(fake, sent);
 
     const noAuth = await GET(
       new NextRequest("http://localhost/api/cron/tekmetric-webhook-health"),
@@ -88,7 +129,7 @@ async function run() {
     delete process.env.CRON_SECRET;
     const fake = makeFakeDb({});
     const sent: any[] = [];
-    installFakes(fake.db, sent);
+    installFakes(fake, sent);
     const res = await GET(
       new NextRequest("http://localhost/api/cron/tekmetric-webhook-health"),
     );
@@ -100,7 +141,7 @@ async function run() {
     process.env.CRON_SECRET = "shhh";
     const fake = makeFakeDb({});
     const sent: any[] = [];
-    installFakes(fake.db, sent);
+    installFakes(fake, sent);
     const res = await GET(
       new NextRequest("http://localhost/api/cron/tekmetric-webhook-health", {
         headers: { authorization: "Bearer shhh" },
@@ -116,7 +157,7 @@ async function run() {
   {
     const fake = makeFakeDb({});
     const sent: any[] = [];
-    installFakes(fake.db, sent);
+    installFakes(fake, sent);
     const res = await GET(
       new NextRequest("http://localhost/api/cron/tekmetric-webhook-health"),
     );
@@ -167,7 +208,7 @@ async function run() {
       tekmetric_webhook_health_alerts: [],
     });
     const sent: any[] = [];
-    installFakes(fake.db, sent);
+    installFakes(fake, sent);
     const res = await GET(
       new NextRequest("http://localhost/api/cron/tekmetric-webhook-health"),
     );
@@ -254,17 +295,25 @@ async function run() {
       fake.collections.tekmetric_webhook_health_alerts.length === 1,
     );
 
-    // Unique index is created defensively.
+    // Dedup contract is now enforced by the repo seam (which mirrors the
+    // Mongo unique index on (tekmetricShopId, alertDate)). The inserted row
+    // carries exactly that key, and re-inserting the same key is a no-op —
+    // verify both so the original "at most one alert per (shop, day)" intent
+    // still holds even though the index creation moved into the repository.
     ok(
-      "creates unique index on (tekmetricShopId, alertDate)",
-      fake.ops.some(
-        (o) =>
-          o.op === "createIndex" &&
-          o.collection === "tekmetric_webhook_health_alerts" &&
-          (o as any).spec.tekmetricShopId === 1 &&
-          (o as any).spec.alertDate === 1 &&
-          (o as any).opts?.unique === true,
-      ),
+      "alert row carries the (tekmetricShopId, alertDate) dedup key",
+      typeof insertedDoc.tekmetricShopId === "number" &&
+        typeof insertedDoc.alertDate === "string",
+    );
+    ok(
+      "repo seam dedups a second insert on the same (tekmetricShopId, alertDate)",
+      (await (__deps as any).insertWebhookHealthAlert({
+        tekmetricShopId: insertedDoc.tekmetricShopId,
+        mosShopId: insertedDoc.mosShopId,
+        alertDate: insertedDoc.alertDate,
+        createdAt: new Date(),
+      })) === false &&
+        fake.collections.tekmetric_webhook_health_alerts.length === 1,
     );
 
     // Email assertions: one per platform admin, correct subject + HTML.
@@ -324,7 +373,7 @@ async function run() {
       ],
     });
     const sent: any[] = [];
-    installFakes(fake.db, sent);
+    installFakes(fake, sent);
     const res = await GET(
       new NextRequest("http://localhost/api/cron/tekmetric-webhook-health"),
     );
@@ -368,7 +417,7 @@ async function run() {
       tekmetric_webhook_health_alerts: [],
     });
     const sent: any[] = [];
-    installFakes(fake.db, sent);
+    installFakes(fake, sent);
     const res = await GET(
       new NextRequest("http://localhost/api/cron/tekmetric-webhook-health"),
     );
@@ -418,7 +467,7 @@ async function run() {
       tekmetric_webhook_health_alerts: [],
     });
     const sent: any[] = [];
-    installFakes(fake.db, sent);
+    installFakes(fake, sent);
     const res = await GET(
       new NextRequest("http://localhost/api/cron/tekmetric-webhook-health"),
     );
@@ -446,7 +495,7 @@ async function run() {
       tekmetric_webhook_health_alerts: [],
     });
     const sent: any[] = [];
-    installFakes(fake.db, sent);
+    installFakes(fake, sent);
     const res = await GET(
       new NextRequest("http://localhost/api/cron/tekmetric-webhook-health"),
     );

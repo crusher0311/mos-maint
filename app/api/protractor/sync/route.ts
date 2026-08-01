@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
+import { findByShop as findBackfillProgressByShop } from "@/lib/data/repositories/protractor-backfill-progress";
+import {
+  findDeferredWorkByShop,
+  countDeferredWorkByShop,
+} from "@/lib/data/repositories/protractor-deferred-work";
 import {
   resolveProtractorConfig,
   fetchActiveWorkOrders,
@@ -47,7 +52,7 @@ export async function POST(req: NextRequest) {
   // Check if backfill has been completed - if not, trigger it
   const shop = await db.collection("shops").findOne({ shopId });
   if (shop && !shop.protractorBackfillComplete) {
-    const backfillProgress = await db.collection("backfill_progress").findOne({ shopId });
+    const backfillProgress = await findBackfillProgressByShop(shopId);
     if (!backfillProgress || !backfillProgress.completed) {
       console.log(`[Protractor Sync] Backfill not complete for shop ${shopId}, triggering in background`);
       runProtractorBackfill(shopId).then(result => {
@@ -168,7 +173,7 @@ export async function POST(req: NextRequest) {
     const discovered = new Map<string, { id: string; title: string; description: string; chapter: string; code: string }>();
     
     // Get from deferred work
-    const deferredWork = await db.collection("protractor_deferred_work").find({ shopId }).toArray();
+    const deferredWork = await findDeferredWorkByShop(shopId);
     console.log(`[Protractor Sync] Checking ${deferredWork.length} deferred work records for service packages...`);
     for (const dw of deferredWork) {
       const items = dw.items || dw.deferredWork || [];
@@ -443,7 +448,7 @@ export async function GET(req: NextRequest) {
   
   const vehicleCount = await db.collection("protractor_vehicles").countDocuments({ shopId });
   const workOrderCount = await db.collection("protractor_work_orders").countDocuments({ shopId });
-  const deferredWorkCount = await db.collection("protractor_deferred_work").countDocuments({ shopId });
+  const deferredWorkCount = await countDeferredWorkByShop(shopId);
   
   const cannedJobsCache = await db.collection("protractor_canned_jobs").findOne({ shopId });
   const cannedJobsCount = cannedJobsCache?.items?.length || 0;

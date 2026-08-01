@@ -1,4 +1,8 @@
-import { getDb } from "@/lib/mongo";
+import {
+  countUsageInWindow,
+  recentRateLimitedInWindow,
+  topShopsInWindow,
+} from "@/lib/data/repositories/api-usage";
 
 // Tekmetric usage stats reader.
 //
@@ -30,8 +34,7 @@ interface UsageStats {
 }
 
 const REQUEST_LIMIT_PER_MINUTE = 600;
-const USAGE_COLLECTION = "api_usage";
-const TEKMETRIC_FILTER = { provider: "tekmetric" } as const;
+const TEKMETRIC_PROVIDER = "tekmetric";
 
 export async function trackTekmetricRequest(
   _endpoint: string,
@@ -47,7 +50,6 @@ export async function trackTekmetricRequest(
 }
 
 export async function getTekmetricUsageStats(): Promise<UsageStats> {
-  const db = await getDb();
   const now = new Date();
 
   const oneMinuteAgo = new Date(now.getTime() - 60 * 1000);
@@ -55,20 +57,11 @@ export async function getTekmetricUsageStats(): Promise<UsageStats> {
   const sixtyMinutesAgo = new Date(now.getTime() - 60 * 60 * 1000);
 
   const [currentMinute, last5Minutes, last60Minutes, errors429, topShopsAgg] = await Promise.all([
-    db.collection(USAGE_COLLECTION).countDocuments({ ...TEKMETRIC_FILTER, timestamp: { $gte: oneMinuteAgo } }),
-    db.collection(USAGE_COLLECTION).countDocuments({ ...TEKMETRIC_FILTER, timestamp: { $gte: fiveMinutesAgo } }),
-    db.collection(USAGE_COLLECTION).countDocuments({ ...TEKMETRIC_FILTER, timestamp: { $gte: sixtyMinutesAgo } }),
-    db.collection(USAGE_COLLECTION).find({
-      ...TEKMETRIC_FILTER,
-      $or: [{ isRateLimited: true }, { statusCode: 429 }],
-      timestamp: { $gte: sixtyMinutesAgo },
-    }).sort({ timestamp: -1 }).limit(10).toArray(),
-    db.collection(USAGE_COLLECTION).aggregate([
-      { $match: { ...TEKMETRIC_FILTER, timestamp: { $gte: sixtyMinutesAgo }, shopId: { $exists: true, $ne: null } } },
-      { $group: { _id: "$shopId", count: { $sum: 1 } } },
-      { $sort: { count: -1 } },
-      { $limit: 10 }
-    ]).toArray()
+    countUsageInWindow(TEKMETRIC_PROVIDER, oneMinuteAgo),
+    countUsageInWindow(TEKMETRIC_PROVIDER, fiveMinutesAgo),
+    countUsageInWindow(TEKMETRIC_PROVIDER, sixtyMinutesAgo),
+    recentRateLimitedInWindow(TEKMETRIC_PROVIDER, sixtyMinutesAgo, 10),
+    topShopsInWindow(TEKMETRIC_PROVIDER, sixtyMinutesAgo, 10),
   ]);
 
   return {
@@ -78,11 +71,11 @@ export async function getTekmetricUsageStats(): Promise<UsageStats> {
     requestsPerMinuteLimit: REQUEST_LIMIT_PER_MINUTE,
     usagePercent: Math.round((currentMinute / REQUEST_LIMIT_PER_MINUTE) * 100),
     is429Count: errors429.length,
-    topShops: topShopsAgg.map(s => ({ shopId: s._id as number, count: s.count as number })),
+    topShops: topShopsAgg.map(s => ({ shopId: s.shopId, count: s.count })),
     recentErrors: errors429.map(e => ({
-      timestamp: e.timestamp as Date,
+      timestamp: e.timestamp,
       endpoint: e.endpoint as string,
-      shopId: e.shopId as number | undefined,
+      shopId: e.shopId,
     }))
   };
 }

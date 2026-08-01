@@ -8,6 +8,7 @@ import { getCachedVehicle, cacheVehicle, getCachedCustomer, cacheCustomer, getCa
 import { getPaceConfig, midpoint, describePace, getBackfillYears, reopenCompletedShopsForHorizon } from "@/lib/integrations/backfill-pace";
 import { prepareQuietWindowGate, applyQuietWindowGate } from "@/lib/data/repositories/activity-profiles";
 import { archiveResolvedSkippedRos } from "@/lib/integrations/tekmetric/skipped-ro-resolution";
+import { getDrainLock } from "@/lib/data/repositories/tekmetric-ops";
 import { bulkCacheJobs, bulkFetchJobsByShopWindow, isBulkJobsPrewarmEnabledForShop } from "@/lib/integrations/tekmetric/bulk-jobs";
 import { probeTekmetricRoCount, getPrePassVehicle, getPrePassCustomer } from "@/lib/integrations/tekmetric/full-page-backfill";
 import { syncTekmetricRoster } from "@/lib/integrations/tekmetric/sync-roster";
@@ -1967,7 +1968,7 @@ export async function GET(req: NextRequest) {
   // calls don't race the cron's writes to `tekmetric_backfill_progress`
   // (cursor regressions, clobbered skip windows, double-counted totals).
   // Lease has a TTL — a crashed drain won't lock cron out forever.
-  const drainLock = await db.collection("tekmetric_drain_lock").findOne({ _id: "global" as any });
+  const drainLock = await getDrainLock();
   if (drainLock && drainLock.expiresAt && new Date(drainLock.expiresAt) > new Date()) {
     return NextResponse.json({
       ok: true,
@@ -2286,7 +2287,7 @@ export async function POST(req: NextRequest) {
   // Drain-mode lock — see GET handler for rationale. Same gate applied to
   // the manual POST trigger (used by wave1-backfill.ts and admin-clicked
   // single-shop kicks) so nothing races the drain worker.
-  const drainLock = await db.collection("tekmetric_drain_lock").findOne({ _id: "global" as any });
+  const drainLock = await getDrainLock();
   if (drainLock && drainLock.expiresAt && new Date(drainLock.expiresAt) > new Date()) {
     return NextResponse.json({
       ok: true,

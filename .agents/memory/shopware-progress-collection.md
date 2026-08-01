@@ -1,17 +1,10 @@
 ---
-name: Shop-Ware backfill progress lives in collection `ln`
-description: Which Mongo collection actually holds Shop-Ware backfill progress, and the latent bug in chunk-speed-health.
+name: Shop-Ware progress collection
+description: Which Mongo collection actually holds Shop-Ware backfill progress (ln vs shopware_backfill_progress) — flipped over time.
 ---
 
-# Shop-Ware backfill progress collection
+**Rule:** Shop-Ware backfill progress lives in Mongo `shopware_backfill_progress` (verified 2026-08-01: `ln` has 0 docs; `shopware_backfill_progress` has live per-shop docs with fresh `lastRunAt`). The historically odd `ln` collection is DEAD.
 
-Shop-Ware per-shop backfill progress is stored in the oddly-named **`ln`**
-collection (default app-data DB). That's what `shopware-backfill`,
-`backfill-reconcile`, and `invoice-cache-refresh` all read/write.
+**Why:** an earlier era had the reverse (progress in `ln`), and stale comments survive: `app/api/cron/pipeline-stall-alerter/lib.ts` still documents `ln` as live and reads it for its Shop-Ware branch — that branch is therefore blind to Shop-Ware stalls. The flag-gated repo `lib/data/repositories/shopware-ops.ts` targets `shopware_backfill_progress` (correct).
 
-**Latent gotcha:** `app/api/cron/backfill-chunk-speed-health/lib.ts` lists the
-Shop-Ware collection as `shopware_backfill_progress`, which is effectively
-empty — so that cron's Shop-Ware branch silently detects nothing. Any new
-code that needs Shop-Ware progress must use `ln`, not
-`shopware_backfill_progress`. (Tekmetric → `tekmetric_backfill_progress`,
-Protractor → `backfill_progress` are correct everywhere.)
+**How to apply:** before trusting any "which collection is live" comment for Shop-Ware, count docs + check latest `lastRunAt` in both. Don't repoint stall detection to `ln`.

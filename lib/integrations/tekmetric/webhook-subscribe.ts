@@ -26,7 +26,7 @@
  */
 
 import { getValidAccessToken } from "@/lib/integrations/tekmetric/auth";
-import { getDb } from "@/lib/mongo";
+import { upsertWebhookSubscription } from "@/lib/data/repositories/tekmetric-ops";
 
 const DEFAULT_EVENTS = [
   "RepairOrder.Created",
@@ -91,21 +91,17 @@ export async function subscribeShopToTekmetricWebhooks(opts: {
 
   // Persist outcome for the visibility endpoint.
   try {
-    const db = await getDb();
-    await db.collection("tekmetric_webhook_subscriptions").updateOne(
-      { tekmetricShopId: opts.tekmetricShopId },
+    await upsertWebhookSubscription(
+      opts.tekmetricShopId,
       {
-        $set: {
-          tekmetricShopId: opts.tekmetricShopId,
-          mosShopId: opts.mosShopId ?? null,
-          lastAttemptAt: new Date(),
-          lastResult: result,
-          events,
-          publicUrl,
-        },
-        $setOnInsert: { firstAttemptAt: new Date() },
+        tekmetricShopId: opts.tekmetricShopId,
+        mosShopId: opts.mosShopId ?? null,
+        lastAttemptAt: new Date(),
+        lastResult: result,
+        events,
+        publicUrl,
       },
-      { upsert: true }
+      { firstAttemptAt: new Date() },
     );
   } catch (err: any) {
     console.warn(`[TekmetricWebhookSubscribe] Failed to persist outcome for shop ${opts.tekmetricShopId}:`, err?.message);

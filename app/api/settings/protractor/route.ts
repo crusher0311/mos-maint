@@ -5,6 +5,11 @@ import { testConnection, resolveProtractorConfig } from "@/lib/integrations/prot
 import { runProtractorBackfill } from "@/lib/integrations/protractor/sync";
 import { prewarmProtractorJobsCacheForOnboarding } from "@/lib/integrations/protractor/jobs-prewarm";
 import { ensureProtractorWebhookSubscription } from "@/lib/integrations/protractor/webhook-subscribe";
+import { deleteDeferredWorkByShop } from "@/lib/data/repositories/protractor-deferred-work";
+import {
+  deleteByShop as deleteBackfillProgressByShop,
+} from "@/lib/data/repositories/protractor-backfill-progress";
+import { countServiceItemsByShop } from "@/lib/data/repositories/protractor-service-items";
 import {
   DEFAULT_PART_COST_RATIO,
   MIN_PART_COST_RATIO,
@@ -233,8 +238,8 @@ export async function POST(req: NextRequest) {
           db.collection("protractor_canned_jobs").deleteOne({ shopId }),
           db.collection("protractor_vehicles").deleteMany({ shopId }),
           db.collection("protractor_work_orders").deleteMany({ shopId }),
-          db.collection("protractor_deferred_work").deleteMany({ shopId }),
-          db.collection("backfill_progress").deleteOne({ shopId }),
+          deleteDeferredWorkByShop(shopId),
+          deleteBackfillProgressByShop(shopId),
           db.collection("cached_plans").deleteMany({ shopId }),
         ]);
         console.log(
@@ -271,9 +276,7 @@ export async function POST(req: NextRequest) {
       // the parity "imported N vehicles" line in the UI.
       let initialSyncVehicles = 0;
       try {
-        initialSyncVehicles = await db
-          .collection("protractor_service_items")
-          .countDocuments({ shopId });
+        initialSyncVehicles = await countServiceItemsByShop(shopId);
       } catch {}
 
       await db.collection("shops").updateOne(
@@ -388,7 +391,7 @@ export async function DELETE(req: NextRequest) {
     await db.collection("protractor_canned_jobs").deleteOne({ shopId });
     await db.collection("protractor_vehicles").deleteMany({ shopId });
     await db.collection("protractor_work_orders").deleteMany({ shopId });
-    await db.collection("protractor_deferred_work").deleteMany({ shopId });
+    await deleteDeferredWorkByShop(shopId);
 
     return NextResponse.json({ ok: true, message: "Protractor disconnected" });
   } catch (err: any) {

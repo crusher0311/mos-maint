@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
+import { insertAutoVitalsImport } from "@/lib/data/repositories/autovitals-imports";
 
 export const runtime = "nodejs";
 
@@ -113,7 +114,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    await db.collection("autovitals_imports").insertOne({
+    await insertAutoVitalsImport({
       shopId,
       source: source || "autovitals",
       pageUrl,

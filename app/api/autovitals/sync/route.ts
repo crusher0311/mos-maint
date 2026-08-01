@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
+import { countAutoVitalsAppointments } from "@/lib/data/repositories/autovitals-appointments";
+import { countAutoVitalsInspections } from "@/lib/data/repositories/autovitals-inspections";
 import {
   getShopAutoVitalsConfig,
   getAppointmentUpdates,
@@ -98,8 +100,8 @@ export async function GET(request: NextRequest) {
     const db = await getDb();
 
     const vehicleCount = await db.collection("autovitals_vehicles").countDocuments({ shopId: user.shopId });
-    const appointmentCount = await db.collection("autovitals_appointments").countDocuments({ shopId: user.shopId });
-    const inspectionCount = await db.collection("autovitals_inspections").countDocuments({ shopId: user.shopId });
+    const appointmentCount = await countAutoVitalsAppointments(user.shopId);
+    const inspectionCount = await countAutoVitalsInspections(user.shopId);
 
     const lastVehicle = await db.collection("autovitals_vehicles")
       .findOne({ shopId: user.shopId }, { sort: { updatedAt: -1 } });

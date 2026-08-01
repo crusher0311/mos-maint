@@ -4,6 +4,14 @@ import crypto from "node:crypto";
 import https from "node:https";
 import pLimit from "p-limit";
 import { getDb } from "@/lib/mongo";
+import {
+  findDeferredWorkByShopAndVin,
+  upsertDeferredWorkSnapshot,
+} from "@/lib/data/repositories/protractor-deferred-work";
+import {
+  findFreshTemplateCacheEntry,
+  upsertTemplateCacheEntry,
+} from "@/lib/data/repositories/protractor-template-cache";
 import { trackApiRequest, acquireDistributedRateLimitSlot } from "@/lib/api-usage-tracker";
 import {
   extractProtractorLineCost,
@@ -2400,23 +2408,8 @@ export async function upsertProtractorDeferredWorkSnapshot(
   vin: string,
   deferredWork: ProtractorDeferredWork[]
 ): Promise<void> {
-  const db = await getDb();
   const now = new Date();
-  
-  await db.collection("protractor_deferred_work").updateOne(
-    { shopId, vin: vin.toUpperCase() },
-    {
-      $set: {
-        shopId,
-        vin: vin.toUpperCase(),
-        items: deferredWork,
-        fetchedAt: now,
-        source: "protractor",
-      },
-      $setOnInsert: { createdAt: now },
-    },
-    { upsert: true }
-  );
+  await upsertDeferredWorkSnapshot(shopId, vin, deferredWork, now);
 }
 
 const CACHE_TTL_HOURS = 6;
@@ -2472,11 +2465,7 @@ export async function fetchDeferredWorkWithCache(
   serviceItemId: string,
   maxAgeMs = CACHE_TTL_HOURS * 60 * 60 * 1000
 ): Promise<{ ok: boolean; deferredWork?: ProtractorDeferredWork[]; error?: string; source?: "cache" | "api" }> {
-  const db = await getDb();
-  const cached = await db.collection("protractor_deferred_work").findOne({
-    shopId,
-    vin: vin.toUpperCase(),
-  });
+  const cached = await findDeferredWorkByShopAndVin(shopId, vin);
 
   const now = Date.now();
   const fresh = cached?.fetchedAt
@@ -3064,14 +3053,10 @@ export async function fetchServicePackageTemplateDetail(
     return { ok: false, error: "Protractor not configured for this shop" };
   }
 
-  const db = await getDb();
   const cacheKey = `protractor_template_${shopId}_${templateId}`;
   
   // Check cache first
-  const cached = await db.collection("protractor_template_cache").findOne({ 
-    cacheKey,
-    expiresAt: { $gt: new Date() }
-  });
+  const cached = await findFreshTemplateCacheEntry(cacheKey);
   
   if (cached) {
     if (cached.is404) {
@@ -3122,21 +3107,15 @@ export async function fetchServicePackageTemplateDetail(
       };
 
       // Cache successful response
-      await db.collection("protractor_template_cache").updateOne(
-        { cacheKey },
-        {
-          $set: {
-            cacheKey,
-            template: normalized,
-            is404: false,
-            shopId,
-            templateId,
-            fetchedAt: new Date(),
-            expiresAt: new Date(Date.now() + TEMPLATE_CACHE_TTL_MS)
-          }
-        },
-        { upsert: true }
-      );
+      await upsertTemplateCacheEntry({
+        cacheKey,
+        template: normalized,
+        is404: false,
+        shopId,
+        templateId,
+        fetchedAt: new Date(),
+        expiresAt: new Date(Date.now() + TEMPLATE_CACHE_TTL_MS),
+      });
       return { ok: true, template: normalized };
     }
 
@@ -3166,21 +3145,15 @@ export async function fetchServicePackageTemplateDetail(
   
   if (is404) {
     // Cache 404 to avoid repeated requests
-    await db.collection("protractor_template_cache").updateOne(
-      { cacheKey },
-      { 
-        $set: { 
-          cacheKey,
-          is404: true,
-          template: null,
-          shopId,
-          templateId,
-          fetchedAt: new Date(),
-          expiresAt: new Date(Date.now() + TEMPLATE_404_TTL_MS)
-        }
-      },
-      { upsert: true }
-    );
+    await upsertTemplateCacheEntry({
+      cacheKey,
+      is404: true,
+      template: null,
+      shopId,
+      templateId,
+      fetchedAt: new Date(),
+      expiresAt: new Date(Date.now() + TEMPLATE_404_TTL_MS),
+    });
   }
 
   return { ok: false, error: `Template detail not found for ID ${templateId}` };
@@ -3461,17 +3434,13 @@ export async function fetchCannedJobDetailViaTemplate(
     return { ok: false, error: "Protractor not configured for this shop" };
   }
 
-  const db = await getDb();
   // Distinct cacheKey prefix so this can't collide with
   // `fetchServicePackageTemplateDetail` (which hits the undocumented
   // `/ServicePackageTemplate/Read/{id}` and uses prefix
   // `protractor_template_`). Same collection, different namespace.
   const cacheKey = `protractor_template_get_${shopId}_${templateId}`;
 
-  const cached = await db.collection("protractor_template_cache").findOne({
-    cacheKey,
-    expiresAt: { $gt: new Date() },
-  });
+  const cached = await findFreshTemplateCacheEntry(cacheKey);
 
   if (cached) {
     if (cached.is404) {
@@ -3522,21 +3491,15 @@ export async function fetchCannedJobDetailViaTemplate(
         },
       };
 
-      await db.collection("protractor_template_cache").updateOne(
-        { cacheKey },
-        {
-          $set: {
-            cacheKey,
-            template: normalized,
-            is404: false,
-            shopId,
-            templateId,
-            fetchedAt: new Date(),
-            expiresAt: new Date(Date.now() + CANNED_JOB_DETAIL_VIA_TEMPLATE_CACHE_TTL_MS),
-          },
-        },
-        { upsert: true },
-      );
+      await upsertTemplateCacheEntry({
+        cacheKey,
+        template: normalized,
+        is404: false,
+        shopId,
+        templateId,
+        fetchedAt: new Date(),
+        expiresAt: new Date(Date.now() + CANNED_JOB_DETAIL_VIA_TEMPLATE_CACHE_TTL_MS),
+      });
       return { ok: true, detail: normalized };
     }
 
@@ -3560,21 +3523,15 @@ export async function fetchCannedJobDetailViaTemplate(
 
   const is404 = result.error?.includes("404") || result.error?.includes("not found");
   if (is404) {
-    await db.collection("protractor_template_cache").updateOne(
-      { cacheKey },
-      {
-        $set: {
-          cacheKey,
-          is404: true,
-          template: null,
-          shopId,
-          templateId,
-          fetchedAt: new Date(),
-          expiresAt: new Date(Date.now() + CANNED_JOB_DETAIL_VIA_TEMPLATE_404_TTL_MS),
-        },
-      },
-      { upsert: true },
-    );
+    await upsertTemplateCacheEntry({
+      cacheKey,
+      is404: true,
+      template: null,
+      shopId,
+      templateId,
+      fetchedAt: new Date(),
+      expiresAt: new Date(Date.now() + CANNED_JOB_DETAIL_VIA_TEMPLATE_404_TTL_MS),
+    });
   }
 
   return { ok: false, error: `Template detail not found for ID ${templateId}` };
@@ -5229,11 +5186,7 @@ export async function addDeferredWorkToWorkOrder(
     return { ok: false, error: "Protractor not configured for this shop" };
   }
 
-  const db = await getDb();
-  const cachedDeferred = await db.collection("protractor_deferred_work").findOne({
-    shopId,
-    vin: vin.toUpperCase()
-  });
+  const cachedDeferred = await findDeferredWorkByShopAndVin(shopId, vin);
 
   if (!cachedDeferred?.items) {
     return { ok: false, error: "Deferred work not found in cache" };

@@ -11,3 +11,4 @@ export * from "./wave2";
 export * from "./wave3";
 export * from "./wave4";
 export * from "./operational";
+export * from "./integration-ops";

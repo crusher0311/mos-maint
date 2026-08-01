@@ -233,6 +233,32 @@ export async function findLatestAppointmentForVehicle(
   return rows.length ? reconstructAppointment(rows[0]) : null;
 }
 
+export async function countAutoVitalsAppointments(
+  shopId: string,
+): Promise<number> {
+  const db = getDb();
+  const rows = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(autovitalsAppointments)
+    .where(eq(autovitalsAppointments.shopId, shopId));
+  return rows[0]?.count ?? 0;
+}
+
+export async function deleteAutoVitalsAppointmentsForShop(
+  shopId: number,
+): Promise<number> {
+  const db = getDb();
+  // shop_id is TEXT; the cache writes the string spelling, so match both
+  // the string and numeric renderings to mirror the Mongo `$or`.
+  const result = await db
+    .delete(autovitalsAppointments)
+    .where(
+      sql`${autovitalsAppointments.shopId} in (${String(shopId)}, ${String(Number(shopId))})`,
+    )
+    .returning({ shopId: autovitalsAppointments.shopId });
+  return result.length;
+}
+
 /* -------------------------------------------------------------------------- */
 /* inspections                                                                 */
 /* -------------------------------------------------------------------------- */
@@ -279,6 +305,24 @@ export async function upsertAutoVitalsInspection(
     });
 }
 
+function reconstructInspection(
+  row: typeof autovitalsInspections.$inferSelect,
+): AnyDoc {
+  const payload = (row.payload as AnyDoc) ?? {};
+  return {
+    ...payload,
+    appointmentId: row.appointmentId,
+    shopId: row.shopId,
+    inspectionResultId: row.inspectionResultId ?? undefined,
+    completedAt: row.completedAt ?? undefined,
+    technicianId: row.technicianId ?? undefined,
+    technicianName: row.technicianName ?? undefined,
+    items: row.items ?? undefined,
+    updatedAt: row.updatedAt,
+    createdAt: row.createdAt,
+  };
+}
+
 export async function findAutoVitalsInspection(
   appointmentId: number,
   shopId: string,
@@ -294,19 +338,62 @@ export async function findAutoVitalsInspection(
       ),
     )
     .limit(1);
-  if (!rows.length) return null;
-  const row = rows[0];
-  const payload = (row.payload as AnyDoc) ?? {};
-  return {
-    ...payload,
-    appointmentId: row.appointmentId,
-    shopId: row.shopId,
-    inspectionResultId: row.inspectionResultId ?? undefined,
-    completedAt: row.completedAt ?? undefined,
-    technicianId: row.technicianId ?? undefined,
-    technicianName: row.technicianName ?? undefined,
-    items: row.items ?? undefined,
-    updatedAt: row.updatedAt,
-    createdAt: row.createdAt,
-  };
+  return rows.length ? reconstructInspection(rows[0]) : null;
+}
+
+export async function findLatestInspectionForAppointment(
+  shopId: string,
+  appointmentId: number,
+): Promise<AnyDoc | null> {
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(autovitalsInspections)
+    .where(
+      and(
+        eq(autovitalsInspections.shopId, shopId),
+        eq(autovitalsInspections.appointmentId, appointmentId),
+      ),
+    )
+    .orderBy(desc(autovitalsInspections.updatedAt))
+    .limit(1);
+  return rows.length ? reconstructInspection(rows[0]) : null;
+}
+
+export async function countAutoVitalsInspections(
+  shopId: string,
+): Promise<number> {
+  const db = getDb();
+  const rows = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(autovitalsInspections)
+    .where(eq(autovitalsInspections.shopId, shopId));
+  return rows[0]?.count ?? 0;
+}
+
+/**
+ * Raw insert of a browser-extension DVI capture. These docs have no
+ * AutoVitals `appointmentId`, so we synthesize a unique negative key
+ * (the table PK is `(shopId, appointmentId)`) and stash the verbatim
+ * doc in `payload`. Returns the synthetic appointmentId as the id.
+ */
+export async function insertAutoVitalsInspectionDoc(
+  doc: AnyDoc,
+): Promise<unknown> {
+  const db = getDb();
+  const now = new Date();
+  const shopId = String(doc.shopId ?? "");
+  const syntheticId = -now.getTime();
+  await db.insert(autovitalsInspections).values({
+    shopId,
+    appointmentId: syntheticId,
+    completedAt:
+      typeof doc.inspectionDate === "string"
+        ? (doc.inspectionDate as string)
+        : null,
+    payload: doc,
+    updatedAt: now,
+    createdAt: now,
+  } as typeof autovitalsInspections.$inferInsert);
+  return syntheticId;
 }

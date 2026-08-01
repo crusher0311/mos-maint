@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { requirePlatformAdmin } from "@/lib/auth";
+import { findAllShopwareBackfillProgress } from "@/lib/data/repositories/shopware-ops";
 import {
   buildChunkSpeed,
   computeStuckDiagnostics,
@@ -22,7 +23,7 @@ export async function GET() {
       shopwareShopDocs,
       chunkSpeedAlertsByKey,
     ] = await Promise.all([
-      db.collection("shopware_backfill_progress").find({}).toArray(),
+      findAllShopwareBackfillProgress(),
       // Per-shop Shop-Ware jobs-cache pre-warm overlay (task #72). Stamped
       // by lib/shopware-jobs-prewarm.ts on `shops.shopware.jobsCachePrewarm`.
       db.collection("shops").find(

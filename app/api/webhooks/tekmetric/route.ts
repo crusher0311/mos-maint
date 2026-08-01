@@ -8,6 +8,7 @@ import { triggerVhiOnWorkOrderClose, triggerVhiOnWorkOrderCreate, extractAuthori
 import { NormalizedIngestionService } from "@/lib/integrations/core/normalized-ingestion";
 import { getRepairOrderInspectionsWithXAuth } from "@/lib/integrations/tekmetric/client";
 import { tekmetricShopIdFilter } from "@/lib/integrations/tekmetric/shop-lookup";
+import { insertWebhookLog as insertTekmetricWebhookLog } from "@/lib/data/repositories/tekmetric-ops";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -927,7 +928,7 @@ export async function POST(req: NextRequest) {
     // without changing what callers feel.
     const handlerDurationMs = Date.now() - startTime;
 
-    await db.collection("tekmetric_webhook_logs").insertOne({
+    await insertTekmetricWebhookLog({
       eventType,
       data,
       rawBody: body,

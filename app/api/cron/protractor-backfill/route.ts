@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { findAndResumeStaleBackfills, findAndRunNewShopFastpath, runProtractorBackfill } from "@/lib/integrations/protractor/sync";
-import { getDb } from "@/lib/mongo";
+import { upsertMerge as upsertBackfillProgress } from "@/lib/data/repositories/protractor-backfill-progress";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,11 +46,7 @@ export async function GET(req: NextRequest) {
       const shopId = parseInt(shopIdParam, 10);
       console.log(`[Protractor Backfill Cron] Force-starting backfill for shop ${shopId}...`);
       
-      const db = await getDb();
-      await db.collection("backfill_progress").updateOne(
-        { shopId },
-        { $set: { inProgress: false } }
-      );
+      await upsertBackfillProgress(shopId, { set: { inProgress: false } });
 
       // `?wait=1` opts in to synchronous execution so the platform-admin
       // "Run chunk now" endpoint can surface chunk metrics inline. The

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { getValidToken } from "@/lib/integrations/tekmetric/auth";
+import { getProgress } from "@/lib/data/repositories/tekmetric-ops";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -142,9 +143,10 @@ export async function GET(req: NextRequest) {
 
     // 2. Pull the backfill-progress row so we can include the current
     //    cursor / lastError in the report (saves another hop).
-    backfillRow = (await db
-      .collection("tekmetric_backfill_progress")
-      .findOne({ shopId: mosShopId })) as Record<string, unknown> | null;
+    backfillRow = (await getProgress(mosShopId)) as Record<
+      string,
+      unknown
+    > | null;
 
     // 3. Get a valid token (this exercises the OAuth client_credentials
     //    flow against Tekmetric — if this throws we know the shared

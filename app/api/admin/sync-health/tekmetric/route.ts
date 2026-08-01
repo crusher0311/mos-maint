@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { requirePlatformAdmin } from "@/lib/auth";
 import {
+  listProgress as listTekmetricProgress,
+  listCatchupRuns as listTekmetricCatchupRuns,
+} from "@/lib/data/repositories/tekmetric-ops";
+import {
   buildChunkSpeed,
   computeStuckDiagnostics,
   loadChunkSpeedAlertsByKey,
@@ -31,7 +35,7 @@ export async function GET() {
       tekmetricCatchupRunDocs,
       tekmetricEligibleShopDocs,
     ] = await Promise.all([
-      db.collection("tekmetric_backfill_progress").find({}).toArray(),
+      listTekmetricProgress(),
       // Aggregate stale-archived entries (auto-archived after 30d without
       // re-fetch). Surfaces in the admin view as a separate "stale, never
       // re-fetched" bucket so cold leftovers stop polluting the live skipped
@@ -86,11 +90,7 @@ export async function GET() {
       // on-call can see which Tekmetric shops haven't been touched by
       // the recent overnight runs (task #287). Mirrors the
       // `coverage` default in /api/cron/catchup-status.
-      db.collection("tekmetric_catchup_runs")
-        .find({})
-        .sort({ startedAt: -1 })
-        .limit(10)
-        .toArray(),
+      listTekmetricCatchupRuns(10),
       // Tekmetric-eligible shops for the catch-up coverage join (task
       // #287). Same OR-filter as /api/cron/catchup-status so the totals
       // on the sync-health card line up with what that endpoint returns.

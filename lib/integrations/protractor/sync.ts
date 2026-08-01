@@ -12,6 +12,11 @@ import { extractJobIndexFromWorkOrder, updatePartCrossReferences, computeJobHash
 import { createIngestionService } from "@/lib/integrations/core/normalized-ingestion";
 import { getPaceConfig, midpoint, describePace, getBackfillYears, reopenCompletedShopsForHorizon } from "@/lib/integrations/backfill-pace";
 import { prepareQuietWindowGate, applyQuietWindowGate } from "@/lib/data/repositories/activity-profiles";
+import {
+  findServiceItem,
+  upsertServiceItem,
+} from "@/lib/data/repositories/protractor-service-items";
+import * as backfillProgress from "@/lib/data/repositories/protractor-backfill-progress";
 import pLimit from "p-limit";
 import { detectDviLinksFromProtractorInvoice, isDviLinkIngestEnabled } from "@/lib/dvi-links/ingest";
 
@@ -90,19 +95,16 @@ async function getOrFetchVehicle(
 ): Promise<{ vin?: string; year?: number; make?: string; model?: string; engine?: string } | null> {
   if (!serviceItemId) return null;
   
-  const cached = await db.collection("protractor_service_items").findOne({ 
-    shopId, 
-    serviceItemId 
-  });
+  const cached = await findServiceItem(shopId, serviceItemId);
   
   if (cached) {
     if (cacheCounters) cacheCounters.hits++;
     return {
-      vin: cached.vin,
-      year: cached.year,
-      make: cached.make,
-      model: cached.model,
-      engine: cached.engine,
+      vin: cached.vin ?? undefined,
+      year: cached.year ?? undefined,
+      make: cached.make ?? undefined,
+      model: cached.model ?? undefined,
+      engine: cached.engine ?? undefined,
     };
   }
 
@@ -125,11 +127,7 @@ async function getOrFetchVehicle(
       fetchedAt: new Date(),
     };
     
-    await db.collection("protractor_service_items").updateOne(
-      { shopId, serviceItemId },
-      { $set: vehicleData },
-      { upsert: true }
-    );
+    await upsertServiceItem(shopId, serviceItemId, vehicleData);
     
     return {
       vin: vehicleData.vin || undefined,
@@ -261,7 +259,7 @@ async function backfillShopChunk(
     }
   );
 
-  let progress = await db.collection("backfill_progress").findOne({ shopId });
+  let progress = await backfillProgress.findByShop(shopId);
   
   const today = new Date();
   today.setHours(23, 59, 59, 999);
@@ -279,20 +277,16 @@ async function backfillShopChunk(
   } else {
     chunkEnd = new Date(today);
     console.log(`[Backfill] Shop ${shopId}: Starting fresh (logicVersion=${progress?.logicVersion || 'none'})`);
-    await db.collection("backfill_progress").updateOne(
-      { shopId },
-      { 
-        $set: { 
-          shopId, 
-          startedAt: new Date(), 
-          currentChunkEnd: chunkEnd, 
-          completed: false,
-          logicVersion: 4
-        },
-        $unset: { currentChunkStart: "" }
+    await backfillProgress.upsertMerge(shopId, {
+      set: {
+        shopId,
+        startedAt: new Date(),
+        currentChunkEnd: chunkEnd,
+        completed: false,
+        logicVersion: 4,
       },
-      { upsert: true }
-    );
+      unset: ["currentChunkStart"],
+    });
   }
 
   let daysToProcess = pace.chunkDays;
@@ -362,18 +356,15 @@ async function backfillShopChunk(
     }
     daysToProcess = shrunk;
   }
-  await db.collection("backfill_progress").updateOne(
-    { shopId },
-    {
-      $set: {
-        pendingAttempt: {
-          chunkEnd,
-          days: daysToProcess,
-          startedAt: new Date(),
-        },
+  await backfillProgress.upsertMerge(shopId, {
+    set: {
+      pendingAttempt: {
+        chunkEnd,
+        days: daysToProcess,
+        startedAt: new Date(),
       },
     },
-  );
+  });
   
   const chunkStart = new Date(chunkEnd);
   chunkStart.setDate(chunkStart.getDate() - daysToProcess);
@@ -382,10 +373,9 @@ async function backfillShopChunk(
   }
 
   if (chunkEnd <= oldestDate) {
-    await db.collection("backfill_progress").updateOne(
-      { shopId },
-      { $set: { completed: true, completedAt: new Date() } }
-    );
+    await backfillProgress.upsertMerge(shopId, {
+      set: { completed: true, completedAt: new Date() },
+    });
     await db.collection("shops").updateOne(
       { shopId },
       { $set: { protractorBackfillComplete: true, protractorBackfillCompletedAt: new Date() } }
@@ -437,26 +427,23 @@ async function backfillShopChunk(
       0,
       RECENT_CHUNK_METRICS_LIMIT,
     );
-    await db.collection("backfill_progress").updateOne(
-      { shopId },
-      {
-        $set: {
-          currentChunkEnd: nextChunkEnd,
-          lastRunAt: new Date(),
-          lastInvoiceCount: 0,
-          completed: isComplete,
-          ...(isComplete ? { completedAt: new Date() } : {}),
-          ...(chunkHadError
-            ? { lastError: "empty chunk after error", lastErrorAt: new Date() }
-            : { lastError: null, lastErrorAt: null }),
-          lastChunkMetrics: emptyChunkMetrics,
-          recentChunkMetrics: nextEmptyRecent,
-        },
-        // Chunk committed its cursor decision — clear the interrupted-attempt
-        // marker so the next chunk isn't treated as a re-walk (task #946).
-        $unset: { pendingAttempt: "" },
-      }
-    );
+    await backfillProgress.upsertMerge(shopId, {
+      set: {
+        currentChunkEnd: nextChunkEnd,
+        lastRunAt: new Date(),
+        lastInvoiceCount: 0,
+        completed: isComplete,
+        ...(isComplete ? { completedAt: new Date() } : {}),
+        ...(chunkHadError
+          ? { lastError: "empty chunk after error", lastErrorAt: new Date() }
+          : { lastError: null, lastErrorAt: null }),
+        lastChunkMetrics: emptyChunkMetrics,
+        recentChunkMetrics: nextEmptyRecent,
+      },
+      // Chunk committed its cursor decision — clear the interrupted-attempt
+      // marker so the next chunk isn't treated as a re-walk (task #946).
+      unset: ["pendingAttempt"],
+    });
     if (isComplete) {
       await db.collection("shops").updateOne(
         { shopId },
@@ -759,27 +746,24 @@ async function backfillShopChunk(
       `backoff=${chunkMetrics.backoff429Ms}ms`,
   );
 
-  await db.collection("backfill_progress").updateOne(
-    { shopId },
-    {
-      $set: {
-        currentChunkEnd: nextChunkEnd,
-        lastRunAt: new Date(),
-        lastInvoiceCount: invoices.length,
-        completed: isComplete,
-        ...(isComplete ? { completedAt: new Date() } : {}),
-        ...(chunkHadError
-          ? { lastError: "chunk had errors, holding cursor", lastErrorAt: new Date() }
-          : { lastError: null, lastErrorAt: null }),
-        lastChunkMetrics: chunkMetrics,
-        recentChunkMetrics: nextRecentChunkMetrics,
-      },
-      $inc: { totalJobsIndexed: jobsIndexed },
-      // Chunk committed its cursor decision — clear the interrupted-attempt
-      // marker so the next chunk isn't treated as a re-walk (task #946).
-      $unset: { pendingAttempt: "" },
-    }
-  );
+  await backfillProgress.upsertMerge(shopId, {
+    set: {
+      currentChunkEnd: nextChunkEnd,
+      lastRunAt: new Date(),
+      lastInvoiceCount: invoices.length,
+      completed: isComplete,
+      ...(isComplete ? { completedAt: new Date() } : {}),
+      ...(chunkHadError
+        ? { lastError: "chunk had errors, holding cursor", lastErrorAt: new Date() }
+        : { lastError: null, lastErrorAt: null }),
+      lastChunkMetrics: chunkMetrics,
+      recentChunkMetrics: nextRecentChunkMetrics,
+    },
+    inc: { totalJobsIndexed: jobsIndexed },
+    // Chunk committed its cursor decision — clear the interrupted-attempt
+    // marker so the next chunk isn't treated as a re-walk (task #946).
+    unset: ["pendingAttempt"],
+  });
 
   if (isComplete) {
     await db.collection("shops").updateOne(
@@ -871,36 +855,11 @@ export async function runProtractorBackfill(
   // "Already in progress" signal instead of letting the outer try/catch
   // misclassify it as a backfill error.
   const staleLockThreshold = new Date(Date.now() - STALE_THRESHOLD_MS);
-  let lockResult: any = null;
-  try {
-    lockResult = await db.collection("backfill_progress").findOneAndUpdate(
-      {
-        shopId,
-        $or: [
-          { inProgress: { $ne: true } },
-          { lastActivityAt: { $lt: staleLockThreshold } },
-        ],
-      },
-      { 
-        $set: { 
-          lastAttemptedAt: new Date(),
-          lastActivityAt: new Date(),
-          inProgress: true,
-          lastError: null,
-          lastErrorAt: null,
-          retryCount: 0,
-        } 
-      },
-      { upsert: true, returnDocument: 'after' }
-    );
-  } catch (err: any) {
-    if (err?.code === 11000) {
-      // Doc already exists with a fresh lock — another instance owns it.
-      console.log(`[Backfill] Shop ${shopId}: Skipping - another instance already in progress (lock is fresh)`);
-      return { chunksProcessed: 0, totalJobsIndexed: 0, complete: false, error: 'Already in progress' };
-    }
-    throw err;
-  }
+  const lockResult = await backfillProgress.acquireLease(
+    shopId,
+    staleLockThreshold,
+    new Date(),
+  );
 
   if (!lockResult) {
     // Defensive: shouldn't be reachable with `upsert: true`, but kept for
@@ -933,10 +892,9 @@ export async function runProtractorBackfill(
 
       console.log(`[Backfill] Shop ${shopId} chunk ${chunksProcessed}: ${result.message}`);
       
-      await db.collection("backfill_progress").updateOne(
-        { shopId },
-        { $set: { lastActivityAt: new Date() } }
-      );
+      await backfillProgress.upsertMerge(shopId, {
+        set: { lastActivityAt: new Date() },
+      });
 
       if (result.complete) {
         complete = true;
@@ -948,10 +906,9 @@ export async function runProtractorBackfill(
 
     console.log(`[Backfill] Shop ${shopId}: Run finished - ${chunksProcessed} chunks, ${totalJobsIndexed} jobs indexed, complete: ${complete}`);
     
-    await db.collection("backfill_progress").updateOne(
-      { shopId },
-      { $set: { inProgress: false, lastCompletedRunAt: new Date() } }
-    );
+    await backfillProgress.upsertMerge(shopId, {
+      set: { inProgress: false, lastCompletedRunAt: new Date() },
+    });
     
     if (!complete) {
       if (singlePass) {
@@ -973,21 +930,18 @@ export async function runProtractorBackfill(
   } catch (err: any) {
     console.error(`[Backfill] Shop ${shopId}: Error during backfill:`, err.message);
     
-    const progress = await db.collection("backfill_progress").findOne({ shopId });
-    const retryCount = (progress?.retryCount || 0) + 1;
+    const progress = await backfillProgress.findByShop(shopId);
+    const retryCount = ((progress?.retryCount as number) || 0) + 1;
     const MAX_RETRIES = 5;
     
-    await db.collection("backfill_progress").updateOne(
-      { shopId },
-      { 
-        $set: { 
-          inProgress: false, 
-          lastError: err.message,
-          lastErrorAt: new Date(),
-          retryCount,
-        } 
-      }
-    );
+    await backfillProgress.upsertMerge(shopId, {
+      set: {
+        inProgress: false,
+        lastError: err.message,
+        lastErrorAt: new Date(),
+        retryCount,
+      },
+    });
     
     if (singlePass) {
       // Skip the auto-retry chain in single-pass mode — the run-now endpoint
@@ -1170,15 +1124,11 @@ export async function findAndRunNewShopFastpath(): Promise<{
 
   // Drop shops whose backfill is already complete; brand-new shops with
   // no progress doc yet are kept (they need the backfill the most).
-  const progressDocs = await db
-    .collection("backfill_progress")
-    .find({ shopId: { $in: newShopIds } })
-    .project({ shopId: 1, completed: 1 })
-    .toArray();
+  const progressDocs = await backfillProgress.findProgressForShops(newShopIds);
   const completedShopIds = new Set(
     progressDocs
-      .filter((p: any) => p.completed === true)
-      .map((p: any) => Number(p.shopId)),
+      .filter((p) => p.completed === true)
+      .map((p) => Number(p.shopId)),
   );
 
   const eligible = newShopIds

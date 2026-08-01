@@ -78,12 +78,26 @@ const TEKMETRIC_COL = PROVIDERS.find((p) => p.key === "tekmetric")!.collectionNa
 const PROTRACTOR_COL = PROVIDERS.find((p) => p.key === "protractor")!.collectionName;
 const SHOPWARE_COL = PROVIDERS.find((p) => p.key === "shopware")!.collectionName;
 
-function installFakes(db: any, sentEmails: any[]) {
+function installFakes(fake: any, sentEmails: any[]) {
+  const db = fake.db;
   __deps.getDb = (async () => db) as any;
   __deps.sendEmail = (async (args: any) => {
     sentEmails.push(args);
     return { ok: true };
   }) as any;
+  // The route now reads each provider's progress through a flag-gated
+  // repository function instead of `db.collection(<name>).find({})`. Back
+  // each seam with the SAME fake collection the real Mongo path read, and
+  // record an equivalent `find` op so the "reads all three provider
+  // progress collections" assertion still verifies the read intent.
+  const readCollection = (name: string) => {
+    fake.ops.push({ op: "find", collection: name, filter: {} });
+    return (fake.collections[name] || []).map((d: any) => ({ ...d }));
+  };
+  __deps.listTekmetricProgress = (async () => readCollection(TEKMETRIC_COL)) as any;
+  __deps.findAllProtractorProgress = (async () => readCollection(PROTRACTOR_COL)) as any;
+  __deps.findAllShopwareBackfillProgress = (async () =>
+    readCollection(SHOPWARE_COL)) as any;
 }
 
 // Save the originals so we can restore at end-of-test (defensive — the
@@ -103,7 +117,7 @@ async function run() {
     process.env.CRON_SECRET = "shhh";
     const fake = makeFakeDb({});
     const sent: any[] = [];
-    installFakes(fake.db, sent);
+    installFakes(fake, sent);
 
     const noAuth = await GET(
       new NextRequest("http://localhost/api/cron/backfill-chunk-speed-health"),
@@ -135,7 +149,7 @@ async function run() {
     delete process.env.CRON_SECRET;
     const fake = makeFakeDb({});
     const sent: any[] = [];
-    installFakes(fake.db, sent);
+    installFakes(fake, sent);
     const res = await GET(
       new NextRequest("http://localhost/api/cron/backfill-chunk-speed-health"),
     );
@@ -147,7 +161,7 @@ async function run() {
     process.env.CRON_SECRET = "shhh";
     const fake = makeFakeDb({});
     const sent: any[] = [];
-    installFakes(fake.db, sent);
+    installFakes(fake, sent);
     const res = await GET(
       new NextRequest("http://localhost/api/cron/backfill-chunk-speed-health", {
         headers: { authorization: "Bearer shhh" },
@@ -163,7 +177,7 @@ async function run() {
   {
     const fake = makeFakeDb({});
     const sent: any[] = [];
-    installFakes(fake.db, sent);
+    installFakes(fake, sent);
     const res = await GET(
       new NextRequest("http://localhost/api/cron/backfill-chunk-speed-health"),
     );
@@ -223,7 +237,7 @@ async function run() {
       backfill_chunk_speed_alerts: [],
     });
     const sent: any[] = [];
-    installFakes(fake.db, sent);
+    installFakes(fake, sent);
     const res = await GET(
       new NextRequest("http://localhost/api/cron/backfill-chunk-speed-health"),
     );
@@ -348,7 +362,7 @@ async function run() {
       ],
     });
     const sent: any[] = [];
-    installFakes(fake.db, sent);
+    installFakes(fake, sent);
     const res = await GET(
       new NextRequest("http://localhost/api/cron/backfill-chunk-speed-health"),
     );
@@ -405,7 +419,7 @@ async function run() {
       ],
     });
     const sent: any[] = [];
-    installFakes(fake.db, sent);
+    installFakes(fake, sent);
     const res = await GET(
       new NextRequest("http://localhost/api/cron/backfill-chunk-speed-health"),
     );
@@ -462,7 +476,7 @@ async function run() {
       ],
     });
     const sent: any[] = [];
-    installFakes(fake.db, sent);
+    installFakes(fake, sent);
     const res = await GET(
       new NextRequest("http://localhost/api/cron/backfill-chunk-speed-health"),
     );
@@ -538,7 +552,7 @@ async function run() {
       backfill_chunk_speed_alerts: [],
     });
     const sent: any[] = [];
-    installFakes(fake.db, sent);
+    installFakes(fake, sent);
     const res = await GET(
       new NextRequest("http://localhost/api/cron/backfill-chunk-speed-health"),
     );
@@ -566,7 +580,7 @@ async function run() {
       backfill_chunk_speed_alerts: [],
     });
     const sent: any[] = [];
-    installFakes(fake.db, sent);
+    installFakes(fake, sent);
     const res = await GET(
       new NextRequest("http://localhost/api/cron/backfill-chunk-speed-health"),
     );
@@ -581,9 +595,8 @@ async function run() {
     );
   }
 
-  // Restore originals before exiting.
-  __deps.getDb = ORIGINAL_DEPS.getDb;
-  __deps.sendEmail = ORIGINAL_DEPS.sendEmail;
+  // Restore originals before exiting (including the new repo seams).
+  Object.assign(__deps, ORIGINAL_DEPS);
 
   if (failed > 0) {
     console.error(`\nFAILED ${failed} assertion(s)`);

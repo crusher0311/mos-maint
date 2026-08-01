@@ -1,6 +1,8 @@
 import "server-only";
 import type { Db } from "mongodb";
 import { runProtractorBackfill } from "@/lib/integrations/protractor/sync";
+import { updateShopwareBackfillProgress } from "@/lib/data/repositories/shopware-ops";
+import { updateProgressFields as updateTekmetricProgress } from "@/lib/data/repositories/tekmetric-ops";
 
 // Shared backfill trigger (task #629 follow-on). Encapsulates the
 // "reset cursor + kick the provider cron" logic so both the platform-admin
@@ -98,17 +100,17 @@ export async function triggerBackfillForShop(
   }
 
   if (p === "shopware") {
-    await db.collection("shopware_backfill_progress").updateOne(
-      { shopId },
+    await updateShopwareBackfillProgress(
+      shopId,
       {
-        $set: {
+        set: {
           shopId,
           completed: false,
           inProgress: false,
           currentCursor: null,
           queuedAt: new Date(),
         },
-        $setOnInsert: { startedAt: null },
+        setOnInsert: { startedAt: null },
       },
       { upsert: true },
     );
@@ -131,20 +133,17 @@ export async function triggerBackfillForShop(
   const eod = new Date();
   eod.setHours(23, 59, 59, 999);
 
-  await db.collection("tekmetric_backfill_progress").updateOne(
-    { shopId },
+  await updateTekmetricProgress(
+    shopId,
     {
-      $set: {
-        shopId,
-        completed: false,
-        inProgress: false,
-        currentChunkEnd: eod,
-        queuedAt: new Date(),
-        logicVersion: 2,
-      },
-      $setOnInsert: { startedAt: null },
+      shopId,
+      completed: false,
+      inProgress: false,
+      currentChunkEnd: eod,
+      queuedAt: new Date(),
+      logicVersion: 2,
     },
-    { upsert: true },
+    { upsert: true, setOnInsert: { startedAt: null } },
   );
 
   await db

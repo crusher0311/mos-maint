@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
+import { findLatestAppointmentForVehicle } from "@/lib/data/repositories/autovitals-appointments";
+import { findLatestInspectionForAppointment } from "@/lib/data/repositories/autovitals-inspections";
 
 export const runtime = "nodejs";
 
@@ -96,15 +98,15 @@ export async function GET(req: NextRequest) {
     let dviResults: any[] = [];
     
     if (avVehicle?.vehicleId) {
-      const latestAppointment = await db.collection("autovitals_appointments").findOne(
-        { shopId: shopIdStr, vehicleId: avVehicle.vehicleId },
-        { sort: { updatedAt: -1 } }
+      const latestAppointment = await findLatestAppointmentForVehicle(
+        shopIdStr,
+        avVehicle.vehicleId,
       );
 
       if (latestAppointment?.appointmentId) {
-        const latestDvi = await db.collection("autovitals_inspections").findOne(
-          { shopId: shopIdStr, appointmentId: latestAppointment.appointmentId },
-          { sort: { updatedAt: -1 } }
+        const latestDvi = await findLatestInspectionForAppointment(
+          shopIdStr,
+          latestAppointment.appointmentId,
         );
 
         if (latestDvi?.items) {

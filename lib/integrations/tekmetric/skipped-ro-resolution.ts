@@ -5,6 +5,11 @@
 // route handlers that consume this module (Next.js will refuse to bundle
 // `mongodb` into client code regardless).
 import type { Db } from "mongodb";
+import {
+  insertSkippedRoArchive,
+  getProgress,
+  updateProgressFields,
+} from "@/lib/data/repositories/tekmetric-ops";
 
 export type SkippedRoEntry = {
   roId: number;
@@ -58,9 +63,7 @@ export async function archiveResolvedSkippedRos(
       : { manualResolution: true, resolvedBy: context.actor }),
   }));
 
-  await db
-    .collection("tekmetric_skipped_ro_archive")
-    .insertMany(archiveDocs, { ordered: false });
+  await insertSkippedRoArchive(archiveDocs);
 
   return {
     archivedCount: entries.length,
@@ -91,9 +94,7 @@ export async function manuallyResolveSkippedRo(
   roId: number,
   actor: string,
 ): Promise<ManualResolveResult> {
-  const progress = await db
-    .collection("tekmetric_backfill_progress")
-    .findOne({ shopId });
+  const progress = await getProgress(shopId);
   if (!progress) {
     return { ok: false, error: "No backfill progress row for this shop" };
   }
@@ -125,16 +126,14 @@ export async function manuallyResolveSkippedRo(
   const consecutiveRoSkipRuns = Number(progress.consecutiveRoSkipRuns || 0);
   const fullyRecovered = remaining.length === 0 && consecutiveRoSkipRuns === 0;
 
-  await db.collection("tekmetric_backfill_progress").updateOne(
-    { shopId },
+  await updateProgressFields(
+    shopId,
     {
-      $set: {
-        recentSkippedRos: remaining,
-        lastSkippedRosResolvedAt: now,
-        ...(fullyRecovered ? { roSkipsFullyRecoveredAt: now } : {}),
-      },
-      $inc: { resolvedSkippedRosTotal: 1 },
+      recentSkippedRos: remaining,
+      lastSkippedRosResolvedAt: now,
+      ...(fullyRecovered ? { roSkipsFullyRecoveredAt: now } : {}),
     },
+    { incFields: { resolvedSkippedRosTotal: 1 } },
   );
 
   return {

@@ -27,6 +27,7 @@
 
 import { getDb } from "@/lib/mongo";
 import { runProtractorBackfill } from "@/lib/integrations/protractor/sync";
+import { findByShop as findBackfillProgressByShop } from "@/lib/data/repositories/protractor-backfill-progress";
 
 const PARALLELISM = Math.max(1, Number(process.env.DRAIN_PARALLELISM) || 3);
 // Round-robin tuning. CHUNKS_PER_TURN is how many chunks a shop walks before
@@ -123,9 +124,7 @@ export async function loadIncompleteProtractorShops(
     // Skip shops already marked complete in backfill_progress (defensive —
     // protractorBackfillComplete on the shops doc is the canonical signal,
     // but a progress row with `completed:true` is the same outcome.)
-    const progress = await db
-      .collection("backfill_progress")
-      .findOne({ shopId });
+    const progress = await findBackfillProgressByShop(shopId);
     if (progress?.completed === true) continue;
 
     jobs.push({
@@ -136,17 +135,11 @@ export async function loadIncompleteProtractorShops(
 
   // Sort: shops with the OLDEST cursor (most-behind) first.
   const progressMap = new Map<number, Date | null>();
-  const progressDocs = await db
-    .collection("backfill_progress")
-    .find(
-      { shopId: { $in: jobs.map((j) => j.shopId) } },
-      { projection: { shopId: 1, currentChunkEnd: 1 } }
-    )
-    .toArray();
-  for (const p of progressDocs) {
+  for (const job of jobs) {
+    const p = await findBackfillProgressByShop(job.shopId);
     progressMap.set(
-      Number(p.shopId),
-      p.currentChunkEnd ? new Date(p.currentChunkEnd) : null
+      job.shopId,
+      p?.currentChunkEnd ? new Date(p.currentChunkEnd as Date) : null,
     );
   }
   jobs.sort((a, b) => {
@@ -176,14 +169,13 @@ async function waitForLockOrCompletion(
   shopId: number,
   shouldStop: () => boolean
 ): Promise<"ready" | "completed" | "timeout" | "stopped"> {
-  const db = await getDb();
   const startedAt = Date.now();
   let pollCount = 0;
   while (Date.now() - startedAt < LOCK_WAIT_MAX_MS) {
     if (shouldStop()) return "stopped";
     await new Promise((r) => setTimeout(r, LOCK_WAIT_POLL_MS));
     pollCount++;
-    const doc = await db.collection("backfill_progress").findOne({ shopId });
+    const doc = await findBackfillProgressByShop(shopId);
     if (!doc) return "ready"; // no progress doc yet, lock can be acquired
     if (doc.completed === true) return "completed";
     const lastActivityAt = doc.lastActivityAt

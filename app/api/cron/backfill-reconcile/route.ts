@@ -3,6 +3,8 @@ import { getDb } from "@/lib/mongo";
 import { tekmetricRequest } from "@/lib/integrations/tekmetric/client";
 import { resolveProtractorConfig, protractorFetch } from "@/lib/integrations/protractor";
 import { getRepairOrders } from "@/lib/integrations/shopware/client";
+import { updateProgressFields as updateTekmetricProgressFields } from "@/lib/data/repositories/tekmetric-ops";
+import { updateShopwareBackfillProgress } from "@/lib/data/repositories/shopware-ops";
 import {
   DELTA_TOLERANCE,
   buildTekmetricUpstreamParams,
@@ -104,33 +106,23 @@ async function reconcileTekmetricShop(db: any, shopId: number, tekmetricShopId: 
 
   if (shouldRequeue) {
     // Re-queue: pull cursor back so the worst-delta window will be reprocessed.
-    await db.collection("tekmetric_backfill_progress").updateOne(
-      { shopId },
-      {
-        $set: {
-          completed: false,
-          currentChunkEnd: worstDeltaWindow!.end,
-          reconciliationGapDetected: true,
-          reconciliationZeroCountGuard: false,
-          reconciliationLastRunAt: new Date(),
-        },
-      }
-    );
+    await updateTekmetricProgressFields(shopId, {
+      completed: false,
+      currentChunkEnd: worstDeltaWindow!.end,
+      reconciliationGapDetected: true,
+      reconciliationZeroCountGuard: false,
+      reconciliationLastRunAt: new Date(),
+    });
     await db.collection("shops").updateOne(
       { shopId },
       { $set: { tekmetricBackfillComplete: false } }
     );
   } else {
-    await db.collection("tekmetric_backfill_progress").updateOne(
-      { shopId },
-      {
-        $set: {
-          reconciliationLastRunAt: new Date(),
-          reconciliationGapDetected: false,
-          reconciliationZeroCountGuard: zeroCountGuardTripped,
-        },
-      }
-    );
+    await updateTekmetricProgressFields(shopId, {
+      reconciliationLastRunAt: new Date(),
+      reconciliationGapDetected: false,
+      reconciliationZeroCountGuard: zeroCountGuardTripped,
+    });
   }
 
   return { provider: "tekmetric", shopId, samples: audits, requeued: shouldRequeue, zeroCountGuard: zeroCountGuardTripped };
@@ -285,33 +277,27 @@ async function reconcileShopwareShop(db: any, shopId: number, tenantId: number, 
   const zeroCountGuardTripped = !!worstDeltaWindow && !hasStoredData;
 
   if (shouldRequeue) {
-    await db.collection("shopware_backfill_progress").updateOne(
-      { shopId },
-      {
-        $set: {
-          completed: false,
-          currentChunkEnd: worstDeltaWindow!.end,
-          reconciliationGapDetected: true,
-          reconciliationZeroCountGuard: false,
-          reconciliationLastRunAt: new Date(),
-        },
-      }
-    );
+    await updateShopwareBackfillProgress(shopId, {
+      set: {
+        completed: false,
+        currentChunkEnd: worstDeltaWindow!.end,
+        reconciliationGapDetected: true,
+        reconciliationZeroCountGuard: false,
+        reconciliationLastRunAt: new Date(),
+      },
+    });
     await db.collection("shops").updateOne(
       { shopId: { $in: [shopId, String(shopId)] as any } },
       { $set: { "backfill.status": "incomplete_after_reconciliation" } }
     );
   } else {
-    await db.collection("shopware_backfill_progress").updateOne(
-      { shopId },
-      {
-        $set: {
-          reconciliationLastRunAt: new Date(),
-          reconciliationGapDetected: false,
-          reconciliationZeroCountGuard: zeroCountGuardTripped,
-        },
-      }
-    );
+    await updateShopwareBackfillProgress(shopId, {
+      set: {
+        reconciliationLastRunAt: new Date(),
+        reconciliationGapDetected: false,
+        reconciliationZeroCountGuard: zeroCountGuardTripped,
+      },
+    });
   }
 
   return { provider: "shopware", shopId, samples: audits, requeued: shouldRequeue, zeroCountGuard: zeroCountGuardTripped };

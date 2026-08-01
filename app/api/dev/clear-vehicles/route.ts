@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { requireSession } from "@/lib/auth";
+import { deleteAutoVitalsAppointmentsForShop } from "@/lib/data/repositories/autovitals-appointments";
 
 export const runtime = "nodejs";
 
@@ -28,9 +29,8 @@ export async function DELETE() {
     const autovitalsVehiclesResult = await db.collection("autovitals_vehicles").deleteMany({ 
       $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] 
     });
-    const autovitalsAppointmentsResult = await db.collection("autovitals_appointments").deleteMany({ 
-      $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] 
-    });
+    const autovitalsAppointmentsDeleted =
+      await deleteAutoVitalsAppointmentsForShop(shopId);
 
     return NextResponse.json({
       ok: true,
@@ -42,7 +42,7 @@ export async function DELETE() {
         protractorWorkOrders: protractorWoResult.deletedCount,
         protractorVehicles: protractorVehiclesResult.deletedCount,
         autovitalsVehicles: autovitalsVehiclesResult.deletedCount,
-        autovitalsAppointments: autovitalsAppointmentsResult.deletedCount,
+        autovitalsAppointments: autovitalsAppointmentsDeleted,
       },
     });
   } catch (e: any) {

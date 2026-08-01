@@ -104,3 +104,44 @@ export async function findLatestAppointmentForVehicle(
     { sort: { updatedAt: -1 } },
   );
 }
+
+export async function countAutoVitalsAppointments(
+  shopId: string,
+): Promise<number> {
+  if (isAutovitalsCachePgCanonical()) {
+    return pg.countAutoVitalsAppointments(shopId);
+  }
+  const col = await collection();
+  return col.countDocuments({ shopId });
+}
+
+/**
+ * Delete every appointment row for a shop (dev "clear vehicles" tool).
+ * Mongo matches both the string and numeric spellings of shopId — the
+ * cache historically wrote the string form but older rows may carry the
+ * number. Returns the number of docs removed.
+ */
+export async function deleteAutoVitalsAppointmentsForShop(
+  shopId: number,
+): Promise<number> {
+  if (isAutovitalsCachePgCanonical()) {
+    const removed = await pg.deleteAutoVitalsAppointmentsForShop(shopId);
+    await shadowWriteMongoIntegrationCache(
+      shouldShadowWriteMongoAutovitalsCache,
+      "autovitals.appointments.deleteForShop",
+      () => deleteAutoVitalsAppointmentsForShopMongo(shopId),
+    );
+    return removed;
+  }
+  return deleteAutoVitalsAppointmentsForShopMongo(shopId);
+}
+
+async function deleteAutoVitalsAppointmentsForShopMongo(
+  shopId: number,
+): Promise<number> {
+  const col = await collection();
+  const result = await col.deleteMany({
+    $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) as any }],
+  });
+  return result.deletedCount ?? 0;
+}

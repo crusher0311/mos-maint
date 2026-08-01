@@ -40,6 +40,11 @@
 
 import { getDb } from "@/lib/mongo";
 import { backfillShopChunk } from "@/app/api/cron/tekmetric-backfill/route";
+import {
+  acquireDrainLock as acquireDrainLockRepo,
+  refreshDrainLock as refreshDrainLockRepo,
+  releaseDrainLock as releaseDrainLockRepo,
+} from "@/lib/data/repositories/tekmetric-ops";
 
 const PARALLELISM = Math.max(1, Number(process.env.DRAIN_PARALLELISM) || 4);
 const MAX_CHUNKS_PER_SHOP = Math.max(
@@ -155,69 +160,32 @@ function log(msg: string) {
 export const DRAIN_LOCK_HELD_EXIT_CODE = 75;
 
 async function acquireDrainLock(): Promise<void> {
-  const db = await getDb();
-  const now = new Date();
-  const expiresAt = new Date(now.getTime() + LOCK_TTL_MS);
-
-  // Atomic acquire: succeed if no doc exists, OR if existing lease is
+  // Atomic acquire: succeed if no lease exists, OR if the existing lease is
   // expired, OR if we already own it (defensive — same owner re-acquiring
   // shouldn't fail). Anything else (a fresh, valid lease owned by another
-  // worker) means we refuse to start.
-  try {
-    await db.collection("tekmetric_drain_lock").findOneAndUpdate(
-      {
-        _id: "global" as any,
-        $or: [
-          { expiresAt: { $lte: now } },
-          { expiresAt: { $exists: false } },
-          { owner: LOCK_OWNER },
-        ],
-      },
-      {
-        $set: {
-          owner: LOCK_OWNER,
-          acquiredAt: now,
-          expiresAt,
-          lastRefreshAt: now,
-        },
-      },
-      { upsert: true, returnDocument: "after" }
+  // worker) means we refuse to start. The repo preserves the Mongo
+  // duplicate-key-means-held semantics behind the cutover flag.
+  const result = await acquireDrainLockRepo(LOCK_OWNER, LOCK_TTL_MS);
+  if (!result.acquired) {
+    // Another live drain owns the lock — the normal contention path. Log a
+    // single-line reason and exit with the dedicated code so the worker loop
+    // can short-backoff retry without surfacing a stack trace on every
+    // iteration.
+    const expISO = result.expiresAt
+      ? new Date(result.expiresAt).toISOString()
+      : "?";
+    log(
+      `LOCK HELD by owner=${result.owner ?? "?"} until ${expISO} — exiting (code ${DRAIN_LOCK_HELD_EXIT_CODE}); worker will retry after backoff`
     );
-  } catch (err: any) {
-    // E11000 = filter didn't match AND upsert attempt tripped the unique
-    // _id index. This is the normal "another live drain owns the lock"
-    // path. Log a single-line reason and exit with the dedicated code so
-    // the worker loop can short-backoff retry without surfacing a stack
-    // trace on every iteration.
-    if (err?.code === 11000) {
-      const existing = await db
-        .collection("tekmetric_drain_lock")
-        .findOne({ _id: "global" as any })
-        .catch(() => null);
-      const expISO = existing?.expiresAt
-        ? new Date(existing.expiresAt).toISOString()
-        : "?";
-      log(
-        `LOCK HELD by owner=${existing?.owner ?? "?"} until ${expISO} — exiting (code ${DRAIN_LOCK_HELD_EXIT_CODE}); worker will retry after backoff`
-      );
-      process.exit(DRAIN_LOCK_HELD_EXIT_CODE);
-    }
-    throw err;
+    process.exit(DRAIN_LOCK_HELD_EXIT_CODE);
   }
+  const expiresAt = new Date(Date.now() + LOCK_TTL_MS);
   log(`Lock acquired owner=${LOCK_OWNER} expiresAt=${expiresAt.toISOString()}`);
 }
 
 async function refreshDrainLock(): Promise<void> {
-  const db = await getDb();
-  const now = new Date();
-  const expiresAt = new Date(now.getTime() + LOCK_TTL_MS);
-  const result = await db
-    .collection("tekmetric_drain_lock")
-    .updateOne(
-      { _id: "global" as any, owner: LOCK_OWNER },
-      { $set: { expiresAt, lastRefreshAt: now } }
-    );
-  if (result.matchedCount === 0) {
+  const stillOwned = await refreshDrainLockRepo(LOCK_OWNER, LOCK_TTL_MS);
+  if (!stillOwned) {
     log(
       `WARN lock refresh failed — we no longer own the lock. Stopping after in-flight chunks.`
     );
@@ -227,11 +195,8 @@ async function refreshDrainLock(): Promise<void> {
 
 async function releaseDrainLock(): Promise<void> {
   try {
-    const db = await getDb();
-    const result = await db
-      .collection("tekmetric_drain_lock")
-      .deleteOne({ _id: "global" as any, owner: LOCK_OWNER });
-    log(`Lock released (deletedCount=${result.deletedCount})`);
+    const deletedCount = await releaseDrainLockRepo(LOCK_OWNER);
+    log(`Lock released (deletedCount=${deletedCount})`);
   } catch (err: any) {
     log(`WARN failed to release lock: ${err?.message || String(err)}`);
   }

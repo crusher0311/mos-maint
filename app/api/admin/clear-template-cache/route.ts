@@ -1,6 +1,9 @@
 import { NextResponse, NextRequest } from "next/server";
-import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
+import {
+  clearTemplateCache,
+  templateCacheStats,
+} from "@/lib/data/repositories/protractor-template-cache";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,24 +20,18 @@ export async function POST(req: NextRequest) {
     const shopId = body.shopId ? Number(body.shopId) : null;
     const clear404sOnly = body.clear404sOnly === true;
     
-    const db = await getDb();
-    
-    const filter: Record<string, any> = {};
-    if (shopId) filter.shopId = shopId;
-    if (clear404sOnly) filter.is404 = true;
-    
-    const result = await db.collection("protractor_template_cache").deleteMany(filter);
+    const cleared = await clearTemplateCache({ shopId, clear404sOnly });
     
     const desc = shopId 
       ? `shop ${shopId}${clear404sOnly ? " (404s only)" : ""}` 
       : clear404sOnly ? "all 404s" : "all shops";
     
-    console.log(`[Admin] Cleared ${result.deletedCount} template cache entries for ${desc} (by ${session.email})`);
+    console.log(`[Admin] Cleared ${cleared} template cache entries for ${desc} (by ${session.email})`);
     
     return NextResponse.json({ 
       ok: true, 
-      cleared: result.deletedCount,
-      message: `Cleared ${result.deletedCount} cached templates for ${desc}`
+      cleared,
+      message: `Cleared ${cleared} cached templates for ${desc}`
     });
   } catch (error: any) {
     console.error("[Admin] Error clearing template cache:", error.message);
@@ -50,29 +47,7 @@ export async function GET() {
   }
 
   try {
-    const db = await getDb();
-    
-    const stats = await db.collection("protractor_template_cache").aggregate([
-      {
-        $group: {
-          _id: { shopId: "$shopId", is404: "$is404" },
-          count: { $sum: 1 }
-        }
-      },
-      {
-        $group: {
-          _id: "$_id.shopId",
-          total: { $sum: "$count" },
-          cached: { 
-            $sum: { $cond: [{ $eq: ["$_id.is404", false] }, "$count", 0] }
-          },
-          notFound: { 
-            $sum: { $cond: [{ $eq: ["$_id.is404", true] }, "$count", 0] }
-          }
-        }
-      },
-      { $sort: { total: -1 } }
-    ]).toArray();
+    const stats = await templateCacheStats();
     
     const totals = stats.reduce((acc, s) => ({
       total: acc.total + s.total,
@@ -84,7 +59,7 @@ export async function GET() {
       ok: true, 
       totals,
       byShop: stats.map(s => ({
-        shopId: s._id,
+        shopId: s.shopId,
         total: s.total,
         cached: s.cached,
         notFound: s.notFound

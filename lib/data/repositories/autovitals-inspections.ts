@@ -84,3 +84,60 @@ export async function findAutoVitalsInspection(
   const col = await collection();
   return col.findOne({ appointmentId, shopId });
 }
+
+export async function findLatestInspectionForAppointment(
+  shopId: string,
+  appointmentId: number,
+): Promise<AutoVitalsInspectionCacheDoc | null> {
+  if (isAutovitalsCachePgCanonical()) {
+    return (await pg.findLatestInspectionForAppointment(
+      shopId,
+      appointmentId,
+    )) as AutoVitalsInspectionCacheDoc | null;
+  }
+  const col = await collection();
+  return col.findOne(
+    { shopId, appointmentId },
+    { sort: { updatedAt: -1 } },
+  );
+}
+
+export async function countAutoVitalsInspections(
+  shopId: string | number,
+): Promise<number> {
+  if (isAutovitalsCachePgCanonical()) {
+    return pg.countAutoVitalsInspections(String(shopId));
+  }
+  const col = await collection();
+  return col.countDocuments({ shopId } as Document);
+}
+
+/**
+ * Insert a browser-extension DVI capture (task: AutoVitals extension).
+ * Unlike `upsertAutoVitalsInspection`, this is a raw insert of a
+ * differently-shaped doc (no appointmentId; carries vin/source/results)
+ * and returns the new document id so the caller can stamp the vehicle's
+ * `lastDviId`.
+ */
+export async function insertAutoVitalsInspectionDoc(
+  doc: Record<string, unknown>,
+): Promise<unknown> {
+  if (isAutovitalsCachePgCanonical()) {
+    const id = await pg.insertAutoVitalsInspectionDoc(doc);
+    await shadowWriteMongoIntegrationCache(
+      shouldShadowWriteMongoAutovitalsCache,
+      "autovitals.inspections.insertDoc",
+      () => insertAutoVitalsInspectionDocMongo(doc),
+    );
+    return id;
+  }
+  return insertAutoVitalsInspectionDocMongo(doc);
+}
+
+async function insertAutoVitalsInspectionDocMongo(
+  doc: Record<string, unknown>,
+): Promise<unknown> {
+  const col = await collection();
+  const result = await col.insertOne(doc as AutoVitalsInspectionCacheDoc);
+  return result.insertedId;
+}

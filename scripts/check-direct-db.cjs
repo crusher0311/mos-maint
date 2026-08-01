@@ -35,7 +35,6 @@ const ALLOWLIST = new Set([
   "app/api/admin/billing/grace-period-check/route.ts",
   "app/api/admin/billing/settings/route.ts",
   "app/api/admin/clear-plan-cache/route.ts",
-  "app/api/admin/clear-template-cache/route.ts",
   "app/api/admin/concern-skip-stats/route.ts",
   "app/api/admin/database/collections/route.ts",
   "app/api/admin/database/query/route.ts",
@@ -122,7 +121,6 @@ const ALLOWLIST = new Set([
   "app/api/cron/data-quality/route.ts",
   "app/api/cron/invoice-cache-refresh/route.ts",
   "app/api/cron/protractor-af-log-tail/route.ts",
-  "app/api/cron/protractor-backfill/route.ts",
   "app/api/cron/protractor-stage-refresh/route.ts",
   "app/api/cron/protractor-webhook-health/route.ts",
   "app/api/cron/protractor-sync/route.ts",
@@ -408,14 +406,11 @@ const ALLOWLIST = new Set([
   // webhook-subscribe helper below.
   "lib/integrations/protractor/webhook-subscribe.ts",
   "lib/integrations/shopware/adapter.ts",
-  "lib/integrations/tekmetric/auth.ts",
   "lib/integrations/tekmetric/incremental-sync.ts",
   "lib/integrations/tekmetric/job-index.ts",
   "lib/integrations/tekmetric/jobs-prewarm.ts",
   "lib/integrations/tekmetric/shared-rate-limiter.ts",
   "lib/integrations/tekmetric/sync.ts",
-  "lib/integrations/tekmetric/usage-tracker.ts",
-  "lib/integrations/tekmetric/webhook-subscribe.ts",
   // Task #587 — Shopmonkey integration layer (read adapter, per-shop auth,
   // backfill/sync, operational rate-limiter, gated webhook-subscribe), mirroring
   // the allowlisted tekmetric integration files above.

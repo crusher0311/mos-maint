@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
+import { findDeferredWorkByShop } from "@/lib/data/repositories/protractor-deferred-work";
 import {
   resolveProtractorConfig,
   fetchActiveWorkOrders,
@@ -67,9 +68,7 @@ export async function GET(req: NextRequest) {
     .find({ shopId })
     .toArray();
     
-  const cachedDeferredWork = await db.collection("protractor_deferred_work")
-    .find({ shopId })
-    .toArray();
+  const cachedDeferredWork = await findDeferredWorkByShop(shopId);
 
   // Fetch sample deferred work from first vehicle with ServiceItem
   let sampleDeferredWork = null;

@@ -3,6 +3,7 @@ import { getDb } from "@/lib/mongo";
 import { getAllQueueSnapshots } from "@/lib/queue/metrics";
 import { isQueueEnabled } from "@/lib/queue/connection";
 import { getBackfillYears } from "@/lib/integrations/backfill-pace";
+import { listProgress, listCatchupRuns } from "@/lib/data/repositories/tekmetric-ops";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -61,13 +62,8 @@ export async function GET(req: NextRequest) {
           tekmetricBackfillComplete: 1,
         })
         .toArray(),
-      db.collection("tekmetric_backfill_progress").find({}).toArray(),
-      db
-        .collection("tekmetric_catchup_runs")
-        .find({})
-        .sort({ startedAt: -1 })
-        .limit(runLimit)
-        .toArray(),
+      listProgress(),
+      listCatchupRuns(runLimit),
     ]);
 
     const progressByShop = new Map<number, any>();

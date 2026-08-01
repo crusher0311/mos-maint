@@ -19,6 +19,9 @@ import {
   buildRecoveryEmailHtml,
   buildRecoveryEmailSubject,
 } from "./email-html";
+import { listProgress as listTekmetricProgress } from "@/lib/data/repositories/tekmetric-ops";
+import { findAllProgress as findAllProtractorProgress } from "@/lib/data/repositories/protractor-backfill-progress";
+import { findAllShopwareBackfillProgress } from "@/lib/data/repositories/shopware-ops";
 
 /**
  * Test seam: the route handler dereferences `__deps.getDb` /
@@ -30,6 +33,9 @@ import {
 export const __deps = {
   getDb,
   sendEmail,
+  listTekmetricProgress,
+  findAllProtractorProgress,
+  findAllShopwareBackfillProgress,
 };
 
 export const runtime = "nodejs";
@@ -104,11 +110,15 @@ export async function GET(req: NextRequest) {
 
   const db = await __deps.getDb();
 
-  // Pull progress rows for all three providers in parallel.
+  // Pull progress rows for all three providers in parallel. Each read
+  // routes through its flag-gated ops repo (same collections as before:
+  // tekmetric_backfill_progress / backfill_progress /
+  // shopware_backfill_progress), so they flip to Postgres with the same
+  // kill-switches.
   const [tekmetricRows, protractorRows, shopwareRows] = await Promise.all([
-    db.collection(PROVIDERS[0].collectionName).find({}).toArray(),
-    db.collection(PROVIDERS[1].collectionName).find({}).toArray(),
-    db.collection(PROVIDERS[2].collectionName).find({}).toArray(),
+    __deps.listTekmetricProgress() as Promise<any[]>,
+    __deps.findAllProtractorProgress() as Promise<any[]>,
+    __deps.findAllShopwareBackfillProgress() as Promise<any[]>,
   ]);
 
   const providerRows: Array<{ provider: typeof PROVIDERS[number]; rows: any[] }> = [

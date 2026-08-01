@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { requirePlatformAdmin } from "@/lib/auth";
+import { findAllProgress as findAllBackfillProgress } from "@/lib/data/repositories/protractor-backfill-progress";
 import {
   buildChunkSpeed,
   computeStuckDiagnostics,
@@ -22,7 +23,7 @@ export async function GET() {
       protractorShopDocs,
       chunkSpeedAlertsByKey,
     ] = await Promise.all([
-      db.collection("backfill_progress").find({}).toArray(),
+      findAllBackfillProgress(),
       // Per-shop Protractor invoice-cache pre-warm overlay. Stamped by
       // lib/protractor-jobs-prewarm.ts at onboarding under
       // `shops.protractor.invoiceCachePrewarm`. Restricted to shops with

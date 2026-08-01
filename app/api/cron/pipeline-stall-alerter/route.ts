@@ -5,6 +5,8 @@ import { getPlatformAdminEmails } from "@/lib/super-admins";
 import { sendOpsAlert } from "@/lib/alerts/notify";
 import { getAllQueueSnapshots } from "@/lib/queue/metrics";
 import { isQueueEnabled } from "@/lib/queue/connection";
+import { listProgress as listTekmetricProgress, getDrainLock } from "@/lib/data/repositories/tekmetric-ops";
+import { findAllProgress as findAllProtractorProgress } from "@/lib/data/repositories/protractor-backfill-progress";
 import {
   PROVIDERS,
   DEFAULT_STALL_WINDOW_MS,
@@ -41,7 +43,6 @@ export const dynamic = "force-dynamic";
 
 const HEARTBEAT_COLLECTION = "pipeline_progress_heartbeat";
 const ALERTS_COLLECTION = "pipeline_stall_alerts";
-const DRAIN_LOCK_COLLECTION = "tekmetric_drain_lock";
 
 // Test seam — the route smoke test swaps these for in-memory fakes.
 export const __deps = {
@@ -110,10 +111,21 @@ export async function GET(req: NextRequest) {
 
   // (1) Fleet progress heartbeat, per provider ---------------------------
   for (const provider of PROVIDERS) {
-    const rows = await db
-      .collection(provider.collectionName)
-      .find({})
-      .toArray();
+    // Tekmetric + Protractor progress reads route through their flag-gated
+    // ops repos (so they flip to Postgres with the same kill-switches).
+    // Shop-Ware's progress for THIS cron lives in the historically named
+    // `ln` collection — NOT `shopware_backfill_progress` (the repo's
+    // collection, which is effectively empty here). Routing Shop-Ware
+    // through the repo would silently change which collection is read and
+    // make Shop-Ware stalls invisible, so it deliberately stays on Mongo.
+    let rows: any[];
+    if (provider.key === "tekmetric") {
+      rows = (await listTekmetricProgress()) as any[];
+    } else if (provider.key === "protractor") {
+      rows = (await findAllProtractorProgress()) as any[];
+    } else {
+      rows = await db.collection(provider.collectionName).find({}).toArray();
+    }
     const sig = computeProgressSignature(rows as any[]);
 
     const hb = await db
@@ -177,9 +189,9 @@ export async function GET(req: NextRequest) {
   }
 
   // (2) Drain-lease wedge (Tekmetric) ------------------------------------
-  const lock = await db
-    .collection(DRAIN_LOCK_COLLECTION)
-    .findOne({ _id: "global" as any });
+  // Reads the single global drain lease via the flag-gated Tekmetric ops
+  // repo (Mongo `findOne({_id:"global"})` on `tekmetric_drain_lock`).
+  const lock = await getDrainLock();
   const wedge = decideDrainWedge(lock, nowMs, drainWedgeMs);
   if (wedge) {
     hits.push({

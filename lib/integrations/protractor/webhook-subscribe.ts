@@ -24,6 +24,7 @@
  */
 
 import { getDb } from "@/lib/mongo";
+import { ensureSubscriptionRecord } from "@/lib/data/repositories/protractor-webhook-subscriptions";
 import crypto from "crypto";
 import type { Db } from "mongodb";
 
@@ -110,20 +111,14 @@ export async function ensureProtractorWebhookSubscription(opts: {
   const callbackUrl = buildProtractorCallbackUrl(token);
 
   try {
-    await db.collection("protractor_webhook_subscriptions").updateOne(
-      { shopId },
-      {
-        $set: {
-          shopId,
-          token,
-          callbackUrl,
-          registrationMode: "manual",
-          lastEnsuredAt: new Date(),
-        },
-        $setOnInsert: { firstEnsuredAt: new Date() },
-      },
-      { upsert: true },
-    );
+    const now = new Date();
+    await ensureSubscriptionRecord(shopId, {
+      token: token ?? null,
+      callbackUrl,
+      registrationMode: "manual",
+      lastEnsuredAt: now,
+      firstEnsuredAt: now,
+    });
   } catch (err: any) {
     console.warn(
       `[ProtractorWebhookSubscribe] Failed to persist subscription record for shop ${shopId}:`,

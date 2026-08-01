@@ -9,6 +9,10 @@ import { computeJobHash } from "@/lib/job-index";
 import type { ShopWareRepairOrder, ShopWareVehicle, ShopWareCustomer } from "@/lib/integrations/shopware/types";
 import { getPaceConfig, describePace, getBackfillYears, reopenCompletedShopsForHorizon } from "@/lib/integrations/backfill-pace";
 import { prepareQuietWindowGate, applyQuietWindowGate } from "@/lib/data/repositories/activity-profiles";
+import {
+  findShopwareBackfillProgress,
+  updateShopwareBackfillProgress,
+} from "@/lib/data/repositories/shopware-ops";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -454,7 +458,7 @@ export async function GET(req: NextRequest) {
     const shopDoc = await db.collection("shops").findOne({ shopId: { $in: [mosShopId, String(mosShopId)] as any } });
     const pace = getPaceConfig("shopware", shopDoc?.timezone, new Date());
 
-    let progress = await db.collection("shopware_backfill_progress").findOne({ shopId: mosShopId });
+    let progress = (await findShopwareBackfillProgress(mosShopId)) as any;
 
     if (progress?.completed && progress?.logicVersion === 2) {
       console.log(`[SW Backfill] Shop ${mosShopId} already completed, skipping`);
@@ -503,10 +507,10 @@ export async function GET(req: NextRequest) {
       console.log(`[SW Backfill] Shop ${mosShopId}: starting fresh in REVERSE mode (was logicVersion=${progress?.logicVersion ?? "none"})`);
     }
 
-    await db.collection("shopware_backfill_progress").updateOne(
-      { shopId: mosShopId },
+    await updateShopwareBackfillProgress(
+      mosShopId,
       {
-        $set: {
+        set: {
           shopId: mosShopId,
           inProgress: true,
           startedAt: progress?.startedAt || new Date(),
@@ -582,17 +586,14 @@ export async function GET(req: NextRequest) {
         console.error(`[SW Backfill] Shop ${mosShopId} chunk error (HOLDING cursor): ${result.error}`);
         // Persist metrics even on error so the admin view captures rate-limit
         // hits, then break (cursor not advanced — next run retries chunk).
-        await db.collection("shopware_backfill_progress").updateOne(
-          { shopId: mosShopId },
-          {
-            $set: {
-              lastChunkAt: new Date(),
-              lastRunAt: new Date(),
-              lastChunkMetrics: chunkMetric,
-              recentChunkMetrics,
-            },
+        await updateShopwareBackfillProgress(mosShopId, {
+          set: {
+            lastChunkAt: new Date(),
+            lastRunAt: new Date(),
+            lastChunkMetrics: chunkMetric,
+            recentChunkMetrics,
           },
-        );
+        });
         break;
       }
 
@@ -603,51 +604,45 @@ export async function GET(req: NextRequest) {
       const previousChunkEnd = cursor;
       cursor = effectiveStart;
 
-      await db.collection("shopware_backfill_progress").updateOne(
-        { shopId: mosShopId },
-        {
-          $set: {
-            currentChunkEnd: cursor,
-            currentCursor: cursor.toISOString(),
-            previousChunkEnd,
-            lastChunkAt: new Date(),
-            lastRunAt: new Date(),
-            lastCursorMoveAt: new Date(),
-            lastError: null,
-            lastErrorAt: null,
-            lastChunkMetrics: chunkMetric,
-            recentChunkMetrics,
-          },
-          $inc: {
-            totalRosProcessed: result.rosStored,
-            totalJobsIndexed: result.jobsIndexed,
-            totalVehiclesProcessed: result.vehiclesStored,
-            totalCustomersProcessed: result.customersStored,
-          },
-        }
-      );
+      await updateShopwareBackfillProgress(mosShopId, {
+        set: {
+          currentChunkEnd: cursor,
+          currentCursor: cursor.toISOString(),
+          previousChunkEnd,
+          lastChunkAt: new Date(),
+          lastRunAt: new Date(),
+          lastCursorMoveAt: new Date(),
+          lastError: null,
+          lastErrorAt: null,
+          lastChunkMetrics: chunkMetric,
+          recentChunkMetrics,
+        },
+        inc: {
+          totalRosProcessed: result.rosStored,
+          totalJobsIndexed: result.jobsIndexed,
+          totalVehiclesProcessed: result.vehiclesStored,
+          totalCustomersProcessed: result.customersStored,
+        },
+      });
     }
 
     const isComplete = cursor <= oldestDate && !chunkError;
 
-    await db.collection("shopware_backfill_progress").updateOne(
-      { shopId: mosShopId },
-      {
-        $set: {
-          inProgress: false,
-          completed: isComplete,
-          completedAt: isComplete ? new Date() : undefined,
-          currentChunkEnd: cursor,
-          currentCursor: cursor.toISOString(),
-          lastChunkAt: new Date(),
-          lastRunAt: new Date(),
-          ...(chunkError ? { lastError: chunkError, lastErrorAt: new Date() } : {}),
-        },
-      }
-    );
+    await updateShopwareBackfillProgress(mosShopId, {
+      set: {
+        inProgress: false,
+        completed: isComplete,
+        completedAt: isComplete ? new Date() : undefined,
+        currentChunkEnd: cursor,
+        currentCursor: cursor.toISOString(),
+        lastChunkAt: new Date(),
+        lastRunAt: new Date(),
+        ...(chunkError ? { lastError: chunkError, lastErrorAt: new Date() } : {}),
+      },
+    });
 
     if (isComplete) {
-      const finalProgress = await db.collection("shopware_backfill_progress").findOne({ shopId: mosShopId });
+      const finalProgress = (await findShopwareBackfillProgress(mosShopId)) as any;
       await db.collection("shops").updateOne(
         { shopId: { $in: [mosShopId, String(mosShopId)] as any } },
         {

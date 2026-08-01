@@ -1073,3 +1073,91 @@ window:
    `locks` / `tek:*` bucket collections dropped (Wave 0 procedure). This final
    decommission is the downstream "Final MongoDB decommission" task — **not** part of
    #557.
+
+
+## 13. Task #999 — Integration operational stores → flag-gated PG repositories
+
+Task #999 extends the §12 precedent (operational primitives, flag-flip cutover) to
+the remaining **integration operational stores**: Tekmetric tokens / backfill
+progress & mileage progress / health & permfailed alerts / skipped-RO archive /
+catchup runs / drain lock / webhook logs·subscriptions·health; Protractor
+`backfill_progress` (incl. the inline chunk lease) / service items / template
+cache / deferred work / webhook subscriptions; Shop-Ware `shopware_backfill_progress`;
+AutoVitals appointments / inspections / imports; and the cross-provider
+`api_usage` log + `api_rate_limits` slots.
+
+
+### 13.2 Schema
+
+Most tables pre-existed in `lib/db/schema/wave2.ts` / `wave3.ts`
+(`drizzle/0012`, `drizzle/0014`). Task #999 adds `lib/db/schema/integration-ops.ts`
++ `drizzle/0023_task999_integration_ops.sql` (idempotent, NOT applied here):
+`protractor_backfill_progress` (lease columns + `extra` jsonb),
+`protractor_webhook_subscriptions`, `integration_drain_locks` (one lease row per
+provider, preserving the Mongo `_id:"global"` insert-or-take-over-if-expired /
+owner-fenced refresh & release semantics), `api_usage` (Mongo `_id` hex PK →
+idempotent backfill; `(provider,timestamp)` + `(shop_id,timestamp)` indexes for
+the 1/5/60-minute window reads), `api_rate_limits`.
+
+Quirk: `tekmetric_tokens` in Mongo is a **single global doc** keyed
+`{ tokenKey: "current" }`; PG keys by `shop_id`, so the global doc maps to the
+`shop_id = 0` sentinel (documented in `lib/data/repositories/tekmetric-ops.ts`).
+Also note the "`ln`" collection mentioned in older notes is **not** a runtime
+store — the live Shop-Ware progress collection is literally
+`shopware_backfill_progress`.
+
+
+### 13.3 Repositories
+
+`lib/data/repositories/{tekmetric-ops,protractor-backfill-progress,protractor-service-items,protractor-webhook-subscriptions,shopware-ops,autovitals-imports,api-usage}.ts`
+(+ extensions to the existing `protractor-template-cache`, `protractor-deferred-work`,
+`autovitals-appointments`, `autovitals-inspections` repos), each dispatching to a
+`pg/*` twin. Unknown/undeclared Mongo fields round-trip via `extra`/`payload`
+jsonb so flag-OFF and flag-ON docs are shape-identical to callers.
+
+
+### 13.4 Transient vs durable → backfill classification
+
+- **Transient (pure flag flip, NO backfill):** drain locks, `api_rate_limits`
+  slots, all `*_backfill_progress` heartbeats/leases, mileage progress,
+  Protractor template cache & deferred-work snapshots (rebuilt on demand),
+  webhook-health alert dedup rows.
+- **Durable (operator backfill before flip):**
+  - Tekmetric webhook logs/subscriptions, health & permfailed alerts, skipped-RO
+    archive, catchup runs → `scripts/wave2-mongo-to-pg-backfill.ts` (pre-existing).
+  - `protractor_callback_events`, `shopware_webhook_logs`, `autovitals_imports`
+    → `scripts/backfill-mongo-to-supabase.ts` mirror specs (pre-existing).
+  - `api_usage`, `tekmetric_tokens`, `protractor_webhook_subscriptions`,
+    `autovitals_appointments`, `autovitals_inspections` →
+    **`scripts/backfill-integration-ops.ts`** (new; chunked `_id`-ordered walk,
+    idempotent upserts, per-spec checkpoint in `integration_ops_backfill_state`,
+    `--only=` / `--batch=` / `--restart`).
+
+
+### 13.1 Flags (all default OFF → Mongo canonical, behavior unchanged)
+
+| Flag | Shadow-write kill switch | Domain |
+| --- | --- | --- |
+| `TEKMETRIC_OPS_PG_CANONICAL` | `WRITE_MONGO_TEKMETRIC_OPS` | all Tekmetric operational stores above |
+| `PROTRACTOR_OPS_PG_CANONICAL` | `WRITE_MONGO_PROTRACTOR_OPS` | Protractor operational stores |
+| `SHOPWARE_OPS_PG_CANONICAL` | `WRITE_MONGO_SHOPWARE_OPS` | `shopware_backfill_progress` |
+| `AUTOVITALS_CACHE_PG_CANONICAL` (existing) | `WRITE_MONGO_AUTOVITALS_CACHE` | AutoVitals appointments/inspections/imports (sibling consistency) |
+| `API_USAGE_PG_CANONICAL` | `WRITE_MONGO_API_USAGE` | `api_usage` + `api_rate_limits` |
+
+Flag helpers live in `lib/db/integration-ops-write-mode.ts` (plus local helpers in
+`lib/data/repositories/api-usage.ts`). PG-canonical = PG read/write + non-fatal
+Mongo shadow write via `shadowWriteMongoIntegrationOps`.
+
+
+### 13.5 Known remainders (left on Mongo deliberately)
+
+- `protractor_callback_events` runtime flow (ObjectId contract threaded across
+  the webhook request path, ~40 sites) — needs a dedicated task; the backfill
+  mirror spec already exists.
+- The giant `app/api/cron/tekmetric-backfill/route.ts` progress logic and
+  `workers/processors/drain-tekmetric.ts` (`$unset`/`findOneAndUpdate` shapes) —
+  drain-lock sites are migrated, heavy progress logic is not.
+- Bespoke Mongo aggregation dashboards (`admin/api-usage`, platform-admin usage
+  summaries, webhook-subscription-status latency percentiles, skipped-RO `$group`).
+- Cross-provider helper `lib/integrations/backfill-pace.ts`
+  (`reopenCompletedShopsForHorizon`) and diagnostic/one-off scripts.
