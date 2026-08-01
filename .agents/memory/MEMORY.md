@@ -120,3 +120,4 @@
 - [Feature override stores](feature-override-stores.md) — shops.enabledFeatures is the ONLY resolver-read override store; legacy shop_features = metadata-only, never gate on it; normalize legacy string[] before merging.
 - [Estimate labor-hour sources](estimate-labor-hours-sources.md) — no Mitchell feed; recommended hours = vehicle-scoped shop history → AI vehicle pass → shop-wide → KB typical; Protractor service jobs have NULL labor hours.
 - [Vehicle specs cache](vehicle-specs-cache.md) — Specs tab caches per `<VIN>|<hintKey>` (not squish) + `hint|<VIN>` CARFAX-hint rows; never cache ok:false; use pingDataOne + warming-503 instead of blocking on endpoint wake.
+- [Cache/identity cutover gating coverage](cache-cutover-gating-coverage.md) — all 5 cache domains + identity repos now flag-gated; writers/aggregates still direct-Mongo, shadow-off gated by scripts/cutover-parity.ts.

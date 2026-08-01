@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import Link from "next/link";
 import OilDutyToggle from "@/components/plan/OilDutyToggle";
 import { getDb } from "@/lib/mongo";
+import { findLatestEventByVin as findLatestAutoflowEventByVin } from "@/lib/data/repositories/autoflow-cache";
 import { requireSession } from "@/lib/auth";
 import { 
   resolveAutoflowConfig, 
@@ -1711,18 +1712,9 @@ async function PlanContent({ params, searchParams }: PageProps) {
       // both so "most recent" holds for either writer.
       { sort: { updatedAt: -1, updatedDate: -1, createdAt: -1, createdDate: -1 } }
     ),
-    // AutoFlow work orders (via webhook events)
-    db.collection("autoflow_events").findOne(
-      { 
-        shopId,
-        $or: [
-          { vehicleVin: { $regex: vinRegex } },
-          { vin: { $regex: vinRegex } },
-          { "payload.vehicle.vin": { $regex: vinRegex } }
-        ]
-      },
-      { sort: { createdAt: -1 } }
-    )
+    // AutoFlow work orders (via webhook events) — gated behind
+    // AUTOFLOW_CACHE_PG_CANONICAL (Mongo body preserved verbatim in the repo).
+    findLatestAutoflowEventByVin(shopId, vin)
     ]),
     VHI_DB_TIMEOUT_MS,
     `wo-sources ${vin}`,

@@ -169,6 +169,18 @@ export async function listShopsByMosShopIds(ids: number[]) {
   return rows.map((r) => shopRowToDoc(r)!);
 }
 
+/**
+ * List shops by their legacy numeric `id` (Mongo `shops.id`, PG
+ * `shops.legacy_id`). Mirrors the Mongo `{ id: { $in: ids } }` lookup
+ * used by the platform-admin ticket routing. Returns Mongo-shaped docs.
+ */
+export async function listShopsByLegacyIds(ids: number[]) {
+  const db = getDb();
+  if (!ids.length) return [];
+  const rows = await db.select().from(shops).where(inArray(shops.legacyId, ids));
+  return rows.map((r) => shopRowToDoc(r)!);
+}
+
 export async function listAllShops() {
   const db = getDb();
   const rows = await db.select().from(shops);
@@ -453,6 +465,49 @@ export async function listUsers(predicate: {
   return rows.map((r) => userRowToDoc(r));
 }
 
+/**
+ * Richer user-list surface for the abstracted `users` repo
+ * (`lib/data/repositories/users.ts`). It maps the exact Mongo filter
+ * shapes the migrated callers use (announcements targeting + the
+ * support-ticket shop lookup) onto typed columns:
+ *
+ *   - `shopIdIn`  → Mongo `{ shopId: { $in: [...] } }`
+ *   - `roleIn`    → Mongo `{ role:   { $in: [...] } }`
+ *   - `emailEquals` (already lowercased) → Mongo `{ email: <lower> }`
+ *   - `emailExists` → Mongo `{ email: { $exists: true } }`; in PG
+ *     `email` is NOT NULL so this is always satisfied — we translate it
+ *     to a no-op condition (a superset that can only ever include the
+ *     same rows Mongo would have).
+ *
+ * Projections are intentionally ignored here — returning the full doc
+ * is a safe superset; the caller only reads the fields it asked for.
+ */
+export async function listUsersByPredicate(predicate: {
+  shopIdIn?: number[];
+  roleIn?: string[];
+  emailEquals?: string;
+  emailExists?: boolean;
+}): Promise<Array<ReturnType<typeof userRowToDoc>>> {
+  const db = getDb();
+  const conditions: ReturnType<typeof eq>[] = [];
+  if (predicate.shopIdIn !== undefined) {
+    if (predicate.shopIdIn.length === 0) return [];
+    conditions.push(inArray(users.shopId, predicate.shopIdIn));
+  }
+  if (predicate.roleIn !== undefined) {
+    if (predicate.roleIn.length === 0) return [];
+    conditions.push(inArray(users.role, predicate.roleIn));
+  }
+  if (predicate.emailEquals !== undefined) {
+    conditions.push(eq(users.emailLower, predicate.emailEquals.toLowerCase()));
+  }
+  // `emailExists` is always true in PG (email NOT NULL) — no condition.
+  const rows = conditions.length
+    ? await db.select().from(users).where(and(...conditions))
+    : await db.select().from(users);
+  return rows.map((r) => userRowToDoc(r));
+}
+
 export async function updateUserExtensionTokenTimestamp(
   userId: string,
   ts: Date,
@@ -512,6 +567,13 @@ export async function insertSession(s: {
   });
 }
 
+/**
+ * Update a single session row by token. Returns Mongo-style
+ * `matchedCount`/`modifiedCount` so callers (the dev fix-session route)
+ * keep their existing response shape. postgres-js doesn't split matched
+ * vs. modified for us, so we approximate both from the rows-affected
+ * count (matched == modified for a straight `$set`).
+ */
 export async function updateSessionByToken(
   token: string,
   set: Partial<{
@@ -521,14 +583,50 @@ export async function updateSessionByToken(
     impersonatedBy: string | null;
     mustChangePassword: boolean;
   }>,
-): Promise<void> {
+): Promise<{ matchedCount: number; modifiedCount: number }> {
   const db = getDb();
-  await db.update(sessions).set(set).where(eq(sessions.token, token));
+  // Nothing to set (empty `$set`) — still report a match if the row
+  // exists so behaviour matches Mongo's `updateOne`.
+  if (Object.keys(set).length === 0) {
+    const exists = await db
+      .select({ token: sessions.token })
+      .from(sessions)
+      .where(eq(sessions.token, token))
+      .limit(1);
+    return { matchedCount: exists.length, modifiedCount: 0 };
+  }
+  const res = await db
+    .update(sessions)
+    .set(set)
+    .where(eq(sessions.token, token))
+    .returning({ token: sessions.token });
+  return { matchedCount: res.length, modifiedCount: res.length };
 }
 
-export async function deleteSessionByToken(token: string): Promise<void> {
+/**
+ * Delete a single session row by token, optionally constrained to an
+ * `isImpersonation` flag so callers can kill only the ghost session and
+ * not the operator's real one (mirrors the Mongo
+ * `deleteOne({ token, isImpersonation: true })`). Returns the
+ * `deletedCount` in the Mongo response shape.
+ */
+export async function deleteSessionByToken(
+  token: string,
+  opts?: { isImpersonation?: boolean },
+): Promise<{ deletedCount: number }> {
   const db = getDb();
-  await db.delete(sessions).where(eq(sessions.token, token));
+  const where =
+    opts?.isImpersonation !== undefined
+      ? and(
+          eq(sessions.token, token),
+          eq(sessions.isImpersonation, opts.isImpersonation),
+        )
+      : eq(sessions.token, token);
+  const res = await db
+    .delete(sessions)
+    .where(where)
+    .returning({ token: sessions.token });
+  return { deletedCount: res.length };
 }
 
 export async function deleteSessionsByUserId(userId: string): Promise<void> {

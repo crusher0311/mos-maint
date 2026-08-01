@@ -6,6 +6,8 @@
 // behavior so callers don't have to.
 import type { Collection, Document, Filter, UpdateFilter } from "mongodb";
 import { getDb } from "@/lib/data/db";
+import { isIdentityPgCanonical } from "@/lib/db/wave4-write-mode";
+import * as pg from "./pg/identity";
 
 const COLLECTION = "shops";
 
@@ -28,6 +30,12 @@ export async function listShopsByLegacyIds(
   ids: number[],
   projection?: ShopProjection,
 ): Promise<ShopDoc[]> {
+  if (isIdentityPgCanonical()) {
+    // PG returns full Mongo-shaped shop docs; the `projection` is
+    // ignored on the PG side because returning the whole doc is a safe
+    // superset (the caller only reads the fields it asked for).
+    return (await pg.listShopsByLegacyIds(ids)) as unknown as ShopDoc[];
+  }
   return listShopsByQuery({ id: { $in: ids } }, projection);
 }
 
@@ -44,6 +52,13 @@ export async function findShopByShopId<T extends ShopDoc = ShopDoc>(
   shopId: number | string,
   projection?: ShopProjection,
 ): Promise<T | null> {
+  if (isIdentityPgCanonical()) {
+    // The Mongo lookup matches `shopId` as either string or number
+    // (`shopIdFilter`); `findShopByMosShopId` coerces to Number and
+    // matches the canonical `mos_shop_id` column, covering both. The
+    // `projection` is ignored (full doc is a safe superset).
+    return (await pg.findShopByMosShopId(shopId)) as unknown as T | null;
+  }
   const col = await collection();
   const doc = await col.findOne(
     shopIdFilter(shopId),
@@ -56,11 +71,21 @@ export async function findShopByExactShopId<T extends ShopDoc = ShopDoc>(
   shopId: number,
   projection?: ShopProjection,
 ): Promise<T | null> {
+  if (isIdentityPgCanonical()) {
+    // Projection ignored (full doc is a safe superset).
+    return (await pg.findShopByMosShopId(shopId)) as unknown as T | null;
+  }
   const col = await collection();
   const doc = await col.findOne({ shopId }, projection ? { projection } : undefined);
   return (doc as T | null) ?? null;
 }
 
+// NOT flag-gated: accepts an arbitrary Mongo Filter whose only caller
+// (app/api/webhooks/shopware/route.ts) queries nested integration
+// settings — `{ "shopware.tenantId": … }` / `{ "shopware.swShopId": … }`
+// — which live inside the `settings` jsonb in PG with no indexed column
+// and no single translatable shape. Left Mongo-only until the shopware
+// webhook is migrated to a typed PG lookup — see task 997.
 export async function findShopByQuery(
   query: ShopFilter,
   projection?: ShopProjection,
@@ -72,6 +97,13 @@ export async function findShopByQuery(
   )) as ShopDoc | null;
 }
 
+// NOT flag-gated: accepts an arbitrary Mongo Filter. Real callers use
+// untranslatable shapes — an `$or` over nested integration fields
+// (`tekmetric.shopId`, `integrations.protractor.apiKey` existence,
+// lib/api-usage-tracker.ts + lib/announcements.ts) and a `createdAt`
+// range window (lib/integrations/protractor/new-shop-sweep.ts). None map
+// to an indexed PG column or a single equality/`$in` shape, so this
+// stays Mongo-only — see task 997.
 export async function listShopsByQuery(
   query: ShopFilter,
   projection?: ShopProjection,
@@ -86,9 +118,17 @@ export async function listShopsByShopIds(
   shopIds: number[],
   projection?: ShopProjection,
 ): Promise<ShopDoc[]> {
+  if (isIdentityPgCanonical()) {
+    // Projection ignored (full doc is a safe superset).
+    return (await pg.listShopsByMosShopIds(shopIds)) as unknown as ShopDoc[];
+  }
   return listShopsByQuery({ shopId: { $in: shopIds } }, projection);
 }
 
+// NOT flag-gated: no live callers in the app/lib tree (grep found
+// none), and it takes an arbitrary Mongo UpdateFilter. Leaving it
+// Mongo-only avoids adding an untested translation path with no
+// exercising caller — see task 997.
 export async function updateShopById(
   shopId: number | string,
   update: ShopUpdate,

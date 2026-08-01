@@ -3,6 +3,7 @@ import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
 import { triggerPlanBuild } from "@/lib/vhi-rebuild";
 import { generateShareToken } from "@/lib/report-share";
+import { findLatestTekmetricWorkOrderByVinWithCustomerName } from "@/lib/data/repositories/tekmetric-work-orders";
 import crypto from "crypto";
 
 const SHARE_SECRET = process.env.REPORT_SHARE_SECRET || process.env.STRIPE_WEBHOOK_SECRET || "vhr-share-default-key";
@@ -117,19 +118,9 @@ export async function GET(
     let customerName = plan.customerName || null;
 
     if (!customerName) {
-      const tekWo = await db.collection("tekmetric_work_orders").findOne(
-        {
-          vin: { $regex: new RegExp(`^${vin}$`, "i") },
-          $or: [
-            { shopId: String(shopId) },
-            { shopId: Number(shopId) },
-          ],
-          customerName: { $exists: true, $nin: [null, "", "Unknown Customer"] },
-        },
-        // Task #960: sync-written mirror docs carry only Tekmetric's *Date
-        // fields (updatedDate/createdDate), not updatedAt/createdAt —
-        // include both so "most recent" holds for either writer.
-        { sort: { updatedAt: -1, updatedDate: -1, createdAt: -1, createdDate: -1 }, projection: { customerName: 1 } }
+      const tekWo = await findLatestTekmetricWorkOrderByVinWithCustomerName(
+        String(shopId),
+        vin,
       );
       if (tekWo?.customerName) customerName = tekWo.customerName;
     }

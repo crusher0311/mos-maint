@@ -184,7 +184,6 @@ const ALLOWLIST = new Set([
   "app/api/enterprise/users/route.ts",
   "app/api/estimate-assist/audit/history/route.ts",
   "app/api/estimate-assist/audit/route.ts",
-  "app/api/estimate-assist/job-builder/route.ts",
   "app/api/extension/auth/route.ts",
   "app/api/extension/auth-token/route.ts",
   "app/api/extension/build-ro-from-vhi/route.ts",
@@ -255,7 +254,6 @@ const ALLOWLIST = new Set([
   "app/api/platform-admin/notifications/count/route.ts",
   "app/api/platform-admin/notifications/[id]/route.ts",
   "app/api/platform-admin/notifications/route.ts",
-  "app/api/platform-admin/partner-keys/route.ts",
   "app/api/platform-admin/plans/seed/route.ts",
   "app/api/platform-admin/protractor-rewarm-jobs-cache-all/route.ts",
   "app/api/platform-admin/service-keys/route.ts",
@@ -383,7 +381,6 @@ const ALLOWLIST = new Set([
   "app/dashboard/vehicles/[vin]/plan/page.tsx",
   "app/dashboard/vehicles/[vin]/recommend/page.tsx",
   "lib/ai-budget.ts",
-  "lib/audit-log.ts",
   "lib/auth.ts",
   "lib/common-failures.ts",
   "lib/data-quality.ts",
@@ -396,13 +393,11 @@ const ALLOWLIST = new Set([
   "lib/featureResolver.ts",
   "lib/ids.ts",
   "lib/integrations/autoflow/client.ts",
-  "lib/integrations/autoflow.ts",
   "lib/integrations/backfill-pace.ts",
   "lib/integrations/carfax.ts",
   "lib/integrations/dataone-api.ts",
   "lib/integrations/dataone.ts",
   "lib/integrations/dvi.ts",
-  "lib/integrations/protractor-backfill.ts",
   "lib/integrations/protractor/client.ts",
   "lib/integrations/protractor/jobs-prewarm.ts",
   "lib/integrations/protractor/sync.ts",
@@ -453,13 +448,6 @@ const ALLOWLIST = new Set([
   "scripts/protractor-job-index-catchup.ts",
   "scripts/repair-corrupted-carfax-snapshots.ts",
   "scripts/repair-poisoned-aces-markers.ts",
-  // Task #891 — one-shot repair of 'Unknown Service' titles in
-  // normalized_service_jobs for Protractor shops; titles sourced from the
-  // legacy Mongo job_index. Same one-off-repair precedent as the two above.
-  "scripts/repair-protractor-unknown-service-titles.ts",
-  // Task #479 — one-shot repair of fake dueMileage/dueAtMiles 0 anchors in
-  // cached plan payloads; same one-off-repair precedent as the two above.
-  "scripts/fix-zero-due-at-miles.ts",
   "scripts/wave1-backfill.ts",
   // Task #629 — customer-requested re-sync on the Data Status panel. The cron
   // processor and the settings route read/write the operational

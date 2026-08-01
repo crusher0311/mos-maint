@@ -87,8 +87,8 @@ and must be handled before a flip is real for that integration:
 | **Shop-Ware** | ✅ `shopware-cache.ts` (RO upsert/delete, vehicle, customer) | ✅ | ✅ `shopware_repair_orders`, `shopware_vehicles`, `shopware_customers` | Fold direct readers: `lib/shopware-jobs-prewarm.ts`, `app/api/dashboard/data/route.ts`, `app/api/plan-build/route.ts`. |
 | **Protractor** | ✅ `protractor-work-orders.ts`, `protractor-vehicles.ts` | ✅ | ✅ `protractor_work_orders`, `protractor_vehicles` (also `protractor_invoices`, `protractor_callback_events`) | Fold direct readers: `lib/integrations/protractor.ts`, `lib/protractor-jobs-prewarm.ts`, `app/api/dashboard/data/route.ts`, `lib/vhi-rebuild.ts`, `lib/auto-booking/scheduler.ts`. |
 | **AutoVitals** | ✅ `autovitals-vehicles.ts`, `-appointments.ts`, `-inspections.ts` | ✅ | ⚠️ `autovitals_vehicles` only — **add `autovitals_appointments` + `autovitals_inspections` mirror specs first** | Fold direct readers under `lib/integrations/autovitals.ts`, `app/api/autovitals/**`. |
-| **Tekmetric** | ⚠️ flags provided; cache access is **direct/unabstracted** (sprawling readers) | — (reuses wave2/3 tables) | ✅ `tekmetric_work_orders`, `tekmetric_repair_orders`, `tekmetric_vehicles` | Hot path. Route the direct call sites (`lib/tekmetric-*`, dashboard, extension job-search) onto a gated surface before flipping. Treat as its own sub-project. |
-| **AutoFlow** | ⚠️ flags provided; cache access is **direct/unabstracted** | — | ✅ `autoflow_dvi_items`, `autoflow_events`, `af_open` | Credentials live on the `shops` collection (W4 overlap) and `dvi_results` is shared — coordinate with identity (W4). Route direct call sites first. |
+| **Tekmetric** | ✅ `tekmetric-work-orders.ts` gated (task #997) — reads for extension job-search + report route now route through it | ✅ `pg/tekmetric-cache.ts` (task #997) | ✅ `tekmetric_work_orders`, `tekmetric_repair_orders`, `tekmetric_vehicles` | Hot path. Remaining direct call sites (dashboard `data` aggregates, plan-build, vhi-rebuild, extension plan/ro-context, and the sync/backfill **writers** in `lib/integrations/tekmetric/*`) still hit Mongo directly — fold them onto the gated repo before shadow-off. |
+| **AutoFlow** | ✅ `autoflow-cache.ts` gated (task #997) — `lib/evidence.ts` DVI read + plan-page `autoflow_events` read routed through it | ✅ `pg/autoflow-cache.ts` (task #997) | ✅ `autoflow_dvi_items`, `autoflow_events`, `af_open` | Credentials live on the `shops` collection (W4 overlap) and `dvi_results` is shared — coordinate with identity (W4). Remaining direct call sites (webhook receivers, `lib/dvi-prefill-history.ts`, `lib/declined-work-lines.ts`, extension DVI routes) still to fold before shadow-off. |
 
 "✅ gated" = flipping the flag changes behaviour through the abstracted
 repos today. "⚠️" = the flag exists for symmetry/future use but the
@@ -96,6 +96,24 @@ integration still needs its direct call sites routed before a flip means
 anything; do that as a follow-up before attempting its cutover.
 
 ---
+
+## Parity verification (task #997)
+
+`scripts/cutover-parity.ts` is the per-domain Mongo↔PG parity checker the
+operator runs **before the flip and during the soak**:
+
+```bash
+tsx scripts/cutover-parity.ts --domain=<tekmetric|protractor|shopware|autoflow|autovitals|identity|all> [--sample=N] [--json]
+```
+
+Per entity it reports Mongo vs PG row counts (+delta %), freshness (max
+recency timestamp in each store), newest-N sampled key diffs in **both**
+directions, and a promoted-field spot check (vin/status/…) on matched
+samples. It is strictly read-only against both stores. Exit is non-zero
+if any count delta exceeds 1% or any sampled Mongo key is missing from
+PG — treat a non-zero exit as a **no-go** for the flip / shadow-off.
+`--json` writes a timestamped report under
+`docs/db-migration-audit-log/`.
 
 ## Pre-window (T-1 day) — per integration `<I>`
 
@@ -114,6 +132,8 @@ anything; do that as a follow-up before attempting its cutover.
    ```bash
    tsx scripts/backfill-mongo-to-supabase.ts --mirror=<collection> --verify-only
    ```
+5. **Parity gate:** `tsx scripts/cutover-parity.ts --domain=<i> --json` must
+   exit 0 (counts within 1%, no sampled Mongo keys missing from PG).
 
 ## Cutover window (T0) — one integration at a time
 
@@ -147,6 +167,8 @@ backfills** while `WRITE_MONGO_<I>_CACHE=1`:
 
 Before flipping the shadow write off, **all** must hold:
 
+0. `tsx scripts/cutover-parity.ts --domain=<i>` exits 0 at T+24h and again
+   just before shadow-off.
 1. Every mirror in the group reports `OK` (≤ tolerance) across the soak.
 2. Every direct-access call site for the integration (allowlist
    inventory above) has been folded onto the gated repo / a PG read, or

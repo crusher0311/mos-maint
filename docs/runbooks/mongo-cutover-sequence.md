@@ -86,6 +86,16 @@ flips first, and protect login early. Where this diverges from the strict
   on so the ~487 files that still read Mongo identity keep working. So we get the
   protective benefit (login no longer shares Mongo's fate) without the risk that
   makes tenancy-core normally go last. We are flipping reads, **not** dropping.
+- **Coverage note (task #997):** in addition to the central libs, the
+  abstracted identity repos (`lib/data/repositories/{sessions,shops,users}.ts`)
+  are now flag-gated onto `lib/data/repositories/pg/identity.ts`, so their
+  callers flip with the flag too. Three query-shape helpers remain Mongo-only
+  (documented in-file: `findShopByQuery`, `listShopsByQuery`,
+  `updateShopById` — nested-jsonb integration lookups); they stay correct
+  while `WRITE_MONGO_IDENTITY=1`.
+- **Parity:** `tsx scripts/cutover-parity.ts --domain=identity` (read-only;
+  counts + freshness + bidirectional sampled key diffs) must exit 0 before
+  the flip and during the soak.
 - **Operator actions:** backfill users/shops into PG, set
   **`IDENTITY_PG_CANONICAL=1`**, soak 24–168h (login success metrics + parity),
   then later `WRITE_MONGO_IDENTITY=0` only once downstream Mongo identity readers
@@ -100,11 +110,18 @@ flips first, and protect login early. Where this diverges from the strict
   `<INT>_CACHE_PG_CANONICAL=1` then `WRITE_MONGO_<INT>_CACHE=0`
   (`lib/db/integration-cache-write-mode.ts`).
 - **Why last of the relief steps:** highest fan-in, needs the most careful soak,
-  and it is the heaviest daily traffic. **Build caveat:** Protractor and Shop-Ware
-  already have PG-mirror cache repositories; **Tekmetric does not yet** — its cache
-  writes (incl. the catch-up: `job_index`, `tekmetric_work_orders`) still go
-  straight to Mongo. So Tekmetric's cache cutover needs a **PG-mirror repository
-  built first** before it can be flipped.
+  and it is the heaviest daily traffic. **Build status (task #997):** all five
+  integrations now have PG-mirror cache repositories and flag-gated abstracted
+  repos — Tekmetric (`pg/tekmetric-cache.ts`, gated `tekmetric-work-orders.ts`)
+  and AutoFlow (`pg/autoflow-cache.ts`, gated `autoflow-cache.ts`) were added in
+  #997 alongside the existing Protractor/Shop-Ware/AutoVitals ones. **Caveat:**
+  the Tekmetric cache *writers* (sync/backfill/webhook, incl. `job_index` and
+  `tekmetric_work_orders` catch-up writes) and the heavy aggregate readers
+  (dashboard `data`, plan-build, vhi-rebuild) are still direct-to-Mongo; they
+  stay correct while `WRITE_MONGO_TEKMETRIC_CACHE=1` but must be folded onto the
+  gated surface before shadow-off (inventory in
+  `db-integration-cache-cutover.md`). Pre-flip + soak parity gate for every
+  integration: `tsx scripts/cutover-parity.ts --domain=<int>` must exit 0.
 - **Recommended sub-order (canary → heaviest):**
   1. A low-traffic integration as canary (AutoVitals or AutoFlow).
   2. Shop-Ware, then Protractor (repos exist).

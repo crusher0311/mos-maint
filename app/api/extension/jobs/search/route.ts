@@ -9,6 +9,10 @@ import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { searchJobsCombined } from "@/lib/job-search-combined";
 import { batchDecodeSquishes, toSquishPublic } from "@/lib/integrations/dataone-local";
 import { resolveJobSearchSpecs } from "@/lib/job-search-specs";
+import {
+  findTekmetricWorkOrderByWorkOrderId,
+  findTekmetricRepairOrderById,
+} from "@/lib/data/repositories/tekmetric-work-orders";
 
 const MODEL_VARIANTS: Record<string, string[]> = {
   "EXPEDITION": ["EXPEDITION", "EXPEDITION MAX"],
@@ -49,10 +53,7 @@ async function resolveVehicleContext(
     return { year, make, model, engine, vin };
   }
   
-  const workOrder = await db.collection("tekmetric_work_orders").findOne({
-    shopId: { $in: [String(mosShopId), Number(mosShopId)] },
-    workOrderId: String(roId)
-  });
+  const workOrder = await findTekmetricWorkOrderByWorkOrderId(mosShopId, String(roId));
   
   if (workOrder) {
     year = year || workOrder.vehicleYear?.toString() || null;
@@ -63,9 +64,7 @@ async function resolveVehicleContext(
     console.log(`[Jobs Search] Resolved vehicle from WO ${roId}: ${year} ${make} ${model} VIN=${vin ? vin.slice(0,8)+'...' : 'none'}`);
   } else if (provider === "tekmetric") {
     console.log(`[Jobs Search] WO ${roId} not in cache, checking Tekmetric repair orders`);
-    const tekRo = await db.collection("tekmetric_repair_orders").findOne({
-      $or: [{ id: parseInt(roId) }, { id: String(roId) }]
-    });
+    const tekRo = await findTekmetricRepairOrderById(roId);
     if (tekRo?.vehicle) {
       year = year || tekRo.vehicle.year?.toString() || null;
       make = make || tekRo.vehicle.make || null;

@@ -1,12 +1,12 @@
 // lib/evidence.ts
 import { getDb } from "@/lib/mongo";
+import { findDviItemsByVin } from "@/lib/data/repositories/autoflow-cache";
 
 export async function buildEvidenceForVIN(vin: string) {
   const db = await getDb();
 
-  // Pull DVI items (Autoflow)
-  const dvi = await db.collection("autoflow_dvi_items")
-    .find({ vin }, { projection: { _id: 0 } }).limit(500).toArray();
+  // Pull DVI items (Autoflow) — gated behind AUTOFLOW_CACHE_PG_CANONICAL.
+  const dvi = await findDviItemsByVin(vin);
 
   // Pull CARFAX history (your cached table)
   const carfax = await db.collection("carfax_history")
