@@ -17,12 +17,11 @@ export async function getMaintenanceRecommendations(
   vin: string,
   options: RecommendationOptions
 ): Promise<Recommendation[]> {
-  const { getDb } = await import('@/lib/mongo');
-  const db = await getDb();
-  
-  const vehicle = await db.collection('vehicles').findOne({
-    vin: vin.toUpperCase(),
-  });
+  const { findVehicleByVin } = await import(
+    '@/lib/data/repositories/vehicles'
+  );
+
+  const vehicle = await findVehicleByVin(vin.toUpperCase());
   
   if (!vehicle) {
     return [];

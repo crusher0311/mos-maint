@@ -1,7 +1,7 @@
 import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 import { NextRequest, NextResponse } from "next/server";
 import { validateExtensionToken, getUserShopIds, getAuthErrorStatus , buildAuthErrorBody } from "@/lib/extension-auth";
-import { getDb } from "@/lib/mongo";
+import { insertCannedJobApplication } from "@/lib/data/repositories/canned-jobs";
 import {
   applyCannedJobToWorkOrder,
   fetchVehicleByVin,
@@ -241,8 +241,7 @@ async function _POST(req: NextRequest) {
       );
     }
 
-    const db = await getDb();
-    await db.collection("canned_job_applications").insertOne({
+    await insertCannedJobApplication({
       shopId,
       vin: vin?.toUpperCase() || null,
       roNumber: roNumber || null,

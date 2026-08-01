@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
+import { insertCannedJobApplication } from "@/lib/data/repositories/canned-jobs";
 import {
   applyCannedJobToWorkOrder,
   fetchVehicleByVin,
@@ -150,7 +151,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: result.error }, { status: 500, headers: corsHeaders });
   }
 
-  await db.collection("canned_job_applications").insertOne({
+  await insertCannedJobApplication({
     shopId,
     vin: vin?.toUpperCase() || null,
     workOrderId: targetWorkOrderId,

@@ -16,6 +16,7 @@ import crypto from "node:crypto";
 import { fetchDviByInvoice, upsertDviSnapshot } from "@/lib/integrations/autoflow/client";
 import { upsertCustomerFromEvent } from "@/lib/upsert-customer";
 import { insertEvent } from "@/lib/data/repositories/events";
+import { updateDviResultCrossRef } from "@/lib/data/repositories/dvi";
 
 // ---- HMAC helpers --------------------------------------------------------
 
@@ -354,23 +355,18 @@ export async function processAutoflowWebhookEvent(args: {
         // Normalize shopId/roNumber forms so the cross-reference always lands
         // on the snapshot we just upserted, even if a future caller stores
         // `shopId` as a string or `roNumber` as a number.
-        const updateRes = await db.collection("dvi_results").updateOne(
+        const matchedCount = await updateDviResultCrossRef(
+          sId,
+          roStr,
           {
-            shopId: { $in: sIds },
-            $or: [
-              { roNumber: roStr },
-              { roNumber: Number(roStr) },
-            ],
+            primaryRefs: xref,
+            primaryMatched: matched,
+            primaryMatchedAt: new Date(),
           },
-          {
-            $set: {
-              primaryRefs: xref,
-              primaryMatched: matched,
-              primaryMatchedAt: new Date(),
-            },
-          }
+          sIds,
+          [roStr, Number(roStr)],
         );
-        if (updateRes.matchedCount === 0) {
+        if (matchedCount === 0) {
           console.warn(
             `[autoflow-webhook] DVI cross-reference write missed dvi_results for shop ${sId} RO ${roStr} (snapshot may not have been written yet)`
           );

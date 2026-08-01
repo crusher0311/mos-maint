@@ -1016,6 +1016,155 @@ const MIRRORS: MirrorSpec[] = [
     buildFilter: filterByShop,
   },
 
+  /* Task #1000 — remaining legacy pre-normalized stores */
+  {
+    key: "canned_job_applications",
+    mongoName: "canned_job_applications",
+    pgTableName: "canned_job_applications",
+    // Append-only audit rows: insert-or-skip on backfill_mongo_id.
+    extract: (d) => ({
+      values: {
+        backfill_mongo_id: String(d._id),
+        shop_id: asInt(d.shopId ?? d.mosShopId),
+        canned_job_id: asStr(d.cannedJobId ?? d.jobId),
+        vin: asStr(d.vin),
+        ro_number: asStr(d.roNumber ?? d.workOrderNumber),
+        applied_at: asDate(d.appliedAt ?? d.createdAt) ?? new Date(),
+        payload: d,
+      },
+    }),
+    buildFilter: filterByShop,
+  },
+  {
+    key: "concern_conversations",
+    mongoName: "concern_conversations",
+    pgTableName: "concern_conversations",
+    // PK is the Mongo _id hex (text `id`); docs mutate in place (round
+    // results / review / injected flags) so refresh on conflict.
+    naturalKey: ["id"],
+    extract: (d) => {
+      const sid = asInt(d.mosShopId ?? d.shopId);
+      if (sid == null) return null; // shop_id is NOT NULL; unattributable doc
+      return {
+        values: {
+          id: String(d._id),
+          shop_id: sid,
+          mos_shop_id: asInt(d.mosShopId),
+          vin: asStr(d.vin),
+          user_email: asStr(d.userEmail),
+          user_id: asStr(d.userId),
+          concern: asStr(d.concern),
+          symptom_category: asStr(d.symptomCategory),
+          questions: d.questions ?? null,
+          answered_questions: d.answeredQuestions ?? null,
+          round_results: d.roundResults ?? null,
+          review: d.review ?? null,
+          injected_to_protractor: !!d.injectedToProtractor,
+          status: asStr(d.status),
+          payload: d,
+          created_at: asDate(d.createdAt) ?? new Date(),
+          updated_at: asDate(d.updatedAt) ?? new Date(),
+        },
+      };
+    },
+    buildFilter: (shop?: number) =>
+      shop != null ? { $or: [{ mosShopId: shop }, { shopId: shop }] } : {},
+  },
+  {
+    key: "shop_repair_patterns",
+    mongoName: "shop_repair_patterns",
+    pgTableName: "shop_repair_patterns",
+    // Rolling-aggregate docs mutate in place — refresh on the
+    // backfill_mongo_id unique so re-runs converge on latest values.
+    naturalKey: ["backfill_mongo_id"],
+    extract: (d) => {
+      const sid = asInt(d.shopId);
+      if (sid == null) return null; // shop_id NOT NULL
+      return {
+        values: {
+          backfill_mongo_id: String(d._id),
+          shop_id: sid,
+          enterprise_id: d.enterpriseId != null ? String(d.enterpriseId) : null,
+          year: asInt(d.year),
+          make: asStr(d.make),
+          model: asStr(d.model),
+          mileage_bucket: asInt(d.mileageBucket),
+          job_title: asStr(d.jobTitle),
+          job_title_normalized: asStr(d.jobTitleNormalized),
+          occurrences: asInt(d.occurrences) ?? 0,
+          total_labor: d.totalLabor ?? 0,
+          total_parts: d.totalParts ?? 0,
+          total_amount: d.totalAmount ?? 0,
+          avg_labor: d.avgLabor ?? 0,
+          avg_parts: d.avgParts ?? 0,
+          avg_total: d.avgTotal ?? 0,
+          avg_hours: d.avgHours ?? 0,
+          last_performed: asDate(d.lastPerformed),
+          first_performed: asDate(d.firstPerformed),
+          vins_seen: d.vinsSeen ?? [],
+          created_at: asDate(d.createdAt) ?? new Date(),
+          updated_at: asDate(d.updatedAt) ?? new Date(),
+        },
+      };
+    },
+    buildFilter: filterByShop,
+  },
+  {
+    key: "support_tickets",
+    mongoName: "support_tickets",
+    pgTableName: "support_tickets",
+    // The PG table pre-exists (task #344 PG-first insert path) with a
+    // serial id; the Mongo _id is bridged via the unique `mongo_id`
+    // column (drizzle/0026). Conflict on ticket_number (unique NOT NULL)
+    // so rows the task #344 PG-first route already inserted (mongo_id
+    // NULL) get merged rather than colliding. Tickets mutate
+    // (status/messages) so refresh.
+    naturalKey: ["ticket_number"],
+    shopFilterColumn: "shop_id",
+    extract: (d) => {
+      const subject = asStr(d.subject);
+      const description = asStr(d.description ?? d.message);
+      const ticketNumber = asStr(d.ticketNumber);
+      if (!ticketNumber || !subject) return null; // NOT NULL columns
+      // Loose Mongo-only fields ride along in metadata so nothing is lost.
+      const {
+        _id, ticketNumber: _tn, subject: _s, description: _d2, category,
+        priority, status, source, shopId, shopName, locationIdentifier,
+        userEmail, userName, callerPhone, callSid, assignedTo, resolvedAt,
+        closedAt, autoClosedAt, messages, metadata, createdAt, updatedAt,
+        ...rest
+      } = d;
+      return {
+        values: {
+          mongo_id: String(d._id),
+          ticket_number: ticketNumber,
+          subject,
+          description: description ?? "",
+          category: asStr(category) ?? "general",
+          priority: asStr(priority) ?? "medium",
+          status: asStr(status) ?? "open",
+          source: asStr(source) ?? "web",
+          shop_id: asInt(shopId),
+          shop_name: asStr(shopName),
+          location_identifier: asStr(locationIdentifier),
+          user_email: asStr(userEmail),
+          user_name: asStr(userName),
+          caller_phone: asStr(callerPhone),
+          call_sid: asStr(callSid),
+          assigned_to: asStr(assignedTo),
+          resolved_at: asDate(resolvedAt),
+          closed_at: asDate(closedAt),
+          auto_closed_at: asDate(autoClosedAt),
+          messages: messages ?? [],
+          metadata: { ...(metadata ?? {}), ...rest },
+          created_at: asDate(createdAt) ?? new Date(),
+          updated_at: asDate(updatedAt) ?? new Date(),
+        },
+      };
+    },
+    buildFilter: filterByShop,
+  },
+
   /* Carfax */
   {
     key: "carfax_reports",

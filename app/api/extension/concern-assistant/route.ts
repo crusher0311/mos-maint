@@ -3,6 +3,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
 import { getOpenAI, trackOpenAiCall } from "@/lib/ai";
 import { getDb } from "@/lib/mongo";
+import {
+  findConversationRoundResults,
+  findConversationsForUser,
+  insertConversation,
+  pushRoundResults,
+  updateConversationSet,
+} from "@/lib/data/repositories/concern-conversations";
 import { trackApiRequest } from "@/lib/api-usage-tracker";
 import { enforceAiBudget } from "@/lib/ai-budget";
 import { SYMPTOM_QUESTION_GUIDE } from "@/lib/symptomQuestionGuide";
@@ -97,11 +104,7 @@ async function collectAskedQuestions(opts: {
 
   if (conversationId) {
     try {
-      const { ObjectId } = await import("mongodb");
-      const conv = await db.collection("concern_conversations").findOne(
-        { _id: new ObjectId(conversationId) },
-        { projection: { roundResults: 1 } },
-      );
+      const conv = await findConversationRoundResults(conversationId);
       const rounds = (conv as any)?.roundResults;
       if (Array.isArray(rounds)) {
         for (const round of rounds) {
@@ -131,9 +134,8 @@ async function _GET(request: NextRequest) {
     const provider = searchParams.get("provider");
     const limit = parseInt(searchParams.get("limit") || "20");
 
-    const db = await getDb();
     const userId = auth.user._id?.toString() || auth.user.id?.toString();
-    const filter: any = { userId };
+    let mosShopId: number | undefined;
 
     if (rawShopId) {
       // Resolve raw provider shopId to canonical mosShopId at the boundary
@@ -147,19 +149,15 @@ async function _GET(request: NextRequest) {
         corsHeaders,
       });
       if (!guard.ok) return guard.response;
-      filter.$or = [
-        { mosShopId: guard.mosShopId },
-        { mosShopId: String(guard.mosShopId) },
-        { shopId: rawShopId },
-        { shopId: Number(rawShopId) },
-      ];
+      mosShopId = guard.mosShopId;
     }
 
-    const conversations = await db.collection("concern_conversations")
-      .find(filter)
-      .sort({ updatedAt: -1 })
-      .limit(limit)
-      .toArray();
+    const conversations = await findConversationsForUser({
+      userId: userId as string,
+      mosShopId,
+      rawShopId: rawShopId ?? null,
+      limit,
+    });
 
     return NextResponse.json({ ok: true, conversations }, { headers: corsHeaders });
   } catch (error: any) {
@@ -265,12 +263,12 @@ async function _POST(request: NextRequest) {
         updatedAt: new Date(),
       };
 
-      const insertResult = await db.collection("concern_conversations").insertOne(conversation);
+      const insertedId = await insertConversation(conversation);
 
       return NextResponse.json({
         ok: true,
         questions,
-        conversationId: insertResult.insertedId.toString(),
+        conversationId: insertedId,
       }, { headers: corsHeaders });
     }
 
@@ -293,11 +291,10 @@ async function _POST(request: NextRequest) {
             symptomCategory,
             results: cleanResults,
           });
-          const { ObjectId } = await import("mongodb");
-          await db.collection<{ roundResults?: unknown[] }>("concern_conversations").updateOne(
-            { _id: new ObjectId(conversationId) },
-            { $push: { roundResults: { results: cleanResults, recordedAt: new Date() } } },
-          );
+          await pushRoundResults(conversationId, {
+            results: cleanResults,
+            recordedAt: new Date(),
+          });
         }
       }
 
@@ -339,13 +336,10 @@ async function _POST(request: NextRequest) {
       const noMoreQuestions = questions.length === 0;
 
       if (conversationId) {
-        const { ObjectId } = await import("mongodb");
-        await db.collection("concern_conversations").updateOne(
-          { _id: new ObjectId(conversationId) },
-          {
-            $set: { exchanges: answeredQuestions, updatedAt: new Date() }
-          }
-        );
+        await updateConversationSet(conversationId, {
+          exchanges: answeredQuestions,
+          updatedAt: new Date(),
+        });
       }
 
       return NextResponse.json({ ok: true, questions, noMoreQuestions }, { headers: corsHeaders });
@@ -369,11 +363,10 @@ async function _POST(request: NextRequest) {
             symptomCategory,
             results: cleanResults,
           });
-          const { ObjectId } = await import("mongodb");
-          await db.collection<{ roundResults?: unknown[] }>("concern_conversations").updateOne(
-            { _id: new ObjectId(conversationId) },
-            { $push: { roundResults: { results: cleanResults, recordedAt: new Date() } } },
-          );
+          await pushRoundResults(conversationId, {
+            results: cleanResults,
+            recordedAt: new Date(),
+          });
         }
       }
 
@@ -396,18 +389,12 @@ async function _POST(request: NextRequest) {
       const cleanedText = completion.choices[0]?.message?.content?.trim() || conversationText;
 
       if (conversationId) {
-        const { ObjectId } = await import("mongodb");
-        await db.collection("concern_conversations").updateOne(
-          { _id: new ObjectId(conversationId) },
-          {
-            $set: {
-              cleanedText,
-              exchanges: exchanges || [],
-              status: "completed",
-              updatedAt: new Date(),
-            }
-          }
-        );
+        await updateConversationSet(conversationId, {
+          cleanedText,
+          exchanges: exchanges || [],
+          status: "completed",
+          updatedAt: new Date(),
+        });
       }
 
       return NextResponse.json({ ok: true, cleanedText }, { headers: corsHeaders });

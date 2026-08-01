@@ -1084,7 +1084,41 @@ window:
    decommission is the downstream "Final MongoDB decommission" task — **not** part of
    #557.
 
+---
 
+
+## 13. Legacy pre-normalized stores (task #1000, 2026-08-01)
+
+The last data-bearing Mongo group before decommission. Every collection now
+has a recorded disposition: **RETIRE** (readers repointed to normalized PG,
+dead write paths deleted) or **MIGRATE** (flag-gated repository +
+operator-runnable backfill mirror + parity spec).
+
+Flags live in `lib/db/legacy-store-write-mode.ts` — per-domain
+`<DOMAIN>_PG_CANONICAL` (default OFF ⇒ Mongo canonical, zero behaviour
+change) + `WRITE_MONGO_<DOMAIN>` shadow kill-switch (default ON), same
+conventions as the §2/§3 integration-cache flags. Backfill mirrors:
+`tsx scripts/backfill-mongo-to-supabase.ts --mirror=<key>`; parity:
+`tsx scripts/cutover-parity.ts --domain=legacy`.
+
+| Collection | Disposition | How |
+| --- | --- | --- |
+| `repair_orders` (legacy) | **RETIRE** | All 4 live readers repointed to PG `normalized_work_orders` (`lib/miles.ts` shared helpers `getLatestRepairOrderMiles*ForVin`, dashboard vehicle + plan pages, `app/api/communications/caller-lookup`); dead upsert in `lib/models/customers.ts` deleted; dead page `plan/page-fixed.tsx` deleted. Historic mirror `pre_normalized_repair_orders` (`--mirror=pre_repair_orders`) retained for archive. |
+| `jobs` | **RETIRE** | Write-only operational log with zero readers; the 4 dead writes in `app/api/vehicles/[vin]/refresh` deleted. `--mirror=jobs` retained for archival backfill before drop. |
+| `job_history` | **RETIRE** | Zero live readers/writers (re-verified); only backfill tooling references remain. `--mirror=job_history` archives it. |
+| `sms_historical_work_orders` | **MIGRATE (archive)** | Script-only writers (history backfills, allowlist-exempt migration tooling); PG mirror table + `--mirror=sms_historical_work_orders` already exist. No app readers to gate. |
+| `vehicles`, `customers`, `manual_vehicles` | **MIGRATE** | Gated repos `lib/data/repositories/{vehicles,customers}.ts` → `pg/pre-normalized.ts` on `LEGACY_VEHICLES_PG_CANONICAL`. VIN-keyed inconsistent-shopId quirk preserved (`shop_id::text = ANY(variants)` scoping). Central readers folded (`lib/evidence.ts`, `lib/miles.ts`, `lib/recommendations`, `lib/vhi-rebuild.ts`, `lib/vhi-score.ts`, `lib/upsert-customer.ts`, `lib/models/customers.ts`, `app/api/vehicles/manual`). Long-tail route/adapter call sites stay direct-Mongo and remain correct under shadow writes (inventoried in `docs/runbooks/db-legacy-store-cutover.md`). Mirrors `pre_vehicles` / `pre_customers` / `pre_manual_vehicles`. |
+| `dvi`, `dvi_results` | **MIGRATE** | Gated repo `lib/data/repositories/dvi.ts` → `pg/dvi.ts` on `DVI_PG_CANONICAL`; writers (`lib/integrations/dvi.ts`, autoflow client/webhook) + readers (extension ro-context/plan, dashboard data/recent) folded. Advisory-only semantics preserved (never a history anchor). `drizzle/0024` adds `dvi.payload`. Mirrors `dvi` / `dvi_results`. |
+| `canned_jobs`, `canned_job_applications` | **MIGRATE** | Gated repo `lib/data/repositories/canned-jobs.ts` on `CANNED_JOBS_PG_CANONICAL`; single reader (extension plan) + 3 application-audit writers folded. Distinct from the provider canned-jobs *caches* (whose empty-cache poisoning guards are untouched); empty-result semantics preserved, no caching added. Mirrors `canned_jobs` / `canned_job_applications`. |
+| `concern_conversations` | **MIGRATE** | Gated repo on `CONCERN_CONVERSATIONS_PG_CANONICAL`; extension + dashboard concern-assistant routes and inject-protractor folded; mosShopId/legacy-shopId keying preserved. `drizzle/0025` extends the wave2 table. Mirror `concern_conversations`. |
+| `shop_repair_patterns` | **MIGRATE** | `lib/repair-patterns.ts` itself gated on `REPAIR_PATTERNS_PG_CANONICAL` (SQL equivalents in `pg/repair-patterns.ts`; Mongo createIndex skipped when PG-canonical). `drizzle/0025` adds the real natural-key/aggregate columns. Mirror `shop_repair_patterns`. |
+| `support_tickets` | **MIGRATE** | §5 #7 resolved in code: `lib/data/repositories/support-tickets.ts` gated on `SUPPORT_TICKETS_PG_CANONICAL` onto `pg/support-tickets.ts` (Mongo-id bridge via unique `mongo_id`, `drizzle/0026`); merges with the existing task #344 PG-first insert via `ON CONFLICT (ticket_number)`. All 10 reader routes go through the repo. Mirror `support_tickets`. |
+
+**Operator steps (prod-only, per established §10.5/§11.8 gating):** apply
+`drizzle/0024`–`0026`, run each `--mirror=...` backfill, run
+`cutover-parity.ts --domain=legacy`, flip each `*_PG_CANONICAL=1`, soak,
+then set the matching `WRITE_MONGO_*=0`. Details:
+`docs/runbooks/db-legacy-store-cutover.md`.
 ## 13. Task #999 — Integration operational stores → flag-gated PG repositories
 
 Task #999 extends the §12 precedent (operational primitives, flag-flip cutover) to

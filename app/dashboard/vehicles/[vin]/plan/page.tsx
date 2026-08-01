@@ -3,6 +3,7 @@ import Link from "next/link";
 import OilDutyToggle from "@/components/plan/OilDutyToggle";
 import { getDb } from "@/lib/mongo";
 import { findLatestEventByVin as findLatestAutoflowEventByVin } from "@/lib/data/repositories/autoflow-cache";
+import { getLatestRepairOrderMilesRecordForVin } from "@/lib/miles";
 import { requireSession } from "@/lib/auth";
 import { 
   resolveAutoflowConfig, 
@@ -302,13 +303,10 @@ async function getLatestMilesForVin(db: any, vinRaw: string): Promise<{ miles: n
     return Number.isFinite(n) && n > 0 ? n : null;
   };
 
-  // Latest RO mileage
-  const ro = await db.collection("repair_orders").findOne(
-    { vin },
-    { sort: { updatedAt: -1, createdAt: -1 }, projection: { mileage: 1, updatedAt: 1, createdAt: 1 } }
-  );
-  const mRO = toPos(ro?.mileage);
-  const dRO = ro?.updatedAt || ro?.createdAt || null;
+  // Latest RO mileage (normalized_work_orders PG — task #1000)
+  const roRecord = await getLatestRepairOrderMilesRecordForVin(vin);
+  const mRO = toPos(roRecord.miles);
+  const dRO = roRecord.recordedDate || null;
 
   // Latest event with mileage
   const af = await db.collection("events").aggregate([

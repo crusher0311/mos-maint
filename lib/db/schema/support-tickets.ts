@@ -37,6 +37,10 @@ export const supportTickets = pgTable(
   "support_tickets",
   {
     id: serial("id").primaryKey(),
+    // task #1000 (PACKAGE 4): identity bridge for the Mongo→PG cutover. Holds
+    // the ObjectId-shaped string id returned to callers so their
+    // `ObjectId.isValid()` guards keep passing after the flag flip.
+    mongoId: text("mongo_id"),
     ticketNumber: varchar("ticket_number", { length: 50 }).notNull().unique(),
     subject: text("subject").notNull(),
     description: text("description").notNull(),
@@ -53,6 +57,10 @@ export const supportTickets = pgTable(
     callSid: varchar("call_sid", { length: 100 }),
     assignedTo: varchar("assigned_to", { length: 255 }),
     resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    // task #1000 (PACKAGE 4): the Mongo repo sets these on the resolved→closed
+    // auto-close sweep; mirrored here so PG-canonical writes retain them.
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+    autoClosedAt: timestamp("auto_closed_at", { withTimezone: true }),
     messages: jsonb("messages").default([]),
     metadata: jsonb("metadata"),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -67,5 +75,6 @@ export const supportTickets = pgTable(
     statusIdx: index("support_tickets_status_idx").on(table.status),
     userEmailIdx: index("support_tickets_user_email_idx").on(table.userEmail),
     createdAtIdx: index("support_tickets_created_at_idx").on(table.createdAt),
+    mongoIdIdx: index("support_tickets_mongo_id_idx").on(table.mongoId),
   }),
 );

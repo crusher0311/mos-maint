@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getOpenAI, trackOpenAiCall } from "@/lib/ai";
 import { getDb } from "@/lib/mongo";
+import {
+  findConversationRoundResults,
+  insertConversation,
+  pushRoundResults,
+  updateConversationSet,
+} from "@/lib/data/repositories/concern-conversations";
 import { trackApiRequest } from "@/lib/api-usage-tracker";
 import { enforceAiBudget } from "@/lib/ai-budget";
 import { isPlatformAdmin as isPlatformAdminEmail } from "@/lib/super-admins";
@@ -90,11 +96,7 @@ async function collectAskedQuestions(opts: {
 
   if (conversationId) {
     try {
-      const { ObjectId } = await import("mongodb");
-      const conv = await db.collection("concern_conversations").findOne(
-        { _id: new ObjectId(conversationId) },
-        { projection: { roundResults: 1 } },
-      );
+      const conv = await findConversationRoundResults(conversationId);
       const rounds = (conv as any)?.roundResults;
       if (Array.isArray(rounds)) {
         for (const round of rounds) {
@@ -186,12 +188,12 @@ export async function POST(request: NextRequest) {
         updatedAt: new Date(),
       };
 
-      const insertResult = await db.collection("concern_conversations").insertOne(conversation);
+      const insertedId = await insertConversation(conversation);
 
       return NextResponse.json({
         ok: true,
         questions,
-        conversationId: insertResult.insertedId.toString(),
+        conversationId: insertedId,
       });
     }
 
@@ -216,11 +218,10 @@ export async function POST(request: NextRequest) {
             symptomCategory,
             results: cleanResults,
           });
-          const { ObjectId } = await import("mongodb");
-          await db.collection<{ roundResults?: unknown[] }>("concern_conversations").updateOne(
-            { _id: new ObjectId(conversationId) },
-            { $push: { roundResults: { results: cleanResults, recordedAt: new Date() } } },
-          );
+          await pushRoundResults(conversationId, {
+            results: cleanResults,
+            recordedAt: new Date(),
+          });
         }
       }
 
@@ -265,12 +266,10 @@ export async function POST(request: NextRequest) {
       const noMoreQuestions = questions.length === 0;
 
       if (conversationId) {
-        const { ObjectId } = await import("mongodb");
-        const db = await getDb();
-        await db.collection("concern_conversations").updateOne(
-          { _id: new ObjectId(conversationId) },
-          { $set: { exchanges: answeredQuestions, updatedAt: new Date() } }
-        );
+        await updateConversationSet(conversationId, {
+          exchanges: answeredQuestions,
+          updatedAt: new Date(),
+        });
       }
 
       return NextResponse.json({ ok: true, questions, noMoreQuestions });
@@ -296,11 +295,10 @@ export async function POST(request: NextRequest) {
             symptomCategory,
             results: cleanResults,
           });
-          const { ObjectId } = await import("mongodb");
-          await db2.collection<{ roundResults?: unknown[] }>("concern_conversations").updateOne(
-            { _id: new ObjectId(conversationId) },
-            { $push: { roundResults: { results: cleanResults, recordedAt: new Date() } } },
-          );
+          await pushRoundResults(conversationId, {
+            results: cleanResults,
+            recordedAt: new Date(),
+          });
         }
       }
 
@@ -324,19 +322,12 @@ export async function POST(request: NextRequest) {
       const cleanedText = completion.choices[0]?.message?.content?.trim() || conversationText;
 
       if (conversationId) {
-        const { ObjectId } = await import("mongodb");
-        const db = await getDb();
-        await db.collection("concern_conversations").updateOne(
-          { _id: new ObjectId(conversationId) },
-          {
-            $set: {
-              cleanedText,
-              exchanges: exchanges || [],
-              status: "completed",
-              updatedAt: new Date(),
-            }
-          }
-        );
+        await updateConversationSet(conversationId, {
+          cleanedText,
+          exchanges: exchanges || [],
+          status: "completed",
+          updatedAt: new Date(),
+        });
       }
 
       return NextResponse.json({ ok: true, cleanedText });

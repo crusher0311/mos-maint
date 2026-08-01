@@ -1,4 +1,5 @@
 import { Db } from "mongodb";
+import { findVehicleByVin } from "@/lib/data/repositories/vehicles";
 import { type TriagedItemCache } from "@/lib/plan-cache";
 import { isComplimentaryItem } from "@/lib/complimentary-classification";
 import { computeIntervalProgress, type IntervalProgress } from "@/lib/vhi-progress";
@@ -451,10 +452,7 @@ export async function getVhiFromAnalysisCache(
   // response — a VIN-only lookup could leak another tenant's customer.
   // shopId is matched as both String and Number (legacy writers stored
   // either); the (shopId, vin) unique index bounds the query either way.
-  const vehicleDoc = await db.collection("vehicles").findOne(
-    { vin: vin.toUpperCase(), shopId: { $in: [String(shopId), Number(shopId)] } },
-    { projection: { _id: 0, year: 1, make: 1, model: 1, engine: 1, customerName: 1 } }
-  );
+  const vehicleDoc = await findVehicleByVin(vin.toUpperCase(), shopId);
 
   return {
     score: { value: score, tier: tier.label, color: tier.color },

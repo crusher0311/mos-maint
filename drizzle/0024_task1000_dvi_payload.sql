@@ -1,0 +1,16 @@
+-- DVI Mongo→PG cutover bridge column (task #1000, PACKAGE 2).
+--
+-- The gated DVI repos (lib/data/repositories/dvi.ts +
+-- lib/data/repositories/pg/dvi.ts) store the full legacy Mongo doc shape
+-- verbatim in a `payload` jsonb — mirroring the Tekmetric cutover
+-- (lib/data/repositories/pg/tekmetric-cache.ts) — so heterogeneous
+-- advisory fields (`status`, `advisor`, `technician`, `categories`,
+-- `hunter`, `primaryRefs`, …) survive the flip without a column per
+-- field. Reads reconstruct the Mongo doc from `payload` merged with the
+-- typed lookup columns, so callers see the exact legacy shape.
+--
+-- `dvi_results` already carries a `payload` jsonb (drizzle/0014_wave3.sql);
+-- only the `dvi` table needs the column added here. ADD COLUMN IF NOT
+-- EXISTS keeps this idempotent and aligned with
+-- scripts/apply-normalized-migration.ts.
+ALTER TABLE "dvi" ADD COLUMN IF NOT EXISTS "payload" jsonb;

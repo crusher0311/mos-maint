@@ -1,5 +1,9 @@
 import "server-only";
 import { getDb } from "@/lib/mongo";
+import {
+  upsertDviResult,
+  findDviResultByRo,
+} from "@/lib/data/repositories/dvi";
 
 type Fetcher = typeof fetch;
 
@@ -306,35 +310,32 @@ export async function upsertDviSnapshot(
   roNumber: string | number,
   dvi: DviResult
 ) {
-  const db = await getDb();
   const now = new Date();
   try {
-    await db.collection("dvi_results").updateOne(
-      { shopId, roNumber: String(roNumber) },
+    await upsertDviResult(
+      shopId,
+      String(roNumber),
       {
-        $set: {
-          shopId,
-          roNumber: String(roNumber),
-          fetchedAt: now,
-          vin: dvi.vin ?? null,
-          mileage: dvi.mileage ?? null,
-          sheetName: dvi.sheetName ?? null,
-          timestamp: dvi.timestamp ?? null,
-          advisor: dvi.advisor ?? null,
-          technician: dvi.technician ?? null,
-          pdfUrl: dvi.pdfUrl ?? null,
-          shopUrl: dvi.shopUrl ?? null,
-          customerUrl: dvi.customerUrl ?? null,
-          categories: dvi.categories ?? null,
-          hunter: dvi.hunter ?? null,
-          ok: dvi.ok,
-          error: dvi.error ?? null,
-          raw: dvi.raw ?? null,
-          source: "autoflow",
-        },
-        $setOnInsert: { createdAt: now },
+        shopId,
+        roNumber: String(roNumber),
+        fetchedAt: now,
+        vin: dvi.vin ?? null,
+        mileage: dvi.mileage ?? null,
+        sheetName: dvi.sheetName ?? null,
+        timestamp: dvi.timestamp ?? null,
+        advisor: dvi.advisor ?? null,
+        technician: dvi.technician ?? null,
+        pdfUrl: dvi.pdfUrl ?? null,
+        shopUrl: dvi.shopUrl ?? null,
+        customerUrl: dvi.customerUrl ?? null,
+        categories: dvi.categories ?? null,
+        hunter: dvi.hunter ?? null,
+        ok: dvi.ok,
+        error: dvi.error ?? null,
+        raw: dvi.raw ?? null,
+        source: "autoflow",
       },
-      { upsert: true }
+      { createdAt: now },
     );
   } catch (err: any) {
     // Task #510: AutoFlow write failure marker. Snapshot upserts are
@@ -385,9 +386,7 @@ export async function fetchDviWithCache(
   maxAgeMs = 10 * 60 * 1000,
   doFetch: Fetcher = fetch
 ): Promise<DviResult> {
-  const db = await getDb();
-  const key = { shopId, roNumber: String(invoice) };
-  const doc = await db.collection("dvi_results").findOne(key);
+  const doc = await findDviResultByRo(shopId, String(invoice));
 
   const now = Date.now();
   const fresh = doc?.fetchedAt ? now - new Date(doc.fetchedAt).getTime() <= maxAgeMs : false;

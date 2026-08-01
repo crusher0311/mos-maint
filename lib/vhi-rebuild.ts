@@ -1,4 +1,5 @@
 import { getDb } from "@/lib/mongo";
+import { findVehicleByVin } from "@/lib/data/repositories/vehicles";
 import { getCachedPlan, invalidateCachedPlan, type CachedPlan, type CachedPlanData } from "@/lib/plan-cache";
 import { computeScore, getScoreTier, formatVhiItem, separateComplimentary } from "@/lib/vhi-score";
 
@@ -524,9 +525,6 @@ export async function resolveMileageFromRo(
       wo?.data?.OutUsage ?? wo?.data?.InUsage ?? wo?.data?.Odometer ?? null;
   }
 
-  const vehicleDoc = await db.collection("vehicles").findOne(
-    { shopId, vin: vinUpper },
-    { projection: { currentMileage: 1, lastMileage: 1 } }
-  );
+  const vehicleDoc = await findVehicleByVin(vinUpper, shopId);
   return vehicleDoc?.currentMileage ?? vehicleDoc?.lastMileage ?? null;
 }

@@ -1,5 +1,6 @@
 // lib/upsert-customer.ts
 import { Db } from "mongodb";
+import { upsertCustomerBySelector } from "@/lib/data/repositories/customers";
 
 export async function upsertCustomerFromEvent(db: Db, shopId: number, payload: any) {
   const p = payload || {};
@@ -42,9 +43,5 @@ export async function upsertCustomerFromEvent(db: Db, shopId: number, payload: a
     phone       ? { shopId, phone } :
                   { shopId, name };
 
-  await db.collection("customers").updateOne(
-    match,
-    { $set: doc, $setOnInsert: { createdAt: new Date() } },
-    { upsert: true }
-  );
+  await upsertCustomerBySelector(match, doc, { createdAt: new Date() });
 }

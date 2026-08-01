@@ -33,7 +33,7 @@
  *   pnpm tsx scripts/cutover-parity.ts --domain=tekmetric --json
  *
  * Flags:
- *   --domain=identity|tekmetric|protractor|shopware|autoflow|autovitals|all  (default: all)
+ *   --domain=identity|tekmetric|protractor|shopware|autoflow|autovitals|legacy|all  (default: all)
  *   --sample=N   newest-N sample size per direction (default: 10)
  *   --json       also write a JSON report to
  *                docs/db-migration-audit-log/cutover-parity-<domain>-<ts>.json
@@ -99,7 +99,8 @@ type DomainName =
   | "protractor"
   | "shopware"
   | "autoflow"
-  | "autovitals";
+  | "autovitals"
+  | "legacy";
 
 /* -------------------------------------------------------------------------- */
 /* Small shared helpers                                                       */
@@ -504,6 +505,138 @@ const AUTOVITALS: EntitySpec[] = [
   },
 ];
 
+/* Task #1000 — legacy pre-normalized stores (vehicles/customers/
+ * manual_vehicles, DVI, canned jobs, concern conversations, repair
+ * patterns, support tickets). */
+const LEGACY: EntitySpec[] = [
+  {
+    name: "vehicles",
+    mongoCollection: "vehicles",
+    pgTable: "pre_normalized_vehicles",
+    mongoKey: (d) => s(d._id),
+    pgKeyExpr: "backfill_mongo_id",
+    mongoRecencyField: "updatedAt",
+    pgRecencyExpr: "updated_at",
+    fieldChecks: [
+      { label: "vin", fromMongo: (d) => d.vin, pgExpr: "vin" },
+      { label: "make", fromMongo: (d) => d.make, pgExpr: "make" },
+    ],
+  },
+  {
+    name: "customers",
+    mongoCollection: "customers",
+    pgTable: "pre_normalized_customers",
+    mongoKey: (d) => s(d._id),
+    pgKeyExpr: "backfill_mongo_id",
+    mongoRecencyField: "updatedAt",
+    pgRecencyExpr: "updated_at",
+    fieldChecks: [
+      { label: "externalId", fromMongo: (d) => d.externalId, pgExpr: "external_id" },
+      { label: "status", fromMongo: (d) => d.status, pgExpr: "status" },
+    ],
+  },
+  {
+    name: "manual_vehicles",
+    mongoCollection: "manual_vehicles",
+    pgTable: "pre_normalized_manual_vehicles",
+    mongoKey: (d) => s(d._id),
+    pgKeyExpr: "backfill_mongo_id",
+    mongoRecencyField: "createdAt",
+    pgRecencyExpr: "created_at",
+    fieldChecks: [
+      { label: "vin", fromMongo: (d) => d.vin, pgExpr: "vin" },
+    ],
+  },
+  {
+    name: "dvi",
+    mongoCollection: "dvi",
+    pgTable: "dvi",
+    mongoKey: (d) => s(d._id),
+    pgKeyExpr: "backfill_mongo_id",
+    mongoRecencyField: "fetchedAt",
+    pgRecencyExpr: "fetched_at",
+    fieldChecks: [
+      { label: "vin", fromMongo: (d) => d.vin, pgExpr: "vin" },
+      { label: "roNumber", fromMongo: (d) => d.roNumber, pgExpr: "ro_number" },
+    ],
+  },
+  {
+    name: "dvi_results",
+    mongoCollection: "dvi_results",
+    pgTable: "dvi_results",
+    mongoKey: (d) => s(d._id),
+    pgKeyExpr: "backfill_mongo_id",
+    mongoRecencyField: "receivedAt",
+    pgRecencyExpr: "received_at",
+    fieldChecks: [
+      { label: "roNumber", fromMongo: (d) => d.roNumber, pgExpr: "ro_number" },
+    ],
+  },
+  {
+    name: "canned_jobs",
+    mongoCollection: "canned_jobs",
+    pgTable: "canned_jobs",
+    mongoKey: (d) => `${s(d.shopId ?? d.shop_id)}:${s(d.cannedJobId ?? d.id ?? d._id)}`,
+    pgKeyExpr: "shop_id::text || ':' || canned_job_id",
+    mongoRecencyField: "updatedAt",
+    pgRecencyExpr: "updated_at",
+    fieldChecks: [
+      { label: "title", fromMongo: (d) => d.title ?? d.name, pgExpr: "title" },
+    ],
+  },
+  {
+    name: "canned_job_applications",
+    mongoCollection: "canned_job_applications",
+    pgTable: "canned_job_applications",
+    mongoKey: (d) => s(d._id),
+    pgKeyExpr: "backfill_mongo_id",
+    mongoRecencyField: "appliedAt",
+    pgRecencyExpr: "applied_at",
+    fieldChecks: [
+      { label: "vin", fromMongo: (d) => d.vin, pgExpr: "vin" },
+    ],
+  },
+  {
+    name: "concern_conversations",
+    mongoCollection: "concern_conversations",
+    pgTable: "concern_conversations",
+    mongoKey: (d) => s(d._id),
+    pgKeyExpr: "id",
+    mongoRecencyField: "updatedAt",
+    pgRecencyExpr: "updated_at",
+    fieldChecks: [
+      { label: "vin", fromMongo: (d) => d.vin, pgExpr: "vin" },
+      { label: "status", fromMongo: (d) => d.status, pgExpr: "status" },
+    ],
+  },
+  {
+    name: "shop_repair_patterns",
+    mongoCollection: "shop_repair_patterns",
+    pgTable: "shop_repair_patterns",
+    mongoKey: (d) => s(d._id),
+    pgKeyExpr: "backfill_mongo_id",
+    mongoRecencyField: "updatedAt",
+    pgRecencyExpr: "updated_at",
+    fieldChecks: [
+      { label: "jobTitleNormalized", fromMongo: (d) => d.jobTitleNormalized, pgExpr: "job_title_normalized" },
+      { label: "occurrences", fromMongo: (d) => d.occurrences, pgExpr: "occurrences" },
+    ],
+  },
+  {
+    name: "support_tickets",
+    mongoCollection: "support_tickets",
+    pgTable: "support_tickets",
+    mongoKey: (d) => s(d.ticketNumber),
+    pgKeyExpr: "ticket_number",
+    mongoRecencyField: "updatedAt",
+    pgRecencyExpr: "updated_at",
+    fieldChecks: [
+      { label: "status", fromMongo: (d) => d.status, pgExpr: "status" },
+      { label: "subject", fromMongo: (d) => d.subject, pgExpr: "subject" },
+    ],
+  },
+];
+
 const REGISTRY: Record<DomainName, EntitySpec[]> = {
   identity: IDENTITY,
   tekmetric: TEKMETRIC,
@@ -511,6 +644,7 @@ const REGISTRY: Record<DomainName, EntitySpec[]> = {
   shopware: SHOPWARE,
   autoflow: AUTOFLOW,
   autovitals: AUTOVITALS,
+  legacy: LEGACY,
 };
 
 const ALL_DOMAINS = Object.keys(REGISTRY) as DomainName[];

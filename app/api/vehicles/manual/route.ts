@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getDb } from "@/lib/mongo";
+import {
+  findActiveManualVehicle,
+  upsertManualVehicle,
+  updateManualVehicle,
+  archiveManualVehicle,
+} from "@/lib/data/repositories/vehicles";
 
 export async function POST(request: NextRequest) {
   try {
@@ -40,27 +46,18 @@ export async function POST(request: NextRequest) {
     const normalizedVin = vin.toUpperCase().trim();
     const shopId = Number(user.shopId);
 
-    const existing = await db.collection("manual_vehicles").findOne({
-      shopId,
-      vin: normalizedVin,
-      archived: { $ne: true },
-    });
+    const existing = await findActiveManualVehicle(shopId, normalizedVin);
 
     if (existing) {
-      await db.collection("manual_vehicles").updateOne(
-        { _id: existing._id },
-        {
-          $set: {
-            customerName: customerName.trim(),
-            roNumber: roNumber?.trim() || null,
-            mileage: Number(mileage),
-            vehicleYear: vehicleYear ? Number(vehicleYear) : null,
-            vehicleMake: vehicleMake?.trim() || null,
-            vehicleModel: vehicleModel?.trim() || null,
-            updatedAt: new Date(),
-          },
-        }
-      );
+      await updateManualVehicle(shopId, normalizedVin, existing, {
+        customerName: customerName.trim(),
+        roNumber: roNumber?.trim() || null,
+        mileage: Number(mileage),
+        vehicleYear: vehicleYear ? Number(vehicleYear) : null,
+        vehicleMake: vehicleMake?.trim() || null,
+        vehicleModel: vehicleModel?.trim() || null,
+        updatedAt: new Date(),
+      });
     } else {
       const doc = {
         shopId,
@@ -77,7 +74,7 @@ export async function POST(request: NextRequest) {
         updatedAt: new Date(),
         createdBy: user.email,
       };
-      await db.collection("manual_vehicles").insertOne(doc);
+      await upsertManualVehicle(shopId, normalizedVin, doc);
     }
 
     await db.collection("dashboard_updates").updateOne(
@@ -153,10 +150,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     const shopId = Number(user.shopId);
-    await db.collection("manual_vehicles").updateOne(
-      { shopId, vin: vin.toUpperCase() },
-      { $set: { archived: true, updatedAt: new Date() } }
-    );
+    await archiveManualVehicle(shopId, vin.toUpperCase());
 
     await db.collection("dashboard_updates").updateOne(
       { shopId },

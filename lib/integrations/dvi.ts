@@ -1,5 +1,6 @@
 // lib/integrations/dvi.ts
 import { getDb } from "@/lib/mongo";
+import { insertDvi } from "@/lib/data/repositories/dvi";
 
 /** Heuristic base64 decoder: if it looks like base64, decode; else return as-is */
 function maybeDecodeBase64(s?: string | null): string {
@@ -199,7 +200,7 @@ export async function importDVI(args: { shopId: number; roNumber: string | numbe
 
   if (!res.ok) {
     const message = json?.message || json?.error || `AutoFlow DVI HTTP ${res.status}`;
-    await db.collection("dvi").insertOne({
+    await insertDvi([{
       shopId,
       roNumber: ro,
       ok: false,
@@ -207,20 +208,20 @@ export async function importDVI(args: { shopId: number; roNumber: string | numbe
       status: res.status,
       raw: json ?? null,
       fetchedAt: now,
-    });
+    }]);
     throw new Error(message);
   }
 
   const content = Array.isArray(json?.content) ? json.content : [];
   if (!content.length) {
-    await db.collection("dvi").insertOne({
+    await insertDvi([{
       shopId,
       roNumber: ro,
       ok: true,
       empty: true,
       raw: json ?? null,
       fetchedAt: now,
-    });
+    }]);
     return { insertedCount: 0, rows: [] };
   }
 
@@ -259,7 +260,7 @@ export async function importDVI(args: { shopId: number; roNumber: string | numbe
     };
   });
 
-  const result = await db.collection("dvi").insertMany(rows);
+  await insertDvi(rows);
 
   // Best-effort enrichment from the first row
   const first = rows[0];
@@ -305,6 +306,6 @@ export async function importDVI(args: { shopId: number; roNumber: string | numbe
     }
   }
 
-  return { insertedCount: result.insertedCount, rows };
+  return { insertedCount: rows.length, rows };
 }
 

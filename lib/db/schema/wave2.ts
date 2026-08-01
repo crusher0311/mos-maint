@@ -146,12 +146,21 @@ export const concernConversations = pgTable(
     roundResults: jsonb("round_results"),
     review: jsonb("review"),
     injectedToProtractor: boolean("injected_to_protractor").notNull().default(false),
+    // Task #1000: the concern-assistant Mongo doc is heterogeneous
+    // (userId, vehicleDisplay, exchanges, status, source, cleanedText,
+    // injectedAt/injectedTo/injectedWorkOrderId, …). The full doc is stored
+    // verbatim in `payload` so the legacy shape survives the cutover; the
+    // typed columns above back the indexed lookups.
+    userId: text("user_id"),
+    status: text("status"),
+    payload: jsonb("payload"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
     shopVinIdx: index("concern_conversations_shop_vin_idx").on(t.shopId, t.vin),
     createdIdx: index("concern_conversations_created_idx").on(t.createdAt),
+    userUpdatedIdx: index("concern_conversations_user_updated_idx").on(t.userId, t.updatedAt),
   }),
 );
 
@@ -187,24 +196,72 @@ export const remediedDeferredWork = pgTable(
   }),
 );
 
-/** `shop_repair_patterns` — learned per-shop service-name → recommendation patterns. */
+/** `shop_repair_patterns` — learned per (shop, vehicle, mileage bucket, job)
+ * repair patterns (Mongo `shop_repair_patterns`, see `lib/repair-patterns.ts`).
+ *
+ * Task #1000: the original wave2 stub (`pattern`/`serviceName`/`sampleCount`)
+ * modelled a different concept than the collection the app actually writes.
+ * The real doc is keyed by
+ * `(shopId, year, make, model, mileageBucket, jobTitleNormalized)` and carries
+ * rolling occurrence/labour/parts/hours aggregates plus a capped `vinsSeen`
+ * array. The extra columns below (added idempotently in drizzle/0025) back the
+ * PG-canonical reads/aggregates; the legacy stub columns are kept nullable for
+ * backward compatibility. `pattern` is relaxed to nullable there too.
+ */
 export const shopRepairPatterns = pgTable(
   "shop_repair_patterns",
   {
     id: serial("id").primaryKey(),
     backfillMongoId: text("backfill_mongo_id"),
     shopId: integer("shop_id").notNull(),
-    pattern: text("pattern").notNull(),
+    pattern: text("pattern"),
     serviceName: text("service_name"),
     sampleCount: integer("sample_count").notNull().default(0),
     confidence: doublePrecision("confidence"),
     metadata: jsonb("metadata"),
+    // Task #1000: natural-key + aggregate columns mirroring the Mongo doc.
+    enterpriseId: text("enterprise_id"),
+    year: integer("year"),
+    make: text("make"),
+    model: text("model"),
+    mileageBucket: integer("mileage_bucket"),
+    jobTitle: text("job_title"),
+    jobTitleNormalized: text("job_title_normalized"),
+    occurrences: integer("occurrences").notNull().default(0),
+    totalLabor: doublePrecision("total_labor").notNull().default(0),
+    totalParts: doublePrecision("total_parts").notNull().default(0),
+    totalAmount: doublePrecision("total_amount").notNull().default(0),
+    avgLabor: doublePrecision("avg_labor").notNull().default(0),
+    avgParts: doublePrecision("avg_parts").notNull().default(0),
+    avgTotal: doublePrecision("avg_total").notNull().default(0),
+    avgHours: doublePrecision("avg_hours").notNull().default(0),
+    lastPerformed: timestamp("last_performed", { withTimezone: true }),
+    firstPerformed: timestamp("first_performed", { withTimezone: true }),
+    vinsSeen: jsonb("vins_seen").notNull().default([]),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull().defaultNow(),
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
     shopPatternIdx: uniqueIndex("shop_repair_patterns_shop_pattern_uniq").on(t.shopId, t.pattern),
     backfillUniq: uniqueIndex("shop_repair_patterns_backfill_uniq").on(t.backfillMongoId),
+    shopVehicleJobUniq: uniqueIndex("shop_repair_patterns_shop_vehicle_job_uniq").on(
+      t.shopId,
+      t.year,
+      t.make,
+      t.model,
+      t.mileageBucket,
+      t.jobTitleNormalized,
+    ),
+    enterpriseVehicleIdx: index("shop_repair_patterns_enterprise_vehicle_idx").on(
+      t.enterpriseId,
+      t.year,
+      t.make,
+      t.model,
+      t.mileageBucket,
+    ),
+    shopTopIdx: index("shop_repair_patterns_shop_top_idx").on(t.shopId, t.occurrences),
   }),
 );
 

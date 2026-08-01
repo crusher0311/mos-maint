@@ -1,6 +1,8 @@
 import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
+import { findEnrichedCannedJobs } from "@/lib/data/repositories/canned-jobs";
+import { findDviResultByRo } from "@/lib/data/repositories/dvi";
 import { validateExtensionToken, getUserShopIds, getAuthErrorStatus , buildAuthErrorBody } from "@/lib/extension-auth";
 import { checkShopFeatureGate } from "@/lib/extension-route-guard";
 import { resolveCarfaxConfig, fetchCarfaxWithCache, estimateMileageFromCarfax } from "@/lib/integrations/carfax";
@@ -1561,10 +1563,7 @@ async function _GET(request: NextRequest) {
         // route.ts), then enrich from the linked read provider matched BY VIN
         // — AutoFlow and the linked provider use different RO numbers, so the
         // vehicle VIN is the only reliable cross-provider key.
-        const dvi = await db.collection("dvi_results").findOne({
-          shopId: { $in: [mosShopId, String(mosShopId)] },
-          roNumber: { $in: [roId, String(roId)] },
-        });
+        const dvi = await findDviResultByRo(mosShopId, roId);
         console.log(`[Extension] Autoflow DVI lookup: mosShopId=${mosShopId}, roId=${roId}, found=${!!dvi}, resolvedProvider=${provider}`);
         if (dvi) {
           vin = vin || (dvi.vin ? String(dvi.vin).toUpperCase() : null);
@@ -2529,10 +2528,10 @@ async function _GET(request: NextRequest) {
       complimentary: [] as any[]
     };
 
-    // Look up enriched canned jobs to include full labor/parts details
-    const cannedJobs = await db.collection("canned_jobs")
-      .find({ shopId: mosShopId, enriched: true })
-      .toArray();
+    // Look up enriched canned jobs to include full labor/parts details.
+    // Gated repo (task #1000): PG-canonical when CANNED_JOBS_PG_CANONICAL=1,
+    // else the verbatim Mongo `find({ shopId, enriched: true })`.
+    const cannedJobs = await findEnrichedCannedJobs(mosShopId);
     
     // Build a map for fuzzy matching service names to canned jobs
     const cannedJobMap = new Map<string, any>();

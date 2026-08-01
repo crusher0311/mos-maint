@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
+import { insertCannedJobApplication } from "@/lib/data/repositories/canned-jobs";
 import { addCannedJobsToRepairOrder } from "@/lib/integrations/tekmetric";
 import { logRecommendationEvent } from "@/lib/enterprise";
 import { trackPushToRO } from "@/lib/extension-analytics";
@@ -185,7 +186,7 @@ export async function POST(req: NextRequest) {
   try {
     const result = await addCannedJobsToRepairOrder(targetRepairOrderId, [Number(cannedJobId)], shopId ? Number(shopId) : undefined);
     
-    await db.collection("canned_job_applications").insertOne({
+    await insertCannedJobApplication({
       shopId,
       tekmetricShopId,
       vin: vin?.toUpperCase() || null,

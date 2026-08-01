@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
+import { getDb as getPgDb } from "@/lib/db/drizzle";
+import { normalizedWorkOrders } from "@/lib/db/schema/normalized";
+import { and, desc, eq } from "drizzle-orm";
 
 export const runtime = "nodejs";
 
@@ -70,19 +73,46 @@ export async function GET(req: NextRequest) {
       licensePlate: 1,
     }).limit(10).toArray();
 
-    const recentOrders = await db.collection("repair_orders").find({
-      $or: [
-        { customerId: customer._id },
-        { customer_id: customer._id },
-      ],
-    }).sort({ createdAt: -1 }).limit(5).project({
-      _id: 1,
-      orderNumber: 1,
-      status: 1,
-      createdAt: 1,
-      total: 1,
-      vehicleId: 1,
-    }).toArray();
+    // Recent orders from the normalized PG store (task #1000 — legacy
+    // `repair_orders` reader retirement). The Mongo `customers.externalId`
+    // is the source-system customer id, which is what
+    // `normalized_work_orders.customer_id` stores; scope by the customer's
+    // shopId since external ids can collide across shops. Returned fields /
+    // ordering (orderNumber, status, createdAt, total; most-recent first)
+    // match the previous Mongo projection.
+    const customerExternalId =
+      customer.externalId != null ? String(customer.externalId) : null;
+    const customerShopId =
+      customer.shopId != null ? Number(customer.shopId) : null;
+
+    let recentOrders: Array<{
+      id: string;
+      orderNumber: string | null;
+      status: string | null;
+      createdAt: Date | null;
+      total: string | null;
+    }> = [];
+
+    if (customerExternalId && customerShopId != null && Number.isFinite(customerShopId)) {
+      const pg = getPgDb();
+      recentOrders = await pg
+        .select({
+          id: normalizedWorkOrders.id,
+          orderNumber: normalizedWorkOrders.workOrderNumber,
+          status: normalizedWorkOrders.status,
+          createdAt: normalizedWorkOrders.createdAt,
+          total: normalizedWorkOrders.grandTotal,
+        })
+        .from(normalizedWorkOrders)
+        .where(
+          and(
+            eq(normalizedWorkOrders.shopId, customerShopId),
+            eq(normalizedWorkOrders.customerId, customerExternalId),
+          ),
+        )
+        .orderBy(desc(normalizedWorkOrders.createdAt))
+        .limit(5);
+    }
 
     const customerName = [
       customer.firstName || customer.first_name || "",
@@ -107,8 +137,8 @@ export async function GET(req: NextRequest) {
         mileage: v.mileage || null,
         licensePlate: v.licensePlate || null,
       })),
-      recentOrders: recentOrders.map((o: any) => ({
-        id: String(o._id),
+      recentOrders: recentOrders.map((o) => ({
+        id: String(o.id),
         orderNumber: o.orderNumber || null,
         status: o.status || null,
         createdAt: o.createdAt || null,

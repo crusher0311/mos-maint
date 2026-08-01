@@ -1,6 +1,7 @@
 // lib/evidence.ts
 import { getDb } from "@/lib/mongo";
 import { findDviItemsByVin } from "@/lib/data/repositories/autoflow-cache";
+import { findVehicleByVin } from "@/lib/data/repositories/vehicles";
 
 export async function buildEvidenceForVIN(vin: string) {
   const db = await getDb();
@@ -13,7 +14,7 @@ export async function buildEvidenceForVIN(vin: string) {
     .find({ vin }, { projection: { _id: 0 } }).limit(1000).toArray();
 
   // Pull OE schedule (DataOne LKP/DEF tables you imported)
-  const veh = await db.collection("vehicles").findOne({ vin });
+  const veh = await findVehicleByVin(vin);
   const ymmFilter: any = { Year: veh?.year, Make: veh?.make, Model: veh?.model };
   if (veh?.trim) ymmFilter.Trim = veh.trim;
 

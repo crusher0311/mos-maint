@@ -923,6 +923,9 @@ export const dvi = pgTable(
     lines: jsonb("lines"),
     raw: jsonb("raw"),
     source: text("source"),
+    // Task #1000: full legacy Mongo doc verbatim so reads reconstruct the
+    // exact advisory shape after the PG cutover (see pg/dvi.ts).
+    payload: jsonb("payload"),
   },
   (t) => ({
     shopRoIdx: index("dvi_shop_ro_idx").on(t.shopId, t.roNumber),

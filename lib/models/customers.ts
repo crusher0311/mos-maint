@@ -1,6 +1,14 @@
 // lib/models/customers.ts
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongo";
+import {
+  findCustomerIdBySelectors,
+  insertCustomer,
+  upsertCustomerBySelector,
+  updateCustomerByHandle,
+  findOpenCustomersForDashboard,
+} from "@/lib/data/repositories/customers";
+import { upsertVehicleByShopVin } from "@/lib/data/repositories/vehicles";
 
 type RawPayload = any;
 
@@ -177,74 +185,53 @@ export async function upsertCustomerFromAutoflow(shopId: number, payload: RawPay
   if (email)      selectors.push({ shopId, email });
   if (phone)      selectors.push({ shopId, phone });
 
-  let customerId: ObjectId;
+  let customerId: ObjectId | string;
+
+  const customerOnInsert = { shopId, createdAt: now, createdBy: "autoflow-webhook" };
 
   if (selectors.length === 0) {
     if (!hasAnyName && !hasUsefulVehicle && !hasRO) {
       return { ok: true as const, customerId: null, vehicleId: null, roNumber: roNumber ?? null, mileage: mileage ?? null };
     }
-    const ins = await db.collection("customers").insertOne({ shopId, createdAt: now, createdBy: "autoflow-webhook", ...baseSet });
-    customerId = ins.insertedId;
+    // No identity selector: unconditionally insert a fresh customer.
+    // Each anonymous/partial webhook payload must get its OWN record —
+    // never a selector-based upsert (a {shopId}-only selector would
+    // collapse distinct customers into one row per shop).
+    customerId = await insertCustomer({ shopId, ...customerOnInsert, ...baseSet });
   } else {
-    const existing = await db.collection("customers").findOne({ $or: selectors }, { projection: { _id: 1 } });
+    const existing = await findCustomerIdBySelectors(selectors);
     if (existing?._id) {
       customerId = existing._id;
-      await db.collection("customers").updateOne(
-        { _id: customerId },
-        { $set: baseSet, $setOnInsert: { shopId, createdAt: now, createdBy: "autoflow-webhook" } },
-      );
+      await updateCustomerByHandle(customerId, baseSet, customerOnInsert);
     } else {
-      await db.collection("customers").updateOne(
-        selectors[0],
-        { $set: baseSet, $setOnInsert: { shopId, createdAt: now, createdBy: "autoflow-webhook" } },
-        { upsert: true },
-      );
-      const got = await db.collection("customers").findOne(selectors[0], { projection: { _id: 1 } });
-      customerId = got!._id as ObjectId;
+      await upsertCustomerBySelector(selectors[0], baseSet, customerOnInsert);
+      const got = await findCustomerIdBySelectors([selectors[0]]);
+      customerId = (got!._id as ObjectId | string);
     }
   }
 
   // Vehicle
   let vehicleId: ObjectId | undefined;
   if (vin) {
-    const vehRes = await db.collection("vehicles").findOneAndUpdate(
-      { shopId, vin },
+    const vehDoc = await upsertVehicleByShopVin(
+      shopId,
+      vin,
+      { shopId, vin, createdAt: now },
       {
-        $setOnInsert: { shopId, vin, createdAt: now },
-        $set: {
-          customerId,
-          customerExternalId: externalId ?? null,
-          lastMileage: mileage ?? undefined,
-          updatedAt: now,
-          source: "autoflow",
-          ...(vehicleMeta ?? {}),
-        },
+        customerId,
+        customerExternalId: externalId ?? null,
+        lastMileage: mileage ?? undefined,
+        updatedAt: now,
+        source: "autoflow",
+        ...(vehicleMeta ?? {}),
       },
-      { upsert: true, returnDocument: "after" },
     );
-    vehicleId = (vehRes.value?._id as ObjectId) ?? ((vehRes as any).lastErrorObject?.upserted as ObjectId | undefined);
+    vehicleId = (vehDoc?._id as ObjectId) ?? undefined;
   }
 
-  // RO
-  if (roNumber) {
-    await db.collection("repair_orders").updateOne(
-      { shopId, roNumber: String(roNumber) },
-      {
-        $setOnInsert: { shopId, roNumber: String(roNumber), createdAt: now },
-        $set: {
-          customerId,
-          customerExternalId: externalId ?? null,
-          vehicleId: vehicleId ?? null,
-          vin: vin ?? null,
-          mileage: mileage ?? null,
-          status: ticketStatus ?? null, // store raw
-          updatedAt: now,
-          source: "autoflow",
-        },
-      },
-      { upsert: true },
-    );
-  }
+  // RO write retired (task #1000): the legacy `repair_orders` upsert was
+  // dead once its readers moved to `normalized_work_orders`. `roNumber`/
+  // `mileage` are still returned below for callers that inspect the result.
 
   return { ok: true as const, customerId, vehicleId: vehicleId ?? null, roNumber: roNumber ?? null, mileage: mileage ?? null };
 }
@@ -256,8 +243,6 @@ export async function upsertCustomerFromAutoflow(shopId: number, payload: RawPay
  * - Ensures openedAt on first sighting
  */
 export async function upsertCustomerFromAutoflowEvent(payload: any, shopIdRaw: string | number) {
-  const db = await getDb();
-
   const shopIdStr = String(shopIdRaw);
   const now = new Date();
 
@@ -376,13 +361,10 @@ export async function upsertCustomerFromAutoflowEvent(payload: any, shopIdRaw: s
     if (vehDoc.odometer !== undefined) setDoc.lastMileage = vehDoc.odometer;
   }
 
-  await db.collection("customers").updateOne(
+  await upsertCustomerBySelector(
     selector,
-    {
-      $setOnInsert: { createdAt: now, openedAt: now, status: rawStatus ?? "open" },
-      $set: setDoc,
-    },
-    { upsert: true },
+    setDoc,
+    { createdAt: now, openedAt: now, status: rawStatus ?? "open" },
   );
 }
 
@@ -416,33 +398,10 @@ export type OpenCustomer = {
  *  - Sorts by updatedAt desc
  */
 export async function getOpenCustomersForDashboard(shopIdInput: number | string, limit = 50) {
-  const db = await getDb();
-  const shopIdNum = Number(shopIdInput);
-  const shopIdStr = String(shopIdInput);
-
-  const cursor = db
-    .collection<OpenCustomer>("customers")
-    .find(
-      {
-        $and: [
-          { $or: [{ shopId: shopIdNum }, { shopId: shopIdStr }] },
-          { status: { $nin: CLOSED_SET as unknown as ClosedWord[] } },
-          { "vehicle.vin": { $nin: ["", null] } }, // ← stricter VIN filter
-        ],
-      },
-      {
-        projection: {
-          name: 1,
-          status: 1,
-          lastStatus: 1,
-          lastTicketId: 1,
-          updatedAt: 1,
-          vehicle: { year: 1, make: 1, model: 1, vin: 1, odometer: 1, license: 1 },
-        },
-      },
-    )
-    .sort({ updatedAt: -1 })
-    .limit(limit);
-
-  return cursor.toArray();
+  const rows = await findOpenCustomersForDashboard(
+    shopIdInput,
+    CLOSED_SET as unknown as string[],
+    limit,
+  );
+  return rows as unknown as OpenCustomer[];
 }

@@ -2,7 +2,7 @@ import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 import { NextRequest, NextResponse } from "next/server";
 import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
 import { resolveProtractorConfig, protractorFetch } from "@/lib/integrations/protractor/client";
-import { getDb } from "@/lib/mongo";
+import { markInjectedForUser } from "@/lib/data/repositories/concern-conversations";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -129,32 +129,20 @@ async function _POST(request: NextRequest) {
 
     console.log(`[Protractor Concern] Successfully added concern to WO ${woId}`);
 
-    const db = await getDb();
     const userId = auth.user._id?.toString() || auth.user.id?.toString();
     // Task #300: scope injection-tracking to this shop too. Filter by either
     // the canonical mosShopId (new docs) or the legacy raw shopId / null
     // (pre-migration docs that were never tagged).
-    await db.collection("concern_conversations").updateMany(
-      {
-        userId,
-        status: "completed",
-        injectedAt: { $exists: false },
-        $or: [
-          { mosShopId },
-          { mosShopId: String(mosShopId) },
-          { shopId: String(shopId) },
-          { shopId: Number(shopId) },
-          { shopId: null, mosShopId: { $exists: false } },
-        ],
+    await markInjectedForUser({
+      userId: userId as string,
+      mosShopId,
+      rawShopId: shopId,
+      set: {
+        injectedAt: new Date(),
+        injectedTo: "protractor",
+        injectedWorkOrderId: woId,
       },
-      {
-        $set: {
-          injectedAt: new Date(),
-          injectedTo: "protractor",
-          injectedWorkOrderId: woId,
-        },
-      }
-    );
+    });
 
     return NextResponse.json({ ok: true }, { headers: corsHeaders });
   } catch (error: any) {

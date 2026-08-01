@@ -10,6 +10,7 @@ import { resolveProtractorConfig, fetchAllActiveInspections, fetchInvoicesForVeh
 import VehicleDetailClient from "./VehicleDetailClient";
 import { estimateMileageFromCarfax } from "@/lib/integrations/carfax";
 import { resolveShopDistanceUnit } from "@/lib/shop-distance-unit";
+import { getLatestRepairOrderMilesForVin } from "@/lib/miles";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -60,12 +61,8 @@ async function getLatestMilesForVin(db: any, vinRaw: string): Promise<number | n
     return Number.isFinite(n) && n > 0 ? n : null;
   };
 
-  // Latest RO mileage
-  const ro = await db.collection("repair_orders").findOne(
-    { vin },
-    { sort: { updatedAt: -1, createdAt: -1 }, projection: { mileage: 1 } }
-  );
-  const mRO = toPos(ro?.mileage);
+  // Latest RO mileage (normalized_work_orders PG — task #1000)
+  const mRO = await getLatestRepairOrderMilesForVin(vin);
 
   // Latest AF or manual close event with mileage
   const af = await db.collection("events").aggregate([

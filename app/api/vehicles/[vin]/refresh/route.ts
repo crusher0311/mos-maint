@@ -61,7 +61,6 @@ async function handle(req: NextRequest, ctx: { params: { vin: string } }) {
 
     const { vin, shopId, customerId } = parsed;
     const db = await getDb();
-    const now = new Date();
 
     // Most recent ticket for RO#
     const ticket = await db.collection("tickets").findOne(
@@ -69,16 +68,6 @@ async function handle(req: NextRequest, ctx: { params: { vin: string } }) {
       { sort: { updatedAt: -1 }, projection: { roNumber: 1 } }
     );
     const ro = ticket?.roNumber ? String(ticket.roNumber) : null;
-
-    await db.collection("jobs").insertOne({
-      type: "vehicle-refresh",
-      shopId,
-      vin,
-      customerId,
-      status: "running",
-      startedAt: now,
-      updatedAt: now,
-    });
 
     // Step 1: DVI import (if we have RO)
     let dviSummary: any = { skipped: true };
@@ -88,31 +77,8 @@ async function handle(req: NextRequest, ctx: { params: { vin: string } }) {
         dviSummary = { inserted: res.insertedCount };
       } catch (e: any) {
         dviSummary = { error: String(e?.message || e) };
-        await db.collection("jobs").insertOne({
-          type: "vehicle-refresh-error",
-          shopId,
-          vin,
-          customerId,
-          stage: "dvi",
-          error: dviSummary.error,
-          at: new Date(),
-        });
       }
-    } else {
-      await db.collection("jobs").insertOne({
-        type: "vehicle-refresh-note",
-        shopId,
-        vin,
-        customerId,
-        note: "No RO# found for VIN; skipped DVI.",
-        at: new Date(),
-      });
     }
-
-    await db.collection("jobs").updateMany(
-      { type: "vehicle-refresh", shopId, vin, customerId, status: "running" },
-      { $set: { status: "done", updatedAt: new Date() } }
-    );
 
     // -------- Fixed redirect: build absolute URL from req.url --------
     if (req.method === "POST") {

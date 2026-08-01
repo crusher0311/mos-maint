@@ -1,6 +1,12 @@
 import { getDb } from "./mongo";
 import { Collection, ObjectId } from "mongodb";
 import { toObjectId } from "./object-id-utils";
+import {
+  isRepairPatternsPgCanonical,
+  shouldShadowWriteMongoRepairPatterns,
+  shadowWriteMongoLegacyStore,
+} from "./db/legacy-store-write-mode";
+import * as pg from "./data/repositories/pg/repair-patterns";
 
 export interface RepairPattern {
   _id?: ObjectId;
@@ -103,7 +109,60 @@ export async function getRepairPatternsCollection(): Promise<Collection<RepairPa
   return db.collection<RepairPattern>(COLLECTION_NAME);
 }
 
-export async function updateRepairPattern(params: {
+interface UpdateRepairPatternInput {
+  shopId: number;
+  enterpriseId?: string;
+  year: number;
+  make: string;
+  model: string;
+  mileage: number;
+  jobTitle: string;
+  laborAmount: number;
+  partsAmount: number;
+  totalAmount: number;
+  laborHours: number;
+  vin?: string;
+  performedDate: Date;
+}
+
+/** Map a caller's mileage-based input to the PG repo's bucketed shape. */
+function toPgUpdateParams(
+  params: UpdateRepairPatternInput,
+): pg.UpdateRepairPatternParams {
+  return {
+    shopId: params.shopId,
+    enterpriseId: params.enterpriseId,
+    year: params.year,
+    make: params.make,
+    model: params.model,
+    mileageBucket: getMileageBucket(params.mileage),
+    jobTitle: params.jobTitle,
+    jobTitleNormalized: normalizeJobTitle(params.jobTitle),
+    laborAmount: params.laborAmount,
+    partsAmount: params.partsAmount,
+    totalAmount: params.totalAmount,
+    laborHours: params.laborHours,
+    vin: params.vin,
+    performedDate: params.performedDate,
+  };
+}
+
+export async function updateRepairPattern(
+  params: UpdateRepairPatternInput,
+): Promise<void> {
+  if (isRepairPatternsPgCanonical()) {
+    await pg.updateRepairPattern(toPgUpdateParams(params));
+    if (shouldShadowWriteMongoRepairPatterns()) {
+      await shadowWriteMongoLegacyStore("shop_repair_patterns.update", () =>
+        updateRepairPatternMongo(params),
+      );
+    }
+    return;
+  }
+  await updateRepairPatternMongo(params);
+}
+
+async function updateRepairPatternMongo(params: {
   shopId: number;
   enterpriseId?: string;
   year: number;
@@ -198,7 +257,34 @@ export async function updateRepairPatternBatch(jobs: Array<{
   performedDate: Date;
 }>): Promise<number> {
   if (jobs.length === 0) return 0;
-  
+
+  if (isRepairPatternsPgCanonical()) {
+    const n = await pg.updateRepairPatternBatch(jobs.map(toPgUpdateParams));
+    if (shouldShadowWriteMongoRepairPatterns()) {
+      await shadowWriteMongoLegacyStore("shop_repair_patterns.updateBatch", () =>
+        updateRepairPatternBatchMongo(jobs),
+      );
+    }
+    return n;
+  }
+  return updateRepairPatternBatchMongo(jobs);
+}
+
+async function updateRepairPatternBatchMongo(jobs: Array<{
+  shopId: number;
+  enterpriseId?: string;
+  year: number;
+  make: string;
+  model: string;
+  mileage: number;
+  jobTitle: string;
+  laborAmount: number;
+  partsAmount: number;
+  totalAmount: number;
+  laborHours: number;
+  vin?: string;
+  performedDate: Date;
+}>): Promise<number> {
   const collection = await getRepairPatternsCollection();
   const now = new Date();
   
@@ -274,6 +360,35 @@ export async function getShopPatterns(params: {
   includeEnterprise?: boolean;
   limit?: number;
 }): Promise<PatternMatch[]> {
+  if (isRepairPatternsPgCanonical()) {
+    const mileageBucket = getMileageBucket(params.mileage);
+    const buckets = [mileageBucket - 5000, mileageBucket, mileageBucket + 5000].filter(b => b >= 0);
+    const modelVariants = getModelVariants(params.model);
+    const rows = await pg.getShopPatterns({
+      shopId: params.shopId,
+      enterpriseId: params.enterpriseId,
+      year: params.year,
+      make: params.make,
+      model: params.model,
+      buckets,
+      modelVariants,
+      includeEnterprise: params.includeEnterprise,
+      limit: params.limit || 20,
+    });
+    return rows.map(p => ({
+      jobTitle: p.jobTitle,
+      occurrences: p.occurrences,
+      avgTotal: Math.round(p.avgTotal * 100) / 100,
+      avgHours: Math.round(p.avgHours * 10) / 10,
+      avgLabor: Math.round(p.avgLabor * 100) / 100,
+      avgParts: Math.round(p.avgParts * 100) / 100,
+      lastPerformed: p.lastPerformed as Date,
+      mileageBucket: p.mileageBucket ?? 0,
+      uniqueVehicles: p.uniqueVehicles,
+      confidence: p.occurrences >= 10 ? "high" : p.occurrences >= 5 ? "medium" : "low",
+    }));
+  }
+
   const collection = await getRepairPatternsCollection();
   const mileageBucket = getMileageBucket(params.mileage);
   
@@ -321,6 +436,33 @@ export async function getEnterprisePatterns(params: {
   mileage: number;
   limit?: number;
 }): Promise<PatternMatch[]> {
+  if (isRepairPatternsPgCanonical()) {
+    const mileageBucket = getMileageBucket(params.mileage);
+    const buckets = [mileageBucket - 5000, mileageBucket, mileageBucket + 5000].filter(b => b >= 0);
+    const modelVariants = getModelVariants(params.model);
+    const rows = await pg.getEnterprisePatterns({
+      enterpriseId: params.enterpriseId,
+      year: params.year,
+      make: params.make,
+      model: params.model,
+      buckets,
+      modelVariants,
+      limit: params.limit || 20,
+    });
+    return rows.map(p => ({
+      jobTitle: p.jobTitle,
+      occurrences: p.occurrences,
+      avgTotal: Math.round(p.avgTotal * 100) / 100,
+      avgHours: 0, // Would need separate tracking for accurate enterprise hours
+      avgLabor: Math.round(p.avgLabor * 100) / 100,
+      avgParts: Math.round(p.avgParts * 100) / 100,
+      lastPerformed: p.lastPerformed as Date,
+      mileageBucket: p.mileageBucket ?? 0,
+      uniqueVehicles: p.shopCount, // Simplified: count of shops that did this
+      confidence: p.occurrences >= 10 ? "high" : p.occurrences >= 5 ? "medium" : "low",
+    }));
+  }
+
   const collection = await getRepairPatternsCollection();
   const mileageBucket = getMileageBucket(params.mileage);
   const buckets = [mileageBucket - 5000, mileageBucket, mileageBucket + 5000].filter(b => b >= 0);
@@ -391,6 +533,13 @@ export async function getEnterprisePatterns(params: {
 }
 
 export async function setupRepairPatternsIndexes(): Promise<void> {
+  // Mongo-only: the PG mirror's indexes are created by the drizzle migration
+  // (drizzle/0025_task1000_package3.sql). When the domain is PG-canonical this
+  // Mongo `createIndex` work must NOT run.
+  if (isRepairPatternsPgCanonical()) {
+    return;
+  }
+
   const collection = await getRepairPatternsCollection();
 
   // Primary lookup index

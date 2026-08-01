@@ -1,6 +1,10 @@
 import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
+import {
+  findDviResultByRo,
+  findLatestDviResultByRoOrVin,
+} from "@/lib/data/repositories/dvi";
 import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
 import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
 
@@ -256,10 +260,7 @@ async function _GET(request: NextRequest) {
         }
       }
     } else if (resolvedProvider === "autoflow") {
-      const dvi = await db.collection("dvi_results").findOne({
-        shopId: { $in: [mosShopId, String(mosShopId)] },
-        roNumber: { $in: [roId, String(roId)] },
-      });
+      const dvi = await findDviResultByRo(mosShopId, roId);
 
       if (dvi) {
         vin = dvi.vin || null;
@@ -331,19 +332,11 @@ async function _GET(request: NextRequest) {
     if (resolvedProvider !== "autoflow") {
       try {
         const vinForLookup = (vin || vinHint || "").toUpperCase();
-        const dviQuery: any = {
-          shopId: { $in: [mosShopId, String(mosShopId), Number(mosShopId)] },
-          $or: [
-            { roNumber: String(roId) },
-            { roNumber: roId },
-          ],
-        };
-        if (vinForLookup) {
-          dviQuery.$or.push({ vin: vinForLookup });
-        }
-        const dviDoc = await db.collection("dvi_results").findOne(dviQuery, {
-          sort: { fetchedAt: -1 },
-        });
+        const dviDoc = await findLatestDviResultByRoOrVin(
+          mosShopId,
+          roId,
+          vinForLookup || null,
+        );
         if (dviDoc) {
           const cats = Array.isArray(dviDoc.categories) ? dviDoc.categories : [];
           let findingCount = 0;
