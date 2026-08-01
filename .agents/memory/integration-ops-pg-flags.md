@@ -8,7 +8,7 @@ description: Flag families and quirks from the integration operational-store Mon
 **Quirks worth remembering:**
 - `tekmetric_tokens` in Mongo is a SINGLE global doc keyed `{tokenKey:"current"}`; the PG table keys by shop_id → global doc = shop_id 0 sentinel.
 - `tekmetric_api_usage` collection is dead/empty; real usage log is cross-provider `api_usage` (provider field), windowed reads need (provider,timestamp) index.
-- `protractor_callback_events` deliberately NOT migrated: an ObjectId is threaded across the webhook request flow (~40 sites); needs a dedicated rework, not a repo swap.
+- `protractor_callback_events` NOW migrated: the ObjectId contract was replaced by an opaque string key (Mongo mode = ObjectId hex, PG mode = app-generated UUID in `event_key`); repo in lib/data/repositories/protractor-callback-events.ts, runtime columns in drizzle/0024. Webhook-health's `__deps` fake-db test seam is preserved via optional `dbOverride` params on the Mongo-path read helpers.
 - Repos round-trip unknown Mongo fields via `extra`/`payload` jsonb so flag-OFF/ON doc shapes stay identical.
 
 **How to apply:** new operational-store consumers must go through the repos, not raw getDb; flips are operator-only (backfill classification: transient=pure flip, durable logs=scripts first — see runbook addendum).

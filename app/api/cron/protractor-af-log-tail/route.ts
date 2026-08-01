@@ -56,6 +56,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { parseAfLog, type AfLogEvent } from "@/lib/integrations/protractor/af-log-parser";
+import * as callbackEvents from "@/lib/data/repositories/protractor-callback-events";
 
 const CRON_SECRET = process.env.CRON_SECRET;
 const AF_LOG_URL =
@@ -116,32 +117,25 @@ export async function GET(req: NextRequest) {
   // Step 3: load high-water mark and connectionId → shopId map.
   const [stateDoc, cidRows] = await Promise.all([
     db.collection(STATE_COLLECTION).findOne({ _id: STATE_DOC_ID as any }),
-    db
-      .collection("protractor_callback_events")
-      .aggregate([
-        { $match: { connectionId: { $exists: true, $ne: null }, shopId: { $exists: true, $ne: null } } },
-        { $group: { _id: { cid: "$connectionId", shopId: "$shopId" }, last: { $max: "$receivedAt" } } },
-      ])
-      .toArray(),
+    // Repo dispatches on PROTRACTOR_OPS_PG_CANONICAL (task #1006); the
+    // Mongo path runs the same $group aggregate as before.
+    callbackEvents.connectionShopPairs(),
   ]);
 
   // Sort rows by `last` descending so the first-encountered row per CID is
-  // the most-recently-seen mapping. (Aggregation above doesn't sort; without
-  // this the "ambiguous CID" tiebreak below would be nondeterministic.)
-  cidRows.sort((a: any, b: any) => {
+  // the most-recently-seen mapping. (The repo doesn't guarantee order;
+  // without this the "ambiguous CID" tiebreak below would be
+  // nondeterministic.)
+  cidRows.sort((a, b) => {
     const al = a.last ? new Date(a.last).getTime() : 0;
     const bl = b.last ? new Date(b.last).getTime() : 0;
     return bl - al;
   });
   const cidToShopId = new Map<string, number>();
   for (const row of cidRows) {
-    const cid = (row as any)._id?.cid;
-    const shopId = (row as any)._id?.shopId;
-    if (typeof cid === "string" && typeof shopId === "number") {
-      // If multiple shops share a CID in history (shouldn't, but observed
-      // once for cid 177cef5...), keep the most-recently-seen mapping.
-      if (!cidToShopId.has(cid)) cidToShopId.set(cid, shopId);
-    }
+    // If multiple shops share a CID in history (shouldn't, but observed
+    // once for cid 177cef5...), keep the most-recently-seen mapping.
+    if (!cidToShopId.has(row.connectionId)) cidToShopId.set(row.connectionId, row.shopId);
   }
 
   // Resolve high-water mark, planting a durable cold-start anchor on first

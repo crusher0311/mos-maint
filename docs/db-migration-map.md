@@ -1161,9 +1161,20 @@ Mongo shadow write via `shadowWriteMongoIntegrationOps`.
 
 ### 13.5 Known remainders (left on Mongo deliberately)
 
-- `protractor_callback_events` runtime flow (ObjectId contract threaded across
-  the webhook request path, ~40 sites) — needs a dedicated task; the backfill
-  mirror spec already exists.
+- ~~`protractor_callback_events` runtime flow~~ — **DONE (task #1006).** The
+  ObjectId contract was replaced by a store-agnostic string key
+  (`CallbackEventKey` in `lib/data/repositories/protractor-callback-events.ts`):
+  Mongo mode hands out the ObjectId hex (byte-identical documents/queries,
+  default flag OFF), PG mode an app-generated UUID stored in the new
+  `event_key` column (`drizzle/0024_task1006_*.sql` adds the runtime columns +
+  indexes). All call sites in `app/api/callbacks/protractor/route.ts` and the
+  protractor-sync / protractor-webhook-health / protractor-af-log-tail crons
+  go through the repo, gated on `PROTRACTOR_OPS_PG_CANONICAL` with the
+  standard `WRITE_MONGO_PROTRACTOR_OPS` shadow write. The backfill spec now
+  mirrors the full runtime document shape (event_key defaults to the Mongo
+  _id hex so in-flight keys resolve post-flip). Remaining Mongo readers:
+  `lib/data/repositories/activity-profiles.ts` (bespoke cross-provider
+  activity aggregate, §13.5 dashboards bullet below).
 - The giant `app/api/cron/tekmetric-backfill/route.ts` progress logic and
   `workers/processors/drain-tekmetric.ts` (`$unset`/`findOneAndUpdate` shapes) —
   drain-lock sites are migrated, heavy progress logic is not.

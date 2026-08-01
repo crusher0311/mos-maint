@@ -7,7 +7,9 @@ import {
   upsertProtractorWorkOrderSnapshot,
 } from "@/lib/integrations/protractor";
 import { attributeRevenueFromWorkOrder } from "@/lib/enterprise";
-import { Db, ObjectId } from "mongodb";
+import { Db } from "mongodb";
+import * as callbackEvents from "@/lib/data/repositories/protractor-callback-events";
+import type { CallbackEventKey } from "@/lib/data/repositories/protractor-callback-events";
 
 const VALID_TERMINAL_STATUSES = ["INVOICED", "INVOICE", "CLOSED", "VOID"];
 const MAX_IMMEDIATE_RETRIES = 3;
@@ -43,7 +45,7 @@ async function signalDashboardUpdate(
 
 async function processCallbackEvent(
   db: Db,
-  eventId: ObjectId,
+  eventId: CallbackEventKey,
   shopId: number,
   objectType: string,
   objectId: string,
@@ -56,10 +58,7 @@ async function processCallbackEvent(
         await upsertProtractorVehicleSnapshot(shopId, result.vehicle.VIN, result.vehicle);
         console.log(`[Protractor Callback] Processed vehicle ${result.vehicle.VIN}`);
         
-        await db.collection("protractor_callback_events").updateOne(
-          { _id: eventId },
-          { $set: { processed: true, processedAt: new Date(), vin: result.vehicle.VIN } }
-        );
+        await callbackEvents.markProcessed(eventId, { vin: result.vehicle.VIN });
         return true;
       }
     }
@@ -117,10 +116,10 @@ async function processCallbackEvent(
       await signalDashboardUpdate(db, { shopId, workOrderId: objectId });
       console.log(`[Protractor Callback] Deleted work order ${objectId} (WO#${existingWO?.workOrderNumber || '?'}) from dashboard`);
 
-      await db.collection("protractor_callback_events").updateOne(
-        { _id: eventId },
-        { $set: { processed: true, processedAt: new Date(), workOrderNumber: existingWO?.workOrderNumber, deletedFromDashboard: true } }
-      );
+      await callbackEvents.markProcessed(eventId, {
+        workOrderNumber: existingWO?.workOrderNumber,
+        deletedFromDashboard: true,
+      });
       return true;
     }
 
@@ -233,19 +232,15 @@ async function processCallbackEvent(
           }
         }
         
-        await db.collection("protractor_callback_events").updateOne(
-          { _id: eventId },
-          { $set: { processed: true, processedAt: new Date(), workOrderNumber: result.workOrder.WorkOrderNumber } }
-        );
+        await callbackEvents.markProcessed(eventId, {
+          workOrderNumber: result.workOrder.WorkOrderNumber,
+        });
         return true;
       }
     }
 
     // No action needed for this event type
-    await db.collection("protractor_callback_events").updateOne(
-      { _id: eventId },
-      { $set: { processed: true, processedAt: new Date(), noAction: true } }
-    );
+    await callbackEvents.markProcessed(eventId, { noAction: true });
     return true;
 
   } catch (error: any) {
@@ -279,7 +274,7 @@ async function enrichOpenWorkOrderInBackground(
   shopId: number,
   workOrderId: string,
   status: string | null,
-  eventId: ObjectId,
+  eventId: CallbackEventKey,
 ): Promise<void> {
   try {
     const result = await fetchWorkOrderById(shopId, workOrderId);
@@ -289,13 +284,7 @@ async function enrichOpenWorkOrderInBackground(
       // Stamp lastAttemptAt + increment attempts so the daily cron
       // sees this as a retry candidate rather than thinking it was
       // never attempted. We deliberately leave processed: false.
-      await db.collection("protractor_callback_events").updateOne(
-        { _id: eventId },
-        {
-          $set: { lastAttemptAt: new Date(), lastError: String(errMsg).slice(0, 500) },
-          $inc: { attempts: 1 },
-        },
-      );
+      await callbackEvents.recordAttempt(eventId, String(errMsg));
       return;
     }
 
@@ -375,29 +364,22 @@ async function enrichOpenWorkOrderInBackground(
       }
     }
 
-    await db.collection("protractor_callback_events").updateOne(
-      { _id: eventId },
-      { $set: { processed: true, processedAt: new Date(), workOrderNumber: result.workOrder.WorkOrderNumber } }
-    );
+    await callbackEvents.markProcessed(eventId, {
+      workOrderNumber: result.workOrder.WorkOrderNumber,
+    });
   } catch (err: any) {
     console.error(`[Protractor Callback] Background enrich error for WO ${workOrderId}:`, err?.message || err);
     // Stamp lastAttemptAt + increment attempts so the daily cron picks
     // it up on the next pass; deliberately leave processed: false.
     try {
-      await db.collection("protractor_callback_events").updateOne(
-        { _id: eventId },
-        {
-          $set: { lastAttemptAt: new Date(), lastError: String(err?.message || err).slice(0, 500) },
-          $inc: { attempts: 1 },
-        },
-      );
+      await callbackEvents.recordAttempt(eventId, String(err?.message || err));
     } catch {}
   }
 }
 
 async function processWithRetries(
   db: Db,
-  eventId: ObjectId,
+  eventId: CallbackEventKey,
   shopId: number,
   objectType: string,
   objectId: string,
@@ -414,13 +396,7 @@ async function processWithRetries(
       return;
     }
     
-    await db.collection("protractor_callback_events").updateOne(
-      { _id: eventId },
-      { 
-        $set: { lastAttemptAt: new Date() },
-        $inc: { attempts: 1 }
-      }
-    );
+    await callbackEvents.recordAttempt(eventId);
     
     if (attempt < remainingAttempts) {
       console.log(`[Protractor Callback] Retry ${attempt}/${remainingAttempts} failed, trying again...`);
@@ -432,14 +408,11 @@ async function processWithRetries(
 const RATE_LIMIT_WINDOW_MS = 60000;
 const RATE_LIMIT_MAX = 30;
 
-async function checkRateLimit(db: Db, connectionId: string): Promise<{ allowed: boolean; remaining: number }> {
+async function checkRateLimit(connectionId: string): Promise<{ allowed: boolean; remaining: number }> {
   const now = new Date();
   const windowStart = new Date(now.getTime() - RATE_LIMIT_WINDOW_MS);
   
-  const recentCount = await db.collection("protractor_callback_events").countDocuments({
-    connectionId,
-    receivedAt: { $gte: windowStart }
-  });
+  const recentCount = await callbackEvents.countRecentByConnection(connectionId, windowStart);
   
   if (recentCount >= RATE_LIMIT_MAX) {
     return { allowed: false, remaining: 0 };
@@ -507,7 +480,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "Missing connectionId" }, { status: 400 });
     }
 
-    const rateCheck = await checkRateLimit(db, connectionId);
+    const rateCheck = await checkRateLimit(connectionId);
     if (!rateCheck.allowed) {
       console.warn(`[Protractor Callback] Rate limited: connectionId ${connectionId}`);
       return NextResponse.json({ ok: false, error: "Rate limit exceeded" }, { status: 429 });
@@ -536,28 +509,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, message: "No work order ID" });
     }
 
-    const existingEvent = await db.collection("protractor_callback_events").findOne({
+    const isDuplicate = await callbackEvents.hasRecentProcessedPost(
       workOrderId,
-      status,
-      processed: true,
-      processedAt: { $gte: new Date(Date.now() - 300000) }
-    });
+      status ?? null,
+      new Date(Date.now() - 300000),
+    );
 
-    if (existingEvent) {
+    if (isDuplicate) {
       console.log(`[Protractor Callback] Duplicate event for ${workOrderId}, skipping`);
       return NextResponse.json({ ok: true, duplicate: true });
     }
 
-    const insertResult = await db.collection("protractor_callback_events").insertOne({
-      receivedAt: new Date(),
+    const eventId = await callbackEvents.insertPostEvent({
       payload,
       workOrderId,
-      status,
+      status: status ?? null,
       connectionId,
       shopId: shop.shopId,
-      processed: false
     });
-    const eventId = insertResult.insertedId;
 
     const normalizedStatus = (status || "").toUpperCase();
     const isClosed = VALID_TERMINAL_STATUSES.includes(normalizedStatus);
@@ -640,10 +609,7 @@ export async function POST(request: NextRequest) {
         }
       );
 
-      await db.collection("protractor_callback_events").updateOne(
-        { workOrderId, status, processed: false },
-        { $set: { processed: true, processedAt: new Date() } }
-      );
+      await callbackEvents.markOneProcessedByWorkOrderStatus(workOrderId, status ?? null);
 
       await signalDashboardUpdate(db, { workOrderId });
     }
@@ -701,14 +667,13 @@ export async function GET(request: NextRequest) {
     // Deduplication: skip if we already processed this exact object+operation in the last 60 seconds
     // IMPORTANT: Include operation in the query so Delete is not skipped when Update was just processed
     if (objectId) {
-      const recentDuplicate = await db.collection("protractor_callback_events").findOne({
+      const recentDuplicate = await callbackEvents.findRecentProcessedGet(
         shopId,
         objectType,
         objectId,
-        operation,
-        processed: true,
-        processedAt: { $gte: new Date(Date.now() - 60000) }
-      });
+        operation ?? null,
+        new Date(Date.now() - 60000),
+      );
 
       if (recentDuplicate) {
         console.log(`[Protractor Callback GET] Skipping duplicate ${operation} ${objectType} ${objectId} for shop ${shopId} (processed ${Math.round((Date.now() - recentDuplicate.processedAt.getTime()) / 1000)}s ago)`);
@@ -722,20 +687,13 @@ export async function GET(request: NextRequest) {
     }
 
     // Log the event
-    const insertResult = await db.collection("protractor_callback_events").insertOne({
-      receivedAt: new Date(),
-      method: "GET",
+    const eventId = await callbackEvents.insertGetEvent({
       connectionId,
       objectType,
       objectId,
-      operation,
+      operation: operation ?? null,
       shopId,
-      processed: false,
-      attempts: 0,
-      priority: 1
     });
-
-    const eventId = insertResult.insertedId;
     console.log(`[Protractor Callback GET] Logged ${objectType} ${objectId} for shop ${shopId}`);
 
     // Try to process immediately — if it works, return real success
@@ -752,10 +710,7 @@ export async function GET(request: NextRequest) {
       }
 
       // First attempt failed — queue remaining retries in background, respond as queued
-      await db.collection("protractor_callback_events").updateOne(
-        { _id: eventId },
-        { $set: { lastAttemptAt: new Date() }, $inc: { attempts: 1 } }
-      );
+      await callbackEvents.recordAttempt(eventId);
 
       processWithRetries(db, eventId, shopId, objectType, objectId, operation || "Unknown", 2)
         .catch(err => console.error(`[Protractor Callback] Background retry error:`, err.message));

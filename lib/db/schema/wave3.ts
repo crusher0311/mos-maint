@@ -482,16 +482,49 @@ export const protractorCallbackEvents = pgTable(
   {
     id: serial("id").primaryKey(),
     backfillMongoId: text("backfill_mongo_id"),
+    // Task #1006: app-generated UUID assigned at insert time so the webhook
+    // request path has a stable per-event key that works identically for
+    // Mongo (ObjectId hex) and PG (this column) — see
+    // lib/data/repositories/protractor-callback-events.ts.
+    eventKey: text("event_key"),
     shopId: integer("shop_id"),
     callbackToken: text("callback_token"),
     eventType: text("event_type"),
     receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
     payload: jsonb("payload"),
     processed: boolean("processed").notNull().default(false),
+    // Runtime-flow columns (task #1006) mirroring the Mongo document shape
+    // used by app/api/callbacks/protractor + the protractor-sync /
+    // protractor-webhook-health / protractor-af-log-tail crons.
+    method: text("method"),
+    connectionId: text("connection_id"),
+    objectType: text("object_type"),
+    objectId: text("object_id"),
+    operation: text("operation"),
+    workOrderId: text("work_order_id"),
+    status: text("status"),
+    processedAt: timestamp("processed_at", { withTimezone: true }),
+    attempts: integer("attempts"),
+    priority: integer("priority"),
+    processingStartedAt: timestamp("processing_started_at", { withTimezone: true }),
+    lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
+    lastError: text("last_error"),
+    lastErrorAt: timestamp("last_error_at", { withTimezone: true }),
+    vin: text("vin"),
+    workOrderNumber: text("work_order_number"),
+    noAction: boolean("no_action"),
+    deletedFromDashboard: boolean("deleted_from_dashboard"),
   },
   (t) => ({
     shopReceivedIdx: index("pro_cb_shop_received_idx").on(t.shopId, t.receivedAt),
     backfillUniq: uniqueIndex("pro_cb_backfill_uniq").on(t.backfillMongoId),
+    eventKeyUniq: uniqueIndex("pro_cb_event_key_uniq").on(t.eventKey),
+    connReceivedIdx: index("pro_cb_conn_received_idx").on(t.connectionId, t.receivedAt),
+    methodReceivedIdx: index("pro_cb_method_received_idx").on(t.method, t.receivedAt),
+    methodProcessedIdx: index("pro_cb_method_processed_idx").on(t.method, t.processedAt),
+    pendingQueueIdx: index("pro_cb_pending_queue_idx").on(t.method, t.processed, t.priority, t.receivedAt),
+    woStatusIdx: index("pro_cb_wo_status_idx").on(t.workOrderId, t.status, t.processed),
+    objDedupIdx: index("pro_cb_obj_dedup_idx").on(t.shopId, t.objectType, t.objectId, t.operation),
   }),
 );
 

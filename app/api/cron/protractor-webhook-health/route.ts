@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { sendEmail } from "@/lib/email";
+import * as callbackEvents from "@/lib/data/repositories/protractor-callback-events";
 
 /**
  * Test seam — same pattern as `app/api/cron/tekmetric-webhook-health`.
@@ -122,31 +123,25 @@ export async function GET(req: NextRequest) {
     .map((s: any) => Number(s.shopId))
     .filter((n: number) => Number.isFinite(n));
 
-  // Keep the time-window scan cheap.
-  await db.collection("protractor_callback_events").createIndex(
-    { receivedAt: -1 },
-    { name: "receivedAt_-1" },
-  ).catch(() => {});
+  // Keep the time-window scan cheap (Mongo-mode only; PG indexes ship in
+  // drizzle/0024). Repo dispatches on PROTRACTOR_OPS_PG_CANONICAL — task
+  // #1006. The `db` handle is passed through so the `__deps.getDb` test
+  // seam keeps working against the fake Mongo db.
+  await callbackEvents.ensureHealthScanIndexes(db);
 
   // Per-shop event counts in the 24h + 7d windows.
   const [counts24hRows, counts7dRows] = await Promise.all([
-    db.collection("protractor_callback_events").aggregate([
-      { $match: { receivedAt: { $gte: since24h }, shopId: { $in: shopIds } } },
-      { $group: { _id: "$shopId", count: { $sum: 1 } } },
-    ]).toArray(),
-    db.collection("protractor_callback_events").aggregate([
-      { $match: { receivedAt: { $gte: since7d }, shopId: { $in: shopIds } } },
-      { $group: { _id: "$shopId", count: { $sum: 1 } } },
-    ]).toArray(),
+    callbackEvents.countsByShopSince(shopIds, since24h, db),
+    callbackEvents.countsByShopSince(shopIds, since7d, db),
   ]);
 
   const countByShop24h = new Map<number, number>();
-  for (const row of counts24hRows as Array<{ _id: number; count: number }>) {
-    countByShop24h.set(Number(row._id), row.count);
+  for (const row of counts24hRows) {
+    countByShop24h.set(row.shopId, row.count);
   }
   const countByShop7d = new Map<number, number>();
-  for (const row of counts7dRows as Array<{ _id: number; count: number }>) {
-    countByShop7d.set(Number(row._id), row.count);
+  for (const row of counts7dRows) {
+    countByShop7d.set(row.shopId, row.count);
   }
 
   type SilentRow = { shopId: number; name: string; eventsLast24h: number };
@@ -211,23 +206,11 @@ export async function GET(req: NextRequest) {
   // Keep the two counts on the SAME population (method:"GET") — POST rows
   // are also stamped `processedAt` on their own path, and counting them in
   // the numerator can mask a GET-processing wedge (false negative).
-  await db.collection("protractor_callback_events").createIndex(
-    { method: 1, receivedAt: -1 },
-    { name: "method_1_receivedAt_-1" },
-  ).catch(() => {});
-  await db.collection("protractor_callback_events").createIndex(
-    { method: 1, processedAt: -1 },
-    { name: "method_1_processedAt_-1" },
-  ).catch(() => {});
+  // (The method_1_receivedAt_-1 / method_1_processedAt_-1 index ensures
+  // moved into callbackEvents.ensureHealthScanIndexes above.)
   const [lagReceived, lagProcessed] = await Promise.all([
-    db.collection("protractor_callback_events").countDocuments({
-      method: "GET",
-      receivedAt: { $gte: lagWindowStart },
-    }),
-    db.collection("protractor_callback_events").countDocuments({
-      method: "GET",
-      processedAt: { $gte: lagWindowStart },
-    }),
+    callbackEvents.countGetSince("receivedAt", lagWindowStart, db),
+    callbackEvents.countGetSince("processedAt", lagWindowStart, db),
   ]);
   const lagRatio = lagReceived > 0 ? lagProcessed / lagReceived : 1;
   const processingLagTripped =

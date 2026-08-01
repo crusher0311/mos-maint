@@ -459,10 +459,35 @@ const MIRRORS: MirrorSpec[] = [
     extract: (d) => ({
       values: {
         backfill_mongo_id: String(d._id),
+        // Task #1006: backfilled rows get the Mongo _id hex as their
+        // event_key — the same key the runtime Mongo mode hands out — so
+        // any in-flight retry key still resolves after the flag flip.
+        event_key: asStr(d.eventKey) ?? String(d._id),
         shop_id: asInt(d.shopId),
         event_type: asStr(d.eventType ?? d.type),
         received_at: asDate(d.receivedAt) ?? new Date(),
         payload: d,
+        method: asStr(d.method),
+        connection_id: asStr(d.connectionId),
+        object_type: asStr(d.objectType),
+        object_id: asStr(d.objectId),
+        operation: asStr(d.operation),
+        work_order_id: asStr(d.workOrderId),
+        status: asStr(d.status),
+        processed: d.processed === true,
+        processed_at: asDate(d.processedAt),
+        attempts: asInt(d.attempts),
+        priority: asInt(d.priority),
+        processing_started_at: asDate(d.processingStartedAt),
+        last_attempt_at: asDate(d.lastAttemptAt),
+        last_error: asStr(d.lastError),
+        last_error_at: asDate(d.lastErrorAt),
+        vin: asStr(d.vin),
+        work_order_number:
+          d.workOrderNumber == null ? null : String(d.workOrderNumber),
+        no_action: typeof d.noAction === "boolean" ? d.noAction : null,
+        deleted_from_dashboard:
+          typeof d.deletedFromDashboard === "boolean" ? d.deletedFromDashboard : null,
       },
     }),
     buildFilter: filterByShop,

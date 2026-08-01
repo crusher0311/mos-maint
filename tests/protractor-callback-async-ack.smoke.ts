@@ -106,8 +106,8 @@ ok(
 // the SPECIFIC event row (by _id) rather than racing with sibling
 // events for the same workOrderId.
 ok(
-  "POST captures eventId from insertOne result",
-  /const\s+eventId\s*=\s*insertResult\.insertedId/.test(postBody),
+  "POST captures eventId from the event-insert (repo insertPostEvent)",
+  /const\s+eventId\s*=\s*await\s+callbackEvents\.insertPostEvent\s*\(/.test(postBody),
 );
 ok(
   "POST passes eventId into enrichOpenWorkOrderInBackground",
@@ -116,21 +116,23 @@ ok(
   ),
 );
 
-// Helper must update the event by _id, not by {workOrderId,
-// processed:false} (which would race across concurrent webhooks for
-// the same WO).
+// Helper must update the SPECIFIC event (by its per-event key via the
+// repo), not by {workOrderId, processed:false} (which would race across
+// concurrent webhooks for the same WO). Since task #1006 the update goes
+// through lib/data/repositories/protractor-callback-events, whose
+// markProcessed/recordAttempt target the event key ({_id} in Mongo mode,
+// event_key in PG mode).
 if (helperMatch) {
   const helperBody = helperMatch[0];
   ok(
-    "helper updates protractor_callback_events by _id (not workOrderId)",
-    /\{\s*_id:\s*eventId\s*\}/.test(helperBody) &&
+    "helper updates the event by its per-event key (repo markProcessed(eventId))",
+    /callbackEvents\.markProcessed\s*\(\s*eventId\s*,/.test(helperBody) &&
       !/\{\s*workOrderId\s*,\s*processed:\s*false\s*\}/.test(helperBody),
-    "helper must scope its updateOne to {_id: eventId} so concurrent webhooks for the same WO can't clobber each other's state",
+    "helper must scope its processed-stamp to the event key so concurrent webhooks for the same WO can't clobber each other's state",
   );
   ok(
-    "helper stamps lastAttemptAt + increments attempts on failure",
-    /lastAttemptAt:\s*new Date\(\)/.test(helperBody) &&
-      /\$inc:\s*\{\s*attempts:\s*1\s*\}/.test(helperBody),
+    "helper stamps lastAttemptAt + increments attempts on failure (repo recordAttempt)",
+    /callbackEvents\.recordAttempt\s*\(\s*eventId\s*,/.test(helperBody),
     "without these the daily cron can't tell a failed background attempt from one that was never tried",
   );
 }

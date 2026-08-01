@@ -25,6 +25,7 @@ import { attributeRevenueFromWorkOrder } from "@/lib/enterprise";
 import { extractJobIndexFromWorkOrder, computeJobHash } from "@/lib/job-index";
 import pLimit from "p-limit";
 import { Db } from "mongodb";
+import * as callbackEvents from "@/lib/data/repositories/protractor-callback-events";
 
 const QUEUE_BATCH_SIZE = 50;
 const MAX_ATTEMPTS = 3;
@@ -51,18 +52,10 @@ const PREGEN_HARD_MS = 23 * 60 * 1000; // stop pre-generation after 23 min
 async function processWebhookQueue(db: Db): Promise<{ processed: number; failed: number }> {
   // Process unprocessed GET callback events (webhooks)
   // These are logged immediately when received, processed here with priority
-  const pendingItems = await db.collection("protractor_callback_events")
-    .find({ 
-      method: "GET",
-      processed: false,
-      $or: [
-        { attempts: { $exists: false } },
-        { attempts: { $lt: MAX_ATTEMPTS } }
-      ]
-    })
-    .sort({ priority: 1, receivedAt: 1 })
-    .limit(QUEUE_BATCH_SIZE)
-    .toArray();
+  const pendingItems = await callbackEvents.findPendingGetEvents(
+    QUEUE_BATCH_SIZE,
+    MAX_ATTEMPTS,
+  );
 
   if (pendingItems.length === 0) {
     return { processed: 0, failed: 0 };
@@ -81,13 +74,7 @@ async function processWebhookQueue(db: Db): Promise<{ processed: number; failed:
       break;
     }
     try {
-      await db.collection("protractor_callback_events").updateOne(
-        { _id: item._id },
-        { 
-          $set: { processingStartedAt: new Date() },
-          $inc: { attempts: 1 }
-        }
-      );
+      await callbackEvents.recordProcessingStarted(item.key);
 
       const { shopId, objectType, objectId, operation } = item;
 
@@ -96,10 +83,9 @@ async function processWebhookQueue(db: Db): Promise<{ processed: number; failed:
         if (result.ok && result.vehicle?.VIN) {
           await upsertProtractorVehicleSnapshot(shopId, result.vehicle.VIN, result.vehicle);
           
-          await db.collection("protractor_callback_events").updateOne(
-            { objectId, objectType, processed: false },
-            { $set: { processed: true, processedAt: new Date(), vin: result.vehicle.VIN } }
-          );
+          await callbackEvents.markOneProcessedByObject(objectId, objectType, {
+            vin: result.vehicle.VIN,
+          });
         }
       }
 
@@ -184,32 +170,20 @@ async function processWebhookQueue(db: Db): Promise<{ processed: number; failed:
             }
           }
           
-          await db.collection("protractor_callback_events").updateOne(
-            { objectId, objectType, processed: false },
-            { $set: { processed: true, processedAt: new Date(), workOrderNumber: result.workOrder.WorkOrderNumber } }
-          );
+          await callbackEvents.markOneProcessedByObject(objectId, objectType, {
+            workOrderNumber: result.workOrder.WorkOrderNumber,
+          });
         }
       }
 
       // Mark as processed on success
-      await db.collection("protractor_callback_events").updateOne(
-        { _id: item._id },
-        { $set: { processed: true, processedAt: new Date() } }
-      );
+      await callbackEvents.markProcessed(item.key);
 
       processed++;
 
     } catch (error: any) {
       // Mark with error - will retry on next cron run if under MAX_ATTEMPTS
-      await db.collection("protractor_callback_events").updateOne(
-        { _id: item._id },
-        { 
-          $set: { 
-            lastError: error.message,
-            lastErrorAt: new Date()
-          }
-        }
-      );
+      await callbackEvents.recordError(item.key, error.message);
 
       failed++;
     }
