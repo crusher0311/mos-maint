@@ -307,6 +307,84 @@ export async function countGetSince(
   return Number(rows[0]?.n ?? 0);
 }
 
+/* ----------------------- activity-profiles aggregate ---------------------- */
+
+/**
+ * PG twin of the burst-filtered Mongo aggregation the activity-profiles
+ * repo (`lib/data/repositories/activity-profiles.ts`, task #662) runs over
+ * `protractor_callback_events`: bucket events into UTC minutes per shop,
+ * drop "machine burst" minutes (count >= burstThreshold) from the organic
+ * stats, then return per-(shop, dow, hour) organic counts, raw per-shop
+ * totals, and distinct organic active days.
+ *
+ * dow matches the Mongo path's `$dayOfWeek - 1` (0 = Sunday), computed on
+ * the UTC-truncated minute, as does `extract(dow ...)` on the UTC
+ * timestamp.
+ */
+export interface ActivityHistogramAgg {
+  organic: Array<{ shopId: number; dow: number; hour: number; count: number }>;
+  totals: Array<{ shopId: number; total: number }>;
+  activeDays: Array<{ shopId: number; days: number }>;
+}
+
+export async function aggregateActivityHistogram(
+  since: Date,
+  burstThreshold: number,
+): Promise<ActivityHistogramAgg> {
+  const db = getDb();
+  const minuteCte = sql`
+    SELECT shop_id,
+           date_trunc('minute', received_at AT TIME ZONE 'UTC') AS m,
+           count(*)::int AS c
+    FROM protractor_callback_events
+    WHERE received_at >= ${since} AND shop_id IS NOT NULL
+    GROUP BY 1, 2
+  `;
+
+  const organicRows = (await db.execute(sql`
+    WITH mins AS (${minuteCte})
+    SELECT shop_id,
+           extract(dow FROM m)::int AS dow,
+           extract(hour FROM m)::int AS h,
+           sum(c)::int AS count
+    FROM mins
+    WHERE c < ${burstThreshold}
+    GROUP BY 1, 2, 3
+  `)) as unknown as Array<{ shop_id: number; dow: number; h: number; count: number }>;
+
+  const totalRows = (await db.execute(sql`
+    WITH mins AS (${minuteCte})
+    SELECT shop_id, sum(c)::int AS total
+    FROM mins
+    GROUP BY 1
+  `)) as unknown as Array<{ shop_id: number; total: number }>;
+
+  const activeDayRows = (await db.execute(sql`
+    WITH mins AS (${minuteCte})
+    SELECT shop_id, count(DISTINCT date_trunc('day', m))::int AS days
+    FROM mins
+    WHERE c < ${burstThreshold}
+    GROUP BY 1
+  `)) as unknown as Array<{ shop_id: number; days: number }>;
+
+  return {
+    organic: organicRows.map((r) => ({
+      shopId: Number(r.shop_id),
+      dow: Number(r.dow),
+      hour: Number(r.h),
+      count: Number(r.count),
+    })),
+    totals: totalRows.map((r) => ({
+      shopId: Number(r.shop_id),
+      total: Number(r.total),
+    })),
+    activeDays: activeDayRows.map((r) => ({
+      shopId: Number(r.shop_id),
+      days: Number(r.days),
+    })),
+  };
+}
+
 /**
  * af-log-tail: distinct (connectionId, shopId) pairs with the most recent
  * receivedAt — mirrors the Mongo `$group {_id:{cid,shopId}, last:$max}`.

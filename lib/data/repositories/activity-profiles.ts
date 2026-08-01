@@ -30,6 +30,8 @@ import {
   timezoneOffsetHours,
 } from "@/lib/integrations/activity-profile/profile";
 import { inferTimezoneFromAddress } from "@/lib/integrations/activity-profile/timezone";
+import { isProtractorOpsPgCanonical } from "@/lib/db/integration-ops-write-mode";
+import { aggregateActivityHistogram } from "@/lib/data/repositories/pg/protractor-callback-events";
 
 const PROFILE_COLLECTION = "shop_activity_profiles";
 const DEFAULT_TZ = "America/Chicago";
@@ -223,6 +225,52 @@ async function aggregateSource(
   return out;
 }
 
+// PG twin of aggregateSource for the protractor source, used when
+// PROTRACTOR_OPS_PG_CANONICAL=1 (task #1013 — last direct Mongo reader of
+// protractor_callback_events). Same SourceAggRow shape, keyed by MOS shopId.
+async function aggregateProtractorSourceFromPg(
+  since: Date,
+  burstThreshold: number,
+): Promise<Map<string, SourceAggRow>> {
+  const agg = await aggregateActivityHistogram(since, burstThreshold);
+
+  const out = new Map<string, SourceAggRow>();
+  const ensure = (rawKey: string): SourceAggRow => {
+    let row = out.get(rawKey);
+    if (!row) {
+      row = {
+        rawKey,
+        hist24Utc: emptyHistogram(),
+        dowHourUtc: Array.from({ length: 7 }, () => emptyHistogram()),
+        organicTotal: 0,
+        rawTotal: 0,
+        activeDays: 0,
+      };
+      out.set(rawKey, row);
+    }
+    return row;
+  };
+
+  for (const r of agg.organic) {
+    const dow = Number(r.dow);
+    const h = Number(r.hour);
+    if (!Number.isInteger(dow) || dow < 0 || dow > 6) continue;
+    if (!Number.isInteger(h) || h < 0 || h > 23) continue;
+    const row = ensure(String(r.shopId));
+    const c = Number(r.count) || 0;
+    row.hist24Utc[h] += c;
+    row.dowHourUtc[dow][h] += c;
+    row.organicTotal += c;
+  }
+  for (const r of agg.totals) {
+    ensure(String(r.shopId)).rawTotal += Number(r.total) || 0;
+  }
+  for (const r of agg.activeDays) {
+    ensure(String(r.shopId)).activeDays = Number(r.days) || 0;
+  }
+  return out;
+}
+
 /* --------------------------- shop key mapping ----------------------------- */
 
 interface ShopMeta {
@@ -359,9 +407,14 @@ export async function computeAndStoreProfiles(
   const sourceAgg = new Map<string, Map<string, SourceAggRow>>();
   for (const src of SOURCES) {
     try {
+      const usePg =
+        src.collection === "protractor_callback_events" &&
+        isProtractorOpsPgCanonical();
       sourceAgg.set(
         src.label,
-        await aggregateSource(db, src, since, burstThreshold),
+        usePg
+          ? await aggregateProtractorSourceFromPg(since, burstThreshold)
+          : await aggregateSource(db, src, since, burstThreshold),
       );
     } catch (err: any) {
       console.warn(

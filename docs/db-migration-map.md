@@ -1208,9 +1208,16 @@ Mongo shadow write via `shadowWriteMongoIntegrationOps`.
   go through the repo, gated on `PROTRACTOR_OPS_PG_CANONICAL` with the
   standard `WRITE_MONGO_PROTRACTOR_OPS` shadow write. The backfill spec now
   mirrors the full runtime document shape (event_key defaults to the Mongo
-  _id hex so in-flight keys resolve post-flip). Remaining Mongo readers:
-  `lib/data/repositories/activity-profiles.ts` (bespoke cross-provider
-  activity aggregate, §13.5 dashboards bullet below).
+  _id hex so in-flight keys resolve post-flip). ~~Remaining Mongo readers:
+  `lib/data/repositories/activity-profiles.ts`~~ — **DONE (task #1013).**
+  The activity-profiles aggregate (per-shop burst-filtered day/hour
+  histogram) now dispatches on the same `PROTRACTOR_OPS_PG_CANONICAL` flag:
+  PG mode runs the SQL twin
+  (`aggregateActivityHistogram` in
+  `lib/data/repositories/pg/protractor-callback-events.ts`, same
+  SourceAggRow result shape, dow 0=Sunday on UTC minutes), Mongo mode is
+  byte-identical to before. `protractor_callback_events` has **no** direct
+  Mongo readers left outside the gated repos.
 - The giant `app/api/cron/tekmetric-backfill/route.ts` progress logic and
   `workers/processors/drain-tekmetric.ts` (`$unset`/`findOneAndUpdate` shapes) —
   drain-lock sites are migrated, heavy progress logic is not.
