@@ -371,14 +371,39 @@ const PROTRACTOR: EntitySpec[] = [
     name: "protractor_callback_events",
     mongoCollection: "protractor_callback_events",
     pgTable: "protractor_callback_events",
-    // Append-only; PG keyed by serial id + backfill_mongo_id. Natural
-    // cross-store key is the Mongo _id mirrored into backfill_mongo_id.
-    mongoKey: (d) => s(d._id),
-    pgKeyExpr: "backfill_mongo_id",
+    // Append-only. Two row provenances share the table (task #1006):
+    //   - backfilled mirror rows: keyed by backfill_mongo_id (= Mongo _id),
+    //     event_key NULL;
+    //   - rows written under PROTRACTOR_OPS_PG_CANONICAL=1: keyed by
+    //     event_key (app UUID), backfill_mongo_id NULL; the Mongo shadow
+    //     doc carries the same UUID in `eventKey`.
+    // The cross-store key is therefore eventKey-first with a Mongo-_id
+    // fallback, matched against COALESCE(event_key, backfill_mongo_id).
+    mongoKey: (d) => s(d.eventKey ?? d._id),
+    pgKeyExpr: "COALESCE(event_key, backfill_mongo_id)",
     mongoRecencyField: "receivedAt",
     pgRecencyExpr: "received_at",
     fieldChecks: [
+      // legacy mirror column
       { label: "eventType", fromMongo: (d) => d.eventType, pgExpr: "event_type" },
+      // task #1012: runtime columns added by drizzle/0024 — compare the
+      // full flag-ON write surface, not just the mirror shape.
+      { label: "eventKey", fromMongo: (d) => d.eventKey, pgExpr: "event_key" },
+      { label: "method", fromMongo: (d) => d.method, pgExpr: "method" },
+      { label: "processed", fromMongo: (d) => d.processed, pgExpr: "processed" },
+      {
+        label: "processedAt",
+        fromMongo: (d) => d.processedAt,
+        // Match Date.prototype.toISOString() (ms precision, Z suffix) so
+        // looseEq's string compare works across stores.
+        pgExpr:
+          `to_char(processed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`,
+      },
+      { label: "attempts", fromMongo: (d) => d.attempts, pgExpr: "attempts" },
+      { label: "workOrderId", fromMongo: (d) => d.workOrderId, pgExpr: "work_order_id" },
+      { label: "status", fromMongo: (d) => d.status, pgExpr: "status" },
+      { label: "objectType", fromMongo: (d) => d.objectType, pgExpr: "object_type" },
+      { label: "objectId", fromMongo: (d) => d.objectId, pgExpr: "object_id" },
     ],
   },
 ];
