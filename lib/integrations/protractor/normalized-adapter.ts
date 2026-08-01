@@ -52,6 +52,24 @@ function parseBusinessDate(value: any): Date | undefined {
   return parsed.getFullYear() < 1990 ? undefined : parsed;
 }
 
+// Sum hours from a service package's labor lines. Protractor labor lines
+// carry hours in `Hours` or (more commonly) `Quantity` — the same fields
+// mapLineItem reads for per-line laborHours. Returns undefined (not 0) when
+// there are no labor lines / no hours, because 0 is treated as a "no mileage
+// math"-style sentinel by readers and the PG columns are nullable.
+export function sumLaborLineHours(sp: any): number | undefined {
+  const lines = sp?.ServicePackageLines?.ItemCollection || sp?.ServicePackageLines || [];
+  if (!Array.isArray(lines)) return undefined;
+  let total = 0;
+  for (const line of lines) {
+    const type = String(line?.Type || line?.LineType || '').toLowerCase();
+    if (!type.includes('labor')) continue;
+    total += parseNumber(line.Hours || line.Quantity) || 0;
+  }
+  if (total <= 0) return undefined;
+  return Math.round(total * 100) / 100;
+}
+
 // =============================================================================
 // PROTRACTOR ADAPTER
 // =============================================================================
@@ -229,7 +247,15 @@ export class ProtractorAdapter implements INormalizedAdapter {
   
   mapServiceJob(shopId: number, workOrderId: string, sourceData: any): Partial<NormalizedServiceJob> {
     const sp = sourceData;
-    
+
+    // Protractor service packages almost never carry package-level hour
+    // fields (EstimatedHours/ActualHours/BilledHours are absent), but their
+    // labor LINES do carry hours (verified live: shop 66 water pump labor
+    // lines all have Hours). Sum the labor-line hours so laborHoursBilled is
+    // populated at ingestion instead of every reader re-deriving it from
+    // normalized_line_items (task #986).
+    const laborLineHours = sumLaborLineHours(sp);
+
     return {
       shopId,
       workOrderId,
@@ -278,7 +304,7 @@ export class ProtractorAdapter implements INormalizedAdapter {
       total: parseNumber(sp.Total) || 0,
       laborHoursEstimated: parseNumber(sp.EstimatedHours),
       laborHoursActual: parseNumber(sp.ActualHours),
-      laborHoursBilled: parseNumber(sp.BilledHours || sp.Hours),
+      laborHoursBilled: parseNumber(sp.BilledHours || sp.Hours) ?? laborLineHours,
       isWarranty: Boolean(sp.IsWarranty),
       isSublet: Boolean(sp.IsSublet),
       subletVendor: cleanString(sp.SubletVendor),

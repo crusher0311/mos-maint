@@ -3216,8 +3216,12 @@ async function queryHistoricalAverage(
 ): Promise<{ avgHours: number; avgTotal: number; avgLaborTotal: number; avgPartsTotal: number; count: number } | null> {
     const base = db
       .select({
-        // Protractor leaves the job-level hours fields NULL but its labor
-        // LINES carry hours — fall back to summing those per job.
+        // Protractor historically left the job-level hours fields NULL but
+        // its labor LINES carry hours — fall back to summing those per job.
+        // The Protractor mapper now derives laborHoursBilled from labor lines
+        // at ingestion (task #986), so once the operator-gated backfill
+        // (scripts/backfill-protractor-labor-hours.ts) has filled the old
+        // NULL rows, this correlated subquery can be dropped entirely.
         avgHours: sql<string | null>`avg(coalesce(
           ${normalizedServiceJobs.laborHoursBilled},
           ${normalizedServiceJobs.laborHoursActual},
