@@ -8,7 +8,15 @@ import { getCachedVehicle, cacheVehicle, getCachedCustomer, cacheCustomer, getCa
 import { getPaceConfig, midpoint, describePace, getBackfillYears, reopenCompletedShopsForHorizon } from "@/lib/integrations/backfill-pace";
 import { prepareQuietWindowGate, applyQuietWindowGate } from "@/lib/data/repositories/activity-profiles";
 import { archiveResolvedSkippedRos } from "@/lib/integrations/tekmetric/skipped-ro-resolution";
-import { getDrainLock } from "@/lib/data/repositories/tekmetric-ops";
+import {
+  getDrainLock,
+  getProgress,
+  listProgress,
+  queryProgress,
+  updateProgressFields,
+  updateManyProgress,
+  autoClearProgressErrors,
+} from "@/lib/data/repositories/tekmetric-ops";
 import { bulkCacheJobs, bulkFetchJobsByShopWindow, isBulkJobsPrewarmEnabledForShop } from "@/lib/integrations/tekmetric/bulk-jobs";
 import { probeTekmetricRoCount, getPrePassVehicle, getPrePassCustomer } from "@/lib/integrations/tekmetric/full-page-backfill";
 import { syncTekmetricRoster } from "@/lib/integrations/tekmetric/sync-roster";
@@ -276,17 +284,7 @@ async function getShopsNeedingBackfill(db: any): Promise<ShopToBackfill[]> {
   // resets (chunk advances cleanly or force-skip moves the cursor past the
   // bad window) the next run will clear `lastError` itself via the
   // chunk-handler write below.
-  await db.collection("tekmetric_backfill_progress").updateMany(
-    {
-      lastError: { $ne: null },
-      lastErrorAt: { $lt: autoClearCutoff },
-      $or: [
-        { consecutiveChunkErrors: { $lt: MAX_CONSECUTIVE_CHUNK_ERRORS } },
-        { consecutiveChunkErrors: { $exists: false } },
-      ],
-    },
-    { $set: { lastError: null, lastErrorAt: null, autoClearedErrorAt: new Date() } }
-  );
+  await autoClearProgressErrors(autoClearCutoff, MAX_CONSECUTIVE_CHUNK_ERRORS);
 
   // Orphan sweep: a progress row whose shop has had its Tekmetric link
   // removed (no `tekmetric.shopId` and no `tekmetricShopId`) will never be
@@ -298,26 +296,21 @@ async function getShopsNeedingBackfill(db: any): Promise<ShopToBackfill[]> {
       .filter((s: any) => (s.tekmetric?.shopId ?? s.tekmetricShopId) != null)
       .map((s: any) => Number(s.shopId))
   );
-  const orphanRows = await db
-    .collection("tekmetric_backfill_progress")
-    .find({ completed: { $ne: true } }, { projection: { shopId: 1 } })
-    .toArray();
+  const orphanRows = await queryProgress({ notCompleted: true });
   const orphanIds = orphanRows
     .map((r: any) => Number(r.shopId))
     .filter((id: number) => !linkedShopIds.has(id));
   if (orphanIds.length > 0) {
     const now = new Date();
-    await db.collection("tekmetric_backfill_progress").updateMany(
-      { shopId: { $in: orphanIds } },
+    await updateManyProgress(
+      { shopIds: orphanIds },
       {
-        $set: {
-          complete: true,
-          completed: true,
-          completedAt: now,
-          lastError: "shop has no Tekmetric link; marking complete to drop from queue",
-          lastErrorAt: now,
-        },
-      }
+        complete: true,
+        completed: true,
+        completedAt: now,
+        lastError: "shop has no Tekmetric link; marking complete to drop from queue",
+        lastErrorAt: now,
+      },
     );
     console.log(`[Tekmetric Backfill] Orphan sweep: marked ${orphanIds.length} progress row(s) complete (no Tekmetric link): ${orphanIds.join(",")}`);
   }
@@ -335,7 +328,7 @@ async function getShopsNeedingBackfill(db: any): Promise<ShopToBackfill[]> {
     const tekmetricShopId = shop.tekmetric?.shopId || shop.tekmetricShopId;
     if (!tekmetricShopId) continue;
 
-    const progress = await db.collection("tekmetric_backfill_progress").findOne({ shopId });
+    const progress = await getProgress(shopId);
 
     // Include shops that are not completed OR have outdated logic version
     const needsReprocess = !progress?.completed || progress?.logicVersion !== 2;
@@ -406,10 +399,7 @@ async function sweepStaleSkippedRos(
   db: any,
 ): Promise<{ shopsTouched: number; entriesArchived: number }> {
   const cutoffMs = Date.now() - STALE_SKIPPED_RO_DAYS * 24 * 60 * 60 * 1000;
-  const rows = await db
-    .collection("tekmetric_backfill_progress")
-    .find({ "recentSkippedRos.0": { $exists: true } })
-    .toArray();
+  const rows = await queryProgress({ hasRecentSkippedRos: true });
 
   const now = new Date();
   let shopsTouched = 0;
@@ -453,15 +443,13 @@ async function sweepStaleSkippedRos(
         .insertMany(archiveDocs, { ordered: false });
       // Only drop from the live list AFTER archive write succeeds so a
       // Mongo blip can't silently destroy the postmortem record.
-      await db.collection("tekmetric_backfill_progress").updateOne(
-        { shopId: row.shopId },
+      await updateProgressFields(
+        Number(row.shopId),
         {
-          $set: {
-            recentSkippedRos: fresh,
-            lastStaleSkippedRosArchivedAt: now,
-          },
-          $inc: { staleSkippedRosArchivedTotal: stale.length },
+          recentSkippedRos: fresh,
+          lastStaleSkippedRosArchivedAt: now,
         },
+        { incFields: { staleSkippedRosArchivedTotal: stale.length } },
       );
       shopsTouched++;
       entriesArchived += stale.length;
@@ -524,17 +512,15 @@ export async function backfillShopChunk(
     const now = new Date();
     const errMessage = err?.message ? String(err.message).slice(0, 500) : String(err).slice(0, 500);
     try {
-      await db.collection("tekmetric_backfill_progress").updateOne(
-        { shopId },
+      await updateProgressFields(
+        shopId,
         {
-          $set: {
-            shopId,
-            lastRunAt: now,
-            lastError: `chunk threw: ${errMessage}`,
-            lastErrorAt: now,
-          },
+          shopId,
+          lastRunAt: now,
+          lastError: `chunk threw: ${errMessage}`,
+          lastErrorAt: now,
         },
-        { upsert: true }
+        { upsert: true },
       );
     } catch (writeErr) {
       console.error(`[Tekmetric Backfill] Shop ${shopId}: failed to record chunk error to progress row:`, writeErr);
@@ -592,7 +578,7 @@ async function backfillShopChunkInner(
   let customersPrePassHits = 0;
   let customersPrePassMisses = 0;
 
-  let progress = await db.collection("tekmetric_backfill_progress").findOne({ shopId });
+  let progress: any = await getProgress(shopId);
   const vehiclesPrePassDoneForShop = !!progress?.vehiclesPrePassDone;
   const customersPrePassDoneForShop = !!progress?.customersPrePassDone;
 
@@ -649,19 +635,16 @@ async function backfillShopChunkInner(
   } else {
     // Fresh start or upgrading from old logic
     chunkEnd = new Date(today);
-    await db.collection("tekmetric_backfill_progress").updateOne(
-      { shopId },
-      { 
-        $set: { 
-          shopId, 
-          startedAt: new Date(), 
-          currentChunkEnd: chunkEnd, 
-          completed: false,
-          logicVersion: 2
-        },
-        $unset: { currentChunkStart: "" }
+    await updateProgressFields(
+      shopId,
+      {
+        shopId,
+        startedAt: new Date(),
+        currentChunkEnd: chunkEnd,
+        completed: false,
+        logicVersion: 2,
       },
-      { upsert: true }
+      { upsert: true, unsetFields: ["currentChunkStart"] },
     );
   }
 
@@ -684,10 +667,11 @@ async function backfillShopChunkInner(
 
   // Check if we've reached the oldest date
   if (chunkEnd <= oldestDate) {
-    await db.collection("tekmetric_backfill_progress").updateOne(
-      { shopId },
-      { $set: { complete: true, completed: true, completedAt: new Date() } }
-    );
+    await updateProgressFields(shopId, {
+      complete: true,
+      completed: true,
+      completedAt: new Date(),
+    });
     _metricOutcome = "complete";
     return { jobsIndexed: 0, skipped: 0, complete: true, message: "Already complete", normalizedCount: 0 };
   }
@@ -1574,11 +1558,10 @@ async function backfillShopChunkInner(
       `429backoff=${Math.round(chunkBackoffMs)}ms`,
   );
 
-  await db.collection("tekmetric_backfill_progress").updateOne(
-    { shopId },
+  await updateProgressFields(
+    shopId,
     {
-      $set: {
-        currentChunkEnd: nextChunkEnd,
+      currentChunkEnd: nextChunkEnd,
         lastRunAt: now,
         completed: isComplete,
         ...(isComplete ? { completedAt: now } : {}),
@@ -1628,12 +1611,13 @@ async function backfillShopChunkInner(
               lastForceSkippedWindow: { start: chunkStart, end: chunkEnd, spanDays: effectiveChunkDays, at: now },
             }
           : { lastError: null, lastErrorAt: null }),
-      },
-      $inc: {
+    },
+    {
+      incFields: {
         totalJobsIndexed: jobsIndexed,
         ...(archivedResolvedCount > 0 ? { resolvedSkippedRosTotal: archivedResolvedCount } : {}),
-      }
-    }
+      },
+    },
   );
 
   // Set shop-level completion flag when backfill is done
@@ -2089,17 +2073,9 @@ export async function GET(req: NextRequest) {
       if (shopsToProcess.length > 0) {
         const cooldownMs = FASTPATH_RECENT_ATTEMPT_MINUTES * 60 * 1000;
         const nowMs = Date.now();
-        const progressRows = await db
-          .collection("tekmetric_backfill_progress")
-          .find({ shopId: { $in: shopsToProcess.map((s) => Number(s.shopId)) } })
-          .project({
-            shopId: 1,
-            lastRunAt: 1,
-            inFlightUntil: 1,
-            inFlightOwner: 1,
-            inFlightHeartbeatAt: 1,
-          })
-          .toArray();
+        const progressRows = await listProgress(
+          shopsToProcess.map((s) => Number(s.shopId)),
+        );
         const progressByShop = new Map<number, any>(
           progressRows.map((r: any) => [Number(r.shopId), r]),
         );
@@ -2219,18 +2195,18 @@ export async function GET(req: NextRequest) {
             const now = new Date();
             const message = (err?.message || String(err)).slice(0, 500);
             try {
-              await db.collection("tekmetric_backfill_progress").updateOne(
-                { shopId: shop.shopId },
+              await updateProgressFields(
+                shop.shopId,
                 {
-                  $set: {
-                    shopId: shop.shopId,
-                    lastRunAt: now,
-                    lastError: `unhandled chunk exception: ${message}`,
-                    lastErrorAt: now,
-                  },
-                  $setOnInsert: { startedAt: now, completed: false, logicVersion: 2 },
+                  shopId: shop.shopId,
+                  lastRunAt: now,
+                  lastError: `unhandled chunk exception: ${message}`,
+                  lastErrorAt: now,
                 },
-                { upsert: true },
+                {
+                  upsert: true,
+                  setOnInsert: { startedAt: now, completed: false, logicVersion: 2 },
+                },
               );
             } catch (writeErr) {
               console.error(`[Tekmetric Backfill] Shop ${shop.shopId} failed to record exception lastRunAt:`, writeErr);

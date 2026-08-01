@@ -34,7 +34,6 @@ const ALLOWLIST = new Set([
   "app/api/admin/billing/extend-grace/route.ts",
   "app/api/admin/billing/grace-period-check/route.ts",
   "app/api/admin/billing/settings/route.ts",
-  "app/api/admin/clear-template-cache/route.ts",
   "app/api/admin/concern-skip-stats/route.ts",
   "app/api/admin/database/collections/route.ts",
   "app/api/admin/database/query/route.ts",

@@ -77,6 +77,8 @@ export interface UpdateProgressOpts {
    * |N| entries.
    */
   pushRecentSkippedRo?: { entries: AnyDoc[]; slice?: number };
+  /** Fields removed from the doc (Mongo `$unset`). */
+  unsetFields?: string[];
 }
 
 export async function getProgress(shopId: number): Promise<AnyDoc | null> {
@@ -136,7 +138,131 @@ async function updateProgressFieldsMongo(
           : { $each: entries, $slice: slice },
     };
   }
+  if (opts.unsetFields && opts.unsetFields.length > 0) {
+    update.$unset = Object.fromEntries(opts.unsetFields.map((k) => [k, ""]));
+  }
   await c.updateOne({ shopId }, update, { upsert: !!opts.upsert });
+}
+
+/**
+ * Read progress rows matching a small predicate. Filters mirror the
+ * historical direct-Mongo queries used by the backfill cron and drain
+ * worker:
+ *   notCompleted        → { completed: { $ne: true } }
+ *   hasRecentSkippedRos → { "recentSkippedRos.0": { $exists: true } }
+ *   drainPoisoned       → { drainPoisoned: true }
+ */
+export interface ProgressQueryFilter {
+  shopIds?: number[];
+  notCompleted?: boolean;
+  hasRecentSkippedRos?: boolean;
+  drainPoisoned?: boolean;
+}
+
+export async function queryProgress(
+  filter: ProgressQueryFilter,
+): Promise<AnyDoc[]> {
+  if (isTekmetricOpsPgCanonical()) return pg.queryProgress(filter);
+  return queryProgressMongo(filter);
+}
+
+async function queryProgressMongo(
+  filter: ProgressQueryFilter,
+): Promise<AnyDoc[]> {
+  const c = await col(PROGRESS);
+  const q: AnyDoc = {};
+  if (filter.shopIds) q.shopId = { $in: filter.shopIds };
+  if (filter.notCompleted) q.completed = { $ne: true };
+  if (filter.hasRecentSkippedRos) q["recentSkippedRos.0"] = { $exists: true };
+  if (filter.drainPoisoned) q.drainPoisoned = true;
+  return (await c.find(q).toArray()) as AnyDoc[];
+}
+
+/**
+ * Auto-clear sweep for stale `lastError`s: clears `lastError`/`lastErrorAt`
+ * and stamps `autoClearedErrorAt` on every row whose error is older than
+ * `cutoff` and whose `consecutiveChunkErrors` is missing or below
+ * `maxConsecutiveErrors`. Byte-identical to the cron's historical
+ * updateMany when the flag is OFF.
+ */
+export async function autoClearProgressErrors(
+  cutoff: Date,
+  maxConsecutiveErrors: number,
+): Promise<void> {
+  if (isTekmetricOpsPgCanonical()) {
+    await pg.autoClearProgressErrors(cutoff, maxConsecutiveErrors);
+    await shadow("tekmetric.backfill_progress.autoClearErrors", () =>
+      autoClearProgressErrorsMongo(cutoff, maxConsecutiveErrors),
+    );
+    return;
+  }
+  await autoClearProgressErrorsMongo(cutoff, maxConsecutiveErrors);
+}
+
+async function autoClearProgressErrorsMongo(
+  cutoff: Date,
+  maxConsecutiveErrors: number,
+): Promise<void> {
+  const c = await col(PROGRESS);
+  await c.updateMany(
+    {
+      lastError: { $ne: null },
+      lastErrorAt: { $lt: cutoff },
+      $or: [
+        { consecutiveChunkErrors: { $lt: maxConsecutiveErrors } },
+        { consecutiveChunkErrors: { $exists: false } },
+      ],
+    },
+    { $set: { lastError: null, lastErrorAt: null, autoClearedErrorAt: new Date() } },
+  );
+}
+
+/**
+ * Atomic read-modify-return on the per-shop progress row, mirroring Mongo
+ * `findOneAndUpdate({shopId}, {…}, { upsert: true, returnDocument: "after" })`.
+ * Returns the post-update doc (never the Mongo `{ value }` wrapper).
+ */
+export async function findOneAndUpdateProgress(
+  shopId: number,
+  patch: {
+    set?: AnyDoc;
+    incFields?: Record<string, number>;
+    setOnInsert?: AnyDoc;
+  },
+): Promise<AnyDoc | null> {
+  if (isTekmetricOpsPgCanonical()) {
+    const doc = await pg.findOneAndUpdateProgress(shopId, patch);
+    await shadow("tekmetric.backfill_progress.findOneAndUpdate", async () => {
+      await findOneAndUpdateProgressMongo(shopId, patch);
+    });
+    return doc;
+  }
+  return findOneAndUpdateProgressMongo(shopId, patch);
+}
+
+async function findOneAndUpdateProgressMongo(
+  shopId: number,
+  patch: {
+    set?: AnyDoc;
+    incFields?: Record<string, number>;
+    setOnInsert?: AnyDoc;
+  },
+): Promise<AnyDoc | null> {
+  const c = await col(PROGRESS);
+  const update: AnyDoc = {};
+  if (patch.set && Object.keys(patch.set).length > 0) update.$set = patch.set;
+  if (patch.incFields && Object.keys(patch.incFields).length > 0)
+    update.$inc = patch.incFields;
+  if (patch.setOnInsert && Object.keys(patch.setOnInsert).length > 0)
+    update.$setOnInsert = patch.setOnInsert;
+  const res: any = await c.findOneAndUpdate({ shopId }, update, {
+    upsert: true,
+    returnDocument: "after",
+  });
+  // Driver-version tolerance: v4/5 returns { value }, v6 returns the doc.
+  return (res && typeof res === "object" && "value" in res ? res.value : res) as
+    | AnyDoc
+    | null;
 }
 
 /**

@@ -51,6 +51,8 @@ export async function processDrainTekmetric(
   const { backfillShopChunk } = await import(
     "@/app/api/cron/tekmetric-backfill/route"
   );
+  const { queryProgress, updateProgressFields, findOneAndUpdateProgress } =
+    await import("@/lib/data/repositories/tekmetric-ops");
   const db = await getDb();
 
   // Resolve the shop set: explicit allowlist, or "every shop with a
@@ -75,11 +77,10 @@ export async function processDrainTekmetric(
 
   // Poisoned-shop guard: skip shops already flagged as poisoned so the
   // drain doesn't re-walk a permanently failing shop on every pass.
-  const progressCol = db.collection("tekmetric_backfill_progress");
-  const poisonedRows = await progressCol
-    .find({ shopId: { $in: targetShopIds }, drainPoisoned: true })
-    .project({ shopId: 1, drainPoisonedReason: 1 })
-    .toArray();
+  const poisonedRows = await queryProgress({
+    shopIds: targetShopIds,
+    drainPoisoned: true,
+  });
   const poisonedIds = new Set(poisonedRows.map((r: any) => Number(r.shopId)));
   if (poisonedIds.size > 0) {
     console.warn(
@@ -97,15 +98,17 @@ export async function processDrainTekmetric(
       shopsProcessed++;
       // Success fully resets the consecutive-failure streak and clears
       // any poison flag (self-heal after a transient bad spell).
-      await progressCol
-        .updateOne(
-          { shopId },
-          {
-            $set: { drainConsecutiveFailures: 0 },
-            $unset: { drainPoisoned: "", drainPoisonedReason: "", drainPoisonedAt: "" },
-          },
-        )
-        .catch(() => {});
+      await updateProgressFields(
+        shopId,
+        { drainConsecutiveFailures: 0 },
+        {
+          unsetFields: [
+            "drainPoisoned",
+            "drainPoisonedReason",
+            "drainPoisonedAt",
+          ],
+        },
+      ).catch(() => {});
     } catch (err: any) {
       const reason = String(err?.message || err);
       console.error(
@@ -116,33 +119,21 @@ export async function processDrainTekmetric(
       // by the next drain attempt — unless the shop keeps failing, in
       // which case we flag it poisoned and stop re-picking it.
       try {
-        const updated: any = await progressCol.findOneAndUpdate(
-          { shopId },
-          {
-            $inc: { drainConsecutiveFailures: 1 },
-            $set: {
-              drainLastFailureAt: new Date(),
-              drainLastFailureReason: reason.slice(0, 500),
-            },
-            $setOnInsert: { shopId },
+        const updated: any = await findOneAndUpdateProgress(shopId, {
+          incFields: { drainConsecutiveFailures: 1 },
+          set: {
+            drainLastFailureAt: new Date(),
+            drainLastFailureReason: reason.slice(0, 500),
           },
-          { upsert: true, returnDocument: "after" },
-        );
-        const failures =
-          updated?.value?.drainConsecutiveFailures ??
-          updated?.drainConsecutiveFailures ??
-          1;
+          setOnInsert: { shopId },
+        });
+        const failures = updated?.drainConsecutiveFailures ?? 1;
         if (failures >= DRAIN_POISON_THRESHOLD) {
-          await progressCol.updateOne(
-            { shopId },
-            {
-              $set: {
-                drainPoisoned: true,
-                drainPoisonedAt: new Date(),
-                drainPoisonedReason: `${failures} consecutive drain chunk failures; last: ${reason.slice(0, 300)}`,
-              },
-            },
-          );
+          await updateProgressFields(shopId, {
+            drainPoisoned: true,
+            drainPoisonedAt: new Date(),
+            drainPoisonedReason: `${failures} consecutive drain chunk failures; last: ${reason.slice(0, 300)}`,
+          });
           poisonedIds.add(shopId);
           console.error(
             `[Worker drain-tekmetric] [OPS-ALERT] shop=${shopId} poisoned after ${failures} consecutive chunk failures — skipping until drainPoisoned is cleared in tekmetric_backfill_progress. Last error: ${reason.slice(0, 300)}`,

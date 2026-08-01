@@ -98,6 +98,8 @@ export interface UpdateProgressOpts {
   setOnInsert?: AnyDoc;
   /** Append entries to recentSkippedRos, keeping only the last `slice`. */
   pushRecentSkippedRo?: { entries: AnyDoc[]; slice?: number };
+  /** Fields removed from the doc (Mongo `$unset`). */
+  unsetFields?: string[];
 }
 
 /**
@@ -150,6 +152,17 @@ export async function updateProgressFields(
         const cur = Number(nextExtra[k] ?? 0);
         nextExtra[k] = cur + delta;
       }
+    }
+  }
+
+  // $unset — columns get NULLed, extra keys get removed. Mirrors Mongo's
+  // field removal as closely as typed columns allow (a NULL column is
+  // skipped by progressRowToDoc only when it was never present; we keep
+  // Mongo parity by deleting from extra and nulling columns).
+  if (opts.unsetFields) {
+    for (const k of opts.unsetFields) {
+      if (PROGRESS_COLUMN_KEYS.has(k)) cols[k] = null;
+      else delete nextExtra[k];
     }
   }
 
@@ -211,6 +224,97 @@ export async function updateManyProgress(
   for (const r of targets) {
     await updateProgressFields(Number(r.shopId), set);
   }
+}
+
+export interface ProgressQueryFilter {
+  shopIds?: number[];
+  notCompleted?: boolean;
+  /** Mongo `{ "recentSkippedRos.0": { $exists: true } }`. */
+  hasRecentSkippedRos?: boolean;
+  /** Mongo `{ drainPoisoned: true }`. */
+  drainPoisoned?: boolean;
+}
+
+/**
+ * Read progress rows matching a small predicate. Semantics mirror the
+ * historical Mongo queries exactly (see the Mongo repo for the source
+ * filters).
+ */
+export async function queryProgress(
+  filter: ProgressQueryFilter,
+): Promise<AnyDoc[]> {
+  const db = getDb();
+  const q = db.select().from(tekmetricBackfillProgress);
+  const rows = filter.shopIds
+    ? await q.where(inArray(tekmetricBackfillProgress.shopId, filter.shopIds))
+    : await q;
+  const docs = (rows as AnyDoc[]).map((r) => progressRowToDoc(r)!) as AnyDoc[];
+  return docs.filter((doc) => {
+    if (filter.notCompleted && doc.completed === true) return false;
+    if (filter.hasRecentSkippedRos) {
+      const arr = doc.recentSkippedRos;
+      if (!Array.isArray(arr) || arr.length === 0) return false;
+    }
+    if (filter.drainPoisoned && doc.drainPoisoned !== true) return false;
+    return true;
+  });
+}
+
+/**
+ * Mongo-parity auto-clear sweep: clear `lastError`/`lastErrorAt` (stamping
+ * `autoClearedErrorAt`) on every row whose error is older than `cutoff` and
+ * whose `consecutiveChunkErrors` is missing or below `maxConsecutiveErrors`.
+ * Mirrors:
+ *   { lastError: {$ne:null}, lastErrorAt: {$lt:cutoff},
+ *     $or: [ {consecutiveChunkErrors:{$lt:max}}, {…$exists:false} ] }
+ */
+export async function autoClearProgressErrors(
+  cutoff: Date,
+  maxConsecutiveErrors: number,
+): Promise<void> {
+  const db = getDb();
+  const rows = await db.select().from(tekmetricBackfillProgress);
+  const now = new Date();
+  for (const r of rows as AnyDoc[]) {
+    const doc = progressRowToDoc(r)!;
+    // $ne:null excludes both null and missing.
+    if (doc.lastError === null || doc.lastError === undefined) continue;
+    // $lt requires the field to exist and be an earlier date.
+    const at = doc.lastErrorAt ? new Date(doc.lastErrorAt as string | Date) : null;
+    if (!at || Number.isNaN(at.getTime()) || at >= cutoff) continue;
+    const cce = doc.consecutiveChunkErrors;
+    const cceOk =
+      cce === undefined || (typeof cce === "number" && cce < maxConsecutiveErrors);
+    if (!cceOk) continue;
+    await updateProgressFields(Number(doc.shopId), {
+      lastError: null,
+      lastErrorAt: null,
+      autoClearedErrorAt: now,
+    });
+  }
+}
+
+/**
+ * Atomic-enough read-modify-return mirroring Mongo
+ * `findOneAndUpdate(..., { upsert: true, returnDocument: "after" })`.
+ * PG applies the patch via the upserting writer then re-reads the row;
+ * the caller only inspects a counter for a threshold check, so the
+ * read-after-write is behaviorally equivalent for this workload.
+ */
+export async function findOneAndUpdateProgress(
+  shopId: number,
+  patch: {
+    set?: AnyDoc;
+    incFields?: Record<string, number>;
+    setOnInsert?: AnyDoc;
+  },
+): Promise<AnyDoc | null> {
+  await updateProgressFields(shopId, patch.set ?? {}, {
+    upsert: true,
+    incFields: patch.incFields,
+    setOnInsert: patch.setOnInsert,
+  });
+  return getProgress(shopId);
 }
 
 /* -------------------------------------------------------------------------- */
