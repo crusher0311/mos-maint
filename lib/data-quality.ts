@@ -186,13 +186,11 @@ export async function runDataQualityCheck(shopId?: number): Promise<DataQualityR
   // by more than the tolerance.
   let mileageDiscrepancyCount = 0;
   try {
-    const planFilter: any = { "plan.mileageDiscrepancy": { $ne: null, $exists: true } };
-    if (shopId) {
-      planFilter.shopId = { $in: [String(shopId), Number(shopId)] };
-    }
-    const flagged = await db.collection("cached_plans").find(planFilter, {
-      projection: { vin: 1, shopId: 1, "plan.mileageDiscrepancy": 1, "plan.vehicle": 1 },
-    }).toArray();
+    // Task #998: flag-dispatched PG/Mongo facade read.
+    const { listMileageDiscrepancyPlans } = await import(
+      "@/lib/data/repositories/plan-cache-store"
+    );
+    const flagged = await listMileageDiscrepancyPlans(shopId ? Number(shopId) : null, db);
     mileageDiscrepancyCount = flagged.length;
     for (const entry of flagged) {
       const d = (entry as any).plan?.mileageDiscrepancy;

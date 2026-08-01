@@ -306,11 +306,21 @@ These are per-integration mirrors of remote SMS data. They feed `normalized_inge
 
 ### 3.5 Plans, recommendations, AI caches (W2/W3)
 
+> **Task #998 (2026-08-01): flag-gated PG cutover wired for the whole
+> family.** All reads/writes below now dispatch through
+> `lib/data/repositories/plan-cache-store.ts` (PG arm
+> `lib/data/repositories/pg/plan-cache.ts`) behind
+> `PLAN_CACHE_PG_CANONICAL` / `WRITE_MONGO_PLAN_CACHE` — default remains
+> Mongo-canonical. PG tables already existed (drizzle/0012 + 0014); no new
+> migration. Deletes always hit both stores. Durable-store backfill:
+> `scripts/plan-cache-family-backfill.ts` (+ wave2 script). Runbook:
+> `docs/runbooks/db-plan-cache-cutover.md`. Flag flip is operator-only.
+
 | Collection | Readers | Writers | Notes |
 | --- | --- | --- | --- |
-| `plans`, `plan_cache`, `plan_prefetch_cache`, `cached_plans`, `cached_work_orders` | `lib/plan-builder.ts`, `lib/plan-cache.ts`, `app/api/report/[vin]/route.ts`, `app/api/plan-build/route.ts`, `app/api/deferred/remedy/route.ts`, `lib/integrations/{shopware,tekmetric}/adapter.ts`, `scripts/scan-stale-plan-cache.ts` | same | Multiple overlapping caches; consolidation is its own task. **W3.** |
-| `recommendations`, `recommendations_cache`, `recommendation_events` | `lib/recommendations/index.ts`, `app/api/external/recommendations/[vin]/route.ts`, `app/api/autovitals/extension/vehicle-data/route.ts`, `app/api/shop/analytics/route.ts` | same | **W3.** |
-| `ai_analysis_cache`, `maintenance_analysis_cache`, `ai_budget_alerts`, `vhi_analysis_log` | `lib/ai-budget.ts`, `lib/vhi-score.ts`, `lib/vhi-webhook-trigger.ts`, `app/api/recommended/cache/route.ts`, `app/api/external/vehicles/[vin]/vhi/route.ts`, `app/api/report/[vin]/route.ts` | same + `scripts/invalidate-task-{163,166}-caches.ts` | **W2** (caches — easy to nuke and rebuild). |
+| `plans`, `plan_cache`, `plan_prefetch_cache`, `cached_plans`, `cached_work_orders` | `lib/plan-builder.ts`, `lib/plan-cache.ts`, `app/api/report/[vin]/route.ts`, `app/api/plan-build/route.ts`, `app/api/deferred/remedy/route.ts`, `lib/integrations/{shopware,tekmetric}/adapter.ts`, `scripts/scan-stale-plan-cache.ts` | same | **Gated (task #998)** except adapters/scan script. `plan_cache` is dead (no writers; last delete reference now a facade no-op cleanup). TTL caches cut over with no backfill. |
+| `recommendations`, `recommendations_cache`, `recommendation_events` | `lib/recommendations/index.ts`, `app/api/external/recommendations/[vin]/route.ts`, `app/api/autovitals/extension/vehicle-data/route.ts`, `app/api/shop/analytics/route.ts` | same | **Gated (task #998).** `recommendation_events` inserts dual-write (PG canonical when flag on); analytics aggregates have a PG SQL arm. Durable stores backfilled by `scripts/plan-cache-family-backfill.ts`. |
+| `ai_analysis_cache`, `maintenance_analysis_cache`, `ai_budget_alerts`, `vhi_analysis_log` | `lib/ai-budget.ts`, `lib/vhi-score.ts`, `lib/vhi-webhook-trigger.ts`, `app/api/recommended/cache/route.ts`, `app/api/external/vehicles/[vin]/vhi/route.ts`, `app/api/report/[vin]/route.ts` | same + `scripts/invalidate-task-{163,166}-caches.ts` | Both analysis caches **gated (task #998)** on all four VHI branches + extension + report + dashboard. `ai_budget_alerts` / `vhi_analysis_log` unchanged (**W2**). |
 | `concern_conversations` | `app/api/{dashboard,extension}/concern-assistant/route.ts` | same | **W2.** |
 | `viewed_vins` | `lib/plan-cache.ts`, `lib/usage.ts` | `lib/plan-cache.ts` | **W1.** |
 | `report_approved_items`, `remedied_deferred_work` | `app/api/report/[vin]/route.ts`, `app/api/extension/plan/route.ts`, `app/api/deferred/remedy/route.ts`, `app/dashboard/vehicles/[vin]/plan/page.tsx` | same | **W2.** |

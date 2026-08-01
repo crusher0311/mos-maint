@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
+import {
+  summarizeRecommendationEvents,
+  dailyRecommendationEvents,
+} from "@/lib/data/repositories/plan-cache-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,34 +27,11 @@ export async function GET(req: NextRequest) {
 
     const db = await getDb();
 
-    const dateFilter: any = {};
-    if (startDateStr) dateFilter.$gte = new Date(startDateStr);
-    if (endDateStr) dateFilter.$lte = new Date(endDateStr);
+    const startDate = startDateStr ? new Date(startDateStr) : undefined;
+    const endDate = endDateStr ? new Date(endDateStr) : undefined;
 
-    const matchStage: any = { shopId };
-    if (startDateStr || endDateStr) {
-      matchStage.createdAt = dateFilter;
-    }
-
-    const eventsPipeline = [
-      { $match: matchStage },
-      {
-        $group: {
-          _id: {
-            eventType: "$eventType",
-            recommendationType: "$recommendationType"
-          },
-          count: { $sum: 1 },
-          totalRevenue: { $sum: { $ifNull: ["$totalPrice", 0] } },
-          laborRevenue: { $sum: { $ifNull: ["$laborPrice", 0] } },
-          partsRevenue: { $sum: { $ifNull: ["$partsPrice", 0] } }
-        }
-      }
-    ];
-
-    const events = await db.collection("recommendation_events")
-      .aggregate(eventsPipeline)
-      .toArray();
+    // Task #998: flag-dispatched PG/Mongo facade aggregation.
+    const events = await summarizeRecommendationEvents(shopId, startDate, endDate, db);
 
     let jobsAdded = 0;
     let jobsSold = 0;
@@ -61,7 +42,10 @@ export async function GET(req: NextRequest) {
     const byType: Record<string, { added: number; sold: number; revenue: number }> = {};
 
     for (const event of events) {
-      const { eventType, recommendationType } = event._id;
+      const { eventType, recommendationType } = event as {
+        eventType: string | null;
+        recommendationType: string;
+      };
       
       if (!byType[recommendationType]) {
         byType[recommendationType] = { added: 0, sold: 0, revenue: 0 };
@@ -80,36 +64,19 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const dailyPipeline = [
-      { $match: matchStage },
-      {
-        $group: {
-          _id: {
-            date: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
-            eventType: "$eventType"
-          },
-          count: { $sum: 1 },
-          revenue: { $sum: { $ifNull: ["$totalPrice", 0] } }
-        }
-      },
-      { $sort: { "_id.date": -1 } },
-      { $limit: 60 }
-    ];
-
-    const dailyData = await db.collection("recommendation_events")
-      .aggregate(dailyPipeline)
-      .toArray();
+    // Task #998: flag-dispatched PG/Mongo facade aggregation.
+    const dailyData = await dailyRecommendationEvents(shopId, startDate, endDate, 60, db);
 
     const dailyMap: Record<string, { date: string; added: number; sold: number; revenue: number }> = {};
     
     for (const d of dailyData) {
-      const date = d._id.date;
+      const date = d.date;
       if (!dailyMap[date]) {
         dailyMap[date] = { date, added: 0, sold: 0, revenue: 0 };
       }
-      if (d._id.eventType === "recommendation_added") {
+      if (d.eventType === "recommendation_added") {
         dailyMap[date].added += d.count;
-      } else if (d._id.eventType === "recommendation_sold") {
+      } else if (d.eventType === "recommendation_sold") {
         dailyMap[date].sold += d.count;
         dailyMap[date].revenue += d.revenue;
       }
@@ -138,6 +105,9 @@ export async function GET(req: NextRequest) {
       ]
     };
     if (startDateStr || endDateStr) {
+      const dateFilter: Record<string, Date> = {};
+      if (startDate) dateFilter.$gte = startDate;
+      if (endDate) dateFilter.$lte = endDate;
       usageMatch.createdAt = dateFilter;
     }
 

@@ -1953,10 +1953,11 @@ async function PlanContent({ params, searchParams }: PageProps) {
   }
 
   // Load remedied deferred items to exclude from display
-  const remediedItems = await db.collection("remedied_deferred_work").find({
-    shopId,
-    vin: vin.toUpperCase(),
-  }).toArray();
+  // Task #998: flag-dispatched PG/Mongo facade read.
+  const { listRemediedDeferredWorkDocs } = await import(
+    "@/lib/data/repositories/plan-cache-store"
+  );
+  const remediedItems = await listRemediedDeferredWorkDocs(Number(shopId), vin, db);
   const remediedIds = new Set(remediedItems.map(r => r.deferredId));
   
   // Filter out remedied items from deferred work

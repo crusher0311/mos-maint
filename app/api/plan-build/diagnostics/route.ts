@@ -157,10 +157,11 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const cachedPlan = await db.collection("cached_plans").findOne(
-      { vin: vin.toUpperCase(), shopId: { $in: [String(shopId), Number(shopId)] } },
-      { sort: { createdAt: -1 } }
+    // Task #998: flag-dispatched PG/Mongo facade read.
+    const { findLatestCachedPlanDoc } = await import(
+      "@/lib/data/repositories/plan-cache-store"
     );
+    const cachedPlan = (await findLatestCachedPlanDoc(Number(shopId), vin, db)) as any;
 
     return NextResponse.json({
       ok: true,

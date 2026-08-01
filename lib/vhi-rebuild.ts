@@ -369,15 +369,18 @@ export async function rebuildVhi(
 
   if (sourceChanged || legacyBackfill || detailsBackfill) {
     try {
-      await db.collection("cached_plans").updateOne(
-        { vin: vinUpper, shopId: { $in: [String(shopId), Number(shopId)] } },
+      // Task #998: flag-dispatched PG/Mongo facade patch.
+      const { patchCachedPlanFields } = await import(
+        "@/lib/data/repositories/plan-cache-store"
+      );
+      await patchCachedPlanFields(
+        shopId,
+        vinUpper,
         {
-          $set: {
-            "plan.mileageSource": resolvedSource,
-            "plan.mileageEstimateDetails":
-              resolvedSource === "actual" ? null : resolvedDetails,
-          },
+          mileageSource: resolvedSource,
+          mileageEstimateDetails: resolvedSource === "actual" ? null : resolvedDetails,
         },
+        db,
       );
     } catch (err: any) {
       console.warn(

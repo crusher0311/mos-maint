@@ -1,4 +1,10 @@
 import { Db } from "mongodb";
+import {
+  findCachedPlanCandidates,
+  upsertCachedPlanDoc,
+  deleteCachedPlans,
+  deleteMaintenanceAnalysisForShop,
+} from "@/lib/data/repositories/plan-cache-store";
 
 const CACHE_TTL_MS = 1000 * 60 * 60 * 4; // 4 hours
 // Task #737: plans built while the OEM/VIN-attribute lookup timed out are
@@ -315,19 +321,44 @@ export async function getCachedPlan(
   // cache entries whose distanceUnit no longer matches the shop preference.
   distanceUnit?: "miles" | "kilometers"
 ): Promise<CachedPlan | null> {
-  const candidates = await db.collection("cached_plans")
-    .find({
-      vin: vin.toUpperCase(),
-      shopId: { $in: [String(shopId), Number(shopId)] },
-    })
-    .sort({ createdAt: -1 })
-    .toArray() as CachedPlan[];
+  // Task #998: reads dispatch through the plan-cache store facade
+  // (PG-canonical behind PLAN_CACHE_PG_CANONICAL, Mongo otherwise). The
+  // validity rules below are store-independent — both arms return the
+  // same Mongo-shaped candidate docs, newest-first.
+  const candidates = (await findCachedPlanCandidates(
+    shopId,
+    vin,
+    db,
+  )) as unknown as CachedPlan[];
 
   if (candidates.length === 0) {
     console.log(`[PlanCache] MISS: No cache entry for ${vin}`);
     return null;
   }
 
+  const selected = selectValidCachedPlan(candidates, { vin, currentMiles, distanceUnit });
+  if (!selected) {
+    console.log(`[PlanCache] MISS: ${candidates.length} entries found but none valid for ${vin}`);
+  }
+  return selected;
+}
+
+/**
+ * Pure cache-validity selector (task #998) — applies the TTL / schema /
+ * distance-unit / oemMissing / mileage-tolerance rules to candidate
+ * docs (newest-first) and returns the first valid entry. Extracted so
+ * the Mongo and PG read paths share EXACTLY the same semantics and the
+ * rules are unit-testable without a live store.
+ */
+export function selectValidCachedPlan(
+  candidates: CachedPlan[],
+  opts: {
+    vin: string;
+    currentMiles?: number | null;
+    distanceUnit?: "miles" | "kilometers";
+  },
+): CachedPlan | null {
+  const { vin, currentMiles, distanceUnit } = opts;
   for (const entry of candidates) {
     if (entry.expiresAt <= new Date()) {
       const ageMinutes = Math.round((Date.now() - entry.expiresAt.getTime()) / 60000);
@@ -395,7 +426,6 @@ export async function getCachedPlan(
     return entry;
   }
 
-  console.log(`[PlanCache] MISS: ${candidates.length} entries found but none valid for ${vin}`);
   return null;
 }
 
@@ -407,8 +437,6 @@ export async function setCachedPlan(
   plan: CachedPlanData
 ): Promise<void> {
   const now = new Date();
-  const normalizedVin = vin.toUpperCase();
-  const normalizedShopId = Number(shopId);
 
   // 2026-05-12 (Task #392 follow-up): historically this was
   // deleteMany({vin, shopId}) followed by insertOne(...). Two near-
@@ -427,29 +455,25 @@ export async function setCachedPlan(
   // never absent — concurrent writers race on the upsert, last-write-
   // wins, but readers always see SOMETHING and the freshness override
   // in getCachedPlan accepts a just-built row even if its mileage
-  // differs from the reader's request.
-  await db.collection("cached_plans").deleteMany({
-    vin: normalizedVin,
-    shopId: String(normalizedShopId),
-  });
+  // differs from the reader's request. (The legacy String-shopId cleanup
+  // now lives in the facade's Mongo arm — task #998.)
 
   // Task #737: OEM-less (degraded) plans get a short TTL so they can't
   // linger as stale truth; getCachedPlan additionally skips them outside
   // the 30s freshness window.
   const ttlMs = plan.oemMissing === true ? OEM_MISSING_TTL_MS : CACHE_TTL_MS;
 
-  await db.collection("cached_plans").updateOne(
-    { vin: normalizedVin, shopId: normalizedShopId },
+  await upsertCachedPlanDoc(
+    shopId,
+    vin,
     {
-      $set: {
-        mileage,
-        plan,
-        createdAt: now,
-        expiresAt: new Date(now.getTime() + ttlMs),
-        schemaVersion: PLAN_CACHE_SCHEMA_VERSION,
-      },
+      mileage,
+      plan: plan as unknown as Record<string, unknown>,
+      createdAt: now,
+      expiresAt: new Date(now.getTime() + ttlMs),
+      schemaVersion: PLAN_CACHE_SCHEMA_VERSION,
     },
-    { upsert: true },
+    db,
   );
   console.log(
     `[PlanCache] Cached plan for ${vin} at ${mileage} miles, TTL ${plan.oemMissing === true ? "10m (oemMissing — degraded, will retry OEM on next load)" : "4h"}`,
@@ -473,10 +497,7 @@ export async function invalidateCachedPlan(
   shopId: number,
   reason: "plan_cache_invalidate" | "tekmetric_webhook" = "plan_cache_invalidate"
 ): Promise<void> {
-  await db.collection("cached_plans").deleteMany({
-    vin: vin.toUpperCase(),
-    shopId: { $in: [String(shopId), Number(shopId)] },
-  });
+  await deleteCachedPlans(shopId, vin, db);
   try {
     const { broadcastVhiUpdated } = await import("@/lib/realtime/broadcast-vhi");
     broadcastVhiUpdated({ vin, shopId, reason }).catch(() => {});
@@ -498,19 +519,14 @@ export async function invalidateShopPlanCache(
   db: Db,
   shopId: number,
 ): Promise<{ cachedPlans: number; analysisCache: number }> {
-  const shopMatch = { $in: [String(shopId), Number(shopId)] };
-  const planRes = await db
-    .collection("cached_plans")
-    .deleteMany({ shopId: shopMatch });
-  const analysisRes = await db
-    .collection("maintenance_analysis_cache")
-    .deleteMany({ shopId: shopMatch });
+  const planCount = await deleteCachedPlans(shopId, undefined, db);
+  const analysisCount = await deleteMaintenanceAnalysisForShop(shopId, db);
   console.log(
-    `[PlanCache] Invalidated shop ${shopId} plan cache: cached_plans=${planRes.deletedCount} maintenance_analysis_cache=${analysisRes.deletedCount}`,
+    `[PlanCache] Invalidated shop ${shopId} plan cache: cached_plans=${planCount} maintenance_analysis_cache=${analysisCount}`,
   );
   return {
-    cachedPlans: planRes.deletedCount,
-    analysisCache: analysisRes.deletedCount,
+    cachedPlans: planCount,
+    analysisCache: analysisCount,
   };
 }
 

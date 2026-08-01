@@ -59,13 +59,15 @@ export async function GET(
       return NextResponse.json({ error: "Shop not found" }, { status: 404 });
     }
 
-    let cachedPlan = await db.collection("cached_plans").findOne(
-      {
-        vin,
-        shopId: { $in: [String(shopId), Number(shopId)] },
-      },
-      { sort: { createdAt: -1 } }
-    );
+    // Task #998: flag-dispatched PG/Mongo facade reads.
+    const {
+      findLatestCachedPlanDoc,
+      getMaintenanceAnalysisDoc,
+      getReportApprovedItemsDoc,
+      findCachedWorkOrderCustomerName,
+    } = await import("@/lib/data/repositories/plan-cache-store");
+
+    let cachedPlan = await findLatestCachedPlanDoc(Number(shopId), vin, db);
 
     if (!cachedPlan?.plan) {
       let mileage: number | null = null;
@@ -76,10 +78,7 @@ export async function GET(
       mileage = vehicleDoc?.currentMileage ?? vehicleDoc?.lastMileage ?? null;
 
       if (!mileage) {
-        const analysisDoc = await db.collection("maintenance_analysis_cache").findOne(
-          { vin, shopId: { $in: [String(shopId), Number(shopId)] } },
-          { projection: { mileageAtAnalysis: 1 } }
-        );
+        const analysisDoc = await getMaintenanceAnalysisDoc(Number(shopId), vin, db);
         mileage = analysisDoc?.mileageAtAnalysis ?? null;
       }
 
@@ -88,10 +87,7 @@ export async function GET(
         const built = await triggerPlanBuild(Number(shopId), vin, mileage);
         if (built.ok) {
           await new Promise((resolve) => setTimeout(resolve, 500));
-          cachedPlan = await db.collection("cached_plans").findOne(
-            { vin, shopId: { $in: [String(shopId), Number(shopId)] } },
-            { sort: { createdAt: -1 } }
-          );
+          cachedPlan = await findLatestCachedPlanDoc(Number(shopId), vin, db);
         }
       }
 
@@ -103,10 +99,7 @@ export async function GET(
     const plan = cachedPlan.plan;
     const buckets = plan.buckets || {};
 
-    const approvedDoc = await db.collection("report_approved_items").findOne({
-      vin,
-      shopId: { $in: [String(shopId), Number(shopId)] },
-    });
+    const approvedDoc = await getReportApprovedItemsDoc(Number(shopId), vin, db);
     const approvedServiceKeys: string[] = [];
     if (approvedDoc?.approvedServiceKeys?.length > 0) {
       const ageMs = approvedDoc.updatedAt ? Date.now() - new Date(approvedDoc.updatedAt).getTime() : Infinity;
@@ -126,14 +119,7 @@ export async function GET(
     }
 
     if (!customerName) {
-      const wo = await db.collection("cached_work_orders").findOne(
-        {
-          vin,
-          shopId: { $in: [String(shopId), Number(shopId)] },
-          customerName: { $exists: true, $nin: [null, ""] },
-        },
-        { sort: { createdAt: -1 }, projection: { customerName: 1 } }
-      );
+      const wo = await findCachedWorkOrderCustomerName(Number(shopId), vin, db);
       if (wo?.customerName) customerName = wo.customerName;
     }
 

@@ -7,6 +7,13 @@ import { resolveCarfaxConfig, fetchCarfaxWithCache, estimateMileageFromCarfax } 
 import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
 import { getMaintenanceScheduleCached } from "@/lib/integrations/dataone-api";
 import { trackViewedVin, getCachedPlan } from "@/lib/plan-cache";
+import {
+  getMaintenanceAnalysisDoc,
+  upsertMaintenanceAnalysisDoc,
+  listMaintenanceAnalysisMeta,
+  upsertReportApprovedItemsDoc,
+  deleteReportApprovedItemsDoc,
+} from "@/lib/data/repositories/plan-cache-store";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { isComplimentaryItem } from "@/lib/complimentary-classification";
 import { computeIntervalProgress } from "@/lib/vhi-progress";
@@ -619,10 +626,8 @@ async function backgroundPrefetchShopPlans(
     }
 
     const allVins = Array.from(uniqueVins.keys());
-    const existingCaches = await db2.collection("maintenance_analysis_cache").find({
-      vin: { $in: allVins },
-      shopId: mosShopId
-    }).project({ vin: 1, analyzedAt: 1, mileageAtAnalysis: 1 }).toArray();
+    // Task #998: flag-dispatched PG/Mongo facade read.
+    const existingCaches = await listMaintenanceAnalysisMeta(mosShopId, allVins, db2);
 
     const cacheMap = new Map<string, { analyzedAt: Date; mileage: number }>();
     for (const c of existingCaches) {
@@ -1403,27 +1408,25 @@ export async function runOnDemandAnalysis(
   // cached recommendations (which are missing engineRiskFlag /
   // engineRiskReason and the auto-inserted Safety Check — Oil Level row)
   // are treated as stale and re-built. See ANALYSIS_CACHE_SCHEMA_VERSION.
-  await db.collection("maintenance_analysis_cache").updateOne(
-    { vin: vin.toUpperCase(), shopId },
+  // Task #998: flag-dispatched PG/Mongo facade write.
+  await upsertMaintenanceAnalysisDoc(
     {
-      $set: {
-        vin: vin.toUpperCase(),
-        shopId,
-        recommendations: uniqueRecs,
-        analyzedAt: new Date(),
-        source: "extension_on_demand",
-        schemaVersion: ANALYSIS_CACHE_SCHEMA_VERSION,
-        mileageAtAnalysis: currentMileage,
-        showInspectItems,
-        // Task #384: persist mileage provenance so external VHI responses
-        // served from the analysis cache include the same fields as the
-        // on-demand and cached_plan branches.
-        mileageSource,
-        mileageEstimateDetails:
-          mileageSource === "actual" ? null : mileageEstimateDetails,
-      }
+      vin: vin.toUpperCase(),
+      shopId,
+      recommendations: uniqueRecs,
+      analyzedAt: new Date(),
+      source: "extension_on_demand",
+      schemaVersion: ANALYSIS_CACHE_SCHEMA_VERSION,
+      mileageAtAnalysis: currentMileage,
+      showInspectItems,
+      // Task #384: persist mileage provenance so external VHI responses
+      // served from the analysis cache include the same fields as the
+      // on-demand and cached_plan branches.
+      mileageSource,
+      mileageEstimateDetails:
+        mileageSource === "actual" ? null : mileageEstimateDetails,
     },
-    { upsert: true }
+    db,
   );
 
   const counts = { overdue: 0, due_soon: 0, upcoming: 0 };
@@ -2348,16 +2351,11 @@ async function _GET(request: NextRequest) {
         const approvedServiceKeys = [...plan.overdue, ...plan.dueSoon]
           .filter((i: any) => i.approvedThisVisit && i.serviceKey)
           .map((i: any) => i.serviceKey as string);
+        // Task #998: flag-dispatched PG/Mongo facade writes (fire-and-forget).
         if (approvedServiceKeys.length > 0) {
-          db.collection("report_approved_items").updateOne(
-            { vin: vin.toUpperCase(), shopId: mosShopId },
-            { $set: { vin: vin.toUpperCase(), shopId: mosShopId, approvedServiceKeys, updatedAt: new Date() } },
-            { upsert: true }
-          ).catch(() => {});
+          upsertReportApprovedItemsDoc(mosShopId, vin, approvedServiceKeys, db).catch(() => {});
         } else {
-          db.collection("report_approved_items").deleteOne(
-            { vin: vin.toUpperCase(), shopId: mosShopId }
-          ).catch(() => {});
+          deleteReportApprovedItemsDoc(mosShopId, vin, db).catch(() => {});
         }
       }
 
@@ -2384,10 +2382,8 @@ async function _GET(request: NextRequest) {
     // Fall back to running our own analysis if no cached plan
     console.log(`[Extension] No dashboard cache, running on-demand analysis`);
     
-    let analysisData: any = await db.collection("maintenance_analysis_cache").findOne({
-      vin: vin.toUpperCase(),
-      shopId: mosShopId
-    });
+    // Task #998: flag-dispatched PG/Mongo facade read.
+    let analysisData: any = await getMaintenanceAnalysisDoc(mosShopId, vin, db);
 
     const analysisAge = analysisData?.analyzedAt 
       ? Date.now() - new Date(analysisData.analyzedAt).getTime()
@@ -2672,16 +2668,11 @@ async function _GET(request: NextRequest) {
       const approvedServiceKeys = [...plan.overdue, ...plan.dueSoon]
         .filter((i: any) => i.approvedThisVisit && i.serviceKey)
         .map((i: any) => i.serviceKey as string);
+      // Task #998: flag-dispatched PG/Mongo facade writes (fire-and-forget).
       if (approvedServiceKeys.length > 0) {
-        db.collection("report_approved_items").updateOne(
-          { vin: vin.toUpperCase(), shopId: mosShopId },
-          { $set: { vin: vin.toUpperCase(), shopId: mosShopId, approvedServiceKeys, updatedAt: new Date() } },
-          { upsert: true }
-        ).catch(() => {});
+        upsertReportApprovedItemsDoc(mosShopId, vin, approvedServiceKeys, db).catch(() => {});
       } else {
-        db.collection("report_approved_items").deleteOne(
-          { vin: vin.toUpperCase(), shopId: mosShopId }
-        ).catch(() => {});
+        deleteReportApprovedItemsDoc(mosShopId, vin, db).catch(() => {});
       }
     }
 

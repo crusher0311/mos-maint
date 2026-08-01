@@ -1,7 +1,10 @@
 // app/api/recommended/cache/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import {
+  getAiAnalysisDoc,
+  upsertAiAnalysisDoc,
+} from "@/lib/data/repositories/plan-cache-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,15 +24,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "VIN required" }, { status: 400 });
     }
 
-    const db = await getDb();
-    
-    // Look for cached analysis (valid for 24 hours)
+    // Task #998: dispatches through the plan-cache store facade
+    // (PG-canonical behind PLAN_CACHE_PG_CANONICAL, Mongo otherwise).
+    // 24h TTL is applied here (was the Mongo createdAt filter).
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const cached = await db.collection("ai_analysis_cache").findOne({
-      shopId: Number(session.shopId),
-      vin: vin.toUpperCase(),
-      createdAt: { $gte: oneDayAgo }
-    });
+    let cached = await getAiAnalysisDoc(Number(session.shopId), vin);
+    if (cached) {
+      const createdAt = cached.createdAt ? new Date(cached.createdAt as string | Date) : null;
+      if (!createdAt || createdAt < oneDayAgo) cached = null;
+    }
 
     if (cached) {
       return NextResponse.json({
@@ -65,25 +68,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "VIN and result required" }, { status: 400 });
     }
 
-    const db = await getDb();
-    
-    // Save to cache
-    await db.collection("ai_analysis_cache").updateOne(
-      {
-        shopId: Number(session.shopId),
-        vin: vin.toUpperCase()
-      },
-      {
-        $set: {
-          shopId: Number(session.shopId),
-          vin: vin.toUpperCase(),
-          result,
-          createdAt: new Date(),
-          updatedAt: new Date()
-        }
-      },
-      { upsert: true }
-    );
+    // Save to cache (task #998: flag-dispatched PG/Mongo facade write).
+    await upsertAiAnalysisDoc(Number(session.shopId), vin, result);
 
     return NextResponse.json({ ok: true, cached: true });
 

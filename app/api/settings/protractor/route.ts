@@ -240,7 +240,10 @@ export async function POST(req: NextRequest) {
           db.collection("protractor_work_orders").deleteMany({ shopId }),
           deleteDeferredWorkByShop(shopId),
           deleteBackfillProgressByShop(shopId),
-          db.collection("cached_plans").deleteMany({ shopId }),
+          // Task #998: clears BOTH stores (Mongo + PG) via the facade.
+          import("@/lib/data/repositories/plan-cache-store").then(({ deleteCachedPlans }) =>
+            deleteCachedPlans(shopId, undefined, db),
+          ),
         ]);
         console.log(
           `[Protractor Settings] Stale-data cleanup for shop ${shopId} took ${Date.now() - cleanupStart}ms`

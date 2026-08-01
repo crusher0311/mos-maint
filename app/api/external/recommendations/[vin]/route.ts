@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createExternalEndpoint } from "@/lib/external-api/middleware";
 import { getDb } from "@/lib/mongo";
+import {
+  getRecommendationsCacheDoc,
+  upsertRecommendationsCacheDoc,
+} from "@/lib/data/repositories/plan-cache-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,10 +27,8 @@ export const GET = createExternalEndpoint(
     const db = await getDb();
     
     try {
-      const cachedRecs = await db.collection("recommendations_cache").findOne({
-        vin: vin.toUpperCase(),
-        shopId,
-      });
+      // Task #998: flag-dispatched PG/Mongo facade read.
+      const cachedRecs = await getRecommendationsCacheDoc(shopId, vin, db);
       
       if (cachedRecs && !includeAI) {
         const cacheAge = Date.now() - new Date(cachedRecs.updatedAt).getTime();
@@ -51,16 +53,7 @@ export const GET = createExternalEndpoint(
         includeAI,
       });
       
-      await db.collection("recommendations_cache").updateOne(
-        { vin: vin.toUpperCase(), shopId },
-        {
-          $set: {
-            recommendations,
-            updatedAt: new Date(),
-          }
-        },
-        { upsert: true }
-      );
+      await upsertRecommendationsCacheDoc(shopId, vin, recommendations, db);
       
       return NextResponse.json({
         success: true,

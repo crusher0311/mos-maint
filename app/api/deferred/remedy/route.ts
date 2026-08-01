@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/mongo";
 import { getServerSession } from "@/lib/auth";
+import {
+  upsertRemediedDeferredWorkDoc,
+  deleteLegacyPlanCacheEntry,
+} from "@/lib/data/repositories/plan-cache-store";
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,35 +19,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    const db = await getDb();
     const now = new Date();
 
-    await db.collection("remedied_deferred_work").updateOne(
-      { 
-        shopId: session.shopId, 
-        vin: vin.toUpperCase(), 
-        deferredId 
-      },
-      {
-        $set: {
-          shopId: session.shopId,
-          vin: vin.toUpperCase(),
-          deferredId,
-          carfaxDate,
-          carfaxDescription,
-          carfaxLocation,
-          remediedAt: now,
-          remediedBy: session.userId || session.email || "unknown",
-        },
-        $setOnInsert: { createdAt: now },
-      },
-      { upsert: true }
-    );
-
-    await db.collection("plan_cache").deleteOne({
+    // Task #998: flag-dispatched PG/Mongo facade write.
+    await upsertRemediedDeferredWorkDoc({
       shopId: session.shopId,
-      vin: vin.toUpperCase(),
+      vin,
+      deferredId,
+      carfaxDate,
+      carfaxDescription,
+      carfaxLocation,
+      remediedAt: now,
+      remediedBy: session.userId || session.email || "unknown",
     });
+
+    // Legacy dead-collection cleanup (`plan_cache` has no writers).
+    await deleteLegacyPlanCacheEntry(session.shopId, vin);
 
     console.log(`[Deferred] Marked ${deferredId} as remedied for VIN ${vin} by shop ${session.shopId}`);
 

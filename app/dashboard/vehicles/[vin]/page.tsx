@@ -329,13 +329,11 @@ export default async function VehicleDetailPage({ params }: PageProps) {
     gapMiles: number;
   } | null = null;
   try {
-    const planEntry = await db.collection("cached_plans").findOne(
-      {
-        vin: vin.toUpperCase(),
-        shopId: { $in: [String(shopId), Number(shopId)] },
-      },
-      { sort: { createdAt: -1 }, projection: { "plan.mileageDiscrepancy": 1 } },
+    // Task #998: flag-dispatched PG/Mongo facade read.
+    const { findLatestCachedPlanDoc } = await import(
+      "@/lib/data/repositories/plan-cache-store"
     );
+    const planEntry = await findLatestCachedPlanDoc(Number(shopId), vin, db);
     const persisted = (planEntry as any)?.plan?.mileageDiscrepancy;
     // Defensive type guard against malformed legacy / partial docs.
     if (

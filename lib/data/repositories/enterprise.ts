@@ -108,8 +108,25 @@ export async function removeShopFromEnterprise(
 export async function insertRecommendationEvent(
   doc: Omit<RecommendationEventDoc, "_id">,
 ): Promise<ObjectIdType> {
+  // Task #998: recommendation_events is a durable store in the plan-cache
+  // family. When PLAN_CACHE_PG_CANONICAL=1, PG is the canonical insert and
+  // Mongo becomes the (still-awaited, for the ObjectId return contract)
+  // shadow; pre-flip, Mongo stays canonical with a best-effort PG mirror.
+  const { isPlanCachePgCanonical } = await import("@/lib/db/plan-cache-write-mode");
   const col = await eventsCollection();
   const res = await col.insertOne(doc);
+  try {
+    const { recordRecommendationEventPg } = await import(
+      "@/lib/data/repositories/plan-cache-store"
+    );
+    await recordRecommendationEventPg({ ...doc, _id: res.insertedId });
+  } catch (err) {
+    if (isPlanCachePgCanonical()) throw err;
+    console.warn(
+      "[RecommendationEvents] PG mirror insert failed (non-fatal pre-cutover):",
+      (err as Error)?.message,
+    );
+  }
   return res.insertedId;
 }
 

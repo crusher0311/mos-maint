@@ -114,10 +114,16 @@ export default async function IntervalsPage() {
       { upsert: true }
     );
 
-    await Promise.all([
-      db.collection("cached_plans").deleteMany({ shopId }),
-      db.collection("maintenance_analysis_cache").deleteMany({ shopId }),
-    ]);
+    // Task #998: clears BOTH stores (Mongo + PG) via the facade.
+    {
+      const { deleteCachedPlans, deleteMaintenanceAnalysisForShop } = await import(
+        "@/lib/data/repositories/plan-cache-store"
+      );
+      await Promise.all([
+        deleteCachedPlans(shopId, undefined, db),
+        deleteMaintenanceAnalysisForShop(shopId, db),
+      ]);
+    }
 
     revalidatePath("/dashboard/settings/intervals");
     revalidatePath("/dashboard/vehicles/[vin]/plan");
@@ -171,10 +177,16 @@ export default async function IntervalsPage() {
       { upsert: true }
     );
 
-    await Promise.all([
-      db.collection("cached_plans").deleteMany({ shopId }),
-      db.collection("maintenance_analysis_cache").deleteMany({ shopId }),
-    ]);
+    // Task #998: clears BOTH stores (Mongo + PG) via the facade.
+    {
+      const { deleteCachedPlans, deleteMaintenanceAnalysisForShop } = await import(
+        "@/lib/data/repositories/plan-cache-store"
+      );
+      await Promise.all([
+        deleteCachedPlans(shopId, undefined, db),
+        deleteMaintenanceAnalysisForShop(shopId, db),
+      ]);
+    }
 
     revalidatePath("/dashboard/settings/intervals");
     revalidatePath("/dashboard/vehicles/[vin]/plan");

@@ -39,27 +39,22 @@ export interface PlanCacheData {
 }
 
 export async function getPlanCache(db: Db, vin: string, shopId: number): Promise<PlanCacheData | null> {
-  const cached = await db.collection("plan_prefetch_cache").findOne({
-    vin: vin.toUpperCase(),
-    shopId,
-    expiresAt: { $gt: new Date() },
-  });
+  // Task #998: dispatches through the plan-cache store facade
+  // (PG-canonical behind PLAN_CACHE_PG_CANONICAL, Mongo otherwise).
+  const { getPlanPrefetchDoc } = await import("@/lib/data/repositories/plan-cache-store");
+  const cached = await getPlanPrefetchDoc(shopId, vin, db);
   return cached as PlanCacheData | null;
 }
 
 export async function setPlanCache(db: Db, data: Omit<PlanCacheData, 'createdAt' | 'expiresAt'>): Promise<void> {
   const now = new Date();
-  await db.collection("plan_prefetch_cache").updateOne(
-    { vin: data.vin.toUpperCase(), shopId: data.shopId },
-    {
-      $set: {
-        ...data,
-        vin: data.vin.toUpperCase(),
-        createdAt: now,
-        expiresAt: new Date(now.getTime() + CACHE_TTL_MS),
-      },
-    },
-    { upsert: true }
+  const { setPlanPrefetchDoc } = await import("@/lib/data/repositories/plan-cache-store");
+  await setPlanPrefetchDoc(
+    data.shopId,
+    data.vin,
+    { ...data, createdAt: now },
+    new Date(now.getTime() + CACHE_TTL_MS),
+    db,
   );
 }
 

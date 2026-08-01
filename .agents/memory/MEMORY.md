@@ -119,6 +119,7 @@
 - [platform_features tier resolution](platform-features-tier-resolution.md) — plan features come from PG rows, not the static map; unseeded features are off everywhere & `demo` needs the elite-tier mapping.
 - [Feature override stores](feature-override-stores.md) — shops.enabledFeatures is the ONLY resolver-read override store; legacy shop_features = metadata-only, never gate on it; normalize legacy string[] before merging.
 - [Estimate labor-hour sources](estimate-labor-hours-sources.md) — no Mitchell feed; recommended hours = vehicle-scoped shop history → AI vehicle pass → shop-wide → KB typical; Protractor service jobs have NULL labor hours.
+- [Plan-cache family PG cutover](plan-cache-family-cutover.md) — TTL caches flip with zero backfill (PG-first + Mongo fallback under shadow); deletes must hit BOTH stores flag-independently.
 - [Vehicle specs cache](vehicle-specs-cache.md) — Specs tab caches per `<VIN>|<hintKey>` (not squish) + `hint|<VIN>` CARFAX-hint rows; never cache ok:false; use pingDataOne + warming-503 instead of blocking on endpoint wake.
 - [Integration ops PG flags](integration-ops-pg-flags.md) — integration operational stores are flag-gated `<INT>_OPS_PG_CANONICAL`/`API_USAGE_PG_CANONICAL`; tekmetric_tokens is ONE global Mongo doc → PG shop_id=0 sentinel; callback_events left on Mongo (ObjectId contract).
 - [Cache/identity cutover gating coverage](cache-cutover-gating-coverage.md) — all 5 cache domains + identity repos now flag-gated; writers/aggregates still direct-Mongo, shadow-off gated by scripts/cutover-parity.ts.

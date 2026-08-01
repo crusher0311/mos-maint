@@ -66,10 +66,11 @@ export async function PATCH(
   // Bust any cached plan for this VIN so the next page load reflects the
   // newly selected duty schedule (oil interval, engine-risk chip, and the
   // auto-inserted Safety Check item all depend on it).
-  await db.collection("cached_plans").deleteMany({
-    vin: vin.toUpperCase(),
-    shopId: { $in: [String(session.shopId), Number(session.shopId)] },
-  });
+  // Task #998: clears BOTH stores (Mongo + PG) via the facade.
+  const { deleteCachedPlans } = await import(
+    "@/lib/data/repositories/plan-cache-store"
+  );
+  await deleteCachedPlans(Number(session.shopId), vin, db);
 
   return NextResponse.json({ ok: true, oilDutyPreference });
 }

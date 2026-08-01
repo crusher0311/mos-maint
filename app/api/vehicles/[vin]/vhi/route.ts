@@ -106,10 +106,11 @@ export async function GET(
     }
 
     if (!mileage) {
-      const expiredEntry = await db.collection("cached_plans").findOne(
-        { vin: vin.toUpperCase(), shopId: { $in: [String(shopId), Number(shopId)] } },
-        { sort: { createdAt: -1 }, projection: { mileage: 1, "plan.currentMiles": 1 } }
+      // Task #998: flag-dispatched PG/Mongo facade read (raw, incl. expired).
+      const { findLatestCachedPlanDoc } = await import(
+        "@/lib/data/repositories/plan-cache-store"
       );
+      const expiredEntry = (await findLatestCachedPlanDoc(Number(shopId), vin, db)) as any;
       if (expiredEntry) {
         mileage = expiredEntry.mileage || expiredEntry.plan?.currentMiles || null;
         console.log(`[VHI API] Recovered mileage ${mileage} from expired cache for ${vin}`);
@@ -117,10 +118,11 @@ export async function GET(
     }
 
     if (!mileage) {
-      const analysisDoc = await db.collection("maintenance_analysis_cache").findOne(
-        { vin: vin.toUpperCase(), shopId: { $in: [String(shopId), Number(shopId)] } },
-        { projection: { mileageAtAnalysis: 1 } }
+      // Task #998: flag-dispatched PG/Mongo facade read.
+      const { getMaintenanceAnalysisDoc } = await import(
+        "@/lib/data/repositories/plan-cache-store"
       );
+      const analysisDoc = (await getMaintenanceAnalysisDoc(Number(shopId), vin, db)) as any;
       if (analysisDoc?.mileageAtAnalysis) {
         mileage = analysisDoc.mileageAtAnalysis;
         console.log(`[VHI API] Recovered mileage ${mileage} from analysis cache for ${vin}`);

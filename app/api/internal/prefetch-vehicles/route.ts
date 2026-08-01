@@ -214,12 +214,11 @@ export async function GET(req: Request) {
     // Also try getting vehicles that were already cached in plans
     let cachedPlans: any[] = [];
     try {
-      cachedPlans = await db.collection("cached_plans")
-        .find({ shopId: shopIdMatch })
-        .sort({ createdAt: -1 })
-        .limit(limit)
-        .project({ vin: 1, mileage: 1, "plan.vehicle.year": 1, "plan.vehicle.make": 1, "plan.vehicle.model": 1 })
-        .toArray();
+      // Task #998: flag-dispatched PG/Mongo facade read.
+      const { listRecentCachedPlans } = await import(
+        "@/lib/data/repositories/plan-cache-store"
+      );
+      cachedPlans = await listRecentCachedPlans(Number(shopId), limit, db);
     } catch (e: any) {
       console.error(`[InternalAPI] Shop ${shopId}: cached_plans read failed:`, e?.message || e);
     }

@@ -964,14 +964,11 @@ export async function POST(req: NextRequest) {
     if (!customerName) {
       let shopWareWorkOrderForName: { customerName?: string | null } | null = null;
       try {
-        const swRo = await db.collection("cached_work_orders").findOne(
-          {
-            vin: vin.toUpperCase(),
-            shopId: { $in: [String(shopId), Number(shopId)] },
-            customerName: { $exists: true, $nin: [null, ""] },
-          },
-          { sort: { createdAt: -1 }, projection: { customerName: 1 } }
+        // Task #998: flag-dispatched PG/Mongo facade read.
+        const { findCachedWorkOrderCustomerName } = await import(
+          "@/lib/data/repositories/plan-cache-store"
         );
+        const swRo = await findCachedWorkOrderCustomerName(Number(shopId), vin, db);
         if (swRo) shopWareWorkOrderForName = { customerName: swRo.customerName ?? null };
       } catch (err) {
         console.log(`[PlanBuild] cached_work_orders customer lookup error for ${vin}:`, err);

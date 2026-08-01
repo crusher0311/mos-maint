@@ -583,10 +583,11 @@ export const GET = createExternalEndpoint(
     }
 
     if (!mileage) {
-      const expiredEntry = await db.collection("cached_plans").findOne(
-        { vin: vin.toUpperCase(), shopId: { $in: shopIdVariants } },
-        { sort: { createdAt: -1 }, projection: { mileage: 1, "plan.currentMiles": 1 } }
+      // Task #998: flag-dispatched PG/Mongo facade read (raw, incl. expired).
+      const { findLatestCachedPlanDoc } = await import(
+        "@/lib/data/repositories/plan-cache-store"
       );
+      const expiredEntry = (await findLatestCachedPlanDoc(resolvedShopId, vin, db)) as any;
       if (expiredEntry) {
         mileage = expiredEntry.mileage || expiredEntry.plan?.currentMiles || null;
         // Task #476: expired-cache and analysis-cache recoveries are both
@@ -599,10 +600,11 @@ export const GET = createExternalEndpoint(
     }
 
     if (!mileage) {
-      const analysisDoc = await db.collection("maintenance_analysis_cache").findOne(
-        { vin: vin.toUpperCase(), shopId: { $in: shopIdVariants } },
-        { projection: { mileageAtAnalysis: 1 } }
+      // Task #998: flag-dispatched PG/Mongo facade read.
+      const { getMaintenanceAnalysisDoc } = await import(
+        "@/lib/data/repositories/plan-cache-store"
       );
+      const analysisDoc = (await getMaintenanceAnalysisDoc(resolvedShopId, vin, db)) as any;
       if (analysisDoc?.mileageAtAnalysis) {
         mileage = analysisDoc.mileageAtAnalysis;
         mileageInputSource = "vehicles_collection";
@@ -707,10 +709,11 @@ export const GET = createExternalEndpoint(
     );
 
     if (!result) {
-      const lastPlan = await db.collection("cached_plans").findOne(
-        { vin: vin.toUpperCase(), shopId: { $in: shopIdVariants } },
-        { sort: { createdAt: -1 } },
+      // Task #998: flag-dispatched PG/Mongo facade read (stale-serve branch).
+      const { findLatestCachedPlanDoc: findLatestForStale } = await import(
+        "@/lib/data/repositories/plan-cache-store"
       );
+      const lastPlan = (await findLatestForStale(resolvedShopId, vin, db)) as any;
       if (lastPlan?.plan) {
         console.warn(
           `[PartnerVHI] rebuild_timeout_serving_stale requestId=${requestId} vin=${vin} ` +

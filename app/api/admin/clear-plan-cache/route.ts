@@ -1,5 +1,4 @@
 import { NextResponse, NextRequest } from "next/server";
-import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
 
 export const runtime = "nodejs";
@@ -13,15 +12,18 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const db = await getDb();
-    const result = await db.collection("cached_plans").deleteMany({});
-    
-    console.log(`[Admin] Cleared ${result.deletedCount} cached plans (by ${session.email})`);
-    
+    // Task #998: clears BOTH stores (Mongo + PG) via the facade.
+    const { deleteAllCachedPlans } = await import(
+      "@/lib/data/repositories/plan-cache-store"
+    );
+    const cleared = await deleteAllCachedPlans();
+
+    console.log(`[Admin] Cleared ${cleared} cached plans (by ${session.email})`);
+
     return NextResponse.json({ 
       ok: true, 
-      cleared: result.deletedCount,
-      message: `Cleared ${result.deletedCount} cached plans`
+      cleared,
+      message: `Cleared ${cleared} cached plans`
     });
   } catch (error: any) {
     console.error("[Admin] Error clearing plan cache:", error.message);

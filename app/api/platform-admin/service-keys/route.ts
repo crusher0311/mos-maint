@@ -16,28 +16,14 @@ export async function GET(req: NextRequest) {
     const shopIdFilter = req.nextUrl.searchParams.get("shopId");
     const limit = Math.min(parseInt(req.nextUrl.searchParams.get("limit") || "200", 10), 500);
 
-    const matchStage: any = { "plan.buckets": { $exists: true } };
-    if (shopIdFilter) {
-      matchStage.shopId = { $in: [String(shopIdFilter), Number(shopIdFilter)] };
-    }
-
-    const pipeline = [
-      { $match: matchStage },
-      { $sort: { createdAt: -1 } },
-      { $limit: limit },
-      {
-        $project: {
-          vin: 1,
-          shopId: 1,
-          "plan.vehicle": 1,
-          "plan.buckets.overdue": 1,
-          "plan.buckets.dueSoon": 1,
-          "plan.buckets.upcoming": 1,
-        },
-      },
-    ];
-
-    const plans = await db.collection("cached_plans").aggregate(pipeline).toArray();
+    // Task #998: flag-dispatched PG/Mongo facade read. The buckets-exist
+    // filter is applied in JS so both stores share the same semantics.
+    const { listRecentCachedPlans } = await import(
+      "@/lib/data/repositories/plan-cache-store"
+    );
+    const plans = (
+      await listRecentCachedPlans(shopIdFilter ? Number(shopIdFilter) : null, limit, db)
+    ).filter((p: any) => p?.plan?.buckets);
 
     const keyMap: Record<string, { count: number; samples: Set<string>; buckets: Record<string, number> }> = {};
     const unmapped: { name: string; vin: string; bucket: string }[] = [];

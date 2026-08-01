@@ -54,10 +54,11 @@ export async function GET(req: NextRequest) {
 
     const vehicle = await db.collection("vehicles").findOne({ shopId, vin });
 
-    const recommendations = await db.collection("recommendations").find({
-      shopId,
-      vin,
-    }).sort({ priority: 1 }).toArray();
+    // Task #998: flag-dispatched PG/Mongo facade read.
+    const { listRecommendationDocs } = await import(
+      "@/lib/data/repositories/plan-cache-store"
+    );
+    const recommendations = await listRecommendationDocs(shopId, vin, db);
 
     const formattedRecs = recommendations.map(rec => ({
       id: rec._id.toString(),

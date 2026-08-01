@@ -405,10 +405,12 @@ export async function getVhiFromAnalysisCache(
   shopId: number,
   currentMiles?: number | null
 ): Promise<AnalysisCacheVhiResult | null> {
-  const doc = await db.collection("maintenance_analysis_cache").findOne({
-    vin: vin.toUpperCase(),
-    shopId: { $in: [String(shopId), Number(shopId)] },
-  });
+  // Task #998: dispatches through the plan-cache store facade
+  // (PG-canonical behind PLAN_CACHE_PG_CANONICAL, Mongo otherwise).
+  const { getMaintenanceAnalysisDoc } = await import(
+    "@/lib/data/repositories/plan-cache-store"
+  );
+  const doc = await getMaintenanceAnalysisDoc(shopId, vin, db);
 
   if (!doc || !doc.recommendations || !Array.isArray(doc.recommendations) || doc.recommendations.length === 0) {
     return null;
