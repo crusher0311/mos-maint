@@ -527,6 +527,163 @@ async function main() {
     `CREATE INDEX IF NOT EXISTS "knowledge_articles_category_trgm_idx" ON "knowledge_articles" USING gin ("category" gin_trgm_ops)`,
   ];
 
+  // Task #1018 — mirror drizzle/0023–0026 so fresh environments get the same
+  // schema (db:generate is dead; this script is the canonical path).
+  // ALTERs target wave2/wave3 tables that may not exist in a truly fresh
+  // environment, so they use ALTER TABLE IF EXISTS, and dependent index
+  // creates are guarded on to_regclass. All statements are idempotent.
+  const legacyCutoverStatements = [
+    // ---- 0023_task999_integration_ops.sql ----
+    `CREATE TABLE IF NOT EXISTS "protractor_backfill_progress" (
+      "shop_id" integer PRIMARY KEY NOT NULL,
+      "started_at" timestamp with time zone,
+      "completed" boolean DEFAULT false NOT NULL,
+      "completed_at" timestamp with time zone,
+      "complete" boolean,
+      "last_run_at" timestamp with time zone,
+      "last_error" text,
+      "last_error_at" timestamp with time zone,
+      "current_chunk_end" timestamp with time zone,
+      "lock_owner" text,
+      "lock_expires_at" timestamp with time zone,
+      "extra" jsonb,
+      "updated_at" timestamp with time zone DEFAULT now() NOT NULL
+    )`,
+    `CREATE INDEX IF NOT EXISTS "protractor_backfill_progress_completed_idx"
+      ON "protractor_backfill_progress" ("completed", "last_run_at")`,
+    `CREATE TABLE IF NOT EXISTS "protractor_webhook_subscriptions" (
+      "shop_id" integer PRIMARY KEY NOT NULL,
+      "token" text,
+      "url" text,
+      "active" boolean DEFAULT true NOT NULL,
+      "verified_at" timestamp with time zone,
+      "last_checked_at" timestamp with time zone,
+      "payload" jsonb,
+      "created_at" timestamp with time zone DEFAULT now() NOT NULL,
+      "updated_at" timestamp with time zone DEFAULT now() NOT NULL
+    )`,
+    `CREATE TABLE IF NOT EXISTS "api_usage" (
+      "id" text PRIMARY KEY NOT NULL,
+      "provider" text NOT NULL,
+      "shop_id" integer,
+      "shop_name" text,
+      "endpoint" text,
+      "method" text,
+      "status_code" integer,
+      "is_error" boolean DEFAULT false NOT NULL,
+      "is_rate_limited" boolean DEFAULT false NOT NULL,
+      "error_message" text,
+      "error_code" text,
+      "latency_ms" integer,
+      "request_id" text,
+      "source_worker" text,
+      "timestamp" timestamp with time zone NOT NULL,
+      "extra" jsonb
+    )`,
+    `CREATE INDEX IF NOT EXISTS "api_usage_provider_ts_idx" ON "api_usage" ("provider", "timestamp")`,
+    `CREATE INDEX IF NOT EXISTS "api_usage_shop_ts_idx" ON "api_usage" ("shop_id", "timestamp")`,
+    `CREATE TABLE IF NOT EXISTS "api_rate_limits" (
+      "slot_key" text PRIMARY KEY NOT NULL,
+      "count" integer DEFAULT 0 NOT NULL,
+      "created_at" timestamp with time zone DEFAULT now() NOT NULL,
+      "expires_at" timestamp with time zone
+    )`,
+    `CREATE INDEX IF NOT EXISTS "api_rate_limits_expires_idx" ON "api_rate_limits" ("expires_at")`,
+    `CREATE TABLE IF NOT EXISTS "integration_drain_locks" (
+      "provider" text PRIMARY KEY NOT NULL,
+      "owner" text NOT NULL,
+      "acquired_at" timestamp with time zone DEFAULT now() NOT NULL,
+      "expires_at" timestamp with time zone NOT NULL,
+      "last_refresh_at" timestamp with time zone,
+      "meta" jsonb
+    )`,
+    `CREATE INDEX IF NOT EXISTS "integration_drain_locks_expires_idx"
+      ON "integration_drain_locks" ("expires_at")`,
+
+    // ---- 0024_task1000_dvi_payload.sql ----
+    `ALTER TABLE IF EXISTS "dvi" ADD COLUMN IF NOT EXISTS "payload" jsonb`,
+
+    // ---- 0024_task1006_protractor_callback_event_runtime.sql ----
+    `ALTER TABLE IF EXISTS "protractor_callback_events"
+      ADD COLUMN IF NOT EXISTS "event_key" text,
+      ADD COLUMN IF NOT EXISTS "method" text,
+      ADD COLUMN IF NOT EXISTS "connection_id" text,
+      ADD COLUMN IF NOT EXISTS "object_type" text,
+      ADD COLUMN IF NOT EXISTS "object_id" text,
+      ADD COLUMN IF NOT EXISTS "operation" text,
+      ADD COLUMN IF NOT EXISTS "work_order_id" text,
+      ADD COLUMN IF NOT EXISTS "status" text,
+      ADD COLUMN IF NOT EXISTS "processed_at" timestamp with time zone,
+      ADD COLUMN IF NOT EXISTS "attempts" integer,
+      ADD COLUMN IF NOT EXISTS "priority" integer,
+      ADD COLUMN IF NOT EXISTS "processing_started_at" timestamp with time zone,
+      ADD COLUMN IF NOT EXISTS "last_attempt_at" timestamp with time zone,
+      ADD COLUMN IF NOT EXISTS "last_error" text,
+      ADD COLUMN IF NOT EXISTS "last_error_at" timestamp with time zone,
+      ADD COLUMN IF NOT EXISTS "vin" text,
+      ADD COLUMN IF NOT EXISTS "work_order_number" text,
+      ADD COLUMN IF NOT EXISTS "no_action" boolean,
+      ADD COLUMN IF NOT EXISTS "deleted_from_dashboard" boolean`,
+    `DO $$ BEGIN IF to_regclass('public.protractor_callback_events') IS NOT NULL THEN
+      CREATE UNIQUE INDEX IF NOT EXISTS "pro_cb_event_key_uniq" ON "protractor_callback_events" ("event_key");
+      CREATE INDEX IF NOT EXISTS "pro_cb_conn_received_idx" ON "protractor_callback_events" ("connection_id", "received_at");
+      CREATE INDEX IF NOT EXISTS "pro_cb_method_received_idx" ON "protractor_callback_events" ("method", "received_at");
+      CREATE INDEX IF NOT EXISTS "pro_cb_method_processed_idx" ON "protractor_callback_events" ("method", "processed_at");
+      CREATE INDEX IF NOT EXISTS "pro_cb_pending_queue_idx" ON "protractor_callback_events" ("method", "processed", "priority", "received_at");
+      CREATE INDEX IF NOT EXISTS "pro_cb_wo_status_idx" ON "protractor_callback_events" ("work_order_id", "status", "processed");
+      CREATE INDEX IF NOT EXISTS "pro_cb_obj_dedup_idx" ON "protractor_callback_events" ("shop_id", "object_type", "object_id", "operation");
+    END IF; END $$`,
+
+    // ---- 0025_task1000_package3.sql ----
+    `ALTER TABLE IF EXISTS "concern_conversations" ADD COLUMN IF NOT EXISTS "user_id" text`,
+    `ALTER TABLE IF EXISTS "concern_conversations" ADD COLUMN IF NOT EXISTS "status" text`,
+    `ALTER TABLE IF EXISTS "concern_conversations" ADD COLUMN IF NOT EXISTS "payload" jsonb`,
+    `DO $$ BEGIN IF to_regclass('public.concern_conversations') IS NOT NULL THEN
+      CREATE INDEX IF NOT EXISTS "concern_conversations_user_updated_idx"
+        ON "concern_conversations" ("user_id", "updated_at");
+    END IF; END $$`,
+    `DO $$ BEGIN IF to_regclass('public.shop_repair_patterns') IS NOT NULL THEN
+      ALTER TABLE "shop_repair_patterns" ALTER COLUMN "pattern" DROP NOT NULL;
+    END IF; END $$`,
+    `ALTER TABLE IF EXISTS "shop_repair_patterns" ADD COLUMN IF NOT EXISTS "enterprise_id" text`,
+    `ALTER TABLE IF EXISTS "shop_repair_patterns" ADD COLUMN IF NOT EXISTS "year" integer`,
+    `ALTER TABLE IF EXISTS "shop_repair_patterns" ADD COLUMN IF NOT EXISTS "make" text`,
+    `ALTER TABLE IF EXISTS "shop_repair_patterns" ADD COLUMN IF NOT EXISTS "model" text`,
+    `ALTER TABLE IF EXISTS "shop_repair_patterns" ADD COLUMN IF NOT EXISTS "mileage_bucket" integer`,
+    `ALTER TABLE IF EXISTS "shop_repair_patterns" ADD COLUMN IF NOT EXISTS "job_title" text`,
+    `ALTER TABLE IF EXISTS "shop_repair_patterns" ADD COLUMN IF NOT EXISTS "job_title_normalized" text`,
+    `ALTER TABLE IF EXISTS "shop_repair_patterns" ADD COLUMN IF NOT EXISTS "occurrences" integer NOT NULL DEFAULT 0`,
+    `ALTER TABLE IF EXISTS "shop_repair_patterns" ADD COLUMN IF NOT EXISTS "total_labor" double precision NOT NULL DEFAULT 0`,
+    `ALTER TABLE IF EXISTS "shop_repair_patterns" ADD COLUMN IF NOT EXISTS "total_parts" double precision NOT NULL DEFAULT 0`,
+    `ALTER TABLE IF EXISTS "shop_repair_patterns" ADD COLUMN IF NOT EXISTS "total_amount" double precision NOT NULL DEFAULT 0`,
+    `ALTER TABLE IF EXISTS "shop_repair_patterns" ADD COLUMN IF NOT EXISTS "avg_labor" double precision NOT NULL DEFAULT 0`,
+    `ALTER TABLE IF EXISTS "shop_repair_patterns" ADD COLUMN IF NOT EXISTS "avg_parts" double precision NOT NULL DEFAULT 0`,
+    `ALTER TABLE IF EXISTS "shop_repair_patterns" ADD COLUMN IF NOT EXISTS "avg_total" double precision NOT NULL DEFAULT 0`,
+    `ALTER TABLE IF EXISTS "shop_repair_patterns" ADD COLUMN IF NOT EXISTS "avg_hours" double precision NOT NULL DEFAULT 0`,
+    `ALTER TABLE IF EXISTS "shop_repair_patterns" ADD COLUMN IF NOT EXISTS "last_performed" timestamptz`,
+    `ALTER TABLE IF EXISTS "shop_repair_patterns" ADD COLUMN IF NOT EXISTS "first_performed" timestamptz`,
+    `ALTER TABLE IF EXISTS "shop_repair_patterns" ADD COLUMN IF NOT EXISTS "vins_seen" jsonb NOT NULL DEFAULT '[]'::jsonb`,
+    `ALTER TABLE IF EXISTS "shop_repair_patterns" ADD COLUMN IF NOT EXISTS "created_at" timestamptz NOT NULL DEFAULT now()`,
+    `ALTER TABLE IF EXISTS "shop_repair_patterns" ADD COLUMN IF NOT EXISTS "updated_at" timestamptz NOT NULL DEFAULT now()`,
+    `DO $$ BEGIN IF to_regclass('public.shop_repair_patterns') IS NOT NULL THEN
+      CREATE UNIQUE INDEX IF NOT EXISTS "shop_repair_patterns_shop_vehicle_job_uniq"
+        ON "shop_repair_patterns" ("shop_id", "year", "make", "model", "mileage_bucket", "job_title_normalized");
+      CREATE INDEX IF NOT EXISTS "shop_repair_patterns_enterprise_vehicle_idx"
+        ON "shop_repair_patterns" ("enterprise_id", "year", "make", "model", "mileage_bucket");
+      CREATE INDEX IF NOT EXISTS "shop_repair_patterns_shop_top_idx"
+        ON "shop_repair_patterns" ("shop_id", "occurrences");
+    END IF; END $$`,
+
+    // ---- 0026_task1000_support_tickets.sql ----
+    `ALTER TABLE IF EXISTS "support_tickets" ADD COLUMN IF NOT EXISTS "mongo_id" text`,
+    `ALTER TABLE IF EXISTS "support_tickets" ADD COLUMN IF NOT EXISTS "closed_at" timestamptz`,
+    `ALTER TABLE IF EXISTS "support_tickets" ADD COLUMN IF NOT EXISTS "auto_closed_at" timestamptz`,
+    `DO $$ BEGIN IF to_regclass('public.support_tickets') IS NOT NULL THEN
+      CREATE UNIQUE INDEX IF NOT EXISTS "support_tickets_mongo_id_key"
+        ON "support_tickets" ("mongo_id");
+    END IF; END $$`,
+  ];
+
   console.log("Creating extensions...");
   // pg_trgm backs the trigram GIN indexes used by job-history search
   // (leading-wildcard ILIKE on title/description/canned_job_name). Without
@@ -559,6 +716,14 @@ async function main() {
     await sql.unsafe(stmt);
   }
   console.log(`  ✓ ${indexStatements.length} indexes created/verified`);
+
+  console.log("Applying legacy-cutover DDL (drizzle 0023–0026)...");
+  for (const stmt of legacyCutoverStatements) {
+    await sql.unsafe(stmt);
+  }
+  console.log(
+    `  ✓ ${legacyCutoverStatements.length} legacy-cutover statements applied/verified`,
+  );
 
   console.log("\nVerifying tables exist...");
   const expectedTables = [

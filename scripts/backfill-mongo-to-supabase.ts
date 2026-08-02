@@ -31,12 +31,21 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { sql, type SQL } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { getDb as getMongoDb } from "../lib/mongo";
 import * as pgSchema from "../lib/db/schema";
 import { SupabaseDualWriter } from "../lib/supabase-dual-writer";
+import {
+  buildMirrorUpsert,
+  describeMirrorError,
+  quoteIdent,
+  safeEnum,
+  TICKET_CATEGORIES,
+  TICKET_PRIORITIES,
+  TICKET_STATUSES,
+} from "./backfill-mirror-utils";
 
 // Dedicated Postgres pool for the backfill so we don't contend with the live
 // app's tiny shared pool (max: 2 in lib/db/drizzle.ts).
@@ -48,6 +57,10 @@ function makeDedicatedPgDb() {
     idle_timeout: 30,
     connect_timeout: 30,
     max_lifetime: 60 * 30,
+    // Task #1018: absent Mongo fields reach the driver as `undefined`;
+    // postgres-js rejects those with UNDEFINED_VALUE unless told to bind
+    // them as SQL NULL. Belt-and-suspenders with mirrorParam().
+    transform: { undefined: null },
   });
   return drizzle(client, { schema: pgSchema });
 }
@@ -1134,15 +1147,28 @@ const MIRRORS: MirrorSpec[] = [
         closedAt, autoClosedAt, messages, metadata, createdAt, updatedAt,
         ...rest
       } = d;
+      // Enum-safe mapping (task #1018): Mongo carries categories outside the
+      // PG `ticket_category` enum (e.g. `account`) — map unknowns to
+      // `general` (documented choice; extending the enum is operator DDL)
+      // and preserve the original value in metadata. Same guard for
+      // status / priority so `resolved`/`closed` and any legacy oddballs
+      // survive the upsert instead of failing the row.
+      const cat = safeEnum(asStr(category), TICKET_CATEGORIES, "general");
+      const pri = safeEnum(asStr(priority), TICKET_PRIORITIES, "medium");
+      const st = safeEnum(asStr(status), TICKET_STATUSES, "open");
+      const originals: Record<string, string> = {};
+      if (cat.original) originals.originalCategory = cat.original;
+      if (pri.original) originals.originalPriority = pri.original;
+      if (st.original) originals.originalStatus = st.original;
       return {
         values: {
           mongo_id: String(d._id),
           ticket_number: ticketNumber,
           subject,
           description: description ?? "",
-          category: asStr(category) ?? "general",
-          priority: asStr(priority) ?? "medium",
-          status: asStr(status) ?? "open",
+          category: cat.value,
+          priority: pri.value,
+          status: st.value,
           source: asStr(source) ?? "web",
           shop_id: asInt(shopId),
           shop_name: asStr(shopName),
@@ -1156,7 +1182,7 @@ const MIRRORS: MirrorSpec[] = [
           closed_at: asDate(closedAt),
           auto_closed_at: asDate(autoClosedAt),
           messages: messages ?? [],
-          metadata: { ...(metadata ?? {}), ...rest },
+          metadata: { ...(metadata ?? {}), ...rest, ...originals },
           created_at: asDate(createdAt) ?? new Date(),
           updated_at: asDate(updatedAt) ?? new Date(),
         },
@@ -1857,7 +1883,7 @@ async function processInBatches<T extends { _id: any }>(
       } else {
         failed++;
         failedIds.push(String(slice[idx]._id));
-        if (errors.length < 5) errors.push(String(r.reason?.message || r.reason));
+        if (errors.length < 5) errors.push(describeMirrorError(r.reason));
       }
     });
   }
@@ -1992,44 +2018,15 @@ async function backfillOne(spec: CollectionSpec, args: Args): Promise<void> {
 
 type AnyPg = ReturnType<typeof getPgDb>;
 
-function quoteIdent(name: string): string {
-  // Allow snake_case identifiers only — defensive guard, not a SQL builder.
-  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) {
-    throw new Error(`Invalid SQL identifier: ${name}`);
-  }
-  return `"${name}"`;
-}
-
+// quoteIdent / upsert construction / error formatting live in
+// scripts/backfill-mirror-utils.ts (task #1018) so the undefined→NULL and
+// array/object→jsonb parameter handling is unit-testable without running
+// this script's main().
 function buildMirrorUpsertSql(spec: MirrorSpec, row: ExtractedRow) {
-  const cols = Object.keys(row.values);
-  const colsSql = cols.map(quoteIdent).join(", ");
-  const valuesChunk = sql.join(
-    cols.map((c) => sql`${row.values[c]}`),
-    sql`, `,
-  );
-
-  const conflictKey = row.conflictKey ?? spec.naturalKey;
-  const refresh = spec.refreshOnConflict !== false;
-
-  let conflictClause: SQL;
-  if (conflictKey && conflictKey.length > 0) {
-    const target = conflictKey.map(quoteIdent).join(", ");
-    if (refresh) {
-      const updatable = cols
-        .filter((c) => !conflictKey.includes(c))
-        .map((c) => `${quoteIdent(c)} = EXCLUDED.${quoteIdent(c)}`)
-        .join(", ");
-      conflictClause = updatable
-        ? sql.raw(` ON CONFLICT (${target}) DO UPDATE SET ${updatable}`)
-        : sql.raw(` ON CONFLICT (${target}) DO NOTHING`);
-    } else {
-      conflictClause = sql.raw(` ON CONFLICT (${target}) DO NOTHING`);
-    }
-  } else {
-    conflictClause = sql.raw(` ON CONFLICT ("backfill_mongo_id") DO NOTHING`);
-  }
-
-  return sql`INSERT INTO ${sql.raw(quoteIdent(spec.pgTableName))} (${sql.raw(colsSql)}) VALUES (${valuesChunk})${conflictClause}`;
+  return buildMirrorUpsert(spec.pgTableName, row.values, {
+    conflictKey: row.conflictKey ?? spec.naturalKey,
+    refreshOnConflict: spec.refreshOnConflict,
+  });
 }
 
 async function applyMirrorRow(
@@ -2119,12 +2116,7 @@ async function backfillMirror(spec: MirrorSpec, args: Args): Promise<void> {
           failed++;
           failedIds.push(String(slice[idx]._id));
           if (errors.length < 5) {
-            const reason: unknown = r.reason;
-            const msg =
-              reason && typeof reason === "object" && "message" in reason
-                ? String((reason as { message: unknown }).message)
-                : String(reason);
-            errors.push(msg);
+            errors.push(describeMirrorError(r.reason));
           }
         }
       });
