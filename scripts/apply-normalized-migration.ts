@@ -36,6 +36,7 @@ const drizzleMigrationFiles = [
   "0024_task1006_protractor_callback_event_runtime.sql",
   "0025_task1000_package3.sql",
   "0026_task1000_support_tickets.sql",
+  "0028_task1023_raw_data.sql",
 ];
 
 async function main() {

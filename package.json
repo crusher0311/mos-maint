@@ -174,7 +174,8 @@
     "test:estimate-job-builder": "tsx tests/estimate-job-builder.smoke.ts",
     "test:estimate-assist-routes": "NODE_OPTIONS='--require ./scripts/_stubs/server-only-stub.cjs' tsx tests/estimate-assist-routes.smoke.ts",
     "test:protractor-callback-events-parity": "tsx tests/protractor-callback-events-parity.smoke.ts",
-    "test:backfill-mirror-utils": "tsx tests/backfill-mirror-utils.smoke.ts"
+    "test:backfill-mirror-utils": "tsx tests/backfill-mirror-utils.smoke.ts",
+    "test:schema-drift": "tsx scripts/check-schema-drift.ts"
   },
   "dependencies": {
     "@deepgram/sdk": "^5.0.0",
