@@ -1,4 +1,42 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import postgres from "postgres";
+
+// Task #1020 — fresh environments must get the COMPLETE schema, not just the
+// normalized_* tables. db:generate is dead (journal drift since 0012), so this
+// script is the canonical schema path; it executes the hand-written wave
+// migration files below in order. All of them are idempotent (CREATE ... IF
+// NOT EXISTS / guarded DO blocks / ALTER TABLE IF EXISTS), so re-running
+// against an existing environment (including prod Supabase) is a no-op.
+// New drizzle/00NN.sql migrations must be idempotent and appended here.
+//
+// Note: 0019/0021 create their trigram GIN indexes with plain CREATE INDEX,
+// which is fine for fresh/empty tables; on a populated prod table build them
+// with CREATE INDEX CONCURRENTLY out-of-band instead (see file comments).
+const drizzleMigrationFiles = [
+  "0011_wave1_reference_and_leaf.sql",
+  "0012_wave2_operational.sql",
+  "0013_relax_normalized_work_order_vehicle.sql",
+  "0014_wave3.sql",
+  "0015_wave4.sql",
+  "0016_task382_aces_ids.sql",
+  "0017_task552_provenance_sourceids_gin.sql",
+  "0018_task557_operational_primitives.sql",
+  "0019_job_search_trgm.sql",
+  "0020_task632_appointments_employees.sql",
+  "0021_task758_kb_search_trgm.sql",
+  "0022_task901_vehicle_specs_cache.sql",
+  // 0027 runs before 0023–0026 on purpose: it creates the pre-wave base
+  // tables (support_tickets, communications family, production_logs, ...)
+  // that 0024–0026 ALTER, so those ALTERs actually apply on a fresh
+  // environment instead of being skipped by their IF EXISTS guards.
+  "0027_task1020_full_schema_baseline.sql",
+  "0023_task999_integration_ops.sql",
+  "0024_task1000_dvi_payload.sql",
+  "0024_task1006_protractor_callback_event_runtime.sql",
+  "0025_task1000_package3.sql",
+  "0026_task1000_support_tickets.sql",
+];
 
 async function main() {
   const connStr = process.env.DATAONE_DATABASE_URL || process.env.DATABASE_URL;
@@ -711,6 +749,19 @@ async function main() {
   }
   console.log("  ✓ 4 foreign keys created/verified");
 
+  // Run the full drizzle wave-migration series before the index block: some
+  // of the index statements below (e.g. knowledge_articles trgm indexes)
+  // target tables that only these files create on a fresh environment.
+  console.log("Applying drizzle wave migrations (0011–0027)...");
+  for (const file of drizzleMigrationFiles) {
+    const filePath = path.join(process.cwd(), "drizzle", file);
+    const content = readFileSync(filePath, "utf8");
+    // .simple() uses the simple query protocol so a whole multi-statement
+    // migration file (including DO $$ blocks) runs in one round trip.
+    await sql.unsafe(content).simple();
+    console.log(`  ✓ ${file}`);
+  }
+
   console.log("Creating indexes...");
   for (const stmt of indexStatements) {
     await sql.unsafe(stmt);
@@ -730,6 +781,23 @@ async function main() {
     'normalized_vehicles', 'normalized_customers', 'normalized_work_orders',
     'normalized_service_jobs', 'normalized_line_items', 'normalized_payments',
     'normalized_appointments', 'normalized_employees',
+    // Task #1020 — spot-check one table per migration wave so a fresh
+    // environment failure is caught here, not at first runtime read.
+    'knowledge_articles',          // 0011 wave1
+    'concern_conversations',       // 0012 wave2
+    'shop_repair_patterns',        // 0012 wave2
+    'dvi',                         // 0014 wave3
+    'protractor_callback_events',  // 0014 wave3
+    'job_index',                   // 0014 wave3
+    'shops',                       // 0015 wave4
+    'users',                       // 0015 wave4
+    'sessions',                    // 0015 wave4
+    'cron_locks',                  // 0018 operational primitives
+    'protractor_backfill_progress',// 0023 integration ops
+    'support_tickets',             // 0027 baseline
+    'sms_messages',                // 0027 baseline (communications)
+    'production_logs',             // 0027 baseline
+    'platform_features',           // 0027 baseline
   ];
   const tables = await sql`
     SELECT table_name FROM information_schema.tables 

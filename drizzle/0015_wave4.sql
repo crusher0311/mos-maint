@@ -147,7 +147,20 @@ CREATE TABLE IF NOT EXISTS "platform_plans" (
   "created_at" timestamp with time zone DEFAULT now() NOT NULL,
   "updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
-CREATE INDEX IF NOT EXISTS "platform_plans_active_idx" ON "platform_plans" ("active");
+-- Task #1020: prod's platform_plans carries the wave2 shape
+-- (drizzle/0012 — monthly_price/annual_price/..., no "active" column), so the
+-- CREATE TABLE above is skipped there and on any fresh environment that ran
+-- 0012 first. Guard the index on the column actually existing so this file
+-- stays re-runnable against both shapes.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'platform_plans' AND column_name = 'active'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS "platform_plans_active_idx" ON "platform_plans" ("active");
+  END IF;
+END$$;
 
 CREATE TABLE IF NOT EXISTS "pending_signups" (
   "token" text PRIMARY KEY NOT NULL,

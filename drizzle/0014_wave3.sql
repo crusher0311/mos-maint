@@ -773,18 +773,12 @@ CREATE TABLE IF NOT EXISTS "jobs" (
 CREATE INDEX IF NOT EXISTS "jobs_shop_vin_idx" ON "jobs" ("shop_id","vin");
 CREATE UNIQUE INDEX IF NOT EXISTS "jobs_backfill_uniq" ON "jobs" ("backfill_mongo_id");
 
-CREATE TABLE IF NOT EXISTS "sms_historical_work_orders" (
-  "id" serial PRIMARY KEY,
-  "backfill_mongo_id" text,
-  "shop_id" integer,
-  "vin" text,
-  "ro_number" text,
-  "provider" text,
-  "payload" jsonb,
-  "received_at" timestamptz NOT NULL DEFAULT now()
-);
-CREATE INDEX IF NOT EXISTS "smshwo_shop_vin_idx" ON "sms_historical_work_orders" ("shop_id","vin");
-CREATE UNIQUE INDEX IF NOT EXISTS "smshwo_backfill_uniq" ON "sms_historical_work_orders" ("backfill_mongo_id");
+-- Task #1020: the sms_historical_work_orders CREATE that used to live here was
+-- a stale duplicate of the canonical wave1 shape (drizzle/0011 /
+-- lib/db/schema/wave1.ts, composite-PK shop_id+source_system+work_order_id).
+-- Prod has the wave1 shape; the duplicate's smshwo_shop_vin_idx referenced a
+-- "vin" column that does not exist there, so this whole migration file failed
+-- when re-run. Removed — 0011 owns this table.
 
 /* -------------------- Carfax mirrors ------------------------------------- */
 
