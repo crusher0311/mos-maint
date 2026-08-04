@@ -85,6 +85,41 @@ function getActiveAbortSignal(): AbortSignal | undefined {
   return abortSignalStorage.getStore();
 }
 
+// Ambient rate-limit priority. `tekmetricRequest` defaults to 'interactive',
+// which means every cron/sync caller that doesn't explicitly thread
+// `priority: 'background'` through the wrapper chain competes head-to-head
+// with advisor-facing traffic (VHI, extension sticker/keytag, ro-context)
+// for the shared 8 RPS budget — the 2026-08-04 midday incident: cron
+// fan-out on the web process exhausted the budget and extension requests
+// timed out fleet-wide. Threading a param through every wrapper
+// (getRepairOrders, getCustomer, getVehicle, ...) is invasive and easy to
+// miss on new call sites, so cron/backfill entry points instead bind the
+// priority ambiently (same ALS pattern as the abort signal above) and every
+// Tekmetric request issued transitively under them inherits it. An explicit
+// non-default `priority` argument on `tekmetricRequest` still wins.
+const priorityStorage = new AsyncLocalStorage<RateLimitPriority>();
+
+/**
+ * Run `fn` with `priority` bound as the ambient Tekmetric rate-limit
+ * priority. Cron routes / backfill runners wrap their body in
+ * `runWithTekmetricPriority('background', ...)` so all their Tekmetric
+ * calls yield to interactive traffic (and are confined to the
+ * background share of the shared cross-process bucket).
+ */
+export async function runWithTekmetricPriority<T>(
+  priority: RateLimitPriority,
+  fn: () => Promise<T>,
+): Promise<T> {
+  return priorityStorage.run(priority, fn);
+}
+
+function resolveAmbientPriority(explicit: RateLimitPriority): RateLimitPriority {
+  // An explicit 'background' argument always wins; otherwise fall back to
+  // the ambient scope (if any), then the interactive default.
+  if (explicit !== 'interactive') return explicit;
+  return priorityStorage.getStore() ?? 'interactive';
+}
+
 function throwIfAborted(signal: AbortSignal | undefined): void {
   if (signal?.aborted) {
     const err: any = new Error("Tekmetric request aborted");
@@ -317,6 +352,7 @@ export async function tekmetricRequest<T = any>(
   // tech's VHI load.
   priority: RateLimitPriority = 'interactive',
 ): Promise<T> {
+  priority = resolveAmbientPriority(priority);
   const method = options.method || 'GET';
   // Hard-cancel signal (drain script SIGINT). Ambient via ALS so callers
   // don't have to thread it through every wrapper. Falls back to any
@@ -335,7 +371,7 @@ export async function tekmetricRequest<T = any>(
     // queue in lib/integrations/core/rate-limiter.ts.
     const rateSlot = await acquireRateLimitSlot('tekmetric', 8, priority);
     if (!rateSlot.acquired) {
-      throw new Error(`[Tekmetric] Rate limit budget exhausted (waited ${rateSlot.waitedMs}ms). Request to ${endpoint} rejected to prevent 429 errors.`);
+      throw new Error(`[Tekmetric] Rate limit budget exhausted (priority=${priority}, waited ${rateSlot.waitedMs ?? 0}ms). Request to ${endpoint} rejected to prevent 429 errors.`);
     }
     // Cross-process per-second gate. The local pacer above only enforces RPS
     // within a single Node process; without this, two services sharing the

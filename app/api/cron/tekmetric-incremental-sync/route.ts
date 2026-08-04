@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { runWithTekmetricPriority } from "@/lib/integrations/tekmetric/client";
 import { runIncrementalSyncCycle, ensureCacheIndexes } from "@/lib/integrations/tekmetric/incremental-sync";
 import { getDb } from "@/lib/mongo";
 import { runWithTekmetricApiCallTracking } from "@/lib/integrations/tekmetric/client";
@@ -8,7 +9,14 @@ export const dynamic = "force-dynamic";
 
 const CRON_SECRET = process.env.CRON_SECRET;
 
+// Task: cron/backfill Tekmetric traffic must yield to advisor-facing
+// requests — bind ambient 'background' rate-limit priority for the
+// whole handler so every Tekmetric call under it inherits it.
 export async function GET(req: NextRequest) {
+  return runWithTekmetricPriority("background", () => _GETImpl(req));
+}
+
+async function _GETImpl(req: NextRequest) {
   // Check if sync is disabled for this deployment
   if (process.env.DISABLE_TEKMETRIC_SYNC === "true") {
     return NextResponse.json({

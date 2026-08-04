@@ -806,7 +806,12 @@ export async function runFullPageBackfillChunk(
   // Task #460: capture write fan-out + record into backfill_chunk_metrics.
   const { withChunkWriteCounters } = await import("@/lib/backfill-metrics/write-counters");
   const { recordChunkMetric } = await import("@/lib/backfill-metrics/chunk-metrics");
-  return withChunkWriteCounters(async (chunkWriteCounters) => {
+  // All Tekmetric traffic under a backfill chunk is background work: bind
+  // the ambient rate-limit priority here so the queue worker / drain script
+  // paths (which don't go through a cron route wrapper) also yield to
+  // advisor-facing requests instead of competing at interactive priority.
+  const { runWithTekmetricPriority } = await import("@/lib/integrations/tekmetric/client");
+  return runWithTekmetricPriority("background", () => withChunkWriteCounters(async (chunkWriteCounters) => {
   const _metricStartedAt = Date.now();
   let _metricOutcome: "ok" | "error" | "deferred" | "complete" | "empty" = "ok";
   let _metricRos = 0;
@@ -1587,7 +1592,7 @@ export async function runFullPageBackfillChunk(
       counters: chunkWriteCounters,
     });
   }
-  });
+  }));
 }
 
 /**

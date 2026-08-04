@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { runWithTekmetricPriority } from "@/lib/integrations/tekmetric/client";
 import { getDb } from "@/lib/mongo";
 import crypto from "crypto";
 import { createIngestionService } from "@/lib/integrations/core/normalized-ingestion";
@@ -483,7 +484,14 @@ export async function runRetry(db: any) {
   };
 }
 
+// Task: cron/backfill Tekmetric traffic must yield to advisor-facing
+// requests — bind ambient 'background' rate-limit priority for the
+// whole handler so every Tekmetric call under it inherits it.
 export async function GET(req: NextRequest) {
+  return runWithTekmetricPriority("background", () => _GETImpl(req));
+}
+
+async function _GETImpl(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
   if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -516,7 +524,14 @@ export async function GET(req: NextRequest) {
   });
 }
 
+// Task: cron/backfill Tekmetric traffic must yield to advisor-facing
+// requests — bind ambient 'background' rate-limit priority for the
+// whole handler so every Tekmetric call under it inherits it.
 export async function POST(req: NextRequest) {
+  return runWithTekmetricPriority("background", () => _POSTImpl(req));
+}
+
+async function _POSTImpl(req: NextRequest) {
   // Same handler — allow on-demand POST trigger from admin UI.
   return GET(req);
 }

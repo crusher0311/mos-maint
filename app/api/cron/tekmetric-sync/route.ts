@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { runWithTekmetricPriority } from "@/lib/integrations/tekmetric/client";
 import { getDb } from "@/lib/mongo";
 import { 
   getRepairOrders, 
@@ -197,7 +198,14 @@ async function upsertTekmetricWorkOrderSnapshot(
   );
 }
 
+// Task: cron/backfill Tekmetric traffic must yield to advisor-facing
+// requests — bind ambient 'background' rate-limit priority for the
+// whole handler so every Tekmetric call under it inherits it.
 export async function GET(req: NextRequest) {
+  return runWithTekmetricPriority("background", () => _GETImpl(req));
+}
+
+async function _GETImpl(req: NextRequest) {
   // Check if sync is disabled for this deployment
   if (isSyncDisabled()) {
     return NextResponse.json({

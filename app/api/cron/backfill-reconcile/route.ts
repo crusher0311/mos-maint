@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { runWithTekmetricPriority } from "@/lib/integrations/tekmetric/client";
 import { getDb } from "@/lib/mongo";
 import { tekmetricRequest } from "@/lib/integrations/tekmetric/client";
 import { resolveProtractorConfig, protractorFetch } from "@/lib/integrations/protractor";
@@ -303,7 +304,14 @@ async function reconcileShopwareShop(db: any, shopId: number, tenantId: number, 
   return { provider: "shopware", shopId, samples: audits, requeued: shouldRequeue, zeroCountGuard: zeroCountGuardTripped };
 }
 
+// Task: cron/backfill Tekmetric traffic must yield to advisor-facing
+// requests — bind ambient 'background' rate-limit priority for the
+// whole handler so every Tekmetric call under it inherits it.
 export async function GET(req: NextRequest) {
+  return runWithTekmetricPriority("background", () => _GETImpl(req));
+}
+
+async function _GETImpl(req: NextRequest) {
   if (!isAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -373,6 +381,13 @@ export async function GET(req: NextRequest) {
   }
 }
 
+// Task: cron/backfill Tekmetric traffic must yield to advisor-facing
+// requests — bind ambient 'background' rate-limit priority for the
+// whole handler so every Tekmetric call under it inherits it.
 export async function POST(req: NextRequest) {
+  return runWithTekmetricPriority("background", () => _POSTImpl(req));
+}
+
+async function _POSTImpl(req: NextRequest) {
   return GET(req);
 }
