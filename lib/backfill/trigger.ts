@@ -3,13 +3,21 @@ import type { Db } from "mongodb";
 import { runProtractorBackfill } from "@/lib/integrations/protractor/sync";
 import { updateShopwareBackfillProgress } from "@/lib/data/repositories/shopware-ops";
 import { updateProgressFields as updateTekmetricProgress } from "@/lib/data/repositories/tekmetric-ops";
+import { updateShopmonkeyBackfillProgress } from "@/lib/data/repositories/shopmonkey-ops";
 
 // Shared backfill trigger (task #629 follow-on). Encapsulates the
 // "reset cursor + kick the provider cron" logic so both the platform-admin
 // manual-backfill endpoint and the customer-requested overnight re-sync
 // consumer use the exact same, proven path instead of duplicating it.
 
-export type BackfillProvider = "protractor" | "tekmetric" | "shopware";
+export type BackfillProvider = "protractor" | "tekmetric" | "shopware" | "shopmonkey";
+
+// Test seam: lets tests stub the progress-doc reset and the cron kick without
+// touching the real Mongo/network. Production callers use the real impls.
+export const __deps = {
+  updateShopmonkeyBackfillProgress,
+  fetch: (url: string, init?: any) => fetch(url, init),
+};
 
 export function detectBackfillProvider(shop: any): BackfillProvider | null {
   if (!shop) return null;
@@ -17,6 +25,7 @@ export function detectBackfillProvider(shop: any): BackfillProvider | null {
   if (shop.integrationProvider === "tekmetric") return "tekmetric";
   if (shop.integrationProvider === "protractor") return "protractor";
   if (shop.integrationProvider === "shopware") return "shopware";
+  if (shop.integrationProvider === "shopmonkey") return "shopmonkey";
 
   const hasTekmetric = !!(shop.tekmetric?.shopId || shop.tekmetricShopId);
   const hasProtractor = !!(
@@ -27,10 +36,12 @@ export function detectBackfillProvider(shop: any): BackfillProvider | null {
     shop.protractorConnectionId
   );
   const hasShopWare = !!shop.shopware?.tenantId;
+  const hasShopmonkey = !!shop.shopmonkey?.apiKey;
 
   if (hasTekmetric) return "tekmetric";
   if (hasProtractor) return "protractor";
   if (hasShopWare) return "shopware";
+  if (hasShopmonkey) return "shopmonkey";
   return null;
 }
 
@@ -74,7 +85,7 @@ export async function triggerBackfillForShop(
     return {
       ok: false,
       provider: null,
-      message: `Shop ${shopId} has no backfillable SMS integration (Protractor, Tekmetric, or Shop-Ware)`,
+      message: `Shop ${shopId} has no backfillable SMS integration (Protractor, Tekmetric, Shop-Ware, or Shopmonkey)`,
     };
   }
 
@@ -126,6 +137,48 @@ export async function triggerBackfillForShop(
       ok: true,
       provider: p,
       message: `Shop-Ware backfill triggered for shop ${shopId}`,
+    };
+  }
+
+  if (p === "shopmonkey") {
+    // Reset the progress doc so the cron's next pass treats the shop as
+    // incomplete and resumes/starts its history pull. Mirrors the Shop-Ware
+    // shape (complete flag + queuedAt bookkeeping).
+    await __deps.updateShopmonkeyBackfillProgress(
+      shopId,
+      {
+        set: {
+          shopId,
+          complete: false,
+          queuedAt: new Date(),
+        },
+        setOnInsert: { startedAt: null },
+      },
+      { upsert: true },
+    );
+
+    __deps
+      .fetch(`${cronBaseUrl()}/api/cron/shopmonkey-fullpage-backfill`, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${process.env.CRON_SECRET || ""}` },
+      })
+      .catch((err: any) => {
+        console.log(`[Backfill] Shopmonkey cron trigger note: ${err.message}`);
+      });
+
+    // The cron route itself stays gated behind SHOPMONKEY_BACKFILL_ENABLED
+    // (operator-controlled). We still reset the cursor so the backfill starts
+    // the moment the flag is on — but tell the caller when it's off so
+    // "triggered but nothing happened" is diagnosable.
+    const gateNote =
+      process.env.SHOPMONKEY_BACKFILL_ENABLED === "true"
+        ? ""
+        : " (note: SHOPMONKEY_BACKFILL_ENABLED is not true — the backfill cron is a no-op until an operator enables it)";
+
+    return {
+      ok: true,
+      provider: p,
+      message: `Shopmonkey backfill triggered for shop ${shopId}${gateNote}`,
     };
   }
 

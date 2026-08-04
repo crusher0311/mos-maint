@@ -301,6 +301,17 @@ interface SyncHealthData {
     tekmetric: ProviderBackfill;
     protractor: ProviderBackfill;
     shopware: ProviderBackfill;
+    shopmonkey: ProviderBackfill & {
+      backfillEnabled?: boolean;
+      shops?: ShopmonkeyShopSummary[];
+      progress?: {
+        shopId: number;
+        completed: boolean;
+        totalJobsIndexed?: number | null;
+        chunksProcessed?: number | null;
+        lastRunAt?: string | null;
+      }[];
+    };
   };
   sync: {
     last24h: {
@@ -312,6 +323,20 @@ interface SyncHealthData {
   errors: {
     unresolved: number;
   };
+}
+
+interface ShopmonkeyShopSummary {
+  shopId: number;
+  name: string | null;
+  locationId: string | null;
+  companyId: string | null;
+  locationIdSource: string | null;
+  companyIdSource: string | null;
+  idsValidation: { status?: string; notes?: string[]; checkedAt?: string } | null;
+  connectedAt: string | null;
+  lastSyncAt: string | null;
+  cachedOrderCount: number;
+  lastOrderReceivedAt: string | null;
 }
 
 const REASON_LABELS: Record<string, { label: string; color: string }> = {
@@ -819,6 +844,7 @@ export default function SyncHealthPage() {
         tekmetric: { complete: 0, total: 0, stuck: 0, diagnostics: [] },
         protractor: { complete: 0, total: 0, stuck: 0, diagnostics: [] },
         shopware: { complete: 0, total: 0, stuck: 0, diagnostics: [] },
+        shopmonkey: { complete: 0, total: 0, stuck: 0, diagnostics: [] },
       },
       sync: { last24h: { total: 0, successRate: "N/A", avgDurationMs: 0 } },
       errors: { unresolved: 0 },
@@ -865,6 +891,7 @@ export default function SyncHealthPage() {
               tekmetric: { complete: 0, total: 0, stuck: 0, diagnostics: [] },
               protractor: { complete: 0, total: 0, stuck: 0, diagnostics: [] },
               shopware: { complete: 0, total: 0, stuck: 0, diagnostics: [] },
+              shopmonkey: { complete: 0, total: 0, stuck: 0, diagnostics: [] },
             },
           sync: json.sync,
           errors: json.errors,
@@ -886,6 +913,12 @@ export default function SyncHealthPage() {
         setData((d) => ({
           ...(d as SyncHealthData),
           backfill: { ...(d as SyncHealthData).backfill, shopware: json },
+        })),
+      ),
+      fetchSlice("/api/admin/sync-health/shopmonkey", (json) =>
+        setData((d) => ({
+          ...(d as SyncHealthData),
+          backfill: { ...(d as SyncHealthData).backfill, shopmonkey: json },
         })),
       ),
     ];
@@ -1739,8 +1772,9 @@ export default function SyncHealthPage() {
   const tek = data?.backfill.tekmetric;
   const pro = data?.backfill.protractor;
   const sw = data?.backfill.shopware;
+  const sm = data?.backfill.shopmonkey;
   const totalStuck =
-    (tek?.stuck ?? 0) + (pro?.stuck ?? 0) + (sw?.stuck ?? 0);
+    (tek?.stuck ?? 0) + (pro?.stuck ?? 0) + (sw?.stuck ?? 0) + (sm?.stuck ?? 0);
 
   const renderRunNowProgress = (rn: RunNowState) => {
     const statusMeta: Record<
@@ -3998,7 +4032,7 @@ export default function SyncHealthPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
           <div className="flex items-center gap-3 mb-2">
             <div className="p-2 bg-[rgba(60,129,195,0.15)] rounded-lg">
@@ -4037,6 +4071,26 @@ export default function SyncHealthPage() {
           </div>
           <div className="text-xs text-gray-500 mt-1">complete</div>
         </div>
+
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-[rgba(60,129,195,0.15)] rounded-lg">
+              <Database className="w-5 h-5 text-[#3c81c3]" />
+            </div>
+            <span className="text-sm text-gray-600">Shopmonkey backfill</span>
+          </div>
+          <div className="text-2xl font-bold text-gray-900">
+            {sm?.complete ?? 0} / {sm?.total ?? 0}
+          </div>
+          <div className="text-xs text-gray-500 mt-1">
+            complete
+            {sm && sm.backfillEnabled === false && (
+              <span className="ml-1 text-amber-600" title="SHOPMONKEY_BACKFILL_ENABLED is not true — the backfill cron is a no-op until an operator enables it">
+                · flag off
+              </span>
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -4049,7 +4103,7 @@ export default function SyncHealthPage() {
           </div>
           <div className="text-2xl font-bold text-gray-900">{totalStuck}</div>
           <div className="text-xs text-gray-500 mt-1">
-            Tek {tek?.stuck ?? 0} · Pro {pro?.stuck ?? 0} · SW {sw?.stuck ?? 0}
+            Tek {tek?.stuck ?? 0} · Pro {pro?.stuck ?? 0} · SW {sw?.stuck ?? 0} · SM {sm?.stuck ?? 0}
           </div>
         </div>
 
@@ -4286,6 +4340,98 @@ export default function SyncHealthPage() {
       {renderStuckSection("Tekmetric", tek?.diagnostics)}
       {renderStuckSection("Protractor", pro?.diagnostics)}
       {renderStuckSection("Shop-Ware", sw?.diagnostics)}
+      {renderStuckSection("Shopmonkey", sm?.diagnostics)}
+
+      {/* Shopmonkey connection health (task #1030). Small fleet (0-1 shops),
+          so instead of the chunk-speed/prewarm machinery the other providers
+          get, show exactly what made "connected but not syncing" invisible:
+          per-shop last incremental sync, cached-order inflow, and whether id
+          auto-detection actually produced a sane location/company pair. */}
+      {(sm?.shops?.length ?? 0) > 0 && (
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+          <h2 className="text-lg font-semibold text-gray-900 mb-1">
+            Shopmonkey shops
+          </h2>
+          <p className="text-xs text-gray-500 mb-4">
+            Connection + inflow status for every shop with a Shopmonkey API key.
+            {sm?.backfillEnabled === false &&
+              " History backfill flag (SHOPMONKEY_BACKFILL_ENABLED) is OFF — only incremental sync and webhooks are flowing."}
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-left text-gray-500 border-b border-gray-100">
+                  <th className="py-2 pr-3">Shop</th>
+                  <th className="py-2 pr-3">Last incremental sync</th>
+                  <th className="py-2 pr-3">Cached orders</th>
+                  <th className="py-2 pr-3">Last order received</th>
+                  <th className="py-2 pr-3">Backfill</th>
+                  <th className="py-2 pr-3">ID detection</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sm?.shops?.map((s) => {
+                  const prog = sm?.progress?.find(
+                    (p: any) => Number(p.shopId) === Number(s.shopId),
+                  ) as any;
+                  const idStatus = s.idsValidation?.status ?? null;
+                  const idMeta: Record<string, { label: string; cls: string }> = {
+                    ok: { label: "OK", cls: "bg-green-100 text-green-800" },
+                    identical_ids: {
+                      label: "Identical IDs",
+                      cls: "bg-red-100 text-red-700",
+                    },
+                    mismatch: { label: "Mismatch", cls: "bg-red-100 text-red-700" },
+                    unverified: {
+                      label: "Unverified",
+                      cls: "bg-yellow-100 text-yellow-800",
+                    },
+                  };
+                  const badge = idStatus ? idMeta[idStatus] : null;
+                  return (
+                    <tr key={s.shopId} className="border-b border-gray-50">
+                      <td className="py-2 pr-3 font-medium text-gray-900">
+                        {s.name || `Shop ${s.shopId}`}{" "}
+                        <span className="text-gray-400">#{s.shopId}</span>
+                      </td>
+                      <td className="py-2 pr-3 text-gray-700">
+                        {s.lastSyncAt ? new Date(s.lastSyncAt).toLocaleString() : "never"}
+                      </td>
+                      <td className="py-2 pr-3 text-gray-700">
+                        {s.cachedOrderCount.toLocaleString()}
+                      </td>
+                      <td className="py-2 pr-3 text-gray-700">
+                        {s.lastOrderReceivedAt
+                          ? new Date(s.lastOrderReceivedAt).toLocaleString()
+                          : "never"}
+                      </td>
+                      <td className="py-2 pr-3 text-gray-700">
+                        {prog
+                          ? prog.completed
+                            ? "complete"
+                            : `in progress (${(prog.totalJobsIndexed ?? 0).toLocaleString()} jobs)`
+                          : "not started"}
+                      </td>
+                      <td className="py-2 pr-3">
+                        {badge ? (
+                          <span
+                            className={`inline-block px-2 py-0.5 rounded-full ${badge.cls}`}
+                            title={(s.idsValidation?.notes || []).join(" | ")}
+                          >
+                            {badge.label}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400">not checked</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <TekmetricEndpointHealthSection />
     </div>

@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { validateApiKey, discoverIdsFromKey } from "@/lib/integrations/shopmonkey/auth";
+import {
+  assessIdConsistency,
+  validateAndCorrectIds,
+} from "@/lib/integrations/shopmonkey/id-validation";
 import { subscribeShopToShopmonkeyWebhooks } from "@/lib/integrations/shopmonkey/webhook-subscribe";
 
 export const runtime = "nodejs";
@@ -51,6 +55,10 @@ export async function GET() {
       locationIdSource: shop.shopmonkey.locationIdSource ?? null,
       companyIdSource: shop.shopmonkey.companyIdSource ?? null,
       idsDetectedAt: shop.shopmonkey.idsDetectedAt ?? null,
+      // Consistency check result from connect/re-detect (task #1030): status
+      // "ok" | "identical_ids" | "mismatch" | "unverified" + human notes, so
+      // the Integrations UI can tell admins whether detection succeeded.
+      idsValidation: shop.shopmonkey.idsValidation ?? null,
       connectedAt: shop.shopmonkey.connectedAt ?? null,
       lastSyncAt: shop.shopmonkey.lastSyncAt ?? null,
     });
@@ -99,6 +107,25 @@ export async function POST(request: NextRequest) {
         set["shopmonkey.companyId"] = discovered.companyId;
         set["shopmonkey.companyIdSource"] = "auto";
       }
+
+      // Validate the freshly-discovered ids (task #1030): identical
+      // location/company ids means discovery mis-mapped a field — surface it
+      // rather than silently storing a broken pair.
+      const validation = assessIdConsistency(
+        {
+          locationId: discovered.locationId,
+          companyId: discovered.companyId,
+          locationIdSource: "auto",
+          companyIdSource: "auto",
+        },
+        discovered,
+      );
+      set["shopmonkey.idsValidation"] = {
+        status: validation.status,
+        notes: validation.notes,
+        checkedAt: new Date(),
+      };
+
       await db.collection("shops").updateOne(
         { shopId: { $in: [userShopId, Number(userShopId)] } },
         { $set: set },
@@ -110,6 +137,7 @@ export async function POST(request: NextRequest) {
         companyId: discovered.companyId,
         locationIdSource: discovered.locationId ? "auto" : null,
         companyIdSource: discovered.companyId ? "auto" : null,
+        idsValidation: { status: validation.status, notes: validation.notes },
       });
     }
 
@@ -140,8 +168,9 @@ export async function POST(request: NextRequest) {
     // entered": operator-pasted ids are "manual", key-derived ids are "auto".
     let locationIdSource: "auto" | "manual" | null = locationId ? "manual" : null;
     let companyIdSource: "auto" | "manual" | null = companyId ? "manual" : null;
+    let discovered: { locationId: string | null; companyId: string | null } | null = null;
     if (!resolvedLocationId || !resolvedCompanyId) {
-      const discovered = await discoverIdsFromKey(apiKey);
+      discovered = await discoverIdsFromKey(apiKey);
       if (!resolvedLocationId && discovered.locationId) {
         resolvedLocationId = discovered.locationId;
         locationIdSource = "auto";
@@ -150,6 +179,35 @@ export async function POST(request: NextRequest) {
         resolvedCompanyId = discovered.companyId;
         companyIdSource = "auto";
       }
+    }
+
+    // Validate id consistency (task #1030). Always have a discovery result to
+    // compare against — when the operator pasted both ids manually we haven't
+    // called discovery yet, so do it now (one extra GET /location, bounded).
+    if (!discovered) {
+      discovered = await discoverIdsFromKey(apiKey);
+    }
+    // Assess + apply auto-only corrections + re-assess in one pure step (a
+    // manual operator entry is warned about, never silently replaced; a
+    // corrected pair reads "ok", not "mismatch").
+    const corrected = validateAndCorrectIds(
+      {
+        locationId: resolvedLocationId,
+        companyId: resolvedCompanyId,
+        locationIdSource,
+        companyIdSource,
+      },
+      discovered,
+    );
+    resolvedLocationId = corrected.locationId;
+    resolvedCompanyId = corrected.companyId;
+    locationIdSource = corrected.locationIdSource;
+    companyIdSource = corrected.companyIdSource;
+    const finalValidation = corrected.validation;
+    if (finalValidation.status !== "ok") {
+      console.warn(
+        `[Shopmonkey Settings] Id validation for shop ${userShopId}: ${finalValidation.status} — ${finalValidation.notes.join(" | ")}`,
+      );
     }
 
     const db = await getDb();
@@ -163,6 +221,11 @@ export async function POST(request: NextRequest) {
           "shopmonkey.locationIdSource": locationIdSource,
           "shopmonkey.companyIdSource": companyIdSource,
           "shopmonkey.idsDetectedAt": new Date(),
+          "shopmonkey.idsValidation": {
+            status: finalValidation.status,
+            notes: finalValidation.notes,
+            checkedAt: new Date(),
+          },
           "shopmonkey.connectedAt": new Date(),
           integrationProvider: "shopmonkey",
         },
@@ -192,6 +255,7 @@ export async function POST(request: NextRequest) {
       configured: true,
       locationId: resolvedLocationId,
       companyId: resolvedCompanyId,
+      idsValidation: { status: finalValidation.status, notes: finalValidation.notes },
     });
   } catch (error: any) {
     console.error("Error saving Shopmonkey settings:", error);
