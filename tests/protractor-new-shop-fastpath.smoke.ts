@@ -56,12 +56,26 @@ async function run() {
     sync.__fastpathDeps.runBackfill = ((shopId: number) => {
       kicked.push(shopId);
     }) as any;
+    // The progress read goes through the repository (flag-gated Mongo/PG
+    // since task #999), so stub it against the same fake seed to keep this
+    // test store-independent.
+    sync.__fastpathDeps.findProgressForShops = (async (shopIds: number[]) => {
+      const docs = await fake.db
+        .collection("backfill_progress")
+        .find({ shopId: { $in: shopIds } })
+        .toArray();
+      return docs.map((d: any) => ({
+        shopId: Number(d.shopId),
+        completed: d.completed === true,
+      }));
+    }) as any;
     return { fake, kicked };
   }
 
   function restore() {
     sync.__fastpathDeps.getDb = ORIGINAL.getDb;
     sync.__fastpathDeps.runBackfill = ORIGINAL.runBackfill;
+    sync.__fastpathDeps.findProgressForShops = ORIGINAL.findProgressForShops;
   }
 
   // (1) Selects only recently-onboarded, incomplete, Protractor-configured

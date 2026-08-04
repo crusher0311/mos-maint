@@ -1069,6 +1069,10 @@ const FASTPATH_MAX_SHOPS_PER_RUN = 3;
 // exercised against a fake Mongo without launching real backfills.
 export const __fastpathDeps = {
   getDb,
+  // Progress reads go through the repository (flag-gated Mongo/PG since
+  // task #999); exposed here so smoke tests can stub the read alongside
+  // the fake Mongo handle instead of hitting the real store.
+  findProgressForShops: backfillProgress.findProgressForShops,
   runBackfill: (shopId: number): void => {
     // Fire-and-forget, mirroring `findAndResumeStaleBackfills`.
     // `runProtractorBackfill` claims the per-shop in-flight/stale lock,
@@ -1124,7 +1128,7 @@ export async function findAndRunNewShopFastpath(): Promise<{
 
   // Drop shops whose backfill is already complete; brand-new shops with
   // no progress doc yet are kept (they need the backfill the most).
-  const progressDocs = await backfillProgress.findProgressForShops(newShopIds);
+  const progressDocs = await __fastpathDeps.findProgressForShops(newShopIds);
   const completedShopIds = new Set(
     progressDocs
       .filter((p) => p.completed === true)
