@@ -45,9 +45,16 @@ const defaultDefer: DeferFn = (fn) => {
     });
   });
 };
-export const __deps: { getDb: typeof getDb; defer: DeferFn } = {
+export const __deps: {
+  getDb: typeof getDb;
+  defer: DeferFn;
+  insertWebhookLog: typeof insertTekmetricWebhookLog;
+} = {
   getDb,
   defer: defaultDefer,
+  // Webhook-log writes go through the flag-gated Mongo/PG repository;
+  // exposed here so smoke tests can capture them alongside the fake db.
+  insertWebhookLog: insertTekmetricWebhookLog,
 };
 
 const TERMINAL_STATUSES = ["invoice", "invoiced", "posted", "deleted", "void", "closed"];
@@ -928,7 +935,7 @@ export async function POST(req: NextRequest) {
     // without changing what callers feel.
     const handlerDurationMs = Date.now() - startTime;
 
-    await insertTekmetricWebhookLog({
+    await __deps.insertWebhookLog({
       eventType,
       data,
       rawBody: body,

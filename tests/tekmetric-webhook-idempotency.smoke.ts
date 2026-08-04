@@ -50,11 +50,18 @@ function makeReq(payload: any): NextRequest {
 function withFakeDb(seed: Record<string, any[]>) {
   const fake = makeFakeDb(seed);
   const original = __deps.getDb;
+  const originalInsertLog = __deps.insertWebhookLog;
   __deps.getDb = async () => fake.db as any;
+  // Webhook-log writes go through the flag-gated repository since task #999;
+  // capture them into the same fake seed so the assertions stay store-independent.
+  __deps.insertWebhookLog = (async (doc: any) => {
+    fake.collections.tekmetric_webhook_logs.push({ ...doc });
+  }) as any;
   return {
     fake,
     restore: () => {
       __deps.getDb = original;
+      __deps.insertWebhookLog = originalInsertLog;
     },
   };
 }
