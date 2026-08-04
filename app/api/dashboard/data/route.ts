@@ -120,6 +120,7 @@ export async function GET(request: NextRequest) {
     const shopConfig = await db.collection("shops").findOne({ shopId: { $in: [String(user.shopId), Number(user.shopId)] } });
     const isAutoFlowConfigured = !!(shopConfig?.autoflow?.apiKey || shopConfig?.autoflowApiKey);
     const isShopWareConfigured = !!(shopConfig?.shopware?.tenantId);
+    const isShopmonkeyConfigured = !!(shopConfig?.shopmonkey?.apiKey);
 
     // If showing archived vehicles, fetch from vehicles collection directly
     if (showArchived) {
@@ -808,6 +809,89 @@ export async function GET(request: NextRequest) {
       ]).toArray();
     }
 
+    // Fetch Shopmonkey work orders (only if Shopmonkey is configured).
+    // Shopmonkey has no legacy provider-specific cache collection — its
+    // ingest (webhooks + full-page backfill) writes straight into the
+    // normalized store, so the dashboard reads active ROs from
+    // `normalized_work_orders`. Active = estimate / work_in_progress per
+    // the adapter's mapShopmonkeyStatus (Invoice/Complete/Posted → closed).
+    let shopmonkeyRows: any[] = [];
+    if (isShopmonkeyConfigured) {
+      shopmonkeyRows = await db.collection("normalized_work_orders").aggregate([
+        {
+          $match: {
+            shopId: { $in: [Number(user.shopId), String(user.shopId)] },
+            status: { $in: ["estimate", "work_in_progress"] },
+            "softDelete.isDeleted": { $ne: true },
+            "provenance.sourceIds.system": "shopmonkey",
+            "vehicle.vin": { $ne: null, $type: "string" },
+          },
+        },
+        { $sort: { updatedAt: -1 } },
+        {
+          $project: {
+            _id: 0,
+            updatedAt: { $ifNull: ["$updatedAt", "$createdAt"] },
+            displayName: {
+              $ifNull: [
+                "$customer.fullName",
+                {
+                  $ifNull: [
+                    "$customer.companyName",
+                    "Unknown Customer",
+                  ],
+                },
+              ],
+            },
+            displayVehicle: {
+              $trim: {
+                input: {
+                  $concat: [
+                    { $cond: [{ $ifNull: ["$vehicle.year", false] }, { $toString: "$vehicle.year" }, ""] },
+                    { $cond: [{ $ifNull: ["$vehicle.year", false] }, " ", ""] },
+                    { $ifNull: ["$vehicle.make", ""] },
+                    { $cond: [{ $ifNull: ["$vehicle.make", false] }, " ", ""] },
+                    { $ifNull: ["$vehicle.model", ""] },
+                  ],
+                },
+              },
+            },
+            displayVin: "$vehicle.vin",
+            displayMiles: {
+              $cond: [
+                { $gt: ["$odometerOut", 0] },
+                "$odometerOut",
+                { $cond: [{ $gt: ["$odometerIn", 0] }, "$odometerIn", null] },
+              ],
+            },
+            displayRo: { $toString: { $ifNull: ["$workOrderNumber", ""] } },
+            dviDone: { $literal: false },
+            source: { $literal: "shopmonkey" },
+            displayStatus: {
+              $cond: [{ $eq: ["$status", "work_in_progress"] }, "In Progress", "Estimate"],
+            },
+            af: {
+              status: "$status",
+              createdAt: { $ifNull: ["$checkInDate", "$createdAt"] },
+              miles: {
+                $cond: [
+                  { $gt: ["$odometerOut", 0] },
+                  "$odometerOut",
+                  { $cond: [{ $gt: ["$odometerIn", 0] }, "$odometerIn", null] },
+                ],
+              },
+            },
+            vehicle: {
+              year: { $ifNull: ["$vehicle.year", null] },
+              make: { $ifNull: ["$vehicle.make", null] },
+              model: { $ifNull: ["$vehicle.model", null] },
+              engine: { $ifNull: ["$vehicle.engineDescription", null] },
+            },
+          },
+        },
+      ]).toArray();
+    }
+
     // Fetch manually-added vehicles for this shop
     const manualVehicles = await db.collection("manual_vehicles")
       .find({ shopId: Number(user.shopId), archived: { $ne: true } })
@@ -840,7 +924,7 @@ export async function GET(request: NextRequest) {
     // by VIN; rows with no primary match are emitted standalone. See
     // `lib/dashboard/autoflow-merge.ts` for the rules and the smoke test.
     const merged = mergeAutoflowIntoPrimary(
-      [...protractorRows, ...tekmetricRows, ...shopwareRows],
+      [...protractorRows, ...tekmetricRows, ...shopwareRows, ...shopmonkeyRows],
       autoflowRows
     );
     let allRows: any[] = merged.rows;
