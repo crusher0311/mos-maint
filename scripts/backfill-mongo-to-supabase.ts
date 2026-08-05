@@ -35,6 +35,7 @@ import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { getDb as getMongoDb } from "../lib/mongo";
+import { ObjectId } from "mongodb";
 import * as pgSchema from "../lib/db/schema";
 import { SupabaseDualWriter } from "../lib/supabase-dual-writer";
 import {
@@ -49,6 +50,13 @@ import {
 
 // Dedicated Postgres pool for the backfill so we don't contend with the live
 // app's tiny shared pool (max: 2 in lib/db/drizzle.ts).
+// Checkpoint lastId is persisted as a string; Mongo $gt is type-bracketed,
+// so comparing a string against ObjectId _ids matches NOTHING and a resumed
+// mirror silently reports "0 docs to process". Convert back when valid.
+function toMongoId(id: string): any {
+  return ObjectId.isValid(id) ? new ObjectId(id) : id;
+}
+
 function makeDedicatedPgDb() {
   const url = process.env.DATAONE_DATABASE_URL || process.env.DATABASE_URL;
   if (!url) throw new Error("Missing DATAONE_DATABASE_URL or DATABASE_URL");
@@ -1938,7 +1946,7 @@ async function backfillOne(spec: CollectionSpec, args: Args): Promise<void> {
 
   const filter: Record<string, any> = {};
   if (args.shop != null) filter.shopId = args.shop;
-  if (cp.lastId) filter._id = { $gt: cp.lastId };
+  if (cp.lastId) filter._id = { $gt: toMongoId(cp.lastId) };
 
   const total = await mongo.collection(spec.mongoName).countDocuments(filter);
   console.log(
@@ -2062,10 +2070,63 @@ async function backfillMirror(spec: MirrorSpec, args: Args): Promise<void> {
   };
   if (!Array.isArray(cp.failedIds)) cp.failedIds = [];
 
+  // Retry previously-failed docs first (mirrors backfillOne behavior) so a
+  // fixed bug lets outstanding failedIds drain without --reset.
+  if (cp.failedIds.length > 0 && !args.dryRun) {
+    console.log(
+      `  [mirror ${spec.key}] retrying ${cp.failedIds.length} previously-failed doc(s)...`,
+    );
+    const { ObjectId } = await import("mongodb");
+    const retryIds = cp.failedIds.map((id: string) =>
+      ObjectId.isValid(id) ? new ObjectId(id) : (id as any),
+    );
+    const retryDocs = await mongo
+      .collection(spec.mongoName)
+      .find({ _id: { $in: retryIds } })
+      .toArray();
+    if (retryDocs.length !== cp.failedIds.length) {
+      console.warn(
+        `  [mirror ${spec.key}] retry expected ${cp.failedIds.length} docs but found ${retryDocs.length} in mongo`,
+      );
+    }
+    let ok = 0;
+    let skipped = 0;
+    const stillFailed: string[] = [];
+    const retryErrors: string[] = [];
+    for (let i = 0; i < retryDocs.length; i += args.concurrency) {
+      const slice = retryDocs.slice(i, i + args.concurrency);
+      const results = await Promise.allSettled(
+        slice.map((d) => applyMirrorRow(pg, spec, d)),
+      );
+      results.forEach((r, idx) => {
+        if (r.status === "fulfilled") {
+          if (r.value === "ok") ok++;
+          else skipped++;
+        } else if (isDataQualitySkip(r.reason)) {
+          skipped++;
+        } else {
+          stillFailed.push(String(slice[idx]._id));
+          if (retryErrors.length < 5) retryErrors.push(describeMirrorError(r.reason));
+        }
+      });
+    }
+    cp.upserted += ok;
+    cp.skipped += skipped;
+    cp.failed = stillFailed.length;
+    cp.failedIds = stillFailed;
+    cpAll[key] = cp;
+    saveCheckpoint(cpAll);
+    if (retryErrors.length)
+      console.error(`  [mirror ${spec.key}] retry errors:`, retryErrors);
+    console.log(
+      `  [mirror ${spec.key}] retry result: ok=${ok} skipped=${skipped} stillFailed=${stillFailed.length}`,
+    );
+  }
+
   const filter: Record<string, any> = spec.buildFilter
     ? spec.buildFilter(args.shop)
     : (args.shop != null ? { shopId: args.shop } : {});
-  if (cp.lastId) filter._id = { $gt: cp.lastId };
+  if (cp.lastId) filter._id = { $gt: toMongoId(cp.lastId) };
 
   const total = await mongo.collection(spec.mongoName).countDocuments(filter);
   console.log(

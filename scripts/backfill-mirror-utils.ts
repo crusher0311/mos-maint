@@ -32,13 +32,28 @@ export function quoteIdent(name: string): string {
  */
 export function mirrorParam(v: unknown): SQL {
   if (v === undefined || v === null) return sql`${null}`;
-  if (v instanceof Date) return sql`${v}`;
+  if (v instanceof Date) {
+    // postgres-js cannot serialize a raw Date on the untyped raw-SQL path
+    // (Buffer.byteLength throws ERR_INVALID_ARG_TYPE); bind as ISO text and
+    // cast. Invalid Dates (NaN time) become NULL rather than crashing.
+    const t = v.getTime();
+    if (Number.isNaN(t)) return sql`${null}`;
+    return sql`${v.toISOString()}::timestamptz`;
+  }
   if (typeof v === "object") {
     // JSON.stringify can return undefined for exotic inputs (e.g. a bare
     // function); normalize to SQL NULL rather than crashing the row.
-    const json = JSON.stringify(v);
+    // Postgres jsonb rejects \u0000 (22P05 "unsupported Unicode escape
+    // sequence") — strip NUL chars from string values via a replacer.
+    const json = JSON.stringify(v, (_k, val) =>
+      typeof val === "string" ? val.replace(/\u0000/g, "") : val,
+    );
     if (json === undefined) return sql`${null}`;
     return sql`${json}::jsonb`;
+  }
+  if (typeof v === "string" && v.includes("\u0000")) {
+    // Postgres text columns also reject NUL bytes.
+    return sql`${v.replace(/\u0000/g, "")}`;
   }
   return sql`${v}`;
 }

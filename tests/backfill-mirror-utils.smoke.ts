@@ -112,7 +112,37 @@ console.log("[3] mirrorParam edge cases");
 {
   const d = new Date("2026-08-02T12:00:00Z");
   const qDate = compile(buildMirrorUpsert("t", { a: d }, { conflictKey: ["a"] }));
-  check("Date passes through untouched", qDate.params[0] === d, qDate.params);
+  check(
+    "Date binds as ISO text with ::timestamptz cast",
+    qDate.params[0] === "2026-08-02T12:00:00.000Z" &&
+      /::timestamptz/.test(qDate.sql),
+    qDate.params,
+  );
+  const qBadDate = compile(
+    buildMirrorUpsert("t", { a: new Date("nonsense") }, { conflictKey: ["a"] }),
+  );
+  check("Invalid Date binds as NULL", qBadDate.params[0] === null, qBadDate.params);
+  // NUL chars (from mangled license plates etc.) must be stripped: Postgres
+  // rejects \u0000 in both jsonb (22P05) and text.
+  const qNul = compile(
+    buildMirrorUpsert(
+      "t",
+      { plate: "\u0000PW44U", payload: { licensePlate: "\u0000PW44U" } },
+      { conflictKey: ["plate"] },
+    ),
+  );
+  check(
+    "NUL stripped from text param",
+    qNul.params[0] === "PW44U",
+    qNul.params,
+  );
+  check(
+    "NUL stripped inside jsonb payload",
+    typeof qNul.params[1] === "string" &&
+      !(qNul.params[1] as string).includes("\\u0000") &&
+      (qNul.params[1] as string).includes("PW44U"),
+    qNul.params,
+  );
   // ObjectId-like object with toJSON serializes inside jsonb payloads.
   const oidLike = { toJSON: () => "65f0c0ffee0ddba11ca75123" };
   const qOid = compile(

@@ -808,7 +808,22 @@ async function reportEntity(
   const fieldMismatches: FieldMismatch[] = [];
   for (const d of mongoSample) {
     const key = spec.mongoKey(d);
-    const row = pgByKey.get(key);
+    let row = pgByKey.get(key);
+    if (!row) {
+      // The windowed newest-N PG sample can miss keys whose PG recency lags
+      // the Mongo recency (live writers bump Mongo updatedAt after the
+      // backfill; some recency fields are NULL in Mongo making the sample
+      // order arbitrary). Confirm with a direct point lookup before
+      // declaring the key missing — read-only, bounded to the sample size.
+      const direct = (await pg.execute(
+        sql`${sql.raw(
+          `SELECT ${spec.pgKeyExpr} AS k` +
+            (fieldSelects ? `, ${fieldSelects}` : "") +
+            ` FROM ${pgTable} WHERE ${spec.pgKeyExpr} = `,
+        )}${key}${sql.raw(" LIMIT 1")}`,
+      )) as unknown as Record<string, unknown>[];
+      row = direct[0];
+    }
     if (!row) {
       missingFromPg.push(key);
       continue;
