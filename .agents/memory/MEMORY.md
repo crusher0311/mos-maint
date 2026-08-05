@@ -128,4 +128,3 @@
 - [Legacy mirror backfill run](legacy-mirror-backfill-run.md) — legacy mirrors backfilled + parity green (2026-08-02); Date/NUL params, string-lastId-vs-ObjectId resume wedge, parity sampler false-missing — all fixed in script/checker.
 - [Mirror param binding](mirror-param-binding.md) — never pass raw extract values to drizzle sql`${v}`: undefined→UNDEFINED_VALUE, arrays→SQL tuples; bind via backfill-mirror-utils (null/::jsonb/enum-safe).
 - [Cache/identity cutover gating coverage](cache-cutover-gating-coverage.md) — all 5 cache domains + identity repos now flag-gated; writers/aggregates still direct-Mongo, shadow-off gated by scripts/cutover-parity.ts.
-- [Legacy pre-normalized store cutover](legacy-store-cutover.md) — last Mongo data group flag-gated; vehicles/customers long-tail writers still Mongo-direct, fold before shadow-off; support_tickets merges on ticket_number not mongo_id.

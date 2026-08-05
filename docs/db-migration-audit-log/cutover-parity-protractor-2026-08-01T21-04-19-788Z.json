@@ -1,0 +1,101 @@
+{
+  "generatedAt": "2026-08-01T21:04:19.788Z",
+  "domain": "protractor",
+  "sampleSize": 10,
+  "reports": [
+    {
+      "domain": "protractor",
+      "entity": "protractor_work_orders",
+      "status": "ok",
+      "mongoCount": 80282,
+      "pgCount": 0,
+      "countDelta": -80282,
+      "countDeltaPct": 100,
+      "mongoFreshness": "2026-08-01T21:04:14.926Z",
+      "pgFreshness": null,
+      "sampledMongoKeys": 10,
+      "missingFromPg": [
+        "51:cf1cbf2e-fa06-4e96-a1e0-c17c8be861d4",
+        "68:99f0c243-688b-4a8d-bde3-72e4986fd46b",
+        "68:132174d6-3819-427a-bfdf-385de11558ac",
+        "68:edf779db-ff22-4995-aab7-332bd00b7331",
+        "51:9f905ef5-38fe-4933-8501-dcd3d514786e",
+        "68:f2fc16e7-8de9-4c71-93e2-abf178c8c26e",
+        "68:3b3bbba9-9a48-4e51-a1f1-77a7b65a919d",
+        "51:a54cff34-ed54-433d-a753-a6767cce2169",
+        "68:c390b6c2-08a9-4dba-8444-9c44671f9c09",
+        "51:e4550e52-fbea-4f6e-8b94-b669e03411da"
+      ],
+      "missingFromMongo": [],
+      "fieldMismatches": []
+    },
+    {
+      "domain": "protractor",
+      "entity": "protractor_vehicles",
+      "status": "ok",
+      "mongoCount": 55192,
+      "pgCount": 0,
+      "countDelta": -55192,
+      "countDeltaPct": 100,
+      "mongoFreshness": "2026-08-01T21:04:17.249Z",
+      "pgFreshness": null,
+      "sampledMongoKeys": 10,
+      "missingFromPg": [
+        "68:2GNAXJEV2J6147513",
+        "68:1FDXE45P96HA61253",
+        "109:1GC2KVEG7FZ132439",
+        "51:1C6RRFFGXNN379143",
+        "68:1FDKE30SXVHB83943",
+        "68:1BABLCSA1TF811180",
+        "51:1GKS2BKC3GR191090",
+        "68:6G2VX12U35L348752",
+        "68:82657",
+        "51:1FMCU9G92HUE63879"
+      ],
+      "missingFromMongo": [],
+      "fieldMismatches": []
+    },
+    {
+      "domain": "protractor",
+      "entity": "protractor_invoices",
+      "status": "ok",
+      "mongoCount": 1148,
+      "pgCount": 0,
+      "countDelta": -1148,
+      "countDeltaPct": 100,
+      "mongoFreshness": "2026-01-01T20:35:53.062Z",
+      "pgFreshness": null,
+      "sampledMongoKeys": 10,
+      "missingFromPg": [
+        "35:c16a5ee5-393c-4475-a49e-2d4fc5c3feed",
+        "35:038f6849-f905-453c-89dc-006e0da46072",
+        "35:535b6955-32dd-422a-9bcd-2aa5dae7fab1",
+        "35:b8712fe4-2308-4de8-802a-59ecdb97e9fb",
+        "35:3174c56f-8661-4712-a05b-44e6d7b11952",
+        "35:d56d9b4e-0ce0-48d2-b5dc-8eec98263edf",
+        "35:e03aef00-7fcd-4dfc-a12b-77bf1f6afb3c",
+        "35:a5650d00-6e21-4768-b666-c1efb8f9d579",
+        "35:53f9ffb1-7829-4436-ad5e-a53f1543c791",
+        "35:b26ceda8-c4cc-48bc-b21f-dbac8c85bbd5"
+      ],
+      "missingFromMongo": [],
+      "fieldMismatches": []
+    },
+    {
+      "domain": "protractor",
+      "entity": "protractor_callback_events",
+      "status": "error",
+      "mongoCount": -1,
+      "pgCount": -1,
+      "countDelta": 0,
+      "countDeltaPct": null,
+      "mongoFreshness": null,
+      "pgFreshness": null,
+      "sampledMongoKeys": 0,
+      "missingFromPg": [],
+      "missingFromMongo": [],
+      "fieldMismatches": [],
+      "error": "Failed query: SELECT COALESCE(event_key, backfill_mongo_id) AS k, event_type AS f0, event_key AS f1, method AS f2, processed AS f3, to_char(processed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"') AS f4, attempts AS f5, work_order_id AS f6, status AS f7, object_type AS f8, object_id AS f9 FROM protractor_callback_events ORDER BY received_at DESC NULLS LAST LIMIT 60\nparams: "
+    }
+  ]
+}

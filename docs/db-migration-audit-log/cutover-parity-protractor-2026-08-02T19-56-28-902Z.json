@@ -1,0 +1,161 @@
+{
+  "generatedAt": "2026-08-02T19:56:28.902Z",
+  "domain": "protractor",
+  "sampleSize": 10,
+  "reports": [
+    {
+      "domain": "protractor",
+      "entity": "protractor_work_orders",
+      "status": "ok",
+      "mongoCount": 81493,
+      "pgCount": 0,
+      "countDelta": -81493,
+      "countDeltaPct": 100,
+      "mongoFreshness": "2026-08-02T19:55:59.938Z",
+      "pgFreshness": null,
+      "sampledMongoKeys": 10,
+      "missingFromPg": [
+        "68:18b08fb6-7cf5-4cff-9040-3c8e669c82d9",
+        "68:614ef3b8-38ef-414f-8f75-e3c3af22d06c",
+        "68:20c03e17-b8e0-47b5-8882-c23bea73df2d",
+        "68:7b07de89-3761-496a-82ba-b58f8877b719",
+        "294:d5ec6638-e3bc-486e-ba8f-f50ee5b357ce",
+        "68:5fd387d3-8708-479d-99a7-90e108a71d3b",
+        "109:15c95298-4102-4253-9b06-a227c0efd148",
+        "109:1a4c35c7-8948-42aa-aea2-4a542f097a31",
+        "294:acbe255a-0aec-406b-90de-8a036792de63",
+        "109:f35eb70b-3209-4f35-8884-5fcda9c41ad1"
+      ],
+      "missingFromMongo": [],
+      "fieldMismatches": []
+    },
+    {
+      "domain": "protractor",
+      "entity": "protractor_vehicles",
+      "status": "ok",
+      "mongoCount": 55770,
+      "pgCount": 0,
+      "countDelta": -55770,
+      "countDeltaPct": 100,
+      "mongoFreshness": "2026-08-02T19:55:58.458Z",
+      "pgFreshness": null,
+      "sampledMongoKeys": 10,
+      "missingFromPg": [
+        "68:82722",
+        "68:1FTFW1CFXCFB32117",
+        "68:3GNFK12387G315000",
+        "294:1C4BJWDG1DL562073",
+        "68:5TFHW5F17DX292872",
+        "109:1HGCT2B87FA004344",
+        "109:1FDEE3FL5EDB17515",
+        "294:5J6RM4H33FL080963",
+        "109:3N6CM0KNXHK716416",
+        "109:1C6RR7ST1KS672029"
+      ],
+      "missingFromMongo": [],
+      "fieldMismatches": []
+    },
+    {
+      "domain": "protractor",
+      "entity": "protractor_invoices",
+      "status": "ok",
+      "mongoCount": 1148,
+      "pgCount": 0,
+      "countDelta": -1148,
+      "countDeltaPct": 100,
+      "mongoFreshness": "2026-01-01T20:35:53.062Z",
+      "pgFreshness": null,
+      "sampledMongoKeys": 10,
+      "missingFromPg": [
+        "35:c16a5ee5-393c-4475-a49e-2d4fc5c3feed",
+        "35:038f6849-f905-453c-89dc-006e0da46072",
+        "35:535b6955-32dd-422a-9bcd-2aa5dae7fab1",
+        "35:b8712fe4-2308-4de8-802a-59ecdb97e9fb",
+        "35:3174c56f-8661-4712-a05b-44e6d7b11952",
+        "35:d56d9b4e-0ce0-48d2-b5dc-8eec98263edf",
+        "35:e03aef00-7fcd-4dfc-a12b-77bf1f6afb3c",
+        "35:a5650d00-6e21-4768-b666-c1efb8f9d579",
+        "35:53f9ffb1-7829-4436-ad5e-a53f1543c791",
+        "35:b26ceda8-c4cc-48bc-b21f-dbac8c85bbd5"
+      ],
+      "missingFromMongo": [],
+      "fieldMismatches": []
+    },
+    {
+      "domain": "protractor",
+      "entity": "protractor_callback_events",
+      "status": "ok",
+      "mongoCount": 2199110,
+      "pgCount": 2199110,
+      "countDelta": 0,
+      "countDeltaPct": 0,
+      "mongoFreshness": "2026-08-02T14:54:07.981Z",
+      "pgFreshness": "2026-08-02T14:54:07.981Z",
+      "sampledMongoKeys": 10,
+      "missingFromPg": [],
+      "missingFromMongo": [],
+      "fieldMismatches": [
+        {
+          "key": "6a6f5a0f7c442e2fa92c4cf6",
+          "field": "eventKey",
+          "mongo": "",
+          "pg": "6a6f5a0f7c442e2fa92c4cf6"
+        },
+        {
+          "key": "6a6efe6f7c442e2fa9224836",
+          "field": "eventKey",
+          "mongo": "",
+          "pg": "6a6efe6f7c442e2fa9224836"
+        },
+        {
+          "key": "6a6e5c8a7c442e2fa90ae64a",
+          "field": "eventKey",
+          "mongo": "",
+          "pg": "6a6e5c8a7c442e2fa90ae64a"
+        },
+        {
+          "key": "6a6e5c6a7c442e2fa90ad90b",
+          "field": "eventKey",
+          "mongo": "",
+          "pg": "6a6e5c6a7c442e2fa90ad90b"
+        },
+        {
+          "key": "6a6e51ac7c442e2fa9075ab7",
+          "field": "eventKey",
+          "mongo": "",
+          "pg": "6a6e51ac7c442e2fa9075ab7"
+        },
+        {
+          "key": "6a6e519f7c442e2fa90756ab",
+          "field": "eventKey",
+          "mongo": "",
+          "pg": "6a6e519f7c442e2fa90756ab"
+        },
+        {
+          "key": "6a6e517d7c442e2fa9074ca4",
+          "field": "eventKey",
+          "mongo": "",
+          "pg": "6a6e517d7c442e2fa9074ca4"
+        },
+        {
+          "key": "6a6e50797c442e2fa906f380",
+          "field": "eventKey",
+          "mongo": "",
+          "pg": "6a6e50797c442e2fa906f380"
+        },
+        {
+          "key": "6a6e50667c442e2fa906ef2a",
+          "field": "eventKey",
+          "mongo": "",
+          "pg": "6a6e50667c442e2fa906ef2a"
+        },
+        {
+          "key": "6a6e504c7c442e2fa906e813",
+          "field": "eventKey",
+          "mongo": "",
+          "pg": "6a6e504c7c442e2fa906e813"
+        }
+      ]
+    }
+  ]
+}
