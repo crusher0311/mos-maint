@@ -80,7 +80,14 @@ export async function runFullPageBackfillChunk(
           complete: !!result.complete,
           lastChunkJobsIndexed: result.totalJobsIndexed || 0,
         },
-        $inc: { chunksProcessed: result.chunksProcessed || 0 },
+        // `totalJobsIndexed` accumulates so the pipeline-stall-alerter's
+        // progress signature moves iff real rows land (lastChunkAt alone
+        // bumps every tick, even on a wedged no-op — see the alerter's
+        // lastRunAt exclusion rationale).
+        $inc: {
+          chunksProcessed: result.chunksProcessed || 0,
+          totalJobsIndexed: result.totalJobsIndexed || 0,
+        },
       },
       { upsert: true },
     );

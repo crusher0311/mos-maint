@@ -61,7 +61,12 @@ export const API_PROVIDER_CONFIGS: Record<ApiProvider, ProviderConfig> = {
   },
   shopmonkey: {
     name: 'Shopmonkey',
-    rateLimit: { perMinute: 300, perSecond: 5 },
+    // Documented budget is 300/min (5 RPS), but Cloudflare's edge in front of
+    // api.shopmonkey.cloud trips error 1015 well below that under sustained
+    // backfill load. Budget deliberately kept under the edge tolerance; the
+    // shared per-second limiter defaults match (see
+    // lib/integrations/shopmonkey/shared-rate-limiter.ts).
+    rateLimit: { perMinute: 120, perSecond: 2 },
     warningThreshold: 0.75,
     criticalThreshold: 0.85
   },

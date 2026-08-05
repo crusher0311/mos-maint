@@ -9,7 +9,19 @@ import { Db } from "mongodb";
 import { mergeAutoflowIntoPrimary } from "@/lib/dashboard/autoflow-merge";
 import { prefixRegex, vinPrefix } from "@/lib/dashboard-search";
 
-async function batchEstimateMileage(db: Db, shopId: number, rows: any[]) {
+// Default number of NEW CARFAX reports fetched per page load for vehicles
+// missing mileage. Mile-less providers (Shopmonkey estimates rarely carry an
+// odometer) get a wider batch so their vehicles surface within a page load or
+// two instead of trickling in 5 VINs at a time.
+const CARFAX_FETCH_BATCH_DEFAULT = 5;
+const CARFAX_FETCH_BATCH_MILELESS = 25;
+
+async function batchEstimateMileage(
+  db: Db,
+  shopId: number,
+  rows: any[],
+  fetchBatchSize: number = CARFAX_FETCH_BATCH_DEFAULT,
+) {
   const noMileageVins = rows
     .filter((r) => !r.displayMiles)
     .map((r) => r.displayVin)
@@ -26,7 +38,7 @@ async function batchEstimateMileage(db: Db, shopId: number, rows: any[]) {
     const missingVins = noMileageVins.filter((v: string) => !coveredVins.has(v));
 
     if (missingVins.length > 0) {
-      const fetchPromises = missingVins.slice(0, 5).map(async (vin: string) => {
+      const fetchPromises = missingVins.slice(0, fetchBatchSize).map(async (vin: string) => {
         try {
           const result = await fetchCarfaxWithCache(shopId, vin);
           if (result.ok) {
@@ -890,6 +902,54 @@ export async function GET(request: NextRequest) {
           },
         },
       ]).toArray();
+
+      // Most Shopmonkey estimates carry no odometer (mileageIn/Out are rarely
+      // filled at estimate time), so backfill missing miles from the newest
+      // historical Shopmonkey work order for the same VIN that DID record one.
+      const milelessVins = shopmonkeyRows
+        .filter((r: any) => !(r.displayMiles > 0) && r.displayVin)
+        .map((r: any) => r.displayVin);
+      if (milelessVins.length > 0) {
+        try {
+          const historical = await db.collection("normalized_work_orders").aggregate([
+            {
+              $match: {
+                shopId: { $in: [Number(user.shopId), String(user.shopId)] },
+                "provenance.sourceIds.system": "shopmonkey",
+                "vehicle.vin": { $in: milelessVins },
+                "softDelete.isDeleted": { $ne: true },
+                $or: [{ odometerOut: { $gt: 0 } }, { odometerIn: { $gt: 0 } }],
+              },
+            },
+            {
+              $addFields: {
+                bestOdo: {
+                  $cond: [{ $gt: ["$odometerOut", 0] }, "$odometerOut", "$odometerIn"],
+                },
+                orderDate: {
+                  $ifNull: ["$closedDate", { $ifNull: ["$checkInDate", "$createdAt"] }],
+                },
+              },
+            },
+            { $sort: { orderDate: -1 } },
+            { $group: { _id: "$vehicle.vin", odometer: { $first: "$bestOdo" } } },
+          ]).toArray();
+
+          const odoByVin = new Map(historical.map((h: any) => [h._id, h.odometer]));
+          for (const row of shopmonkeyRows) {
+            if (!(row.displayMiles > 0)) {
+              const odo = odoByVin.get(row.displayVin);
+              if (odo > 0) {
+                row.displayMiles = odo;
+                row.mileageFromHistory = true;
+                if (row.af) row.af.miles = odo;
+              }
+            }
+          }
+        } catch (e) {
+          console.error("[Dashboard] Shopmonkey historical mileage lookup error:", e);
+        }
+      }
     }
 
     // Fetch manually-added vehicles for this shop
@@ -937,11 +997,24 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    await batchEstimateMileage(db, Number(user.shopId), allRows);
+    await batchEstimateMileage(
+      db,
+      Number(user.shopId),
+      allRows,
+      isShopmonkeyConfigured ? CARFAX_FETCH_BATCH_MILELESS : CARFAX_FETCH_BATCH_DEFAULT,
+    );
 
     // Filter to only show vehicles with mileage data (if preference is enabled)
-    // This ensures advisors know to enter mileage before the vehicle appears
-    const showOnlyWithMileage = shopPrefs?.preferences?.showOnlyWithMileage !== false; // default true
+    // This ensures advisors know to enter mileage before the vehicle appears.
+    // Provider-aware default: Shopmonkey estimates rarely carry an odometer,
+    // so for Shopmonkey-configured shops the UNSET preference defaults to
+    // showing mile-less vehicles (the Mileage column renders a "no mileage"
+    // indicator). An explicit true/false preference is always honored.
+    const mileagePref = shopPrefs?.preferences?.showOnlyWithMileage;
+    const showOnlyWithMileage =
+      mileagePref === undefined || mileagePref === null
+        ? !isShopmonkeyConfigured // default true, except mile-less providers
+        : mileagePref !== false;
     if (showOnlyWithMileage) {
       allRows = allRows.filter((row: any) => {
         const miles = row.displayMiles ?? row.af?.miles;

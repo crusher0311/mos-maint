@@ -25,8 +25,13 @@
 import { getDb } from "@/lib/mongo";
 
 const COLLECTION = "shopmonkey_rate_buckets";
+const COOLDOWN_COLLECTION = "shopmonkey_rate_cooldowns";
 const HARD_CEILING_RPS = 5;
-const DEFAULT_CAP_RPS = 5;
+// Cloudflare's edge in front of api.shopmonkey.cloud trips error 1015 well
+// below the documented 5 RPS budget under sustained load, so the default
+// effective cap is deliberately lower. SHOPMONKEY_SHARED_RPS_CAP can raise it
+// back up to the hard ceiling if Shopmonkey's edge tolerance improves.
+const DEFAULT_CAP_RPS = 2;
 const DEFAULT_USER_RESERVE_RPS = 2;
 const MAX_WAIT_MS = 5_000;
 const BUCKET_TTL_MS = 10_000;
@@ -43,6 +48,7 @@ async function ensureIndex(db: any): Promise<void> {
   indexEnsurePromise = (async () => {
     try {
       await db.collection(COLLECTION).createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+      await db.collection(COOLDOWN_COLLECTION).createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
       indexEnsured = true;
       indexEnsureFailedLogged = false;
     } catch (err: any) {
@@ -136,6 +142,69 @@ async function decBucket(db: any, key: string): Promise<void> {
   } catch {
     /* best-effort */
   }
+}
+
+// ---------------------------------------------------------------------------
+// Shared per-shop 429 cooldown.
+//
+// When Shopmonkey (or Cloudflare's 1015 edge limit) returns a 429 for a shop,
+// EVERY process sharing that shop's API key must back off — not just the one
+// that saw the response. The cooldown is stored per shop in Mongo (with an
+// in-process cache so the hot path doesn't pay a read per request) and
+// honored by `shopmonkeyRequest` before issuing any call for that shop.
+// Best-effort: Mongo being unreachable degrades to the in-process cache.
+// ---------------------------------------------------------------------------
+
+const inProcessCooldownUntil = new Map<number, number>();
+const COOLDOWN_MAX_MS = 5 * 60_000;
+
+/** Remaining shared cooldown for a shop, in ms (0 when none). */
+export async function getSharedShopmonkeyCooldownMs(shopId: number): Promise<number> {
+  const now = Date.now();
+  const local = inProcessCooldownUntil.get(shopId) ?? 0;
+  if (local > now) return local - now;
+  try {
+    const db = await __deps.getDb();
+    const doc = await db
+      .collection(COOLDOWN_COLLECTION)
+      .findOne({ _id: `sm-cooldown:${shopId}` as any });
+    const until = doc?.until instanceof Date ? doc.until.getTime() : Number(doc?.until) || 0;
+    if (until > now) {
+      inProcessCooldownUntil.set(shopId, until);
+      return until - now;
+    }
+  } catch {
+    /* best-effort — fall back to the in-process view */
+  }
+  return 0;
+}
+
+/** Record a shared per-shop cooldown (capped). Extends, never shortens. */
+export async function setSharedShopmonkeyCooldown(shopId: number, cooldownMs: number): Promise<void> {
+  const bounded = Math.max(0, Math.min(cooldownMs, COOLDOWN_MAX_MS));
+  if (bounded === 0) return;
+  const until = Date.now() + bounded;
+  const prev = inProcessCooldownUntil.get(shopId) ?? 0;
+  if (until > prev) inProcessCooldownUntil.set(shopId, until);
+  try {
+    const db = await __deps.getDb();
+    await ensureIndex(db);
+    await db.collection(COOLDOWN_COLLECTION).updateOne(
+      { _id: `sm-cooldown:${shopId}` as any },
+      {
+        $max: { until: new Date(until) },
+        $set: { expiresAt: new Date(until + 60_000) },
+      },
+      { upsert: true },
+    );
+  } catch {
+    /* best-effort — the in-process cache still applies */
+  }
+}
+
+/** Test-only seam: clear the in-process cooldown cache. */
+export function __resetCooldownForTest(): void {
+  inProcessCooldownUntil.clear();
 }
 
 /**

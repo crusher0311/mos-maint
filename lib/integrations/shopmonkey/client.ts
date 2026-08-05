@@ -1,6 +1,12 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { trackApiRequest } from "@/lib/api-usage-tracker";
 import { getBaseUrl, getCredentials } from "./auth";
+import {
+  acquireSharedShopmonkeySlot,
+  getSharedShopmonkeyCooldownMs,
+  setSharedShopmonkeyCooldown,
+  type SharedSlotPriority,
+} from "./shared-rate-limiter";
 import type {
   ShopmonkeyEnvelope,
   ShopmonkeyPaginatedResponse,
@@ -35,21 +41,69 @@ class ShopmonkeyNotConfiguredError extends Error {
   }
 }
 
+// 429 handling: Cloudflare's 1015 edge limit on api.shopmonkey.cloud usually
+// arrives as a 429 WITHOUT a Retry-After header, so a default cooldown is
+// applied when no hint is present. Retries are bounded — a persistent 429
+// storm throws instead of recursing forever.
+const DEFAULT_429_COOLDOWN_MS = 30_000;
+const MAX_429_WAIT_MS = 120_000;
+const MAX_429_RETRIES = 3;
+
+function jitterMs(): number {
+  return 250 + Math.floor(Math.random() * 1250);
+}
+
+export type ShopmonkeyRequestOptions = RequestInit & {
+  /**
+   * Shared-limiter lane. Interactive (user-facing) callers get the full RPS
+   * cap; background (cron/backfill) callers are held under the user reserve.
+   */
+  smPriority?: SharedSlotPriority;
+};
+
 /**
- * Core Shopmonkey request: resolves the per-shop API key, issues a Bearer
- * request, tracks API usage, and applies a bounded rate-limit backoff when the
- * API reports it. Throws on non-2xx (after tracking the failure).
+ * Core Shopmonkey request: resolves the per-shop API key, waits out any shared
+ * per-shop 429 cooldown, paces through the cross-process per-second limiter,
+ * issues a Bearer request, tracks API usage, and applies a bounded, jittered
+ * rate-limit backoff (honoring Retry-After) when the API reports it. Throws on
+ * non-2xx (after tracking the failure).
  */
 export async function shopmonkeyRequest<T = any>(
   shopId: number,
   path: string,
-  options: RequestInit = {},
+  options: ShopmonkeyRequestOptions = {},
+  attempt: number = 0,
 ): Promise<T> {
   const creds = await getCredentials(shopId);
   if (!creds) throw new ShopmonkeyNotConfiguredError(shopId);
 
   const method = options.method || "GET";
   const url = `${getBaseUrl()}${path}`;
+  const priority = options.smPriority ?? "background";
+
+  // Shared per-shop cooldown (set by any process that saw a 429 for this
+  // shop). Bounded wait so a long cooldown surfaces as an error rather than
+  // silently hanging an interactive caller.
+  const cooldownMs = await getSharedShopmonkeyCooldownMs(shopId);
+  if (cooldownMs > 0) {
+    if (cooldownMs > MAX_429_WAIT_MS) {
+      throw new Error(
+        `Shopmonkey rate-limit cooldown active for shop ${shopId} (${Math.round(cooldownMs / 1000)}s remaining)`,
+      );
+    }
+    const backoffCounter = backoffStorage.getStore();
+    if (backoffCounter) backoffCounter.ms += cooldownMs;
+    await new Promise((r) => setTimeout(r, cooldownMs));
+  }
+
+  // Cross-process per-second pacing (see shared-rate-limiter.ts). A timed-out
+  // slot means the fleet is saturating the budget — fail fast instead of
+  // stacking more load on an already-hot edge.
+  const slot = await acquireSharedShopmonkeySlot({ priority });
+  if (!slot.acquired) {
+    throw new Error(`Shopmonkey shared rate limiter timed out for shop ${shopId} (${path})`);
+  }
+
   const startTime = Date.now();
   let statusCode = 0;
 
@@ -70,20 +124,32 @@ export async function shopmonkeyRequest<T = any>(
     const latencyMs = Date.now() - startTime;
     trackApiRequest("shopmonkey", path, method, statusCode, latencyMs, shopId).catch(() => {});
 
-    // Honor a Retry-After / X-RateLimit-Reset hint with a bounded sleep.
+    // Honor a Retry-After / X-RateLimit-Reset hint; default when absent
+    // (Cloudflare 1015 sends none). Cooldown is shared per shop so every
+    // process backs off together, and retries are bounded + jittered.
     if (response.status === 429) {
       const retryAfter = response.headers.get("Retry-After");
       const reset = response.headers.get("X-RateLimit-Reset");
       let waitMs = 0;
-      if (retryAfter) waitMs = Number(retryAfter) * 1000;
-      else if (reset) waitMs = Number(reset) * 1000 - Date.now();
-      if (waitMs > 0 && waitMs < 60_000) {
-        console.warn(`[Shopmonkey] Rate limit hit, sleeping ${waitMs}ms`);
+      if (retryAfter && Number.isFinite(Number(retryAfter))) waitMs = Number(retryAfter) * 1000;
+      else if (reset && Number.isFinite(Number(reset))) waitMs = Number(reset) * 1000 - Date.now();
+      if (!(waitMs > 0)) waitMs = DEFAULT_429_COOLDOWN_MS;
+      waitMs = Math.min(waitMs, MAX_429_WAIT_MS) + jitterMs();
+
+      await setSharedShopmonkeyCooldown(shopId, waitMs).catch(() => {});
+
+      if (attempt < MAX_429_RETRIES) {
+        console.warn(
+          `[Shopmonkey] Rate limit hit for shop ${shopId}, sleeping ${waitMs}ms (attempt ${attempt + 1}/${MAX_429_RETRIES})`,
+        );
         const backoffCounter = backoffStorage.getStore();
         if (backoffCounter) backoffCounter.ms += waitMs;
         await new Promise((r) => setTimeout(r, waitMs));
-        return shopmonkeyRequest<T>(shopId, path, options);
+        return shopmonkeyRequest<T>(shopId, path, options, attempt + 1);
       }
+      throw new Error(
+        `Shopmonkey API rate limited (429) after ${MAX_429_RETRIES} retries (${url})`,
+      );
     }
 
     if (!response.ok) {

@@ -10,6 +10,7 @@
  */
 
 import {
+  PROVIDERS,
   computeProgressSignature,
   decidePipelineStall,
   decideDrainWedge,
@@ -213,6 +214,44 @@ const HOUR = 60 * MIN;
   ok("key is order-independent", k1 === k2);
 
   ok("empty hits → empty key", buildAlertKey([]) === "");
+}
+
+// --- (6) Shopmonkey provider branch (task #1044) -----------------------
+{
+  console.log("shopmonkey provider");
+  const sm = PROVIDERS.find((p) => p.key === "shopmonkey");
+  ok("PROVIDERS includes shopmonkey", !!sm);
+  ok(
+    "shopmonkey reads shopmonkey_backfill_progress",
+    sm?.collectionName === "shopmonkey_backfill_progress",
+  );
+  ok(
+    "shopmonkey liveness keyed on fullpage backfill cron",
+    (sm?.backfillJobNames || []).includes("shopmonkey-fullpage-backfill"),
+  );
+
+  // Shopmonkey progress-doc shape (full-page-backfill.ts): lastChunkAt bumps
+  // every tick even on a wedged no-op — it must NOT move the signature. The
+  // cumulative totalJobsIndexed counter and the complete flag must.
+  const base = [
+    { shopId: 165, complete: false, lastChunkAt: new Date(NOW - HOUR), chunksProcessed: 4, totalJobsIndexed: 120, lastChunkJobsIndexed: 0 },
+  ];
+  const s1 = computeProgressSignature(base);
+  const bumped = base.map((r) => ({ ...r, lastChunkAt: new Date(NOW) }));
+  ok(
+    "lastChunkAt bump does NOT move shopmonkey signature",
+    s1.signature === computeProgressSignature(bumped).signature,
+  );
+  const advanced = base.map((r) => ({ ...r, totalJobsIndexed: 150 }));
+  ok(
+    "totalJobsIndexed advance moves shopmonkey signature",
+    s1.signature !== computeProgressSignature(advanced).signature,
+  );
+  const completed = base.map((r) => ({ ...r, complete: true }));
+  ok(
+    "completion moves shopmonkey signature",
+    s1.signature !== computeProgressSignature(completed).signature,
+  );
 }
 
 if (failed > 0) {

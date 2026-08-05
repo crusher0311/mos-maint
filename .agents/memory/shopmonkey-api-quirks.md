@@ -24,3 +24,8 @@ description: Non-obvious facts about the Shopmonkey v3 API and how the MOS integ
 - **No MOS shop is registered with a `shopmonkey` field yet (prod, as of 2026-06-05).** `shops` collection has zero docs with `shopmonkey.*`. So even with correct on-page id detection, `/api/extension/ro-context` can't resolve a MOS shop and the VHI Coach shows no real data until an operator onboards the shop (sets `shopmonkey.companyId`/`locationId` + apiKey on the shop doc). Adapter-side detection is confirmed; the remaining gap is shop onboarding, an operator/prod-data action.
 
 - **Prod-safety:** dev Mongo == prod, so this build is dormant by design — no shops configured, backfills gated behind `SHOPMONKEY_BACKFILL_ENABLED`, webhook auto-subscribe behind `SHOPMONKEY_WEBHOOK_AUTO_SUBSCRIBE`, both default OFF. The new Mongo-touching files were added to the `scripts/check-direct-db.cjs` allowlist (that guard gates the Render prod build).
+
+## Cloudflare 1015 pacing
+api.shopmonkey.cloud sits behind a Cloudflare edge that trips error 1015 (a 429 with NO Retry-After header) well below the documented 5 RPS/300-min budget under sustained backfill load.
+**Why:** the configured budget alone doesn't prevent 429 storms; the edge tolerance is the real ceiling.
+**How to apply:** effective defaults are 2 RPS / 120-min (shared-rate-limiter + api-usage-tracker); every 429 sets a shared per-shop cooldown (`shopmonkey_rate_cooldowns`, extend-never-shorten, 5-min cap) honored by all processes before any request; retries are bounded+jittered. Raise via SHOPMONKEY_SHARED_RPS_CAP only if the edge tolerance is proven higher.

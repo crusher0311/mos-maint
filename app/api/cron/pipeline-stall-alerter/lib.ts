@@ -14,7 +14,7 @@
  * slipped past every existing check for ~2 days.
  */
 
-export type ProviderKey = "tekmetric" | "protractor" | "shopware";
+export type ProviderKey = "tekmetric" | "protractor" | "shopware" | "shopmonkey";
 
 export type ProviderConfig = {
   key: ProviderKey;
@@ -64,6 +64,19 @@ export const PROVIDERS: ProviderConfig[] = [
     label: "Shop-Ware",
     collectionName: "ln",
     backfillJobNames: ["shopware-backfill", "shopware-weekend-boost"],
+  },
+  {
+    // Shopmonkey progress lives in `shopmonkey_backfill_progress` (written by
+    // lib/integrations/shopmonkey/full-page-backfill.ts). Its cumulative
+    // `totalJobsIndexed` counter + `complete` flag feed the signature; a shop
+    // whose cache→normalize path wedges keeps bumping `lastChunkAt` (excluded,
+    // like lastRunAt) while the counter freezes — exactly the stall this
+    // alerter hunts. With zero incomplete Shopmonkey shops this branch is
+    // silent, so adding it is prod-safe for the current fleet.
+    key: "shopmonkey",
+    label: "Shopmonkey",
+    collectionName: "shopmonkey_backfill_progress",
+    backfillJobNames: ["shopmonkey-fullpage-backfill"],
   },
 ];
 
