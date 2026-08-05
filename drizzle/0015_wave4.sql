@@ -133,34 +133,11 @@ CREATE TABLE IF NOT EXISTS "platform_settings" (
   "updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS "platform_plans" (
-  "slug" text PRIMARY KEY NOT NULL,
-  "name" text NOT NULL,
-  "description" text,
-  "stripe_product_id" text,
-  "stripe_price_id" text,
-  "price_per_month" double precision,
-  "included_vins" integer,
-  "payload" jsonb,
-  "active" boolean DEFAULT true NOT NULL,
-  "sort_order" integer DEFAULT 0 NOT NULL,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL
-);
--- Task #1020: prod's platform_plans carries the wave2 shape
--- (drizzle/0012 — monthly_price/annual_price/..., no "active" column), so the
--- CREATE TABLE above is skipped there and on any fresh environment that ran
--- 0012 first. Guard the index on the column actually existing so this file
--- stays re-runnable against both shapes.
-DO $$
-BEGIN
-  IF EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'platform_plans' AND column_name = 'active'
-  ) THEN
-    CREATE INDEX IF NOT EXISTS "platform_plans_active_idx" ON "platform_plans" ("active");
-  END IF;
-END$$;
+-- platform_plans: created by drizzle/0012_wave2_operational.sql (the shape
+-- prod actually has: monthly_price/annual_price/features/raw). This file used
+-- to re-create it with an incompatible shape (price_per_month/included_vins/
+-- active/sort_order); that CREATE was always skipped because 0012 runs first.
+-- Removed in Task #1022 — one canonical definition only.
 
 CREATE TABLE IF NOT EXISTS "pending_signups" (
   "token" text PRIMARY KEY NOT NULL,

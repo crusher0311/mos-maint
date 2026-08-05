@@ -29,7 +29,6 @@ import {
   shopFeatures,
   platformAdmins,
   platformSettings,
-  platformPlans,
   pendingSignups,
   setupTokens,
   passwordResetTokens,
@@ -38,6 +37,9 @@ import {
   stripeEvents,
   stripeWebhookEvents,
 } from "@/lib/db/schema/wave4";
+// platform_plans' canonical Drizzle definition is the wave2 one (the shape
+// prod actually has); the incompatible wave4 duplicate was removed (Task #1022).
+import { platformPlans } from "@/lib/db/schema/wave2";
 
 type Json = Record<string, unknown>;
 
@@ -1062,35 +1064,44 @@ export async function upsertPlatformSetting(type: string, payload: Json): Promis
 
 export async function listPlatformPlans() {
   const db = getDb();
-  return db.select().from(platformPlans).where(eq(platformPlans.active, true));
+  // Active/inactive lives on the Mongo doc's `status` field, preserved in the
+  // `raw` jsonb (there is no `active` column in the real table shape).
+  return db
+    .select()
+    .from(platformPlans)
+    .where(sql`coalesce(${platformPlans.raw} ->> 'status', 'active') = 'active'`);
 }
 
 /**
  * Mirror a Mongo `platform_plans.updateOne({slug}, {$set}, {upsert})`
  * into PG. The Mongo plan doc carries display fields (`monthlyPrice`,
  * `order`, `status`, `features`, ...); the full doc is preserved in the
- * `payload` jsonb while the hot columns (`name`, `description`,
- * `pricePerMonth`, `sortOrder`, `active`) are promoted. Keyed on the
- * `slug` primary key.
+ * `raw` jsonb while the hot columns (`name`, `monthlyPrice`,
+ * `annualPrice`, Stripe price ids, `features`) are promoted — matching
+ * the real table shape (drizzle/0012). Keyed on the `slug` primary key.
  */
 export async function upsertPlatformPlan(plan: {
   slug: string;
   name: string;
-  description?: string | null;
   monthlyPrice?: number | null;
-  order?: number | null;
-  status?: string | null;
+  annualPrice?: number | null;
+  stripeMonthlyPriceId?: string | null;
+  stripeAnnualPriceId?: string | null;
+  features?: unknown;
   [k: string]: unknown;
 }): Promise<void> {
   const db = getDb();
   const now = new Date();
   const promoted = {
     name: plan.name,
-    description: plan.description ?? null,
-    pricePerMonth: typeof plan.monthlyPrice === "number" ? plan.monthlyPrice : null,
-    payload: plan as unknown as Json,
-    active: plan.status != null ? plan.status === "active" : true,
-    sortOrder: typeof plan.order === "number" ? plan.order : 0,
+    monthlyPrice: typeof plan.monthlyPrice === "number" ? plan.monthlyPrice : null,
+    annualPrice: typeof plan.annualPrice === "number" ? plan.annualPrice : null,
+    stripeMonthlyPriceId:
+      typeof plan.stripeMonthlyPriceId === "string" ? plan.stripeMonthlyPriceId : null,
+    stripeAnnualPriceId:
+      typeof plan.stripeAnnualPriceId === "string" ? plan.stripeAnnualPriceId : null,
+    features: (plan.features ?? null) as Json | null,
+    raw: plan as unknown as Json,
     updatedAt: now,
   };
   await db

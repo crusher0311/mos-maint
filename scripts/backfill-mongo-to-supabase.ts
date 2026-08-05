@@ -1467,18 +1467,18 @@ const MIRRORS: MirrorSpec[] = [
     extract: (d) => {
       const slug = asStr(d.slug);
       if (!slug) return null;
+      // Canonical wave2 shape (drizzle/0012): monthly_price/annual_price/
+      // features/raw — matches what prod actually has (Task #1022).
       return {
         values: {
           slug,
           name: asStr(d.name) ?? slug,
-          description: asStr(d.description),
-          stripe_product_id: asStr(d.stripeProductId),
-          stripe_price_id: asStr(d.stripePriceId),
-          price_per_month: d.pricePerMonth != null ? Number(d.pricePerMonth) : null,
-          included_vins: asInt(d.includedVins),
-          payload: d,
-          active: d.active !== false,
-          sort_order: asInt(d.sortOrder) ?? 0,
+          monthly_price: d.monthlyPrice != null ? Number(d.monthlyPrice) : null,
+          annual_price: d.annualPrice != null ? Number(d.annualPrice) : null,
+          stripe_monthly_price_id: asStr(d.stripeMonthlyPriceId),
+          stripe_annual_price_id: asStr(d.stripeAnnualPriceId),
+          features: d.features ?? null,
+          raw: d,
           created_at: asDate(d.createdAt) ?? new Date(),
           updated_at: asDate(d.updatedAt) ?? new Date(),
         },

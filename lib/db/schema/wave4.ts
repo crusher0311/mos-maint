@@ -327,30 +327,13 @@ export const platformSettings = pgTable("platform_settings", {
 });
 
 /* ========================================================================== */
-/* platform_plans (was W2; rolled into W4 if not previously cut over).      */
-/* Small catalog table — slug + display info + Stripe price refs.          */
+/* platform_plans — canonical definition lives in wave2.ts (that is the    */
+/* shape prod actually has: monthly_price/annual_price/features/raw).      */
+/* A second, incompatible definition used to live here (price_per_month/   */
+/* included_vins/active/sort_order) but its CREATE TABLE was always        */
+/* skipped because drizzle/0012 creates the table first. Task #1022        */
+/* removed it; import `platformPlans` from ./wave2.                        */
 /* ========================================================================== */
-
-export const platformPlans = pgTable(
-  "platform_plans",
-  {
-    slug: text("slug").primaryKey(),
-    name: text("name").notNull(),
-    description: text("description"),
-    stripeProductId: text("stripe_product_id"),
-    stripePriceId: text("stripe_price_id"),
-    pricePerMonth: doublePrecision("price_per_month"),
-    includedVins: integer("included_vins"),
-    payload: jsonb("payload"),
-    active: boolean("active").notNull().default(true),
-    sortOrder: integer("sort_order").notNull().default(0),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => ({
-    activeIdx: index("platform_plans_active_idx").on(t.active),
-  }),
-);
 
 /* ========================================================================== */
 /* Auth-adjacent token tables (pending_signups, setup_tokens,              */
