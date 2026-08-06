@@ -288,6 +288,78 @@ export async function getOrders(
   return getAllPages<ShopmonkeyOrder>(shopId, `/order`, extra);
 }
 
+export interface ShopmonkeyOrdersPage {
+  orders: ShopmonkeyOrder[];
+  /** Resume state for the NEXT call; persist both and pass them back. */
+  nextCursor: string | null;
+  nextOffset: number;
+  hasMore: boolean;
+}
+
+/**
+ * Bounded, resumable variant of `getOrders` for the full-page backfill: fetches
+ * at most `maxPages` pages (100 orders each) per call and returns the resume
+ * cursor/offset so the caller can checkpoint between cron ticks instead of
+ * materializing an entire year of orders in one run (the pattern that
+ * saturated the web instance on 2026-08-06).
+ */
+export async function getOrdersPaged(
+  shopId: number,
+  params: {
+    closedAfter?: string;
+    updatedAfter?: string;
+    cursor?: string | null;
+    offset?: number;
+    maxPages?: number;
+  },
+): Promise<ShopmonkeyOrdersPage> {
+  const extra: Record<string, string> = {
+    "include[vehicle]": "true",
+    "include[customer]": "true",
+  };
+  if (params.updatedAfter) extra.updatedAfter = params.updatedAfter;
+  if (params.closedAfter) extra.closedAfter = params.closedAfter;
+
+  const limit = 100;
+  const maxPages = Math.max(1, params.maxPages ?? 1);
+  const orders: ShopmonkeyOrder[] = [];
+  let cursor: string | null = params.cursor ?? null;
+  let offset = params.offset ?? 0;
+  let hasMore = true;
+  let page = 0;
+
+  while (hasMore && page < maxPages) {
+    const qs = new URLSearchParams({ limit: String(limit), ...extra });
+    if (cursor) qs.set("cursor", cursor);
+    else qs.set("offset", String(offset));
+
+    const data = await shopmonkeyRequest<ShopmonkeyPaginatedResponse<ShopmonkeyOrder>>(
+      shopId,
+      `/order?${qs.toString()}`,
+    );
+
+    const rows = Array.isArray(data?.data) ? data.data : [];
+    orders.push(...rows);
+
+    // Track total rows consumed on EVERY page (even cursor-driven ones) so
+    // that if cursor metadata ever disappears mid-run, the offset fallback is
+    // a consistent continuation rather than a stale starting offset.
+    offset += rows.length;
+
+    const next = data?.meta?.nextCursor ?? data?.meta?.cursor ?? null;
+    if (next && next !== cursor) {
+      cursor = next;
+    } else if (data?.meta?.hasMore === true || rows.length === limit) {
+      cursor = null;
+    } else {
+      hasMore = false;
+    }
+    page++;
+  }
+
+  return { orders, nextCursor: cursor, nextOffset: offset, hasMore };
+}
+
 /**
  * Fetch flat order line items from the `/service_item` endpoint. Shopmonkey v3
  * does NOT embed labor/part arrays inside an order, and the endpoint REQUIRES a

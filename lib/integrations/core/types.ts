@@ -132,6 +132,13 @@ export interface BackfillOptions {
   toDate?: Date;
   maxChunks?: number;
   chunkDays?: number;
+  /**
+   * Optional lease-heartbeat callback: long-running backfill chunks should
+   * invoke this between phases (fetch / attach / per ingest batch) so the
+   * caller's in-flight lock isn't stolen mid-chunk by the stale-heartbeat
+   * takeover path.
+   */
+  heartbeat?: () => Promise<void>;
 }
 
 export interface BackfillResult {

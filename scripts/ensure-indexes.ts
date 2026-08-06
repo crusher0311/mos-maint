@@ -126,6 +126,7 @@ async function ensureIndexes() {
       // backfill progress tracking
       { collection: "backfill_progress", index: { shopId: 1 }, options: { unique: true } },
       { collection: "tekmetric_backfill_progress", index: { shopId: 1 }, options: { unique: true } },
+      { collection: "shopmonkey_backfill_progress", index: { shopId: 1 }, options: { unique: true } },
 
       // usage_logs - OpenAI usage tracking
       { collection: "usage_logs", index: { shopId: 1 } },

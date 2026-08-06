@@ -62,13 +62,28 @@ export async function runFullPageBackfillChunk(
 
   const db = await getDb();
 
+  // Once a shop's history pull has completed, don't re-run it every tick —
+  // webhooks + incremental sync keep it fresh. Operators re-run by clearing
+  // `complete` (and `fetchCursor`) on the shop's progress doc.
+  const progress = await db
+    .collection(PROGRESS_COLLECTION)
+    .findOne({ shopId }, { projection: { complete: 1 } });
+  if (progress?.complete === true) {
+    return { ...base, complete: true, skippedReason: "backfill already complete" };
+  }
+
   const lock = await acquireInFlightLock(db, shopId);
   if (!lock.acquired) {
     return { ...base, busy: true, heldBy: lock.heldBy, skippedReason: "another backfill run holds the lock" };
   }
 
   try {
-    const result = await shopmonkeyAdapter.runBackfill(shopId, options);
+    const result = await shopmonkeyAdapter.runBackfill(shopId, {
+      ...options,
+      // Keep the lease fresh through fetch/attach/ingest so a healthy slow
+      // chunk can't be stolen by the 3-min stale-heartbeat takeover.
+      heartbeat: () => bumpInFlightHeartbeat(db, shopId, lock.owner),
+    });
     await bumpInFlightHeartbeat(db, shopId, lock.owner);
 
     await db.collection(PROGRESS_COLLECTION).updateOne(

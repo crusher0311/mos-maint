@@ -21,6 +21,7 @@ import {
   searchVehiclesByVin,
   getOrder,
   getOrders,
+  getOrdersPaged,
   getOrderServiceItems,
   getServiceItems,
   getCannedServices,
@@ -28,6 +29,8 @@ import {
 import { transformVehicle, transformOrder, transformCannedService } from "./transform";
 import type { ShopmonkeyOrder, ShopmonkeyServiceItem } from "./types";
 import { resolveShopDistanceUnit } from "@/lib/shop-distance-unit";
+import { PROGRESS_COLLECTION } from "./inflight-lock";
+import { NormalizedIngestionService } from "@/lib/integrations/core/normalized-ingestion";
 
 /**
  * Resolve the normalized odometer unit for a Shopmonkey shop via the central
@@ -211,6 +214,19 @@ export class ShopmonkeyAdapter implements IIntegrationAdapter {
       // lines so the normalized ingestion path can map jobs/line items.
       await attachServiceItems(shopId, orders);
 
+      // Actually persist what we fetched (this path previously discarded the
+      // orders — the webhook was the only writer).
+      const ingest = await ingestShopmonkeyOrders(db, shopId, orders, "incremental_sync");
+      if (ingest.hardFailures > 0) {
+        // Don't advance lastSyncAt past orders that failed to persist — the
+        // next cycle re-fetches from the same watermark (upserts are safe).
+        return {
+          ok: false,
+          recordsProcessed: orders.length,
+          error: `${ingest.hardFailures} ingestion batch(es) failed; lastSyncAt not advanced`,
+        };
+      }
+
       await db.collection("shops").updateOne(
         { $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] },
         { $set: { "shopmonkey.lastSyncAt": new Date().toISOString() } },
@@ -222,42 +238,161 @@ export class ShopmonkeyAdapter implements IIntegrationAdapter {
     }
   }
 
+  /**
+   * One bounded, checkpointed backfill chunk (reworked after the 2026-08-06
+   * saturation incident — the previous version re-fetched an entire YEAR of
+   * orders on EVERY 5-min cron tick with an unbounded per-order fan-out, and
+   * then never persisted any of it).
+   *
+   * Per tick this now:
+   *  1. resumes from the pagination checkpoint stored on the shop's
+   *     `shopmonkey_backfill_progress` doc (`fetchCursor`),
+   *  2. fetches a bounded number of order pages (default 1 page = 100 orders;
+   *     env `SHOPMONKEY_BACKFILL_PAGES_PER_TICK`),
+   *  3. attaches `/service_item` lines with bounded concurrency
+   *     (env `SHOPMONKEY_BACKFILL_ITEM_CONCURRENCY`, default 3),
+   *  4. actually ingests the orders into the normalized store,
+   *  5. advances the checkpoint; `complete` only once pagination is exhausted.
+   */
   async runBackfill(shopId: number, options?: BackfillOptions): Promise<BackfillResult> {
     if (!(await isConfigured(shopId))) {
       return { ok: false, chunksProcessed: 0, totalJobsIndexed: 0, complete: false, error: "Shopmonkey not configured" };
     }
 
     try {
-      const fromDate = options?.fromDate ?? new Date(Date.now() - 365 * 24 * 60 * 60 * 1000);
-      const orders = await getOrders(shopId, { closedAfter: fromDate.toISOString() });
-      // Attach `/service_item` lines to each order so the normalized ingestion
-      // path produces real service jobs + line items (live v3 has no embedded
-      // line items on the order).
-      await attachServiceItems(shopId, orders);
-
       const db = await getDb();
+      const pagesPerTick = Math.min(
+        5,
+        Math.max(1, Number(process.env.SHOPMONKEY_BACKFILL_PAGES_PER_TICK) || 1),
+      );
+
+      // Resume from the stored checkpoint. `closedAfter` is frozen at the
+      // start of a run so pagination stays stable across ticks.
+      const progress = await db
+        .collection(PROGRESS_COLLECTION)
+        .findOne({ shopId }, { projection: { fetchCursor: 1 } });
+      const fromDate = options?.fromDate ?? new Date(Date.now() - 365 * 24 * 60 * 60 * 1000);
+      const cursorState: { closedAfter: string; cursor: string | null; offset: number } =
+        progress?.fetchCursor && typeof progress.fetchCursor.closedAfter === "string"
+          ? progress.fetchCursor
+          : { closedAfter: fromDate.toISOString(), cursor: null, offset: 0 };
+
+      const page = await getOrdersPaged(shopId, {
+        closedAfter: cursorState.closedAfter,
+        cursor: cursorState.cursor,
+        offset: cursorState.offset,
+        maxPages: pagesPerTick,
+      });
+
+      await options?.heartbeat?.();
+
+      // Attach `/service_item` lines so the normalized ingestion path produces
+      // real service jobs + line items (live v3 has no embedded line items).
+      await attachServiceItems(shopId, page.orders);
+
+      await options?.heartbeat?.();
+
+      const { jobsIndexed, hardFailures } = await ingestShopmonkeyOrders(
+        db,
+        shopId,
+        page.orders,
+        "backfill",
+        options?.heartbeat,
+      );
+
+      // A batch that threw means some orders were NOT durably ingested: do not
+      // advance the checkpoint (this tick will be retried from the same
+      // position) and never mark complete.
+      if (hardFailures > 0) {
+        return {
+          ok: false,
+          chunksProcessed: 0,
+          totalJobsIndexed: jobsIndexed,
+          complete: false,
+          error: `${hardFailures} ingestion batch(es) failed; checkpoint not advanced`,
+        };
+      }
+
+      await db.collection(PROGRESS_COLLECTION).updateOne(
+        { shopId },
+        page.hasMore
+          ? {
+              $set: {
+                shopId,
+                fetchCursor: {
+                  closedAfter: cursorState.closedAfter,
+                  cursor: page.nextCursor,
+                  offset: page.nextOffset,
+                },
+              },
+            }
+          : { $set: { shopId }, $unset: { fetchCursor: "" } },
+        { upsert: true },
+      );
+
       await db.collection("shops").updateOne(
         { $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] },
-        {
-          $set: {
-            "shopmonkey.lastBackfillAt": new Date().toISOString(),
-            "shopmonkey.lastSyncAt": new Date().toISOString(),
-          },
-        },
+        { $set: { "shopmonkey.lastBackfillAt": new Date().toISOString() } },
       );
 
-      // One synthetic job per order that has line items (Shopmonkey v3 has no
-      // job grouping under an order); fall back to any embedded `services[]`.
-      const totalJobs = orders.reduce(
-        (sum, o) => sum + (o.services?.length || (o.serviceItems?.length ? 1 : 0)),
-        0,
+      console.log(
+        `[Shopmonkey Backfill] shop=${shopId}: ${page.orders.length} orders this chunk, ${jobsIndexed} jobs indexed, ${page.hasMore ? `resume offset=${page.nextOffset}` : "COMPLETE"}`,
       );
 
-      return { ok: true, chunksProcessed: 1, totalJobsIndexed: totalJobs, complete: true };
+      return { ok: true, chunksProcessed: 1, totalJobsIndexed: jobsIndexed, complete: !page.hasMore };
     } catch (err: any) {
       return { ok: false, chunksProcessed: 0, totalJobsIndexed: 0, complete: false, error: err.message };
     }
   }
+}
+
+/**
+ * Persist fetched Shopmonkey orders through the shared normalized ingestion
+ * pipeline (same options as the webhook writer). The previous backfill and
+ * incremental-sync paths fetched orders and THREW THEM AWAY — the webhook was
+ * the only real writer.
+ */
+async function ingestShopmonkeyOrders(
+  db: Awaited<ReturnType<typeof getDb>>,
+  shopId: number,
+  orders: ShopmonkeyOrder[],
+  via: "backfill" | "incremental_sync",
+  heartbeat?: () => Promise<void>,
+): Promise<{ jobsIndexed: number; hardFailures: number }> {
+  if (orders.length === 0) return { jobsIndexed: 0, hardFailures: 0 };
+
+  const shopDoc = await db.collection("shops").findOne(
+    { $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] },
+    { projection: { enterpriseId: 1 } },
+  );
+
+  const ingestionService = new NormalizedIngestionService(
+    db,
+    "shopmonkey",
+    shopId,
+    shopDoc?.enterpriseId as string | undefined,
+    { dualWriteToJobIndex: false, dualWriteToRepairPatterns: true, ingestionVia: via },
+  );
+
+  let jobsIndexed = 0;
+  let hardFailures = 0;
+  const BATCH = 20;
+  for (let i = 0; i < orders.length; i += BATCH) {
+    const batch = orders.slice(i, i + BATCH);
+    try {
+      const r = await ingestionService.ingestWorkOrderBatchWithAllEntities(batch);
+      jobsIndexed += (r.serviceJobs?.created || 0) + (r.serviceJobs?.updated || 0);
+    } catch (err: any) {
+      // Keep processing the remaining batches (ingestion is upsert-based so
+      // re-running them later is safe) but count the failure so the caller
+      // refuses to advance its checkpoint — otherwise these orders would be
+      // silently skipped forever.
+      hardFailures++;
+      console.error(`[Shopmonkey Ingest] shop=${shopId} batch@${i} error:`, err?.message);
+    }
+    await heartbeat?.();
+  }
+  return { jobsIndexed, hardFailures };
 }
 
 /**
@@ -268,15 +403,25 @@ export class ShopmonkeyAdapter implements IIntegrationAdapter {
  * so one bad order can't abort the whole batch.
  */
 async function attachServiceItems(shopId: number, orders: ShopmonkeyOrder[]): Promise<void> {
-  await Promise.all(
-    orders.map(async (o) => {
+  // Bounded concurrency: the previous unbounded Promise.all fanned out one
+  // /service_item fetch per order for EVERY order at once, monopolizing the
+  // web instance during backfill runs.
+  const concurrency = Math.min(
+    10,
+    Math.max(1, Number(process.env.SHOPMONKEY_BACKFILL_ITEM_CONCURRENCY) || 3),
+  );
+  let next = 0;
+  const workers = Array.from({ length: Math.min(concurrency, orders.length) }, async () => {
+    while (next < orders.length) {
+      const o = orders[next++];
       try {
         o.serviceItems = await getOrderServiceItems(shopId, o);
       } catch {
         o.serviceItems = o.serviceItems ?? [];
       }
-    }),
-  );
+    }
+  });
+  await Promise.all(workers);
 }
 
 export const shopmonkeyAdapter = new ShopmonkeyAdapter();
