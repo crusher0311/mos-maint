@@ -23,7 +23,7 @@
  * normalized tables). `tekmetricShopId` is the Tekmetric-side shop id used as
  * the `shop=` query param against the Tekmetric API.
  */
-import { and, eq, notInArray } from "drizzle-orm";
+import { and, eq, isNull, lte, notInArray, or } from "drizzle-orm";
 import { getDb } from "@/lib/db/drizzle";
 import {
   normalizedAppointments,
@@ -175,9 +175,19 @@ async function syncAppointments(
   }
 
   // Prune appointments that fell out of the forward window (past/cancelled),
-  // but only when we know we saw the full upstream set this run.
+  // but only when we know we saw the full upstream set this run — and ONLY
+  // rows scheduled inside the window we actually fetched. Rows scheduled
+  // beyond `end` (e.g. synced under a wider previous lookahead) were not in
+  // this fetch, so their absence from `seen` says nothing; deleting them
+  // would silently contract the Data Status panel's count. Rows with no
+  // scheduled date can't be placed outside the window, so they remain
+  // prunable as before.
   let pruned = 0;
   if (complete) {
+    const insideFetchedWindow = or(
+      lte(normalizedAppointments.scheduledDate, end),
+      isNull(normalizedAppointments.scheduledDate),
+    );
     const result =
       seen.length > 0
         ? await db
@@ -185,12 +195,18 @@ async function syncAppointments(
             .where(
               and(
                 eq(normalizedAppointments.shopId, shopId),
+                insideFetchedWindow,
                 notInArray(normalizedAppointments.sourceId, seen),
               ),
             )
         : await db
             .delete(normalizedAppointments)
-            .where(eq(normalizedAppointments.shopId, shopId));
+            .where(
+              and(
+                eq(normalizedAppointments.shopId, shopId),
+                insideFetchedWindow,
+              ),
+            );
     pruned = (result as { count?: number })?.count ?? 0;
   }
 
