@@ -1,3 +1,4 @@
+- [Shopmonkey dashboard mileage gate](shopmonkey-dashboard-mileage-gate.md) — history-mileage lookup + 25-wide CARFAX batch OFF by default (unindexed vehicle.vin scan melted prod 2026-08-06); needs compound index first. Render rollback disables push auto-deploy.
 - [Shopmonkey dashboard & backfill wiring](shopmonkey-dashboard-source.md) — SM writes only normalized_* (legacy vehicles=0 is normal); dashboard needs explicit per-provider source; backfill gated by SHOPMONKEY_BACKFILL_ENABLED; Render env edits need a deploy to apply.
 - [Dev Mongo is Prod Mongo](dev-mongo-is-prod.md) — this repl's dev MongoDB == the production cluster; any write/createIndex from dev hits prod live.
 - [Long-running jobs need a workflow](long-running-jobs-need-workflow.md) — shell `&`/nohup/setsid jobs are reaped when the bash tool returns; run multi-min backfills via a console workflow (sleep-infinity tail + sentinel), poll getWorkflowStatus.
