@@ -33,3 +33,5 @@ share ONE key. The ONLY levers for materially faster Tekmetric history:
   Brandon/Tekmetric to provision the key. Previously deferred (AppFueled idea).
 - RPS env bump (`CAP`/`USER_RESERVE`) — already applied; only buys 5→8/sec and
   risks 429s / starves live in-app calls.
+
+- Roster sync (appointments fan-out in the tekmetric-backfill cron) was the loudest background budget consumer (~860 exhaustions/4h fleet-wide, Aug 2026); levers now in code: peak-hours deferral (TEKMETRIC_ROSTER_PEAK_START/END_UTC), staleness cadence, appointment lookahead. Symptom of saturation: stale ro-context caches -> live interactive calls -> upstream timeouts -> negative-cached ROs ("recent timeout" logs), while interactive lane shows zero rate-limiter waits.
