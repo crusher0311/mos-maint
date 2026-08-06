@@ -906,9 +906,21 @@ export async function GET(request: NextRequest) {
       // Most Shopmonkey estimates carry no odometer (mileageIn/Out are rarely
       // filled at estimate time), so backfill missing miles from the newest
       // historical Shopmonkey work order for the same VIN that DID record one.
-      const milelessVins = shopmonkeyRows
-        .filter((r: any) => !(r.displayMiles > 0) && r.displayVin)
-        .map((r: any) => r.displayVin);
+      //
+      // GATED OFF by default (SHOPMONKEY_HISTORY_MILEAGE_ENABLED=true to turn
+      // on): this aggregation filters normalized_work_orders (3.8M docs) on
+      // `vehicle.vin`, which has NO index — the 2026-08-06 deploy shipped it
+      // ungated and the resulting per-dashboard-load scans saturated shared
+      // Mongo fleet-wide (p95 100s+ on every route). Do not re-enable until a
+      // compound index covering {shopId, "provenance.sourceIds.system",
+      // "vehicle.vin"} exists on prod and explain() shows no COLLSCAN.
+      const historyMileageEnabled =
+        process.env.SHOPMONKEY_HISTORY_MILEAGE_ENABLED === "true";
+      const milelessVins = historyMileageEnabled
+        ? shopmonkeyRows
+            .filter((r: any) => !(r.displayMiles > 0) && r.displayVin)
+            .map((r: any) => r.displayVin)
+        : [];
       if (milelessVins.length > 0) {
         try {
           const historical = await db.collection("normalized_work_orders").aggregate([
@@ -1001,7 +1013,14 @@ export async function GET(request: NextRequest) {
       db,
       Number(user.shopId),
       allRows,
-      isShopmonkeyConfigured ? CARFAX_FETCH_BATCH_MILELESS : CARFAX_FETCH_BATCH_DEFAULT,
+      // Wider CARFAX batch rides the same gate as the history-mileage lookup:
+      // 25 parallel CARFAX fetches per dashboard load amplified the
+      // 2026-08-06 saturation incident, so keep the default batch until the
+      // Shopmonkey mileage path is re-enabled deliberately.
+      isShopmonkeyConfigured &&
+        process.env.SHOPMONKEY_HISTORY_MILEAGE_ENABLED === "true"
+        ? CARFAX_FETCH_BATCH_MILELESS
+        : CARFAX_FETCH_BATCH_DEFAULT,
     );
 
     // Filter to only show vehicles with mileage data (if preference is enabled)
