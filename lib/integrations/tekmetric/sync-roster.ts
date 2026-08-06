@@ -35,7 +35,13 @@ import type { TekmetricAppointment, TekmetricEmployee } from "./types";
 // Forward window for "upcoming" appointments. We start slightly in the past so
 // in-progress / same-day appointments aren't missed, and look ~90 days ahead.
 const APPOINTMENT_LOOKBACK_HOURS = 12;
-const APPOINTMENT_LOOKAHEAD_DAYS = 90;
+// 30 days (was 90): the Data Status panel only needs a live "upcoming" count
+// and freshness, and a 90-day window tripled the page fan-out against the
+// shared Tekmetric API budget for appointments nobody looks at yet.
+const APPOINTMENT_LOOKAHEAD_DAYS = Math.max(
+  7,
+  Number(process.env.TEKMETRIC_APPT_LOOKAHEAD_DAYS) || 30,
+);
 const PAGE_SIZE = 100; // Tekmetric hard-caps page size at 100.
 const MAX_PAGES = 50; // Safety cap (≤ 5000 rows/entity/shop) — rosters are small.
 

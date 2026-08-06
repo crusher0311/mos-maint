@@ -501,6 +501,21 @@ async function recordRoNegativeCache(roId: string, mosShopId?: number): Promise<
   }
 }
 
+// Eager reset: as soon as any worker DOES get a good response for the RO,
+// clear the cross-instance negative entry so other instances stop skipping
+// the live call for the remainder of the 30s window. One bad moment should
+// not degrade an RO's screen a second longer than the upstream is sick.
+async function clearRoNegativeCache(roId: string, mosShopId?: number): Promise<void> {
+  try {
+    const db = await getDb();
+    await db
+      .collection(TEKMETRIC_RO_NEG_CACHE_COLL)
+      .deleteOne({ _id: negCacheKey(roId, mosShopId) } as any);
+  } catch {
+    // best-effort
+  }
+}
+
 async function fetchTekmetricRoCached(roId: string, forceRefresh = false, mosShopId?: number): Promise<any | null> {
   if (!forceRefresh) {
     const cached = tekmetricRoCache.get(roId);
@@ -534,6 +549,10 @@ async function fetchTekmetricRoCached(roId: string, forceRefresh = false, mosSho
       return null;
     }
     tekmetricRoCache.set(roId, { data, fetchedAt: Date.now() });
+    // Success — eagerly clear any cross-instance negative entry (fire and
+    // forget; a stale entry would otherwise suppress live calls for up to
+    // the full TTL even though the upstream has recovered).
+    void clearRoNegativeCache(roId, mosShopId);
     if (tekmetricRoCache.size > 200) {
       const oldest = Array.from(tekmetricRoCache.entries())
         .sort((a, b) => a[1].fetchedAt - b[1].fetchedAt)[0];

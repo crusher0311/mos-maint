@@ -82,13 +82,38 @@ const FASTPATH_RECENT_ATTEMPT_MINUTES = Math.max(
 // collection keyed by shopId.
 const ROSTER_SYNC_STALE_HOURS = Math.max(
   1,
-  Number(process.env.TEKMETRIC_ROSTER_SYNC_STALE_HOURS) || 6,
+  Number(process.env.TEKMETRIC_ROSTER_SYNC_STALE_HOURS) || 12,
 );
 const ROSTER_SYNC_MAX_SHOPS_PER_RUN = Math.max(
   1,
   Number(process.env.TEKMETRIC_ROSTER_SYNC_MAX_SHOPS) || 10,
 );
 const ROSTER_SYNC_PARALLELISM = 3;
+// Peak-hours deferral: the shared Tekmetric API budget (~8-10 RPS, one key
+// fleet-wide) is fully subscribed during business hours, and roster sync's
+// appointments fan-out was the loudest background consumer (hundreds of
+// "budget exhausted (priority=background)" failures per day). Appointments
+// don't need daytime freshness, so during the peak advisor window we only
+// sync shops that have NEVER synced (new connections); everything else waits
+// for the overnight window when the budget is idle. Window is UTC hours,
+// env-overridable; setting start == end disables the deferral.
+const ROSTER_SYNC_PEAK_START_UTC = Math.min(
+  23,
+  Math.max(0, Number(process.env.TEKMETRIC_ROSTER_PEAK_START_UTC ?? 12)),
+);
+const ROSTER_SYNC_PEAK_END_UTC = Math.min(
+  24,
+  Math.max(0, Number(process.env.TEKMETRIC_ROSTER_PEAK_END_UTC ?? 23)),
+);
+function isRosterPeakHoursNow(): boolean {
+  const h = new Date().getUTCHours();
+  if (ROSTER_SYNC_PEAK_START_UTC === ROSTER_SYNC_PEAK_END_UTC) return false;
+  if (ROSTER_SYNC_PEAK_START_UTC < ROSTER_SYNC_PEAK_END_UTC) {
+    return h >= ROSTER_SYNC_PEAK_START_UTC && h < ROSTER_SYNC_PEAK_END_UTC;
+  }
+  // Window wraps midnight UTC.
+  return h >= ROSTER_SYNC_PEAK_START_UTC || h < ROSTER_SYNC_PEAK_END_UTC;
+}
 const ROSTER_SYNC_COLLECTION = "tekmetric_roster_sync";
 // Protractor roster sync (Task #635). Same staleness-gated, bounded pass as the
 // Tekmetric one above, but over connected Protractor shops and into a dedicated
@@ -1705,6 +1730,11 @@ async function runRosterSyncPass(
     lastSyncByShop.set(Number(b.shopId), Number.isFinite(t) ? t : 0);
   }
 
+  // During peak advisor hours only never-synced shops (new connections) get a
+  // pass; stale-but-synced shops wait for the off-peak window so roster sync
+  // stops competing with interactive traffic and cache-refreshing sync for
+  // the shared Tekmetric budget.
+  const peakNow = isRosterPeakHoursNow();
   const candidates = shops
     .map((s) => {
       const tekmetricShopId = Number(s.tekmetric?.shopId ?? s.tekmetricShopId);
@@ -1719,12 +1749,20 @@ async function runRosterSyncPass(
       (s) =>
         Number.isFinite(s.shopId) &&
         Number.isFinite(s.tekmetricShopId) &&
-        s.lastSyncMs < staleBefore.getTime(),
+        s.lastSyncMs < staleBefore.getTime() &&
+        (!peakNow || s.lastSyncMs === 0),
     )
     .sort((a, b) => a.lastSyncMs - b.lastSyncMs)
     .slice(0, ROSTER_SYNC_MAX_SHOPS_PER_RUN);
 
-  if (candidates.length === 0) return { attempted: 0, synced: 0, errors: 0 };
+  if (candidates.length === 0) {
+    if (peakNow) {
+      console.log(
+        "[Roster Sync] Peak hours — deferring stale-shop refresh to the off-peak window.",
+      );
+    }
+    return { attempted: 0, synced: 0, errors: 0 };
+  }
 
   const limit = pLimit(ROSTER_SYNC_PARALLELISM);
   let synced = 0;
