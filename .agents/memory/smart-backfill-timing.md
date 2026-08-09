@@ -49,6 +49,10 @@ This is gated by the compute cron, so OFF mode writes nothing.
 - **Rollout sequence:** observe → eyeball candidate quiet shops in the readout →
   set `SMART_BACKFILL_TIMING_SHOP_IDS` to a small canary → flip to enforce →
   widen the list → eventually unset (null) for fleet-wide.
+- **2026-08-09: allowlist DELETED — enforce is FLEET-WIDE in prod.** Verified via
+  runtime `BLOCK` lines for non-pilot shops (75 BLOCK / 4 low-conf ALLOW per tick,
+  zero `not-in-canary`). Rationale: Aug 7 daytime web-instance saturation from
+  ungated fleet backfill.
 
 ## Flag + flip rules (IMPORTANT)
 - Env `SMART_BACKFILL_TIMING` = `off` (default) | `observe` | `enforce`.
@@ -97,20 +101,11 @@ is never starved.
   setting `SMART_BACKFILL_TIMING=observe` on prod web svc (Render, srv-d55jaq... ),
   which auto-triggered a redeploy (live 11:29Z).
 
-## Coverage gap: Tekmetric FULL-PAGE route is NOT gated
-- The gate (`prepareQuietWindowGate`/`applyQuietWindowGate`) is wired into the
-  **standard** per-shop routes only: `tekmetric-backfill`, `shopware-backfill`,
-  protractor resume, shopmonkey `runFullPageBackfillCycle`. The **Tekmetric
-  full-page** route `app/api/cron/tekmetric-fullpage-backfill/route.ts` has NO gate
-  call (greps for the gate symbols return nothing; it only matched generic
-  "eligible"/"skip" words in earlier searches).
-- Consequence: during Monday/heavy full-page catch-up, the full-page path does all
-  the work and the gated standard route no-ops (returns ~68ms, "lock held by
-  another instance") → smart-timing logs ZERO even though observe is correctly on.
-  So "no observe lines right now" can be expected, not a bug. Observe lines appear
-  only when a gated route actually iterates shops.
-- This also means enforce would NOT defer full-page Tekmetric backfills — a real
-  feature gap if quiet-window deferral of the big catch-up pulls is ever wanted.
+## Tekmetric FULL-PAGE route gap — CLOSED (was: not gated)
+- REVERSED as of Aug 2026: `app/api/cron/tekmetric-fullpage-backfill/route.ts` now
+  calls `prepareQuietWindowGate`/`applyQuietWindowGate` (filters `shopsToRun` before
+  queue hand-off + inline drain), so enforce DOES defer full-page pulls too. All
+  Tekmetric backfill lanes are covered.
 
 ## Demoing an actual skip
 - A sparse/demo shop (few organic events) profiles BELOW the 0.5 floor → enforce
