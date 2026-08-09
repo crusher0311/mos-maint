@@ -129,3 +129,5 @@
 - [Legacy mirror backfill run](legacy-mirror-backfill-run.md) — legacy mirrors backfilled + parity green (2026-08-02); Date/NUL params, string-lastId-vs-ObjectId resume wedge, parity sampler false-missing — all fixed in script/checker.
 - [Mirror param binding](mirror-param-binding.md) — never pass raw extract values to drizzle sql`${v}`: undefined→UNDEFINED_VALUE, arrays→SQL tuples; bind via backfill-mirror-utils (null/::jsonb/enum-safe).
 - [Cache/identity cutover gating coverage](cache-cutover-gating-coverage.md) — all 5 cache domains + identity repos now flag-gated; writers/aggregates still direct-Mongo, shadow-off gated by scripts/cutover-parity.ts.
+- [GitHub push vs credential helper](github-push-credential-helper.md) — managed gitPush rejects any configured credential.helper (DANGEROUS_CONFIG); unset → push → restore.
+- [Normalized money units per provider](normalized-money-units.md) — WO grand_total is CENTS for tekmetric only; service-job money is DOLLARS for all providers; created_at=import time; declined jobs often $0.

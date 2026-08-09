@@ -12,3 +12,4 @@ export * from "./wave3";
 export * from "./wave4";
 export * from "./operational";
 export * from "./integration-ops";
+export * from "./sales-coach";

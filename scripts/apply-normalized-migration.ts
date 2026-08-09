@@ -432,9 +432,46 @@ async function main() {
       "fetched_at" timestamptz NOT NULL DEFAULT now(),
       "expires_at" timestamptz NOT NULL
     )`,
+    // Task #987 — sales coaching trainer (mirrors drizzle/0023_task987_sales_coach.sql)
+    `CREATE TABLE IF NOT EXISTS "sales_coach_scenarios" (
+      "id" varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+      "scenario_date" text NOT NULL,
+      "scenario_type" text NOT NULL,
+      "shop_id" integer NOT NULL,
+      "work_order_id" varchar NOT NULL,
+      "work_order_number" text,
+      "context" jsonb NOT NULL,
+      "created_at" timestamp NOT NULL DEFAULT now()
+    )`,
+    `CREATE TABLE IF NOT EXISTS "sales_coach_sessions" (
+      "id" varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+      "scenario_id" varchar NOT NULL,
+      "user_email" text NOT NULL,
+      "audio" "bytea",
+      "audio_mime" text,
+      "audio_bytes" integer,
+      "duration_sec" integer,
+      "transcript" text,
+      "transcription_provider" text,
+      "feedback" jsonb,
+      "score" integer,
+      "created_at" timestamp NOT NULL DEFAULT now()
+    )`,
+    // Task #987 — sales script cache (mirrors drizzle/0024_task987_sales_script_cache.sql)
+    `CREATE TABLE IF NOT EXISTS "sales_script_cache" (
+      "id" varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+      "shop_id" integer NOT NULL,
+      "work_order_id" varchar NOT NULL,
+      "context_hash" text NOT NULL,
+      "script" jsonb NOT NULL,
+      "model" text,
+      "created_at" timestamp NOT NULL DEFAULT now()
+    )`,
   ];
 
   const fkStatements = [
+    // Task #987 — sales coaching trainer
+    `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE constraint_name = 'sales_coach_sessions_scenario_id_fk') THEN ALTER TABLE "sales_coach_sessions" ADD CONSTRAINT "sales_coach_sessions_scenario_id_fk" FOREIGN KEY ("scenario_id") REFERENCES "public"."sales_coach_scenarios"("id") ON DELETE no action ON UPDATE no action; END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE constraint_name = 'normalized_service_jobs_work_order_id_fk') THEN ALTER TABLE "normalized_service_jobs" ADD CONSTRAINT "normalized_service_jobs_work_order_id_fk" FOREIGN KEY ("work_order_id") REFERENCES "public"."normalized_work_orders"("id") ON DELETE no action ON UPDATE no action; END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE constraint_name = 'normalized_line_items_work_order_id_fk') THEN ALTER TABLE "normalized_line_items" ADD CONSTRAINT "normalized_line_items_work_order_id_fk" FOREIGN KEY ("work_order_id") REFERENCES "public"."normalized_work_orders"("id") ON DELETE no action ON UPDATE no action; END IF; END $$`,
     `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE constraint_name = 'normalized_line_items_service_job_id_fk') THEN ALTER TABLE "normalized_line_items" ADD CONSTRAINT "normalized_line_items_service_job_id_fk" FOREIGN KEY ("service_job_id") REFERENCES "public"."normalized_service_jobs"("id") ON DELETE no action ON UPDATE no action; END IF; END $$`,
@@ -442,6 +479,14 @@ async function main() {
   ];
 
   const indexStatements = [
+    // Task #987 — sales coaching trainer (mirrors drizzle/0023_task987_sales_coach.sql)
+    `CREATE UNIQUE INDEX IF NOT EXISTS "scs_work_order_id_idx" ON "sales_coach_scenarios" ("work_order_id")`,
+    `CREATE INDEX IF NOT EXISTS "scs_scenario_date_idx" ON "sales_coach_scenarios" ("scenario_date")`,
+    `CREATE INDEX IF NOT EXISTS "scsn_scenario_id_idx" ON "sales_coach_sessions" ("scenario_id")`,
+    `CREATE INDEX IF NOT EXISTS "scsn_created_at_idx" ON "sales_coach_sessions" ("created_at")`,
+    // Task #987 — sales script cache (mirrors drizzle/0024_task987_sales_script_cache.sql)
+    `CREATE UNIQUE INDEX IF NOT EXISTS "ssc_wo_hash_idx" ON "sales_script_cache" ("work_order_id", "context_hash")`,
+    `CREATE INDEX IF NOT EXISTS "ssc_shop_id_idx" ON "sales_script_cache" ("shop_id")`,
     // Task #901 — vehicle specs cache
     `CREATE INDEX IF NOT EXISTS "vehicle_specs_cache_vin_idx" ON "vehicle_specs_cache" ("vin")`,
     `CREATE INDEX IF NOT EXISTS "vehicle_specs_cache_expires_idx" ON "vehicle_specs_cache" ("expires_at")`,
