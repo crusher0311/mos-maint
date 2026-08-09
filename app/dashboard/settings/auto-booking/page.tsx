@@ -158,12 +158,13 @@ export default function AutoBookingSettingsPage() {
               <div>
                 <h3 className="font-semibold text-amber-900">Feature Not Available</h3>
                 <p className="text-sm text-amber-800 mt-1">{unavailableReason}</p>
-                <a 
-                  href="/dashboard/settings/billing" 
-                  className="inline-block mt-3 text-sm font-medium text-amber-700 hover:text-amber-800"
-                >
-                  View Plans →
-                </a>
+                <p className="mt-3 text-sm font-medium text-amber-700">
+                  Contact support at{" "}
+                  <a href="mailto:support@mosmaintenance.com" className="underline hover:text-amber-800">
+                    support@mosmaintenance.com
+                  </a>{" "}
+                  to change your plan.
+                </p>
               </div>
             </div>
           </div>

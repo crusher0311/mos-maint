@@ -37,13 +37,13 @@ export function TrialUpgradePrompt({ viewedCount, limit, onClose }: TrialUpgrade
           </p>
           
           <div className="w-full space-y-3">
-            <Link
-              href="/dashboard/settings/billing"
+            <a
+              href="mailto:support@mosmaintenance.com?subject=Upgrade Inquiry"
               className="flex items-center justify-center gap-2 w-full py-3 px-4 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors"
             >
               <Zap className="w-5 h-5" />
-              Upgrade to Professional
-            </Link>
+              Contact Us to Upgrade
+            </a>
             
             <Link
               href="/dashboard"
@@ -81,12 +81,12 @@ export function TrialBanner({ viewedCount, limit }: { viewedCount: number; limit
             }
           </span>
         </div>
-        <Link
-          href="/dashboard/settings/billing"
+        <a
+          href="mailto:support@mosmaintenance.com?subject=Upgrade Inquiry"
           className="text-sm font-medium text-amber-700 hover:text-amber-800 underline"
         >
-          Upgrade now
-        </Link>
+          Contact us to upgrade
+        </a>
       </div>
     </div>
   );

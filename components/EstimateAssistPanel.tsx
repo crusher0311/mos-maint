@@ -512,12 +512,13 @@ export default function EstimateAssistPanel({
           <p className="text-gray-500 text-sm mt-1">
             Upgrade your plan to build smart estimates and audit work orders for completeness.
           </p>
-          <a
-            href="/dashboard/settings/billing"
-            className="inline-block mt-6 px-5 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700"
-          >
-            View Plans &amp; Billing
-          </a>
+          <p className="text-gray-500 text-sm mt-6">
+            Contact support at{" "}
+            <a href="mailto:support@mosmaintenance.com" className="text-blue-600 underline hover:text-blue-700">
+              support@mosmaintenance.com
+            </a>{" "}
+            to change your plan.
+          </p>
         </div>
       </div>
     );

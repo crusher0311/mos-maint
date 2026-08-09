@@ -804,7 +804,7 @@ export async function POST(req: NextRequest) {
             }
             const now = new Date();
             const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://mos.tools";
-            const updatePaymentUrl = `${baseUrl}/dashboard/settings/billing`;
+            const updatePaymentUrl = `${baseUrl}/dashboard`;
             const owner = await db.collection("users").findOne({ shopId, role: "owner" });
 
             // Trial-converted subs run a dedicated retry counter + hard

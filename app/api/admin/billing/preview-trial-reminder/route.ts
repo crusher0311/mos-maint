@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
       process.env.NEXT_PUBLIC_APP_URL ||
       process.env.APP_BASE_URL ||
       req.nextUrl.origin;
-    const addCardUrl = `${baseUrl.replace(/\/$/, "")}/dashboard/settings/billing`;
+    const addCardUrl = `${baseUrl.replace(/\/$/, "")}/dashboard`;
 
     const rendered = makeTrialReminderEmail(
       sampleShopName,

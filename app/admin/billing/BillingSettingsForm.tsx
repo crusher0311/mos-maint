@@ -67,7 +67,7 @@ export default function BillingSettingsForm({
         day: "numeric",
         year: "numeric",
       }),
-      addCardUrl: "https://app.example.com/dashboard/settings/billing",
+      addCardUrl: "https://app.example.com/dashboard",
     } as Record<string, string>;
   }, [previewDaysLeft, previewShopName]);
 

@@ -9,8 +9,6 @@ import SupportChatWidget from "@/components/ui/SupportChatWidget";
 import { GhostModeBanner } from "@/components/ui/GhostModeBanner";
 import { AnnouncementBanner } from "@/components/ui/AnnouncementBanner";
 import { BillingStatusBanner, BillingStatus } from "@/components/ui/BillingStatusBanner";
-import { TrialCardCaptureBanner } from "@/components/ui/TrialCardCaptureBanner";
-import { CardCaptureModal } from "@/components/ui/CardCaptureModal";
 import { Menu } from "lucide-react";
 
 interface TrialState {
@@ -39,38 +37,12 @@ interface UserInfo {
   trial?: TrialState | null;
 }
 
-const CARD_PROMPT_DISMISS_KEY = "mos.trialCardPromptDismissedAt";
-
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [quickStickerOpen, setQuickStickerOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [cardModalOpen, setCardModalOpen] = useState(false);
-  const [cardSetupLoading, setCardSetupLoading] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
-
-  const startCardSetup = async () => {
-    setCardSetupLoading(true);
-    try {
-      const res = await fetch("/api/stripe/setup-card", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ returnTo: pathname || "/dashboard" }),
-      });
-      const data = await res.json();
-      if (data.url) {
-        window.location.href = data.url;
-      } else {
-        alert(data.error || "Could not start card setup");
-        setCardSetupLoading(false);
-      }
-    } catch (err) {
-      console.error("Card setup error:", err);
-      alert("Could not start card setup");
-      setCardSetupLoading(false);
-    }
-  };
 
   useEffect(() => {
     async function fetchUserInfo() {
@@ -109,21 +81,6 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             }
             
             setUserInfo({ ...authData, enabledFeatures, billingStatus, gracePeriodEndsAt, trial });
-
-            if (trial?.active && trial.endsAt && !trial.cardOnFile) {
-              const daysLeft = trial.daysLeft ?? 0;
-              let dismissedAt = 0;
-              try {
-                const v = window.localStorage.getItem(CARD_PROMPT_DISMISS_KEY);
-                dismissedAt = v ? Number(v) : 0;
-              } catch {
-                dismissedAt = 0;
-              }
-              const hoursSinceDismiss = (Date.now() - dismissedAt) / (1000 * 60 * 60);
-              if (daysLeft <= 1 || hoursSinceDismiss > 24) {
-                setCardModalOpen(true);
-              }
-            }
           }
         }
       } catch (err) {
@@ -164,7 +121,6 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           isPlatformAdmin={userInfo?.isPlatformAdmin}
           currentShopId={userInfo?.shopId}
           enterpriseId={userInfo?.enterpriseId}
-          hasEnterpriseBilling={userInfo?.hasEnterpriseBilling}
           enabledFeatures={userInfo?.enabledFeatures}
           onQuickStickerClick={() => setQuickStickerOpen(true)}
         />
@@ -194,7 +150,6 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           isPlatformAdmin={userInfo?.isPlatformAdmin}
           currentShopId={userInfo?.shopId}
           enterpriseId={userInfo?.enterpriseId}
-          hasEnterpriseBilling={userInfo?.hasEnterpriseBilling}
           enabledFeatures={userInfo?.enabledFeatures}
           onQuickStickerClick={() => {
             setQuickStickerOpen(true);
@@ -241,13 +196,6 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                 shopName={userInfo.shopName}
               />
             )}
-            {userInfo?.trial && (
-              <TrialCardCaptureBanner
-                trial={userInfo.trial}
-                onAddCard={startCardSetup}
-                loading={cardSetupLoading}
-              />
-            )}
           </div>
           {children}
         </div>
@@ -257,24 +205,6 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         isOpen={quickStickerOpen} 
         onClose={() => setQuickStickerOpen(false)} 
       />
-
-      {userInfo?.trial && (
-        <CardCaptureModal
-          open={cardModalOpen}
-          trial={userInfo.trial}
-          shopName={userInfo.shopName}
-          required={(userInfo.trial.daysLeft ?? 0) <= 0}
-          onClose={() => {
-            setCardModalOpen(false);
-            try {
-              window.localStorage.setItem(CARD_PROMPT_DISMISS_KEY, String(Date.now()));
-            } catch {
-              // ignore
-            }
-          }}
-          onAddCard={startCardSetup}
-        />
-      )}
 
       <SupportChatWidget />
     </div>

@@ -76,7 +76,6 @@ interface SidebarProps {
   isPlatformAdmin?: boolean;
   currentShopId?: number;
   enterpriseId?: string | null;
-  hasEnterpriseBilling?: boolean;
   enabledFeatures?: string[];
   onClose?: () => void;
   onQuickStickerClick?: () => void;
@@ -102,7 +101,7 @@ function getInitialExpandedSections(pathname: string | null): Set<string> {
   return sections;
 }
 
-export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, userEmail, userRole, userInitials = "MS", isPlatformAdmin, currentShopId, enterpriseId, hasEnterpriseBilling = false, enabledFeatures = ["maintenance"], onClose, onQuickStickerClick }: SidebarProps) {
+export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, userEmail, userRole, userInitials = "MS", isPlatformAdmin, currentShopId, enterpriseId, enabledFeatures = ["maintenance"], onClose, onQuickStickerClick }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [expandedSections, setExpandedSections] = useState<Set<string>>(() => getInitialExpandedSections(pathname));
@@ -330,7 +329,6 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
             { name: "Create RO", href: "/dashboard/settings/create-ro" }
           ]
         },
-        ...(hasEnterpriseBilling ? [] : [{ name: "Billing", href: "/dashboard/settings/billing" }]),
         { name: "Users", href: "/dashboard/settings/users" },
         { name: "Maintenance Thresholds", href: "/dashboard/settings/maintenance" },
         { name: "Shop Intervals", href: "/dashboard/settings/intervals" },

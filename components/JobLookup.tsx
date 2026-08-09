@@ -286,12 +286,13 @@ export default function JobLookup({ currentVehicle, workOrderGuid, onJobAdded }:
               <p className="text-sm text-gray-500 mb-4">
                 Upgrade to Professional or Enterprise to unlock this feature and access your complete job history.
               </p>
-              <a 
-                href="/settings/billing"
-                className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 transition-colors"
-              >
-                View Plans
-              </a>
+              <p className="text-sm text-gray-500">
+                Contact support at{" "}
+                <a href="mailto:support@mosmaintenance.com" className="text-purple-600 underline hover:text-purple-700">
+                  support@mosmaintenance.com
+                </a>{" "}
+                to upgrade your plan.
+              </p>
             </div>
           </div>
         </div>

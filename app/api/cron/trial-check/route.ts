@@ -77,7 +77,7 @@ async function processOne(
   const stripeCustomerId: string | undefined = shop.stripeCustomerId || shop.billing?.stripeCustomerId;
   const paymentMethodId: string | undefined = shop.stripePaymentMethodId || shop.billing?.stripePaymentMethodId;
   const ownerEmail = await findOwnerEmail(db, shopId);
-  const addCardUrl = `${baseUrl}/dashboard/settings/billing`;
+  const addCardUrl = `${baseUrl}/dashboard`;
 
   if (msLeft > 0) {
     if (cardOnFile) {

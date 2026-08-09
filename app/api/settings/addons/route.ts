@@ -1,49 +1,14 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
-import { listPlatformFeatures } from "@/lib/data/repositories/platform-features";
 
-export interface FeatureAddon {
-  slug: string;
-  name: string;
-  description: string;
-  icon: string;
-  monthlyPrice: number;
-  stripePriceId?: string;
-  stripeProductId?: string;
-  category: string;
-  requiresFeature?: string;
-}
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
+// The customer-facing a la carte add-ons catalog has been removed along
+// with the self-serve billing page. Add-ons are managed internally
+// (admin / platform-admin).
 export async function GET() {
-  try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const platformFeatures = await listPlatformFeatures(
-      { status: "active", category: { $in: ["core", "addon"] } },
-      { sort: { order: 1 } },
-    );
-
-    const featureAddons: FeatureAddon[] = platformFeatures.map((f: any) => ({
-      slug: f.slug,
-      name: f.name,
-      description: f.description,
-      icon: f.icon || "Package",
-      monthlyPrice: f.pricePerMonth || f.monthlyPrice || 0,
-      stripePriceId: f.stripePriceId,
-      stripeProductId: f.stripeProductId,
-      category: f.category,
-      requiresFeature: f.requiresFeature,
-    }));
-
-    return NextResponse.json({
-      ok: true,
-      featureAddons,
-    });
-  } catch (error) {
-    console.error("Error fetching add-ons:", error);
-    return NextResponse.json({ error: "Failed to fetch add-ons" }, { status: 500 });
-  }
+  return NextResponse.json(
+    { error: "Self-serve add-ons are no longer available. Please contact support to change your plan." },
+    { status: 410 },
+  );
 }

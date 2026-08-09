@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
         const owner = await db.collection("users").findOne({ shopId: shop.shopId, role: "owner" });
         if (owner?.email) {
           const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://mos.tools";
-          const updatePaymentUrl = `${baseUrl}/dashboard/settings/billing`;
+          const updatePaymentUrl = `${baseUrl}/dashboard`;
           const emailContent = makeGraceReminderEmail(shop.name || `Shop ${shop.shopId}`, updatePaymentUrl, daysRemaining);
           
           const reminderResult = await sendEmail({
@@ -111,7 +111,7 @@ export async function POST(req: NextRequest) {
       const owner = await db.collection("users").findOne({ shopId: shop.shopId, role: "owner" });
       if (owner?.email) {
         const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://mos.tools";
-        const updatePaymentUrl = `${baseUrl}/dashboard/settings/billing`;
+        const updatePaymentUrl = `${baseUrl}/dashboard`;
         const emailContent = makeAccountSuspendedEmail(shop.name || `Shop ${shop.shopId}`, updatePaymentUrl);
         sendEmail({
           to: owner.email,

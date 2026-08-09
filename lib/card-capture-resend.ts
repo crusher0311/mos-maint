@@ -73,7 +73,7 @@ export async function resendCardCaptureForShop(opts: {
     setupSession = await createCardSetupSession({
       shopId: numericShopId,
       ownerEmail,
-      returnTo: "/dashboard/settings/billing",
+      returnTo: "/dashboard",
       purpose: "trial_card_capture",
       createdVia: "platform_admin_resend_card_capture",
     });

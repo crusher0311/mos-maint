@@ -1,7 +1,6 @@
 "use client";
 
-import { AlertTriangle, XCircle, Clock } from "lucide-react";
-import Link from "next/link";
+import { AlertTriangle, XCircle } from "lucide-react";
 
 export type BillingStatus = "active" | "trial" | "past_due" | "suspended" | "canceled" | "enterprise" | "demo";
 
@@ -44,15 +43,13 @@ export function BillingStatusBanner({ status, gracePeriodEndsAt, shopName }: Bil
                 <> Your grace period ends today. Please update your payment immediately.</>
               )}
             </p>
-            <div className="mt-3">
-              <Link
-                href="/dashboard/settings/billing"
-                className="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md text-amber-800 bg-amber-100 hover:bg-amber-200 transition-colors"
-              >
-                <Clock className="h-4 w-4 mr-1.5" />
-                Update Payment Method
-              </Link>
-            </div>
+            <p className="text-sm text-amber-700 mt-2">
+              Please contact support at{" "}
+              <a href="mailto:support@mosmaintenance.com" className="font-medium underline">
+                support@mosmaintenance.com
+              </a>{" "}
+              to update your payment method.
+            </p>
           </div>
         </div>
       </div>
@@ -72,14 +69,13 @@ export function BillingStatusBanner({ status, gracePeriodEndsAt, shopName }: Bil
               Your account has been temporarily suspended due to an unpaid balance. 
               Features are disabled, but your data is safe. Update your payment to restore full access.
             </p>
-            <div className="mt-3">
-              <Link
-                href="/dashboard/settings/billing"
-                className="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 transition-colors"
-              >
-                Update Payment Now
-              </Link>
-            </div>
+            <p className="text-sm text-red-700 mt-2">
+              Please contact support at{" "}
+              <a href="mailto:support@mosmaintenance.com" className="font-medium underline">
+                support@mosmaintenance.com
+              </a>{" "}
+              to restore your account.
+            </p>
           </div>
         </div>
       </div>
@@ -96,16 +92,12 @@ export function BillingStatusBanner({ status, gracePeriodEndsAt, shopName }: Bil
               Subscription Canceled
             </h3>
             <p className="text-sm text-gray-700 mt-1">
-              Your subscription has been canceled. Resubscribe to regain access to all features.
+              Your subscription has been canceled. Contact support at{" "}
+              <a href="mailto:support@mosmaintenance.com" className="font-medium underline">
+                support@mosmaintenance.com
+              </a>{" "}
+              to resubscribe and regain access to all features.
             </p>
-            <div className="mt-3">
-              <Link
-                href="/dashboard/settings/billing"
-                className="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md text-gray-800 bg-gray-200 hover:bg-gray-300 transition-colors"
-              >
-                View Billing Options
-              </Link>
-            </div>
           </div>
         </div>
       </div>
