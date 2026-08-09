@@ -10,6 +10,7 @@ import type {
   ShopWarePastRecommendation,
   ShopWareShop,
   ShopWareTenant,
+  ShopWarePartnerAuthorization,
 } from './types';
 
 const SW_PROD_BASE = 'https://api.shop-ware.com/api/v1';
@@ -136,6 +137,19 @@ export async function getAllPages<T>(
   }
 
   return results;
+}
+
+/**
+ * Partner-level list of tenants that have authorized our Partner API
+ * (task #1064). Shop-Ware 404s tenant-scoped calls for unauthorized
+ * tenants, so this is the only way to tell "typo'd tenant ID" from
+ * "authorization never completed". Paginated like every other list call.
+ */
+export async function getPartnerAuthorizations(): Promise<ShopWarePartnerAuthorization[]> {
+  const { partnerApiId } = getCredentials();
+  return getAllPages<ShopWarePartnerAuthorization>(
+    `/partners/${encodeURIComponent(partnerApiId)}/authorizations`
+  );
 }
 
 export async function getTenants(): Promise<ShopWareTenant[]> {

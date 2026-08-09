@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { getDb } from '@/lib/mongo';
-import { testConnection, getShop, isConfigured } from '@/lib/integrations/shopware/client';
+import { testConnection, getShop, getShops, getPartnerAuthorizations, isConfigured } from '@/lib/integrations/shopware/client';
+import {
+  isShopWareNotFound,
+  suggestTenantId,
+  buildTenantConnectError,
+} from '@/lib/integrations/shopware/connect-errors';
 import { prewarmShopWareJobsCacheForOnboarding } from '@/lib/shopware-jobs-prewarm';
 
 async function triggerShopWareBackfillCron(shopId: number): Promise<void> {
@@ -113,6 +118,47 @@ export async function POST(request: NextRequest) {
 
     const connTest = await testConnection(tenantIdNum);
     if (!connTest.ok) {
+      // Task #1064: Shop-Ware 404s both nonexistent tenants AND tenants
+      // that never authorized our Partner API. Map that to a friendly,
+      // actionable message (no raw JSON/URL blob) and — when the partner
+      // authorizations list is reachable — suggest the tenant whose shops
+      // include the entered Shop ID.
+      if (isShopWareNotFound(connTest.error)) {
+        let suggestedTenantId: number | null = null;
+        try {
+          const auths = await getPartnerAuthorizations();
+          const tenantShopIds = new Map<number, number[]>();
+          // Cap the per-tenant shop lookups so a large partner list can't
+          // stall the Connect POST; suggestion is best-effort.
+          const candidates = auths.slice(0, 15);
+          await Promise.all(
+            candidates.map(async (a) => {
+              try {
+                const shops = await getShops(a.tenant_id);
+                tenantShopIds.set(a.tenant_id, shops.map((s) => s.id));
+              } catch {
+                // skip tenants whose shop lookup fails
+              }
+            })
+          );
+          suggestedTenantId = suggestTenantId(auths, tenantIdNum, swShopIdNum, tenantShopIds);
+        } catch (authErr: any) {
+          console.warn(`[Shop-Ware Settings] Authorizations cross-check failed (non-fatal): ${authErr?.message || authErr}`);
+        }
+
+        return NextResponse.json(
+          {
+            error: buildTenantConnectError({
+              enteredTenantId: tenantIdNum,
+              enteredShopId: swShopIdNum,
+              usedShopIdFallback: !tenantId,
+              suggestedTenantId,
+            }),
+          },
+          { status: 400 }
+        );
+      }
+
       return NextResponse.json(
         { error: connTest.error || 'Could not connect to Shop-Ware. Check your Tenant ID.' },
         { status: 400 }

@@ -17,6 +17,16 @@ export interface ShopWareIntegratorTag {
   updated_at: string;
 }
 
+// Partner-level: GET /partners/{partner_id}/authorizations — lists the
+// tenants that have authorized our Partner API (task #1064).
+export interface ShopWarePartnerAuthorization {
+  id: number;
+  api_partner_id: number;
+  tenant_id: number;
+  writable: boolean;
+  api_tenant_id?: number;
+}
+
 export interface ShopWareTenant {
   id: number;
   cname: string;
