@@ -68,6 +68,13 @@ This is gated by the compute cron, so OFF mode writes nothing.
   flips — never flip it on from an isolated env. Populate profiles first
   (cron or `?force=1` in prod), eyeball the readout, then observe, then enforce.
 
+**Known gap (bit 3x: Aug 5-7, Aug 10):** low-confidence/no-profile shops fail OPEN,
+and brand-new shops are exactly that AND carry the heaviest initial catch-up — so
+fleet-wide enforce does NOT stop new-shop fullpage chunks from running inline on
+web during business hours (p95 10-26s, extension timeouts). Interim lever each
+time: `TEKMETRIC_BACKFILL_PAUSE_UNTIL` + redeploy. Durable fix = keep fail-open
+but route/bound that lane off daytime web (proposed as a project task).
+
 **How to apply:** any change here must preserve the off-path no-op guarantee
 (no DB read / no log when off). Confidence floor is
 `SMART_BACKFILL_TIMING_MIN_CONFIDENCE` (default 0.5); below it the gate falls
