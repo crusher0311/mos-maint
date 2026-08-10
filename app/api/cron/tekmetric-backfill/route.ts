@@ -7,7 +7,7 @@ import { createIngestionService } from "@/lib/integrations/core/normalized-inges
 import { tekmetricRequest as centralTekmetricRequest, runWithTekmetricApiCallTracking, getRepairOrderInspectionsWithXAuth, runWithTekmetric429Tracking, runWithTekmetricAbortSignal } from "@/lib/integrations/tekmetric/client";
 import { getCachedVehicle, cacheVehicle, getCachedCustomer, cacheCustomer, getCachedJobs, cacheJobs } from "@/lib/integrations/tekmetric/incremental-sync";
 import { getPaceConfig, midpoint, describePace, getBackfillYears, reopenCompletedShopsForHorizon } from "@/lib/integrations/backfill-pace";
-import { prepareQuietWindowGate, applyQuietWindowGate } from "@/lib/data/repositories/activity-profiles";
+import { prepareQuietWindowGate, applyQuietWindowGate, applyConservativeFallbackGate } from "@/lib/data/repositories/activity-profiles";
 import { archiveResolvedSkippedRos } from "@/lib/integrations/tekmetric/skipped-ro-resolution";
 import {
   getDrainLock,
@@ -2205,13 +2205,26 @@ async function _GETImpl(req: NextRequest) {
     const quietGate = await prepareQuietWindowGate(
       selectedShops.map((s) => Number(s.shopId)),
     );
+    // Conservative-fallback overlay (task #1072): shops WITHOUT a confident
+    // profile (no_profile / low_confidence / no_quiet_window — exactly the
+    // brand-new shops whose initial catch-up is the heaviest work) do NOT
+    // fail fully open onto this inline web lane. In enforce mode their
+    // chunks only run inside the conservative default window (01:00–06:00
+    // shop-local, Central when unknown; SMART_BACKFILL_FALLBACK_WINDOW
+    // overrides). Confident-profile shops are untouched — the standard gate
+    // above already made their call.
     const shopsToRun =
       quietGate.mode === "off"
         ? selectedShops
         : selectedShops.filter(
             (shop) =>
               !applyQuietWindowGate(quietGate, Number(shop.shopId), "tekmetric")
-                .shouldSkip,
+                .shouldSkip &&
+              !applyConservativeFallbackGate(
+                quietGate,
+                Number(shop.shopId),
+                "tekmetric",
+              ).shouldSkip,
           );
 
     // Process shops in parallel up to SHOP_PARALLELISM. Per-shop concurrency

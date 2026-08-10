@@ -24,6 +24,7 @@ import { decideQueueFor } from "@/lib/queue/feature-flag";
 import {
   prepareQuietWindowGate,
   applyQuietWindowGate,
+  applyConservativeFallbackGate,
 } from "@/lib/data/repositories/activity-profiles";
 
 export const runtime = "nodejs";
@@ -319,6 +320,32 @@ export async function GET(req: NextRequest) {
   // knob comments up top). Counter is per-tick, reset each GET.
   let giantsProcessed = 0;
   for (const shop of inlineShops) {
+    // Conservative-fallback gate (task #1072): shops WITHOUT a confident
+    // activity profile (no_profile / low_confidence / no_quiet_window — i.e.
+    // exactly the brand-new shops whose initial catch-up is the heaviest
+    // work) must never run this INLINE lane on the web instance outside a
+    // conservative default quiet window (01:00–06:00 shop-local, Central
+    // when unknown). The queue hand-off above is intentionally NOT gated by
+    // this — the BullMQ worker lane doesn't touch web p95. Confident-profile
+    // shops are untouched (their call was already made by the standard gate
+    // in `shopsToRun`). OFF/observe modes never skip, same as the standard
+    // gate, and deferred shops count toward shopsRemaining so the night
+    // ticks pick them up.
+    const fallbackGate = applyConservativeFallbackGate(
+      quietGate,
+      Number(shop.shopId),
+      "tekmetric-fullpage",
+    );
+    if (fallbackGate.shouldSkip) {
+      results.push({
+        shopId: shop.shopId,
+        name: shop.name,
+        ok: true,
+        skipped: true,
+        reason: "fallback_outside_conservative_window",
+      });
+      continue;
+    }
     if (Date.now() >= deadlineMs) {
       console.log(
         `[Tekmetric Full-Page Cron] Deadline reached after ${results.length} shop(s) handled (${inlineShops.length} eligible for in-process this tick)`,

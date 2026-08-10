@@ -16,8 +16,10 @@ import {
   type GateDecision,
   type QuietWindow,
   type SmartTimingMode,
+  applyConservativeFallbackToDecision,
   computeConfidence,
   decideQuietWindowGate,
+  getConservativeFallbackWindow,
   describeGateDecision,
   deriveQuietWindows,
   emptyHistogram,
@@ -692,6 +694,57 @@ export function applyQuietWindowGate(
         : "would-BLOCK";
   console.log(
     `[smart-timing][${ctx.mode}][${providerLabel}] ${verb} ${describeGateDecision(Number(shopId), decision)}`,
+  );
+  return { shouldSkip, decision };
+}
+
+// Conservative-fallback gate for HEAVY work only (task #1072): fullpage /
+// initial-catch-up chunks running INLINE on the web instance. For shops where
+// the smart gate falls back (no_profile / low_confidence / no_quiet_window)
+// this does NOT fail open — the work is confined to the conservative default
+// window (01:00–06:00 shop-local, Central when no timezone is known;
+// SMART_BACKFILL_FALLBACK_WINDOW overrides). Non-fallback shops always return
+// shouldSkip:false here — the standard `applyQuietWindowGate` has already made
+// their call, so this adds nothing (and logs nothing) for them.
+//
+// Semantics mirror the standard gate: OFF never skips/logs, OBSERVE logs the
+// would-BLOCK but never skips, only ENFORCE skips (respecting the
+// SMART_BACKFILL_TIMING_SHOP_IDS canary allowlist).
+export function applyConservativeFallbackGate(
+  ctx: QuietWindowGateContext,
+  shopId: number,
+  providerLabel: string,
+): { shouldSkip: boolean; decision: GateDecision | null } {
+  if (ctx.mode === "off") return { shouldSkip: false, decision: null };
+  const base = decideQuietWindowGate({
+    profile: ctx.profiles.get(Number(shopId)),
+    now: ctx.now,
+    minConfidence: ctx.minConfidence,
+  });
+  // Confident-profile shops: the standard gate already decided; no overlay.
+  if (!base.fallback) return { shouldSkip: false, decision: base };
+  const decision = applyConservativeFallbackToDecision({
+    decision: base,
+    now: ctx.now,
+    window: getConservativeFallbackWindow(),
+  });
+  const inCanary = ctx.allowlist === null || ctx.allowlist.has(Number(shopId));
+  const wouldSkip = ctx.mode === "enforce" && !decision.eligible;
+  const shouldSkip = wouldSkip && inCanary;
+  const verb =
+    ctx.mode === "enforce"
+      ? !inCanary
+        ? decision.eligible
+          ? "ALLOW(not-in-canary)"
+          : "would-BLOCK(not-in-canary)"
+        : decision.eligible
+          ? "ALLOW"
+          : "BLOCK"
+      : decision.eligible
+        ? "would-ALLOW"
+        : "would-BLOCK";
+  console.log(
+    `[smart-timing-fallback][${ctx.mode}][${providerLabel}] ${verb} ${describeGateDecision(Number(shopId), decision)}`,
   );
   return { shouldSkip, decision };
 }

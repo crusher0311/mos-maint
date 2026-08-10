@@ -20,6 +20,8 @@ import {
   inferTimezoneFromUtcHistogram,
   decideQuietWindowGate,
   describeGateDecision,
+  getConservativeFallbackWindow,
+  applyConservativeFallbackToDecision,
   type ActivityProfile,
 } from "../lib/integrations/activity-profile/profile";
 import {
@@ -29,6 +31,7 @@ import {
 } from "../lib/integrations/activity-profile/timezone";
 import {
   applyQuietWindowGate,
+  applyConservativeFallbackGate,
   type QuietWindowGateContext,
 } from "../lib/data/repositories/activity-profiles";
 
@@ -433,6 +436,120 @@ check("gate wrapper: OBSERVE ignores allowlist (never skips)", () => {
   const r = applyQuietWindowGate(ctx, 42, "tekmetric");
   assert.equal(r.shouldSkip, false);
   assert.equal(r.decision!.eligible, false);
+});
+
+/* ------------------- conservative fallback gate (task #1072) --------------- */
+
+check("fallback window: default 1-6, env override, bad values ignored", () => {
+  assert.deepEqual(getConservativeFallbackWindow({} as any), {
+    startHour: 1,
+    endHour: 6,
+  });
+  assert.deepEqual(
+    getConservativeFallbackWindow({ SMART_BACKFILL_FALLBACK_WINDOW: "22-6" } as any),
+    { startHour: 22, endHour: 6 },
+  );
+  assert.deepEqual(
+    getConservativeFallbackWindow({ SMART_BACKFILL_FALLBACK_WINDOW: "garbage" } as any),
+    { startHour: 1, endHour: 6 },
+  );
+  assert.deepEqual(
+    getConservativeFallbackWindow({ SMART_BACKFILL_FALLBACK_WINDOW: "5-5" } as any),
+    { startHour: 1, endHour: 6 },
+  );
+  assert.deepEqual(
+    getConservativeFallbackWindow({ SMART_BACKFILL_FALLBACK_WINDOW: "30-6" } as any),
+    { startHour: 1, endHour: 6 },
+  );
+});
+
+check("fallback overlay: non-fallback decision passes through unchanged", () => {
+  const d = decideQuietWindowGate({
+    profile: makeProfile({}),
+    now: new Date("2026-01-15T20:00:00Z"),
+    minConfidence: 0.5,
+  });
+  assert.equal(d.fallback, false);
+  const out = applyConservativeFallbackToDecision({ decision: d });
+  assert.strictEqual(out, d);
+});
+
+check("fallback overlay: no_profile daytime -> NOT eligible (Central default tz)", () => {
+  const d = decideQuietWindowGate({ profile: null, minConfidence: 0.5 });
+  // 2026-01-15T20:00Z = 14:00 America/Chicago — business hours.
+  const out = applyConservativeFallbackToDecision({
+    decision: d,
+    now: new Date("2026-01-15T20:00:00Z"),
+    window: { startHour: 1, endHour: 6 },
+  });
+  assert.equal(out.eligible, false);
+  assert.equal(out.fallback, true);
+  assert.equal(out.reason, "fallback_outside_conservative_window");
+  assert.equal(out.timezone, "America/Chicago");
+  assert.equal(out.localHour, 14);
+});
+
+check("fallback overlay: low_confidence at night -> eligible, uses profile tz", () => {
+  const d = decideQuietWindowGate({
+    profile: makeProfile({ confidence: 0.1, timezone: "America/New_York" }),
+    now: new Date("2026-01-15T08:00:00Z"), // 03:00 Eastern
+    minConfidence: 0.5,
+  });
+  assert.equal(d.reason, "low_confidence");
+  const out = applyConservativeFallbackToDecision({
+    decision: d,
+    now: new Date("2026-01-15T08:00:00Z"),
+    window: { startHour: 1, endHour: 6 },
+  });
+  assert.equal(out.eligible, true);
+  assert.equal(out.reason, "fallback_in_conservative_window");
+  assert.equal(out.timezone, "America/New_York");
+  assert.equal(out.localHour, 3);
+});
+
+check("fallback gate wrapper: OFF never skips", () => {
+  const ctx = makeCtx("off");
+  const r = applyConservativeFallbackGate(ctx, 5, "tekmetric-fullpage");
+  assert.equal(r.shouldSkip, false);
+  assert.equal(r.decision, null);
+});
+
+check("fallback gate wrapper: ENFORCE skips a no-profile shop during business hours", () => {
+  const ctx = makeCtx("enforce", [], new Date("2026-01-15T20:00:00Z")); // 14:00 CT
+  const r = applyConservativeFallbackGate(ctx, 5, "tekmetric-fullpage");
+  assert.equal(r.shouldSkip, true);
+  assert.equal(r.decision!.reason, "fallback_outside_conservative_window");
+});
+
+check("fallback gate wrapper: ENFORCE allows a no-profile shop at night", () => {
+  const ctx = makeCtx("enforce", [], new Date("2026-01-15T09:00:00Z")); // 03:00 CT
+  const r = applyConservativeFallbackGate(ctx, 5, "tekmetric-fullpage");
+  assert.equal(r.shouldSkip, false);
+  assert.equal(r.decision!.reason, "fallback_in_conservative_window");
+});
+
+check("fallback gate wrapper: OBSERVE logs but never skips", () => {
+  const ctx = makeCtx("observe", [], new Date("2026-01-15T20:00:00Z"));
+  const r = applyConservativeFallbackGate(ctx, 5, "tekmetric-fullpage");
+  assert.equal(r.shouldSkip, false);
+  assert.equal(r.decision!.eligible, false);
+});
+
+check("fallback gate wrapper: confident-profile shop is never touched by the overlay", () => {
+  // Out-of-window CONFIDENT shop: the standard gate handles it; overlay must
+  // return shouldSkip:false so it is not double-gated.
+  const ctx = makeCtx("enforce", [[42, makeProfile({ shopId: 42 })]], new Date("2026-01-15T20:00:00Z"));
+  const r = applyConservativeFallbackGate(ctx, 42, "tekmetric-fullpage");
+  assert.equal(r.shouldSkip, false);
+  assert.equal(r.decision!.fallback, false);
+});
+
+check("fallback gate wrapper: ENFORCE respects canary allowlist", () => {
+  const ctx = makeCtx("enforce", [], new Date("2026-01-15T20:00:00Z"), new Set([7]));
+  const r = applyConservativeFallbackGate(ctx, 5, "tekmetric-fullpage");
+  assert.equal(r.shouldSkip, false); // 5 not in canary
+  const r7 = applyConservativeFallbackGate(ctx, 7, "tekmetric-fullpage");
+  assert.equal(r7.shouldSkip, true);
 });
 
 console.log(`\nactivity-profile.smoke: ${passed} checks passed`);

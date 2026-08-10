@@ -53,7 +53,12 @@ export interface GateDecision {
     | "low_confidence"
     | "no_quiet_window"
     | "in_quiet_window"
-    | "outside_quiet_window";
+    | "outside_quiet_window"
+    // Conservative-fallback variants (task #1072): the smart gate fell back
+    // (no/low-confidence profile) but the caller asked for the conservative
+    // default window instead of failing fully open. Heavy work only.
+    | "fallback_in_conservative_window"
+    | "fallback_outside_conservative_window";
   confidence: number;
   localHour: number | null;
   timezone: string | null;
@@ -115,6 +120,40 @@ export function getEnforceShopAllowlist(
     .filter((n) => Number.isInteger(n) && n > 0);
   return ids.length ? new Set(ids) : null;
 }
+
+// Conservative default quiet window for shops WITHOUT a confident profile
+// (task #1072). Heavy work (fullpage/initial catch-up) for such shops must not
+// fail fully open onto the web instance during business hours — instead it is
+// limited to this window in the shop's best-known local time (default
+// 01:00–06:00). Override via SMART_BACKFILL_FALLBACK_WINDOW="start-end"
+// (local hours, end exclusive, may wrap midnight, e.g. "22-6").
+export function getConservativeFallbackWindow(
+  env: NodeJS.ProcessEnv = process.env,
+): QuietWindow {
+  const raw = String(env.SMART_BACKFILL_FALLBACK_WINDOW ?? "").trim();
+  const m = raw.match(/^(\d{1,2})\s*-\s*(\d{1,2})$/);
+  if (m) {
+    const start = Number(m[1]);
+    const end = Number(m[2]);
+    if (
+      Number.isInteger(start) &&
+      Number.isInteger(end) &&
+      start >= 0 &&
+      start <= 23 &&
+      end >= 0 &&
+      end <= 24 &&
+      start !== end
+    ) {
+      return { startHour: start, endHour: end };
+    }
+  }
+  return { startHour: 1, endHour: 6 };
+}
+
+// Fallback timezone used when a shop has no profile at all (mirrors the
+// repository's DEFAULT_TZ). Central covers the US fleet conservatively:
+// 01:00–06:00 CT = 23:00–07:00 across the continental US zones' business gap.
+export const FALLBACK_TIMEZONE = "America/Chicago";
 
 /* --------------------------- small math helpers --------------------------- */
 
@@ -506,6 +545,39 @@ export function decideQuietWindowGate(input: {
     confidence,
     localHour,
     timezone: profile.timezone,
+    window,
+  };
+}
+
+// Conservative-fallback overlay for HEAVY work (task #1072). When the smart
+// gate fell back (no_profile / low_confidence / no_quiet_window), heavy
+// fullpage/initial-catch-up work must NOT fail fully open onto the web
+// instance during business hours — instead it is confined to a conservative
+// default window in the shop's best-known local time. Non-fallback decisions
+// pass through unchanged.
+export function applyConservativeFallbackToDecision(input: {
+  decision: GateDecision;
+  now?: Date;
+  window?: QuietWindow;
+}): GateDecision {
+  const { decision } = input;
+  if (!decision.fallback) return decision;
+  const now = input.now ?? new Date();
+  const window = input.window ?? getConservativeFallbackWindow();
+  const timezone = decision.timezone || FALLBACK_TIMEZONE;
+  const localHour = localHourForTimezone(timezone, now);
+  const inWindow = hourInWindow(localHour, window);
+  return {
+    ...decision,
+    eligible: inWindow,
+    // Still a fallback decision — the smart gate didn't make the call, the
+    // conservative default did.
+    fallback: true,
+    reason: inWindow
+      ? "fallback_in_conservative_window"
+      : "fallback_outside_conservative_window",
+    localHour,
+    timezone,
     window,
   };
 }
