@@ -179,20 +179,20 @@ async function isFetchBackedOff(db: any, collection: string, key: Record<string,
 }
 
 async function recordFetchFailure(db: any, collection: string, key: Record<string, number>): Promise<void> {
-  const doc = await db.collection(collection).findOne(key, { projection: { failCount: 1 } });
-  const failCount = (doc?.failCount || 0) + 1;
-  await db.collection(collection).updateOne(
+  // Atomic $inc so concurrent failures (cross-process) never lose counts;
+  // retryAfter is then derived from the atomically assigned count.
+  const doc = await db.collection(collection).findOneAndUpdate(
     key,
     {
-      $set: {
-        ...key,
-        failCount,
-        retryAfter: new Date(Date.now() + backoffMs(failCount)),
-        cachedAt: new Date(),
-      },
+      $inc: { failCount: 1 },
+      $set: { ...key, cachedAt: new Date() },
     },
-    { upsert: true }
+    { upsert: true, returnDocument: "after" }
   );
+  const failCount = doc?.failCount ?? doc?.value?.failCount ?? 1;
+  await db.collection(collection).updateOne(key, {
+    $set: { retryAfter: new Date(Date.now() + backoffMs(failCount)) },
+  });
 }
 
 // Jobs cache. Backfill only ever indexes terminal ROs (POSTED/INVOICED/
@@ -242,7 +242,9 @@ export async function cacheCustomer(db: any, customerId: number, customer: Tekme
         customerId, 
         data: customer, 
         cachedAt: new Date() 
-      } 
+      },
+      // A successful fetch clears any negative-cache backoff state.
+      $unset: { failCount: "", retryAfter: "" }
     },
     { upsert: true }
   );
@@ -252,7 +254,8 @@ export async function syncShopIncremental(
   shopId: number,
   tekmetricShopId: number,
   state: ShopSyncState,
-  xAuthToken?: string | null
+  xAuthToken?: string | null,
+  deadline?: number
 ): Promise<IncrementalSyncResult> {
   const db = await getDb();
   const result: IncrementalSyncResult = {
@@ -314,6 +317,13 @@ export async function syncShopIncremental(
     }
 
     for (const ro of response.content) {
+      // Honor the cycle deadline inside the per-RO loop too — each iteration
+      // can cost multiple live API calls (with internal 429 retries), so
+      // batch-boundary checks alone don't bound the cycle.
+      if (deadline && Date.now() > deadline) {
+        console.log(`[Tekmetric Incremental] Shop ${shopId}: deadline hit mid-page — remaining ROs picked up next tick`);
+        break;
+      }
       let vehicle = await getCachedVehicle(db, ro.vehicleId);
       if (vehicle) {
         result.fromCache.vehicles++;
@@ -355,7 +365,7 @@ export async function syncShopIncremental(
     const shouldSweepTerminal = !state.lastClosedSweepAt || 
       (Date.now() - state.lastClosedSweepAt.getTime()) > TERMINAL_SWEEP_INTERVAL_MS;
 
-    if (shouldSweepTerminal && newOverflowQueue.length === 0) {
+    if (shouldSweepTerminal && newOverflowQueue.length === 0 && !(deadline && Date.now() > deadline)) {
       const swept = await sweepTerminalStatuses(db, shopId, tekmetricShopId);
       result.removed = swept;
       result.terminalSwept = true;
@@ -586,6 +596,11 @@ const BETWEEN_BATCH_PAUSE_MS = 2500; // was 1000
 // same process — the new tick simply skips (the running one covers the fleet).
 let cycleInFlight = false;
 
+// Fair-rotation cursor: where the next cycle starts in the (sorted) shop
+// list. In-memory is sufficient — it survives across ticks in the long-lived
+// web process and merely resets to 0 on deploy.
+let rotationOffset = 0;
+
 export async function runIncrementalSyncCycle(): Promise<{
   results: IncrementalSyncResult[];
   duration: number;
@@ -632,25 +647,34 @@ async function _runIncrementalSyncCycle(): Promise<{
     }
   }
 
+  // Fair rotation: stable order, then start where the last cycle left off so
+  // deadline-deferred tail shops are FIRST next tick instead of starved
+  // forever (same-order restarts would otherwise never reach them).
+  shopStates.sort((a, b) => a.shopId - b.shopId);
+  const offset = shopStates.length > 0 ? rotationOffset % shopStates.length : 0;
+  const rotated = shopStates.slice(offset).concat(shopStates.slice(0, offset));
+
   // Process shops in concurrent batches
   let deadlineHit = false;
   let shopsDeferred = 0;
-  for (let i = 0; i < shopStates.length; i += CONCURRENT_SHOPS) {
+  let processed = 0;
+  for (let i = 0; i < rotated.length; i += CONCURRENT_SHOPS) {
     if (Date.now() > deadline) {
       deadlineHit = true;
-      shopsDeferred = shopStates.length - i;
-      console.log(`[Tekmetric Incremental] Cycle deadline (${CYCLE_DEADLINE_MS}ms) hit — deferring ${shopsDeferred} shops to next tick`);
+      shopsDeferred = rotated.length - i;
+      console.log(`[Tekmetric Incremental] Cycle deadline (${CYCLE_DEADLINE_MS}ms) hit — deferring ${shopsDeferred} shops to next tick (they run first)`);
       break;
     }
-    const batch = shopStates.slice(i, i + CONCURRENT_SHOPS);
+    const batch = rotated.slice(i, i + CONCURRENT_SHOPS);
     
     const batchPromises = batch.map(async (state, index) => {
       // Stagger within batch to avoid bursting Tekmetric on each batch start.
       if (index > 0) {
         await new Promise(resolve => setTimeout(resolve, index * IN_BATCH_STAGGER_MS));
       }
-      return syncShopIncremental(state.shopId, state.tekmetricShopId, state, state.xAuthToken);
+      return syncShopIncremental(state.shopId, state.tekmetricShopId, state, state.xAuthToken, deadline);
     });
+    processed += batch.length;
 
     const batchResults = await Promise.all(batchPromises);
     results.push(...batchResults);
@@ -659,6 +683,13 @@ async function _runIncrementalSyncCycle(): Promise<{
     if (i + CONCURRENT_SHOPS < shopStates.length) {
       await new Promise(resolve => setTimeout(resolve, BETWEEN_BATCH_PAUSE_MS));
     }
+  }
+
+  // Advance the rotation cursor past the shops we processed so a
+  // deadline-deferred tail goes first next cycle. On a full sweep this wraps
+  // back to the same start point, which is fine.
+  if (shopStates.length > 0) {
+    rotationOffset = (offset + processed) % shopStates.length;
   }
 
   return {
