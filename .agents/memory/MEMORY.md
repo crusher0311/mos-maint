@@ -1,3 +1,4 @@
+- [Tekmetric incremental churn](tekmetric-incremental-churn.md) — budget-denied fetch retries w/o negative cache made 2-min cycles run 7-17h & overlap (daytime p95 spikes); guards: negative cache, 90s deadline, overlap guard, rotation cursor.
 - [Shopmonkey dashboard mileage gate](shopmonkey-dashboard-mileage-gate.md) — history-mileage lookup + 25-wide CARFAX batch OFF by default (unindexed vehicle.vin scan melted prod 2026-08-06); needs compound index first. Render rollback disables push auto-deploy.
 - [Shopmonkey dashboard & backfill wiring](shopmonkey-dashboard-source.md) — SM writes only normalized_* (legacy vehicles=0 is normal); dashboard needs explicit per-provider source; backfill gated by SHOPMONKEY_BACKFILL_ENABLED; Render env edits need a deploy to apply.
 - [Dev Mongo is Prod Mongo](dev-mongo-is-prod.md) — this repl's dev MongoDB == the production cluster; any write/createIndex from dev hits prod live.
