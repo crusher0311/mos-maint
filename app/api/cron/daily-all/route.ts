@@ -149,7 +149,12 @@ export async function GET(req: NextRequest) {
 
   // Tekmetric syncs run sequentially to stay under 600/min API rate limit.
   // Incremental sync first (lower volume), then backfill (higher volume).
-  try {
+  // Task #1079: when the worker owns the incremental cycle, don't trigger
+  // it from the web at all (the route also no-ops defensively).
+  if (process.env.TEKMETRIC_INCREMENTAL_ON_WORKER === "true") {
+    results.tekmetricIncrementalSync = { skipped: true, reason: "TEKMETRIC_INCREMENTAL_ON_WORKER=true — worker owns the cycle" };
+    console.log(`[Cron] Skipping Tekmetric incremental sync — worker owns the cycle`);
+  } else try {
     console.log(`[Cron] Running Tekmetric incremental sync...`);
     const tekIncrementalResponse = await fetch(`${baseUrl}/api/cron/tekmetric-incremental-sync`, {
       method: "GET",

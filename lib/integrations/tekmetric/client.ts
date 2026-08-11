@@ -11,7 +11,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { trackApiRequest } from "@/lib/api-usage-tracker";
 import { acquireRateLimitSlot, type RateLimitPriority } from "@/lib/integrations/core/rate-limiter";
 import { acquireSharedTekmetricSlot } from "./shared-rate-limiter";
-import { getValidToken, refreshToken, clearCachedToken, isConfigured } from "./auth";
+import { getValidToken, refreshToken, clearCachedToken, isConfigured, hasBackgroundCredentials, type TekmetricAuthLane } from "./auth";
 import type { 
   TekmetricShop, 
   TekmetricCustomer, 
@@ -118,6 +118,26 @@ function resolveAmbientPriority(explicit: RateLimitPriority): RateLimitPriority 
   // the ambient scope (if any), then the interactive default.
   if (explicit !== 'interactive') return explicit;
   return priorityStorage.getStore() ?? 'interactive';
+}
+
+// Task #1079: when a dedicated background credential is configured
+// (TEKMETRIC_BG_CLIENT_ID/SECRET), background-priority requests authenticate
+// on that second key and are paced against SEPARATE rate buckets (local
+// channel 'tekmetric-bg', shared buckets 'tekbg:<second>'), so background
+// sync stops competing with advisor-facing traffic for the primary key's
+// 10 RPS. With the envs unset, everything stays on the primary key exactly
+// as before. Logged once per process so on-call can confirm which mode is
+// live from any log stream.
+let bgLaneLogged = false;
+export function resolveAuthLane(priority: RateLimitPriority): TekmetricAuthLane {
+  if (priority === 'background' && hasBackgroundCredentials()) {
+    if (!bgLaneLogged) {
+      bgLaneLogged = true;
+      console.log('[Tekmetric] Dedicated background credential configured — background traffic uses its own API key and rate buckets');
+    }
+    return 'background';
+  }
+  return 'primary';
 }
 
 function throwIfAborted(signal: AbortSignal | undefined): void {
@@ -353,6 +373,19 @@ export async function tekmetricRequest<T = any>(
   priority: RateLimitPriority = 'interactive',
 ): Promise<T> {
   priority = resolveAmbientPriority(priority);
+  // Dedicated-key lane (task #1079): background traffic gets its own
+  // credential + rate buckets when the BG envs are set. The local pacer
+  // channel and the shared cross-process buckets are keyed per lane, and
+  // the user-reserve carve-out only applies to the SHARED primary key —
+  // a key that carries only background traffic gets its full cap.
+  const authLane = resolveAuthLane(priority);
+  // Credential lane for the rate limiters: the background key must be paced
+  // against its OWN local queue AND its own distributed minute buckets /
+  // circuit breaker ("tekmetric-bg:<minute>") — sharing the primary key's
+  // buckets would make the two keys falsely contend (task #1079 review).
+  const limiterLane = authLane === 'background' ? 'bg' : undefined;
+  const sharedBucketPrefix = authLane === 'background' ? 'tekbg' : 'tek';
+  const sharedUserReserveOverride = authLane === 'background' ? 0 : undefined;
   const method = options.method || 'GET';
   // Hard-cancel signal (drain script SIGINT). Ambient via ALS so callers
   // don't have to thread it through every wrapper. Falls back to any
@@ -369,7 +402,7 @@ export async function tekmetricRequest<T = any>(
     // momentarily over 10/sec and trigger 429s. Background priority requests
     // (full-page backfills) still yield to interactive ones via the two-lane
     // queue in lib/integrations/core/rate-limiter.ts.
-    const rateSlot = await acquireRateLimitSlot('tekmetric', 8, priority);
+    const rateSlot = await acquireRateLimitSlot('tekmetric', 8, priority, limiterLane);
     if (!rateSlot.acquired) {
       throw new Error(`[Tekmetric] Rate limit budget exhausted (priority=${priority}, waited ${rateSlot.waitedMs ?? 0}ms). Request to ${endpoint} rejected to prevent 429 errors.`);
     }
@@ -386,7 +419,11 @@ export async function tekmetricRequest<T = any>(
     // background calls only consume up to `cap - userReserve` of the shared
     // bucket, leaving guaranteed headroom for VHI/dashboard/extension calls
     // even when a fleet of backfill workers is hammering the same key.
-    const sharedSlot = await acquireSharedTekmetricSlot({ priority });
+    const sharedSlot = await acquireSharedTekmetricSlot({
+      priority,
+      bucketPrefix: sharedBucketPrefix,
+      userReserveOverride: sharedUserReserveOverride,
+    });
     if (!sharedSlot.acquired) {
       if (attempt > MAX_429_RETRIES) {
         throw new Error(`[Tekmetric] Shared rate limiter timed out after ${MAX_429_RETRIES} attempts on ${endpoint}; refusing to breach the cap.`);
@@ -417,7 +454,7 @@ export async function tekmetricRequest<T = any>(
     try {
       // Resolve the token inside the retry loop so a hung token request also
       // times out and retries instead of escaping the bounded-retry path.
-      const token = await getValidToken();
+      const token = await getValidToken(authLane);
       const { fetchSignal, timeoutSignal: ts } = buildFetchTimeout(abortSignal);
       timeoutSignal = ts;
       const response = await fetch(`${TEKMETRIC_BASE_URL}${endpoint}`, {
@@ -436,9 +473,9 @@ export async function tekmetricRequest<T = any>(
 
       if (response.status === 401 && !authRetry) {
         trackApiRequest('tekmetric', endpoint, method, statusCode, latencyMs, shopId).catch(() => {});
-        console.log('[Tekmetric] Received 401, refreshing token and retrying...');
-        clearCachedToken();
-        await refreshToken();
+        console.log(`[Tekmetric] Received 401, refreshing token (${authLane} lane) and retrying...`);
+        clearCachedToken(authLane);
+        await refreshToken(authLane);
         return tekmetricRequest<T>(endpoint, options, shopId, true, historyClampRetry, priority);
       }
 

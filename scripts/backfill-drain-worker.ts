@@ -148,11 +148,35 @@ async function providerLoop(provider: { name: string; script: string }): Promise
   log(`[${provider.name}] loop exiting (stop requested)`);
 }
 
+// Start the Tekmetric incremental-sync loop on THIS deployed worker
+// service when the web hands ownership over via
+// TEKMETRIC_INCREMENTAL_ON_WORKER=true. The flag suppresses every web
+// invocation path (scheduler, daily-all, the route itself), so the
+// replacement cycle MUST live in the process that actually runs in
+// production — this drain worker — not only in the optional BullMQ
+// worker entrypoint. Dynamic import keeps the heavy app import chain
+// out of drain-only deployments when the flag is off. Exported for the
+// entrypoint smoke test.
+export async function maybeStartIncrementalLoop(): Promise<boolean> {
+  if (process.env.TEKMETRIC_INCREMENTAL_ON_WORKER !== "true") return false;
+  const { startTekmetricIncrementalLoop } = await import(
+    "../workers/tekmetric-incremental-loop"
+  );
+  const started = startTekmetricIncrementalLoop();
+  log(
+    started
+      ? "Tekmetric incremental-sync loop started on this worker (TEKMETRIC_INCREMENTAL_ON_WORKER=true)"
+      : "TEKMETRIC_INCREMENTAL_ON_WORKER=true but incremental loop did not start",
+  );
+  return started;
+}
+
 async function main(): Promise<void> {
   log("starting");
   log(
     `config: idleBetweenLoops=${IDLE_BETWEEN_LOOPS_MS}ms backoffOnFailure=${BACKOFF_ON_FAILURE_MS}ms shortRetryOnLockHeld=${SHORT_RETRY_ON_LOCK_HELD_MS}ms`,
   );
+  await maybeStartIncrementalLoop();
   log(
     `running ${PROVIDERS.length} providers in independent parallel loops: ${PROVIDERS.map((p) => p.name).join(", ")}`,
   );
@@ -198,11 +222,21 @@ function requestStop(signal: string): void {
   forceKillTimer.unref();
 }
 
-process.on("SIGTERM", () => requestStop("SIGTERM"));
-process.on("SIGINT", () => requestStop("SIGINT"));
+// Only auto-run (and trap signals) when executed directly — the module is
+// also imported by the entrypoint smoke test, which must not spawn drain
+// children.
+const isDirectRun = process.argv[1]
+  ? import.meta.url === new URL(`file://${process.argv[1]}`).href ||
+    process.argv[1].endsWith("backfill-drain-worker.ts")
+  : false;
 
-main().catch((err) => {
-  log(`FATAL: ${err?.message || String(err)}`);
-  console.error(err);
-  process.exit(2);
-});
+if (isDirectRun) {
+  process.on("SIGTERM", () => requestStop("SIGTERM"));
+  process.on("SIGINT", () => requestStop("SIGINT"));
+
+  main().catch((err) => {
+    log(`FATAL: ${err?.message || String(err)}`);
+    console.error(err);
+    process.exit(2);
+  });
+}

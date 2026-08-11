@@ -50,6 +50,9 @@ The app supports two OpenAI modes:
 |----------|-------------|
 | `TEKMETRIC_CLIENT_ID` | Tekmetric OAuth client ID |
 | `TEKMETRIC_CLIENT_SECRET` | Tekmetric OAuth client secret |
+| `TEKMETRIC_BG_CLIENT_ID` | Optional second Tekmetric OAuth client ID dedicated to background sync/backfill traffic. When set (with the secret), background-priority calls use this key and their own rate buckets, so they never compete with advisor-facing requests on the primary key |
+| `TEKMETRIC_BG_CLIENT_SECRET` | Secret for the background Tekmetric credential |
+| `TEKMETRIC_INCREMENTAL_ON_WORKER` | `true` moves the Tekmetric incremental-sync cycle onto the background worker service: the web side fully stands down (scheduler skips the cron, `daily-all` skips it, and the web route itself no-ops), while the deployed `backfill-drain-worker` service (`npm run worker:backfill-drain`) and the BullMQ worker entrypoint (`npm run worker`) both start the loop (every `TEKMETRIC_INCREMENTAL_WORKER_INTERVAL_MS`, default 30 min). Set the flag on BOTH web and worker services. Requires a daytime power-schedule exception for the worker — flipping it without one halts incremental sync during business hours |
 | `CARFAX_PDI` | CARFAX vehicle history |
 | `CARFAX_POST_URL` | CARFAX API endpoint |
 | `DATAONE_API_URL` | DataOne VIN decoder |

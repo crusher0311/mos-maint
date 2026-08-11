@@ -26,6 +26,10 @@ import { processTekmetricFullPage } from "./processors/tekmetric-fullpage";
 import { processTekmetricPrePass } from "./processors/tekmetric-prepass";
 import { processDrainTekmetric } from "./processors/drain-tekmetric";
 import { processDrainProtractor } from "./processors/drain-protractor";
+import {
+  startTekmetricIncrementalLoop,
+  stopTekmetricIncrementalLoop,
+} from "./tekmetric-incremental-loop";
 
 // Concurrency per queue. The Tekmetric workloads share the cross-process
 // rate limiter (`shared-rate-limiter.ts`), so when too many full-page /
@@ -90,7 +94,20 @@ function buildWorker(
 }
 
 export async function startWorkers(): Promise<void> {
+  // Task #1079: the incremental-sync loop is independent of BullMQ/Redis —
+  // start it (when flagged on) even if the queue isn't configured, so the
+  // worker can own the cron-style tick regardless of queue rollout state.
+  const incrementalLoopStarted = startTekmetricIncrementalLoop();
+
   if (!isQueueEnabled()) {
+    if (incrementalLoopStarted) {
+      console.log(
+        "[Worker] REDIS_URL not set — no BullMQ workers, but the Tekmetric incremental loop is running; keeping the process alive.",
+      );
+      // The loop's timers are unref'd; hold the process open explicitly.
+      setInterval(() => {}, 60 * 60 * 1000);
+      return;
+    }
     console.log(
       "[Worker] REDIS_URL not set — worker exiting cleanly. Set REDIS_URL to enable the backfill queue.",
     );
@@ -127,6 +144,7 @@ export async function startWorkers(): Promise<void> {
 
   const shutdown = async (signal: string) => {
     console.log(`[Worker] Received ${signal}, draining workers…`);
+    stopTekmetricIncrementalLoop();
     await Promise.allSettled(workers.map((w) => w.close()));
     console.log("[Worker] All workers closed");
     process.exit(0);

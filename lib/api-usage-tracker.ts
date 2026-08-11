@@ -123,7 +123,10 @@ type CircuitBreakerEntry = {
   openUntil: number;
   isOpen: boolean;
 };
-const circuitBreakerState: Partial<Record<ApiProvider, CircuitBreakerEntry>> = {};
+// Keyed by distributed bucket id — the base provider ("tekmetric") or a
+// provider+credential lane ("tekmetric-bg"). Each credential has its own
+// upstream limits, so its breaker trips independently (task #1079).
+const circuitBreakerState: Partial<Record<string, CircuitBreakerEntry>> = {};
 
 function getMinuteBucket(date: Date): string {
   const d = new Date(date);
@@ -134,7 +137,7 @@ function getMinuteBucket(date: Date): string {
 /**
  * Check if circuit breaker is open for a provider.
  */
-function isCircuitBreakerOpen(provider: ApiProvider): boolean {
+function isCircuitBreakerOpen(provider: string): boolean {
   const state = circuitBreakerState[provider];
   if (!state) return false;
   
@@ -150,7 +153,7 @@ function isCircuitBreakerOpen(provider: ApiProvider): boolean {
 /**
  * Record a rate limit failure for circuit breaker tracking.
  */
-function recordRateLimitFailure(provider: ApiProvider): void {
+function recordRateLimitFailure(provider: string): void {
   if (!circuitBreakerState[provider]) {
     circuitBreakerState[provider] = { consecutiveFailures: 0, openUntil: 0, isOpen: false };
   }
@@ -168,7 +171,7 @@ function recordRateLimitFailure(provider: ApiProvider): void {
 /**
  * Record a successful slot acquisition, resetting circuit breaker.
  */
-function recordRateLimitSuccess(provider: ApiProvider): void {
+function recordRateLimitSuccess(provider: string): void {
   if (circuitBreakerState[provider]) {
     circuitBreakerState[provider].consecutiveFailures = 0;
   }
@@ -179,21 +182,40 @@ function recordRateLimitSuccess(provider: ApiProvider): void {
  * Claims a slot before making an API request. If limit is exceeded, waits and retries.
  * This ensures global rate limits are enforced across all workers.
  */
+/**
+ * Bucket identifier for the distributed minute limiter and circuit breaker.
+ * Task #1079: a provider can have multiple independent CREDENTIALS (e.g.
+ * Tekmetric's primary key + a dedicated background-sync key). Each key has
+ * its own upstream per-minute cap, so its minute buckets and circuit
+ * breaker must be keyed per credential lane ("tekmetric-bg:<minute>") —
+ * sharing one "tekmetric:<minute>" bucket would make the two keys falsely
+ * contend and defeat the capacity isolation. Exported for tests.
+ */
+export function distributedBucketId(provider: ApiProvider, lane?: string): string {
+  return lane ? `${provider}-${lane}` : provider;
+}
+
 export async function acquireDistributedRateLimitSlot(
   provider: ApiProvider,
-  maxRetries: number = 8
+  maxRetries: number = 8,
+  // Credential lane (e.g. 'bg' for the dedicated Tekmetric background key).
+  // The rate-limit CONFIG still comes from the base provider (each key has
+  // the same documented per-minute cap), but the minute buckets and circuit
+  // breaker are tracked independently per lane.
+  lane?: string,
 ): Promise<{ acquired: boolean; waitedMs: number; currentCount: number; circuitOpen?: boolean }> {
   const config = API_PROVIDER_CONFIGS[provider];
   const limitPerMinute = config.rateLimit?.perMinute;
+  const bucketId = distributedBucketId(provider, lane);
   
   if (!limitPerMinute) {
     return { acquired: true, waitedMs: 0, currentCount: 0 };
   }
   
-  if (isCircuitBreakerOpen(provider)) {
-    const state = circuitBreakerState[provider];
+  if (isCircuitBreakerOpen(bucketId)) {
+    const state = circuitBreakerState[bucketId];
     const remainingMs = state.openUntil - Date.now();
-    console.log(`[CircuitBreaker] ${provider} circuit open, skipping request (${Math.round(remainingMs/1000)}s remaining)`);
+    console.log(`[CircuitBreaker] ${bucketId} circuit open, skipping request (${Math.round(remainingMs/1000)}s remaining)`);
     return { acquired: false, waitedMs: 0, currentCount: limitPerMinute, circuitOpen: true };
   }
 
@@ -203,13 +225,13 @@ export async function acquireDistributedRateLimitSlot(
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     const now = new Date();
     const minuteBucket = getMinuteBucket(now);
-    const key = `${provider}:${minuteBucket}`;
+    const key = `${bucketId}:${minuteBucket}`;
 
     const claim = await claimRateLimitSlot(key, new Date(now.getTime() + 120000));
     const currentCount = claim.count;
 
     if (currentCount <= limitPerMinute) {
-      recordRateLimitSuccess(provider);
+      recordRateLimitSuccess(bucketId);
       return { acquired: true, waitedMs: totalWaitedMs, currentCount };
     }
 
@@ -224,14 +246,14 @@ export async function acquireDistributedRateLimitSlot(
       30000
     );
     
-    console.log(`[RateLimit] ${provider} at ${currentCount}/${limitPerMinute}, waiting ${Math.round(waitMs)}ms (attempt ${attempt + 1}/${maxRetries}, exponential backoff)`);
+    console.log(`[RateLimit] ${bucketId} at ${currentCount}/${limitPerMinute}, waiting ${Math.round(waitMs)}ms (attempt ${attempt + 1}/${maxRetries}, exponential backoff)`);
     
     await new Promise(r => setTimeout(r, waitMs));
     totalWaitedMs += waitMs;
   }
   
-  recordRateLimitFailure(provider);
-  console.warn(`[RateLimit] ${provider} failed to acquire slot after ${maxRetries} attempts (circuit breaker: ${circuitBreakerState[provider]?.consecutiveFailures || 0}/10)`);
+  recordRateLimitFailure(bucketId);
+  console.warn(`[RateLimit] ${bucketId} failed to acquire slot after ${maxRetries} attempts (circuit breaker: ${circuitBreakerState[bucketId]?.consecutiveFailures || 0}/10)`);
   return { acquired: false, waitedMs: totalWaitedMs, currentCount: limitPerMinute };
 }
 

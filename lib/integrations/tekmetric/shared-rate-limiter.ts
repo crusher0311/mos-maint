@@ -326,6 +326,13 @@ export interface AcquireSharedSlotOptions {
   priority?: SharedSlotPriority;
   /** Override the per-call user reserve. Default reads env. */
   userReserveOverride?: number;
+  /**
+   * Bucket key prefix (default "tek"). Task #1079: traffic on the dedicated
+   * background Tekmetric credential is paced against its OWN per-second
+   * buckets ("tekbg:<second>") because per-key rate limits are independent —
+   * sharing one bucket would make the two keys falsely contend.
+   */
+  bucketPrefix?: string;
   /** Test seam: clock source. */
   nowMs?: () => number;
   /** Test seam: sleep function. */
@@ -418,7 +425,7 @@ export async function acquireSharedTekmetricSlot(
   while (true) {
     const now = nowMs();
     const second = Math.floor(now / 1000);
-    const key = `tek:${second}`;
+    const key = `${opts.bucketPrefix ?? "tek"}:${second}`;
 
     let count: number;
     try {

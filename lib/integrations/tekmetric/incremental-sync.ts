@@ -82,6 +82,13 @@ export interface IncrementalSyncResult {
   synced: number;
   removed: number;
   fromCache: { vehicles: number; customers: number };
+  // Task #1079: negative-cache observability. `negativeCacheHits` counts
+  // vehicle/customer lookups short-circuited by an active fetch-failure
+  // backoff (isFetchBackedOff); `liveFetches` counts live API attempts.
+  // Together with `fromCache` they let the cycle completion log report the
+  // negative-cache hit rate, confirming the retry storm stays gone.
+  negativeCacheHits: { vehicles: number; customers: number };
+  liveFetches: { vehicles: number; customers: number };
   pagesQueued: number;
   terminalSwept: boolean;
   error?: string;
@@ -273,6 +280,8 @@ export async function syncShopIncremental(
     synced: 0,
     removed: 0,
     fromCache: { vehicles: 0, customers: 0 },
+    negativeCacheHits: { vehicles: 0, customers: 0 },
+    liveFetches: { vehicles: 0, customers: 0 },
     pagesQueued: 0,
     terminalSwept: false,
   };
@@ -339,9 +348,11 @@ export async function syncShopIncremental(
       } else if (await isFetchBackedOff(db, "tekmetric_vehicle_cache", { vehicleId: ro.vehicleId })) {
         // Recently failed (rate budget denial or upstream error) — skip the
         // live fetch until the backoff expires instead of retrying every tick.
+        result.negativeCacheHits.vehicles++;
         continue;
       } else {
         try {
+          result.liveFetches.vehicles++;
           vehicle = await getVehicle(ro.vehicleId);
           await cacheVehicle(db, ro.vehicleId, vehicle);
         } catch (err) {
@@ -356,8 +367,10 @@ export async function syncShopIncremental(
         result.fromCache.customers++;
       } else if (await isFetchBackedOff(db, "tekmetric_customer_cache", { customerId: ro.customerId })) {
         // Customer is optional for upsert — proceed without it.
+        result.negativeCacheHits.customers++;
       } else {
         try {
+          result.liveFetches.customers++;
           customer = await getCustomer(ro.customerId, shopId);
           await cacheCustomer(db, ro.customerId, customer);
         } catch (err) {
@@ -610,13 +623,33 @@ let cycleInFlight = false;
 // web process and merely resets to 0 on deploy.
 let rotationOffset = 0;
 
-export async function runIncrementalSyncCycle(): Promise<{
+export async function runIncrementalSyncCycle(options?: {
+  // Ownership enforcement (centralized so no caller can bypass it): when
+  // TEKMETRIC_INCREMENTAL_ON_WORKER=true, the background worker service
+  // owns the cycle and every OTHER caller (cron route, daily-all, the
+  // integration adapter, scripts, manual invocations) becomes a no-op —
+  // otherwise a web-process caller would run a duplicate cycle the
+  // worker's in-process overlap guard cannot see, recreating the
+  // user-vs-background contention this flag exists to eliminate. Only
+  // workers/tekmetric-incremental-loop.ts passes `asWorkerOwner: true`.
+  asWorkerOwner?: boolean;
+}): Promise<{
   results: IncrementalSyncResult[];
   duration: number;
   skippedOverlap?: boolean;
   deadlineHit?: boolean;
   shopsDeferred?: number;
+  skippedNotOwner?: boolean;
 }> {
+  if (
+    process.env.TEKMETRIC_INCREMENTAL_ON_WORKER === "true" &&
+    !options?.asWorkerOwner
+  ) {
+    console.log(
+      `[Tekmetric Incremental] Cycle owned by the background worker (TEKMETRIC_INCREMENTAL_ON_WORKER=true) — skipping non-worker invocation`,
+    );
+    return { results: [], duration: 0, skippedNotOwner: true };
+  }
   if (cycleInFlight) {
     console.log(`[Tekmetric Incremental] Previous cycle still running — skipping this tick`);
     return { results: [], duration: 0, skippedOverlap: true };

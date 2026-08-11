@@ -32,7 +32,10 @@ const BACKGROUND_SLOT_MAX_WAIT_MS = (() => {
   return Number.isFinite(parsed) && parsed >= 1_000 ? parsed : 30_000;
 })();
 
-const localQueues: Map<SMSProvider, {
+// Keyed by provider or "provider#lane" — a dedicated credential lane (e.g.
+// Tekmetric's background API key, task #1079) gets its own local pacer
+// queue because per-key RPS budgets are independent.
+const localQueues: Map<string, {
   lastRequestTime: number;
   interactiveQueue: (() => void)[];
   backgroundQueue: (() => void)[];
@@ -40,7 +43,7 @@ const localQueues: Map<SMSProvider, {
   rpsLimit: number;
 }> = new Map();
 
-function getLocalQueue(provider: SMSProvider, rpsLimit: number = 5) {
+function getLocalQueue(provider: string, rpsLimit: number = 5) {
   if (!localQueues.has(provider)) {
     localQueues.set(provider, {
       lastRequestTime: 0,
@@ -53,7 +56,7 @@ function getLocalQueue(provider: SMSProvider, rpsLimit: number = 5) {
   return localQueues.get(provider)!;
 }
 
-function processLocalQueue(provider: SMSProvider): void {
+function processLocalQueue(provider: string): void {
   const state = getLocalQueue(provider);
   if (
     state.isProcessing ||
@@ -99,9 +102,17 @@ export async function acquireRateLimitSlot(
   provider: SMSProvider,
   localRpsLimit: number = 5,
   priority: RateLimitPriority = 'interactive',
+  // Credential lane (task #1079): pass e.g. 'bg' when the request
+  // authenticates on a dedicated secondary API key. The lane gets its own
+  // local pacer queue AND its own distributed minute buckets / circuit
+  // breaker ("tekmetric-bg:<minute>"), because per-key rate limits are
+  // independent — sharing the base provider's buckets would make two keys
+  // falsely contend and defeat the capacity isolation.
+  lane?: string,
 ): Promise<RateLimitResult> {
   const apiProvider = provider as ApiProvider;
-  const distributed = await acquireDistributedRateLimitSlot(apiProvider);
+  const queueKey = lane ? `${provider}#${lane}` : provider;
+  const distributed = await acquireDistributedRateLimitSlot(apiProvider, undefined, lane);
 
   if (!distributed.acquired) {
     if (distributed.circuitOpen) {
@@ -112,7 +123,7 @@ export async function acquireRateLimitSlot(
     return { acquired: false, waitedMs: distributed.waitedMs };
   }
 
-  const state = getLocalQueue(provider, localRpsLimit);
+  const state = getLocalQueue(queueKey, localRpsLimit);
   const waitStartedAt = Date.now();
   const acquired = await new Promise<boolean>((resolve) => {
     let settled = false;
@@ -144,7 +155,7 @@ export async function acquireRateLimitSlot(
       // resolve promptly — keep the original unbounded wait for them.
       state.interactiveQueue.push(slot);
     }
-    processLocalQueue(provider);
+    processLocalQueue(queueKey);
   });
 
   if (!acquired) {

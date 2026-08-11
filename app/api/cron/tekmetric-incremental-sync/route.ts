@@ -17,6 +17,20 @@ export async function GET(req: NextRequest) {
 }
 
 async function _GETImpl(req: NextRequest) {
+  // Task #1079: when the incremental cycle lives on the background worker
+  // service, this WEB endpoint must not run it — otherwise callers outside
+  // the suppressed scheduler registration (daily-all, the legacy
+  // tekmetric-sync-worker script, manual curls) would run a duplicate
+  // cycle on the web instance. The route's in-process overlap guard cannot
+  // see the worker's cycle, so gate here, before any work.
+  if (process.env.TEKMETRIC_INCREMENTAL_ON_WORKER === "true") {
+    return NextResponse.json({
+      ok: true,
+      skipped: true,
+      message: "Incremental sync is owned by the background worker (TEKMETRIC_INCREMENTAL_ON_WORKER=true); web endpoint is a no-op",
+    });
+  }
+
   // Check if sync is disabled for this deployment
   if (process.env.DISABLE_TEKMETRIC_SYNC === "true") {
     return NextResponse.json({
@@ -53,8 +67,20 @@ async function _GETImpl(req: NextRequest) {
     const errors = results.filter(r => r.error).length;
     const skipped = results.filter(r => r.skipped).length;
     const apiCallCount = apiCallCounter.count;
-    
-    console.log(`[Cron] Tekmetric incremental sync completed in ${duration}ms — API calls made: ${apiCallCount} (budget: 600/min): ${totalSynced} synced, ${totalRemoved} removed, ${totalFromCacheVehicles}/${totalFromCacheCustomers} from cache, ${totalPagesQueued} pages queued, ${errors} errors, ${skipped} skipped${deadlineHit ? `, DEADLINE HIT (${shopsDeferred} shops deferred)` : ""}`);
+
+    // Task #1079: negative-cache hit rate in the completion log so on-call
+    // can confirm the failed-fetch retry storm stays gone without querying
+    // Mongo. Rate = backoff-skipped lookups / all lookups (cache + negative
+    // + live) for vehicles and customers combined.
+    const negVehicles = results.reduce((sum, r) => sum + (r.negativeCacheHits?.vehicles ?? 0), 0);
+    const negCustomers = results.reduce((sum, r) => sum + (r.negativeCacheHits?.customers ?? 0), 0);
+    const liveVehicles = results.reduce((sum, r) => sum + (r.liveFetches?.vehicles ?? 0), 0);
+    const liveCustomers = results.reduce((sum, r) => sum + (r.liveFetches?.customers ?? 0), 0);
+    const negTotal = negVehicles + negCustomers;
+    const lookupTotal = negTotal + liveVehicles + liveCustomers + totalFromCacheVehicles + totalFromCacheCustomers;
+    const negRatePct = lookupTotal > 0 ? Math.round((negTotal / lookupTotal) * 100) : 0;
+
+    console.log(`[Cron] Tekmetric incremental sync completed in ${duration}ms — API calls made: ${apiCallCount} (budget: 600/min): ${totalSynced} synced, ${totalRemoved} removed, ${totalFromCacheVehicles}/${totalFromCacheCustomers} from cache, negative-cache hits ${negVehicles}/${negCustomers} (${negRatePct}% of ${lookupTotal} lookups), ${liveVehicles}/${liveCustomers} live fetches, ${totalPagesQueued} pages queued, ${errors} errors, ${skipped} skipped${deadlineHit ? `, DEADLINE HIT (${shopsDeferred} shops deferred)` : ""}`);
 
     // Fire-and-forget plan pre-generation for ALL dashboard-visible vehicles
     if (CRON_SECRET) {
@@ -136,6 +162,15 @@ async function _GETImpl(req: NextRequest) {
         fromCache: {
           vehicles: totalFromCacheVehicles,
           customers: totalFromCacheCustomers,
+        },
+        negativeCacheHits: {
+          vehicles: negVehicles,
+          customers: negCustomers,
+          ratePct: negRatePct,
+        },
+        liveFetches: {
+          vehicles: liveVehicles,
+          customers: liveCustomers,
         },
         pagesQueued: totalPagesQueued,
         errors,

@@ -31,9 +31,38 @@ interface TokenDocument {
   updatedAt: Date;
 }
 
-let cachedToken: TekmetricToken | null = null;
+/**
+ * Credential lane. Task #1079: one Tekmetric API key (10 RPS) shared
+ * between advisor-facing requests and all background sync meant every
+ * backfill/cron burst competed with users for the same per-key budget.
+ * When a second key dedicated to background work is provisioned
+ * (`TEKMETRIC_BG_CLIENT_ID` / `TEKMETRIC_BG_CLIENT_SECRET`), background-
+ * priority traffic authenticates on its own credential and is paced
+ * against its own rate buckets — the two lanes then never contend.
+ * With the BG envs unset, everything falls back to the primary key and
+ * behavior is exactly as before.
+ */
+export type TekmetricAuthLane = 'primary' | 'background';
 
-function getClientCredentials(): { clientId: string; clientSecret: string } {
+const cachedTokens: Record<TekmetricAuthLane, TekmetricToken | null> = {
+  primary: null,
+  background: null,
+};
+
+export function hasBackgroundCredentials(): boolean {
+  return Boolean(process.env.TEKMETRIC_BG_CLIENT_ID && process.env.TEKMETRIC_BG_CLIENT_SECRET);
+}
+
+function getClientCredentials(lane: TekmetricAuthLane = 'primary'): { clientId: string; clientSecret: string } {
+  if (lane === 'background') {
+    const clientId = process.env.TEKMETRIC_BG_CLIENT_ID;
+    const clientSecret = process.env.TEKMETRIC_BG_CLIENT_SECRET;
+    if (!clientId || !clientSecret) {
+      throw new Error('TEKMETRIC_BG_CLIENT_ID and TEKMETRIC_BG_CLIENT_SECRET must be configured for the background lane');
+    }
+    return { clientId, clientSecret };
+  }
+
   const clientId = process.env.TEKMETRIC_CLIENT_ID;
   const clientSecret = process.env.TEKMETRIC_CLIENT_SECRET;
   
@@ -44,12 +73,12 @@ function getClientCredentials(): { clientId: string; clientSecret: string } {
   return { clientId, clientSecret };
 }
 
-async function fetchNewToken(): Promise<TekmetricToken> {
-  const { clientId, clientSecret } = getClientCredentials();
+async function fetchNewToken(lane: TekmetricAuthLane = 'primary'): Promise<TekmetricToken> {
+  const { clientId, clientSecret } = getClientCredentials(lane);
   
   const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
   
-  console.log('[Tekmetric Auth] Fetching new access token...');
+  console.log(`[Tekmetric Auth] Fetching new access token (${lane} lane)...`);
   
   const response = await fetch(`${TEKMETRIC_BASE_URL}/api/v1/oauth/token`, {
     method: 'POST',
@@ -78,7 +107,7 @@ async function fetchNewToken(): Promise<TekmetricToken> {
     createdAt: new Date(),
   };
   
-  console.log(`[Tekmetric Auth] New token obtained, expires at ${expiresAt.toISOString()}`);
+  console.log(`[Tekmetric Auth] New token obtained (${lane} lane), expires at ${expiresAt.toISOString()}`);
   
   return token;
 }
@@ -120,36 +149,49 @@ function isTokenExpired(token: TekmetricToken): boolean {
   return new Date() >= new Date(token.expiresAt.getTime() - TOKEN_REFRESH_BUFFER_MS);
 }
 
-export async function getValidToken(): Promise<string> {
-  if (cachedToken && !isTokenExpired(cachedToken)) {
-    return cachedToken.accessToken;
+export async function getValidToken(lane: TekmetricAuthLane = 'primary'): Promise<string> {
+  const cached = cachedTokens[lane];
+  if (cached && !isTokenExpired(cached)) {
+    return cached.accessToken;
   }
-  
-  const persistedToken = await loadPersistedToken();
-  if (persistedToken && !isTokenExpired(persistedToken)) {
-    cachedToken = persistedToken;
-    return cachedToken.accessToken;
+
+  // Only the primary lane's token is persisted (the central `{tokenKey:
+  // "current"}` doc / PG shop_id=0 sentinel row predates lanes). The
+  // background lane keeps its token in-process only: one extra OAuth call
+  // per process per ~55 minutes is negligible, and it avoids widening the
+  // single-token storage contract.
+  if (lane === 'primary') {
+    const persistedToken = await loadPersistedToken();
+    if (persistedToken && !isTokenExpired(persistedToken)) {
+      cachedTokens.primary = persistedToken;
+      return persistedToken.accessToken;
+    }
   }
-  
-  const newToken = await fetchNewToken();
-  cachedToken = newToken;
-  await persistToken(newToken);
+
+  const newToken = await fetchNewToken(lane);
+  cachedTokens[lane] = newToken;
+  if (lane === 'primary') {
+    await persistToken(newToken);
+  }
   
   return newToken.accessToken;
 }
 
-export async function refreshToken(): Promise<string> {
-  console.log('[Tekmetric Auth] Force refreshing token...');
+export async function refreshToken(lane: TekmetricAuthLane = 'primary'): Promise<string> {
+  console.log(`[Tekmetric Auth] Force refreshing token (${lane} lane)...`);
   
-  const newToken = await fetchNewToken();
-  cachedToken = newToken;
-  await persistToken(newToken);
+  const newToken = await fetchNewToken(lane);
+  cachedTokens[lane] = newToken;
+  if (lane === 'primary') {
+    await persistToken(newToken);
+  }
   
   return newToken.accessToken;
 }
 
 export async function invalidateToken(): Promise<void> {
-  cachedToken = null;
+  cachedTokens.primary = null;
+  cachedTokens.background = null;
   
   try {
     await deleteCurrentToken();
@@ -158,8 +200,8 @@ export async function invalidateToken(): Promise<void> {
   }
 }
 
-export function clearCachedToken(): void {
-  cachedToken = null;
+export function clearCachedToken(lane: TekmetricAuthLane = 'primary'): void {
+  cachedTokens[lane] = null;
 }
 
 export function isConfigured(): boolean {
