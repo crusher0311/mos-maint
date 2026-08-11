@@ -45,6 +45,20 @@ const MAX_PAGES_PER_CYCLE = 3; // Process up to 3 pages (300 records) per shop p
 const MAX_QUEUED_PAGES = 20; // Max pages to queue for later processing
 const TERMINAL_SWEEP_INTERVAL_MS = 15 * 60 * 1000;
 
+// Wall-clock cap for one incremental cycle. The cron ticks every 2 minutes;
+// without a cap, budget-starved cycles ran for HOURS and overlapped, piling
+// load onto the web instance (observed 7-17h runs on 2026-08-11). When the
+// deadline passes, remaining shops are skipped this tick — they simply run
+// on the next one.
+const CYCLE_DEADLINE_MS = Number(process.env.TEKMETRIC_INCREMENTAL_DEADLINE_MS || 90_000);
+
+// Negative-cache backoff for failed vehicle/customer live fetches. Without
+// this, an uncached vehicle whose fetch is denied by the background rate
+// budget was retried on EVERY tick forever (~320k failed fetches/week).
+// Backoff doubles per consecutive failure: 5m, 10m, 20m, ... capped at 4h.
+const FETCH_FAIL_BASE_MS = 5 * 60 * 1000;
+const FETCH_FAIL_MAX_MS = 4 * 60 * 60 * 1000;
+
 export interface ShopSyncState {
   shopId: number;
   tekmetricShopId: number;
@@ -142,7 +156,40 @@ export async function cacheVehicle(db: any, vehicleId: number, vehicle: Tekmetri
         vehicleId, 
         data: vehicle, 
         cachedAt: new Date() 
-      } 
+      },
+      // A successful fetch clears any negative-cache backoff state.
+      $unset: { failCount: "", retryAfter: "" }
+    },
+    { upsert: true }
+  );
+}
+
+// --- Negative cache for failed live fetches (vehicle + customer) ---
+// Stored on the same cache doc (no `data` field) so the existing TTL index on
+// `cachedAt` garbage-collects it. `retryAfter` gates the next live attempt;
+// `failCount` drives exponential backoff.
+
+function backoffMs(failCount: number): number {
+  return Math.min(FETCH_FAIL_BASE_MS * Math.pow(2, Math.max(0, failCount - 1)), FETCH_FAIL_MAX_MS);
+}
+
+async function isFetchBackedOff(db: any, collection: string, key: Record<string, number>): Promise<boolean> {
+  const doc = await db.collection(collection).findOne(key, { projection: { retryAfter: 1, data: 1 } });
+  return !!doc && !doc.data && doc.retryAfter && new Date() < new Date(doc.retryAfter);
+}
+
+async function recordFetchFailure(db: any, collection: string, key: Record<string, number>): Promise<void> {
+  const doc = await db.collection(collection).findOne(key, { projection: { failCount: 1 } });
+  const failCount = (doc?.failCount || 0) + 1;
+  await db.collection(collection).updateOne(
+    key,
+    {
+      $set: {
+        ...key,
+        failCount,
+        retryAfter: new Date(Date.now() + backoffMs(failCount)),
+        cachedAt: new Date(),
+      },
     },
     { upsert: true }
   );
@@ -270,12 +317,17 @@ export async function syncShopIncremental(
       let vehicle = await getCachedVehicle(db, ro.vehicleId);
       if (vehicle) {
         result.fromCache.vehicles++;
+      } else if (await isFetchBackedOff(db, "tekmetric_vehicle_cache", { vehicleId: ro.vehicleId })) {
+        // Recently failed (rate budget denial or upstream error) — skip the
+        // live fetch until the backoff expires instead of retrying every tick.
+        continue;
       } else {
         try {
           vehicle = await getVehicle(ro.vehicleId);
           await cacheVehicle(db, ro.vehicleId, vehicle);
         } catch (err) {
-          console.log(`[Tekmetric Incremental] Failed to fetch vehicle ${ro.vehicleId}`);
+          console.log(`[Tekmetric Incremental] Failed to fetch vehicle ${ro.vehicleId} (backing off)`);
+          await recordFetchFailure(db, "tekmetric_vehicle_cache", { vehicleId: ro.vehicleId });
           continue;
         }
       }
@@ -283,11 +335,14 @@ export async function syncShopIncremental(
       let customer = await getCachedCustomer(db, ro.customerId);
       if (customer) {
         result.fromCache.customers++;
+      } else if (await isFetchBackedOff(db, "tekmetric_customer_cache", { customerId: ro.customerId })) {
+        // Customer is optional for upsert — proceed without it.
       } else {
         try {
           customer = await getCustomer(ro.customerId, shopId);
           await cacheCustomer(db, ro.customerId, customer);
         } catch (err) {
+          await recordFetchFailure(db, "tekmetric_customer_cache", { customerId: ro.customerId });
         }
       }
 
@@ -526,12 +581,39 @@ const CONCURRENT_SHOPS = 3;
 const IN_BATCH_STAGGER_MS = 1000;   // was 400
 const BETWEEN_BATCH_PAUSE_MS = 2500; // was 1000
 
+// In-process overlap guard: the cron ticks every 2 minutes, but a
+// budget-starved cycle can run far longer. Never let two cycles stack in the
+// same process — the new tick simply skips (the running one covers the fleet).
+let cycleInFlight = false;
+
 export async function runIncrementalSyncCycle(): Promise<{
   results: IncrementalSyncResult[];
   duration: number;
+  skippedOverlap?: boolean;
+  deadlineHit?: boolean;
+  shopsDeferred?: number;
+}> {
+  if (cycleInFlight) {
+    console.log(`[Tekmetric Incremental] Previous cycle still running — skipping this tick`);
+    return { results: [], duration: 0, skippedOverlap: true };
+  }
+  cycleInFlight = true;
+  try {
+    return await _runIncrementalSyncCycle();
+  } finally {
+    cycleInFlight = false;
+  }
+}
+
+async function _runIncrementalSyncCycle(): Promise<{
+  results: IncrementalSyncResult[];
+  duration: number;
+  deadlineHit?: boolean;
+  shopsDeferred?: number;
 }> {
   const db = await getDb();
   const startTime = Date.now();
+  const deadline = startTime + CYCLE_DEADLINE_MS;
   const results: IncrementalSyncResult[] = [];
 
   const shops = await db.collection("shops").find({
@@ -551,7 +633,15 @@ export async function runIncrementalSyncCycle(): Promise<{
   }
 
   // Process shops in concurrent batches
+  let deadlineHit = false;
+  let shopsDeferred = 0;
   for (let i = 0; i < shopStates.length; i += CONCURRENT_SHOPS) {
+    if (Date.now() > deadline) {
+      deadlineHit = true;
+      shopsDeferred = shopStates.length - i;
+      console.log(`[Tekmetric Incremental] Cycle deadline (${CYCLE_DEADLINE_MS}ms) hit — deferring ${shopsDeferred} shops to next tick`);
+      break;
+    }
     const batch = shopStates.slice(i, i + CONCURRENT_SHOPS);
     
     const batchPromises = batch.map(async (state, index) => {
@@ -574,6 +664,8 @@ export async function runIncrementalSyncCycle(): Promise<{
   return {
     results,
     duration: Date.now() - startTime,
+    deadlineHit,
+    shopsDeferred,
   };
 }
 

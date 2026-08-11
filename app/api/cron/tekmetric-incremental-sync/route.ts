@@ -39,7 +39,11 @@ async function _GETImpl(req: NextRequest) {
   try {
     await ensureCacheIndexes();
     
-    const { results, duration } = await runIncrementalSyncCycle();
+    const { results, duration, skippedOverlap, deadlineHit, shopsDeferred } = await runIncrementalSyncCycle();
+
+    if (skippedOverlap) {
+      return NextResponse.json({ ok: true, skippedOverlap: true, message: "Previous cycle still running" });
+    }
     
     const totalSynced = results.reduce((sum, r) => sum + r.synced, 0);
     const totalRemoved = results.reduce((sum, r) => sum + r.removed, 0);
@@ -50,7 +54,7 @@ async function _GETImpl(req: NextRequest) {
     const skipped = results.filter(r => r.skipped).length;
     const apiCallCount = apiCallCounter.count;
     
-    console.log(`[Cron] Tekmetric incremental sync completed in ${duration}ms — API calls made: ${apiCallCount} (budget: 600/min): ${totalSynced} synced, ${totalRemoved} removed, ${totalFromCacheVehicles}/${totalFromCacheCustomers} from cache, ${totalPagesQueued} pages queued, ${errors} errors, ${skipped} skipped`);
+    console.log(`[Cron] Tekmetric incremental sync completed in ${duration}ms — API calls made: ${apiCallCount} (budget: 600/min): ${totalSynced} synced, ${totalRemoved} removed, ${totalFromCacheVehicles}/${totalFromCacheCustomers} from cache, ${totalPagesQueued} pages queued, ${errors} errors, ${skipped} skipped${deadlineHit ? `, DEADLINE HIT (${shopsDeferred} shops deferred)` : ""}`);
 
     // Fire-and-forget plan pre-generation for ALL dashboard-visible vehicles
     if (CRON_SECRET) {
