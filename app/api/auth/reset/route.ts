@@ -25,9 +25,23 @@ import {
  * 8) Create a new session and set HttpOnly cookie so the user is signed in.
  */
 
+// Test seam: smoke tests swap these out to run the handler without a
+// real Mongo/PG connection (see tests/auth-reset.route.smoke.ts).
+export const __deps = {
+  getDb,
+  dualWritePgIdentity,
+  pgUpdateUserPassword,
+  pgDeleteSessionsByUserId,
+  pgInsertSession,
+};
+
 export async function POST(req: Request) {
   try {
-    const { token, email, password } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const { token, email } = body ?? {};
+    // The reset form historically posted the new password as
+    // `newPassword`; accept both keys so the field contract can't drift.
+    const password = body?.password ?? body?.newPassword;
 
     if (!token || !email || !password) {
       return NextResponse.json(
@@ -38,7 +52,7 @@ export async function POST(req: Request) {
 
     const emailLower = String(email).trim().toLowerCase();
 
-    const db = await getDb();
+    const db = await __deps.getDb();
     const pwTokens = db.collection("password_reset_tokens");
     const users = db.collection("users");
     const sessions = db.collection("sessions");
@@ -92,8 +106,8 @@ export async function POST(req: Request) {
     // W4 cutover (#346): mirror the user-level password change into
     // PG so the new session inserted below can authenticate against
     // the PG-canonical reader without a backfill in between.
-    await dualWritePgIdentity("users.update(password-reset)", () =>
-      pgUpdateUserPassword(String(user._id), {
+    await __deps.dualWritePgIdentity("users.update(password-reset)", () =>
+      __deps.pgUpdateUserPassword(String(user._id), {
         passwordHash,
         passwordChangedAt: now,
       }),
@@ -106,8 +120,8 @@ export async function POST(req: Request) {
 
     // W4 cutover (#346): mirror revocation into PG before issuing
     // the new session.
-    await dualWritePgIdentity("sessions.delete(reset)", () =>
-      pgDeleteSessionsByUserId(String(user._id)),
+    await __deps.dualWritePgIdentity("sessions.delete(reset)", () =>
+      __deps.pgDeleteSessionsByUserId(String(user._id)),
     );
 
     const sessionToken = crypto.randomBytes(32).toString("hex");
@@ -124,8 +138,8 @@ export async function POST(req: Request) {
 
     // W4 cutover (#346): mirror new session into PG so the next
     // request via the cookie can authenticate.
-    await dualWritePgIdentity("sessions.insert(reset)", () =>
-      pgInsertSession({
+    await __deps.dualWritePgIdentity("sessions.insert(reset)", () =>
+      __deps.pgInsertSession({
         token: sessionToken,
         userId: String(user._id),
         shopId: Number(t.shopId),

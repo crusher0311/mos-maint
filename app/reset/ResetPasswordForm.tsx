@@ -18,6 +18,13 @@ export default function ResetPasswordPage() {
     e.preventDefault();
     if (busy) return;
 
+    if (!token) {
+      setMsg(
+        "❌ This page is missing a reset token. Please use the reset link from your email, or request a new one from the login page."
+      );
+      return;
+    }
+
     setBusy(true);
     setMsg("");
 
@@ -27,7 +34,7 @@ export default function ResetPasswordPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: email.trim().toLowerCase(),
-          newPassword: password,
+          password,
           token,
         }),
       });
@@ -38,10 +45,10 @@ export default function ResetPasswordPage() {
         throw new Error(data?.error || `HTTP ${res.status}`);
       }
 
-      setMsg("âœ… Password reset successful. Redirecting to loginâ€¦");
+      setMsg("✅ Password reset successful. Redirecting to login…");
       setTimeout(() => router.replace("/login"), 1500);
     } catch (err: any) {
-      setMsg("âŒ " + (err?.message || "Reset failed"));
+      setMsg("❌ " + (err?.message || "Reset failed"));
     } finally {
       setBusy(false);
     }
@@ -50,6 +57,13 @@ export default function ResetPasswordPage() {
   return (
     <main className="mx-auto max-w-md p-6 space-y-6">
       <h1 className="text-2xl font-bold">Reset Password</h1>
+
+      {!token && (
+        <div className="text-sm rounded border border-amber-300 bg-amber-50 p-3 text-amber-800">
+          This page is missing a reset token. Please open the reset link from
+          your email — or request a new link from the login page.
+        </div>
+      )}
 
       <form onSubmit={onSubmit} className="space-y-4">
         <div>
@@ -81,7 +95,7 @@ export default function ResetPasswordPage() {
           disabled={busy}
           className="rounded bg-black text-white px-4 py-2 disabled:opacity-50"
         >
-          {busy ? "Resettingâ€¦" : "Reset Password"}
+          {busy ? "Resetting…" : "Reset Password"}
         </button>
       </form>
 
