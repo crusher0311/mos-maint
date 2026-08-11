@@ -1,11 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useSearchParams } from "next/navigation";
-
-interface BillingConfig {
-  mosProPrice: number;
-}
 
 interface FormData {
   shopName: string;
@@ -26,20 +22,6 @@ export default function SetupWizardContent() {
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(wasCancelled ? "Payment was cancelled. You can try again when ready." : "");
-  const [billingConfig, setBillingConfig] = useState<BillingConfig>({
-    mosProPrice: 199,
-  });
-
-  useEffect(() => {
-    fetch("/api/billing/config")
-      .then(res => res.json())
-      .then(data => {
-        if (data.ok) {
-          setBillingConfig(data.config);
-        }
-      })
-      .catch(() => {});
-  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -102,10 +84,7 @@ export default function SetupWizardContent() {
         </div>
 
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
-          <p className="text-sm text-blue-800">
-            <strong>${billingConfig.mosProPrice}/month</strong>
-          </p>
-          <p className="text-xs text-blue-600 mt-1">
+          <p className="text-xs text-blue-600">
             You can configure integrations after setup in Settings
           </p>
         </div>
