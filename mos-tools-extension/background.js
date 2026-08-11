@@ -1,6 +1,8 @@
 // MOS Tools Extension - Background Service Worker
 // Manages SMS session tokens, MOS authentication, and message routing
 
+import { createStickerConfigCache } from './lib/sticker-config-cache.js';
+
 // ==================== STATE MANAGEMENT ====================
 let mosApiToken = null;
 let mosApiUrl = null;
@@ -821,6 +823,43 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ success: false, error: err.message, code: err.serverCode || err.code || null });
       }
     })();
+    return true;
+  }
+
+  // -------------------- Sticker config cache (task #1076) --------------------
+  // Serves the right-click interval dropdown near-instantly from the SWR
+  // cache; a cold miss fetches with a short bound and the content script
+  // degrades to built-in default intervals on failure.
+  if (message.action === "GET_STICKER_CONFIG") {
+    (async () => {
+      try {
+        const entry = await getStickerConfigCached(message.shopId, message.provider, {
+          forceRefresh: message.forceRefresh === true,
+        });
+        sendResponse({ success: true, config: entry.config, enabled: entry.enabled, fromCache: entry.fromCache === true });
+      } catch (err) {
+        sendResponse({ success: false, error: err.message, code: err.serverCode || err.code || null });
+      }
+    })();
+    return true;
+  }
+
+  // Fire-and-forget warm-up when the print button is injected, so the first
+  // right-click already has warm data.
+  if (message.action === "PREFETCH_STICKER_CONFIG") {
+    getStickerConfigCached(message.shopId, message.provider).catch((err) => {
+      console.warn('[MOS] Sticker config prefetch failed:', err.message);
+    });
+    sendResponse({ success: true });
+    return false;
+  }
+
+  // Expire the cached entry (keeping it as last-known-good fallback) after
+  // the Customize flow so edited intervals show up on the next right-click.
+  if (message.action === "INVALIDATE_STICKER_CONFIG") {
+    invalidateStickerConfigCache(message.shopId, message.provider)
+      .then(() => sendResponse({ success: true }))
+      .catch(() => sendResponse({ success: true }));
     return true;
   }
 
@@ -2549,6 +2588,49 @@ function resolveLeftClickOilType(vehicle, intervals, defaultOilType) {
   return detectOilType(vehicle, intervals, defaultOilType);
 }
 
+// -------------------- Sticker config cache (task #1076) --------------------
+// SWR cache for GET /api/extension/sticker so the right-click interval
+// dropdown renders instantly instead of blocking on a fresh round trip. Logic
+// lives in lib/sticker-config-cache.js (unit-tested); this wires in the real
+// fetch + chrome.storage.local persistence. Every user-facing read is bounded
+// by ONE end-to-end 8s deadline — the deadline covers handleMosApiRequest's
+// internal 401 retries/backoff/silent re-auth too, so a cold right-click can
+// never sit on "Loading intervals..." beyond the bound; callers degrade to
+// built-in default intervals.
+const STICKER_CONFIG_FETCH_DEADLINE_MS = 8000;
+
+const _stickerConfigCacheImpl = createStickerConfigCache({
+  fetchConfig: (shopId, provider) => {
+    const endpoint = `/api/extension/sticker?shopId=${encodeURIComponent(shopId)}&provider=${encodeURIComponent(provider || 'tekmetric')}`;
+    // Per-attempt cap matches the overall deadline; the cache's deadline is
+    // what actually bounds the caller (including auth-retry sleeps).
+    return handleMosApiRequest(endpoint, { timeoutMs: STICKER_CONFIG_FETCH_DEADLINE_MS });
+  },
+  storageGet: (key) => new Promise((resolve) => {
+    try {
+      chrome.storage.local.get([key], (r) => resolve(r ? r[key] : undefined));
+    } catch (e) {
+      resolve(undefined);
+    }
+  }),
+  storageSet: (key, value) => new Promise((resolve) => {
+    try {
+      chrome.storage.local.set({ [key]: value }, () => resolve());
+    } catch (e) {
+      resolve();
+    }
+  }),
+  fetchDeadlineMs: STICKER_CONFIG_FETCH_DEADLINE_MS,
+});
+
+function getStickerConfigCached(shopId, provider, opts) {
+  return _stickerConfigCacheImpl.get(shopId, provider, opts);
+}
+
+function invalidateStickerConfigCache(shopId, provider) {
+  return _stickerConfigCacheImpl.invalidate(shopId, provider);
+}
+
 async function handleImmediateStickerPrint(context, tabId, overrideInterval = null) {
   if (!mosApiToken) {
     throw new Error("Not authenticated with MOS. Please login first.");
@@ -2574,27 +2656,16 @@ async function handleImmediateStickerPrint(context, tabId, overrideInterval = nu
     unit = 'km';
   }
   try {
-    // Task #871: this GET used a bare fetch() with NO timeout. A stalled
-    // connection can hang for ~5 minutes (Chrome's socket timeout) before
-    // recovering — matching the 5–7 minute sticker prints reported at CBA
-    // Lubbock while the server route completed in <1s. The config is
-    // optional (defaults exist), so bound it tightly and degrade.
-    const configController = new AbortController();
-    const configTimer = setTimeout(() => configController.abort(), 8000);
-    let configResp;
-    try {
-      configResp = await fetch(
-        `${mosApiUrl}/api/extension/sticker?shopId=${encodeURIComponent(context.shopId)}&provider=${encodeURIComponent(context.provider || '')}&_token=${encodeURIComponent(mosApiToken)}`,
-        { headers: { 'Authorization': `Bearer ${mosApiToken}` }, signal: configController.signal }
-      );
-    } finally {
-      clearTimeout(configTimer);
-    }
-    if (configResp.ok) {
-      const configData = await configResp.json();
-      if (context.useKilometers == null && configData.config?.useKilometers) unit = 'km';
-      shopIntervals = configData.config?.intervals;
-      shopDefaultOilType = configData.config?.defaultOilType;
+    // Task #871: this GET used a bare fetch() with NO timeout. Task #1076:
+    // it now goes through the shared sticker-config cache — a warm entry is
+    // served instantly (no network round trip) and a cold miss is bounded by
+    // the cache's short fetch timeout. The config is optional (defaults
+    // exist), so any failure degrades instead of stalling the print.
+    const cachedEntry = await getStickerConfigCached(context.shopId, context.provider || 'tekmetric');
+    if (cachedEntry && cachedEntry.config) {
+      if (context.useKilometers == null && cachedEntry.config.useKilometers) unit = 'km';
+      shopIntervals = cachedEntry.config.intervals;
+      shopDefaultOilType = cachedEntry.config.defaultOilType;
     }
   } catch (err) {
     console.warn('[MOS] Could not fetch sticker config for unit/intervals, using defaults:', err.message);

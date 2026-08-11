@@ -173,19 +173,28 @@ function backoffMs(failCount: number): number {
   return Math.min(FETCH_FAIL_BASE_MS * Math.pow(2, Math.max(0, failCount - 1)), FETCH_FAIL_MAX_MS);
 }
 
-async function isFetchBackedOff(db: any, collection: string, key: Record<string, number>): Promise<boolean> {
+export async function isFetchBackedOff(db: any, collection: string, key: Record<string, number>): Promise<boolean> {
   const doc = await db.collection(collection).findOne(key, { projection: { retryAfter: 1, data: 1 } });
   return !!doc && !doc.data && doc.retryAfter && new Date() < new Date(doc.retryAfter);
 }
 
-async function recordFetchFailure(db: any, collection: string, key: Record<string, number>): Promise<void> {
+export async function recordFetchFailure(db: any, collection: string, key: Record<string, number>): Promise<void> {
   // Atomic $inc so concurrent failures (cross-process) never lose counts;
   // retryAfter is then derived from the atomically assigned count.
+  //
+  // A failed refresh over an EXPIRED positive entry must also clear `data`,
+  // for two reasons: (1) `isFetchBackedOff` treats any doc with `data` as a
+  // positive entry and would never gate it, so the failed live fetch would
+  // repeat every tick; (2) we bump `cachedAt` for the TTL index, and leaving
+  // stale `data` behind would make it look fresh to getCachedVehicle/
+  // getCachedCustomer. The expired data was unusable anyway (reads filter on
+  // cachedAt).
   const doc = await db.collection(collection).findOneAndUpdate(
     key,
     {
       $inc: { failCount: 1 },
       $set: { ...key, cachedAt: new Date() },
+      $unset: { data: "" },
     },
     { upsert: true, returnDocument: "after" }
   );

@@ -887,6 +887,20 @@ function injectPrintButton() {
   
   printButtonInjected = true;
   console.log('[MOS Tools] Print button injected');
+
+  // Task #1076: warm the sticker-config cache as soon as the button exists,
+  // so the first right-click renders the interval dropdown from warm data.
+  try {
+    if (context.shopId) {
+      safeSendMessage({
+        action: 'PREFETCH_STICKER_CONFIG',
+        shopId: context.shopId,
+        provider: context.provider || 'tekmetric'
+      });
+    }
+  } catch (e) {
+    // Prefetch is best-effort; the dropdown path has its own bounded fetch.
+  }
 }
 
 function handleImmediatePrint() {
@@ -949,15 +963,27 @@ async function showIntervalDropdown(event, buttonElement) {
   dropdown.innerHTML = '<div style="padding: 12px 16px; color: #666; font-size: 13px;">Loading intervals...</div>';
   document.body.appendChild(dropdown);
   
-  // Fetch shop's configured intervals
+  // Fetch shop's configured intervals via the background's SWR cache (task
+  // #1076): a warm entry renders near-instantly; a cold miss is bounded by
+  // the background's short fetch timeout, so we never sit on
+  // "Loading intervals..." for many seconds — defaults render instead.
   let intervals = [];
   let useKilometers = false;
   try {
     const result = await new Promise((resolve) => {
+      // Belt-and-braces: the background enforces an 8s end-to-end deadline,
+      // but if the message channel itself dies (worker restart mid-flight)
+      // the callback may never fire — resolve to defaults shortly after the
+      // background's own bound instead of hanging the dropdown.
+      const guard = setTimeout(() => resolve(null), 10000);
       safeSendMessage({
-        action: 'MOS_API_REQUEST',
-        endpoint: `/api/extension/sticker?shopId=${context.shopId}&provider=${context.provider || 'tekmetric'}`
-      }, resolve);
+        action: 'GET_STICKER_CONFIG',
+        shopId: context.shopId,
+        provider: context.provider || 'tekmetric'
+      }, (res) => {
+        clearTimeout(guard);
+        resolve(res);
+      });
     });
     
     if (result && result.config) {
@@ -1137,10 +1163,21 @@ function getVehicleDetails() {
 }
 
 function openStickerPanel() {
+  const context = detectContext();
+  // Task #1076: the user is heading into the Customize flow — expire the
+  // cached sticker config so any edits they make show up on the next
+  // right-click (the cache keeps last-known-good as a fallback).
+  if (context && context.shopId) {
+    safeSendMessage({
+      action: 'INVALIDATE_STICKER_CONFIG',
+      shopId: context.shopId,
+      provider: context.provider || 'tekmetric'
+    });
+  }
   // Message background to open side panel to sticker tab
   safeSendMessage({
     action: 'OPEN_STICKER_PANEL',
-    context: detectContext()
+    context
   });
 }
 
