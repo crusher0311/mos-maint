@@ -27,7 +27,7 @@ export default function ForgotForm() {
       setMsg("If the account exists, a reset link has been generated.");
       if (data.resetUrl) setResetUrl(data.resetUrl); // (dev) copy this manually for now
     } catch (e: any) {
-      setMsg("âŒ " + (e?.message || "Error"));
+      setMsg("❌ " + (e?.message || "Error"));
     } finally {
       setBusy(false);
     }
@@ -55,7 +55,7 @@ export default function ForgotForm() {
         className="rounded bg-black text-white px-4 py-2 disabled:opacity-50"
         disabled={busy || !email}
       >
-        {busy ? "Workingâ€¦" : "Send reset link"}
+        {busy ? "Working…" : "Send reset link"}
       </button>
 
       {msg && <div className="text-sm whitespace-pre-wrap">{msg}</div>}

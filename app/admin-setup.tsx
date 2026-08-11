@@ -160,9 +160,9 @@ export default function Home() {
   );
 }
       setWebhookToken(wt);
-      logLine(`âœ… Shop created: ${sid}`);
+      logLine(`✅ Shop created: ${sid}`);
     } catch (e: any) {
-      logLine(`âŒ Create Shop failed: ${e.message || e}`);
+      logLine(`❌ Create Shop failed: ${e.message || e}`);
     }
   }
 
@@ -180,9 +180,9 @@ export default function Home() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(JSON.stringify(data));
-      logLine(`âœ… Credentials saved for shop ${shopId}`);
+      logLine(`✅ Credentials saved for shop ${shopId}`);
     } catch (e: any) {
-      logLine(`âŒ Save Creds failed: ${e.message || e}`);
+      logLine(`❌ Save Creds failed: ${e.message || e}`);
     }
   }
 
@@ -198,9 +198,9 @@ export default function Home() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(JSON.stringify(data));
-      logLine(`âœ… Webhook OK: ${JSON.stringify(data)}`);
+      logLine(`✅ Webhook OK: ${JSON.stringify(data)}`);
     } catch (e: any) {
-      logLine(`âŒ Webhook failed: ${e.message || e}`);
+      logLine(`❌ Webhook failed: ${e.message || e}`);
     }
   }
 
@@ -214,9 +214,9 @@ export default function Home() {
       });
       const txt = await res.text();
       if (!res.ok) throw new Error(txt);
-      logLine(`âœ… DB Indexes: ${txt}`);
+      logLine(`✅ DB Indexes: ${txt}`);
     } catch (e: any) {
-      logLine(`âŒ DB Indexes failed: ${e.message || e}`);
+      logLine(`❌ DB Indexes failed: ${e.message || e}`);
     }
   }
 
@@ -246,9 +246,9 @@ export default function Home() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || JSON.stringify(data));
       setEvents(Array.isArray(data?.logs) ? data.logs : []);
-      if (logSuccess) logLine("âœ… Fetched recent AutoFlow events");
+      if (logSuccess) logLine("✅ Fetched recent AutoFlow events");
     } catch (e: any) {
-      logLine(`âŒ Fetch recent events failed: ${e.message || e}`);
+      logLine(`❌ Fetch recent events failed: ${e.message || e}`);
     } finally {
       setEventsLoading(false);
     }
@@ -307,9 +307,9 @@ export default function Home() {
                   onClick={async () => {
                     try {
                       await navigator.clipboard.writeText(webhookUrl);
-                      logLine("âœ… Copied webhook URL");
+                      logLine("✅ Copied webhook URL");
                     } catch {
-                      logLine("âŒ Copy failed");
+                      logLine("❌ Copy failed");
                     }
                   }}
                 >
@@ -317,7 +317,7 @@ export default function Home() {
                 </button>
               </div>
               <div className="text-xs text-gray-500 mt-1">
-                Paste this into AutoFlowâ€™s Webhook/Callback URL for this shop.
+                Paste this into AutoFlow’s Webhook/Callback URL for this shop.
               </div>
             </div>
           )}
@@ -398,13 +398,13 @@ export default function Home() {
               disabled={eventsLoading}
               title="Fetches with cache: 'no-store' and a ts param"
             >
-              {eventsLoading ? "Refreshingâ€¦" : "Refresh"}
+              {eventsLoading ? "Refreshing…" : "Refresh"}
             </button>
           </div>
         </div>
 
         <div className="text-xs text-gray-500">
-          Last fetch: {lastFetch.current ? new Date(lastFetch.current).toLocaleTimeString() : "â€”"}
+          Last fetch: {lastFetch.current ? new Date(lastFetch.current).toLocaleTimeString() : "—"}
         </div>
 
         {events.length === 0 ? (
@@ -427,11 +427,11 @@ export default function Home() {
                     <div className="space-y-0.5">
                       <div className="font-medium">
                         {t || eventType || "(event)"}{" "}
-                        <span className="text-gray-500 font-normal">Â· token {e.token}</span>
+                        <span className="text-gray-500 font-normal">· token {e.token}</span>
                       </div>
                       <div className="text-gray-600">
                         {cust && <span>{cust}</span>}
-                        {cust && veh && <span> Â· </span>}
+                        {cust && veh && <span> · </span>}
                         {veh && <span>{veh}</span>}
                       </div>
                     </div>

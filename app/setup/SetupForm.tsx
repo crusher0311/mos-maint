@@ -35,7 +35,7 @@ export default function SetupForm() {
       setMsg("Account created! Redirecting...");
       window.location.href = data.redirect || "/dashboard";
     } catch (err: any) {
-      setMsg("âŒ " + (err?.message || String(err)));
+      setMsg("❌ " + (err?.message || String(err)));
     } finally {
       setBusy(false);
     }

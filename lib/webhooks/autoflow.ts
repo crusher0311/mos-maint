@@ -22,7 +22,7 @@ type IncomingCustomer = {
 };
 
 export function toCustomerDoc(payload: any) {
-  // Adapt these paths to match AutoFlowâ€™s exact JSON
+  // Adapt these paths to match AutoFlow’s exact JSON
   const data: IncomingCustomer =
     payload?.data?.customer ||
     payload?.customer ||

@@ -252,7 +252,7 @@ export async function importDVI(args: { shopId: number; roNumber: string | numbe
       },
       sheetId: c?.sheet_id ?? null,
       notes: c?.additional_notes ?? null,
-      lines, // <â€” detailed inspection items
+      lines, // <— detailed inspection items
       raw: c,
       fetchedAt: now,
       ok: true,

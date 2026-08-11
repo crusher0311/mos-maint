@@ -31,7 +31,7 @@ export default function DashboardHeader() {
           className="rounded bg-gray-900 text-white px-3 py-1.5 disabled:opacity-50"
           aria-label="Log out"
         >
-          {busy ? "Logging outâ€¦" : "Log out"}
+          {busy ? "Logging out…" : "Log out"}
         </button>
       </div>
     </header>
