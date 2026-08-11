@@ -9,6 +9,11 @@ import {
   TekmetricCustomer
 } from ".";
 import { getRepairOrderInspectionsWithXAuth } from "./client";
+import {
+  classifyWebhookCoverage,
+  selectPollCadence,
+  isWebhookFirstDisabled,
+} from "./webhook-coverage";
 
 const ACTIVE_STATUS_IDS = [1, 2, 3, 4];
 const TERMINAL_STATUSES = ["Invoice", "Invoiced", "Posted", "Deleted", "Void"];
@@ -68,6 +73,10 @@ export interface ShopSyncState {
   consecutiveAuthFailures: number;
   pausedUntil: Date | null;
   xAuthToken?: string | null;
+  // Task #1089 (webhook-first): last webhook event received for this shop,
+  // stamped by app/api/webhooks/tekmetric/route.ts. Used to decide whether
+  // the shop can drop to the slow safety-net poll cadence.
+  lastWebhookEventAt?: Date | null;
 }
 
 interface OverflowPage {
@@ -114,6 +123,7 @@ async function getShopSyncState(db: any, shopId: number): Promise<ShopSyncState 
     lastClosedSweepAt: shop.tekmetric?.lastClosedSweepAt || null,
     consecutiveAuthFailures: shop.tekmetric?.consecutiveAuthFailures || 0,
     pausedUntil: shop.tekmetric?.pausedUntil || null,
+    lastWebhookEventAt: shop.tekmetric?.lastWebhookEventAt || null,
   };
 }
 
@@ -689,12 +699,74 @@ async function _runIncrementalSyncCycle(): Promise<{
     }
   }
 
+  // Task #1089 (webhook-first sync): shops with confirmed, live webhook
+  // coverage drop to the slow safety-net poll cadence; everyone else keeps
+  // the fast 2-minute poll. Coverage requires auto-subscribe to be ON, a
+  // healthy managed subscription row, AND a recent webhook event — all three,
+  // so nothing can go stale silently. Skipped shops are reported in the
+  // results (skipReason starts with "webhook_covered") so the cycle
+  // completion log can show the API-demand reduction.
+  const autoSubscribeEnabled = process.env.TEKMETRIC_WEBHOOK_AUTO_SUBSCRIBE === "true";
+  const webhookFirstDisabled = isWebhookFirstDisabled();
+  const subscribedOk = new Set<number>();
+  if (autoSubscribeEnabled && !webhookFirstDisabled) {
+    try {
+      const subRows = await db.collection("tekmetric_webhook_subscriptions").find(
+        { tekmetricShopId: { $in: shopStates.map(s => s.tekmetricShopId) } },
+        { projection: { tekmetricShopId: 1, "lastResult.ok": 1 } }
+      ).toArray();
+      for (const row of subRows as any[]) {
+        if (row?.lastResult?.ok === true) subscribedOk.add(Number(row.tekmetricShopId));
+      }
+    } catch (err: any) {
+      // Fail open to the fast poll: if we can't read subscription health we
+      // must not skip anyone.
+      console.warn(`[Tekmetric Incremental] webhook subscription lookup failed (all shops fast-poll this tick): ${err?.message || err}`);
+    }
+  }
+
+  const webhookSkipped: IncrementalSyncResult[] = [];
+  const toPoll: ShopSyncState[] = [];
+  for (const state of shopStates) {
+    const coverage = classifyWebhookCoverage({
+      autoSubscribeEnabled,
+      subscriptionOk: subscribedOk.has(state.tekmetricShopId),
+      lastWebhookEventAt: state.lastWebhookEventAt,
+    });
+    const cadence = selectPollCadence({
+      coverage,
+      lastSyncCursor: state.lastSyncCursor,
+      webhookFirstDisabled,
+    });
+    if (cadence.poll) {
+      toPoll.push(state);
+    } else {
+      webhookSkipped.push({
+        shopId: state.shopId,
+        tekmetricShopId: state.tekmetricShopId,
+        synced: 0,
+        removed: 0,
+        fromCache: { vehicles: 0, customers: 0 },
+        negativeCacheHits: { vehicles: 0, customers: 0 },
+        liveFetches: { vehicles: 0, customers: 0 },
+        pagesQueued: 0,
+        terminalSwept: false,
+        skipped: true,
+        skipReason: cadence.skipReason,
+      });
+    }
+  }
+  if (webhookSkipped.length > 0) {
+    console.log(`[Tekmetric Incremental] Webhook-first: ${webhookSkipped.length}/${shopStates.length} shops webhook-covered — skipped this tick (safety-net poll pending), ${toPoll.length} polled`);
+  }
+  results.push(...webhookSkipped);
+
   // Fair rotation: stable order, then start where the last cycle left off so
   // deadline-deferred tail shops are FIRST next tick instead of starved
   // forever (same-order restarts would otherwise never reach them).
-  shopStates.sort((a, b) => a.shopId - b.shopId);
-  const offset = shopStates.length > 0 ? rotationOffset % shopStates.length : 0;
-  const rotated = shopStates.slice(offset).concat(shopStates.slice(0, offset));
+  toPoll.sort((a, b) => a.shopId - b.shopId);
+  const offset = toPoll.length > 0 ? rotationOffset % toPoll.length : 0;
+  const rotated = toPoll.slice(offset).concat(toPoll.slice(0, offset));
 
   // Process shops in concurrent batches
   let deadlineHit = false;
@@ -722,16 +794,17 @@ async function _runIncrementalSyncCycle(): Promise<{
     results.push(...batchResults);
 
     // Pause between batches to give Tekmetric's per-IP rate limit room to recover.
-    if (i + CONCURRENT_SHOPS < shopStates.length) {
+    if (i + CONCURRENT_SHOPS < rotated.length) {
       await new Promise(resolve => setTimeout(resolve, BETWEEN_BATCH_PAUSE_MS));
     }
   }
 
   // Advance the rotation cursor past the shops we processed so a
   // deadline-deferred tail goes first next cycle. On a full sweep this wraps
-  // back to the same start point, which is fine.
-  if (shopStates.length > 0) {
-    rotationOffset = (offset + processed) % shopStates.length;
+  // back to the same start point, which is fine. (The cursor rotates over the
+  // polled subset; webhook-covered skips don't consume rotation slots.)
+  if (toPoll.length > 0) {
+    rotationOffset = (offset + processed) % toPoll.length;
   }
 
   return {

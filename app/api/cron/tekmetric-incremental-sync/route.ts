@@ -66,6 +66,9 @@ async function _GETImpl(req: NextRequest) {
     const totalPagesQueued = results.reduce((sum, r) => sum + r.pagesQueued, 0);
     const errors = results.filter(r => r.error).length;
     const skipped = results.filter(r => r.skipped).length;
+    // Task #1089 (webhook-first): how many shops were skipped this tick
+    // because live webhook coverage put them on the slow safety-net cadence.
+    const webhookCovered = results.filter(r => r.skipReason?.startsWith("webhook_covered")).length;
     const apiCallCount = apiCallCounter.count;
 
     // Task #1079: negative-cache hit rate in the completion log so on-call
@@ -80,7 +83,7 @@ async function _GETImpl(req: NextRequest) {
     const lookupTotal = negTotal + liveVehicles + liveCustomers + totalFromCacheVehicles + totalFromCacheCustomers;
     const negRatePct = lookupTotal > 0 ? Math.round((negTotal / lookupTotal) * 100) : 0;
 
-    console.log(`[Cron] Tekmetric incremental sync completed in ${duration}ms — API calls made: ${apiCallCount} (budget: 600/min): ${totalSynced} synced, ${totalRemoved} removed, ${totalFromCacheVehicles}/${totalFromCacheCustomers} from cache, negative-cache hits ${negVehicles}/${negCustomers} (${negRatePct}% of ${lookupTotal} lookups), ${liveVehicles}/${liveCustomers} live fetches, ${totalPagesQueued} pages queued, ${errors} errors, ${skipped} skipped${deadlineHit ? `, DEADLINE HIT (${shopsDeferred} shops deferred)` : ""}`);
+    console.log(`[Cron] Tekmetric incremental sync completed in ${duration}ms — API calls made: ${apiCallCount} (budget: 600/min): ${totalSynced} synced, ${totalRemoved} removed, ${totalFromCacheVehicles}/${totalFromCacheCustomers} from cache, negative-cache hits ${negVehicles}/${negCustomers} (${negRatePct}% of ${lookupTotal} lookups), ${liveVehicles}/${liveCustomers} live fetches, ${totalPagesQueued} pages queued, ${errors} errors, ${skipped} skipped (${webhookCovered} webhook-covered)${deadlineHit ? `, DEADLINE HIT (${shopsDeferred} shops deferred)` : ""}`);
 
     // Fire-and-forget plan pre-generation for ALL dashboard-visible vehicles
     if (CRON_SECRET) {
@@ -175,6 +178,7 @@ async function _GETImpl(req: NextRequest) {
         pagesQueued: totalPagesQueued,
         errors,
         skipped,
+        webhookCovered,
       },
       shops: results
     });

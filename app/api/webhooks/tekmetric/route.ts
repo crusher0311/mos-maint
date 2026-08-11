@@ -944,6 +944,23 @@ export async function POST(req: NextRequest) {
       handlerDurationMs,
     });
 
+    // Task #1089 (webhook-first sync): stamp per-shop webhook liveness so the
+    // incremental poller can distinguish shops with live webhook coverage
+    // (safety-net poll cadence) from shops whose webhooks have gone silent
+    // (keep the fast poll). Cheap single-field updateOne; soft-fail so a
+    // shops-write hiccup never breaks the 200 back to Tekmetric.
+    try {
+      const livenessShopId = Number(data?.shopId ?? data?.repairOrder?.shopId ?? body?.repairOrder?.shopId);
+      if (Number.isFinite(livenessShopId) && livenessShopId > 0) {
+        await db.collection("shops").updateOne(
+          tekmetricShopIdFilter(livenessShopId),
+          { $set: { "tekmetric.lastWebhookEventAt": new Date() } }
+        );
+      }
+    } catch (livenessErr: any) {
+      console.warn(`[Tekmetric Webhook] lastWebhookEventAt stamp failed: ${livenessErr?.message || livenessErr}`);
+    }
+
     await db.collection("dashboard_updates").updateOne(
       { _id: "lastUpdate" } as any,
       { $set: { timestamp: Date.now() } },

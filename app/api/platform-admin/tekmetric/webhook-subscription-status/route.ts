@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getDb } from "@/lib/mongo";
+import {
+  classifyWebhookCoverage,
+  selectPollCadence,
+  isWebhookFirstDisabled,
+  getSafetyNetPollMs,
+} from "@/lib/integrations/tekmetric/webhook-coverage";
 
 export const dynamic = "force-dynamic";
 
@@ -79,7 +85,7 @@ export async function GET(req: NextRequest) {
 
   const tekShops = await db.collection("shops").find(
     { "tekmetric.shopId": { $exists: true } },
-    { projection: { shopId: 1, name: 1, "tekmetric.shopId": 1 } }
+    { projection: { shopId: 1, name: 1, "tekmetric.shopId": 1, "tekmetric.lastWebhookEventAt": 1, "tekmetric.lastSyncCursor": 1 } }
   ).toArray();
 
   const tekShopIds = tekShops.map((s: any) => Number(s.tekmetric.shopId)).filter(Boolean);
@@ -259,6 +265,18 @@ export async function GET(req: NextRequest) {
       subscriptionStatus = sub.lastResult.ok === true ? "subscribed" : "error";
     }
 
+    // Task #1089 (webhook-first sync): show which poll cadence the
+    // incremental sync applies to this shop right now, and why.
+    const coverage = classifyWebhookCoverage({
+      autoSubscribeEnabled,
+      subscriptionOk: subscriptionStatus === "subscribed",
+      lastWebhookEventAt: shop.tekmetric?.lastWebhookEventAt || null,
+    });
+    const cadence = selectPollCadence({
+      coverage,
+      lastSyncCursor: shop.tekmetric?.lastSyncCursor || null,
+    });
+
     return {
       tekmetricShopId: tekId,
       mosShopId: shop.shopId,
@@ -269,6 +287,10 @@ export async function GET(req: NextRequest) {
       totalLast7d,
       totalLast30d: stats?.totalLast30d || 0,
       lastEventAt: stats?.lastEventAt || null,
+      lastWebhookEventAt: shop.tekmetric?.lastWebhookEventAt || null,
+      webhookCovered: coverage.covered,
+      coverageReason: coverage.reason,
+      pollCadence: cadence.cadence,
       eventTypeBreakdown: stats?.eventTypeBreakdown || [],
       autoSubscribe: sub
         ? {
@@ -298,9 +320,21 @@ export async function GET(req: NextRequest) {
     total: summary.length,
   };
 
+  const coverageCounts = {
+    covered: summary.filter(s => s.webhookCovered).length,
+    fastPoll: summary.filter(s => s.pollCadence === "fast").length,
+    safetyNetPoll: summary.filter(s => s.pollCadence === "safety-net").length,
+    total: summary.length,
+  };
+
   return NextResponse.json({
     counts,
     subscriptionCounts,
+    coverageCounts,
+    webhookFirst: {
+      disabled: isWebhookFirstDisabled(),
+      safetyNetPollMs: getSafetyNetPollMs(),
+    },
     autoSubscribeEnabled,
     summary,
     latency,

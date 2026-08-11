@@ -36,14 +36,35 @@ const DEFAULT_EVENTS = [
 ];
 
 export type SubscribeResult =
-  | { ok: true; status: number; subscriptionId?: string; raw?: any }
-  | { ok: false; reason: string; status?: number; raw?: any };
+  | { ok: true; status: number; subscriptionId?: string; raw?: any; attempts?: number }
+  | { ok: false; reason: string; status?: number; raw?: any; attempts?: number };
+
+/**
+ * Injectable seams for tests (retry behavior is exercised without touching
+ * the network or the token endpoint). Production callers never pass this.
+ */
+export interface SubscribeDeps {
+  fetchImpl?: typeof fetch;
+  getToken?: () => Promise<string>;
+  sleep?: (ms: number) => Promise<void>;
+  persist?: typeof upsertWebhookSubscription;
+}
+
+// Task #1089: bounded retry with backoff for TRANSIENT failures (network
+// errors, 5xx, 429). Permanent failures (other 4xx — bad template, auth
+// rejection) fail fast; the daily subscription sweep re-attempts them anyway.
+const MAX_ATTEMPTS = Math.max(1, Number(process.env.TEKMETRIC_WEBHOOK_SUBSCRIBE_MAX_ATTEMPTS) || 3);
+const RETRY_BASE_MS = 500;
+
+function isTransientStatus(status: number): boolean {
+  return status === 429 || status >= 500;
+}
 
 export async function subscribeShopToTekmetricWebhooks(opts: {
   tekmetricShopId: number;
   mosShopId?: any;
   events?: string[];
-}): Promise<SubscribeResult> {
+}, deps: SubscribeDeps = {}): Promise<SubscribeResult> {
   if (process.env.TEKMETRIC_WEBHOOK_AUTO_SUBSCRIBE !== "true") {
     return { ok: false, reason: "auto_subscribe_disabled" };
   }
@@ -56,42 +77,57 @@ export async function subscribeShopToTekmetricWebhooks(opts: {
 
   const events = opts.events && opts.events.length > 0 ? opts.events : DEFAULT_EVENTS;
   const url = template.replace("{shopId}", String(opts.tekmetricShopId));
+  const doFetch = deps.fetchImpl ?? fetch;
+  const sleep = deps.sleep ?? ((ms: number) => new Promise<void>(r => setTimeout(r, ms)));
 
   let token: string;
   try {
-    token = await getValidAccessToken();
+    token = await (deps.getToken ? deps.getToken() : getValidAccessToken());
   } catch (err: any) {
     return { ok: false, reason: `auth_failed: ${err?.message || "unknown"}` };
   }
 
-  let response: Response;
-  try {
-    response = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ url: publicUrl, events }),
-    });
-  } catch (err: any) {
-    return { ok: false, reason: `network: ${err?.message || "unknown"}` };
-  }
+  let result: SubscribeResult = { ok: false, reason: "not_attempted" };
+  let attempts = 0;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    attempts = attempt;
+    let response: Response | null = null;
+    try {
+      response = await doFetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ url: publicUrl, events }),
+      });
+    } catch (err: any) {
+      result = { ok: false, reason: `network: ${err?.message || "unknown"}` };
+      if (attempt < MAX_ATTEMPTS) await sleep(RETRY_BASE_MS * Math.pow(2, attempt - 1));
+      continue; // network errors are transient — retry
+    }
 
-  let raw: any = null;
-  try {
-    raw = await response.json();
-  } catch {
-    raw = null;
-  }
+    let raw: any = null;
+    try {
+      raw = await response.json();
+    } catch {
+      raw = null;
+    }
 
-  const result: SubscribeResult = response.ok
-    ? { ok: true, status: response.status, subscriptionId: raw?.id || raw?.subscriptionId, raw }
-    : { ok: false, reason: `http_${response.status}`, status: response.status, raw };
+    if (response.ok) {
+      result = { ok: true, status: response.status, subscriptionId: raw?.id || raw?.subscriptionId, raw };
+      break;
+    }
+
+    result = { ok: false, reason: `http_${response.status}`, status: response.status, raw };
+    if (!isTransientStatus(response.status)) break; // permanent — fail fast
+    if (attempt < MAX_ATTEMPTS) await sleep(RETRY_BASE_MS * Math.pow(2, attempt - 1));
+  }
+  result.attempts = attempts;
 
   // Persist outcome for the visibility endpoint.
   try {
-    await upsertWebhookSubscription(
+    await (deps.persist ?? upsertWebhookSubscription)(
       opts.tekmetricShopId,
       {
         tekmetricShopId: opts.tekmetricShopId,
