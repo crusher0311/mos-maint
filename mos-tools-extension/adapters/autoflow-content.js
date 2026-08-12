@@ -2197,8 +2197,11 @@ function injectAfUndoChip(snapshots) {
     if (failed === 0) {
       showToast(`Reverted ${reverted} change${reverted === 1 ? '' : 's'}. Reloading…`, 'success');
     } else {
-      // delete_rvh is best-effort — AutoFlow may not support removing
-      // recommendation entries; leave the snapshot for a retry.
+      // delete_rvh IS supported by AutoFlow v3 (verified 2026-08-12 against
+      // the public jquery.atme.rvh.js: $.fn.deleteRVH sends exactly
+      // status_id + rvh_id + request_type:'delete_rvh'). A failure here is a
+      // transient/session issue, not a missing feature — leave the snapshot
+      // for a retry.
       showToast(`Undo finished with issues: ${reverted} reverted, ${failed} failed. Reloading…`, 'warning');
     }
     chip.remove();

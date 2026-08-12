@@ -66,6 +66,11 @@
     const ops = [];
     if (!snap || !Array.isArray(snap.items)) return ops;
     if (snap.kind === "add_vhi_recommendations") {
+      // Verified against AutoFlow's public jquery.atme.rvh.js (2026-08-12):
+      // the page's own $.fn.deleteRVH posts exactly
+      // { status_id, rvh_id, request_type: 'delete_rvh' } via $.fn.requestRVH,
+      // which resolves only on success:1 — so this op mirrors the native
+      // delete path 1:1.
       for (const it of snap.items) {
         if (it && it.rvhId != null) {
           ops.push({
