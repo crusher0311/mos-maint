@@ -19,6 +19,127 @@ let currentFeatures = {};
 let saveTimeout = null;
 let swSaveTimeout = null;
 
+// ==================== INJECTED BUTTON VISIBILITY (Task #1086) ====================
+// Mirrors lib/extension-button-visibility.ts on the server: which buttons
+// each adapter injects, and which shop feature entitlement (if any) gates
+// them. Hiding is per-user; entitlements decide what CAN show at all.
+const INJECTED_BUTTONS = [
+  {
+    provider: 'tekmetric', label: 'Tekmetric',
+    buttons: [
+      { key: 'oil_sticker', label: 'Oil Sticker (print)', feature: null },
+      { key: 'dvi_prefill', label: 'Pre-fill DVI', feature: 'dvi_prefill' },
+      { key: 'enhance_notes', label: 'Enhance Notes', feature: 'enhance_notes' },
+      { key: 'add_vhi_recommendations', label: 'Add VHI recommendations', feature: 'dvi_prefill' },
+    ],
+  },
+  {
+    provider: 'autoflow', label: 'AutoFlow',
+    buttons: [
+      { key: 'oil_sticker', label: 'Oil Sticker (print)', feature: null },
+      { key: 'dvi_prefill', label: 'Pre-fill DVI', feature: 'dvi_prefill' },
+      { key: 'enhance_notes', label: 'Enhance Notes', feature: 'enhance_notes' },
+      { key: 'add_vhi_recommendations', label: 'Add VHI recommendations', feature: 'dvi_prefill' },
+      { key: 'create_ro', label: 'Create RO', feature: null },
+    ],
+  },
+  {
+    provider: 'shopware', label: 'Shop-Ware',
+    buttons: [
+      { key: 'oil_sticker', label: 'Oil Sticker (print)', feature: null },
+    ],
+  },
+];
+
+let buttonVisibilityPrefs = {}; // sparse: { provider: { key: false } }
+let visSaveTimeout = null;
+
+function renderButtonVisibility() {
+  const container = document.getElementById('button-visibility-groups');
+  if (!container) return;
+  container.innerHTML = '';
+  for (const group of INJECTED_BUTTONS) {
+    const h = document.createElement('div');
+    h.textContent = group.label;
+    Object.assign(h.style, { fontWeight: '600', fontSize: '13px', color: '#374151', margin: '10px 0 6px' });
+    container.appendChild(h);
+    for (const b of group.buttons) {
+      const row = document.createElement('label');
+      Object.assign(row.style, { display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0', fontSize: '13px', color: '#111', cursor: 'pointer' });
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      const hidden = buttonVisibilityPrefs[group.provider] && buttonVisibilityPrefs[group.provider][b.key] === false;
+      cb.checked = !hidden;
+      const entitled = !b.feature || !!currentFeatures[b.feature];
+      const span = document.createElement('span');
+      span.textContent = b.label + (entitled ? '' : ' (not in your plan)');
+      if (!entitled) {
+        cb.disabled = true;
+        row.style.opacity = '0.55';
+        row.style.cursor = 'default';
+      }
+      cb.addEventListener('change', () => {
+        if (!buttonVisibilityPrefs[group.provider]) buttonVisibilityPrefs[group.provider] = {};
+        if (cb.checked) delete buttonVisibilityPrefs[group.provider][b.key];
+        else buttonVisibilityPrefs[group.provider][b.key] = false;
+        if (Object.keys(buttonVisibilityPrefs[group.provider]).length === 0) delete buttonVisibilityPrefs[group.provider];
+        clearTimeout(visSaveTimeout);
+        showVisStatus('Saving...', 'loading');
+        visSaveTimeout = setTimeout(saveButtonVisibility, 400);
+      });
+      row.appendChild(cb);
+      row.appendChild(span);
+      container.appendChild(row);
+    }
+  }
+}
+
+async function loadButtonVisibility() {
+  try {
+    const result = await chrome.runtime.sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: '/api/extension/preferences',
+    });
+    if (result && result.injectedButtonVisibility) {
+      buttonVisibilityPrefs = result.injectedButtonVisibility;
+    }
+  } catch (err) {
+    console.error('[Options] Error loading button visibility:', err);
+  }
+  renderButtonVisibility();
+}
+
+async function saveButtonVisibility() {
+  try {
+    const result = await chrome.runtime.sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: '/api/extension/preferences',
+      options: {
+        method: 'PUT',
+        body: JSON.stringify({ injectedButtonVisibility: buttonVisibilityPrefs }),
+      },
+    });
+    if (result && result.success) {
+      showVisStatus('Saved — changes apply on the next page load', 'success');
+    } else {
+      throw new Error((result && result.error) || 'Failed to save');
+    }
+  } catch (err) {
+    console.error('[Options] Save button visibility error:', err);
+    showVisStatus('Failed to save. Please try again.', 'error');
+  }
+}
+
+function showVisStatus(message, type) {
+  const el = document.getElementById('button-visibility-status');
+  if (!el) return;
+  el.className = `status-message ${type}`;
+  el.innerHTML = `<span>${message}</span>`;
+  if (type === 'success') {
+    setTimeout(() => { el.className = 'status-message'; }, 3000);
+  }
+}
+
 async function init() {
   try {
     const authStatus = await chrome.runtime.sendMessage({ action: 'GET_MOS_AUTH' });
@@ -40,6 +161,7 @@ async function init() {
     }
 
     loadFeatures();
+    loadButtonVisibility();
     checkShopwareIntegration();
     checkPlatformAdmin(authStatus);
 
@@ -75,6 +197,8 @@ async function loadFeatures() {
     if (result && result.features) {
       currentFeatures = result.features;
       updateSelectOptions();
+      // Re-render visibility toggles with entitlement locks now known.
+      renderButtonVisibility();
     }
   } catch (err) {
     console.error('[Options] Error loading features:', err);

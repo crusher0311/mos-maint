@@ -1,5 +1,24 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.29.0 — 2026-08-11
+
+### Added
+- **Per-user injected-button visibility.** Extension Settings (options page)
+  now has an "Injected Buttons" card with per-provider toggles for every
+  button we inject onto Tekmetric, AutoFlow, and Shop-Ware pages (Oil
+  Sticker, Pre-fill DVI, Enhance Notes, Add VHI recommendations, Create RO).
+  Choices persist server-side per user (survive reinstalls/devices) and
+  layer UNDER shop feature entitlements — you can hide an entitled button
+  but never reveal an unentitled one. Hidden buttons are removed on SPA
+  re-injection too.
+- **Undo for AI write actions.** Pre-fill DVI, Enhance Notes, and Add VHI
+  recommendations now capture the pre-write originals (or created-entry
+  ids) into durable extension storage before applying. A small "↩ Undo"
+  chip appears next to the injected buttons on the RO/DVI page — including
+  after the post-apply page reload — and reverts through the same provider
+  write paths (restores original notes/statuses, deletes created
+  concerns/recommendations). Snapshots are kept for 24h (newest 20).
+
 ## 1.28.7 — 2026-07-20
 
 ### Fixed

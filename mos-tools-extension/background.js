@@ -2,6 +2,10 @@
 // Manages SMS session tokens, MOS authentication, and message routing
 
 import { createStickerConfigCache } from './lib/sticker-config-cache.js';
+// Side-effect import: sets globalThis.MosUndoCore (pure undo-snapshot logic,
+// shared with the content scripts which load it as a classic script).
+import './undo-core.js';
+const MosUndoCore = globalThis.MosUndoCore;
 
 // ==================== STATE MANAGEMENT ====================
 let mosApiToken = null;
@@ -384,10 +388,59 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           floatingButtonEnabled: data.floatingButtonEnabled,
           floatingButtonOwnerEnabled: data.floatingButtonOwnerEnabled,
           floatingButtonUserPreference: data.floatingButtonUserPreference,
+          // Task #1086: per-user injected-button visibility (already
+          // intersected with shop entitlements server-side).
+          buttonVisibility: data.buttonVisibility || null,
         });
       } catch (err) {
         console.warn("[MOS] Feature fetch error:", err.message);
         sendResponse({ success: false, features: {} });
+      }
+    })();
+    return true;
+  }
+
+  // ==================== UNDO SNAPSHOTS (Task #1086) ====================
+  // Durable pre-write snapshots for AI write actions (Enhance Notes, DVI
+  // pre-fill, VHI recommendations) so an accidental apply can be reverted —
+  // including after the post-write page reload. Snapshots live in
+  // chrome.storage.local under `mosUndoSnapshots`, pruned to the newest 20
+  // and max 24h old (see undo-core.js).
+  if (message.action === "UNDO_SNAPSHOT_SAVE") {
+    saveUndoSnapshot(message.snapshot)
+      .then((key) => sendResponse({ success: true, key }))
+      .catch((err) => sendResponse({ success: false, error: err.message }));
+    return true;
+  }
+
+  if (message.action === "UNDO_SNAPSHOT_LIST") {
+    listUndoSnapshots(message)
+      .then((snapshots) => sendResponse({ success: true, snapshots }))
+      .catch((err) => sendResponse({ success: false, error: err.message, snapshots: [] }));
+    return true;
+  }
+
+  if (message.action === "UNDO_SNAPSHOT_CLEAR") {
+    clearUndoSnapshot(message.key)
+      .then(() => sendResponse({ success: true }))
+      .catch((err) => sendResponse({ success: false, error: err.message }));
+    return true;
+  }
+
+  // Revert a Tekmetric snapshot. Tekmetric writes happen here in the
+  // background (x-auth-token relay), so the revert does too. AutoFlow
+  // reverts run in the content script (same-origin session writes).
+  if (message.action === "UNDO_APPLY_TEKMETRIC") {
+    (async () => {
+      try {
+        const store = await loadUndoSnapshots();
+        const snap = store[message.key];
+        if (!snap) { sendResponse({ success: false, error: "Snapshot not found" }); return; }
+        const result = await revertTekmetricSnapshot(snap);
+        if (result.success) await clearUndoSnapshot(message.key);
+        sendResponse(result);
+      } catch (err) {
+        sendResponse({ success: false, error: err.message });
       }
     })();
     return true;
@@ -3265,6 +3318,7 @@ async function prefillDviInspection(context, inspId, tabId) {
 
   let applied = 0;
   let failed = 0;
+  const undoItems = []; // Task #1086: originals of every task we overwrite
 
   for (const update of prefillData.updates) {
     const task = allTasks.find(t => t.id === update.taskId);
@@ -3287,6 +3341,8 @@ async function prefillDviInspection(context, inspId, tabId) {
       if (res.ok) {
         applied++;
         update._applied = true;
+        // `task` is the untouched pre-write object (putBody is a copy).
+        undoItems.push({ inspectionId: inspection.id, task });
       } else {
         console.warn(`[Prefill DVI] Failed to update task ${task.name}: ${res.status}`);
         failed++;
@@ -3302,6 +3358,20 @@ async function prefillDviInspection(context, inspId, tabId) {
   }
 
   console.log(`[Prefill DVI] Complete: ${applied} applied, ${failed} failed`);
+
+  if (undoItems.length > 0) {
+    try {
+      await saveUndoSnapshot({
+        provider: "tekmetric",
+        shopId,
+        roId: context.roId,
+        kind: "dvi_prefill",
+        items: undoItems,
+      });
+    } catch (err) {
+      console.warn("[Prefill DVI] Failed to save undo snapshot:", err.message);
+    }
+  }
 
   return {
     success: true,
@@ -3690,6 +3760,25 @@ async function applyBuildRoFromVhi(context, selected, markerPrefix, tabId) {
     .filter((r) => r.outcome === "failed")
     .map((r) => ({ title: r.title, serviceKey: r.serviceKey, error: r.error }));
 
+  // Task #1086: capture the concern ids we just created so the user can
+  // undo (DELETE) them — including after the post-write reload.
+  const createdConcerns = results
+    .filter((r) => r.outcome === "added" && r.concernId != null)
+    .map((r) => ({ concernId: r.concernId, title: r.title }));
+  if (createdConcerns.length > 0) {
+    try {
+      await saveUndoSnapshot({
+        provider: "tekmetric",
+        shopId,
+        roId: context.roId,
+        kind: "add_vhi_recommendations",
+        items: createdConcerns,
+      });
+    } catch (err) {
+      console.warn("[Build RO from VHI] Failed to save undo snapshot:", err.message);
+    }
+  }
+
   return {
     success: true,
     added,
@@ -3903,6 +3992,7 @@ async function applyEnhancedFindings(context, inspectionId, approved, tabId) {
 
   let applied = 0;
   let failed = 0;
+  const undoItems = []; // Task #1086: originals of every task we overwrite
 
   for (const item of approved) {
     const itemInspId = item._inspectionId || inspectionId;
@@ -3922,7 +4012,11 @@ async function applyEnhancedFindings(context, inspectionId, approved, tabId) {
         },
         { shopId, label: 'enhance-notes.put-task' }
       );
-      if (res.ok) { applied++; } else { failed++; }
+      if (res.ok) {
+        applied++;
+        // `task` is the untouched pre-write object (putBody is a copy).
+        undoItems.push({ inspectionId: itemInspId, task });
+      } else { failed++; }
     } catch { failed++; }
 
     if (applied % 5 === 0 && applied > 0) {
@@ -3931,6 +4025,20 @@ async function applyEnhancedFindings(context, inspectionId, approved, tabId) {
   }
 
   console.log(`[Enhance Findings] Applied: ${applied}, Failed: ${failed}`);
+
+  if (undoItems.length > 0) {
+    try {
+      await saveUndoSnapshot({
+        provider: "tekmetric",
+        shopId,
+        roId: context.roId,
+        kind: "enhance_notes",
+        items: undoItems,
+      });
+    } catch (err) {
+      console.warn("[Enhance Findings] Failed to save undo snapshot:", err.message);
+    }
+  }
 
   const corrections = approved.filter(item =>
     item.aiOriginal && item.enhanced !== item.aiOriginal
@@ -3960,6 +4068,108 @@ async function applyEnhancedFindings(context, inspectionId, approved, tabId) {
   }
 
   return { success: applied > 0, applied, failed };
+}
+
+// ==================== UNDO SNAPSHOT STORE (Task #1086) ====================
+const UNDO_STORE_KEY = "mosUndoSnapshots";
+
+function loadUndoSnapshots() {
+  return new Promise((resolve) =>
+    chrome.storage.local.get([UNDO_STORE_KEY], (r) => resolve(r[UNDO_STORE_KEY] || {}))
+  );
+}
+
+function persistUndoSnapshots(map) {
+  return new Promise((resolve) =>
+    chrome.storage.local.set({ [UNDO_STORE_KEY]: map }, () => resolve())
+  );
+}
+
+async function saveUndoSnapshot(snapshot) {
+  if (!snapshot || !snapshot.provider || !snapshot.kind || snapshot.roId == null) {
+    throw new Error("Invalid undo snapshot");
+  }
+  const snap = { ...snapshot, createdAt: Date.now() };
+  const key = MosUndoCore.makeUndoKey(snap);
+  const store = await loadUndoSnapshots();
+  store[key] = snap;
+  await persistUndoSnapshots(MosUndoCore.pruneUndoSnapshots(store, Date.now()));
+  console.log(`[Undo] Snapshot saved: ${key} (${MosUndoCore.summarizeSnapshot(snap)})`);
+  return key;
+}
+
+async function listUndoSnapshots(filter) {
+  const store = MosUndoCore.pruneUndoSnapshots(await loadUndoSnapshots(), Date.now());
+  return Object.entries(store)
+    .filter(([, s]) =>
+      (!filter.provider || String(s.provider) === String(filter.provider)) &&
+      (filter.shopId == null || String(s.shopId) === String(filter.shopId)) &&
+      (filter.roId == null || String(s.roId) === String(filter.roId))
+    )
+    .map(([key, s]) => ({ key, ...s, summary: MosUndoCore.summarizeSnapshot(s) }));
+}
+
+async function clearUndoSnapshot(key) {
+  const store = await loadUndoSnapshots();
+  if (key in store) {
+    delete store[key];
+    await persistUndoSnapshots(store);
+  }
+}
+
+// Revert a Tekmetric snapshot through the SAME write paths the apply used:
+//   * dvi_prefill / enhance_notes — PUT the captured original task object
+//     back to the inspection-task endpoint;
+//   * add_vhi_recommendations — DELETE the technician concerns we created.
+// Best-effort per item: one failure doesn't abort the rest.
+async function revertTekmetricSnapshot(snap) {
+  await _stateReady;
+  if (!smsTokens.tekmetric) return { success: false, error: "No Tekmetric session token" };
+  const shopId = snap.shopId || tekmetricShopId;
+  const baseUrl = tekmetricBaseUrl || "https://shop.tekmetric.com";
+  let reverted = 0;
+  let failed = 0;
+  const failedItems = [];
+
+  if (snap.kind === "add_vhi_recommendations") {
+    for (const it of snap.items || []) {
+      if (it?.concernId == null) continue;
+      try {
+        const res = await tekmetricFetchWithBackoff(
+          `${baseUrl}/api/repair-orders/${snap.roId}/technician-concerns/${it.concernId}`,
+          {
+            method: "DELETE",
+            headers: { "x-auth-token": smsTokens.tekmetric, "content-type": "application/json" },
+          },
+          `undo DELETE concern ${it.concernId}`
+        );
+        if (res.ok) reverted++; else { failed++; failedItems.push(it.title || String(it.concernId)); }
+      } catch (err) {
+        failed++;
+        failedItems.push(it.title || String(it.concernId));
+      }
+    }
+  } else {
+    // dvi_prefill / enhance_notes: items carry the ORIGINAL task object
+    // captured before the apply mutated it.
+    for (const it of snap.items || []) {
+      if (!it?.task || !it.inspectionId) continue;
+      try {
+        const res = await tekmetricFetch(
+          `/api/shop/${shopId}/repair-orders/${snap.roId}/inspections/${it.inspectionId}/tasks/${it.task.id}`,
+          { method: "PUT", body: JSON.stringify(it.task) },
+          { shopId, label: "undo.put-task" }
+        );
+        if (res.ok) reverted++; else { failed++; failedItems.push(it.task.name || String(it.task.id)); }
+      } catch (err) {
+        failed++;
+        failedItems.push(it.task.name || String(it.task.id));
+      }
+    }
+  }
+
+  console.log(`[Undo] Tekmetric revert ${snap.kind}: ${reverted} reverted, ${failed} failed`);
+  return { success: reverted > 0 || failed === 0, reverted, failed, failedItems };
 }
 
 async function autoApplyLaborRate(context, options = {}) {

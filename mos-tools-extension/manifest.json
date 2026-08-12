@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Detect Dog by MOS Tools",
-  "version": "1.28.8",
+  "version": "1.29.0",
   "description": "Your advisor's best friend — maintenance intelligence, AI job search, and oil sticker printing right inside your SMS",
   "permissions": [
     "storage",
@@ -51,6 +51,7 @@
         "https://cba.tekmetric.com/*"
       ],
       "js": [
+        "undo-core.js",
         "adapters/tekmetric-content.js",
         "realtime-subscriber.js",
         "vhi-coach.js"
@@ -96,6 +97,7 @@
         "https://*.autotext.me/*"
       ],
       "js": [
+        "undo-core.js",
         "adapters/autoflow-content.js",
         "realtime-subscriber.js",
         "vhi-coach.js"

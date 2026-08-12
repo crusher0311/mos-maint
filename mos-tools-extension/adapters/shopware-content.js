@@ -879,6 +879,8 @@ function refreshFloatingSetting() {
         if (chrome.runtime.lastError) return;
         if (resp && resp.success) {
           cachedFloatingEnabled = resp.floatingButtonEnabled !== false;
+          // Task #1086: per-user injected-button visibility rides along.
+          cachedSwButtonVis = (resp.buttonVisibility && resp.buttonVisibility.shopware) || null;
           applyFloatingToFab();
         }
       }
@@ -888,8 +890,18 @@ function refreshFloatingSetting() {
   }
 }
 
+// Task #1086: per-user injected-button visibility (resolved server-side
+// against shop entitlements). null = unknown → fail open (visible).
+let cachedSwButtonVis = null;
+
 function checkAndInjectButton() {
   const context = detectContext();
+  if (cachedSwButtonVis && cachedSwButtonVis.oil_sticker === false) {
+    const ex = document.getElementById('mos-print-btn-sw');
+    if (ex) ex.remove();
+    printButtonInjected = false;
+    return;
+  }
   if (context.roId) injectPrintButton();
 }
 

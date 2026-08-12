@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { validateExtensionToken, getAuthErrorStatus, getUserShopIds , buildAuthErrorBody } from "@/lib/extension-auth";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { getDb } from "@/lib/mongo";
+import { sanitizeInjectedButtonVisibility } from "@/lib/extension-button-visibility";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -52,6 +53,10 @@ async function _GET(request: NextRequest) {
       defaultExtensionTab: auth.user.defaultExtensionTab || null,
       shopwareAddMode: effectiveSwMode,
       floatingDetectDogEnabled: typeof floatingPref === "boolean" ? floatingPref : null,
+      // Task #1086: sparse per-provider map of injected buttons the user has
+      // hidden ({ tekmetric: { enhance_notes: false }, ... }). Absent = all
+      // visible. Entitlement intersection happens in the features route.
+      injectedButtonVisibility: (auth.user as any).injectedButtonVisibility || {},
       shopId
     }, { headers: corsHeaders });
   } catch (error: any) {
@@ -68,7 +73,7 @@ async function _PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { defaultExtensionTab, shopwareAddMode, floatingDetectDogEnabled } = body;
+    const { defaultExtensionTab, shopwareAddMode, floatingDetectDogEnabled, injectedButtonVisibility } = body;
 
     if (defaultExtensionTab !== undefined && defaultExtensionTab !== null && !VALID_TABS.includes(defaultExtensionTab)) {
       return NextResponse.json({ error: "Invalid tab value" }, { status: 400, headers: corsHeaders });
@@ -86,6 +91,17 @@ async function _PUT(request: NextRequest) {
       return NextResponse.json({ error: "Invalid floatingDetectDogEnabled value" }, { status: 400, headers: corsHeaders });
     }
 
+    // Task #1086: validate the injected-button visibility map. null clears
+    // it (back to all-visible); otherwise it must be a known-provider /
+    // known-button map of booleans. Only hidden (false) entries are stored.
+    let sanitizedVisibility: ReturnType<typeof sanitizeInjectedButtonVisibility> = null;
+    if (injectedButtonVisibility !== undefined && injectedButtonVisibility !== null) {
+      sanitizedVisibility = sanitizeInjectedButtonVisibility(injectedButtonVisibility);
+      if (sanitizedVisibility === null) {
+        return NextResponse.json({ error: "Invalid injectedButtonVisibility value" }, { status: 400, headers: corsHeaders });
+      }
+    }
+
     const updateFields: Record<string, any> = { updatedAt: new Date() };
     const unsetFields: Record<string, any> = {};
     if (defaultExtensionTab !== undefined) updateFields.defaultExtensionTab = defaultExtensionTab;
@@ -96,6 +112,11 @@ async function _PUT(request: NextRequest) {
       unsetFields.floatingDetectDogEnabled = "";
     } else if (typeof floatingDetectDogEnabled === "boolean") {
       updateFields.floatingDetectDogEnabled = floatingDetectDogEnabled;
+    }
+    if (injectedButtonVisibility === null) {
+      unsetFields.injectedButtonVisibility = "";
+    } else if (sanitizedVisibility !== null) {
+      updateFields.injectedButtonVisibility = sanitizedVisibility;
     }
 
     const updateOps: Record<string, any> = { $set: updateFields };
@@ -113,7 +134,10 @@ async function _PUT(request: NextRequest) {
       shopwareAddMode: shopwareAddMode ?? auth.user.shopwareAddMode ?? "finding-published",
       floatingDetectDogEnabled: floatingDetectDogEnabled === undefined
         ? ((auth.user as any).floatingDetectDogEnabled ?? null)
-        : floatingDetectDogEnabled
+        : floatingDetectDogEnabled,
+      injectedButtonVisibility: injectedButtonVisibility === undefined
+        ? ((auth.user as any).injectedButtonVisibility || {})
+        : (sanitizedVisibility || {})
     }, { headers: corsHeaders });
   } catch (error: any) {
     console.error("[Extension Preferences] PUT error:", error);

@@ -615,6 +615,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     resetEnhanceButton();
     const modal = document.getElementById('mos-enhance-review-modal');
     if (modal) modal.remove();
+    // Task #1086: originals are snapshotted background-side; the ↩ Undo chip
+    // reappears after the reload.
+    showToast('Notes enhanced — use the ↩ Undo chip to revert if needed', 'success');
     setTimeout(() => {
       window.location.reload();
     }, 2000);
@@ -669,6 +672,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         msg += ` · ${failed} failed`;
         if (names.length) msg += ` (${names.join(', ')}${failed > names.length ? '…' : ''})`;
       }
+      msg += ' — undo available via the ↩ Undo chip';
       showToast(msg, failed > 0 ? 'warning' : 'success');
     } else if (skipped > 0 && failed === 0) {
       showToast(`All ${skipped} concern${skipped === 1 ? '' : 's'} already on this RO — nothing added`, 'info');
@@ -1226,24 +1230,59 @@ function printStickerFromContentScript(sticker) {
   }
 }
 
+// Task #1086: per-user injected-button visibility (resolved server-side
+// against shop entitlements). null = unknown → fail open (visible).
+let cachedButtonVis = null;
+
+function isButtonVisible(key) {
+  return !cachedButtonVis || cachedButtonVis[key] !== false;
+}
+
+function removeInjectedButton(id) {
+  const el = document.getElementById(id);
+  if (el) el.remove();
+}
+
 function checkAndInjectButton() {
   const context = detectContext();
-  if (context.roId && !printButtonInjected) {
-    setTimeout(injectPrintButton, 1000);
-  } else if (!context.roId) {
+  if (context.roId) {
+    fetchShopFeatures(context.shopId, (features) => {
+      // Oil sticker print button has no feature gate today; visibility
+      // preference alone decides.
+      if (isButtonVisible('oil_sticker')) {
+        if (!printButtonInjected) setTimeout(injectPrintButton, 1000);
+      } else {
+        removeInjectedButton('mos-print-button');
+        printButtonInjected = false;
+      }
+      if (features.dvi_prefill && isButtonVisible('dvi_prefill')) {
+        setTimeout(injectPrefillButton, 200);
+      } else {
+        removeInjectedButton('mos-prefill-dvi-btn');
+        prefillButtonInjected = false;
+      }
+      if (features.enhance_notes && isButtonVisible('enhance_notes')) {
+        setTimeout(injectEnhanceButton, 400);
+      } else {
+        removeInjectedButton('mos-enhance-notes-btn');
+        enhanceButtonInjected = false;
+      }
+      if (features.dvi_prefill && isButtonVisible('add_vhi_recommendations')) {
+        setTimeout(injectBuildRoFromVhiButton, 600);
+      } else {
+        removeInjectedButton('mos-build-ro-vhi-btn');
+        buildRoFromVhiButtonInjected = false;
+      }
+      checkAndInjectUndoChip(context);
+    });
+  } else {
     const existingButton = document.getElementById('mos-print-button');
     if (existingButton) {
       existingButton.remove();
       printButtonInjected = false;
     }
-  }
-  if (context.roId) {
-    fetchShopFeatures(context.shopId, (features) => {
-      if (features.dvi_prefill) setTimeout(injectPrefillButton, 200);
-      if (features.enhance_notes) setTimeout(injectEnhanceButton, 400);
-      if (features.dvi_prefill) setTimeout(injectBuildRoFromVhiButton, 600);
-    });
-  } else {
+    removeInjectedButton('mos-undo-chip');
+    undoChipCheckedRoId = null;
     const existingPrefill = document.getElementById('mos-prefill-dvi-btn');
     if (existingPrefill) existingPrefill.remove();
     prefillButtonInjected = false;
@@ -1258,7 +1297,81 @@ function checkAndInjectButton() {
     buildRoFromVhiButtonInjected = false;
     buildRoFromVhiInFlight = false;
     cachedFeatures = null;
+    cachedButtonVis = null;
   }
+}
+
+// ==================== UNDO CHIP (Task #1086) ====================
+// After an AI write (Pre-fill DVI, Enhance Notes, Add VHI recommendations)
+// the background stores a pre-write snapshot. This chip surfaces it on the
+// RO page — including after the post-apply reload — and reverts through the
+// same Tekmetric write paths.
+let undoChipCheckedRoId = null;
+
+function checkAndInjectUndoChip(context) {
+  if (!context.roId) return;
+  if (document.getElementById('mos-undo-chip')) return;
+  if (undoChipCheckedRoId === context.roId) return;
+  undoChipCheckedRoId = context.roId;
+  safeSendMessage(
+    { action: 'UNDO_SNAPSHOT_LIST', provider: 'tekmetric', shopId: context.shopId, roId: context.roId },
+    (resp) => {
+      if (!resp || !resp.success || !Array.isArray(resp.snapshots) || resp.snapshots.length === 0) return;
+      injectUndoChip(resp.snapshots);
+    }
+  );
+}
+
+function injectUndoChip(snapshots) {
+  if (document.getElementById('mos-undo-chip')) return;
+  const target = document.getElementById('mos-prefill-dvi-btn')?.parentElement || findTekmetricActionContainer();
+  if (!target) {
+    // Anchor not rendered yet — allow the next poll tick to retry.
+    undoChipCheckedRoId = null;
+    return;
+  }
+  const summaries = snapshots.map((s) => s.summary || s.kind);
+  const chip = document.createElement('button');
+  chip.id = 'mos-undo-chip';
+  chip.type = 'button';
+  chip.title = 'Undo recent Detect Dog changes:\n' + summaries.map((s) => '• ' + s).join('\n');
+  chip.innerHTML = '<span style="font-size:14px;line-height:1;">↩</span><span>Undo</span>';
+  Object.assign(chip.style, {
+    display: 'inline-flex', alignItems: 'center', gap: '4px',
+    padding: '4px 10px', marginLeft: '6px', verticalAlign: 'middle',
+    backgroundColor: '#fef3c7', color: '#92400e',
+    border: '1px solid #f59e0b', borderRadius: '999px',
+    fontSize: '12px', fontWeight: '600', cursor: 'pointer',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+  });
+  chip.addEventListener('click', async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const ok = window.confirm('Undo recent Detect Dog changes?\n\n' + summaries.map((s) => '• ' + s).join('\n'));
+    if (!ok) return;
+    chip.disabled = true;
+    chip.style.opacity = '0.6';
+    showToast('Reverting Detect Dog changes...', 'info');
+    let reverted = 0;
+    let failed = 0;
+    for (const snap of snapshots) {
+      const resp = await new Promise((resolve) =>
+        safeSendMessage({ action: 'UNDO_APPLY_TEKMETRIC', key: snap.key }, resolve)
+      );
+      if (resp && resp.success) reverted += resp.reverted || 0;
+      else failed++;
+      if (resp && resp.failed) failed += resp.failed;
+    }
+    if (failed === 0) {
+      showToast(`Reverted ${reverted} change${reverted === 1 ? '' : 's'}. Reloading...`, 'success');
+    } else {
+      showToast(`Undo finished with issues: ${reverted} reverted, ${failed} failed. Reloading...`, 'warning');
+    }
+    chip.remove();
+    setTimeout(() => window.location.reload(), 1800);
+  });
+  target.appendChild(chip);
+  console.log('[MOS Tools] Undo chip injected (' + snapshots.length + ' snapshot(s))');
 }
 
 let prefillButtonInjected = false;
@@ -1275,11 +1388,44 @@ function fetchShopFeatures(shopId, callback) {
     featuresFetchInFlight = false;
     if (resp && resp.success) {
       cachedFeatures = resp.features;
+      // Task #1086: per-user button visibility rides along with features.
+      cachedButtonVis = (resp.buttonVisibility && resp.buttonVisibility.tekmetric) || null;
     } else {
       cachedFeatures = {};
     }
     callback(cachedFeatures);
   });
+}
+
+// Locate the RO page's print/action-bar container. Extracted from
+// injectPrefillButton (Task #1086) so Enhance Notes / Build-RO / the undo
+// chip can anchor themselves even when the Pre-fill button is hidden by the
+// user's visibility preferences.
+function findTekmetricActionContainer() {
+  const allButtons = document.querySelectorAll('button');
+  for (const btn of allButtons) {
+    if (btn.id && btn.id.startsWith('mos-')) continue;
+    const svg = btn.querySelector('svg');
+    if (svg) {
+      const svgContent = svg.innerHTML.toLowerCase();
+      if (svgContent.includes('polyline') && svgContent.includes('rect') &&
+          (btn.title?.toLowerCase().includes('print') ||
+           btn.getAttribute('aria-label')?.toLowerCase().includes('print') ||
+           svgContent.includes('6 9 6 2 18 2 18 9'))) {
+        return btn.parentElement;
+      }
+    }
+    if (btn.dataset.testid?.includes('print') ||
+        btn.className?.includes('print') ||
+        btn.title?.toLowerCase() === 'print') {
+      return btn.parentElement;
+    }
+  }
+  const iconRows = document.querySelectorAll('[class*="IconButton"], [class*="icon-button"], [class*="action-bar"]');
+  for (const row of iconRows) {
+    if (row.querySelectorAll('button').length >= 2) return row;
+  }
+  return null;
 }
 
 function injectPrefillButton() {
@@ -1292,38 +1438,7 @@ function injectPrefillButton() {
   const context = detectContext();
   if (!context.roId) return;
 
-  let targetContainer = null;
-  const allButtons = document.querySelectorAll('button');
-  for (const btn of allButtons) {
-    const svg = btn.querySelector('svg');
-    if (svg) {
-      const svgContent = svg.innerHTML.toLowerCase();
-      if (svgContent.includes('polyline') && svgContent.includes('rect') &&
-          (btn.title?.toLowerCase().includes('print') ||
-           btn.getAttribute('aria-label')?.toLowerCase().includes('print') ||
-           svgContent.includes('6 9 6 2 18 2 18 9'))) {
-        targetContainer = btn.parentElement;
-        break;
-      }
-    }
-    if (btn.dataset.testid?.includes('print') ||
-        btn.className?.includes('print') ||
-        btn.title?.toLowerCase() === 'print') {
-      targetContainer = btn.parentElement;
-      break;
-    }
-  }
-
-  if (!targetContainer) {
-    const iconRows = document.querySelectorAll('[class*="IconButton"], [class*="icon-button"], [class*="action-bar"]');
-    for (const row of iconRows) {
-      if (row.querySelectorAll('button').length >= 2) {
-        targetContainer = row;
-        break;
-      }
-    }
-  }
-
+  const targetContainer = findTekmetricActionContainer();
   if (!targetContainer) return;
 
   const btn = document.createElement('button');
@@ -1408,7 +1523,7 @@ function injectEnhanceButton() {
   if (!context.roId) return;
 
   const prefillBtn = document.getElementById('mos-prefill-dvi-btn');
-  const targetContainer = prefillBtn?.parentElement;
+  const targetContainer = prefillBtn?.parentElement || findTekmetricActionContainer();
   if (!targetContainer) return;
 
   const btn = document.createElement('button');
@@ -2013,7 +2128,7 @@ function injectBuildRoFromVhiButton() {
   if (!context.roId) return;
 
   const prefillBtn = document.getElementById('mos-prefill-dvi-btn');
-  const targetContainer = prefillBtn?.parentElement;
+  const targetContainer = prefillBtn?.parentElement || findTekmetricActionContainer();
   if (!targetContainer) return;
 
   const btn = document.createElement('button');

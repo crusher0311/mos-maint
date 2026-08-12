@@ -1249,6 +1249,15 @@ function checkAndInjectButton() {
   if (printButtonInjected && !document.getElementById('mos-print-btn-af')) {
     printButtonInjected = false;
   }
+  // Task #1086: per-user visibility. Unknown → fail open (inject) while a
+  // lazy features fetch resolves it; explicit false → remove/skip.
+  if (cachedAfButtonVis === null && !cachedAfFeatures) fetchAutoflowFeatures(() => {});
+  if (!isAfButtonVisible('oil_sticker')) {
+    const ex = document.getElementById('mos-print-btn-af');
+    if (ex) ex.remove();
+    printButtonInjected = false;
+    return;
+  }
   injectPrintButton();
 }
 
@@ -1685,6 +1694,12 @@ function checkAndInjectCreateRoButton() {
     refreshWriteProvider();
     return;
   }
+  // Task #1086: user hid the Create RO button for AutoFlow pages.
+  if (!isAfButtonVisible("create_ro")) {
+    removeStaleCreateRoButton();
+    createRoButtonInjected = false;
+    return;
+  }
   if (cachedWriteProvider !== "protractor" || cachedCanWrite === false) {
     // Not a Protractor-paired shop, or user lacks write permission —
     // clean up any stale button.
@@ -1940,6 +1955,13 @@ function escapeAfHtml(str) {
 // ---------- Feature flags ----------
 let cachedAfFeatures = null;
 let afFeaturesFetchInFlight = false;
+// Task #1086: per-user injected-button visibility (resolved server-side
+// against shop entitlements). null = unknown → fail open (visible).
+let cachedAfButtonVis = null;
+
+function isAfButtonVisible(key) {
+  return !cachedAfButtonVis || cachedAfButtonVis[key] !== false;
+}
 
 function fetchAutoflowFeatures(cb) {
   if (cachedAfFeatures) { cb(cachedAfFeatures); return; }
@@ -1953,6 +1975,9 @@ function fetchAutoflowFeatures(cb) {
       afFeaturesFetchInFlight = false;
       if (chrome.runtime.lastError) { cb({}); return; }
       cachedAfFeatures = (resp && resp.success) ? (resp.features || {}) : {};
+      if (resp && resp.success) {
+        cachedAfButtonVis = (resp.buttonVisibility && resp.buttonVisibility.autoflow) || null;
+      }
       cb(cachedAfFeatures);
     }
   );
@@ -2016,6 +2041,26 @@ function stopAfEnhanceSlowNotice() {
   if (afEnhanceSlowNoticeInterval) { clearInterval(afEnhanceSlowNoticeInterval); afEnhanceSlowNoticeInterval = null; }
 }
 
+// Anchor next to the AutoFlow DVI action bar (Push DVI / PDF / etc).
+// Extracted (Task #1086) so the undo chip can anchor even when every VHI
+// button is hidden by the user's visibility preferences.
+function findAfDviAnchor() {
+  const KNOWN = [
+    'Push DVI', 'Re-Push', 'Re Push', 'RePush', 'PDF',
+    'Report Complete', 'Text & Email', 'Text and Email', 'Sheets', 'QC',
+  ];
+  const candidates = Array.from(document.querySelectorAll('a, button'));
+  for (const label of KNOWN) {
+    const hit = candidates.find((el) => {
+      if (el.closest('#mos-vhi-actions-af') || el.closest('#mos-af-undo-chip')) return false;
+      const t = (el.textContent || '').trim();
+      return t === label || t.startsWith(label + ' ');
+    });
+    if (hit && hit.parentElement) return hit;
+  }
+  return null;
+}
+
 function injectVhiButtons() {
   if (!isAutoflowDviView()) return;
   const ctx = detectContext();
@@ -2023,27 +2068,14 @@ function injectVhiButtons() {
   if (document.getElementById('mos-vhi-actions-af')) { vhiButtonsInjected = true; return; }
 
   fetchAutoflowFeatures((features) => {
-    const wantPrefill = !!features.dvi_prefill;
-    const wantEnhance = !!features.enhance_notes;
-    const wantConcerns = !!features.dvi_prefill;
+    // Task #1086: intersect entitlements with per-user visibility prefs.
+    const wantPrefill = !!features.dvi_prefill && isAfButtonVisible('dvi_prefill');
+    const wantEnhance = !!features.enhance_notes && isAfButtonVisible('enhance_notes');
+    const wantConcerns = !!features.dvi_prefill && isAfButtonVisible('add_vhi_recommendations');
     if (!wantPrefill && !wantEnhance && !wantConcerns) return;
     if (document.getElementById('mos-vhi-actions-af')) return;
 
-    // Anchor next to the AutoFlow DVI action bar (Push DVI / PDF / etc).
-    const KNOWN = [
-      'Push DVI', 'Re-Push', 'Re Push', 'RePush', 'PDF',
-      'Report Complete', 'Text & Email', 'Text and Email', 'Sheets', 'QC',
-    ];
-    const candidates = Array.from(document.querySelectorAll('a, button'));
-    let target = null;
-    for (const label of KNOWN) {
-      const hit = candidates.find((el) => {
-        if (el.closest('#mos-vhi-actions-af')) return false;
-        const t = (el.textContent || '').trim();
-        return t === label || t.startsWith(label + ' ');
-      });
-      if (hit && hit.parentElement) { target = hit; break; }
-    }
+    const target = findAfDviAnchor();
     if (!target) return; // keep VHI actions tied to the DVI bar; retry next tick
 
     const wrap = document.createElement('span');
@@ -2067,17 +2099,124 @@ function checkAndInjectVhiButtons() {
     if (ex) ex.remove();
     vhiButtonsInjected = false;
     lastVhiInjectedUrl = null;
+    afUndoChipCheckedRoId = null;
   }
   if (!isAutoflowDviView()) {
     const ex = document.getElementById('mos-vhi-actions-af');
     if (ex) ex.remove();
     vhiButtonsInjected = false;
+    const chip = document.getElementById('mos-af-undo-chip');
+    if (chip) chip.remove();
+    afUndoChipCheckedRoId = null;
     return;
   }
   if (vhiButtonsInjected && !document.getElementById('mos-vhi-actions-af')) {
     vhiButtonsInjected = false;
   }
   if (!vhiButtonsInjected) injectVhiButtons();
+  checkAndInjectAfUndoChip();
+}
+
+// ==================== UNDO CHIP (Task #1086) ====================
+// Pre-write snapshots are saved (via the background) before AI writes are
+// applied. AutoFlow reloads the page after each apply (reloadAfterApply),
+// so this chip is how the revert stays reachable afterwards. Reverts run
+// here in the content script through the same MAIN-world bridge write
+// paths the apply used.
+let afUndoChipCheckedRoId = null;
+
+function checkAndInjectAfUndoChip() {
+  if (!isAutoflowDviView()) return;
+  if (document.getElementById('mos-af-undo-chip')) return;
+  const ctx = lastContext || detectContext();
+  if (!ctx.roId) return;
+  if (afUndoChipCheckedRoId === ctx.roId) return;
+  afUndoChipCheckedRoId = ctx.roId;
+  chrome.runtime.sendMessage(
+    { action: 'UNDO_SNAPSHOT_LIST', provider: 'autoflow', shopId: ctx.shopId, roId: ctx.roId },
+    (resp) => {
+      if (chrome.runtime.lastError) return;
+      if (!resp || !resp.success || !Array.isArray(resp.snapshots) || resp.snapshots.length === 0) return;
+      injectAfUndoChip(resp.snapshots);
+    }
+  );
+}
+
+function injectAfUndoChip(snapshots) {
+  if (document.getElementById('mos-af-undo-chip')) return;
+  const wrap = document.getElementById('mos-vhi-actions-af');
+  let parent = wrap;
+  if (!parent) {
+    const anchor = findAfDviAnchor();
+    if (!anchor) { afUndoChipCheckedRoId = null; return; } // retry next tick
+    parent = anchor.parentElement;
+  }
+  const summaries = snapshots.map((s) => s.summary || s.kind);
+  const chip = document.createElement('button');
+  chip.id = 'mos-af-undo-chip';
+  chip.type = 'button';
+  chip.title = 'Undo recent Detect Dog changes:\n' + summaries.map((s) => '• ' + s).join('\n');
+  chip.innerHTML = '<span style="font-size:13px;line-height:1;">↩</span><span>Undo</span>';
+  Object.assign(chip.style, {
+    display: 'inline-flex', alignItems: 'center', gap: '4px',
+    padding: '3px 10px', marginLeft: '6px', verticalAlign: 'middle',
+    backgroundColor: '#fef3c7', color: '#92400e',
+    border: '1px solid #f59e0b', borderRadius: '999px',
+    fontSize: '12px', fontWeight: '600', cursor: 'pointer',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+  });
+  chip.addEventListener('click', async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const ok = window.confirm('Undo recent Detect Dog changes?\n\n' + summaries.map((s) => '• ' + s).join('\n'));
+    if (!ok) return;
+    chip.disabled = true;
+    chip.style.opacity = '0.6';
+    showToast('Reverting Detect Dog changes…', 'info');
+    let reverted = 0;
+    let failed = 0;
+    for (const snap of snapshots) {
+      const ops = MosUndoCore.buildAutoflowRevertOps(snap);
+      let snapFailed = 0;
+      for (const op of ops) {
+        try {
+          const res = op.type === 'rvh_delete'
+            ? await writeAutoflowRvh(op.params)
+            : await writeAutoflowSheet(op.params);
+          if (res && res.ok) reverted++; else { snapFailed++; console.warn('[MOS Tools] Undo op failed:', op.label, res); }
+        } catch (err) {
+          snapFailed++;
+          console.warn('[MOS Tools] Undo op error:', op.label, err);
+        }
+      }
+      failed += snapFailed;
+      if (snapFailed === 0) {
+        chrome.runtime.sendMessage({ action: 'UNDO_SNAPSHOT_CLEAR', key: snap.key }, () => { void chrome.runtime.lastError; });
+      }
+    }
+    if (failed === 0) {
+      showToast(`Reverted ${reverted} change${reverted === 1 ? '' : 's'}. Reloading…`, 'success');
+    } else {
+      // delete_rvh is best-effort — AutoFlow may not support removing
+      // recommendation entries; leave the snapshot for a retry.
+      showToast(`Undo finished with issues: ${reverted} reverted, ${failed} failed. Reloading…`, 'warning');
+    }
+    chip.remove();
+    setTimeout(() => window.location.reload(), 1600);
+  });
+  parent.appendChild(chip);
+  console.log('[MOS Tools] AutoFlow undo chip injected (' + snapshots.length + ' snapshot(s))');
+}
+
+function saveAfUndoSnapshot(snapshot) {
+  return new Promise((resolve) => {
+    try {
+      chrome.runtime.sendMessage({ action: 'UNDO_SNAPSHOT_SAVE', snapshot }, (resp) => {
+        void chrome.runtime.lastError;
+        resolve(resp && resp.success);
+      });
+    } catch (_) { resolve(false); }
+  });
 }
 
 // ---------- Shared review modal ----------
@@ -2287,6 +2426,7 @@ async function handleAfPrefill(btn) {
         onApply: async (selected, { setStatus }) => {
           let added = 0, failed = 0;
           const failedNames = [];
+          const undoItems = []; // Task #1086: pre-write originals
           for (let i = 0; i < selected.length; i++) {
             const row = selected[i];
             const u = row._u, it = row._it || {};
@@ -2303,9 +2443,22 @@ async function handleAfPrefill(btn) {
             if (it.resultsId) params.results_id = it.resultsId;
             if (it.techId) params.prev_tech_id = it.techId;
             const res = await writeAutoflowSheet(params);
-            if (res && res.ok) added++; else { failed++; failedNames.push(row.label); }
+            if (res && res.ok) {
+              added++;
+              undoItems.push({
+                inspecId: String(u.taskId), name: row.label,
+                prevStatus: it.status, prevNotes: it.notes || '',
+                resultsId: it.resultsId || null, techId: it.techId || null,
+              });
+            } else { failed++; failedNames.push(row.label); }
           }
-          if (added) showToast(`DVI pre-filled: ${added} updated${failed ? `, ${failed} failed` : ''}`, failed ? 'warning' : 'success');
+          if (undoItems.length) {
+            await saveAfUndoSnapshot({
+              provider: 'autoflow', shopId: ctx.shopId, roId: ctx.roId,
+              kind: 'dvi_prefill', statusId, sheetId, items: undoItems,
+            });
+          }
+          if (added) showToast(`DVI pre-filled: ${added} updated${failed ? `, ${failed} failed` : ''} — undo available after reload`, failed ? 'warning' : 'success');
           else showToast(`Pre-fill failed (${failed} item${failed === 1 ? '' : 's'})`, 'error');
           if (failedNames.length) console.warn('[MOS Tools] AF prefill failed items:', failedNames);
           if (added) reloadAfterApply();
@@ -2374,6 +2527,7 @@ async function handleAfEnhance(btn) {
         onClose: () => setVhiBtnBusy(btn, false),
         onApply: async (selected, { setStatus }) => {
           let added = 0, failed = 0;
+          const undoItems = []; // Task #1086: pre-write originals
           for (let i = 0; i < selected.length; i++) {
             const row = selected[i];
             const it = row._it || {};
@@ -2390,9 +2544,22 @@ async function handleAfEnhance(btn) {
             if (it.resultsId) params.results_id = it.resultsId;
             if (it.techId) params.prev_tech_id = it.techId;
             const res = await writeAutoflowSheet(params);
-            if (res && res.ok) added++; else failed++;
+            if (res && res.ok) {
+              added++;
+              undoItems.push({
+                inspecId: row._taskId, name: row.label,
+                prevStatus: it.status, prevNotes: it.notes || '',
+                resultsId: it.resultsId || null, techId: it.techId || null,
+              });
+            } else failed++;
           }
-          if (added) showToast(`Updated ${added} note${added === 1 ? '' : 's'}${failed ? `, ${failed} failed` : ''}`, failed ? 'warning' : 'success');
+          if (undoItems.length) {
+            await saveAfUndoSnapshot({
+              provider: 'autoflow', shopId: ctx.shopId, roId: ctx.roId,
+              kind: 'enhance_notes', statusId, sheetId, items: undoItems,
+            });
+          }
+          if (added) showToast(`Updated ${added} note${added === 1 ? '' : 's'}${failed ? `, ${failed} failed` : ''} — undo available after reload`, failed ? 'warning' : 'success');
           else showToast(`Enhance apply failed (${failed})`, 'error');
           if (added) reloadAfterApply();
         },
@@ -2446,6 +2613,7 @@ async function handleAfConcerns(btn) {
         onClose: () => setVhiBtnBusy(btn, false),
         onApply: async (selected, { setStatus }) => {
           let added = 0, failed = 0;
+          const undoItems = []; // Task #1086: ids of the entries we create
           for (let i = 0; i < selected.length; i++) {
             const row = selected[i];
             setStatus(`Adding ${i + 1}/${selected.length}…`);
@@ -2458,9 +2626,21 @@ async function handleAfConcerns(btn) {
               skip_mapping: 1,
             };
             const res = await writeAutoflowRvh(params);
-            if (res && res.ok) added++; else failed++;
+            if (res && res.ok) {
+              added++;
+              // add_rvh responses carry the created entry's id (rvh_id) —
+              // capture it so the entry can be deleted on undo.
+              const rvhId = (res.data && (res.data.rvh_id ?? res.data.id)) ?? res.rvh_id ?? null;
+              if (rvhId != null) undoItems.push({ rvhId, title: row.label });
+            } else failed++;
           }
-          if (added) showToast(`Added ${added} recommendation${added === 1 ? '' : 's'} to RO${failed ? `, ${failed} failed` : ''}`, failed ? 'warning' : 'success');
+          if (undoItems.length) {
+            await saveAfUndoSnapshot({
+              provider: 'autoflow', shopId: ctx.shopId, roId: ctx.roId,
+              kind: 'add_vhi_recommendations', statusId, items: undoItems,
+            });
+          }
+          if (added) showToast(`Added ${added} recommendation${added === 1 ? '' : 's'} to RO${failed ? `, ${failed} failed` : ''}${undoItems.length ? ' — undo available after reload' : ''}`, failed ? 'warning' : 'success');
           else showToast(`Add recommendations failed (${failed})`, 'error');
           if (added) reloadAfterApply();
         },

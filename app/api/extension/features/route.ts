@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { validateExtensionToken, getUserShopIds, getAuthErrorStatus , buildAuthErrorBody } from "@/lib/extension-auth";
 import { getFeatureEntitlements, ShopEntitlementsUnavailableError } from "@/lib/featureResolver";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
+import { resolveInjectedButtonVisibility, INJECTED_BUTTON_PROVIDERS } from "@/lib/extension-button-visibility";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -140,6 +141,20 @@ async function _GET(request: NextRequest) {
 
     const floatingButtonEnabled = floatingButtonOwnerEnabled && userResolved;
 
+    // Task #1086: per-user injected-button visibility, intersected with the
+    // shop's feature entitlements (hiding allowed, un-gating not). Resolved
+    // for the requesting provider when known, otherwise for every provider,
+    // so content scripts can consume one authoritative map.
+    const userButtonVisibility = (auth.user as any)?.injectedButtonVisibility || {};
+    const reqProvider = searchParams.get("provider");
+    const visibilityProviders = reqProvider && INJECTED_BUTTON_PROVIDERS.includes(reqProvider)
+      ? [reqProvider]
+      : INJECTED_BUTTON_PROVIDERS;
+    const buttonVisibility: Record<string, Record<string, boolean>> = {};
+    for (const p of visibilityProviders) {
+      buttonVisibility[p] = resolveInjectedButtonVisibility(p, effFeatures, userButtonVisibility);
+    }
+
     return NextResponse.json({ 
       features: entitlements.effectiveFeatures,
       shopId: mosShopId,
@@ -149,6 +164,7 @@ async function _GET(request: NextRequest) {
       floatingButtonEnabled,
       floatingButtonOwnerEnabled,
       floatingButtonUserPreference,
+      buttonVisibility,
       billing: {
         plan: entitlements.billing.plan,
         status: entitlements.billing.status
