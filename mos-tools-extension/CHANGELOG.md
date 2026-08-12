@@ -1,5 +1,16 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.30.1 — 2026-08-12
+
+### Added
+- **Esc dismisses apply popups.** All apply/confirmation popups (Tekmetric
+  Enhance Notes review, Add-VHI-recommendations review, DVI pre-fill
+  summary; AutoFlow shared review modal used by Pre-fill DVI, Enhance
+  Notes, and Add VHI Recommendations) can now be dismissed with the
+  Escape key, matching the existing Cancel button. Esc and backdrop
+  clicks are ignored while an apply is in flight, so a dismissal can
+  never interrupt writes mid-way.
+
 ## 1.30.0 — 2026-08-12
 
 ### Added

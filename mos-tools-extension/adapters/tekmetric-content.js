@@ -1719,10 +1719,25 @@ function showEnhanceReviewModal(enhanced, inspectionId, context) {
     padding: '8px 16px', borderRadius: '6px', border: '1px solid #d1d5db',
     backgroundColor: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: '500',
   });
-  cancelBtn.addEventListener('click', () => {
+  const dismissEnhanceModal = () => {
+    document.removeEventListener('keydown', onEnhanceModalKeydown, true);
     overlay.remove();
     resetEnhanceButton();
-  });
+  };
+  const onEnhanceModalKeydown = (e) => {
+    if (!overlay.isConnected) {
+      // Modal was closed by another path (apply complete/failed); self-clean.
+      document.removeEventListener('keydown', onEnhanceModalKeydown, true);
+      return;
+    }
+    if (e.key !== 'Escape') return;
+    if (cancelBtn.disabled) return; // apply in flight — don't dismiss
+    e.preventDefault();
+    e.stopPropagation();
+    dismissEnhanceModal();
+  };
+  cancelBtn.addEventListener('click', dismissEnhanceModal);
+  document.addEventListener('keydown', onEnhanceModalKeydown, true);
 
   const applyBtn = document.createElement('button');
   applyBtn.textContent = 'Apply Selected';
@@ -1775,9 +1790,8 @@ function showEnhanceReviewModal(enhanced, inspectionId, context) {
   overlay.appendChild(modal);
 
   overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) {
-      overlay.remove();
-      resetEnhanceButton();
+    if (e.target === overlay && !cancelBtn.disabled) {
+      dismissEnhanceModal();
     }
   });
 
@@ -2095,17 +2109,29 @@ function showPrefillSummaryModal(result) {
     backgroundColor: '#8B5CF6', color: '#fff', cursor: 'pointer',
     fontSize: '13px', fontWeight: '600',
   });
-  doneBtn.addEventListener('click', () => {
+  const dismissSummaryModal = () => {
+    document.removeEventListener('keydown', onSummaryModalKeydown, true);
     overlay.remove();
     window.location.reload();
-  });
+  };
+  const onSummaryModalKeydown = (e) => {
+    if (!overlay.isConnected) {
+      document.removeEventListener('keydown', onSummaryModalKeydown, true);
+      return;
+    }
+    if (e.key !== 'Escape') return;
+    e.preventDefault();
+    e.stopPropagation();
+    dismissSummaryModal();
+  };
+  doneBtn.addEventListener('click', dismissSummaryModal);
+  document.addEventListener('keydown', onSummaryModalKeydown, true);
   footer.appendChild(doneBtn);
   modal.appendChild(footer);
 
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) {
-      overlay.remove();
-      window.location.reload();
+      dismissSummaryModal();
     }
   });
 
@@ -2343,10 +2369,25 @@ function showBuildRoFromVhiModal(preview, context) {
     padding: '8px 16px', borderRadius: '6px', border: '1px solid #d1d5db',
     backgroundColor: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: '500',
   });
-  cancelBtn.addEventListener('click', () => {
+  const dismissBuildRoModal = () => {
+    document.removeEventListener('keydown', onBuildRoModalKeydown, true);
     overlay.remove();
     resetBuildRoFromVhiButton();
-  });
+  };
+  const onBuildRoModalKeydown = (e) => {
+    if (!overlay.isConnected) {
+      // Modal was closed by another path (apply complete/failed); self-clean.
+      document.removeEventListener('keydown', onBuildRoModalKeydown, true);
+      return;
+    }
+    if (e.key !== 'Escape') return;
+    if (cancelBtn.disabled) return; // apply in flight — don't dismiss
+    e.preventDefault();
+    e.stopPropagation();
+    dismissBuildRoModal();
+  };
+  cancelBtn.addEventListener('click', dismissBuildRoModal);
+  document.addEventListener('keydown', onBuildRoModalKeydown, true);
 
   const applyBtn = document.createElement('button');
   applyBtn.textContent = 'Add to RO';
@@ -2384,9 +2425,8 @@ function showBuildRoFromVhiModal(preview, context) {
   overlay.appendChild(modal);
 
   overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) {
-      overlay.remove();
-      resetBuildRoFromVhiButton();
+    if (e.target === overlay && !cancelBtn.disabled) {
+      dismissBuildRoModal();
     }
   });
 

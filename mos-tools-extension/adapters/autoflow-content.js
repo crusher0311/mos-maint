@@ -2335,11 +2335,24 @@ function showAfReviewModal(opts) {
   const cleanup = () => {
     if (closed) return;
     closed = true;
+    document.removeEventListener('keydown', onModalKeydown, true);
     overlay.remove();
     if (typeof opts.onClose === 'function') opts.onClose();
   };
+  const onModalKeydown = (e) => {
+    if (closed || !overlay.isConnected) {
+      document.removeEventListener('keydown', onModalKeydown, true);
+      return;
+    }
+    if (e.key !== 'Escape') return;
+    if (cancel.disabled) return; // apply in flight — don't dismiss
+    e.preventDefault();
+    e.stopPropagation();
+    cleanup();
+  };
   cancel.addEventListener('click', cleanup);
-  overlay.addEventListener('click', (e) => { if (e.target === overlay) cleanup(); });
+  document.addEventListener('keydown', onModalKeydown, true);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay && !cancel.disabled) cleanup(); });
 
   apply.addEventListener('click', async () => {
     const selected = [];
