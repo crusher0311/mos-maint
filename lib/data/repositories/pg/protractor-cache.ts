@@ -116,6 +116,28 @@ export async function findCachedWorkOrderByLegacyRoNumber(
   return rows.length ? reconstructWorkOrder(rows[0]) : null;
 }
 
+// Task #903: RO-number lookup covering BOTH the current snapshot shape
+// (top-level workOrderNumber column) and the legacy shape (payload
+// data.WorkOrderNumber). Newest snapshot wins.
+export async function findCachedWorkOrderByRoNumber(
+  shopId: number,
+  roNumber: number,
+): Promise<AnyDoc | null> {
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(protractorWorkOrders)
+    .where(
+      and(
+        eq(protractorWorkOrders.shopId, shopId),
+        sql`(${protractorWorkOrders.workOrderNumber} = ${roNumber} OR (${protractorWorkOrders.payload} #>> '{data,WorkOrderNumber}') = ${String(roNumber)})`,
+      ),
+    )
+    .orderBy(desc(protractorWorkOrders.fetchedAt))
+    .limit(1);
+  return rows.length ? reconstructWorkOrder(rows[0]) : null;
+}
+
 export async function listOpenWorkOrdersWithPricing(
   shopId: number,
   limit = 25,

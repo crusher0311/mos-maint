@@ -12,6 +12,7 @@ import {
   findFreshTemplateCacheEntry,
   upsertTemplateCacheEntry,
 } from "@/lib/data/repositories/protractor-template-cache";
+import { findCachedWorkOrderByRoNumber } from "@/lib/data/repositories/protractor-work-orders";
 import { trackApiRequest, acquireDistributedRateLimitSlot } from "@/lib/api-usage-tracker";
 import {
   extractProtractorLineCost,
@@ -47,6 +48,8 @@ export const __protractorClientTestHooks: {
   // Task #936: lets wizard-create tests stub Mongo-backed config resolution
   // and observe which lane/retry-cap a high-level create call used.
   resolveProtractorConfig: typeof resolveProtractorConfig;
+  // Task #903: lets resolveWorkOrderGuid tests stub the cached-GUID lookup.
+  findCachedWorkOrderByRoNumber: typeof findCachedWorkOrderByRoNumber;
   onFetchStart: ((endpoint: string, opts?: { priority?: boolean; maxRetries?: number }) => void) | null;
 } = {
   httpsRequest: (...args) => httpsRequest(...args),
@@ -54,6 +57,7 @@ export const __protractorClientTestHooks: {
   trackApiRequest: (...args) => trackApiRequest(...args),
   retryBaseDelayMs: null,
   resolveProtractorConfig: (...args) => resolveProtractorConfig(...args),
+  findCachedWorkOrderByRoNumber: (...args) => findCachedWorkOrderByRoNumber(...args),
   onFetchStart: null,
 };
 
@@ -1708,7 +1712,7 @@ export async function fetchActiveWorkOrders(
   shopId: number,
   options?: { startDate?: string; endDate?: string; readInProgress?: boolean }
 ): Promise<{ ok: boolean; workOrders?: ProtractorWorkOrder[]; error?: string }> {
-  const config = await resolveProtractorConfig(shopId);
+  const config = await __protractorClientTestHooks.resolveProtractorConfig(shopId);
   if (!config.configured) {
     return { ok: false, error: "Protractor not configured for this shop" };
   }
@@ -1772,7 +1776,7 @@ export async function fetchWorkOrderById(
   workOrderId: string,
   opts?: { priority?: boolean }
 ): Promise<{ ok: boolean; workOrder?: ProtractorWorkOrder; error?: string }> {
-  const config = await resolveProtractorConfig(shopId);
+  const config = await __protractorClientTestHooks.resolveProtractorConfig(shopId);
   if (!config.configured) {
     return { ok: false, error: "Protractor not configured for this shop" };
   }
@@ -3635,7 +3639,7 @@ export async function resolveWorkOrderGuid(
   shopId: number,
   roNumberOrGuid: string
 ): Promise<{ ok: boolean; workOrderGuid?: string; workOrder?: ProtractorWorkOrder; error?: string }> {
-  const config = await resolveProtractorConfig(shopId);
+  const config = await __protractorClientTestHooks.resolveProtractorConfig(shopId);
   if (!config.configured) {
     return { ok: false, error: "Protractor not configured for this shop" };
   }
@@ -3657,26 +3661,44 @@ export async function resolveWorkOrderGuid(
 
   console.log(`[Protractor] Looking up GUID for RO number: ${roNumber}`);
 
+  // Fast path (Task #903): prefer the cached GUID first — one upstream call
+  // (fetch-by-ID) in the common case instead of scanning all active work
+  // orders. Open Protractor WOs are unreliable via OData number lookup, so
+  // the GUID fetch is also the most reliable handle. The fetched work order
+  // MUST re-confirm the RO number (cache rows can be stale or mis-keyed);
+  // on any mismatch we fall through to the live active-WO scan. The lookup
+  // goes through the cache repository so both Mongo and PG-canonical modes
+  // (and both current top-level `workOrderNumber` and legacy
+  // `data.WorkOrderNumber` doc shapes) are honored.
+  const cached = await __protractorClientTestHooks.findCachedWorkOrderByRoNumber(shopId, roNumber);
+
+  const cachedGuid = cached?.workOrderGuid ?? cached?.workOrderId ?? cached?.data?.ID;
+  if (typeof cachedGuid === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cachedGuid)) {
+    console.log(`[Protractor] Found cached GUID ${cachedGuid} for RO ${roNumber}, verifying via fetch-by-ID`);
+    const fullWO = await fetchWorkOrderById(shopId, cachedGuid);
+    if (fullWO.ok && fullWO.workOrder) {
+      if (fullWO.workOrder.WorkOrderNumber === roNumber) {
+        return { ok: true, workOrderGuid: fullWO.workOrder.ID, workOrder: fullWO.workOrder };
+      }
+      console.warn(
+        `[Protractor] Cached GUID ${cachedGuid} resolved to RO ${fullWO.workOrder.WorkOrderNumber}, ` +
+          `expected ${roNumber} — falling back to active work-order scan`
+      );
+    } else {
+      console.warn(
+        `[Protractor] Cached GUID ${cachedGuid} fetch failed (${fullWO.error || "not found"}) — falling back to active work-order scan`
+      );
+    }
+  }
+
+  // Fallback: live scan of active work orders (extra upstream round-trip,
+  // but authoritative for freshly created ROs the cache hasn't seen yet).
   const activeResult = await fetchActiveWorkOrders(shopId, { readInProgress: true });
   if (activeResult.ok && activeResult.workOrders) {
     const match = activeResult.workOrders.find(wo => wo.WorkOrderNumber === roNumber);
     if (match) {
-      console.log(`[Protractor] Found GUID ${match.ID} for RO ${roNumber}`);
+      console.log(`[Protractor] Found GUID ${match.ID} for RO ${roNumber} via active scan`);
       return { ok: true, workOrderGuid: match.ID, workOrder: match };
-    }
-  }
-
-  const db = await getDb();
-  const cached = await db.collection("protractor_work_orders").findOne({
-    shopId,
-    "data.WorkOrderNumber": roNumber
-  });
-  
-  if (cached?.data?.ID) {
-    console.log(`[Protractor] Found cached GUID ${cached.data.ID} for RO ${roNumber}`);
-    const fullWO = await fetchWorkOrderById(shopId, cached.data.ID);
-    if (fullWO.ok && fullWO.workOrder) {
-      return { ok: true, workOrderGuid: fullWO.workOrder.ID, workOrder: fullWO.workOrder };
     }
   }
 

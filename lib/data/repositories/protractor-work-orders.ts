@@ -106,6 +106,29 @@ export async function findCachedWorkOrderByLegacyRoNumber(
   } as Filter<ProtractorWorkOrderCacheDoc>);
 }
 
+// Task #903: RO-number lookup covering BOTH the current snapshot shape
+// (top-level `workOrderNumber`) and the legacy shape (`data.WorkOrderNumber`),
+// honoring the PG-canonical cache mode. Newest snapshot wins.
+export async function findCachedWorkOrderByRoNumber(
+  shopId: number,
+  roNumber: number,
+): Promise<ProtractorWorkOrderCacheDoc | null> {
+  if (isProtractorCachePgCanonical()) {
+    return (await pg.findCachedWorkOrderByRoNumber(
+      shopId,
+      roNumber,
+    )) as ProtractorWorkOrderCacheDoc | null;
+  }
+  const col = await collection();
+  return col.findOne(
+    {
+      shopId,
+      $or: [{ workOrderNumber: roNumber }, { "data.WorkOrderNumber": roNumber }],
+    } as Filter<ProtractorWorkOrderCacheDoc>,
+    { projection: { rawPayload: 0, servicePackages: 0 }, sort: { fetchedAt: -1 } },
+  );
+}
+
 // Open (non-completed) WOs in a sellable workflow stage that carry pricing —
 // used by the dashboard Sales Coach. Deduped by workOrderId, newest first.
 const SELLABLE_STAGES = [
