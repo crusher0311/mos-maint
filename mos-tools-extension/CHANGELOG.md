@@ -1,5 +1,20 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.31.0 — 2026-08-12
+
+### Added
+- **Add + undo VHI recommendations on AutoFlow v4 (Task #1099).** The
+  "Add VHI recommendations" button now works on v4 (app.autoflow.com)
+  DVI pages. v4's RVH ("Reason Vehicle is Here") writes go through the
+  SPA's Laravel routes — `rvh.create` for adds and `rvh.delete` for undo —
+  resolved at runtime from the page's Ziggy route table (verified against
+  AutoFlow's public build assets, Rvh3.js). Created entry ids are captured
+  into the same undo snapshot the v3 path uses (recovered from the
+  `rvh.items` list when the create response omits them), so the "↩ Undo"
+  chip deletes v4 entries too. If a v4 page's route table can't be
+  resolved, the advisor sees a clear "not available on this AutoFlow v4
+  page" message instead of a generic failure.
+
 ## 1.30.1 — 2026-08-12
 
 ### Added

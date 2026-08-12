@@ -233,6 +233,185 @@
       });
   }
 
+  // ---------- v4 RVH (recommendations) support ----------
+  //
+  // v4 DOES have the RVH concept: the CustomerView SPA ships Rvh Vue
+  // components (build/assets/Rvh3.js, publicly fetchable) that write through
+  // Laravel routes named `rvh.create` / `rvh.update` / `rvh.delete` /
+  // `rvh.items` (verified 2026-08-12 against app.autoflow.com/build assets):
+  //   - create: axios.post(route('rvh.create', {shop_id}), item)
+  //     with item = { type, details, notes, status_id, ... } (type 0=Concern,
+  //     1=Information, 2=Service — same enum as v3's add_rvh select);
+  //   - delete: axios.delete(route('rvh.delete', {shop_id, id}));
+  //   - list:   axios.get(route('rvh.items', {shop_id, status_id})) →
+  //     resp.data.data.items (each item carries rvh_id).
+  // route() is Ziggy: the page exposes the route table on globalThis.Ziggy
+  // (or a #ziggy-routes-json script tag), so we resolve the concrete URI at
+  // runtime instead of hardcoding a path AutoFlow could move.
+
+  function getZiggy() {
+    try {
+      if (window.Ziggy && window.Ziggy.routes) return window.Ziggy;
+    } catch (e) {}
+    try {
+      var el = document.getElementById("ziggy-routes-json");
+      if (el && el.textContent) {
+        var z = JSON.parse(el.textContent);
+        if (z && z.routes) return z;
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  // Resolve a named Ziggy route to a same-origin path with {param}s filled.
+  // Returns null when the route table or the named route is unavailable.
+  function resolveZiggyRoute(name, params) {
+    var z = getZiggy();
+    var def = z && z.routes && z.routes[name];
+    if (!def || !def.uri) return null;
+    var uri = String(def.uri).replace(/\{(\w+)\??\}/g, function (_, p) {
+      return params && params[p] != null ? encodeURIComponent(String(params[p])) : "";
+    });
+    if (uri.indexOf("{") !== -1) return null; // unfilled required param
+    return "/" + uri.replace(/^\/+/, "").replace(/\/+$/, "");
+  }
+
+  function v4RvhHeaders(xsrf) {
+    return {
+      "Content-Type": "application/json",
+      Accept: "application/json, text/plain, */*",
+      "X-Requested-With": "XMLHttpRequest",
+      "X-XSRF-TOKEN": xsrf,
+    };
+  }
+
+  // Deep-scan a create response for the created entry's rvh_id (response
+  // shape is not pinned by the SPA — its own UI ignores the body and just
+  // re-fetches the list).
+  function findRvhId(node, depth) {
+    if (!node || typeof node !== "object" || (depth || 0) > 6) return null;
+    if (node.rvh_id != null) return node.rvh_id;
+    for (var k in node) {
+      if (!Object.prototype.hasOwnProperty.call(node, k)) continue;
+      var found = findRvhId(node[k], (depth || 0) + 1);
+      if (found != null) return found;
+    }
+    return null;
+  }
+
+  // Fallback id recovery: list the DVI's RVH entries and pick the newest one
+  // whose details match what we just created.
+  function lookupRvhIdByDetails(shopNum, statusId, details, xsrf) {
+    var url = resolveZiggyRoute("rvh.items", { shop_id: shopNum, status_id: statusId });
+    if (!url) return Promise.resolve(null);
+    return fetch(url, {
+      method: "GET",
+      credentials: "same-origin",
+      headers: v4RvhHeaders(xsrf),
+    })
+      .then(function (r) {
+        if (!r.ok) throw new Error("http_" + r.status);
+        return r.json();
+      })
+      .then(function (resp) {
+        var items =
+          (resp && resp.data && resp.data.data && resp.data.data.items) ||
+          (resp && resp.data && resp.data.items) ||
+          (resp && resp.items) ||
+          [];
+        var best = null;
+        for (var i = 0; i < items.length; i++) {
+          var it = items[i];
+          if (!it || it.rvh_id == null) continue;
+          if (String(it.details || "") !== String(details || "")) continue;
+          if (best == null || Number(it.rvh_id) > Number(best)) best = it.rvh_id;
+        }
+        return best;
+      })
+      .catch(function () {
+        return null;
+      });
+  }
+
+  // v4 write: translate the v3-style requestRVH params (add_rvh/delete_rvh)
+  // into the SPA's rvh.create / rvh.delete routes.
+  function writeRvhV4(params, requestId) {
+    var m = v4Match();
+    var xsrf = readXsrfToken();
+    if (!m) return post("MOS_AF_WRITE_RESULT", requestId, { ok: false, error: "not_v4_dvi" });
+    if (!xsrf) return post("MOS_AF_WRITE_RESULT", requestId, { ok: false, error: "no_xsrf_token" });
+    var shopNum = m[1];
+    var statusId = String(params.status_id || m[2]);
+    var reqType = String(params.request_type || "");
+
+    if (reqType === "delete_rvh") {
+      var rvhId = params.rvh_id != null ? String(params.rvh_id) : "";
+      if (!rvhId) return post("MOS_AF_WRITE_RESULT", requestId, { ok: false, error: "no_rvh_id" });
+      var delUrl = resolveZiggyRoute("rvh.delete", { shop_id: shopNum, id: rvhId });
+      if (!delUrl)
+        return post("MOS_AF_WRITE_RESULT", requestId, { ok: false, error: "rvh_route_unresolved_v4" });
+      fetch(delUrl, {
+        method: "DELETE",
+        credentials: "same-origin",
+        headers: v4RvhHeaders(xsrf),
+      })
+        .then(function (r) {
+          if (!r.ok) throw new Error("http_" + r.status);
+          post("MOS_AF_WRITE_RESULT", requestId, { ok: true, data: { success: 1 } });
+        })
+        .catch(function (e) {
+          post("MOS_AF_WRITE_RESULT", requestId, {
+            ok: false,
+            error: String((e && e.message) || e),
+          });
+        });
+      return;
+    }
+
+    if (reqType !== "add_rvh")
+      return post("MOS_AF_WRITE_RESULT", requestId, { ok: false, error: "rvh_unsupported_v4" });
+
+    var createUrl = resolveZiggyRoute("rvh.create", { shop_id: shopNum });
+    if (!createUrl)
+      return post("MOS_AF_WRITE_RESULT", requestId, { ok: false, error: "rvh_route_unresolved_v4" });
+    var details = typeof params.details === "string" ? params.details : "";
+    var body = {
+      type: params.type != null && params.type !== "" ? Number(params.type) : 0,
+      details: details,
+      notes: typeof params.notes === "string" ? params.notes : "",
+      status_id: Number(statusId),
+    };
+    fetch(createUrl, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: v4RvhHeaders(xsrf),
+      body: JSON.stringify(body),
+    })
+      .then(function (r) {
+        if (!r.ok) throw new Error("http_" + r.status);
+        return r.json().catch(function () {
+          return null;
+        });
+      })
+      .then(function (resp) {
+        var rvhId = findRvhId(resp, 0);
+        if (rvhId != null) return { rvh_id: rvhId };
+        // Body didn't carry the id — recover it from the list so undo works.
+        return lookupRvhIdByDetails(shopNum, statusId, details, xsrf).then(function (found) {
+          return { rvh_id: found };
+        });
+      })
+      .then(function (data) {
+        post("MOS_AF_WRITE_RESULT", requestId, { ok: true, data: data });
+      })
+      .catch(function (e) {
+        post("MOS_AF_WRITE_RESULT", requestId, {
+          ok: false,
+          error: String((e && e.message) || e),
+        });
+      });
+  }
+
   // ==================== v3 (legacy jQuery) support ====================
 
   // Flatten the DVI into a list of items the content script can match against
@@ -331,9 +510,7 @@
       }
     } else if (m.type === "MOS_AF_WRITE_RVH") {
       if (isV4Dvi()) {
-        // v4 has no request.php add_rvh equivalent mapped yet; fail cleanly
-        // so the content script surfaces a per-item error instead of hanging.
-        post("MOS_AF_WRITE_RESULT", m.requestId, { ok: false, error: "rvh_unsupported_v4" });
+        writeRvhV4(m.params || {}, m.requestId);
       } else {
         doRequest("requestRVH", m.params || {}, m.requestId);
       }

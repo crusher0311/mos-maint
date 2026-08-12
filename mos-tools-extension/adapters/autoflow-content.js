@@ -1788,38 +1788,38 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'MOS_SNIFFER_STATE_UPDATE') {
     if (message.active) {
       if (!document.getElementById('mos-page-sniffer')) {
-        const script = document.createElement('script');
-        script.id = 'mos-page-sniffer';
-        script.textContent = `(${function() {
-          var snifferActive = true;
-          window.addEventListener('message', function(e) {
-            if (e.data && e.data.type === 'MOS_SNIFFER_STATE') snifferActive = !!e.data.active;
-          });
-          var origFetch = window.fetch;
-          window.fetch = function() {
-            var url = typeof arguments[0] === 'string' ? arguments[0] : (arguments[0] && arguments[0].url) || '';
-            var opts = arguments[1] || {};
-            var method = opts.method || 'GET';
-            if (snifferActive) {
-              var reqBody = null;
-              try { if (opts.body) reqBody = (typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body)).substring(0, 10000); } catch(e) {}
-              var capturedUrl = url, capturedMethod = method;
-              return origFetch.apply(this, arguments).then(function(response) {
-                var cloned = response.clone();
-                cloned.text().then(function(text) {
-                  window.postMessage({ type: 'MOS_SNIFFER_CAPTURE', data: { method: capturedMethod, url: capturedUrl, requestBody: reqBody, responseStatus: response.status, responseBody: text.substring(0, 10000), source: 'page_fetch' } }, '*');
-                }).catch(function(){});
-                return response;
-              });
-            }
-            return origFetch.apply(this, arguments);
-          };
-          var origOpen = XMLHttpRequest.prototype.open;
-          var origSend = XMLHttpRequest.prototype.send;
-          XMLHttpRequest.prototype.open = function(m, u) { this._mosUrl = u; this._mosMethod = m; return origOpen.apply(this, arguments); };
-          XMLHttpRequest.prototype.send = function(body) {
-            if (snifferActive && this._mosMethod) {
-              var xhrRef = this, reqBody = null, xhrMethod = this._mosMethod, xhrUrl = this._mosUrl;
+      const script = document.createElement('script');
+      script.id = 'mos-page-sniffer';
+      script.textContent = `(${function() {
+        var snifferActive = true;
+        window.addEventListener('message', function(e) {
+          if (e.data && e.data.type === 'MOS_SNIFFER_STATE') snifferActive = !!e.data.active;
+        });
+        var origFetch = window.fetch;
+        window.fetch = function() {
+          var url = typeof arguments[0] === 'string' ? arguments[0] : (arguments[0] && arguments[0].url) || '';
+          var opts = arguments[1] || {};
+          var method = opts.method || 'GET';
+          if (snifferActive) {
+            var reqBody = null;
+            try { if (opts.body) reqBody = (typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body)).substring(0, 50000); } catch(e) {}
+            var capturedUrl = url, capturedMethod = method;
+            return origFetch.apply(this, arguments).then(function(response) {
+              var cloned = response.clone();
+              cloned.text().then(function(text) {
+                window.postMessage({ type: 'MOS_SNIFFER_CAPTURE', data: { method: capturedMethod, url: capturedUrl, requestBody: reqBody, responseStatus: response.status, responseBody: text.substring(0, 50000), source: 'page_fetch' } }, '*');
+              }).catch(function(){});
+              return response;
+            });
+          }
+          return origFetch.apply(this, arguments);
+        };
+        var origOpen = XMLHttpRequest.prototype.open;
+        var origSend = XMLHttpRequest.prototype.send;
+        XMLHttpRequest.prototype.open = function(m, u) { this._mosUrl = u; this._mosMethod = m; return origOpen.apply(this, arguments); };
+        XMLHttpRequest.prototype.send = function(body) {
+          if (snifferActive && this._mosMethod) {
+            var xhrRef = this, reqBody = null, xhrMethod = this._mosMethod, xhrUrl = this._mosUrl;
               try { if (body) reqBody = (typeof body === 'string' ? body : JSON.stringify(body)).substring(0, 10000); } catch(e) {}
               this.addEventListener('load', function() {
                 try { window.postMessage({ type: 'MOS_SNIFFER_CAPTURE', data: { method: xhrMethod, url: xhrUrl, requestBody: reqBody, responseStatus: xhrRef.status, responseBody: (xhrRef.responseText || '').substring(0, 10000), source: 'page_xhr' } }, '*'); } catch(e) {}
@@ -2629,6 +2629,7 @@ async function handleAfConcerns(btn) {
         onClose: () => setVhiBtnBusy(btn, false),
         onApply: async (selected, { setStatus }) => {
           let added = 0, failed = 0;
+          let lastErr = null;
           const undoItems = []; // Task #1086: ids of the entries we create
           for (let i = 0; i < selected.length; i++) {
             const row = selected[i];
@@ -2648,7 +2649,7 @@ async function handleAfConcerns(btn) {
               // capture it so the entry can be deleted on undo.
               const rvhId = (res.data && (res.data.rvh_id ?? res.data.id)) ?? res.rvh_id ?? null;
               if (rvhId != null) undoItems.push({ rvhId, title: row.label });
-            } else failed++;
+            } else { failed++; lastErr = (res && res.error) || lastErr; }
           }
           if (undoItems.length) {
             await saveAfUndoSnapshot({
@@ -2657,6 +2658,10 @@ async function handleAfConcerns(btn) {
             });
           }
           if (added) showToast(`Added ${added} recommendation${added === 1 ? '' : 's'} to RO${failed ? `, ${failed} failed` : ''}${undoItems.length ? ' — undo available after reload' : ''}`, failed ? 'warning' : 'success');
+          // v4 pages where the RVH route table can't be resolved (or a future
+          // AutoFlow build removes the feature) get a clear "not available"
+          // message instead of a generic failure count.
+          else if (lastErr === 'rvh_unsupported_v4' || lastErr === 'rvh_route_unresolved_v4') showToast('Adding recommendations is not available on this AutoFlow v4 page', 'error');
           else showToast(`Add recommendations failed (${failed})`, 'error');
           if (added) reloadAfterApply();
         },

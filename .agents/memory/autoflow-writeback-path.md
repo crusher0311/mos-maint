@@ -69,3 +69,13 @@ default OFF; a logged-in shop tester must still run all 3 actions end-to-end onc
 (can't be done from the isolated env — no AutoFlow session). WAR gotcha: button
 icons must be listed in the AutoFlow web_accessible_resources block (per-origin),
 not just Tekmetric's.
+
+## v4 RVH (2026-08-12)
+v4 (app.autoflow.com) DOES have RVH: Vue SPA writes via Laravel routes
+`rvh.create` (POST item {type,details,notes,status_id}), `rvh.delete`
+(DELETE {shop_id,id}), `rvh.items` (GET list → data.data.items). Route URIs
+are NOT hardcodable — resolve at runtime from the page's Ziggy table
+(globalThis.Ziggy / #ziggy-routes-json). Create response shape unpinned
+(the SPA re-fetches the list), so recover rvh_id from rvh.items by details
+match when absent. AutoFlow's build assets (build/assets/Rvh3.js etc.) are
+publicly fetchable — endpoint mapping possible without a live session.
