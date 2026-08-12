@@ -1009,6 +1009,8 @@ function updateContext(context) {
     fetchShopFeatures();
     
     const roChanged = !prevContext || prevContext.roId !== context.roId;
+    // Task #1094: repaint the undo bar for the (possibly new) RO.
+    refreshUndoBar();
     if (context.roId && roChanged) {
       if (currentTab === 'plan') {
         loadPlan();
@@ -1032,6 +1034,7 @@ function updateContext(context) {
   } else {
     elements.noContext.classList.remove('hidden');
     elements.hasContext.classList.add('hidden');
+    document.getElementById('undo-bar')?.classList.add('hidden');
   }
 }
 
@@ -1729,6 +1732,7 @@ async function handleAddAllDeclinedWork() {
         if (res?.success) {
           added++;
           markServiceOnEstimate(job.title, reqPlanCacheKey);
+          // Task #1094: the background snapshotted each created job for undo.
         } else {
           failures.push(`${job.title}: ${res?.error || 'unknown error'}`);
         }
@@ -1744,12 +1748,203 @@ async function handleAddAllDeclinedWork() {
       parts.push(`${failures.length} failed`);
     }
     showNotification(parts.join(' · '), failures.length > 0 ? 'warning' : 'success');
+    if (added > 0) refreshUndoBar();
   } catch (err) {
     console.error('[MOS] Add all declined work error:', err);
     showNotification(err.message || 'Could not add declined work.', 'error');
   } finally {
     addAllDeclinedInFlight = false;
     if (btn) { btn.disabled = false; btn.textContent = originalLabel; }
+  }
+}
+
+// ==================== SIDE-PANEL UNDO (Task #1094) ====================
+// Side-panel write actions (add job / canned job / declined add-all) capture
+// the created job / service-package identifiers into the same background
+// snapshot store the injected-button undo chip uses (Task #1086). The bar at
+// the top of the Plan tab lists what was added and offers a one-click undo:
+//   * tekmetric — background deletes the created jobs via the page session;
+//   * protractor — server removes the added service package(s) via
+//     /api/extension/jobs/remove-from-ro.
+// Shop-Ware adds have no delete path today, so they aren't snapshotted.
+let undoBarInFlight = false;
+
+// Pull created Tekmetric job ids out of the apply-canned-job server response.
+// The route returns `{ success, repairOrderId, result }` where `result` is
+// Tekmetric's own envelope; depending on API version the created jobs appear
+// as an array of ids or of job objects, at the top level or under `data`.
+function extractTekmetricCreatedJobIds(response) {
+  const out = [];
+  const scan = (v) => {
+    if (Array.isArray(v)) {
+      for (const el of v) {
+        if (typeof el === 'number') out.push(el);
+        else if (el && typeof el === 'object' && el.id != null) out.push(el.id);
+      }
+    }
+  };
+  const r = response?.result;
+  scan(r);
+  scan(r?.data);
+  scan(r?.jobs);
+  return out;
+}
+
+// Record one side-panel add into the snapshot store. Tekmetric single adds
+// are snapshotted by the background inside CREATE_TEKMETRIC_JOB; this helper
+// covers the server-mediated paths (Tekmetric canned, Protractor).
+async function recordSidepanelAdd(provider, shopId, roId, items) {
+  if (!provider || shopId == null || roId == null || !items || items.length === 0) return;
+  try {
+    await sendMessage({
+      action: 'UNDO_SNAPSHOT_SAVE',
+      snapshot: { provider, shopId, roId, kind: 'sidepanel_add_job', mergeItems: true, items },
+    });
+  } catch (err) {
+    console.warn('[MOS Undo] Failed to save side-panel undo snapshot:', err?.message || err);
+  }
+  refreshUndoBar();
+}
+
+// The (provider, shopId) pairs a snapshot for the current context could have
+// been keyed under. Tekmetric contexts key by the Tekmetric shop id; adds
+// routed to Protractor key by the MOS shop id.
+function undoBarQueryTargets() {
+  const ctx = currentContext;
+  if (!ctx) return [];
+  const targets = [];
+  if (ctx.provider === 'tekmetric') {
+    targets.push({ provider: 'tekmetric', shopId: ctx.shopId });
+  }
+  const writeProvider = ctx.writeProvider || resolvedWriteProvider || ctx.provider;
+  if (writeProvider === 'protractor') {
+    const mosShopId = ctx.mosShopId || resolvedMosShopId || ctx.shopId;
+    if (mosShopId != null) targets.push({ provider: 'protractor', shopId: mosShopId });
+  }
+  return targets;
+}
+
+async function refreshUndoBar() {
+  const bar = document.getElementById('undo-bar');
+  if (!bar) return;
+  const ctx = currentContext;
+  const roId = ctx?.roId;
+  const targets = undoBarQueryTargets();
+  if (!roId || targets.length === 0) { bar.classList.add('hidden'); return; }
+  const reqKey = planCacheKey(ctx);
+  try {
+    const lists = await Promise.all(targets.map(t =>
+      sendMessage({ action: 'UNDO_SNAPSHOT_LIST', provider: t.provider, shopId: t.shopId, roId })
+        .then(r => (r && r.success && Array.isArray(r.snapshots)) ? r.snapshots : [])
+        .catch(() => [])
+    ));
+    // A slow response must never paint another RO's undo bar.
+    if (planCacheKey(currentContext) !== reqKey) return;
+    const snaps = lists.flat().filter(s => s.kind === 'sidepanel_add_job' && Array.isArray(s.items) && s.items.length > 0);
+    if (snaps.length === 0) { bar.classList.add('hidden'); return; }
+    const total = snaps.reduce((n, s) => n + s.items.length, 0);
+    const names = snaps.flatMap(s => s.items.map(it => it.name || it.title || 'job'));
+    const summaryEl = document.getElementById('undo-bar-summary');
+    if (summaryEl) {
+      summaryEl.textContent = `Added from panel: ${total} job${total === 1 ? '' : 's'}`;
+      summaryEl.title = names.join('\n');
+    }
+    const btn = document.getElementById('undo-bar-btn');
+    if (btn && !btn._mosClickBound) {
+      btn._mosClickBound = true;
+      btn.addEventListener('click', handleUndoBarClick);
+    }
+    bar._mosSnaps = snaps;
+    bar.classList.toggle('hidden', !currentUserCanWrite);
+  } catch (err) {
+    console.warn('[MOS Undo] refreshUndoBar failed:', err?.message || err);
+  }
+}
+
+async function handleUndoBarClick() {
+  const bar = document.getElementById('undo-bar');
+  const btn = document.getElementById('undo-bar-btn');
+  const snaps = bar?._mosSnaps || [];
+  if (undoBarInFlight || snaps.length === 0) return;
+  const names = snaps.flatMap(s => s.items.map(it => it.name || it.title || 'job'));
+  if (!window.confirm('Remove the job(s) just added from this repair order?\n\n' + names.map(n => '• ' + n).join('\n'))) return;
+  undoBarInFlight = true;
+  const originalLabel = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Undoing…'; }
+  let reverted = 0;
+  let failed = 0;
+  try {
+    for (const snap of snaps) {
+      if (snap.provider === 'tekmetric') {
+        try {
+          const res = await sendMessage({ action: 'UNDO_APPLY_TEKMETRIC', key: snap.key }, 90000, 'Still undoing — please keep this panel open…');
+          // Partial failures keep their un-deleted items in the snapshot
+          // (background rewrites it), so the bar stays up for a retry.
+          if (res && typeof res.reverted === 'number') {
+            reverted += res.reverted;
+            failed += res.failed || 0;
+          } else {
+            failed += res?.success ? 0 : snap.items.length;
+          }
+        } catch (err) {
+          failed += snap.items.length;
+          console.warn('[MOS Undo] Tekmetric undo failed:', err?.message || err);
+        }
+      } else if (snap.provider === 'protractor') {
+        // Server-side removal, one package per item. The snapshot is cleared
+        // only when every item is gone; a retried undo is safe — the server
+        // treats an already-removed package as success.
+        let snapFailed = 0;
+        for (const it of snap.items) {
+          if (!it.servicePackageId || !it.workOrderId) { snapFailed++; failed++; continue; }
+          try {
+            const res = await sendMessage({
+              action: 'MOS_API_REQUEST',
+              endpoint: '/api/extension/jobs/remove-from-ro',
+              options: {
+                method: 'POST',
+                body: JSON.stringify({
+                  shopId: Number(snap.shopId),
+                  workOrderId: it.workOrderId,
+                  servicePackageId: it.servicePackageId,
+                }),
+              },
+            }, 90000, 'Still undoing — please keep this panel open…');
+            if (res?.success) reverted++;
+            else { snapFailed++; failed++; console.warn('[MOS Undo] remove-from-ro failed:', res?.error); }
+          } catch (err) {
+            snapFailed++; failed++;
+            console.warn('[MOS Undo] remove-from-ro error:', err?.message || err);
+          }
+        }
+        if (snapFailed === 0) {
+          await sendMessage({ action: 'UNDO_SNAPSHOT_CLEAR', key: snap.key }).catch(() => {});
+        }
+      }
+    }
+    showNotification(
+      failed > 0
+        ? `Undo finished with issues: ${reverted} removed, ${failed} failed — check the RO in your SMS.`
+        : `Undo complete: ${reverted} job${reverted === 1 ? '' : 's'} removed.`,
+      failed > 0 ? 'warning' : 'success'
+    );
+    // The plan cache was computed with these jobs on the estimate — expire it
+    // and repaint so "On Estimate" badges clear.
+    const key = planCacheKey(currentContext);
+    const entry = key && planCache.get(key);
+    if (entry) entry.ts = 0;
+    if (currentTab === 'plan' && currentContext?.roId) loadPlan(true);
+    // Nudge the SMS page to reload so the removal is visible there too.
+    if (reverted > 0) {
+      notifyPageJobCreated(
+        ["*://*.tekmetric.com/*", "*://*.autoflow.com/*", "*://*.autotext.me/*", "*://*.protractor.com/*"],
+        'undo', 'Undo'
+      );
+    }
+  } finally {
+    undoBarInFlight = false;
+    if (btn) { btn.disabled = false; btn.textContent = originalLabel; }
+    refreshUndoBar();
   }
 }
 
@@ -3066,6 +3261,14 @@ async function handleAddJob(job, source) {
       if (result.success) {
         showNotification(`Added: ${result.jobName || jobData.title}`, 'success');
         markServiceOnEstimate(result.jobName || jobData.title, reqPlanCacheKey);
+        // Task #1094: snapshot for undo (server returns the created package id).
+        if (result.servicePackageId && result.workOrderId) {
+          recordSidepanelAdd('protractor', mosShopId, currentContext.roId, [{
+            name: result.jobName || jobData.title,
+            servicePackageId: result.servicePackageId,
+            workOrderId: result.workOrderId,
+          }]);
+        }
         return true;
       } else {
         throw new Error(result.error || 'Failed to add job to Protractor');
@@ -3117,6 +3320,9 @@ async function handleAddJob(job, source) {
     if (result.success) {
       showNotification(`Added: ${result.jobName}`, 'success');
       markServiceOnEstimate(result.jobName || jobData.name, reqPlanCacheKey);
+      // Task #1094: the background snapshotted the created job id inside
+      // CREATE_TEKMETRIC_JOB — just repaint the undo bar.
+      refreshUndoBar();
       return true;
     } else {
       throw new Error(result.error || 'Failed to add job');
@@ -3243,6 +3449,15 @@ async function handleAddCannedJob(job) {
           showNotification(`Added: ${result.jobName || cannedJobTitle}`, 'success');
           markServiceOnEstimate(result.jobName || cannedJobTitle, reqPlanCacheKey);
 
+          // Task #1094: snapshot for undo (server returns the applied package id).
+          if (result.servicePackageId && result.workOrderId) {
+            recordSidepanelAdd('protractor', mosShopId, currentContext.roId, [{
+              name: result.jobName || cannedJobTitle,
+              servicePackageId: result.servicePackageId,
+              workOrderId: result.workOrderId,
+            }]);
+          }
+
           // Refresh the Protractor shop's page so the new job appears without a
           // manual reload — mirrors the Tekmetric JOB_CREATED path. These shops
           // are viewed through AutoFlow/autotext (and occasionally protractor.com),
@@ -3307,6 +3522,15 @@ async function handleAddCannedJob(job) {
       
       showNotification(`Added: ${job.name}`, 'success');
       markServiceOnEstimate(job.name, reqPlanCacheKey);
+
+      // Task #1094: this path writes via the server's official Tekmetric API,
+      // so pull the created job id(s) out of its response (best-effort — the
+      // envelope nests them under result/data depending on the API version).
+      const createdIds = extractTekmetricCreatedJobIds(result);
+      if (createdIds.length > 0) {
+        recordSidepanelAdd('tekmetric', currentContext.shopId, result.repairOrderId || currentContext.roId,
+          createdIds.map(id => ({ jobId: id, name: job.name })));
+      }
 
       notifyPageJobCreated(["*://*.tekmetric.com/*"], job.name, 'Tekmetric');
     } catch (err) {

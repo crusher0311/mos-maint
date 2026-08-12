@@ -437,7 +437,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const snap = store[message.key];
         if (!snap) { sendResponse({ success: false, error: "Snapshot not found" }); return; }
         const result = await revertTekmetricSnapshot(snap);
-        if (result.success) await clearUndoSnapshot(message.key);
+        if (result.success) {
+          await clearUndoSnapshot(message.key);
+        } else if (Array.isArray(result.remainingItems)) {
+          // Task #1094: partial failure — rewrite the snapshot to hold ONLY
+          // the items that still need deleting so Undo can be retried.
+          const store2 = await loadUndoSnapshots();
+          if (store2[message.key]) {
+            store2[message.key] = { ...store2[message.key], items: result.remainingItems };
+            await persistUndoSnapshots(store2);
+          }
+        }
         sendResponse(result);
       } catch (err) {
         sendResponse({ success: false, error: err.message });
@@ -2549,6 +2559,24 @@ async function createTekmetricJob(shopId, roId, jobData) {
     const createdJob = await createRes.json();
     console.log("[Tekmetric] Job created:", createdJob.id);
 
+    // Task #1094: snapshot the created job id so the side panel's undo can
+    // delete it. Merged per RO — one snapshot accumulates every side-panel
+    // add (single adds AND the declined-work add-all loop land here).
+    if (createdJob.id != null) {
+      try {
+        await saveUndoSnapshot({
+          provider: "tekmetric",
+          shopId: effectiveShopId,
+          roId,
+          kind: "sidepanel_add_job",
+          mergeItems: true,
+          items: [{ jobId: createdJob.id, name: createdJob.name || jobPayload.name }],
+        });
+      } catch (err) {
+        console.warn("[Tekmetric] Failed to save add-job undo snapshot:", err.message);
+      }
+    }
+
     // Notify content script to refresh the page
     chrome.tabs.query({ url: "*://*.tekmetric.com/*" }, (tabs) => {
       for (const tab of tabs) {
@@ -4089,9 +4117,16 @@ async function saveUndoSnapshot(snapshot) {
   if (!snapshot || !snapshot.provider || !snapshot.kind || snapshot.roId == null) {
     throw new Error("Invalid undo snapshot");
   }
-  const snap = { ...snapshot, createdAt: Date.now() };
+  const { mergeItems, ...rest } = snapshot;
+  const snap = { ...rest, createdAt: Date.now() };
   const key = MosUndoCore.makeUndoKey(snap);
   const store = await loadUndoSnapshots();
+  // Task #1094: side-panel adds accumulate — a second add to the same RO
+  // appends its items to the existing snapshot instead of replacing it, so
+  // one undo removes everything added in the session (24h window).
+  if (mergeItems && store[key] && Array.isArray(store[key].items)) {
+    snap.items = [...store[key].items, ...(snap.items || [])];
+  }
   store[key] = snap;
   await persistUndoSnapshots(MosUndoCore.pruneUndoSnapshots(store, Date.now()));
   console.log(`[Undo] Snapshot saved: ${key} (${MosUndoCore.summarizeSnapshot(snap)})`);
@@ -4130,6 +4165,35 @@ async function revertTekmetricSnapshot(snap) {
   let reverted = 0;
   let failed = 0;
   const failedItems = [];
+
+  if (snap.kind === "sidepanel_add_job") {
+    // Task #1094: side-panel adds created whole jobs — undo deletes them
+    // through the same page API the create used (POST /api/shop/{id}/job).
+    // Success is ALL-or-nothing: on a partial failure the caller must keep
+    // the still-undeleted items in the snapshot (remainingItems) so a retry
+    // can finish the job — never discard a failed item's identifier.
+    const revertedJobIds = [];
+    for (const it of snap.items || []) {
+      if (it?.jobId == null) continue;
+      try {
+        const res = await tekmetricFetch(
+          `/api/shop/${shopId}/job/${it.jobId}`,
+          { method: "DELETE" },
+          { shopId, label: "undo.delete-job" }
+        );
+        // 404 = already gone (deleted in the SMS or a prior partial undo) —
+        // that item is done; don't hold the snapshot open for it.
+        if (res.ok || res.status === 404) { reverted++; revertedJobIds.push(it.jobId); }
+        else { failed++; failedItems.push(it.name || String(it.jobId)); }
+      } catch (err) {
+        failed++;
+        failedItems.push(it.name || String(it.jobId));
+      }
+    }
+    const remainingItems = MosUndoCore.remainingUndoItems(snap.items, revertedJobIds);
+    console.log(`[Undo] Tekmetric revert ${snap.kind}: ${reverted} reverted, ${failed} failed, ${remainingItems.length} remaining`);
+    return { success: failed === 0, reverted, failed, failedItems, remainingItems };
+  }
 
   if (snap.kind === "add_vhi_recommendations") {
     for (const it of snap.items || []) {

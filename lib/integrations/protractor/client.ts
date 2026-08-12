@@ -400,6 +400,19 @@ export function buildMinimalPayloadForPost(
   return payload;
 }
 
+// Task #1094 (side-panel undo): rebuild the same minimal WO payload the add
+// path POSTs, but with `remainingPackages` only — i.e. the added service
+// package filtered OUT by the caller. Posting this removes the package.
+export function buildMinimalPayloadForRemove(
+  existingWorkOrder: Record<string, any>,
+  remainingPackages: any[]
+): Record<string, any> {
+  return buildMinimalWorkOrderPayload(
+    existingWorkOrder,
+    remainingPackages.map(cleanServicePackageForPost)
+  );
+}
+
 export async function soapAddServicePackage(
   shopId: number | string,
   workOrderGuid: string,

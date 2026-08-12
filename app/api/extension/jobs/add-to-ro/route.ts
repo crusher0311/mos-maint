@@ -322,8 +322,11 @@ async function _POST(req: NextRequest) {
       };
     });
 
+    // Task #1094: pin the package ID up front so it can be returned to the
+    // extension for the side-panel undo snapshot (remove-from-ro uses it).
+    const newServicePackageId = randomUUID();
     const newServicePackage = {
-      ID: randomUUID(),
+      ID: newServicePackageId,
       Chapter: "Service",
       Code: job.code || `MOS-${Date.now()}`,
       Rank: existingPackages.length + 1,
@@ -387,6 +390,8 @@ async function _POST(req: NextRequest) {
         success: true,
         jobName: job.title,
         workOrderId: workOrderGuid,
+        // Task #1094: lets the side panel snapshot this add for undo.
+        servicePackageId: newServicePackageId,
       },
       { headers: corsHeaders }
     );

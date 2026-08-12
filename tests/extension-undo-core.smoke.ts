@@ -9,6 +9,7 @@ const {
   makeUndoKey,
   pruneUndoSnapshots,
   summarizeSnapshot,
+  remainingUndoItems,
   buildAutoflowRevertOps,
   UNDO_MAX_ENTRIES,
 } = require("../mos-tools-extension/undo-core.js");
@@ -57,6 +58,28 @@ ok("summarize counts items per kind", () => {
   assert.strictEqual(summarizeSnapshot({ kind: "enhance_notes", items: [1, 2] }), "2 enhanced notes");
   assert.strictEqual(summarizeSnapshot({ kind: "dvi_prefill", items: [1] }), "1 pre-filled DVI item");
   assert.strictEqual(summarizeSnapshot({ kind: "add_vhi_recommendations", items: [] }), "0 added recommendations");
+  // Task #1094: side-panel add-to-RO snapshots
+  assert.strictEqual(summarizeSnapshot({ kind: "sidepanel_add_job", items: [1] }), "1 job added to RO");
+  assert.strictEqual(summarizeSnapshot({ kind: "sidepanel_add_job", items: [1, 2] }), "2 jobs added to RO");
+});
+
+ok("partial side-panel undo keeps failed items retryable (Task #1094)", () => {
+  const items = [
+    { jobId: 101, name: "Oil change" },
+    { jobId: "102", name: "Brakes" },
+    { jobId: 103, name: "Coolant flush" },
+    { name: "no id — never attempted" },
+  ];
+  // Mixed results: 101 deleted, "102" deleted (string/number id mismatch must
+  // still match), 103 failed → 103 + the id-less item must remain stored.
+  const remaining = remainingUndoItems(items, [101, 102]);
+  assert.deepStrictEqual(remaining.map((it: any) => it.name), ["Coolant flush", "no id — never attempted"]);
+  // Nothing reverted → everything stays.
+  assert.strictEqual(remainingUndoItems(items, []).length, 4);
+  // Everything reverted → only the id-less item stays.
+  assert.deepStrictEqual(remainingUndoItems(items, [101, "102", 103]).map((it: any) => it.jobId), [undefined]);
+  // Malformed input is safe.
+  assert.deepStrictEqual(remainingUndoItems(undefined, [1]), []);
 });
 
 ok("rvh revert ops delete created entries", () => {

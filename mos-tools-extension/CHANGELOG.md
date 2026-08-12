@@ -1,5 +1,19 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.30.0 — 2026-08-12
+
+### Added
+- **Undo for side-panel adds (Task #1094).** Jobs added to a repair order
+  from the side panel — single adds, canned jobs, and the declined-work
+  "Add All" — now capture the created job / service-package identifiers
+  into the same durable undo store the injected-button chip uses. A
+  "↩ Undo" bar at the top of the Plan tab lists what was added and removes
+  it in one click: Tekmetric jobs are deleted through the page session,
+  Protractor service packages are removed server-side via the new
+  `/api/extension/jobs/remove-from-ro` endpoint. Repeated adds to the same
+  RO accumulate into one snapshot (24h window). Shop-Ware adds are not
+  undoable yet (no delete path).
+
 ## 1.29.0 — 2026-08-11
 
 ### Added

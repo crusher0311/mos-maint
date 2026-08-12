@@ -50,8 +50,22 @@
         ? `enhanced note${n === 1 ? "" : "s"}`
         : snap.kind === "dvi_prefill"
           ? `pre-filled DVI item${n === 1 ? "" : "s"}`
-          : `added recommendation${n === 1 ? "" : "s"}`;
+          : snap.kind === "sidepanel_add_job"
+            ? `job${n === 1 ? "" : "s"} added to RO`
+            : `added recommendation${n === 1 ? "" : "s"}`;
     return `${n} ${what}`;
+  }
+
+  // Task #1094 — partial-undo bookkeeping for side-panel add snapshots.
+  // Given a snapshot's items and the set of job ids that were successfully
+  // deleted, return the items that must STAY in the snapshot so a later
+  // retry can still remove them. Items without a jobId are kept (they were
+  // never attempted). Id comparison is string-based — page-API ids come back
+  // as numbers or strings depending on the caller.
+  function remainingUndoItems(items, revertedJobIds) {
+    if (!Array.isArray(items)) return [];
+    const done = new Set((revertedJobIds || []).map(String));
+    return items.filter((it) => !(it && it.jobId != null && done.has(String(it.jobId))));
   }
 
   // Build the ordered AutoFlow revert operations for a snapshot. The content
@@ -112,6 +126,7 @@
     makeUndoKey,
     pruneUndoSnapshots,
     summarizeSnapshot,
+    remainingUndoItems,
     buildAutoflowRevertOps,
   };
 

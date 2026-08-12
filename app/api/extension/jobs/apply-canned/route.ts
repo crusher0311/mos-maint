@@ -268,6 +268,8 @@ async function _POST(req: NextRequest) {
         jobName: cannedJobTitle || cannedJobId,
         workOrderId: targetWorkOrderId,
         servicePackage: result.servicePackage,
+        // Task #1094: lets the side panel snapshot this add for undo.
+        servicePackageId: result.servicePackage?.ID || null,
       },
       { headers: corsHeaders }
     );
