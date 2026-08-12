@@ -622,6 +622,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.action === "ENHANCE_FINDINGS_COMPLETE") {
     console.log("[MOS Tools] Findings enhancement complete:", message.result);
+    clearPendingApply(); // Task #1101
     resetEnhanceButton();
     const modal = document.getElementById('mos-enhance-review-modal');
     if (modal) modal.remove();
@@ -636,6 +637,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === "ENHANCE_FINDINGS_FAILED") {
+    clearPendingApply(); // Task #1101
     resetEnhanceButton();
     reportActionDropped("enhance_findings", "background_failed");
     sendResponse({ success: true });
@@ -665,6 +667,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.action === "BUILD_RO_FROM_VHI_COMPLETE") {
     console.log("[MOS Tools] Build RO from VHI complete:", message.result);
+    clearPendingApply(); // Task #1101
     resetBuildRoFromVhiButton();
     const modal = document.getElementById('mos-build-ro-vhi-modal');
     if (modal) modal.remove();
@@ -703,6 +706,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === "BUILD_RO_FROM_VHI_FAILED") {
+    clearPendingApply(); // Task #1101
     reportActionDropped("build_ro_from_vhi", "background_failed", { reason: message.error || null });
     resetBuildRoFromVhiButton();
     const modal = document.getElementById('mos-build-ro-vhi-modal');
@@ -1785,6 +1789,9 @@ function showEnhanceReviewModal(enhanced, inspectionId, context) {
     // big shops; keep the user reassured until COMPLETE/FAILED arrives
     // (both call resetEnhanceButton, which stops this notice).
     startEnhanceSlowNotice('Still applying enhanced notes — big shops can take a minute…');
+    // Task #1101: survive a mid-apply page reload — the next page view will
+    // announce the in-flight apply until COMPLETE/FAILED lands.
+    setPendingApply('enhance_findings', 'Applying enhanced notes', approved.length);
 
     safeSendMessage({
       action: 'APPLY_ENHANCED_FINDINGS',
@@ -2657,6 +2664,9 @@ function showBuildRoFromVhiModal(preview, context) {
     applyBtn.textContent = `Adding 0/${selected.length}…`;
     applyBtn.style.opacity = '0.6';
     cancelBtn.disabled = true;
+    // Task #1101: survive a mid-apply page reload — the next page view will
+    // announce the in-flight apply until COMPLETE/FAILED lands.
+    setPendingApply('build_ro_from_vhi', 'Adding VHI concerns to the RO', selected.length);
 
     safeSendMessage({
       action: 'APPLY_BUILD_RO_FROM_VHI',
@@ -2678,6 +2688,52 @@ function showBuildRoFromVhiModal(preview, context) {
   });
 
   document.body.appendChild(overlay);
+}
+
+// ==================== PENDING-APPLY MARKER (Task #1101) ====================
+// While an apply (enhance notes / build RO from VHI) is in flight, the writes
+// run in the background worker. If the page fully reloads mid-apply, the modal
+// is gone and the COMPLETE/FAILED message may race the content-script
+// re-injection — the advisor can't tell whether the writes finished. Persist a
+// small per-tab marker in sessionStorage (survives reloads, dies with the tab)
+// so the next page view can say "an apply is still running"; the eventual
+// COMPLETE/FAILED delivered to this tab then toasts the real outcome via the
+// handlers above (which already work with no modal present).
+const MOS_PENDING_APPLY_KEY = 'mosPendingApply';
+const MOS_PENDING_APPLY_MAX_AGE_MS = 10 * 60 * 1000;
+
+function setPendingApply(kind, label, count) {
+  try {
+    sessionStorage.setItem(MOS_PENDING_APPLY_KEY, JSON.stringify({
+      kind, label, count: count || 0, startedAt: Date.now(),
+    }));
+  } catch (_) {}
+}
+
+function clearPendingApply() {
+  try { sessionStorage.removeItem(MOS_PENDING_APPLY_KEY); } catch (_) {}
+}
+
+// Called once at startup. Reads-and-clears the marker; if an apply was still
+// running when this page (re)loaded, tell the user. If the background's
+// COMPLETE/FAILED arrives after injection, its own toast reports the outcome;
+// this notice covers the gap (and the lost-message race) so the advisor knows
+// to verify rather than silently wondering.
+function checkPendingApplyOnLoad() {
+  let rec = null;
+  try {
+    const raw = sessionStorage.getItem(MOS_PENDING_APPLY_KEY);
+    if (raw) rec = JSON.parse(raw);
+  } catch (_) {}
+  if (!rec) return;
+  clearPendingApply();
+  const age = Date.now() - (rec.startedAt || 0);
+  if (!(age >= 0 && age < MOS_PENDING_APPLY_MAX_AGE_MS)) return; // stale/bogus
+  const label = rec.label || 'apply';
+  showToast(
+    `${label} was still running when this page reloaded — the result will appear here shortly. If no confirmation appears, verify the RO before re-applying.`,
+    'info'
+  );
 }
 
 // ==================== UI HELPERS ====================
@@ -2963,6 +3019,12 @@ function startCategoryChangeObserver() {
 function init() {
   // Initial context check
   updateContext();
+
+  // Task #1101: if an apply was in flight when this page (re)loaded, surface
+  // it so the eventual COMPLETE/FAILED toast doesn't arrive out of the blue
+  // (or, if the message got lost in the reload race, the advisor knows to
+  // verify the RO instead of silently wondering).
+  checkPendingApplyOnLoad();
   
   // Inject floating action button (launcher) — gated by owner/user setting.
   injectFloatingButton();

@@ -2222,6 +2222,69 @@ function saveAfUndoSnapshot(snapshot) {
   });
 }
 
+// ---------- Pending-apply marker (Task #1101) ----------
+// AutoFlow applies write item-by-item from THIS content script, so a full page
+// reload mid-apply kills the loop: some items were written, the rest never
+// sent — and the modal (with its status line) is gone. Persist a small per-tab
+// marker in sessionStorage (survives reloads, dies with the tab), updated as
+// each item starts, so the next page view can tell the advisor how far the
+// apply got instead of leaving them guessing. SPA navigation keeps this script
+// alive, so the loop finishes and its own completion toast fires; the marker
+// only matters across real reloads.
+const AF_PENDING_APPLY_KEY = 'mosAfPendingApply';
+const AF_PENDING_APPLY_MAX_AGE_MS = 10 * 60 * 1000;
+
+function afSetPendingApply(label, total) {
+  try {
+    sessionStorage.setItem(AF_PENDING_APPLY_KEY, JSON.stringify({
+      label, total: total || 0, lastStatus: '', startedAt: Date.now(),
+    }));
+  } catch (_) {}
+}
+
+function afNotePendingApplyProgress(statusText) {
+  try {
+    const raw = sessionStorage.getItem(AF_PENDING_APPLY_KEY);
+    if (!raw) return;
+    const rec = JSON.parse(raw);
+    rec.lastStatus = String(statusText || '');
+    sessionStorage.setItem(AF_PENDING_APPLY_KEY, JSON.stringify(rec));
+  } catch (_) {}
+}
+
+function afClearPendingApply() {
+  try { sessionStorage.removeItem(AF_PENDING_APPLY_KEY); } catch (_) {}
+}
+
+// Read-and-clear at startup; if an apply was interrupted by a reload, report
+// how far it got so the advisor reviews the DVI/RO instead of blind re-applying
+// (which would duplicate the already-written items).
+function afCheckPendingApplyOnLoad() {
+  let rec = null;
+  try {
+    const raw = sessionStorage.getItem(AF_PENDING_APPLY_KEY);
+    if (raw) rec = JSON.parse(raw);
+  } catch (_) {}
+  if (!rec) return;
+  afClearPendingApply();
+  const age = Date.now() - (rec.startedAt || 0);
+  if (!(age >= 0 && age < AF_PENDING_APPLY_MAX_AGE_MS)) return; // stale/bogus
+  const label = rec.label || 'An apply';
+  const progress = rec.lastStatus
+    ? ` It got to "${rec.lastStatus.replace(/…$/, '')}" of ${rec.total} item${rec.total === 1 ? '' : 's'}.`
+    : ` None of the ${rec.total} item${rec.total === 1 ? '' : 's'} may have been written.`;
+  showToast(
+    `"${label}" was interrupted by a page reload before it finished.${progress} Some items may not have been written — review before re-applying.`,
+    'warning'
+  );
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', afCheckPendingApplyOnLoad);
+} else {
+  afCheckPendingApplyOnLoad();
+}
+
 // ---------- Shared review modal ----------
 // opts: { title, applyLabel, rows:[{label,sub,badge,badgeColor,text,...}], onApply(selected,{setStatus})->Promise, onClose }
 function showAfReviewModal(opts) {
@@ -2367,11 +2430,19 @@ function showAfReviewModal(opts) {
     cancel.disabled = true;
     apply.style.opacity = '0.6';
     apply.style.cursor = 'wait';
+    // Task #1101: survive a mid-apply page reload — every onApply flow calls
+    // setStatus per item, so mirroring it into the marker records how far the
+    // loop got. Cleared when the apply finishes (success or error).
+    afSetPendingApply(opts.title || 'Apply', selected.length);
     try {
-      await opts.onApply(selected, { setStatus: (t) => { statusEl.textContent = t; } });
+      await opts.onApply(selected, { setStatus: (t) => {
+        statusEl.textContent = t;
+        afNotePendingApplyProgress(t);
+      } });
     } catch (err) {
       showToast('Apply error: ' + (err && err.message ? err.message : err), 'error');
     } finally {
+      afClearPendingApply();
       cleanup();
     }
   });
