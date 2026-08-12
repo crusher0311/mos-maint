@@ -567,15 +567,74 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return false;
     }
 
-    prefillDviInspection(ctx, message.inspectionId || null, tabId).then(result => {
+    // Task #1107: analyze-only — NO writes happen here. The content script
+    // shows a review modal (checkboxes + editable findings + Cancel) and
+    // sends PREFILL_DVI_APPLY with only the approved items.
+    analyzePrefillDvi(ctx, message.inspectionId || null, tabId).then(result => {
       if (tabId) {
         if (result.success && result.choosing) {
           // Multiple candidate inspections — the content script is showing a
           // chooser; it will re-send PREFILL_DVI with an explicit inspectionId.
           return;
         }
+        if (result.success && Array.isArray(result.updates) && result.updates.length > 0) {
+          chrome.tabs.sendMessage(tabId, {
+            action: "PREFILL_DVI_REVIEW",
+            inspectionId: result.inspectionId,
+            updates: result.updates,
+            vehicle: result.vehicle || null,
+            summary: result.summary || null,
+            score: result.score ?? null,
+            context: {
+              shopId: ctx.shopId,
+              roId: ctx.roId,
+              vin: ctx.vin,
+              mileage: ctx.mileage,
+              provider: "tekmetric",
+            },
+          }).catch(() => {});
+        } else {
+          const errMsg = result.error || "No VHI data matched to inspection tasks";
+          chrome.tabs.sendMessage(tabId, { action: "SHOW_TOAST", message: errMsg, type: "error" }).catch(() => {});
+          chrome.tabs.sendMessage(tabId, { action: "PREFILL_DVI_FAILED" }).catch(() => {});
+        }
+      }
+    }).catch(err => {
+      console.error("[Prefill DVI] Error:", err);
+      if (tabId) {
+        chrome.tabs.sendMessage(tabId, { action: "SHOW_TOAST", message: "Pre-fill error: " + err.message, type: "error" }).catch(() => {});
+        chrome.tabs.sendMessage(tabId, { action: "PREFILL_DVI_FAILED" }).catch(() => {});
+      }
+    });
+    sendResponse({ success: true, started: true });
+    return true;
+  }
+
+  // Task #1107: second phase — write only the items the advisor approved in
+  // the review modal. Mirrors the AutoFlow two-phase flow (AF_ANALYZE_PREFILL
+  // + content-script apply) but Tekmetric writes stay in the background
+  // (x-auth-token relay).
+  if (message.action === "PREFILL_DVI_APPLY") {
+    console.log("[Prefill DVI] Apply requested:", (message.approved || []).length, "items");
+    const tabId = sender?.tab?.id || currentSmsContext?._tabId;
+    const ctx = message.context || currentSmsContext;
+
+    if (!ctx?.roId || !ctx?.shopId || !message.inspectionId || !Array.isArray(message.approved) || message.approved.length === 0) {
+      if (tabId) {
+        chrome.tabs.sendMessage(tabId, { action: "SHOW_TOAST", message: "Missing context for pre-fill apply", type: "error" }).catch(() => {});
+        chrome.tabs.sendMessage(tabId, { action: "PREFILL_DVI_FAILED" }).catch(() => {});
+      }
+      sendResponse({ success: false, error: "Missing context" });
+      return false;
+    }
+
+    applyPrefillDvi(ctx, message.inspectionId, message.approved, tabId).then(result => {
+      // Echo the analyze-phase vehicle through so the post-apply summary
+      // header can still show "2019 Honda Accord".
+      if (result && message.vehicle) result.vehicle = message.vehicle;
+      if (tabId) {
         if (result.success && result.applied > 0) {
-          const msg = `DVI pre-filled: ${result.applied} tasks updated (${result.summary?.overdue || 0} red, ${result.summary?.dueSoon || 0} yellow, ${result.summary?.ok || 0} green)`;
+          const msg = `DVI pre-filled: ${result.applied} tasks updated${result.failed ? ` (${result.failed} failed)` : ''}`;
           chrome.tabs.sendMessage(tabId, { action: "SHOW_TOAST", message: msg, type: "success" }).catch(() => {});
           setTimeout(() => {
             chrome.tabs.sendMessage(tabId, { action: "PREFILL_DVI_COMPLETE", result }).catch(() => {});
@@ -587,7 +646,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
       }
     }).catch(err => {
-      console.error("[Prefill DVI] Error:", err);
+      console.error("[Prefill DVI] Apply error:", err);
       if (tabId) {
         chrome.tabs.sendMessage(tabId, { action: "SHOW_TOAST", message: "Pre-fill error: " + err.message, type: "error" }).catch(() => {});
         chrome.tabs.sendMessage(tabId, { action: "PREFILL_DVI_FAILED" }).catch(() => {});
@@ -3179,24 +3238,9 @@ async function fetchVhiCoachData(context, inspections) {
   if (data) lastCoachRoId = coachKey;
 }
 
-async function prefillDviInspection(context, inspId, tabId) {
-  await _stateReady;
-  if (!mosApiToken || !mosApiUrl) return { success: false, error: "Not connected to MOS" };
-  if (!smsTokens.tekmetric) return { success: false, error: "No Tekmetric session token" };
-  if (!context?.vin || context.vin.length !== 17) return { success: false, error: "No VIN detected" };
-  if (!context?.mileage) return { success: false, error: "No mileage detected on this RO" };
-
-  const shopId = context.shopId || tekmetricShopId;
-  if (!shopId) return { success: false, error: "No shop ID" };
-
-  if (tabId) {
-    chrome.tabs.sendMessage(tabId, {
-      action: "SHOW_TOAST",
-      message: "Fetching inspection data...",
-      type: "info"
-    }).catch(() => {});
-  }
-
+// Shared inspection loader for both pre-fill phases. Returns
+// { success:false, error } or { success:true, inspArr }.
+async function fetchTekmetricInspections(shopId, roId, inspId) {
   let inspArr;
   try {
     // Listing → detail-by-known-id fallback when the listing endpoint
@@ -3205,12 +3249,12 @@ async function prefillDviInspection(context, inspId, tabId) {
     // can only try the listing.
     const fallbacks = inspId
       ? [{
-          endpoint: `/api/shop/${shopId}/repair-orders/${context.roId}/inspections/${inspId}`,
+          endpoint: `/api/shop/${shopId}/repair-orders/${roId}/inspections/${inspId}`,
           label: 'inspections.detail-by-id.fallback',
         }]
       : [];
     const res = await tekmetricFetch(
-      `/api/shop/${shopId}/repair-orders/${context.roId}/inspections`,
+      `/api/shop/${shopId}/repair-orders/${roId}/inspections`,
       {},
       {
         shopId,
@@ -3238,6 +3282,49 @@ async function prefillDviInspection(context, inspId, tabId) {
   }
 
   if (!inspArr || inspArr.length === 0) return { success: false, error: "No inspections found on this RO" };
+  return { success: true, inspArr };
+}
+
+// Flatten an inspection's grouped tasks, stamping each with its group title.
+function flattenInspectionTasks(inspection) {
+  const allTasks = [];
+  const groups = inspection.inspectionTasks || inspection.groups || [];
+  for (const group of groups) {
+    const tasks = group.tasks || [];
+    for (const task of tasks) {
+      const t = { ...task };
+      if (!t.inspectionGroup && group.title) t.inspectionGroup = group.title;
+      allTasks.push(t);
+    }
+  }
+  return allTasks;
+}
+
+// Task #1107: PHASE 1 — analyze only, zero Tekmetric writes. Fetches the
+// inspection, matches its tasks against VHI data via the MOS backend, and
+// returns the proposed updates for the advisor to review in the content
+// script. Mirrors AutoFlow's AF_ANALYZE_PREFILL two-phase flow.
+async function analyzePrefillDvi(context, inspId, tabId) {
+  await _stateReady;
+  if (!mosApiToken || !mosApiUrl) return { success: false, error: "Not connected to MOS" };
+  if (!smsTokens.tekmetric) return { success: false, error: "No Tekmetric session token" };
+  if (!context?.vin || context.vin.length !== 17) return { success: false, error: "No VIN detected" };
+  if (!context?.mileage) return { success: false, error: "No mileage detected on this RO" };
+
+  const shopId = context.shopId || tekmetricShopId;
+  if (!shopId) return { success: false, error: "No shop ID" };
+
+  if (tabId) {
+    chrome.tabs.sendMessage(tabId, {
+      action: "SHOW_TOAST",
+      message: "Fetching inspection data...",
+      type: "info"
+    }).catch(() => {});
+  }
+
+  const fetched = await fetchTekmetricInspections(shopId, context.roId, inspId);
+  if (!fetched.success) return fetched;
+  const inspArr = fetched.inspArr;
 
   let inspection;
   if (inspId) {
@@ -3281,17 +3368,7 @@ async function prefillDviInspection(context, inspId, tabId) {
   }
   if (!inspection) return { success: false, error: "Inspection not found" };
 
-  const allTasks = [];
-  const groups = inspection.inspectionTasks || inspection.groups || [];
-  for (const group of groups) {
-    const tasks = group.tasks || [];
-    for (const task of tasks) {
-      const t = { ...task };
-      if (!t.inspectionGroup && group.title) t.inspectionGroup = group.title;
-      allTasks.push(t);
-    }
-  }
-
+  const allTasks = flattenInspectionTasks(inspection);
   if (allTasks.length === 0) return { success: false, error: "No inspection tasks found" };
 
   if (tabId) {
@@ -3334,12 +3411,58 @@ async function prefillDviInspection(context, inspId, tabId) {
     return { success: false, error: prefillData.error || "No VHI data matched to inspection tasks" };
   }
 
-  console.log(`[Prefill DVI] Got ${prefillData.updates.length} updates to apply`);
+  console.log(`[Prefill DVI] Got ${prefillData.updates.length} proposed updates (review pending)`);
+
+  // Only propose updates whose task still exists on the inspection.
+  const taskIds = new Set(allTasks.map(t => t.id));
+
+  return {
+    success: true,
+    inspectionId: inspection.id,
+    summary: prefillData.summary,
+    vehicle: prefillData.vehicle,
+    score: prefillData.score,
+    // Task #744 `basis` + Task #1107: full proposed updates (incl. taskId and
+    // rating) so the review modal can show WHY each item was matched and the
+    // apply phase knows exactly what to write.
+    updates: prefillData.updates
+      .filter((u) => u && u.taskId != null && taskIds.has(u.taskId))
+      .map((u) => ({
+        taskId: u.taskId,
+        rating: u.rating,
+        taskName: u.taskName,
+        inspectionGroup: u.inspectionGroup,
+        status: u.status,
+        basis: u.basis,
+        finding: u.finding,
+      })),
+  };
+}
+
+// Task #1107: PHASE 2 — write ONLY the advisor-approved items. Re-fetches the
+// inspection (the review can sit open for minutes and the MV3 worker may have
+// restarted, so nothing is held in memory between phases), then PUTs each
+// approved task. Undo snapshot behavior is unchanged from the pre-review flow.
+async function applyPrefillDvi(context, inspectionId, approved, tabId) {
+  await _stateReady;
+  if (!mosApiToken || !mosApiUrl) return { success: false, error: "Not connected to MOS" };
+  if (!smsTokens.tekmetric) return { success: false, error: "No Tekmetric session token" };
+
+  const shopId = context.shopId || tekmetricShopId;
+  if (!shopId) return { success: false, error: "No shop ID" };
+
+  const fetched = await fetchTekmetricInspections(shopId, context.roId, inspectionId);
+  if (!fetched.success) return fetched;
+  const inspection = fetched.inspArr.find(i => String(i.id) === String(inspectionId));
+  if (!inspection) return { success: false, error: "Inspection not found" };
+
+  const allTasks = flattenInspectionTasks(inspection);
+  if (allTasks.length === 0) return { success: false, error: "No inspection tasks found" };
 
   if (tabId) {
     chrome.tabs.sendMessage(tabId, {
       action: "SHOW_TOAST",
-      message: `Applying ${prefillData.updates.length} ratings...`,
+      message: `Applying ${approved.length} ratings...`,
       type: "info"
     }).catch(() => {});
   }
@@ -3348,12 +3471,13 @@ async function prefillDviInspection(context, inspId, tabId) {
   let failed = 0;
   const undoItems = []; // Task #1086: originals of every task we overwrite
 
-  for (const update of prefillData.updates) {
+  for (const update of approved) {
     const task = allTasks.find(t => t.id === update.taskId);
     if (!task) { failed++; continue; }
 
     const putBody = { ...task };
     putBody.inspectionRating = update.rating;
+    // `update.finding` may have been edited (or cleared) in the review modal.
     putBody.finding = update.finding || task.finding || null;
 
     try {
@@ -3405,14 +3529,10 @@ async function prefillDviInspection(context, inspId, tabId) {
     success: true,
     applied,
     failed,
-    summary: prefillData.summary,
-    vehicle: prefillData.vehicle,
-    score: prefillData.score,
-    // Task #744: pass the per-task `basis` through so the content script can
-    // show the tech WHY each item was auto-filled (recent history vs. a real
-    // prior inspection finding vs. a generic VHI interval projection). Only
-    // the tasks we actually wrote back are surfaced.
-    updates: prefillData.updates
+    // Task #744: pass the per-task `basis` through so the post-apply summary
+    // ("receipt") can show WHY each item was auto-filled. Only the tasks we
+    // actually wrote back are surfaced.
+    updates: approved
       .filter((u) => u._applied)
       .map((u) => ({
         taskName: u.taskName,

@@ -571,8 +571,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
 
+  // Task #1107: analyze finished — show the review modal BEFORE any write.
+  if (message.action === "PREFILL_DVI_REVIEW") {
+    console.log("[MOS Tools] Showing DVI pre-fill review modal:", message.updates?.length, "items");
+    showPrefillReviewModal(message);
+    sendResponse({ success: true });
+    return false;
+  }
+
   if (message.action === "PREFILL_DVI_COMPLETE") {
     console.log("[MOS Tools] DVI pre-fill complete:", message.result);
+    document.getElementById('mos-prefill-review-modal')?.remove();
     resetPrefillButton();
     // Task #744: show techs WHY each item was auto-filled (history vs. prior
     // inspection vs. VHI interval projection) via a basis-badged summary before
@@ -590,6 +599,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === "PREFILL_DVI_FAILED") {
+    document.getElementById('mos-prefill-review-modal')?.remove();
     resetPrefillButton();
     reportActionDropped("prefill_dvi", "background_failed");
     sendResponse({ success: true });
@@ -1977,6 +1987,243 @@ const PREFILL_STATUS_META = {
   upcoming: { label: 'OK', color: '#22c55e' },
   ok: { label: 'OK', color: '#22c55e' },
 };
+
+// Task #1107: review modal shown BEFORE any Tekmetric write. Mirrors the
+// enhance-notes modal (checkboxes + select-all + editable text + Cancel/Apply)
+// and AutoFlow's showAfReviewModal. Cancel / Esc / overlay click dismiss with
+// zero writes; dismissal is blocked while the apply is in flight. Only the
+// checked items are sent back via PREFILL_DVI_APPLY.
+function showPrefillReviewModal(msg) {
+  const updates = Array.isArray(msg?.updates) ? msg.updates : [];
+  if (updates.length === 0) {
+    showToast('No matching DVI items to pre-fill', 'info');
+    resetPrefillButton();
+    return;
+  }
+
+  const existing = document.getElementById('mos-prefill-review-modal');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'mos-prefill-review-modal';
+  Object.assign(overlay.style, {
+    position: 'fixed', top: '0', left: '0', width: '100vw', height: '100vh',
+    backgroundColor: 'rgba(0,0,0,0.5)', zIndex: '999999',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+  });
+
+  const modal = document.createElement('div');
+  Object.assign(modal.style, {
+    backgroundColor: '#fff', borderRadius: '12px', width: '680px', maxWidth: '90vw',
+    maxHeight: '80vh', display: 'flex', flexDirection: 'column',
+    boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+  });
+
+  const header = document.createElement('div');
+  Object.assign(header.style, {
+    padding: '16px 20px', borderBottom: '1px solid #e5e7eb',
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+  });
+  const veh = msg?.vehicle
+    ? [msg.vehicle.year, msg.vehicle.make, msg.vehicle.model].filter(Boolean).join(' ')
+    : '';
+  header.innerHTML = `<div style="font-size:16px;font-weight:600;color:#111">Review DVI Pre-fill <span style="color:#6b7280;font-weight:400;font-size:13px">(${updates.length} item${updates.length === 1 ? '' : 's'}${veh ? ' · ' + escapeHtml(veh) : ''})</span></div>`;
+
+  const selectAllWrap = document.createElement('label');
+  Object.assign(selectAllWrap.style, { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#6b7280', cursor: 'pointer' });
+  const selectAllCb = document.createElement('input');
+  selectAllCb.type = 'checkbox';
+  selectAllCb.checked = true;
+  selectAllWrap.appendChild(selectAllCb);
+  selectAllWrap.appendChild(document.createTextNode('Select all'));
+  header.appendChild(selectAllWrap);
+  modal.appendChild(header);
+
+  // Legend so techs learn what each basis badge means (matches summary modal).
+  const legend = document.createElement('div');
+  Object.assign(legend.style, {
+    padding: '10px 20px', borderBottom: '1px solid #f3f4f6',
+    display: 'flex', flexWrap: 'wrap', gap: '10px', fontSize: '11px', color: '#6b7280',
+  });
+  ['recently_performed', 'inspection_history', 'vhi'].forEach((key) => {
+    const meta = PREFILL_BASIS_META[key];
+    const chip = document.createElement('span');
+    chip.title = meta.title;
+    Object.assign(chip.style, { display: 'inline-flex', alignItems: 'center', gap: '5px' });
+    chip.innerHTML = `<span style="display:inline-block;font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;background:${meta.bg};color:${meta.color}">${meta.label}</span>`;
+    const desc = document.createElement('span');
+    desc.textContent = key === 'recently_performed'
+      ? 'recently done'
+      : key === 'inspection_history'
+        ? 'prior finding'
+        : 'interval guess';
+    chip.appendChild(desc);
+    legend.appendChild(chip);
+  });
+  modal.appendChild(legend);
+
+  const body = document.createElement('div');
+  Object.assign(body.style, { overflowY: 'auto', padding: '12px 20px', flex: '1' });
+
+  const checkboxes = [];
+
+  updates.forEach((u, idx) => {
+    const meta = PREFILL_BASIS_META[u.basis] || PREFILL_BASIS_META.vhi;
+    const statusMeta = PREFILL_STATUS_META[u.status];
+
+    const card = document.createElement('div');
+    Object.assign(card.style, {
+      border: '1px solid #e5e7eb', borderLeft: `3px solid ${meta.color}`,
+      borderRadius: '8px', padding: '10px 12px', marginBottom: '8px',
+      backgroundColor: '#fafafa',
+    });
+
+    const topRow = document.createElement('div');
+    Object.assign(topRow.style, { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' });
+
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = true;
+    cb.dataset.idx = idx;
+    checkboxes.push(cb);
+    topRow.appendChild(cb);
+
+    const taskLabel = document.createElement('span');
+    Object.assign(taskLabel.style, { fontWeight: '600', fontSize: '13px', color: '#111', flex: '1', minWidth: '0' });
+    taskLabel.textContent = u.taskName || 'Inspection item';
+    topRow.appendChild(taskLabel);
+
+    if (statusMeta) {
+      const statusBadge = document.createElement('span');
+      Object.assign(statusBadge.style, {
+        fontSize: '10px', fontWeight: '600', padding: '2px 6px', borderRadius: '4px',
+        backgroundColor: statusMeta.color + '22', color: statusMeta.color, whiteSpace: 'nowrap',
+      });
+      statusBadge.textContent = statusMeta.label;
+      topRow.appendChild(statusBadge);
+    }
+
+    const basisBadge = document.createElement('span');
+    basisBadge.title = meta.title;
+    Object.assign(basisBadge.style, {
+      fontSize: '10px', fontWeight: '600', padding: '2px 6px', borderRadius: '4px',
+      backgroundColor: meta.bg, color: meta.color, whiteSpace: 'nowrap', cursor: 'help',
+    });
+    basisBadge.textContent = meta.label;
+    topRow.appendChild(basisBadge);
+
+    card.appendChild(topRow);
+
+    const findingInput = document.createElement('textarea');
+    findingInput.value = u.finding || '';
+    findingInput.placeholder = 'Finding (optional)';
+    findingInput.dataset.idx = idx;
+    Object.assign(findingInput.style, {
+      width: '100%', minHeight: '44px', padding: '8px', border: '1px solid #d1d5db',
+      borderRadius: '6px', fontSize: '13px', color: '#111', resize: 'vertical',
+      lineHeight: '1.4', boxSizing: 'border-box',
+    });
+    card.appendChild(findingInput);
+
+    body.appendChild(card);
+  });
+
+  selectAllCb.addEventListener('change', () => {
+    checkboxes.forEach(cb => { cb.checked = selectAllCb.checked; });
+  });
+
+  modal.appendChild(body);
+
+  const footer = document.createElement('div');
+  Object.assign(footer.style, {
+    padding: '12px 20px', borderTop: '1px solid #e5e7eb',
+    display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '10px',
+  });
+
+  const statusEl = document.createElement('div');
+  Object.assign(statusEl.style, { marginRight: 'auto', fontSize: '12px', color: '#6b7280' });
+  statusEl.textContent = 'Nothing is written until you apply.';
+  footer.appendChild(statusEl);
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.textContent = 'Cancel';
+  Object.assign(cancelBtn.style, {
+    padding: '8px 16px', borderRadius: '6px', border: '1px solid #d1d5db',
+    backgroundColor: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: '500',
+  });
+  const dismissReviewModal = () => {
+    document.removeEventListener('keydown', onReviewModalKeydown, true);
+    overlay.remove();
+    resetPrefillButton();
+  };
+  const onReviewModalKeydown = (e) => {
+    if (!overlay.isConnected) {
+      // Modal was closed by another path (apply complete/failed); self-clean.
+      document.removeEventListener('keydown', onReviewModalKeydown, true);
+      return;
+    }
+    if (e.key !== 'Escape') return;
+    if (cancelBtn.disabled) return; // apply in flight — don't dismiss
+    e.preventDefault();
+    e.stopPropagation();
+    dismissReviewModal();
+  };
+  cancelBtn.addEventListener('click', () => { if (!cancelBtn.disabled) dismissReviewModal(); });
+  document.addEventListener('keydown', onReviewModalKeydown, true);
+
+  const applyBtn = document.createElement('button');
+  applyBtn.textContent = 'Apply to DVI';
+  Object.assign(applyBtn.style, {
+    padding: '8px 16px', borderRadius: '6px', border: 'none',
+    backgroundColor: '#8B5CF6', color: '#fff', cursor: 'pointer',
+    fontSize: '13px', fontWeight: '600',
+  });
+  applyBtn.addEventListener('click', () => {
+    const approved = [];
+    checkboxes.forEach((cb, idx) => {
+      if (cb.checked) {
+        const textarea = body.querySelector(`textarea[data-idx="${idx}"]`);
+        approved.push(Object.assign({}, updates[idx], {
+          finding: textarea ? textarea.value : updates[idx].finding,
+        }));
+      }
+    });
+
+    if (approved.length === 0) {
+      showToast('No items selected', 'info');
+      return;
+    }
+
+    applyBtn.disabled = true;
+    applyBtn.textContent = 'Applying...';
+    applyBtn.style.opacity = '0.6';
+    applyBtn.style.cursor = 'wait';
+    cancelBtn.disabled = true;
+    statusEl.textContent = `Applying ${approved.length} item${approved.length === 1 ? '' : 's'}…`;
+
+    safeSendMessage({
+      action: 'PREFILL_DVI_APPLY',
+      inspectionId: msg.inspectionId,
+      context: msg.context,
+      vehicle: msg.vehicle || null,
+      approved: approved,
+    }, () => {});
+  });
+
+  footer.appendChild(cancelBtn);
+  footer.appendChild(applyBtn);
+  modal.appendChild(footer);
+  overlay.appendChild(modal);
+
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay && !cancelBtn.disabled) {
+      dismissReviewModal();
+    }
+  });
+
+  document.body.appendChild(overlay);
+}
 
 // Task #744: after a DVI pre-fill runs, show a read-only summary that explains
 // WHY each item was auto-filled (basis badge) before reloading the RO. The
