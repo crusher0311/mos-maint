@@ -1,0 +1,100 @@
+2026-08-14T15:31:25.793043336Z > mos-maintenance-mvp@1.8.0 postbuild
+2026-08-14T15:31:25.793046692Z > EXT_AUTOPUBLISH_TRIGGER=postbuild tsx scripts/auto-publish-extension.ts
+2026-08-14T15:31:25.793048456Z 
+2026-08-14T15:31:26.617091566Z [ext:auto-publish] CWS secrets not configured (CWS_CLIENT_ID/SECRET/REFRESH_TOKEN/ITEM_ID). Skipping auto-publish for v1.33.0.
+2026-08-14T15:31:26.649128926Z Build complete!
+2026-08-14T15:31:28.348929073Z ==> Uploading build...
+2026-08-14T15:32:00.620328675Z ==> Uploaded in 24.7s. Compression took 7.5s
+2026-08-14T15:32:00.63546672Z ==> Build successful 🎉
+2026-08-14T15:32:02.590553863Z ==> Deploying...
+2026-08-14T15:32:02.733415283Z ==> Setting WEB_CONCURRENCY=4 by default, based on available CPUs in the instance
+2026-08-14T15:33:00.428828729Z ==> Running 'node scripts/start-with-workers.js'
+2026-08-14T15:33:00.462417264Z ============================================================
+2026-08-14T15:33:00.46284222Z MOS Maintenance MVP - Production Start
+2026-08-14T15:33:00.462861561Z ============================================================
+2026-08-14T15:33:00.462896503Z Port: 10000
+2026-08-14T15:33:00.462907144Z Production URL: https://mos.tools
+2026-08-14T15:33:00.462924295Z 
+2026-08-14T15:33:00.463141908Z [1/3] Starting Next.js server...
+2026-08-14T15:33:01.107683713Z   ▲ Next.js 14.2.5
+2026-08-14T15:33:01.10796114Z   - Local:        http://localhost:10000
+2026-08-14T15:33:01.107979211Z   - Network:      http://0.0.0.0:10000
+2026-08-14T15:33:01.108088637Z 
+2026-08-14T15:33:01.108150341Z  ✓ Starting...
+2026-08-14T15:33:01.394971946Z  ✓ Ready in 477ms
+2026-08-14T15:33:02.110802919Z [HostLoadSampler] started (interval=30000ms)
+2026-08-14T15:33:02.118931802Z [Cron] Starting in-process scheduler (instance=srv-d55jaqkhg0os73a5dd8g-5955b68d6d-kr9wg-91-1786721582118, base=http://127.0.0.1:10000)
+2026-08-14T15:33:02.118957484Z [Cron] TEKMETRIC_BACKFILL_PAUSE_UNTIL=2026-08-15T03:00:00Z — fullpage-backfill-tekmetric, weekday-backfill-boost suppressed for next ~687min (auto-resumes after cutoff)
+2026-08-14T15:33:02.137255062Z [Cron]   • tekmetric-incremental-sync   */30 * * * *    UTC              GET   /api/cron/tekmetric-incremental-sync
+2026-08-14T15:33:02.139977067Z [Cron]   • protractor-sync              */30 * * * *    UTC              GET   /api/cron/protractor-sync
+2026-08-14T15:33:02.143127288Z [Cron]   • shopware-sync                */30 * * * *    UTC              GET   /api/cron/shopware-sync
+2026-08-14T15:33:02.145673182Z [Cron]   • shopmonkey-incremental-sync  4,34 * * * *    UTC              GET   /api/cron/shopmonkey-incremental-sync
+2026-08-14T15:33:02.14828759Z [Cron]   • shopmonkey-fullpage-backfill 3-58/5 * * * *  UTC              GET   /api/cron/shopmonkey-fullpage-backfill
+2026-08-14T15:33:02.151155324Z [Cron]   • tekmetric-backfill           0 1 * * *       UTC              GET   /api/cron/tekmetric-backfill
+2026-08-14T15:33:02.155227541Z [Cron]   • weekend-backfill-boost       0,15,30,45 * * * 6,0 UTC              GET   /api/cron/tekmetric-backfill
+2026-08-14T15:33:02.160963838Z [Cron]   • monday-backfill-catchup-boost 0,15,30,45 0-11 * * 1 UTC              GET   /api/cron/tekmetric-backfill
+2026-08-14T15:33:02.163293599Z [Cron]   • weekday-backfill-boost       0,15,30,45 * * * 2-5 UTC              GET   /api/cron/tekmetric-backfill
+2026-08-14T15:33:02.166222607Z [Cron]   • protractor-backfill          0 2 * * *       UTC              GET   /api/cron/protractor-backfill
+2026-08-14T15:33:02.170358637Z [Cron]   • protractor-weekend-boost     5,20,35,50 * * * 6,0 UTC              GET   /api/cron/protractor-backfill
+2026-08-14T15:33:02.174619385Z [Cron]   • protractor-weekday-boost     5,20,35,50 2-11 * * 2-5 UTC              GET   /api/cron/protractor-backfill
+2026-08-14T15:33:02.177356491Z [Cron]   • shopware-backfill            0 3 * * *       UTC              GET   /api/cron/shopware-backfill
+2026-08-14T15:33:02.181327052Z [Cron]   • shopware-weekend-boost       10,25,40,55 * * * 6,0 UTC              GET   /api/cron/shopware-backfill
+2026-08-14T15:33:02.183652932Z [Cron]   • new-shop-backfill-fastpath   */5 * * * *     UTC              GET   /api/cron/tekmetric-backfill?fastpath=newShops
+2026-08-14T15:33:02.186224659Z [Cron]   • protractor-new-shop-fastpath 2-59/5 * * * *  UTC              GET   /api/cron/protractor-backfill?fastpath=newShops
+2026-08-14T15:33:02.188485636Z [Cron]   • fullpage-backfill-tekmetric  */2 * * * *     UTC              GET   /api/cron/tekmetric-fullpage-backfill
+2026-08-14T15:33:02.191004398Z [Cron]   • shopware-enrich              15 * * * *      UTC              GET   /api/cron/shopware-enrich
+2026-08-14T15:33:02.193422064Z [Cron]   • backfill-reconcile           30 * * * *      UTC              GET   /api/cron/backfill-reconcile
+2026-08-14T15:33:02.195619468Z [Cron]   • drift-reconcile              12,27,42,57 * * * * UTC              GET   /api/cron/drift-reconcile
+2026-08-14T15:33:02.198609759Z [Cron]   • log-sync                     */15 * * * *    UTC              GET   /api/cron/log-sync
+2026-08-14T15:33:02.200907238Z [Cron]   • dashboard-refresh            */10 * * * *    UTC              GET   /api/cron/dashboard-refresh
+2026-08-14T15:33:02.204347186Z [Cron]   • specs-warm                   20 4 * * *      UTC              GET   /api/cron/specs-warm
+2026-08-14T15:33:02.207059761Z [Cron]   • dvi-link-fetch               7,22,37,52 * * * * UTC              GET   /api/cron/dvi-link-fetch
+2026-08-14T15:33:02.210669939Z [Cron]   • sales-coach-scenarios        50 10 * * *     UTC              GET   /api/cron/sales-coach-scenarios
+2026-08-14T15:33:02.213847682Z [Cron]   • daily-grace-check            0 8 * * *       UTC              GET   /api/cron/daily-grace-check
+2026-08-14T15:33:02.216471141Z [Cron]   • tekmetric-webhook-health     7 * * * *       UTC              GET   /api/cron/tekmetric-webhook-health
+2026-08-14T15:33:02.22025156Z [Cron]   • protractor-webhook-health    17 * * * *      UTC              GET   /api/cron/protractor-webhook-health
+2026-08-14T15:33:02.224009297Z [Cron]   • webhook-subscription-sweep   43 4 * * *      UTC              GET   /api/cron/webhook-subscription-sweep
+2026-08-14T15:33:02.227228582Z [Cron]   • tekmetric-ro-retry           30 5 * * *      UTC              GET   /api/cron/tekmetric-ro-retry
+2026-08-14T15:33:02.234984292Z [Cron]   • tekmetric-backfill-health    30 6 * * *      UTC              GET   /api/cron/tekmetric-backfill-health
+2026-08-14T15:33:02.237806433Z [Cron]   • backfill-chunk-speed-health  0 7 * * *       UTC              GET   /api/cron/backfill-chunk-speed-health
+2026-08-14T15:33:02.240212059Z [Cron]   • cron-health-alerter          */30 * * * *    UTC              GET   /api/cron/cron-health-alerter
+2026-08-14T15:33:02.243110825Z [Cron]   • backfill-load-alerter        30 7 * * *      UTC              GET   /api/cron/backfill-load-alerter
+2026-08-14T15:33:02.245588804Z [Cron]   • pipeline-stall-alerter       */30 * * * *    UTC              GET   /api/cron/pipeline-stall-alerter
+2026-08-14T15:33:02.249154871Z [Cron]   • data-quality                 0 2 * * *       UTC              POST  /api/cron/data-quality
+2026-08-14T15:33:02.252754289Z [Cron]   • daily-all                    0 4 * * *       UTC              GET   /api/cron/daily-all
+2026-08-14T15:33:02.255009255Z [Cron]   • synthetic-prod-smoke         */5 * * * *     UTC              GET   /api/cron/synthetic-prod-smoke
+2026-08-14T15:33:02.257668536Z [Cron]   • synthetic-overlay-smoke      */30 * * * *    UTC              GET   /api/cron/synthetic-overlay-smoke
+2026-08-14T15:33:02.260729832Z [Cron]   • worker-resume-nightly        0 18 * * 1-5    America/Chicago  GET   /api/cron/worker-power?action=resume
+2026-08-14T15:33:02.264892234Z [Cron]   • worker-pause-morning         0 5 * * 1-5     America/Chicago  GET   /api/cron/worker-power?action=pause
+2026-08-14T15:33:02.268246817Z [Cron]   • compute-activity-profiles    0 9 * * *       UTC              GET   /api/cron/compute-activity-profiles
+2026-08-14T15:33:02.268263848Z [Cron] 42 jobs registered and scheduled
+2026-08-14T15:33:03.149517193Z [Cron] lastSuccessByJob seed: nothing to backfill
+2026-08-14T15:33:03.469138864Z [Startup] Waiting for server... (attempt 1/30)
+2026-08-14T15:33:03.488954375Z [Startup] Server is ready! (status: 401)
+2026-08-14T15:33:03.489732572Z [2/3] Starting Tekmetric Sync Worker...
+2026-08-14T15:33:03.491254724Z [3/4] Protractor Sync Worker DISABLED (using webhooks + daily cron)
+2026-08-14T15:33:03.491265055Z [4/5] Starting Plan Prefetch Worker...
+2026-08-14T15:33:03.492822919Z 
+2026-08-14T15:33:03.49283831Z ============================================================
+2026-08-14T15:33:03.492848081Z All services started!
+2026-08-14T15:33:03.492966848Z - Next.js server on port 10000
+2026-08-14T15:33:03.492976408Z - Tekmetric Sync Worker (every 60s)
+2026-08-14T15:33:03.493057333Z - Protractor Sync Worker DISABLED (daily cron + webhooks)
+2026-08-14T15:33:03.493063044Z - Plan Prefetch Worker (every 30m)
+2026-08-14T15:33:03.49315961Z ============================================================
+2026-08-14T15:33:04.294191584Z Tekmetric Incremental Sync Worker started
+2026-08-14T15:33:04.294241197Z Base sync interval: 60 seconds
+2026-08-14T15:33:04.294250458Z Max retries: 3
+2026-08-14T15:33:04.294254398Z API URL: http://localhost:10000/api/cron/tekmetric-incremental-sync
+2026-08-14T15:33:04.294276409Z 
+2026-08-14T15:33:04.296978643Z [PlanPrefetch] Script loaded
+2026-08-14T15:33:04.297176875Z [PlanPrefetch] Worker starting...
+2026-08-14T15:33:04.297185796Z [PlanPrefetch] Will run every 30 minutes
+2026-08-14T15:33:04.297200337Z [PlanPrefetch] Waiting 120s for server warmup...
+2026-08-14T15:33:08.727060898Z ==> Your service is live 🎉
+2026-08-14T15:33:09.043858894Z ==> 
+2026-08-14T15:33:09.050935087Z ==> ///////////////////////////////////////////////////////////
+2026-08-14T15:33:09.055276363Z ==> 
+2026-08-14T15:33:09.060729508Z ==> Available at your primary URL https://mos.tools + 2 more domains
+2026-08-14T15:33:09.067329962Z ==> 
+2026-08-14T15:33:09.073411368Z ==> ///////////////////////////////////////////////////////////
