@@ -138,3 +138,4 @@
 - [GitHub push vs credential helper](github-push-credential-helper.md) — managed gitPush rejects any configured credential.helper (DANGEROUS_CONFIG); unset → push → restore.
 - [Negative cache over stale positive entries](negative-cache-data-transition.md) — failure markers sharing a doc with cached data must $unset the stale payload or the backoff gate never fires and bumped cachedAt fakes freshness.
 - [Normalized money units per provider](normalized-money-units.md) — WO grand_total is CENTS for tekmetric only; service-job money is DOLLARS for all providers; created_at=import time; declined jobs often $0.
+- [Extension telemetry pipeline](extension-telemetry-pipeline.md) — event names allowlisted on BOTH extension emitter and server route (server drops unknowns); slow-call floor is server-env-tunable; client throttles per-signature via shared telemetry-core.js.

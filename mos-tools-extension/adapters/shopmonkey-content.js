@@ -27,6 +27,19 @@ function reportActionDropped(action, reason, extra) {
   } catch (_) { /* no-op */ }
 }
 
+// Task #1112: report uncaught extension-origin JS errors (throttled).
+try {
+  globalThis.MosTelemetryCore?.installErrorHooks({
+    surface: "content",
+    provider: "shopmonkey",
+    requireExtensionOrigin: true,
+    // Shop-scope the error throttle: single-host SPA can switch locations
+    // without a page reload.
+    getScope: () => { try { return (lastContext && lastContext.shopId) || null; } catch (_) { return null; } },
+    send: (payload) => safeSendMessage({ action: "REPORT_TELEMETRY", event: "client.error", payload }),
+  });
+} catch (_) { /* never throw from telemetry */ }
+
 let lastContext = null;
 let contextCheckInterval = null;
 

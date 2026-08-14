@@ -1,5 +1,23 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.33.0 — 2026-08-13
+
+### Added
+- **Extension error + slowness telemetry (Task #1112).** Every MOS API
+  call through the background fetch proxy now records its duration:
+  calls over 5s emit an `api.slow_call` event (endpoint shape,
+  durationMs, status), and `api.fetch_failure` / `auth.soft_expired`
+  events now carry `durationMs`. Uncaught JS errors and unhandled
+  promise rejections in the background worker, content scripts
+  (extension-origin only — page errors are ignored), and side panel emit
+  a privacy-safe `client.error` event (sanitized message, surface,
+  version — no stacks, no PII). Both are throttled per signature via the
+  new shared `telemetry-core.js`, with suppressed occurrences counted
+  into the next emitted event, so a render loop or a pathologically slow
+  shop can't flood the 120/min per-shop server limit. Ship order:
+  server first (new allowlist), extension second — the server drops
+  unknown event names.
+
 ## 1.31.0 — 2026-08-12
 
 ### Added

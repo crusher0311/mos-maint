@@ -20,6 +20,21 @@ function reportActionDropped(action, reason, extra) {
   } catch (_) { /* no-op */ }
 }
 
+// Task #1112: report uncaught extension-origin JS errors from this content
+// script. The page shares this window, so only errors sourced from a
+// chrome-extension:// file are reported (throttled per signature).
+try {
+  globalThis.MosTelemetryCore?.installErrorHooks({
+    surface: "content",
+    provider: "tekmetric",
+    requireExtensionOrigin: true,
+    // Shop-scope the error throttle: SPA navigation can move this
+    // long-lived content script between shops without a page reload.
+    getScope: () => { try { return (lastContext && lastContext.shopId) || null; } catch (_) { return null; } },
+    send: (payload) => safeSendMessage({ action: "REPORT_TELEMETRY", event: "client.error", payload }),
+  });
+} catch (_) { /* never throw from telemetry */ }
+
 let lastContext = null;
 let contextCheckInterval = null;
 

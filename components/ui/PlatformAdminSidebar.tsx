@@ -214,6 +214,7 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
           <NavLink href="/platform-admin/concern-skip-stats" icon={MessageCircle} label="Concern Skip Stats" />
           <NavLink href="/platform-admin/tekmetric-migrations" icon={ArrowRightLeft} label="Tek Migrations" />
           <NavLink href="/platform-admin/api-usage" icon={Activity} label="API Traffic" />
+          <NavLink href="/platform-admin/extension-telemetry" icon={Activity} label="Ext Telemetry" />
           <NavLink href="/platform-admin/partner-keys" icon={KeyRound} label="Partner Keys" />
           <NavLink href="/platform-admin/shopware-authorizations" icon={KeyRound} label="Shop-Ware Auths" />
           <NavLink href="/platform-admin/job-analytics" icon={BarChart3} label="Job Analytics" />

@@ -60,6 +60,11 @@ function loadHandler() {
     // above the extracted slice, so stub it as a no-op (the test asserts
     // token state + error codes, not telemetry).
     reportTelemetry: () => {},
+    // Task #1112 timing telemetry — the slice calls these plus Date.now
+    // and MosTelemetryCore; this test asserts token state, not telemetry.
+    reportSlowCallIfNeeded: () => {},
+    MosTelemetryCore: { buildThrownFetchFailure: () => ({ emit: false, payload: null }) },
+    Date,
     Promise,
     Error,
     Set,
@@ -75,6 +80,7 @@ function loadHandler() {
     },
     fetch: async () => { throw new Error("fetch not stubbed"); },
     encodeURIComponent,
+    currentSmsContext: null,
     mosApiToken: null,
     mosApiUrl: "http://test",
     _stateReady: Promise.resolve(),

@@ -12,6 +12,24 @@ function reportActionDropped(action, reason, extra) {
   } catch (_) { /* no-op */ }
 }
 
+// Task #1112: report uncaught extension-origin JS errors (throttled).
+try {
+  globalThis.MosTelemetryCore?.installErrorHooks({
+    surface: "content",
+    provider: "autoflow",
+    requireExtensionOrigin: true,
+    // Shop-scope the error throttle (v4 SPA can change shop slug in-tab).
+    getScope: () => { try { return (lastContext && lastContext.shopId) || null; } catch (_) { return null; } },
+    send: (payload) => {
+      try {
+        if (!chrome.runtime?.id) return;
+        const p = chrome.runtime.sendMessage({ action: "REPORT_TELEMETRY", event: "client.error", payload });
+        if (p && p.catch) p.catch(() => {});
+      } catch (_) {}
+    },
+  });
+} catch (_) { /* never throw from telemetry */ }
+
 let lastContext = null;
 let contextCheckInterval = null;
 

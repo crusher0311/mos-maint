@@ -6,6 +6,10 @@ import { createStickerConfigCache } from './lib/sticker-config-cache.js';
 // shared with the content scripts which load it as a classic script).
 import './undo-core.js';
 const MosUndoCore = globalThis.MosUndoCore;
+// Side-effect import: sets globalThis.MosTelemetryCore (pure throttle /
+// sanitize helpers shared with content scripts + sidepanel, Task #1112).
+import './telemetry-core.js';
+const MosTelemetryCore = globalThis.MosTelemetryCore;
 
 // ==================== STATE MANAGEMENT ====================
 let mosApiToken = null;
@@ -254,7 +258,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // mosApiToken in their scope), so they relay via the background worker.
   if (message.action === "REPORT_TELEMETRY") {
     try {
-      reportTelemetry(message.event, message.payload || {});
+      handleRelayedTelemetry(message.event, message.payload || {});
     } catch (_) { /* never throw from telemetry */ }
     sendResponse({ ok: true });
     return false;
@@ -1723,11 +1727,16 @@ function reportTelemetry(name, payload) {
   try {
     if (!name) return;
     const ctx = currentSmsContext || {};
+    // Task #1112: a payload that DECLARES smsShopId/provider (even null —
+    // e.g. a request started before any shop context existed) owns its
+    // attribution; only undeclared payloads fall back to the mutable
+    // global context. This keeps request-start snapshots authoritative.
+    const hasOwn = (k) => payload != null && Object.prototype.hasOwnProperty.call(payload, k);
     const ev = {
       event: String(name),
       occurredAt: Date.now(),
-      provider: (payload && payload.provider) || ctx.provider || null,
-      smsShopId: (payload && payload.smsShopId) || ctx.shopId || null,
+      provider: hasOwn("provider") ? payload.provider : (ctx.provider || null),
+      smsShopId: hasOwn("smsShopId") ? payload.smsShopId : (ctx.shopId || null),
       endpoint: (payload && payload.endpoint) || null,
       payload: payload || {},
     };
@@ -1742,6 +1751,131 @@ function reportTelemetry(name, payload) {
     }
   } catch (_) { /* never throw from telemetry */ }
 }
+
+// -------------------- Task #1112: client error + slow-call telemetry --------------------
+// Throttle client.error by (surface, message-signature) so a render-loop
+// bug can't flood the pipeline: 3 emits per signature per 5 min, with
+// suppressed occurrences counted into the next emitted event.
+const _clientErrorThrottle = MosTelemetryCore.createSignatureThrottle({
+  windowMs: 5 * 60 * 1000,
+  maxPerWindow: 3,
+});
+// Slow calls: at most 2 emits per endpoint per minute; suppressed slow
+// calls fold into the next event's `count` so a pathologically slow shop
+// stays far under the server's 120/min per-shop rate limit.
+const _slowCallThrottle = MosTelemetryCore.createSignatureThrottle({
+  windowMs: 60 * 1000,
+  maxPerWindow: 2,
+});
+
+// Report a client-side JS error (uncaught exception / unhandled promise
+// rejection). Message only — never a stack (stacks can embed page
+// content/URLs). NEVER throws.
+function reportClientError(surface, rawMessage) {
+  try {
+    const message = MosTelemetryCore.sanitizeErrorMessage(rawMessage);
+    // Shop-scoped signature: suppressed occurrences from one shop must
+    // never fold into an event attributed to another shop.
+    const ctx = currentSmsContext || {};
+    const shopKey = ctx.shopId != null ? String(ctx.shopId) : "unknown";
+    const sig = `${shopKey}|${MosTelemetryCore.errorSignature(surface, message)}`;
+    const t = _clientErrorThrottle.note(sig);
+    if (!t.emit) return;
+    reportTelemetry("client.error", {
+      surface: surface || "unknown",
+      message,
+      count: 1 + (t.suppressedSinceLastEmit || 0),
+      // Pin attribution to the shop the throttle bucket belongs to.
+      smsShopId: ctx.shopId || null,
+      provider: ctx.provider || null,
+    });
+  } catch (_) { /* never throw from telemetry */ }
+}
+
+// Emit api.slow_call for a completed MOS API request that exceeded the
+// threshold. Endpoint shape only (query stripped, ids masked server-side
+// too). NEVER throws into the foreground fetch path.
+function reportSlowCallIfNeeded(endpoint, durationMs, status, ctxAtStart) {
+  try {
+    if (typeof durationMs !== "number" || durationMs < MosTelemetryCore.SLOW_CALL_THRESHOLD_MS) return;
+    if (endpoint && endpoint.indexOf("/api/extension/telemetry") !== -1) return;
+    const shape = String(endpoint || "").split("?")[0];
+    // Attribution is snapshotted at REQUEST START by the caller and the
+    // throttle bucket is shop-scoped, so a suppressed slow call from one
+    // shop can never be folded into (or attributed to) another shop even
+    // if the advisor switches tabs mid-request.
+    const ctx = ctxAtStart || currentSmsContext || {};
+    const shopKey = ctx.shopId != null ? String(ctx.shopId) : "unknown";
+    const t = _slowCallThrottle.note(`slow|${shopKey}|${shape}`);
+    if (!t.emit) return;
+    reportTelemetry("api.slow_call", {
+      endpoint: shape,
+      durationMs: Math.round(durationMs),
+      thresholdMs: MosTelemetryCore.SLOW_CALL_THRESHOLD_MS,
+      status: typeof status === "number" ? status : null,
+      count: 1 + (t.suppressedSinceLastEmit || 0),
+      smsShopId: ctx.shopId || null,
+      provider: ctx.provider || null,
+    });
+  } catch (_) { /* never throw from telemetry */ }
+}
+
+// Relayed telemetry from content scripts / the side panel. For
+// client.error the sender either scoped itself (payload.smsShopId from
+// its getScope hook) or we stamp the shop at RECEIPT time — an error is
+// relayed instantly, so receipt-time context is the error's context.
+// Attribution is pinned into the payload so the buffered flush can never
+// re-read a mutated global context later.
+// The relay is also the AUTHORITATIVE cross-surface client.error
+// throttle: shop-scoped buckets with occurrence-weighted carry-over, so
+// a surface whose local throttle isn't shop-aware still can't leak
+// suppressed counts across shops here.
+const _relayErrorThrottle = MosTelemetryCore.createSignatureThrottle({
+  windowMs: 5 * 60 * 1000,
+  maxPerWindow: 3,
+});
+const _relayPendingCounts = new Map(); // sig → suppressed occurrence total
+const RELAY_PENDING_MAX_SIGS = 200;
+
+function handleRelayedTelemetry(event, payload) {
+  try {
+    const p = payload || {};
+    if (event !== "client.error") {
+      reportTelemetry(event, p);
+      return;
+    }
+    if (p.smsShopId == null) {
+      const ctx = currentSmsContext || {};
+      if (ctx.shopId != null) p.smsShopId = ctx.shopId;
+      if (p.provider == null && ctx.provider != null) p.provider = ctx.provider;
+    }
+    const shopKey = p.smsShopId != null ? String(p.smsShopId) : "unknown";
+    const sig = `relay|${shopKey}|${MosTelemetryCore.errorSignature(p.surface, p.message)}`;
+    const inc = typeof p.count === "number" && isFinite(p.count) && p.count > 0 ? Math.round(p.count) : 1;
+    const t = _relayErrorThrottle.note(sig);
+    if (!t.emit) {
+      // Fold occurrences into THIS shop's bucket only.
+      if (_relayPendingCounts.size < RELAY_PENDING_MAX_SIGS || _relayPendingCounts.has(sig)) {
+        _relayPendingCounts.set(sig, (_relayPendingCounts.get(sig) || 0) + inc);
+      }
+      return;
+    }
+    p.count = inc + (_relayPendingCounts.get(sig) || 0);
+    _relayPendingCounts.delete(sig);
+    reportTelemetry(event, p);
+  } catch (_) { /* never throw from telemetry */ }
+}
+
+// Unhandled errors in the background service worker itself.
+try {
+  self.addEventListener("error", (e) => {
+    reportClientError("background", e?.message || e?.error?.message || "uncaught error");
+  });
+  self.addEventListener("unhandledrejection", (e) => {
+    const r = e?.reason;
+    reportClientError("background", (r && (r.message || String(r))) || "unhandled rejection");
+  });
+} catch (_) { /* older runtimes */ }
 
 // Task #502: 401 retry policy.
 //
@@ -1832,6 +1966,43 @@ async function handleMosApiRequest(endpoint, options = {}) {
     throw new Error("Not authenticated with MOS");
   }
 
+  // Task #1112: record wall-clock duration of the whole request (incl.
+  // 401 retries) so slow calls and failures carry timing. The telemetry
+  // helpers below never throw into this foreground path. The whole
+  // request/retry flow is wrapped so THROWN failures (network error,
+  // MOS_REQUEST_TIMEOUT abort, a failure mid-retry) also emit
+  // api.fetch_failure with durationMs — errors already reported at
+  // their throw site are marked `_mosTelemetryReported` and skipped.
+  const _startedAt = Date.now();
+  // Snapshot shop/provider attribution at request start — the global
+  // context is mutable and the advisor may switch tabs mid-request.
+  const _ctxAtStart = currentSmsContext
+    ? { provider: currentSmsContext.provider || null, shopId: currentSmsContext.shopId || null }
+    : null;
+  try {
+    return await _handleMosApiRequestTimed(endpoint, options, _startedAt, _ctxAtStart);
+  } catch (err) {
+    try {
+      const durationMs = Date.now() - _startedAt;
+      // fetch_failure is deduplicated (branches that already emitted mark
+      // the error), but slow-call finalization runs on EVERY failure path
+      // — 401 soft/terminal, 503, other !ok, and thrown network/timeout
+      // errors — so no slow proxied call escapes timing.
+      const d = MosTelemetryCore.buildThrownFetchFailure(endpoint, err, durationMs);
+      if (d.emit) {
+        // Pin attribution to the request-start snapshot, not the mutable
+        // global context (the advisor may have switched shops mid-flight).
+        d.payload.smsShopId = (_ctxAtStart && _ctxAtStart.shopId) || null;
+        d.payload.provider = (_ctxAtStart && _ctxAtStart.provider) || null;
+        reportTelemetry("api.fetch_failure", d.payload);
+      }
+      reportSlowCallIfNeeded(endpoint, durationMs, err && err._mosStatus ? err._mosStatus : 0, _ctxAtStart);
+    } catch (_) { /* never throw from telemetry */ }
+    throw err;
+  }
+}
+
+async function _handleMosApiRequestTimed(endpoint, options, _startedAt, _ctxAtStart) {
   const tokenAtStart = mosApiToken;
   let tokenUsed = tokenAtStart;
   let response = await _doMosFetch(endpoint, options, tokenUsed);
@@ -1907,10 +2078,20 @@ async function handleMosApiRequest(endpoint, options = {}) {
     const isTerminal = TERMINAL_AUTH_CODES.has(lastCode);
     if (isTerminal && mosApiToken === tokenAtStart) {
       console.log(`[MOS] 401 terminal — prompting user (code=${lastCode}) on ${endpoint}`);
-      reportTelemetry("auth.token_invalid_cleared", { endpoint, code: lastCode, status: 401 });
+      reportTelemetry("auth.token_invalid_cleared", {
+        endpoint,
+        code: lastCode,
+        status: 401,
+        durationMs: Date.now() - _startedAt,
+        smsShopId: (_ctxAtStart && _ctxAtStart.shopId) || null,
+        provider: (_ctxAtStart && _ctxAtStart.provider) || null,
+      });
       mosApiToken = null;
       chrome.storage.local.remove(['mosApiToken']);
-      throw new Error("Session expired. Please login again.");
+      const termErr = new Error("Session expired. Please login again.");
+      termErr._mosTelemetryReported = true;
+      termErr._mosStatus = 401;
+      throw termErr;
     }
     console.warn(`[MOS] 401 unresolved on ${endpoint} (code=${lastCode || 'none'}) — keeping token, surfacing soft session-expired`);
     reportTelemetry("auth.soft_expired", {
@@ -1918,10 +2099,15 @@ async function handleMosApiRequest(endpoint, options = {}) {
       code: lastCode,
       status: 401,
       retryBudgetRemaining: 0,
+      durationMs: Date.now() - _startedAt,
+      smsShopId: (_ctxAtStart && _ctxAtStart.shopId) || null,
+      provider: (_ctxAtStart && _ctxAtStart.provider) || null,
     });
     const err = new Error("Session may have expired — click to re-login");
     err.code = "MOS_SESSION_SOFT_EXPIRED";
     err.serverCode = lastCode || null;
+    err._mosTelemetryReported = true;
+    err._mosStatus = 401;
     throw err;
   }
 
@@ -1934,10 +2120,15 @@ async function handleMosApiRequest(endpoint, options = {}) {
       status: 503,
       code: errorData?.code || null,
       reason: errorData?.error || null,
+      durationMs: Date.now() - _startedAt,
+      smsShopId: (_ctxAtStart && _ctxAtStart.shopId) || null,
+      provider: (_ctxAtStart && _ctxAtStart.provider) || null,
     });
     const err = new Error(errorData.error || "Server temporarily unavailable");
     err.code = "MOS_SERVER_TRANSIENT";
     err.serverCode = errorData?.code || null;
+    err._mosTelemetryReported = true;
+    err._mosStatus = 503;
     throw err;
   }
 
@@ -1949,6 +2140,9 @@ async function handleMosApiRequest(endpoint, options = {}) {
         endpoint,
         status: response.status,
         reason: errorData?.error || null,
+        durationMs: Date.now() - _startedAt,
+        smsShopId: (_ctxAtStart && _ctxAtStart.shopId) || null,
+        provider: (_ctxAtStart && _ctxAtStart.provider) || null,
       });
     }
     const apiErr = new Error(errorData.error || `API error: ${response.status}`);
@@ -1956,9 +2150,12 @@ async function handleMosApiRequest(endpoint, options = {}) {
     // RO_NO_LINE_ITEMS) so callers can show a specific friendly message
     // instead of a generic one.
     apiErr.serverCode = errorData?.code || null;
+    apiErr._mosTelemetryReported = true;
+    apiErr._mosStatus = response.status;
     throw apiErr;
   }
 
+  reportSlowCallIfNeeded(endpoint, Date.now() - _startedAt, response.status, _ctxAtStart);
   return response.json();
 }
 

@@ -43,6 +43,25 @@ function normalizeServiceSearch(rawName) {
     .trim();
 }
 
+// Task #1112: report uncaught side-panel JS errors to the background
+// telemetry relay (throttled per signature; message only, no stacks).
+try {
+  globalThis.MosTelemetryCore?.installErrorHooks({
+    surface: "sidepanel",
+    // The side panel persists across shop switches — scope the throttle
+    // to the shop on screen so suppressed counts never cross shops.
+    getScope: () => {
+      try { return (currentContext && currentContext.shopId) || null; } catch (_) { return null; }
+    },
+    send: (payload) => {
+      try {
+        const p = chrome.runtime.sendMessage({ action: "REPORT_TELEMETRY", event: "client.error", payload });
+        if (p && p.catch) p.catch(() => {});
+      } catch (_) {}
+    },
+  });
+} catch (_) { /* never throw from telemetry */ }
+
 // ==================== STATE ====================
 let isAuthenticated = false;
 let currentUserCanWrite = true; // Conservative default; refined via GET_MOS_AUTH.
