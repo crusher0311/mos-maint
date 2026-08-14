@@ -25,8 +25,12 @@ const PREGEN_SHOP_STAGGER_MS = (() => {
 let lastPregenerateAt = 0;
 let pregenInFlight = false;
 function shouldRunPregenerate(): boolean {
-  if (pregenInFlight) return false;
-  return Date.now() - lastPregenerateAt >= PREGEN_INTERVAL_MS;
+  const elapsed = Date.now() - lastPregenerateAt;
+  // Lease semantics: within an interval the flag blocks overlap; past the
+  // interval a still-set flag means the previous pass hung (fetch/query
+  // that never settled) and is considered expired — never wedge forever.
+  if (pregenInFlight && elapsed < PREGEN_INTERVAL_MS) return false;
+  return elapsed >= PREGEN_INTERVAL_MS;
 }
 
 // Task: cron/backfill Tekmetric traffic must yield to advisor-facing
@@ -118,86 +122,84 @@ async function _GETImpl(req: NextRequest) {
     if (CRON_SECRET && shouldRunPregenerate()) {
       pregenInFlight = true;
       lastPregenerateAt = Date.now();
-      try {
-        const baseUrl = process.env.RENDER_EXTERNAL_URL 
-          || (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : null)
-          || `http://localhost:${process.env.PORT || 5000}`;
-        
-        const db = await getDb();
-        
-        // Get all Tekmetric shops - use tekmetric.shopId as the shop identifier
-        const tekmetricShops = await db.collection("shops")
-          .find({ "tekmetric.shopId": { $exists: true, $ne: null } })
-          .project({ _id: 0, shopId: 1, tekmetric: 1 })
-          .toArray();
-        
-        console.log(`[Cron] Found ${tekmetricShops.length} Tekmetric shops for pregeneration`);
-        
-        const tekmetricShopCount = tekmetricShops.length;
-        const pregenTargets: { shopId: unknown; vins: string[] }[] = [];
-        let triggeredCount = 0;
-        for (const shop of tekmetricShops) {
-          // Use internal shop.shopId (NOT tekmetric.shopId) since work orders are stored with internal ID
-          const internalShopId = shop.shopId;
-          const tekmetricShopId = shop.tekmetric?.shopId;
-          if (!internalShopId) continue;
+      // ENTIRE pass (target discovery + POST fan-out) runs detached so the
+      // cron response is never held by per-shop Mongo work. The in-flight
+      // flag is a LEASE, not a lock: shouldRunPregenerate() ignores it once
+      // PREGEN_INTERVAL_MS has elapsed, so a hung fetch/query can only
+      // suppress pregen for one interval, never permanently.
+      void (async () => {
+        let queued = 0;
+        let shopCount = 0;
+        try {
+          const baseUrl = process.env.RENDER_EXTERNAL_URL 
+            || (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : null)
+            || `http://localhost:${process.env.PORT || 5000}`;
           
-          // Get top 50 vehicles by most recent work order (dashboard order)
-          // Tekmetric work orders are stored with internal shopId (not tekmetric shopId)
+          const db = await getDb();
           
-          const recentVehicles = await db.collection("tekmetric_work_orders")
-            .aggregate([
-              { $match: { shopId: { $in: [internalShopId, String(internalShopId), Number(internalShopId)] } } },
-              { $sort: { fetchedAt: -1 } },
-              { $group: { _id: "$vin", lastUpdated: { $first: "$fetchedAt" } } },
-              { $sort: { lastUpdated: -1 } },
-              { $limit: 50 },
-            ])
+          // Get all Tekmetric shops - use tekmetric.shopId as the shop identifier
+          const tekmetricShops = await db.collection("shops")
+            .find({ "tekmetric.shopId": { $exists: true, $ne: null } })
+            .project({ _id: 0, shopId: 1, tekmetric: 1 })
             .toArray();
+          shopCount = tekmetricShops.length;
+          console.log(`[Cron] Plan pre-generation pass starting: ${shopCount} Tekmetric shops (next pass in ~${Math.round(PREGEN_INTERVAL_MS / 60000)}min)`);
           
-          const vins = recentVehicles
-            .map((v: any) => v._id as string)
-            .filter((v: string) => v && typeof v === 'string' && v.length === 17);
-          
-          if (vins.length > 0) {
-            triggeredCount++;
-            pregenTargets.push({ shopId: internalShopId, vins });
-          }
-        }
-
-        // Staggered background fan-out: one POST every PREGEN_SHOP_STAGGER_MS
-        // instead of 177 simultaneous self-requests. Intentionally NOT
-        // awaited — the cron response returns immediately; the in-flight
-        // flag keeps later cycles from starting a second run.
-        void (async () => {
-          try {
-            for (const target of pregenTargets) {
-              try {
-                await fetch(`${baseUrl}/api/internal/plan-pregenerate`, {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${CRON_SECRET}`,
-                  },
-                  body: JSON.stringify(target),
-                });
-              } catch (err: any) {
-                console.log(`[Cron] Plan pregenerate failed for shop ${target.shopId}:`, err?.message);
-              }
-              if (PREGEN_SHOP_STAGGER_MS > 0) {
-                await new Promise((r) => setTimeout(r, PREGEN_SHOP_STAGGER_MS));
-              }
+          for (const shop of tekmetricShops) {
+            // Use internal shop.shopId (NOT tekmetric.shopId) since work orders are stored with internal ID
+            const internalShopId = shop.shopId;
+            if (!internalShopId) continue;
+            
+            // Top 50 vehicles by most recent work order (dashboard order);
+            // maxTimeMS bounds the query so one bad shop can't hang the pass.
+            let vins: string[] = [];
+            try {
+              const recentVehicles = await db.collection("tekmetric_work_orders")
+                .aggregate([
+                  { $match: { shopId: { $in: [internalShopId, String(internalShopId), Number(internalShopId)] } } },
+                  { $sort: { fetchedAt: -1 } },
+                  { $group: { _id: "$vin", lastUpdated: { $first: "$fetchedAt" } } },
+                  { $sort: { lastUpdated: -1 } },
+                  { $limit: 50 },
+                ], { maxTimeMS: 30_000 })
+                .toArray();
+              vins = recentVehicles
+                .map((v: any) => v._id as string)
+                .filter((v: string) => v && typeof v === 'string' && v.length === 17);
+            } catch (aggErr: any) {
+              console.log(`[Cron] Plan pregenerate VIN discovery failed for shop ${internalShopId}:`, aggErr?.message);
+              continue;
             }
-            console.log(`[Cron] Plan pre-generation pass complete: ${pregenTargets.length}/${tekmetricShopCount} shops (staggered ${PREGEN_SHOP_STAGGER_MS}ms apart)`);
-          } finally {
-            pregenInFlight = false;
+            if (vins.length === 0) continue;
+            
+            try {
+              await fetch(`${baseUrl}/api/internal/plan-pregenerate`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${CRON_SECRET}`,
+                },
+                body: JSON.stringify({ shopId: internalShopId, vins }),
+                // Warming 50 VINs is network-bound but must not hang the
+                // lease; the route batches 5 VINs concurrently so 2 min is
+                // generous.
+                signal: AbortSignal.timeout(120_000),
+              });
+              queued++;
+            } catch (err: any) {
+              console.log(`[Cron] Plan pregenerate failed for shop ${internalShopId}:`, err?.message);
+            }
+            if (PREGEN_SHOP_STAGGER_MS > 0) {
+              await new Promise((r) => setTimeout(r, PREGEN_SHOP_STAGGER_MS));
+            }
           }
-        })();
-        console.log(`[Cron] Queued plan pre-generation for ${triggeredCount}/${tekmetricShops.length} Tekmetric shops (next pass in ~${Math.round(PREGEN_INTERVAL_MS / 60000)}min)`);
-      } catch (pregenerateErr: any) {
-        pregenInFlight = false;
-        console.error(`[Cron] Tekmetric pregenerate error:`, pregenerateErr.message);
-      }
+          console.log(`[Cron] Plan pre-generation pass complete: ${queued}/${shopCount} shops (staggered ${PREGEN_SHOP_STAGGER_MS}ms apart)`);
+        } catch (pregenerateErr: any) {
+          console.error(`[Cron] Tekmetric pregenerate error:`, pregenerateErr?.message);
+        } finally {
+          pregenInFlight = false;
+        }
+      })();
     }
 
     return NextResponse.json({
