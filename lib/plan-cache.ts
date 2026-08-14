@@ -66,8 +66,16 @@ const MILEAGE_TOLERANCE = 500; // Plans are still valid within 500 miles
  * `recommendedDefault` producers (the engine-risk Safety Check — Oil
  * Level row). Bumping forces a rebuild so cached rows carry the flag and
  * the Safety Check row stops rendering the lifetime-fluid badge text.
+ *
+ * v11 (Aug 2026, task #1118) — declined jobs now aggregate onto plan items
+ * (`declinedCount` + most-recent `declined` provenance), a guarded
+ * title-containment secondary match attaches declines the key mappers
+ * missed, and triage collapses duplicate items sharing one canonical
+ * service key (the shop-interval retitle twin "Coolant Service" +
+ * "Replace engine coolant."). Bumping forces a rebuild so cached plans
+ * stop serving duplicate pairs for up to the 4h TTL.
  */
-export const PLAN_CACHE_SCHEMA_VERSION = 10;
+export const PLAN_CACHE_SCHEMA_VERSION = 11;
 
 export interface DeclinedServiceCache {
   serviceKey: string;
@@ -117,6 +125,12 @@ export interface TriagedItemCache {
   protractorDeferredId?: string;
   matchedDeferred?: { id: string; title: string };
   declined?: DeclinedServiceCache | null;
+  /**
+   * Task #1118: number of declined jobs accumulated onto this item
+   * (repeat declines across ROs). `declined` carries the most recent one.
+   * Missing while `declined` is set means 1 (legacy rows).
+   */
+  declinedCount?: number | null;
   /** Verb extracted from the source name ("inspect", "replace", ...). */
   action?: string | null;
   /** Free-text note carried from the OE row (e.g. "If equipped with dipstick"). */

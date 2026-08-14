@@ -39,6 +39,13 @@ import {
   toKeyFromFreeText,
 } from "@/lib/service-keys";
 import { listTekmetricDeferredWorkByVin } from "@/lib/data/repositories/tekmetric-deferred-work";
+import {
+  groupDeclinedJobs,
+  titlesContainMatch,
+  accumulateDecline,
+  foldDeclinedProvenance,
+  collapseDuplicateServiceItems,
+} from "@/lib/plan-build/declined-merge";
 import { gatherDviLinkFindings } from "@/lib/dvi-links/plan-findings";
 import {
   classifyEngineRisk,
@@ -86,7 +93,13 @@ export const __deps = {
 // Bumped 6 → 7: shop-interval-override rows with OEM "Inspect …" names are
 // now retitled to the canonical service name (e.g. "Brake Fluid Service");
 // cached analyses still carry the misleading inspect wording and must rebuild.
-const ANALYSIS_CACHE_SCHEMA_VERSION = 7;
+// Bumped 7 → 8 (task #1118): declined jobs now aggregate onto plan items
+// (`declinedCount`, most-recent provenance), a guarded title-containment
+// secondary match attaches declines the key mappers missed, and the final
+// dedup collapses same-canonical-service-key duplicates (the shop-interval
+// retitle twin). Cached analyses may still hold duplicate pairs and must
+// rebuild.
+const ANALYSIS_CACHE_SCHEMA_VERSION = 8;
 
 // Task #336: OEM data from DataOne is always in real miles. Convert to
 // shop unit (km for Canadian shops) at intake so the on-demand analyzer
@@ -782,6 +795,8 @@ export function convertCachedPlanItemForSidePanel(
     matchedDeferred: item.matchedDeferred || null,
     protractorDeferredId: item.protractorDeferredId || null,
     declined: item.declined || null,
+    // Task #1118: repeat-decline count so the side panel renders "Declined ×N".
+    declinedCount: item.declinedCount ?? null,
     // Task #175: forward engine-aware oil warning fields so the side
     // panel renders the same amber chip + tooltip as the dashboard.
     engineRiskFlag: !!item.engineRiskFlag,
@@ -1314,14 +1329,16 @@ export async function runOnDemandAnalysis(
         else recsByServiceKey.set(rec.serviceKey, [rec]);
       }
 
-      const seenDeclinedTitles = new Set<string>();
       let matchedCount = 0;
       let standaloneCount = 0;
-      for (const dj of declinedRows) {
-        const title = (dj.title || "").trim() || "Declined Service";
-        const normalizedTitle = title.toLowerCase().replace(/\s+/g, " ");
-        if (seenDeclinedTitles.has(normalizedTitle)) continue;
-        seenDeclinedTitles.add(normalizedTitle);
+      // Task #1118: group repeat declines by normalized title (count +
+      // most recent row for provenance) instead of dropping duplicates,
+      // and accumulate every matching group onto the recommendation so
+      // the sidepanel can render "Declined ×N". Mirrors
+      // lib/plan-build/triage.ts exactly via the shared helpers.
+      for (const group of groupDeclinedJobs(declinedRows)) {
+        const dj = group.latest;
+        const title = group.title;
 
         const keys = toKeyFromFreeText(title) || [];
         const declinedDate = dj.date ? new Date(dj.date) : null;
@@ -1336,27 +1353,48 @@ export async function runOnDemandAnalysis(
         };
 
         let matchedAny = false;
+        const flagRec = (rec: any): void => {
+          // Performed-after-decline guard: if this service has a history
+          // anchor newer than the decline, the customer already resolved
+          // it — don't re-flag the item.
+          const lastDate = rec.last?.date ? new Date(rec.last.date) : null;
+          if (
+            declinedDate &&
+            !isNaN(declinedDate.getTime()) &&
+            lastDate &&
+            !isNaN(lastDate.getTime()) &&
+            lastDate > declinedDate
+          ) {
+            return;
+          }
+          accumulateDecline(rec, entry, group.count);
+          rec.status = "overdue";
+          matchedCount++;
+        };
+        const flagged = new Set<any>();
         for (const k of keys) {
           for (const rec of recsByServiceKey.get(k) || []) {
             matchedAny = true;
-            // Performed-after-decline guard: if this service has a history
-            // anchor newer than the decline, the customer already resolved
-            // it — don't re-flag the item.
-            const lastDate = rec.last?.date ? new Date(rec.last.date) : null;
-            if (
-              declinedDate &&
-              !isNaN(declinedDate.getTime()) &&
-              lastDate &&
-              !isNaN(lastDate.getTime()) &&
-              lastDate > declinedDate
-            ) {
-              continue;
-            }
-            if (!rec.declined) {
-              rec.declined = entry;
-              rec.status = "overdue";
-              matchedCount++;
-            }
+            if (flagged.has(rec)) continue;
+            flagged.add(rec);
+            flagRec(rec);
+          }
+        }
+
+        // Task #1118: guarded secondary match — when the key mappers
+        // disagree, attach the decline to a recommendation whose
+        // normalized title contains (or is contained by) the declined
+        // title instead of appending a standalone twin. Inspect rows and
+        // existing standalone declined entries are exempt.
+        if (!matchedAny) {
+          for (const rec of recommendations) {
+            if (rec.source === "declined") continue;
+            if (/^\s*(?:inspect|check)\b/i.test(rec.service || "")) continue;
+            if (!titlesContainMatch(title, rec.service || "")) continue;
+            matchedAny = true;
+            if (flagged.has(rec)) continue;
+            flagged.add(rec);
+            flagRec(rec);
           }
         }
 
@@ -1395,6 +1433,7 @@ export async function runOnDemandAnalysis(
             source: "declined",
             status: "overdue",
             declined: entry,
+            declinedCount: group.count,
             approvedThisVisit: isApprovedThisVisit(title, currentRoAuthorizedJobs, entry.serviceKey),
             onCurrentRO: isOnCurrentRO(title, currentRoAllJobs, entry.serviceKey),
           });
@@ -1407,10 +1446,40 @@ export async function runOnDemandAnalysis(
     console.warn('[Extension] Declined-work lookup failed (non-blocking):', e);
   }
 
-  // Deduplicate recommendations by service name
-  const uniqueRecs = recommendations.reduce((acc: any[], rec) => {
+  // Task #1118: last-pass safety net — collapse duplicate recommendations
+  // that resolve to the same canonical service key (shop-interval retitle
+  // twin + any standalone declined entry whose service is already on the
+  // plan), folding declined provenance/count onto the kept item. Mirrors
+  // the identical pass in lib/plan-build/triage.ts.
+  const collapsedRecs = collapseDuplicateServiceItems(recommendations, {
+    getServiceKey: (r: any) => r.serviceKey,
+    // On-demand OEM/plan recs carry source "oe" (OEM interval) or "shop"
+    // (shop-interval override) — both are plan rows; normalize to "oem"
+    // so the collapse rule treats the retitle twin as an OEM+OEM pair.
+    getSource: (r: any) =>
+      r.source === "oe" || r.source === "shop" || r.source === "oem" ? "oem" : r.source,
+    // Recs don't carry a parsed action — sniff the inspect verb from the
+    // display title (retitled shop-service rows no longer start with it,
+    // which is exactly the twin we want to collapse).
+    getAction: (r: any) => (/^\s*(?:inspect|check)\b/i.test(r.service || "") ? "inspect" : null),
+    isInspectOnly: (r: any) => !!r.inspectOnly,
+    mergeInto: (keeper: any, dropped: any) => {
+      foldDeclinedProvenance(keeper, dropped);
+      if (dropped.declined && keeper.status !== "overdue") keeper.status = "overdue";
+      if (dropped.bump === "red") keeper.bump = "red";
+      else if (dropped.bump === "yellow" && !keeper.bump) keeper.bump = "yellow";
+    },
+  });
+
+  // Deduplicate recommendations by service name, folding declined
+  // provenance into the kept row instead of silently dropping it.
+  const uniqueRecs = collapsedRecs.reduce((acc: any[], rec) => {
     const exists = acc.find(r => r.service?.toLowerCase() === rec.service?.toLowerCase());
     if (!exists) acc.push(rec);
+    else if (rec.declined) {
+      foldDeclinedProvenance(exists, rec);
+      if (exists.status !== "overdue") exists.status = "overdue";
+    }
     return acc;
   }, []);
 
@@ -2655,6 +2724,8 @@ async function _GET(request: NextRequest) {
           // `item.declined`) so the side panel shows the Declined badge on
           // on-demand-analysis plans too.
           declined: rec.declined || null,
+          // Task #1118: repeat-decline count ("Declined ×N").
+          declinedCount: rec.declinedCount ?? null,
           progress: recProgress,
           // Bucket-driven (matches partner API semantics): an item triaged
           // into "overdue" always shows the overdue icon even if it had no

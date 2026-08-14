@@ -224,6 +224,13 @@ export function isMatchingHistory(
 // from triage.ts. The Task #166 duty-cycle fields live on `OEMItem` in
 // `./oem-item` so the mapper here forwards them automatically.
 import { toOEMItem as _toOEMItem, type OEMItem as _OEMItem } from "./oem-item";
+import {
+  groupDeclinedJobs,
+  titlesContainMatch,
+  accumulateDecline,
+  foldDeclinedProvenance,
+  collapseDuplicateServiceItems,
+} from "./declined-merge";
 export const toOEMItem = _toOEMItem;
 export type OEMItem = _OEMItem;
 
@@ -315,6 +322,12 @@ export interface TriagedItem {
   dviSource?: "autoflow" | "autovitals" | "tekmetric" | "autoserve1" | "mastertech";
   reason?: string;
   declined?: DeclinedServiceEntry | null;
+  /**
+   * Task #1118: how many declined jobs accumulated onto this item (repeat
+   * declines across ROs). `declined` carries the most recent one. Missing
+   * when `declined` is set means 1 (legacy cached rows).
+   */
+  declinedCount?: number | null;
   usingShopInterval?: boolean;
   protractorDeferredId?: string;
   matchedDeferred?: MatchedDeferred;
@@ -785,7 +798,7 @@ export function triage({
     if (d.serviceKey) declinedMap.set(d.serviceKey, d);
   }
 
-  const triaged: TriagedItem[] = [];
+  let triaged: TriagedItem[] = [];
   const usedDviKeys = new Set<string>();
   // Tracks plain serviceKeys consumed by *any* source (OEM, DVI, …). Used
   // for cross-source suppression (e.g. don't re-add a generic "battery"
@@ -1349,12 +1362,13 @@ export function triage({
       else itemsByServiceKey.set(t.serviceKey, [t]);
     }
 
-    const seenDeclinedTitles = new Set<string>();
-    for (const dj of tekmetricDeclinedJobs || []) {
-      const title = (dj.title || "").trim() || "Declined Service";
-      const normalizedTitle = title.toLowerCase().replace(/\s+/g, " ");
-      if (seenDeclinedTitles.has(normalizedTitle)) continue;
-      seenDeclinedTitles.add(normalizedTitle);
+    // Task #1118: group repeat declines by normalized title (count + most
+    // recent row for provenance) instead of dropping duplicates, and
+    // accumulate every matching group onto the plan item so the sidepanel
+    // can render "Declined ×N".
+    for (const group of groupDeclinedJobs(tekmetricDeclinedJobs || [])) {
+      const dj = group.latest;
+      const title = group.title;
 
       const keys = toKeyFromFreeText(title) || [];
       const declinedDate = dj.date ? new Date(dj.date) : null;
@@ -1369,21 +1383,44 @@ export function triage({
       };
 
       let matchedAny = false;
+      const flagItem = (t: TriagedItem): void => {
+        // Performed-after-decline guard: if this service has a direct
+        // history anchor newer than the decline, the customer already
+        // resolved it — don't re-flag the item.
+        if (
+          declinedDate &&
+          !isNaN(declinedDate.getTime()) &&
+          t.last?.date &&
+          t.last.date > declinedDate
+        ) {
+          return;
+        }
+        accumulateDecline(t, entry, group.count);
+      };
+      const flagged = new Set<TriagedItem>();
       for (const k of keys) {
         for (const t of itemsByServiceKey.get(k) || []) {
           matchedAny = true;
-          // Performed-after-decline guard: if this service has a direct
-          // history anchor newer than the decline, the customer already
-          // resolved it — don't re-flag the item.
-          if (
-            declinedDate &&
-            !isNaN(declinedDate.getTime()) &&
-            t.last?.date &&
-            t.last.date > declinedDate
-          ) {
-            continue;
-          }
-          if (!t.declined) t.declined = entry;
+          if (flagged.has(t)) continue;
+          flagged.add(t);
+          flagItem(t);
+        }
+      }
+
+      // Task #1118: guarded secondary match — when the key mappers
+      // disagree (declined free text vs OEM name), attach the decline to a
+      // plan item whose normalized title contains (or is contained by) the
+      // declined title, instead of appending a standalone twin. Inspect
+      // rows are exempt (a declined replace must not flag an Inspect row).
+      if (!matchedAny) {
+        for (const t of triaged) {
+          if (t.action === "inspect" || t.inspectOnly) continue;
+          if (t.source === "declined") continue;
+          if (!titlesContainMatch(title, t.title || "")) continue;
+          matchedAny = true;
+          if (flagged.has(t)) continue;
+          flagged.add(t);
+          flagItem(t);
         }
       }
 
@@ -1437,10 +1474,34 @@ export function triage({
           source: "declined",
           reason: undefined,
           declined: entry,
+          declinedCount: group.count,
         });
       }
     }
   }
+
+  // Task #1118: last-pass safety net — collapse duplicate items that
+  // resolve to the same canonical service key (the shop-interval retitle
+  // twin "Coolant Service" + "Replace engine coolant.", and any standalone
+  // declined entry whose service is already on the plan), folding declined
+  // provenance/count onto the kept item. Genuine Inspect + Replace OEM
+  // pairs still coexist; synthetic keys (misc_/dvi_/…) are never collapsed.
+  triaged = collapseDuplicateServiceItems(triaged, {
+    getServiceKey: (t) => t.serviceKey,
+    getSource: (t) => t.source,
+    getAction: (t) => t.action,
+    isInspectOnly: (t) => !!t.inspectOnly,
+    mergeInto: (keeper, dropped) => {
+      foldDeclinedProvenance(keeper, dropped);
+      if (!keeper.matchedDeferred && dropped.matchedDeferred) {
+        keeper.matchedDeferred = dropped.matchedDeferred;
+      }
+      // A folded red row (declined standalone / DVI-flagged twin) keeps
+      // the merged card front-and-center.
+      if (dropped.bump === "red") keeper.bump = "red";
+      else if (dropped.bump === "yellow" && !keeper.bump) keeper.bump = "yellow";
+    },
+  });
 
   const overdue: TriagedItem[] = [];
   const dueSoon: TriagedItem[] = [];
@@ -1558,6 +1619,8 @@ export function convertToCache(item: TriagedItem): TriagedItemCache {
     protractorDeferredId: item.protractorDeferredId,
     matchedDeferred: item.matchedDeferred,
     declined: item.declined,
+    // Task #1118: repeat-decline count ("Declined ×N") — see TriagedItemCache.
+    declinedCount: item.declinedCount ?? null,
     action: item.action ?? null,
     notes: item.notes ?? null,
     recommendedDefault: item.recommendedDefault ?? false,

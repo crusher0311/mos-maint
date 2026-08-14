@@ -2412,13 +2412,19 @@ function createServiceItemHTML(item, type) {
         ${item.declined ? (() => {
           // Task #808: surface declined-work provenance on the VHI item. Older
           // cached plans may carry a bare object with no date — degrade cleanly.
+          // Task #1118: when the service was declined more than once
+          // (declinedCount from repeat declines across ROs), show
+          // "Declined ×N" with the most recent date in the tooltip.
           const dt = item.declined.declinedAt ? new Date(item.declined.declinedAt) : null;
           const dateStr = (dt && !isNaN(dt.getTime())) ? dt.toLocaleDateString() : '';
+          const count = Number(item.declinedCount) >= 2 ? Number(item.declinedCount) : 0;
           const tipParts = [];
-          if (dateStr) tipParts.push(`Declined on ${dateStr}`);
+          if (count) tipParts.push(`Declined ${count} times${dateStr ? `, most recently on ${dateStr}` : ''}`);
+          else if (dateStr) tipParts.push(`Declined on ${dateStr}`);
           if (item.declined.roNumber) tipParts.push(`RO #${item.declined.roNumber}`);
           if (item.declined.reason) tipParts.push(item.declined.reason);
-          return `<span class="status-badge" style="background:#ffedd5;color:#c2410c;border:1px solid #fdba74;" title="${escapeHtml(tipParts.join(' · ') || 'Previously declined')}">Declined${dateStr ? ` ${escapeHtml(dateStr)}` : ''}</span>`;
+          const label = count ? `Declined ×${count}` : `Declined${dateStr ? ` ${escapeHtml(dateStr)}` : ''}`;
+          return `<span class="status-badge" style="background:#ffedd5;color:#c2410c;border:1px solid #fdba74;" title="${escapeHtml(tipParts.join(' · ') || 'Previously declined')}">${label}</span>`;
         })() : ''}
       </div>
       ${renderProgressBars(item, type)}
