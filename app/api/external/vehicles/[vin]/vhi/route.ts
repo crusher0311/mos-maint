@@ -14,6 +14,7 @@ import { buildMileageDiscrepancyFlag } from "@/lib/plan-build/mileage-discrepanc
 import { resolveOpenRoMileage, pickMileageInput, reconcileStaleActualWithEstimate, type MileageInputSource } from "@/lib/plan-build/open-ro-mileage";
 import { getDb as getPgDb } from "@/lib/db/drizzle";
 import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
+import { withSlowCallLog } from "@/lib/log-slow-call";
 
 /**
  * Task #476: provenance label for the actual odometer reading the partner
@@ -347,13 +348,20 @@ export const GET = createExternalEndpoint(
       // PG handle is lazy — only initialized for AutoFlow shops since
       // they're the only path that hits `normalized_work_orders`.
       const needsPg = (shopRecord?.integrationProvider ?? "").toLowerCase() === "autoflow";
-      openRoLookup = await resolveOpenRoMileage({
-        db,
-        pg: needsPg ? getPgDb() : undefined,
-        shopIdVariants,
-        vin,
-        provider: shopRecord?.integrationProvider ?? null,
-      });
+      // Task #1119: slow-call log — a hang here happens BEFORE any
+      // rebuild timeout and used to leave zero evidence in Better Stack.
+      openRoLookup = await withSlowCallLog(
+        resolveOpenRoMileage({
+          db,
+          pg: needsPg ? getPgDb() : undefined,
+          shopIdVariants,
+          vin,
+          provider: shopRecord?.integrationProvider ?? null,
+        }),
+        "partner-vhi.resolveOpenRoMileage",
+        5000,
+        `requestId=${requestId} vin=${vin} shopId=${resolvedShopId}`,
+      );
     } catch (err) {
       console.warn(
         `[PartnerVHI] open_ro_lookup_error requestId=${requestId} vin=${vin}:`,
@@ -465,7 +473,13 @@ export const GET = createExternalEndpoint(
       `vehiclesDocMiles=${vehicleDocMileage ?? "null"}`
     );
 
-    let cached = await getCachedPlan(db, vin, resolvedShopId, mileage);
+    // Task #1119: slow-call log so a plan-cache read hang is visible.
+    let cached = await withSlowCallLog(
+      getCachedPlan(db, vin, resolvedShopId, mileage),
+      "partner-vhi.getCachedPlan",
+      5000,
+      `requestId=${requestId} vin=${vin} shopId=${resolvedShopId}`,
+    );
 
     if (cached) {
       const plan = cached.plan;
@@ -548,7 +562,14 @@ export const GET = createExternalEndpoint(
     }
 
     console.log(`[VHI External] No cached_plans entry for ${vin} at shop ${resolvedShopId}, checking analysis cache...`);
-    const analysisResult = await getVhiFromAnalysisCache(db, vin, resolvedShopId, mileage);
+    // Task #1119: the analysis_cache branch had no slow-call logging — a
+    // hang here left only request_in/mileage_resolved lines behind.
+    const analysisResult = await withSlowCallLog(
+      getVhiFromAnalysisCache(db, vin, resolvedShopId, mileage),
+      "partner-vhi.getVhiFromAnalysisCache",
+      5000,
+      `requestId=${requestId} vin=${vin} shopId=${resolvedShopId}`,
+    );
 
     if (analysisResult) {
       console.log(`[VHI External] Found analysis cache for ${vin} at shop ${resolvedShopId}`);
@@ -631,7 +652,14 @@ export const GET = createExternalEndpoint(
 
       if (!year) {
         try {
-          const enhanced = await getEnhancedVehicleData(vin);
+          // Task #1119: DataOne decode had no deadline or slow-call log —
+          // a warming/hung DataOne endpoint was a true silent hang.
+          const enhanced = await withSlowCallLog(
+            getEnhancedVehicleData(vin),
+            "partner-vhi.dataoneDecode",
+            5000,
+            `requestId=${requestId} vin=${vin}`,
+          );
           const yr = enhanced?.vehicle?.year ? Number(enhanced.vehicle.year) : null;
           if (yr && yr > 1980) {
             year = yr;

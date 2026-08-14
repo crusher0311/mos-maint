@@ -780,6 +780,251 @@ function TekmetricEndpointHealthSection() {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Triage summary (task #1119): one-load first read for bug/slowness reports —
+// fleet last-real-progress per provider, cron liveness, queue depths, webhook
+// deltas, production_logs feed freshness, and recent alert states — so most
+// reports get a first answer without clicking through per-provider tabs.
+// Self-contained (own fetch to /api/admin/sync-health/triage) like the
+// Tekmetric endpoint-health section, so a slow provider slice can't block it.
+// ---------------------------------------------------------------------------
+interface TriageProviderRow {
+  provider: string;
+  label: string;
+  lastRealProgressAt: string | null;
+  incompleteShops: number | null;
+  completedShops: number | null;
+  lastCronSuccessAt: string | null;
+  cronAlive: boolean;
+}
+
+interface TriageData {
+  generatedAt: string;
+  providers: TriageProviderRow[];
+  queue: {
+    enabled: boolean;
+    queues: { name: string; waiting: number; active: number; failed: number; delayed: number; error: string | null }[];
+  };
+  webhooks: {
+    tekmetric: { received24h: number | null; lastReceivedAt: string | null };
+    protractor: {
+      received24h: number | null;
+      processed24h: number | null;
+      delta24h: number | null;
+      unprocessedOlderThan15m: number | null;
+    };
+    autoflow: { received24h: number | null };
+  };
+  logFeed: { maxDt: string | null; ageMs: number | null; stale: boolean | null; error?: string };
+  recentAlerts: {
+    source: string;
+    shopId: number | null;
+    alertKey: string | null;
+    lastAlertedAt: string | null;
+  }[];
+}
+
+function TriageSummarySection() {
+  const [data, setData] = useState<TriageData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    setErr(null);
+    try {
+      const res = await fetch("/api/admin/sync-health/triage");
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || `Failed to load triage summary (${res.status})`);
+      setData(json);
+    } catch (e: any) {
+      setErr(e.message || "Failed to load triage summary");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const didLoad = useRef(false);
+  useEffect(() => {
+    if (didLoad.current) return;
+    didLoad.current = true;
+    load();
+  }, []);
+
+  const realProgressStale = (iso: string | null) =>
+    iso != null && Date.now() - new Date(iso).getTime() > 3 * 60 * 60 * 1000;
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+      <div className="p-4 border-b border-gray-100 flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          <Gauge className="w-5 h-5 text-indigo-600" />
+          <h2 className="font-semibold text-gray-900">Triage</h2>
+          <a
+            href="/platform-admin/runbooks/triage"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 px-2 py-0.5 text-xs text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-full"
+            title="Diagnostic scripts + what to include in a bug report"
+          >
+            <BookOpen className="w-3 h-3" />
+            Triage runbook
+          </a>
+        </div>
+        <div className="flex items-center gap-3">
+          <p className="text-xs text-gray-500">
+            First read for bug/slowness reports — fleet progress, cron liveness, queues,
+            webhooks, log feed, recent alerts.
+          </p>
+          <button
+            onClick={load}
+            disabled={loading}
+            className="px-3 py-1.5 text-xs rounded-md border border-gray-200 hover:bg-gray-50 disabled:opacity-50 flex items-center gap-1"
+          >
+            {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      {err ? (
+        <div className="p-4 flex items-center gap-2 text-red-700 bg-red-50 text-sm">
+          <AlertTriangle className="w-4 h-4" /> {err}
+        </div>
+      ) : loading && !data ? (
+        <div className="p-6 flex items-center justify-center gap-2 text-gray-500 text-sm">
+          <Loader2 className="w-4 h-4 animate-spin" /> Loading triage summary…
+        </div>
+      ) : data ? (
+        <div className="p-4 grid grid-cols-1 lg:grid-cols-3 gap-4 text-sm">
+          {/* Fleet progress + cron liveness */}
+          <div>
+            <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2">
+              Fleet real progress / cron
+            </h3>
+            <table className="w-full text-xs">
+              <tbody>
+                {data.providers.map((p) => (
+                  <tr key={p.provider} className="border-b border-gray-50 last:border-0">
+                    <td className="py-1 pr-2 font-medium text-gray-900">{p.label}</td>
+                    <td
+                      className={`py-1 pr-2 ${
+                        (p.incompleteShops ?? 0) > 0 && realProgressStale(p.lastRealProgressAt)
+                          ? "text-red-700 font-medium"
+                          : "text-gray-700"
+                      }`}
+                      title={p.lastRealProgressAt ?? ""}
+                    >
+                      {formatRelativeTime(p.lastRealProgressAt)}
+                    </td>
+                    <td className="py-1 pr-2 text-gray-500">
+                      {p.incompleteShops ?? "—"} open
+                    </td>
+                    <td className="py-1">
+                      <span
+                        className={`px-1.5 py-0.5 rounded-full ${
+                          p.cronAlive ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
+                        }`}
+                        title={`Last backfill cron success: ${p.lastCronSuccessAt ?? "never"}`}
+                      >
+                        {p.cronAlive ? "cron alive" : "cron quiet"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="text-[11px] text-gray-400 mt-1">
+              Progress = heartbeat lastChangedAt (real forward progress only, no-op ticks excluded).
+            </p>
+          </div>
+
+          {/* Queues + webhooks */}
+          <div className="space-y-3">
+            <div>
+              <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2">Queues</h3>
+              {!data.queue.enabled ? (
+                <p className="text-xs text-gray-500">Queue disabled (no Redis in this env).</p>
+              ) : data.queue.queues.length === 0 ? (
+                <p className="text-xs text-gray-500">No queues.</p>
+              ) : (
+                <ul className="text-xs space-y-0.5">
+                  {data.queue.queues.map((q) => (
+                    <li key={q.name} className="flex gap-2">
+                      <span className="font-mono text-gray-800">{q.name}</span>
+                      <span className="text-gray-600">
+                        {q.waiting} waiting · {q.active} active ·{" "}
+                        <span className={q.failed > 0 ? "text-red-700 font-medium" : ""}>
+                          {q.failed} failed
+                        </span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div>
+              <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2">
+                Webhooks (24h)
+              </h3>
+              <ul className="text-xs space-y-0.5 text-gray-700">
+                <li>
+                  Tekmetric: {data.webhooks.tekmetric.received24h ?? "—"} received, last{" "}
+                  {formatRelativeTime(data.webhooks.tekmetric.lastReceivedAt)}
+                </li>
+                <li className={(data.webhooks.protractor.unprocessedOlderThan15m ?? 0) > 0 ? "text-red-700 font-medium" : ""}>
+                  Protractor: {data.webhooks.protractor.received24h ?? "—"} received /{" "}
+                  {data.webhooks.protractor.processed24h ?? "—"} processed
+                  {(data.webhooks.protractor.unprocessedOlderThan15m ?? 0) > 0 &&
+                    ` — ⚠ ${data.webhooks.protractor.unprocessedOlderThan15m} unprocessed >15m (wedge?)`}
+                </li>
+                <li>AutoFlow: {data.webhooks.autoflow.received24h ?? "—"} received</li>
+              </ul>
+            </div>
+          </div>
+
+          {/* Log feed + recent alerts */}
+          <div className="space-y-3">
+            <div>
+              <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2">
+                Log feed (production_logs)
+              </h3>
+              <p
+                className={`text-xs ${data.logFeed.stale ? "text-red-700 font-medium" : "text-gray-700"}`}
+                title={data.logFeed.maxDt ?? ""}
+              >
+                Newest entry: {formatRelativeTime(data.logFeed.maxDt)}
+                {data.logFeed.stale && " — ⚠ feed may be frozen (blind spot)"}
+                {data.logFeed.error && ` (read failed: ${data.logFeed.error})`}
+              </p>
+            </div>
+            <div>
+              <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2">
+                Recent alert states
+              </h3>
+              {data.recentAlerts.length === 0 ? (
+                <p className="text-xs text-gray-500 flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> No live alert states.
+                </p>
+              ) : (
+                <ul className="text-xs space-y-0.5 text-gray-700">
+                  {data.recentAlerts.slice(0, 6).map((a, i) => (
+                    <li key={i}>
+                      <span className="font-medium">{a.source}</span>
+                      {a.shopId != null && ` (shop ${a.shopId})`} —{" "}
+                      {formatRelativeTime(a.lastAlertedAt)}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export default function SyncHealthPage() {
   const [data, setData] = useState<SyncHealthData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -4031,6 +4276,9 @@ export default function SyncHealthPage() {
           <span>{error}</span>
         </div>
       )}
+
+      {/* Triage summary — one-load first read (task #1119). */}
+      <TriageSummarySection />
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">

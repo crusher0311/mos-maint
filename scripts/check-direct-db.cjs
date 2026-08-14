@@ -52,6 +52,10 @@ const ALLOWLIST = new Set([
   "app/api/admin/sync-health/shopware/route.ts",
   "app/api/admin/sync-health/skipped-ros/resolve/route.ts",
   "app/api/admin/sync-health/tekmetric/route.ts",
+  // Task #1119 — read-only triage summary aggregating heartbeat/webhook/
+  // alert-state collections plus the `mos` cron DB; mirrors the other
+  // allowlisted sync-health routes above. Strictly read-only.
+  "app/api/admin/sync-health/triage/route.ts",
   "app/api/admin/tekmetric-endpoint-health/route.ts",
   "app/api/auth/change-password/route.ts",
   "app/api/auth/complete-setup/route.ts",

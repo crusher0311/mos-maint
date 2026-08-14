@@ -14,6 +14,7 @@ import {
 } from "@/lib/plan-build/open-ro-mileage";
 import { estimateMileageFromCarfax } from "@/lib/integrations/carfax";
 import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
+import { withSlowCallLog } from "@/lib/log-slow-call";
 import { getDb as getPgDb } from "@/lib/db/drizzle";
 
 /**
@@ -188,13 +189,20 @@ export const POST = createExternalEndpoint(
           const needsPg =
             ((shopRecord?.integrationProvider ?? shopResult.provider) ?? "").toLowerCase() ===
             "autoflow";
-          openRoLookup = await resolveOpenRoMileage({
-            db,
-            pg: needsPg ? getPgDb() : undefined,
-            shopIdVariants,
-            vin,
-            provider: shopRecord?.integrationProvider ?? shopResult.provider ?? null,
-          });
+          // Task #1119: slow-call log — a hang here prevents the
+          // mileage_resolved line entirely, leaving zero log evidence.
+          openRoLookup = await withSlowCallLog(
+            resolveOpenRoMileage({
+              db,
+              pg: needsPg ? getPgDb() : undefined,
+              shopIdVariants,
+              vin,
+              provider: shopRecord?.integrationProvider ?? shopResult.provider ?? null,
+            }),
+            "vhi-analyze.resolveOpenRoMileage",
+            5000,
+            `requestId=${requestId} vin=${vin} shopId=${resolvedShopId}`,
+          );
         } catch (err) {
           console.warn(
             `[PartnerVHI] open_ro_lookup_error requestId=${requestId} vin=${vin}:`,
@@ -323,11 +331,28 @@ export const POST = createExternalEndpoint(
       (isPartner ? `, partner=${partnerId}` : "")
     );
 
-    const result = await rebuildVhi(resolvedShopId, vin, mileage, {
-      invalidateFirst: true,
-      mileageSource,
-      mileageEstimateDetails,
-    });
+    // Task #1119: analyze's rebuild has NO route-level timeout (unlike the
+    // GET endpoint's 25s bound) — instrument it so a true hang always leaves
+    // a structured line, and log the total duration on completion.
+    console.log(
+      `[PartnerVHI] rebuild_start requestId=${requestId} partnerId=${partnerId ?? "n/a"} ` +
+      `shopId=${resolvedShopId} vin=${vin.toUpperCase()} mileage=${mileage} endpoint=analyze`
+    );
+    const rebuildStartedAt = Date.now();
+    const result = await withSlowCallLog(
+      rebuildVhi(resolvedShopId, vin, mileage, {
+        invalidateFirst: true,
+        mileageSource,
+        mileageEstimateDetails,
+      }),
+      "vhi-analyze.rebuildVhi",
+      15000,
+      `requestId=${requestId} vin=${vin.toUpperCase()} shopId=${resolvedShopId}`,
+    );
+    console.log(
+      `[PartnerVHI] rebuild_done requestId=${requestId} vin=${vin.toUpperCase()} ` +
+      `shopId=${resolvedShopId} durationMs=${Date.now() - rebuildStartedAt} success=${result.success}`
+    );
 
     if (!result.success) {
       console.error(
