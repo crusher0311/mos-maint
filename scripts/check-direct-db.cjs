@@ -166,7 +166,6 @@ const ALLOWLIST = new Set([
   "app/api/dashboard/protractor/vehicles/route.ts",
   "app/api/dashboard/recent/route.ts",
   "app/api/dashboard/updates/route.ts",
-  "app/api/debug/dashboard-data/route.ts",
   "app/api/dev/clear-vehicles/route.ts",
   "app/api/dev/session-logs/route.ts",
   "app/api/enrichment/process/route.ts",
