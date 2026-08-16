@@ -1,0 +1,96 @@
+# MyOilSticker — Security Disclosure (Responsible)
+
+**Reported by:** Ghafari Group Auto Stores (a current MyOilSticker customer)
+**Date:** 2026-08-12
+**Severity:** Critical (unauthenticated access to the full customer database, including
+password hashes and API keys)
+
+This was found while our IT team was working with our **own** account. We did not access,
+download, or retain any other customer's data beyond the minimum needed to confirm the issue,
+and we're reporting it privately so it can be fixed. Nothing on any account was modified.
+
+---
+
+## Summary
+
+Several `/goldapi/` backend endpoints require **no authentication** and enforce **no
+authorization** (no session token, no ownership check). The two most serious:
+
+| Endpoint | Method | Body | Auth required? | Returns |
+|---|---|---|---|---|
+| `/goldapi/user/getInfo` | POST | `{"email": "<string>"}` | **No** | Full account record(s) |
+| `/goldapi/user/getlogos` | POST | `{"id": "<accountId>"}` | **No** | Logo records for that account |
+
+## Issue 1 — `getInfo` returns the entire account record, unauthenticated
+
+A single POST with any email string returns a **47-field** account object, including:
+
+- `password` — the **bcrypt hash** of the account password
+- `apiKey` — the account's **API key**
+- `targetUser` / `targetPwd` — the shop's **third-party POS integration credentials**
+  (e.g. Tekmetric / ShopWare / Protractor logins) in **plaintext**, for any shop that
+  configured them
+- `cookieInfo` / `tokenInfo` — session/token fields
+- `email`, `phoneNumber`, precise `lat`/`lon`, `hovercode`, billing/subscription state
+
+No token or session is required. An attacker who knows (or guesses) any customer email can
+retrieve that customer's full record.
+
+## Issue 2 — the `email` parameter is a substring match → full-database dump
+
+`getInfo` matches the `email` parameter as a **substring/regex against every account** and
+returns **all** matches in one response. This turns Issue 1 into a full-database exfiltration:
+
+```
+POST /goldapi/user/getInfo   {"email": "@"}        -> 509 accounts in one response
+POST /goldapi/user/getInfo   {"email": "gmail.com"} -> 123 accounts in one response
+```
+
+`"@"` matches every account that has an email, so the **entire customer base (~500 shops) —
+with password hashes, API keys, and stored POS credentials — is retrievable with a single
+unauthenticated request.**
+
+## Issue 3 — `getlogos` is an unauthenticated IDOR
+
+`/goldapi/user/getlogos` accepts any account `_id` and returns that account's logo records
+with no ownership check. Uploaded assets are then served from a predictable public path
+(`/upload/<filename>`), so any account's branding is downloadable.
+
+---
+
+## Proof of concept (against our own account, values redacted)
+
+```bash
+curl -s -X POST https://app.myoilsticker.com/goldapi/user/getInfo \
+     -H 'Content-Type: application/json' \
+     -d '{"email":"<our-store-email>"}'
+# -> {"status":1,"data":[{ ...47 fields...
+#       "password":"$2b$10$…redacted…",
+#       "apiKey":"…redacted…",
+#       "targetPwd":"…plaintext POS password if set…", ... }]}
+```
+
+No `Authorization` header, cookie, or token was sent.
+
+---
+
+## Recommended remediation
+
+1. **Require authentication** on every `/goldapi/user/*` and `/goldapi/print/*` route
+   (validate the session/JWT the app already issues at `/goldapi/auth/login`).
+2. **Enforce authorization** — a caller may only read the account tied to their own token.
+   Replace the `email`/`id` lookups with "current authenticated user."
+3. **Never return secrets in API responses.** Strip `password`, `apiKey`, `targetPwd`,
+   `targetUser`, `cookieInfo`, `tokenInfo` from any serialized user object. Password hashes
+   should never leave the database.
+4. **Remove substring matching** on `email`. Look up by exact, normalized email only, and
+   return a single record.
+5. **Add authorization to `getlogos`/`/upload/`** so assets are scoped to the owning account
+   (signed URLs or an auth check).
+6. Rotate any exposed `apiKey`s and treat all stored POS-integration credentials as
+   compromised; prompt affected shops to reset them.
+
+## Contact
+
+Reported by the GG Auto Stores IT team via our account contact. Happy to share exact
+reproduction details privately with your engineer. Please confirm receipt and a fix timeline.
