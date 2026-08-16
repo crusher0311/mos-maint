@@ -4,6 +4,7 @@ import { getDb } from "@/lib/mongo";
 import { createProtractorWorkOrder } from "@/lib/integrations/protractor";
 import { finalizeProtractorWorkOrderCreation } from "@/lib/integrations/protractor/work-order-service";
 import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
+import { resolveClientRequestId } from "@/lib/idempotent-create-id";
 
 // Task #936: bounded upstream deadline so the wizard's final create step can
 // never spin forever. WO create can legitimately push several service
@@ -82,7 +83,10 @@ export async function POST(req: NextRequest) {
         },
         {
           interactive: true,
-          workOrderId: typeof clientRequestId === "string" ? clientRequestId : undefined,
+          // Task #937: derive the upstream ID server-side (hash of
+          // kind+shop+user+key) so the wizard's retry stays duplicate-safe
+          // without letting a caller target an existing record's UUID.
+          workOrderId: resolveClientRequestId("workOrder", shopId, String(sess.userId ?? user.email ?? ""), clientRequestId),
         },
       ),
       UPSTREAM_DEADLINE_MS,

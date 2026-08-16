@@ -4,9 +4,17 @@ import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
 import { checkExtensionWritePermission } from "@/lib/extension-write-guard";
 import { createProtractorWorkOrder } from "@/lib/integrations/protractor";
 import { finalizeProtractorWorkOrderCreation } from "@/lib/integrations/protractor/work-order-service";
+import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
+import { resolveClientRequestId } from "@/lib/idempotent-create-id";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+// Task #937: same never-hang guarantee as the dashboard wizard (Task #936).
+// WO create can legitimately push several service packages sequentially, so
+// it gets a longer budget than contact/vehicle.
+const UPSTREAM_DEADLINE_MS = 45_000;
+const SLOW_UPSTREAM_MSG = "Protractor is responding slowly — please try again.";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -31,6 +39,7 @@ async function _POST(req: NextRequest) {
       note,
       mileage,
       servicePackages,
+      clientRequestId,
     } = body;
 
     if (!shopId) {
@@ -53,21 +62,49 @@ async function _POST(req: NextRequest) {
     }
 
     const numShopId = guard.mosShopId;
-    const result = await createProtractorWorkOrder(numShopId, {
-      contactId,
-      vehicleId,
-      vin: vin || undefined,
-      concernText: concernText || undefined,
-      concerns: Array.isArray(concerns)
-        ? (concerns as unknown[]).filter((c): c is string => typeof c === "string" && c.trim().length > 0)
-        : undefined,
-      note: note || undefined,
-      mileage: mileage || undefined,
-      servicePackages: servicePackages || undefined,
-    });
+    // Task #937: interactive lane (priority pool, capped retries) + optional
+    // idempotency key so an extension retry after a timeout upserts the SAME
+    // work order instead of creating a duplicate. The upstream ID is DERIVED
+    // server-side (hash of kind+shop+user+key), never the raw client value —
+    // a caller can't target an existing record's UUID. The whole create is
+    // bounded by an upstream deadline so the route always answers.
+    const pinnedWorkOrderId = resolveClientRequestId(
+      "workOrder",
+      numShopId,
+      guard.user?._id ?? guard.user?.email,
+      clientRequestId,
+    );
+    const result = await withUpstreamTimeout(
+      createProtractorWorkOrder(
+        numShopId,
+        {
+          contactId,
+          vehicleId,
+          vin: vin || undefined,
+          concernText: concernText || undefined,
+          concerns: Array.isArray(concerns)
+            ? (concerns as unknown[]).filter((c): c is string => typeof c === "string" && c.trim().length > 0)
+            : undefined,
+          note: note || undefined,
+          mileage: mileage || undefined,
+          servicePackages: servicePackages || undefined,
+        },
+        {
+          interactive: true,
+          workOrderId: pinnedWorkOrderId,
+        },
+      ),
+      UPSTREAM_DEADLINE_MS,
+      `ext-create-work-order shop=${numShopId}`,
+      { ok: false, error: SLOW_UPSTREAM_MSG, timedOut: true } as any,
+    );
 
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: 500, headers: corsHeaders });
+      const timedOut = (result as any).timedOut === true;
+      if (timedOut) {
+        console.error(`[Extension Protractor Create WO] upstream deadline (${UPSTREAM_DEADLINE_MS}ms) exceeded shop=${numShopId}`);
+      }
+      return NextResponse.json({ error: result.error }, { status: timedOut ? 504 : 500, headers: corsHeaders });
     }
 
     // The RO already exists in Protractor at this point. The finalize step is

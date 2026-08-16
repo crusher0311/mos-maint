@@ -6410,6 +6410,13 @@ const createRoState = {
   historySearching: false,
   activeJobsTab: 'canned',
   selectedJobs: [], // [{key, source, title, description?, code?, chapter?, originalWorkOrderId?, deferredId?, lines?}]
+  // Task #937: client-pinned idempotency UUIDs (sent as clientRequestId).
+  // Generated before the first create attempt, REUSED on retry after a
+  // timeout so the server upserts the SAME Protractor record (no duplicates),
+  // cleared on definitive success or when the intended entity changes.
+  contactRequestId: null,
+  vehicleRequestId: null,
+  woRequestId: null,
 };
 
 function escCro(str) {
@@ -6483,6 +6490,11 @@ function resetCroState() {
   createRoState.historySearching = false;
   createRoState.activeJobsTab = 'canned';
   createRoState.selectedJobs = [];
+  // Task #937: a reset means a fresh logical create — stale idempotency keys
+  // surviving here would upsert (overwrite) a previous session's records.
+  createRoState.contactRequestId = null;
+  createRoState.vehicleRequestId = null;
+  createRoState.woRequestId = null;
 
   ['cro-jobs-search', 'cro-history-search'].forEach(id => {
     const el = getCroEl(id); if (el) el.value = '';
@@ -6779,16 +6791,23 @@ async function handleCroCreateCustomer() {
   if (!shopId) { setCroError('cro-customer-error', 'No shop context.'); return; }
   const btn = getCroEl('cro-new-customer-save');
   if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  // Task #937: pin a client-generated UUID for this pending create so a retry
+  // after a timeout (504) upserts the SAME Protractor contact — no duplicates.
+  // Reused across retries; cleared only on definitive success.
+  if (!createRoState.contactRequestId) {
+    createRoState.contactRequestId = crypto.randomUUID();
+  }
   try {
     const result = await sendMessage({
       action: 'MOS_API_REQUEST',
       endpoint: '/api/extension/protractor/create-contact',
       options: {
         method: 'POST',
-        body: JSON.stringify({ shopId, firstName, lastName, phone1, email }),
+        body: JSON.stringify({ shopId, firstName, lastName, phone1, email, clientRequestId: createRoState.contactRequestId }),
       }
     });
     if (!result?.success) throw new Error(result?.error || 'Create failed');
+    createRoState.contactRequestId = null;
     selectCroCustomer({
       id: result.contactId,
       name: `${firstName} ${lastName}`.trim(),
@@ -6803,6 +6822,10 @@ async function handleCroCreateCustomer() {
 function selectCroCustomer(customer) {
   createRoState.customer = customer;
   createRoState.vehicle = null;
+  // Task #937: a different customer means different intended vehicle/RO —
+  // drop pinned idempotency keys so retries can't upsert over old attempts.
+  createRoState.vehicleRequestId = null;
+  createRoState.woRequestId = null;
   const picked = getCroEl('cro-customer-picked');
   const label = getCroEl('cro-customer-picked-label');
   if (label) label.textContent = '✓ ' + customer.name;
@@ -7021,6 +7044,12 @@ async function handleCroCreateVehicle() {
   const shopId = getCroShopId();
   const btn = getCroEl('cro-new-vehicle-save');
   if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  // Task #937: pin a client-generated UUID for this pending create so a retry
+  // after a timeout (504) upserts the SAME service item — no duplicate vehicles.
+  // Reused across retries; cleared only on definitive success.
+  if (!createRoState.vehicleRequestId) {
+    createRoState.vehicleRequestId = crypto.randomUUID();
+  }
   try {
     const result = await sendMessage({
       action: 'MOS_API_REQUEST',
@@ -7035,10 +7064,12 @@ async function handleCroCreateVehicle() {
           make: make || undefined,
           model: model || undefined,
           licensePlate: plate || undefined,
+          clientRequestId: createRoState.vehicleRequestId,
         }),
       }
     });
     if (!result?.success) throw new Error(result?.error || 'Create failed');
+    createRoState.vehicleRequestId = null;
     const display = [yearStr, make, model].filter(Boolean).join(' ') || vin || 'New vehicle';
     selectCroVehicle({ id: result.vehicleId, display, vin, year: yearStr, make, model });
   } catch (err) {
@@ -7053,6 +7084,9 @@ function selectCroVehicle(vehicle) {
   // A new vehicle invalidates the vehicle-scoped deferred-work cache.
   createRoState.deferred = [];
   createRoState.deferredLoaded = false;
+  // Task #937: a different vehicle means a different intended RO — drop any
+  // pinned WO request ID so we don't upsert over a previous attempt.
+  createRoState.woRequestId = null;
   const picked = getCroEl('cro-vehicle-picked');
   const label = getCroEl('cro-vehicle-picked-label');
   if (label) label.textContent = '✓ ' + vehicle.display;
@@ -7538,6 +7572,12 @@ async function handleCroSubmit() {
     hasMileage: !!mileage,
     jobCount: createRoState.selectedJobs.length,
   });
+  // Task #937: pin a client-generated UUID for this pending create so a retry
+  // after a timeout (504) upserts the SAME work order — no duplicate ROs.
+  // Reused across retries; cleared on success or when the vehicle changes.
+  if (!createRoState.woRequestId) {
+    createRoState.woRequestId = crypto.randomUUID();
+  }
   try {
     const result = await sendMessage({
       action: 'MOS_API_REQUEST',
@@ -7557,6 +7597,7 @@ async function handleCroSubmit() {
           concerns: concerns.length ? concerns : undefined,
           note: note || undefined,
           mileage,
+          clientRequestId: createRoState.woRequestId,
           servicePackages: createRoState.selectedJobs.length > 0
             ? createRoState.selectedJobs.map(j => ({
                 title: j.title,
@@ -7573,6 +7614,7 @@ async function handleCroSubmit() {
       }
     }, 125000, 'Still creating the repair order — big shops can take a minute or two. Please keep this panel open…');
     if (!result?.ok && !result?.success) throw new Error(result?.error || 'Create failed');
+    createRoState.woRequestId = null;
     try {
       const createdVin = (createRoState.vehicle?.vin || '').toUpperCase();
       if (createdVin && result.workOrderId) {

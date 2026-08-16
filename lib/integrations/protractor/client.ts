@@ -50,6 +50,10 @@ export const __protractorClientTestHooks: {
   resolveProtractorConfig: typeof resolveProtractorConfig;
   // Task #903: lets resolveWorkOrderGuid tests stub the cached-GUID lookup.
   findCachedWorkOrderByRoNumber: typeof findCachedWorkOrderByRoNumber;
+  // Task #937: lets WO-create retry-idempotency tests stub the Mongo-backed
+  // collaborators used by the service-package append loop.
+  getDb: typeof getDb;
+  getShopPartCostRatio: typeof getShopPartCostRatio;
   onFetchStart: ((endpoint: string, opts?: { priority?: boolean; maxRetries?: number }) => void) | null;
 } = {
   httpsRequest: (...args) => httpsRequest(...args),
@@ -58,6 +62,8 @@ export const __protractorClientTestHooks: {
   retryBaseDelayMs: null,
   resolveProtractorConfig: (...args) => resolveProtractorConfig(...args),
   findCachedWorkOrderByRoNumber: (...args) => findCachedWorkOrderByRoNumber(...args),
+  getDb: (...args) => getDb(...args),
+  getShopPartCostRatio: (...args) => getShopPartCostRatio(...args),
   onFetchStart: null,
 };
 
@@ -1262,9 +1268,30 @@ export interface WorkOrderServicePackage {
  *   - Empty / whitespace-only entries inside `concerns` are filtered out and
  *     do not create empty Protractor blocks.
  */
+/**
+ * Task #937: deterministic UUID (v4-shaped) derived from stable parts.
+ * Used to pin ServicePackage / line IDs to the work-order ID so a retry of
+ * the same logical create (same client-pinned WO UUID) regenerates the SAME
+ * package/line IDs — Protractor upserts by ID, so a retry racing a
+ * still-running first attempt converges on one copy of each package instead
+ * of appending duplicates.
+ */
+export function deterministicProtractorId(...parts: Array<string | number>): string {
+  const digest = crypto.createHash("sha256").update(parts.join("|")).digest();
+  const b = Buffer.from(digest.subarray(0, 16));
+  b[6] = (b[6] & 0x0f) | 0x40; // version 4 nibble
+  b[8] = (b[8] & 0x3f) | 0x80; // RFC 4122 variant
+  const hex = b.toString("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
 export function buildConcernServicePackages(input: {
   concerns?: string[];
   concernText?: string;
+  /**
+   * Task #937: when the caller pinned the work-order ID, concern package IDs
+   * are derived from it so a retried create upserts the same concerns.
+   */
+  workOrderId?: string;
 }): Array<{
   ID: string;
   Chapter: "Concern";
@@ -1280,7 +1307,9 @@ export function buildConcernServicePackages(input: {
 
   let rank = 1;
   return concernList.map((concern) => ({
-    ID: crypto.randomUUID(),
+    ID: input.workOrderId
+      ? deterministicProtractorId(input.workOrderId, "concern", rank, concern)
+      : crypto.randomUUID(),
     Chapter: "Concern" as const,
     Rank: rank++,
     ServicePackageHeader: {
@@ -1354,6 +1383,7 @@ export async function createProtractorWorkOrder(
   const initialPackages: any[] = buildConcernServicePackages({
     concerns: params.concerns,
     concernText: params.concernText,
+    workOrderId: newWorkOrderId,
   });
 
   if (initialPackages.length > 0) {
@@ -1379,7 +1409,7 @@ export async function createProtractorWorkOrder(
   console.log(`[Create WO] Created WO #${workOrderNumber} (${workOrderId}) in ${Date.now() - tCreate}ms`);
 
   if (params.servicePackages?.length) {
-    const db = await getDb();
+    const db = await __protractorClientTestHooks.getDb();
 
     const mapLineType = (lineType?: string): string => {
       if (!lineType) return "Labor";
@@ -1411,11 +1441,23 @@ export async function createProtractorWorkOrder(
 
     // Task #681 — per-shop cost-estimate ratio for part lines that don't
     // carry a real cost from the source system.
-    const partCostRatio = await getShopPartCostRatio(shopId);
+    const partCostRatio = await __protractorClientTestHooks.getShopPartCostRatio(shopId);
 
     const packagesWithoutLines: Array<{ title: string; code?: string; source?: string; attempted: string[] }> = [];
 
-    for (const pkg of params.servicePackages) {
+    for (const [pkgIndex, pkg] of params.servicePackages.entries()) {
+      // Task #937: stable per-package ID derived from the WO ID + package
+      // position/identity. With a client-pinned WO UUID, a retried create
+      // regenerates the SAME package IDs, so we can (a) detect a package a
+      // still-running earlier attempt already appended and skip it, and
+      // (b) even a concurrent double-POST upserts one copy, not two.
+      const stablePkgId = deterministicProtractorId(
+        newWorkOrderId,
+        "pkg",
+        pkgIndex,
+        pkg.title || "",
+        pkg.code || "",
+      );
       try {
         // Task #891 timing: line resolution can involve up to 3 sequential
         // upstream fallbacks per package; measure each phase.
@@ -1575,6 +1617,15 @@ export async function createProtractorWorkOrder(
         const existingPkgsRaw = currentWo.ServicePackages as any;
         const existingPkgs = Array.isArray(existingPkgsRaw) ? existingPkgsRaw : (existingPkgsRaw?.ItemCollection || []);
 
+        // Task #937: retry idempotency — if this exact package (same stable
+        // ID) is already on the WO, a previous attempt (possibly still
+        // running past the route deadline) already applied it. Skip instead
+        // of appending a duplicate job.
+        if (existingPkgs.some((p: any) => String(p?.ID || "").toLowerCase() === stablePkgId.toLowerCase())) {
+          console.log(`[Create WO] Package "${pkg.title}" (${stablePkgId}) already on WO ${workOrderId} — skipping duplicate append (retry)`);
+          continue;
+        }
+
         if (shopLaborRate === 0) {
           for (const existPkg of existingPkgs) {
             const pLines = Array.isArray(existPkg.ServicePackageLines) ? existPkg.ServicePackageLines : (existPkg.ServicePackageLines?.ItemCollection || []);
@@ -1607,7 +1658,7 @@ export async function createProtractorWorkOrder(
             const laborRate = shopLaborRate > 0 ? shopLaborRate : price;
             const laborTotal = qty * laborRate;
             return {
-              ID: crypto.randomUUID(),
+              ID: deterministicProtractorId(stablePkgId, "line", idx),
               Rank: idx + 1,
               Type: "Labor",
               Description: l.description || "Labor",
@@ -1640,7 +1691,7 @@ export async function createProtractorWorkOrder(
               unitPrice: price,
             });
             return {
-              ID: crypto.randomUUID(),
+              ID: deterministicProtractorId(stablePkgId, "line", idx),
               Rank: idx + 1,
               Type: lineType,
               Description: l.description || "",
@@ -1669,7 +1720,7 @@ export async function createProtractorWorkOrder(
           : (pkg.description ? `${pkg.description} [Added by MOS]` : "[Added by MOS]");
 
         const newPkg = {
-          ID: crypto.randomUUID(),
+          ID: stablePkgId,
           Chapter: chapter,
           Code: pkg.code || "",
           Rank: existingPkgs.length + 1,

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { createContact } from "@/lib/integrations/protractor";
 import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
+import { resolveClientRequestId } from "@/lib/idempotent-create-id";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -48,7 +49,10 @@ export async function POST(req: NextRequest) {
         {
           priority: true,
           maxRetries: 1,
-          contactId: typeof clientRequestId === "string" ? clientRequestId : undefined,
+          // Task #937: derive the upstream ID server-side (hash of
+          // kind+shop+user+key) so the wizard's retry stays duplicate-safe
+          // without letting a caller target an existing record's UUID.
+          contactId: resolveClientRequestId("contact", shopId, sess.email, clientRequestId),
         },
       ),
       UPSTREAM_DEADLINE_MS,

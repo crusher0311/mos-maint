@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { createServiceItem } from "@/lib/integrations/protractor";
 import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
+import { resolveClientRequestId } from "@/lib/idempotent-create-id";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,7 +47,10 @@ export async function POST(req: NextRequest) {
           licensePlate: licensePlate || undefined,
         },
         {
-          vehicleId: typeof clientRequestId === "string" ? clientRequestId : undefined,
+          // Task #937: derive the upstream ID server-side (hash of
+          // kind+shop+user+key) so the wizard's retry stays duplicate-safe
+          // without letting a caller target an existing record's UUID.
+          vehicleId: resolveClientRequestId("vehicle", shopId, sess.email, clientRequestId),
           soapTimeoutMs: SOAP_TIMEOUT_MS,
         },
       ),
