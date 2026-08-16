@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { getDb } from "@/lib/mongo";
-import { requirePlatformAdmin } from "@/lib/auth";
+import { getSession } from "@/lib/auth";
 import { getNextShopId } from "@/lib/ids";
 import { createHovercodeQR } from "@/lib/hovercode";
 
@@ -12,14 +12,21 @@ export const dynamic = "force-dynamic";
  * POST /api/shops
  * Body: { name: string }
  * Returns: { shop: { shopId: number, name: string, webhookToken: string } }
+ *
+ * Task #1130: previously unauthenticated — anyone could mint shops (and the
+ * webhook token in the response). Now admin-only, mirroring
+ * /api/admin/shops POST (the routed admin UI's create-shop path).
  */
 export async function POST(req: NextRequest) {
   try {
-    await requirePlatformAdmin();
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  try {
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (session.role !== "admin" && !session.isPlatformAdmin) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const { name } = await req.json();
     if (!name || typeof name !== "string" || !name.trim()) {
       return NextResponse.json({ error: "Missing name" }, { status: 400 });
