@@ -1,22 +1,36 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongo";
+import { getSession } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+/** Test seam — swap these in unit tests to avoid real DB / auth calls. */
+export const __deps = { getSession, getDb };
+
 export async function GET(_: Request, ctx: { params: { customerId: string } }) {
+  const session = await __deps.getSession();
+  if (!session?.shopId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   try {
     const id = ctx.params?.customerId;
     if (!id || !ObjectId.isValid(id)) {
       return NextResponse.json({ error: "Invalid customerId" }, { status: 400 });
     }
 
-    const db = await getDb();
+    const db = await __deps.getDb();
     const _id = new ObjectId(id);
 
     const customer = await db.collection("customers").findOne({ _id });
     if (!customer) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+    // Shop-scope authorization: confine non-platform-admins to their own shop.
+    const isPlatformAdmin = session.isPlatformAdmin || session.role === "platform_admin";
+    if (!isPlatformAdmin && Number(customer.shopId) !== Number(session.shopId)) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
 
     const [vehicle, ro, recentEvents] = await Promise.all([
       db

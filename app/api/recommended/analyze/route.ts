@@ -1,5 +1,6 @@
 // app/api/recommended/analyze/route.ts
 import { NextResponse } from "next/server";
+import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { resolveAutoflowConfig, fetchDviWithCache } from "@/lib/integrations/autoflow";
 import { resolveCarfaxConfig, fetchCarfaxWithCache } from "@/lib/integrations/carfax";
@@ -8,6 +9,21 @@ import { trackApiRequest } from "@/lib/api-usage-tracker";
 import { enforceAiBudget } from "@/lib/ai-budget";
 
 export const runtime = "nodejs";
+
+/** Test seam — swap these in unit tests to avoid real DB / auth / AI calls. */
+export const __deps = {
+  getSession,
+  enforceAiBudget,
+  callOpenAIFn: null as
+    | null
+    | ((
+        model: string,
+        systemPrompt: string,
+        userPrompt: string,
+      ) => Promise<{ ok: boolean; text?: string; error?: string }>),
+  logUsage,
+  trackApiRequest,
+};
 
 /* ----------------- helpers ----------------- */
 function fmt(n?: number | null) {
@@ -187,6 +203,10 @@ async function getLocalOeFromMongo(vin: string) {
 
 /* ----------------- route ----------------- */
 export async function POST(req: Request) {
+  const session = await __deps.getSession();
+  if (!session?.shopId) {
+    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  }
   try {
     let body: any = {};
     try {
@@ -198,29 +218,45 @@ export async function POST(req: Request) {
     const vin = String(body?.vin || "").toUpperCase().trim();
     const model = String(body?.model || "gpt-4.1");
 
+    // Resolve shopId from session first so it can gate all downstream DB reads.
+    // This must come before any VIN/vehicle lookup so we can scope those queries.
+    const logShopIdNum = Number(session.shopId);
+    if (!Number.isFinite(logShopIdNum) || logShopIdNum <= 0) {
+      return NextResponse.json(
+        { ok: false, error: "Session shopId is required" },
+        { status: 400 }
+      );
+    }
+
     // Prefer pre-fetched inputs from the UI, fallback to fetching by VIN if provided.
     let dvi = body?.dviData ?? null;
     let carfax = body?.carfaxData ?? null;
     let oem = Array.isArray(body?.oemData) ? body.oemData : null;
 
-    // If anything missing but VIN present, try to fetch what we can
+    // If anything missing but VIN present, try to fetch what we can.
+    // All DB lookups are scoped to the session's shop so a caller cannot
+    // supply a VIN from a different tenant to pull that tenant's DVI/CARFAX.
     if (vin && (!dvi || !carfax || !oem)) {
       const db = await getDb();
 
-      // vehicle so we can get shopId and latest RO
+      // Scope vehicle lookup to session shop (String/Number legacy both handled)
       const vehicle = await db
         .collection("vehicles")
         .findOne(
-          { vin },
+          {
+            vin,
+            $or: [{ shopId: String(logShopIdNum) }, { shopId: logShopIdNum }],
+          },
           { projection: { shopId: 1 } }
         );
 
-      const shopId = Number(vehicle?.shopId ?? NaN);
-
-      // latest RO (for DVI)
+      // latest RO (for DVI) — also shop-scoped
       const ro = await db
         .collection("repair_orders")
-        .find({ $or: [{ vin }, { vehicleId: vehicle?._id }] })
+        .find({
+          $or: [{ vin }, { vehicleId: vehicle?._id }],
+          shopId: { $in: [String(logShopIdNum), logShopIdNum] },
+        })
         .project({ roNumber: 1, updatedAt: 1, createdAt: 1 })
         .sort({ updatedAt: -1, createdAt: -1 })
         .limit(1)
@@ -229,10 +265,10 @@ export async function POST(req: Request) {
       // DVI
       if (!dvi) {
         try {
-          const afCfg = await resolveAutoflowConfig(shopId);
+          const afCfg = await resolveAutoflowConfig(logShopIdNum);
           dvi =
             ro?.roNumber && afCfg.configured
-              ? await fetchDviWithCache(shopId, String(ro.roNumber), 10 * 60 * 1000)
+              ? await fetchDviWithCache(logShopIdNum, String(ro.roNumber), 10 * 60 * 1000)
               : { ok: false, error: ro?.roNumber ? "AutoFlow not connected." : "No RO found." };
         } catch {
           dvi = { ok: false, error: "Failed to fetch DVI" };
@@ -242,9 +278,9 @@ export async function POST(req: Request) {
       // CARFAX
       if (!carfax) {
         try {
-          const carfaxCfg = await resolveCarfaxConfig(shopId);
+          const carfaxCfg = await resolveCarfaxConfig(logShopIdNum);
           carfax = carfaxCfg.configured
-            ? await fetchCarfaxWithCache(shopId, vin, 7 * 24 * 60 * 60 * 1000)
+            ? await fetchCarfaxWithCache(logShopIdNum, vin, 7 * 24 * 60 * 60 * 1000)
             : { ok: false, error: "CARFAX not configured." };
         } catch {
           carfax = { ok: false, error: "Failed to fetch CARFAX" };
@@ -295,48 +331,30 @@ export async function POST(req: Request) {
       safeJson(Array.isArray(oem) ? oem : []),
     ].join("\n");
 
-    // Get shopId from request body or vehicle lookup for tracking
-    let logShopId: string | number | null = body?.shopId || null;
-    if (!logShopId && vin) {
-      try {
-        const usageDb = await getDb();
-        const vehicleForLog = await usageDb.collection("vehicles").findOne({ vin }, { projection: { shopId: 1 } });
-        logShopId = vehicleForLog?.shopId;
-      } catch {}
-    }
-
-    // Refuse anonymous calls — without a shopId we cannot rate-limit or
-    // budget, which would let attackers drain OpenAI quota with no
-    // attribution.
-    const logShopIdNum = logShopId != null ? Number(logShopId) : NaN;
-    if (!Number.isFinite(logShopIdNum) || logShopIdNum <= 0) {
-      return NextResponse.json(
-        { ok: false, error: "shopId (or a VIN that resolves to a shop) is required" },
-        { status: 400 }
-      );
-    }
-    const blocked = await enforceAiBudget({
+    const blocked = await __deps.enforceAiBudget({
       shopId: logShopIdNum,
       route: "/api/recommended/analyze",
     });
     if (blocked) return blocked;
 
-    // OpenAI call
+    // OpenAI call — use __deps override in tests, real callOpenAI in prod.
     const aiStartTime = Date.now();
-    const ai = await callOpenAI(model, systemPrompt, userPrompt);
+    const ai = __deps.callOpenAIFn
+      ? await __deps.callOpenAIFn(model, systemPrompt, userPrompt)
+      : await callOpenAI(model, systemPrompt, userPrompt);
     const aiDuration = Date.now() - aiStartTime;
 
     // Track API request for traffic monitoring (Responses API doesn't return
     // usage, so we estimate prompt/completion tokens for budget accounting).
     const estPrompt = estimateTokens(systemPrompt + userPrompt);
     const estCompletion = estimateTokens(ai.text ?? "");
-    trackApiRequest(
+    __deps.trackApiRequest(
       "openai",
       "/api/recommended/analyze",
       "POST",
       ai.ok ? 200 : 500,
       aiDuration,
-      logShopId ? Number(logShopId) : undefined,
+      logShopIdNum,
       { tokens: { prompt: estPrompt, completion: estCompletion, total: estPrompt + estCompletion } }
     ).catch(() => {});
     
@@ -360,10 +378,10 @@ export async function POST(req: Request) {
     const outputTokens = estimateTokens(raw);
     const cost = estimateCost(model, inputTokens, outputTokens);
     
-    if (logShopId) {
+    if (logShopIdNum) {
       try {
-        await logUsage({
-          shopId: String(logShopId),
+        await __deps.logUsage({
+          shopId: String(logShopIdNum),
           action: "analyze",
           model,
           inputTokens,

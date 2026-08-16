@@ -1,6 +1,7 @@
 // app/api/shops/[shopId]/credentials/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
+import { requirePlatformAdmin } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,6 +29,11 @@ function shopIdQuery(raw: string) {
 
 /** PUT /api/shops/[shopId]/credentials  Body: { apiKey, apiPassword, apiBase? } */
 export async function PUT(req: NextRequest, ctx: { params: { shopId: string } }) {
+  try {
+    await requirePlatformAdmin();
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   try {
     const raw = ctx.params?.shopId?.trim();
     if (!raw) return NextResponse.json({ error: "Missing shopId in path" }, { status: 400 });
@@ -71,6 +77,11 @@ export async function PUT(req: NextRequest, ctx: { params: { shopId: string } })
 
 /** GET /api/shops/[shopId]/credentials — masked status */
 export async function GET(_req: NextRequest, ctx: { params: { shopId: string } }) {
+  try {
+    await requirePlatformAdmin();
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   try {
     const raw = ctx.params?.shopId?.trim();
     if (!raw) return NextResponse.json({ error: "Missing shopId in path" }, { status: 400 });

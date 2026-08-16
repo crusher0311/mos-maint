@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requirePlatformAdmin } from "@/lib/auth";
 import { getPushToROStats } from "@/lib/extension-analytics";
 import { getDb as getPg } from "@/lib/db/drizzle";
 import { extensionAnalytics } from "@/lib/db/schema/wave1";
@@ -6,6 +7,7 @@ import { sql, eq, and, gte, lte, desc, type SQL } from "drizzle-orm";
 
 export async function GET(request: NextRequest) {
   try {
+    await requirePlatformAdmin();
     const { searchParams } = new URL(request.url);
     const shopId = searchParams.get("shopId");
     const enterpriseId = searchParams.get("enterpriseId");

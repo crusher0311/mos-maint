@@ -2,14 +2,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongo";
+import { getSession } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+/** Test seam — swap these in unit tests to avoid real DB / auth calls. */
+export const __deps = { getSession, getDb };
 
 export async function GET(
   _req: NextRequest,
   ctx: { params: { customerId?: string } }
 ) {
+  const session = await __deps.getSession();
+  if (!session?.shopId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const id = ctx.params?.customerId;
   if (!id) {
     return NextResponse.json({ error: "missing customerId" }, { status: 400 });
@@ -19,7 +28,7 @@ export async function GET(
   }
 
   const _id = new ObjectId(id);
-  const db = await getDb();
+  const db = await __deps.getDb();
 
   // -- Customer ------------------------------------------------------------
   const customer = await db.collection("customers").findOne(
@@ -47,6 +56,14 @@ export async function GET(
   );
 
   if (!customer) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
+
+  // -- Shop-scope authorization -------------------------------------------
+  // Platform admins may inspect any shop; regular users are confined to their
+  // own shop. Comparing both Number() casts handles legacy String shopIds.
+  const isPlatformAdmin = session.isPlatformAdmin || session.role === "platform_admin";
+  if (!isPlatformAdmin && Number(customer.shopId) !== Number(session.shopId)) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
 

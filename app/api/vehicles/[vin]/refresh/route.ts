@@ -1,11 +1,20 @@
 // app/api/vehicles/[vin]/refresh/route.ts
 import { NextResponse, NextRequest } from "next/server";
 import { getDb } from "@/lib/mongo";
+import { getSession } from "@/lib/auth";
 import { importDVI } from "@/lib/integrations/dvi";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+/** Test seam — swap these in unit tests to avoid real DB / auth calls. */
+export const __deps = { getSession, getDb };
+
+/**
+ * Parse only the fields that cannot be derived from the session or URL.
+ * shopId is intentionally NOT read from the request — it is always taken
+ * from the session to prevent cross-tenant DVI imports.
+ */
 async function readInputs(req: NextRequest, vinParam: string) {
   const vin = vinParam?.toUpperCase();
 
@@ -13,32 +22,24 @@ async function readInputs(req: NextRequest, vinParam: string) {
     // Try FormData first
     try {
       const fd = await req.formData();
-      const shopId = Number(fd.get("shopId"));
       const customerId = String(fd.get("customerId") || "");
-      if (vin && Number.isFinite(shopId) && customerId) {
-        return { vin, shopId, customerId };
-      }
+      if (vin) return { vin, customerId };
     } catch {}
     // Fallback to JSON body
     try {
       const j = await req.json();
-      const shopId = Number(j?.shopId);
       const customerId = j?.customerId ? String(j.customerId) : "";
-      if (vin && Number.isFinite(shopId) && customerId) {
-        return { vin, shopId, customerId };
-      }
+      if (vin) return { vin, customerId };
     } catch {}
-    return { error: "Missing vin/shopId/customerId in POST body." };
+    if (vin) return { vin, customerId: "" };
+    return { error: "Missing vin in URL." };
   }
 
   if (req.method === "GET") {
     const qp = req.nextUrl.searchParams;
-    const shopId = Number(qp.get("shopId"));
     const customerId = String(qp.get("customerId") || "");
-    if (vin && Number.isFinite(shopId) && customerId) {
-      return { vin, shopId, customerId };
-    }
-    return { error: "For GET testing, pass ?shopId=###&customerId=XXXX" };
+    if (vin) return { vin, customerId };
+    return { error: "Missing vin in URL." };
   }
 
   return { error: "Method not allowed." };
@@ -52,6 +53,13 @@ export async function GET(req: NextRequest, ctx: { params: { vin: string } }) {
 }
 
 async function handle(req: NextRequest, ctx: { params: { vin: string } }) {
+  const session = await __deps.getSession();
+  if (!session?.shopId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  // Always use the authenticated shop — never trust a caller-supplied shopId.
+  const shopId = Number(session.shopId);
+
   try {
     const vinParam = ctx.params.vin;
     const parsed = await readInputs(req, vinParam);
@@ -59,10 +67,22 @@ async function handle(req: NextRequest, ctx: { params: { vin: string } }) {
       return NextResponse.json({ error: parsed.error }, { status: 400 });
     }
 
-    const { vin, shopId, customerId } = parsed;
-    const db = await getDb();
+    const { vin, customerId } = parsed;
+    const db = await __deps.getDb();
 
-    // Most recent ticket for RO#
+    // Verify the VIN belongs to this shop before doing anything.
+    // A caller who supplies a foreign VIN in the URL param gets a 404,
+    // preventing them from reading RO numbers or triggering DVI imports
+    // on vehicles owned by other tenants.
+    const vehicle = await db.collection("vehicles").findOne(
+      { vin, $or: [{ shopId: String(shopId) }, { shopId: shopId }] },
+      { projection: { _id: 1 } }
+    );
+    if (!vehicle) {
+      return NextResponse.json({ error: "Vehicle not found" }, { status: 404 });
+    }
+
+    // Most recent ticket for RO# — scoped to session shop
     const ticket = await db.collection("tickets").findOne(
       { shopId, vin },
       { sort: { updatedAt: -1 }, projection: { roNumber: 1 } }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { getDb } from "@/lib/mongo";
+import { requirePlatformAdmin } from "@/lib/auth";
 import { getNextShopId } from "@/lib/ids";
 import { createHovercodeQR } from "@/lib/hovercode";
 
@@ -13,6 +14,11 @@ export const dynamic = "force-dynamic";
  * Returns: { shop: { shopId: number, name: string, webhookToken: string } }
  */
 export async function POST(req: NextRequest) {
+  try {
+    await requirePlatformAdmin();
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   try {
     const { name } = await req.json();
     if (!name || typeof name !== "string" || !name.trim()) {

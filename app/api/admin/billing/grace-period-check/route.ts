@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
+import { requirePlatformAdmin } from "@/lib/auth";
 import { sendEmail, makeAccountSuspendedEmail, makeGraceReminderEmail } from "@/lib/email";
 
 export const runtime = "nodejs";
@@ -150,6 +151,11 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
+  try {
+    await requirePlatformAdmin();
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const db = await getDb();
   const now = new Date();
   

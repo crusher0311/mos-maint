@@ -331,8 +331,8 @@ const ALLOWLIST = new Set([
   "app/api/sticker/regenerate-qr/route.ts",
   "app/api/sticker/settings/route.ts",
   "app/api/sticker/upload-logo/route.ts",
-  "app/api/stripe/change-plan/route.ts",
-  "app/api/stripe/create-checkout/route.ts",
+  // stripe/change-plan and stripe/create-checkout removed: both now return 410
+  // Gone without any getDb() call and are no longer allowlisted here.
   "app/api/stripe/invoices/route.ts",
   "app/api/stripe/payment-methods/route.ts",
   "app/api/stripe/plans/route.ts",

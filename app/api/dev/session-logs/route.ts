@@ -4,7 +4,16 @@ import { ObjectId } from "mongodb";
 
 const COLLECTION = "dev_session_logs";
 
+function requireDev(): NextResponse | null {
+  if (process.env.NODE_ENV !== "development") {
+    return NextResponse.json({ error: "Dev only" }, { status: 403 });
+  }
+  return null;
+}
+
 export async function GET(req: NextRequest) {
+  const devErr = requireDev();
+  if (devErr) return devErr;
   try {
     const db = await getDb();
     const { searchParams } = new URL(req.url);
@@ -43,6 +52,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const devErr = requireDev();
+  if (devErr) return devErr;
   try {
     const db = await getDb();
     const body = await req.json();
@@ -75,6 +86,8 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+  const devErr = requireDev();
+  if (devErr) return devErr;
   try {
     const db = await getDb();
     const body = await req.json();

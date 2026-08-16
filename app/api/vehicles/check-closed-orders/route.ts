@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import pLimit from "p-limit";
 import { getDb } from "@/lib/mongo";
+import { getSession } from "@/lib/auth";
 import { fetchWorkOrderById } from "@/lib/integrations/protractor";
 import { getTekmetricWorkOrderWithMileage } from "@/lib/integrations/tekmetric";
+
+/** Test seam — swap these in unit tests to avoid real DB / auth calls. */
+export const __deps = { getSession, getDb };
 
 const BATCH_SIZE = 3; // Reduced from 5 to avoid rate limits
 const BATCH_DELAY_MS = 3000; // Increased from 2000
@@ -34,21 +38,21 @@ function setCachedResult(workOrderId: string, isClosed: boolean) {
 }
 
 export async function POST(request: NextRequest) {
+  const session = await __deps.getSession();
+  if (!session?.shopId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  // Ignore any caller-supplied shopId: always use the session's shop.
+  // This prevents a cross-tenant read/write where a caller passes a foreign shopId.
+  const shopId: number = Number(session.shopId);
   try {
-    let shopId: string | number | undefined;
-    
     try {
-      const body = await request.json();
-      shopId = body?.shopId;
+      await request.json(); // consume body; shopId comes from session only
     } catch {
-      return NextResponse.json({ error: "Invalid or empty request body" }, { status: 400 });
-    }
-    
-    if (!shopId) {
-      return NextResponse.json({ error: "shopId required" }, { status: 400 });
+      // body is optional — proceed
     }
 
-    const db = await getDb();
+    const db = await __deps.getDb();
 
     const shop = await db.collection("shops").findOne({ 
       $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] 

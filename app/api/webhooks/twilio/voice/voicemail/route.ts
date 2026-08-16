@@ -1,17 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
+import { validateTwilioSignature } from "@/lib/twilio";
 
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
-    const recordingUrl = formData.get("RecordingUrl")?.toString() || "";
-    const recordingSid = formData.get("RecordingSid")?.toString() || "";
-    const recordingDuration =
-      formData.get("RecordingDuration")?.toString() || "0";
-    const callSid = formData.get("CallSid")?.toString() || "";
-    const from = formData.get("From")?.toString() || "";
-    const to = formData.get("To")?.toString() || "";
-    const transcriptionText =
-      formData.get("TranscriptionText")?.toString() || "";
+    const params: Record<string, string> = {};
+    formData.forEach((value, key) => { params[key] = String(value); });
+
+    const signature = req.headers.get("x-twilio-signature") || "";
+    if (process.env.TWILIO_VALIDATE_SIGNATURE !== "false") {
+      if (!validateTwilioSignature(req.url, params, signature)) {
+        return new NextResponse("Forbidden", { status: 403 });
+      }
+    }
+
+    const recordingUrl = params["RecordingUrl"] || "";
+    const recordingSid = params["RecordingSid"] || "";
+    const recordingDuration = params["RecordingDuration"] || "0";
+    const callSid = params["CallSid"] || "";
+    const from = params["From"] || "";
+    const to = params["To"] || "";
+    const transcriptionText = params["TranscriptionText"] || "";
 
     console.log(
       `[Twilio Voicemail] Recording received: sid=${recordingSid} duration=${recordingDuration}s from=${from}`,

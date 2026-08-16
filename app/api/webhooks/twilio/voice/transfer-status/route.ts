@@ -1,10 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
+import { validateTwilioSignature } from "@/lib/twilio";
 
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
-    const dialCallStatus = formData.get("DialCallStatus")?.toString() || "";
-    const callSid = formData.get("CallSid")?.toString() || "";
+    const params: Record<string, string> = {};
+    formData.forEach((value, key) => { params[key] = String(value); });
+
+    const signature = req.headers.get("x-twilio-signature") || "";
+    if (process.env.TWILIO_VALIDATE_SIGNATURE !== "false") {
+      if (!validateTwilioSignature(req.url, params, signature)) {
+        return new NextResponse("Forbidden", { status: 403 });
+      }
+    }
+
+    const dialCallStatus = params["DialCallStatus"] || "";
+    const callSid = params["CallSid"] || "";
 
     console.log(
       `[Twilio Transfer] Status: ${dialCallStatus} for call ${callSid}`,
