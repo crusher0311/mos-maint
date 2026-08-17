@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { runWithTekmetricPriority } from "@/lib/integrations/tekmetric/client";
 import { runIncrementalSyncCycle, ensureCacheIndexes } from "@/lib/integrations/tekmetric/incremental-sync";
 import { getDb } from "@/lib/mongo";
+import { inlineBusinessHoursBlock } from "@/lib/inline-business-hours";
 import { runWithTekmetricApiCallTracking } from "@/lib/integrations/tekmetric/client";
 
 export const runtime = "nodejs";
@@ -25,6 +26,18 @@ const PREGEN_SHOP_STAGGER_MS = (() => {
 let lastPregenerateAt = 0;
 let pregenInFlight = false;
 function shouldRunPregenerate(): boolean {
+  // Fleet business-hours guard (2026-08-17): the pregen pass runs its plan
+  // builds ON the web instances via self-POSTs, and with N instances each
+  // holding its own module-level throttle the fleet gets N overlapping
+  // ~15-min passes per interval — measurable p95 damage exactly when
+  // advisors are working. A cache warm that slows live traffic is
+  // net-negative, so daytime passes are skipped entirely; evening/night/
+  // weekend passes still warm the caches. Same window + kill switch as the
+  // inline fullpage guard.
+  const biz = inlineBusinessHoursBlock();
+  if (biz.blocked) {
+    return false;
+  }
   const elapsed = Date.now() - lastPregenerateAt;
   // Lease semantics: within an interval the flag blocks overlap; past the
   // interval a still-set flag means the previous pass hung (fetch/query
