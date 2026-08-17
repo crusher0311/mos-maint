@@ -10,6 +10,101 @@ const DATAONE_API_BASE = process.env.DATAONE_API_URL || "http://3.144.191.161:30
 const CACHE_TTL_HOURS = 24 * 7; // Cache for 7 days (OEM data rarely changes)
 const FETCH_TIMEOUT_MS = 5000; // 5 second timeout for API calls
 
+// ---------------------------------------------------------------------------
+// Circuit breaker for the DataOne lookup path (2026-08-17 incident).
+// DataOne's "local" tables live on the SAME Supabase Postgres as the canonical
+// app store; when that box gets disk-IO starved, every cache-miss lookup hangs
+// for minutes, each plan build pins a web request for its full 15s race
+// timeout, builds stack up on the web instances, and unrelated endpoints
+// (extension features → print button) start 503ing. Plans already degrade
+// gracefully without OEM data (`oemMissing`, short TTL), so during a brownout
+// the right move is to fail INSTANTLY, not slowly.
+//
+// Semantics: cache HITs are always served (they're one indexed read). Only the
+// miss/expired fetch path is gated. N consecutive slow/failed fetches open the
+// breaker for a cooldown; while open, misses return ok:false immediately. The
+// first fetch after cooldown is the probe — success closes the breaker.
+// Env: DATAONE_BREAKER_DISABLED=true kill switch;
+//      DATAONE_BREAKER_THRESHOLD (default 3 consecutive failures);
+//      DATAONE_BREAKER_COOLDOWN_MS (default 10 min);
+//      DATAONE_LOCAL_TIMEOUT_MS (default 12000 — deliberately below the
+//      plan-builder 15s race so the failure is observed HERE and counted).
+const BREAKER_THRESHOLD = Math.max(1, Number(process.env.DATAONE_BREAKER_THRESHOLD) || 3);
+const BREAKER_COOLDOWN_MS = Math.max(30_000, Number(process.env.DATAONE_BREAKER_COOLDOWN_MS) || 10 * 60 * 1000);
+const LOCAL_FETCH_TIMEOUT_MS = Math.max(2_000, Number(process.env.DATAONE_LOCAL_TIMEOUT_MS) || 12_000);
+let breakerConsecutiveFailures = 0;
+let breakerOpenUntil = 0;
+// Generation guards against late completions from requests that started
+// before the breaker opened: their success/failure must not mutate newer
+// state. Bumped every time the breaker opens.
+let breakerGeneration = 0;
+// While open-and-cooldown-expired, exactly ONE request is let through as the
+// half-open probe; everyone else keeps failing fast until it reports back.
+let breakerProbeInFlight = false;
+
+type BreakerToken = { gen: number; isProbe: boolean };
+
+function breakerEnabled(): boolean {
+  return process.env.DATAONE_BREAKER_DISABLED !== "true";
+}
+
+/** Returns a token when the caller may attempt the fetch, or null to fail fast. */
+function breakerAcquire(): BreakerToken | null {
+  if (!breakerEnabled()) return { gen: breakerGeneration, isProbe: false };
+  if (breakerOpenUntil === 0) return { gen: breakerGeneration, isProbe: false };
+  const now = Date.now();
+  if (now < breakerOpenUntil) return null;
+  if (breakerProbeInFlight) return null;
+  breakerProbeInFlight = true;
+  console.log(`[DataOne Breaker] cooldown expired — letting one half-open probe through`);
+  return { gen: breakerGeneration, isProbe: true };
+}
+
+function breakerRecordSuccess(token: BreakerToken): void {
+  if (token.isProbe) breakerProbeInFlight = false;
+  if (token.gen !== breakerGeneration) return; // stale pre-open request
+  if (breakerConsecutiveFailures > 0 || breakerOpenUntil > 0) {
+    console.log(`[DataOne Breaker] lookup healthy again — closing (was ${breakerConsecutiveFailures} consecutive failures)`);
+  }
+  breakerConsecutiveFailures = 0;
+  breakerOpenUntil = 0;
+}
+
+function breakerOpen(reason: string): void {
+  breakerGeneration++;
+  breakerOpenUntil = Date.now() + BREAKER_COOLDOWN_MS;
+  breakerProbeInFlight = false;
+  console.warn(
+    `[DataOne Breaker] OPEN for ${Math.round(BREAKER_COOLDOWN_MS / 60000)}min (${reason}) — OEM lookups will fail fast`
+  );
+}
+
+function breakerRecordFailure(token: BreakerToken, reason: string): void {
+  if (token.isProbe) {
+    // Probe failed: re-open for another cooldown.
+    breakerProbeInFlight = false;
+    breakerOpen(`half-open probe failed: ${reason}`);
+    return;
+  }
+  if (token.gen !== breakerGeneration) return; // stale pre-open request
+  breakerConsecutiveFailures++;
+  if (breakerEnabled() && breakerConsecutiveFailures >= BREAKER_THRESHOLD) {
+    breakerOpen(`${breakerConsecutiveFailures} consecutive failures, last: ${reason}`);
+  } else {
+    console.warn(`[DataOne Breaker] failure ${breakerConsecutiveFailures}/${BREAKER_THRESHOLD} (${reason})`);
+  }
+}
+
+function withDeadline<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+    promise.then(
+      (v) => { clearTimeout(t); resolve(v); },
+      (e) => { clearTimeout(t); reject(e); },
+    );
+  });
+}
+
 async function fetchWithTimeout(url: string, options: RequestInit = {}): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -361,10 +456,36 @@ export async function getMaintenanceScheduleCached(vin: string): Promise<{
   const squish = toSquish(vin);
   const now = new Date();
   
+  // Acquired up front (before the cache read, which sits on the same
+  // brownout-prone Postgres); null = breaker open, fail fast on any DB touch
+  // that errors and on the miss path.
+  const breakerToken = breakerAcquire();
+  const fastFail = (error: string) => ({
+    ok: false,
+    vin,
+    squish,
+    count: 0,
+    items: [] as MaintenanceItem[],
+    error,
+    source: "cache" as const,
+  });
+
   try {
-    // Wave 1 (task #342): canonical cache now in Postgres.
+    // Wave 1 (task #342): canonical cache now in Postgres. The read is
+    // deadline-bounded — it lives on the same Postgres as the slow path, so a
+    // hung cache read must not pin the request either.
     const { pgFindDataOneCache } = await import("@/lib/db/repositories/wave1");
-    const cached = (await pgFindDataOneCache(squish)) as CachedMaintenanceData | null;
+    let cached: CachedMaintenanceData | null;
+    try {
+      cached = (await withDeadline(
+        pgFindDataOneCache(squish),
+        LOCAL_FETCH_TIMEOUT_MS,
+        "DataOne cache read",
+      )) as CachedMaintenanceData | null;
+    } catch (cacheErr: any) {
+      if (breakerToken) breakerRecordFailure(breakerToken, cacheErr?.message || "cache read failed");
+      return fastFail(`DataOne cache read failed: ${cacheErr?.message || cacheErr}`);
+    }
     
     if (cached && cached.expiresAt > now && cached.vehicle) {
       const cachedHasIntervals = cached.data.items?.some((item: any) => item.miles || item.months);
@@ -394,14 +515,34 @@ export async function getMaintenanceScheduleCached(vin: string): Promise<{
       console.log(`[DataOne Cache] HIT but missing vehicle info for squish ${squish}, re-fetching...`);
     }
     
+    // Circuit breaker: during a DB brownout, fail the miss path instantly
+    // instead of hanging plan builds for their full 15s race timeout.
+    if (!breakerToken) {
+      console.warn(`[DataOne Breaker] open — failing fast for squish ${squish} (retry after ${new Date(breakerOpenUntil).toISOString()})`);
+      return fastFail("DataOne lookup skipped: circuit breaker open (recent lookups timed out)");
+    }
+
     // Cache miss or expired - fetch from LOCAL PostgreSQL database (fast!)
     console.log(`[DataOne Cache] ${cached ? 'EXPIRED' : 'MISS'} for squish ${squish}, fetching from local PostgreSQL...`);
     
-    // Fetch both maintenance schedule and vehicle decode from local database in parallel
-    const [localResult, decoded] = await Promise.all([
-      getMaintenanceScheduleLocal(vin),
-      decodeVinLocal(vin)
-    ]);
+    // Fetch both maintenance schedule and vehicle decode from local database in
+    // parallel, bounded by our own deadline (below the plan-builder 15s race)
+    // so slowness is observed and counted here.
+    let localResult: Awaited<ReturnType<typeof getMaintenanceScheduleLocal>>;
+    let decoded: Awaited<ReturnType<typeof decodeVinLocal>>;
+    try {
+      [localResult, decoded] = await withDeadline(
+        Promise.all([
+          getMaintenanceScheduleLocal(vin),
+          decodeVinLocal(vin),
+        ]),
+        LOCAL_FETCH_TIMEOUT_MS,
+        "DataOne local fetch",
+      );
+    } catch (fetchErr: any) {
+      breakerRecordFailure(breakerToken, fetchErr?.message || "local fetch failed");
+      return fastFail(`DataOne local fetch failed: ${fetchErr?.message || fetchErr}`);
+    }
     
     // Extract vehicle info from decode
     const vehicleInfo: CachedVehicleInfo | undefined = decoded.ok && decoded.decoded ? {
@@ -468,6 +609,12 @@ export async function getMaintenanceScheduleCached(vin: string): Promise<{
       finalError.includes("timeout")
     );
 
+    if (isDbError) {
+      breakerRecordFailure(breakerToken, finalError || "db error");
+    } else {
+      breakerRecordSuccess(breakerToken);
+    }
+
     if (isDbError && finalCount === 0) {
       console.warn(`[DataOne Cache] Skipping cache store for squish ${squish} — DB unavailable, would cache empty result`);
       return {
@@ -527,12 +674,27 @@ export async function getMaintenanceScheduleCached(vin: string): Promise<{
     };
   } catch (error) {
     console.error("[DataOne Cache] Error:", error);
-    // Fallback to direct local database call if cache layer fails
-    const localResult = await getMaintenanceScheduleLocal(vin);
-    return {
-      ...localResult,
-      source: "local" as "api" | "cache",
-    };
+    // Fallback to direct local database call if the cache layer fails — but
+    // breaker-gated and deadline-bounded: the fallback hits the same Postgres,
+    // so an unbounded retry here would bypass the whole brownout protection.
+    if (!breakerToken || Date.now() < breakerOpenUntil) {
+      return fastFail("DataOne fallback skipped: circuit breaker open");
+    }
+    try {
+      const localResult = await withDeadline(
+        getMaintenanceScheduleLocal(vin),
+        LOCAL_FETCH_TIMEOUT_MS,
+        "DataOne fallback fetch",
+      );
+      if (localResult.ok) breakerRecordSuccess(breakerToken);
+      return {
+        ...localResult,
+        source: "local" as "api" | "cache",
+      };
+    } catch (fallbackErr: any) {
+      breakerRecordFailure(breakerToken, fallbackErr?.message || "fallback fetch failed");
+      return fastFail(`DataOne fallback failed: ${fallbackErr?.message || fallbackErr}`);
+    }
   }
 }
 
