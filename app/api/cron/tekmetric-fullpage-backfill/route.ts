@@ -20,6 +20,7 @@ import {
   releaseInFlightLock,
 } from "@/lib/integrations/tekmetric/inflight-lock";
 import { enqueueTekmetricFullPage } from "@/lib/queue/producer";
+import { inlineBusinessHoursBlock } from "@/lib/inline-business-hours";
 import { decideQueueFor } from "@/lib/queue/feature-flag";
 import {
   prepareQuietWindowGate,
@@ -316,6 +317,27 @@ export async function GET(req: NextRequest) {
   }
 
   // ── Pass 2: in-process drain for shops not routed to the queue ─────
+  // Global fleet business-hours guard (2026-08-14/17 incidents): per-shop
+  // quiet windows that "learned" a late-morning tail (e.g. 20:00–10:00
+  // local) let heavy chunks run inline on the shared web instance during
+  // OTHER shops' business hours, starving the event loop fleet-wide. The
+  // queue hand-off above already ran; only the inline lane is deferred.
+  const bizBlock = inlineBusinessHoursBlock();
+  if (bizBlock.blocked && inlineShops.length > 0) {
+    console.log(
+      `[Tekmetric Full-Page Cron] GLOBAL-BLOCK: deferring ${inlineShops.length} inline shop(s) — ${bizBlock.reason}`,
+    );
+    for (const shop of inlineShops) {
+      results.push({
+        shopId: shop.shopId,
+        name: shop.name,
+        ok: true,
+        skipped: true,
+        reason: "inline_blocked_fleet_business_hours",
+      });
+    }
+    inlineShops.length = 0;
+  }
   // Giant shops get at most MAX_GIANTS_PER_TICK slices per tick (see the
   // knob comments up top). Counter is per-tick, reset each GET.
   let giantsProcessed = 0;
