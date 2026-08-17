@@ -1,0 +1,50 @@
+2026-08-17T16:01:39.917678108Z   ✓ normalize strips dash + uppercases
+2026-08-17T16:01:39.917882751Z   ✓ display '04V-216' matches canonical '04V216000'
+2026-08-17T16:01:39.917923447Z   ✓ display '22V165' matches canonical '22V165000'
+2026-08-17T16:01:39.917926095Z   ✓ identical numbers match
+2026-08-17T16:01:39.917945126Z   ✓ different campaigns do NOT match
+2026-08-17T16:01:39.917976978Z   ✓ non-zero suffix does NOT match
+2026-08-17T16:01:39.917978771Z   ✓ short tokens rejected (false-positive guard)
+2026-08-17T16:01:39.917980328Z   ✓ null/empty never match
+2026-08-17T16:01:39.91822566Z   ✓ all NHTSA recalls survive the merge
+2026-08-17T16:01:39.918229244Z   ✓ matching NHTSA recall enriched with remedy status
+2026-08-17T16:01:39.918230585Z   ✓ enrichment carries mfr recall number
+2026-08-17T16:01:39.91823365Z   ✓ non-matching NHTSA recall NOT enriched
+2026-08-17T16:01:39.918237045Z   ✓ unmatched CARFAX recall (emissions, no NHTSA #) in carfaxOnly
+2026-08-17T16:01:39.918277444Z   ✓ carfaxOnly entry is the emissions recall
+2026-08-17T16:01:39.918290709Z   ✓ empty NHTSA list -> no enriched entries
+2026-08-17T16:01:39.918300282Z   ✓ duplicate unmatched CARFAX recalls deduped by campaign
+2026-08-17T16:01:39.918323573Z   ✓ null carfax list is a no-op merge
+2026-08-17T16:01:40.350571994Z   ✓ old snapshot (no recallRecords field): re-parsed from stored raw
+2026-08-17T16:01:40.350669698Z   ✓ VIN lookup is uppercased
+2026-08-17T16:01:40.350784606Z   ✓ new snapshot: stored recallRecords served without re-parse
+2026-08-17T16:01:40.350837365Z   ✓ ok:false snapshot -> null
+2026-08-17T16:01:40.350868916Z   ✓ missing snapshot -> null
+2026-08-17T16:01:40.351390677Z   ✓ happy path persists recallRecords on the snapshot
+2026-08-17T16:01:40.351396797Z   ✓ happy path persists numberOfRecallRecords
+2026-08-17T16:01:40.351568557Z   ✓ failed re-fetch PRESERVES stored recallRecords
+2026-08-17T16:01:40.351673206Z   ✓ empty-but-ok re-fetch does NOT wipe stored recallRecords
+2026-08-17T16:01:40.351718279Z   ✓ empty-but-ok re-fetch WITH fresh recalls updates recallRecords
+2026-08-17T16:01:40.351720092Z   ✓ …and still preserves the prior serviceRecords
+2026-08-17T16:01:40.351848775Z   ✓ recall-only snapshot written with its recallRecords
+2026-08-17T16:01:40.351872287Z   ✓ FAILED refetch preserves recall-only snapshot's recallRecords
+2026-08-17T16:01:40.351873912Z   ✓ FAILED refetch keeps ok:true on recall-only snapshot
+2026-08-17T16:01:40.351901765Z   ✓ EMPTY-but-ok refetch preserves recall-only snapshot's recallRecords
+2026-08-17T16:01:40.351903683Z   ✓ EMPTY-but-ok refetch stamps lastEmptyFetchAt on recall-only snapshot
+2026-08-17T16:01:40.351977656Z   ✓ first-ever failure doc has recallRecords:null
+2026-08-17T16:01:40.351979306Z 
+2026-08-17T16:01:40.351981544Z All CARFAX recall smoke checks passed.
+2026-08-17T16:01:40.497854389Z 
+2026-08-17T16:01:40.497868106Z > mos-maintenance-mvp@1.8.0 lint:direct-db
+2026-08-17T16:01:40.49787002Z > node scripts/check-direct-db.cjs
+2026-08-17T16:01:40.497874439Z 
+2026-08-17T16:01:40.605992775Z 
+2026-08-17T16:01:40.60601137Z [check-direct-db] 1 file(s) call getDb()/getMongoClient() directly without being on the allowlist:
+2026-08-17T16:01:40.606013015Z 
+2026-08-17T16:01:40.606294329Z   - app/api/vehicle/close/[vin]/route.ts
+2026-08-17T16:01:40.60630071Z 
+2026-08-17T16:01:40.6063025Z Add a function in lib/data/repositories/<entity>.ts and call it from these files instead.
+2026-08-17T16:01:40.606303966Z See docs/data-access.md for details.
+2026-08-17T16:01:40.606305171Z 
+2026-08-17T16:01:40.656617099Z ==> Build failed 😞
+2026-08-17T16:01:40.656635562Z ==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys
