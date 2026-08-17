@@ -14,3 +14,5 @@ The tekmetric-incremental-sync route ends each cycle by firing plan-pregenerate 
 - TEKMETRIC_BACKFILL_PAUSE_UNTIL pauses only fullpage + weekday-boost crons, NOT incremental sync or its pregenerate tail.
 
 **2026-08-17 recurrence:** pregen fix held; slowness was fullpage inline again after the pause expired. Permanent guard added: `inlineBusinessHoursBlock` (lib/inline-business-hours.ts) defers the Tekmetric fullpage INLINE web lane Mon–Fri 12:00–23:00 UTC (env-tunable, kill switch FULLPAGE_INLINE_BUSINESS_BLOCK_DISABLED); queue lane + night/weekend ticks unaffected; deferred shops still count in shopsRemaining.
+
+**2026-08-17 pt 2:** hourly throttle is per-instance module state → N web instances = N overlapping ~15-min passes/hour, and the pass's plan builds run ON the web instances (self-POSTs) — still hurt daytime p95 after fullpage stopped. Fix: shouldRunPregenerate also skips during inlineBusinessHoursBlock window (Mon–Fri 12:00–23:00 UTC); night/weekend warms unchanged. Cross-instance single-flight still not implemented (harmless off-hours).
