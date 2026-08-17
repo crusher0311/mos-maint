@@ -12,3 +12,5 @@ The tekmetric-incremental-sync route ends each cycle by firing plan-pregenerate 
 - Guards now in the route: `TEKMETRIC_PLAN_PREGEN_INTERVAL_MS` (default 60min), in-process in-flight flag, `TEKMETRIC_PLAN_PREGEN_STAGGER_MS` (default 3s between shop POSTs).
 - Uniform all-route slowness + clean Mongo currentOp = event-loop starvation on web; check Render live logs (log-sync feed lags 10-15min).
 - TEKMETRIC_BACKFILL_PAUSE_UNTIL pauses only fullpage + weekday-boost crons, NOT incremental sync or its pregenerate tail.
+
+**2026-08-17 recurrence:** pregen fix held; slowness was fullpage inline again after the pause expired. Permanent guard added: `inlineBusinessHoursBlock` (lib/inline-business-hours.ts) defers the Tekmetric fullpage INLINE web lane Mon–Fri 12:00–23:00 UTC (env-tunable, kill switch FULLPAGE_INLINE_BUSINESS_BLOCK_DISABLED); queue lane + night/weekend ticks unaffected; deferred shops still count in shopsRemaining.
