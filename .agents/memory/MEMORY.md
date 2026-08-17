@@ -143,3 +143,4 @@
 - [VHI duplicate OEM twins](vhi-duplicate-oem-twins.md) — "duplicate declined item" pairs were same-key OEM retitle twins, not mapper drift; shared declined-merge module + same-key collapse; changes need BOTH plan & analysis cache bumps.
 - [Extension telemetry pipeline](extension-telemetry-pipeline.md) — event names allowlisted on BOTH extension emitter and server route (server drops unknowns); slow-call floor is server-env-tunable; client throttles per-signature via shared telemetry-core.js.
 - [Triage read-path quirks](triage-read-path-quirks.md) — job_index has no timestamps (use _id); normalized Mongo mirror COLLSCANs on shopId — bound reads with maxTimeMS; rethrow NEXT_REDIRECT in admin API catches.
+- [DataOne shares canonical Supabase PG](dataone-shared-db-brownout.md) — disk-IO brownout makes OEM lookups take minutes → web tier clogs; breaker in dataone-api fails fast (env-tunable).
