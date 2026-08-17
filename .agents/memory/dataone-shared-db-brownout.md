@@ -11,3 +11,6 @@ DATAONE_DATABASE_URL and DATABASE_URL point at the SAME Supabase Postgres. The "
 - getMaintenanceScheduleCached has a module-level circuit breaker (gen/token + single half-open probe): cache HITs served, miss path + cache read + outer fallback all deadline-bounded (12s, below plan-builder 15s race); 3 consecutive failures → 10min open, instant ok:false (plans degrade to oemMissing, short TTL). Env: DATAONE_BREAKER_DISABLED/_THRESHOLD/_COOLDOWN_MS, DATAONE_LOCAL_TIMEOUT_MS.
 - Note deadline abandonment doesn't cancel the server-side query; the breaker opening is what stops new load.
 - Durable fix = move DataOne tables (or the whole lookup) off the shared canonical DB, or upgrade Supabase compute.
+
+## Probe-leak wedge (2026-08-17, fixed)
+Half-open breaker probes acquire the token BEFORE the cache read; any early-return path that doesn't call breakerRecordSuccess/Failure leaks the probe (`breakerProbeInFlight` stuck true) and wedges the breaker open forever — observed live when the probe landed on a cache HIT. Rule: every return path between breakerAcquire and function exit must report the token. Completion of a deadline-bounded DB call counts as success even when the result is ok:false ("no data" ≠ "DB sick").

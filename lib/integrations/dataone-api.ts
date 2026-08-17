@@ -494,6 +494,13 @@ export async function getMaintenanceScheduleCached(vin: string): Promise<{
         console.log(`[DataOne Cache] HIT but empty result for squish ${squish}, re-fetching (empty results always re-checked)...`);
       } else if (cachedHasIntervals) {
         console.log(`[DataOne Cache] HIT for squish ${squish}, cached at ${cached.fetchedAt.toISOString()}`);
+        // A successful cache read on this early-return path must still report
+        // back, or a half-open probe that lands on a cache HIT leaves
+        // breakerProbeInFlight=true forever and wedges the breaker open even
+        // after the DB recovers. The read touched the same brownout-prone
+        // Postgres and came back inside the deadline, so it is a genuine
+        // health signal.
+        if (breakerToken) breakerRecordSuccess(breakerToken);
         return {
           ok: cached.data.ok,
           vin,
@@ -686,7 +693,11 @@ export async function getMaintenanceScheduleCached(vin: string): Promise<{
         LOCAL_FETCH_TIMEOUT_MS,
         "DataOne fallback fetch",
       );
-      if (localResult.ok) breakerRecordSuccess(breakerToken);
+      // The deadline-bounded call completed, so the DB is responsive — record
+      // success even when ok:false (that flag means "no data", not "DB sick").
+      // Returning without reporting here leaks a half-open probe token and
+      // wedges the breaker open permanently.
+      breakerRecordSuccess(breakerToken);
       return {
         ...localResult,
         source: "local" as "api" | "cache",
