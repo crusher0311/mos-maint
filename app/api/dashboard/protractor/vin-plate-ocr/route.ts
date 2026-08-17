@@ -8,7 +8,15 @@ import { isPlatformAdmin as isPlatformAdminEmail } from "@/lib/super-admins";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const openai = new OpenAI();
+// Lazy client: `new OpenAI()` throws when OPENAI_API_KEY is absent, and at
+// module level that ran during Next's build-time page-data collection —
+// one env-group hiccup failed the whole prod build (2026-08-17). Constructed
+// on first request instead.
+let _openai: OpenAI | null = null;
+function getOpenAI(): OpenAI {
+  if (!_openai) _openai = new OpenAI();
+  return _openai;
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -73,7 +81,7 @@ Return ONLY valid JSON, no other text.`;
     }
 
     const ocrStart = Date.now();
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAI().chat.completions.create({
       model: "gpt-4o",
       messages: [
         {

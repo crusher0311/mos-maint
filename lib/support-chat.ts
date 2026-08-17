@@ -3,7 +3,14 @@ import OpenAI from "openai";
 import { searchArticles, incrementViewCounts, KnowledgeArticle } from "./knowledge-base";
 import * as repo from "@/lib/data/repositories/support-chat-sessions";
 
-const openai = new OpenAI();
+// Lazy client: module-level `new OpenAI()` throws at Next build-time
+// page-data collection when OPENAI_API_KEY is momentarily absent
+// (2026-08-17 prod build failure). Constructed on first use instead.
+let _openai: OpenAI | null = null;
+function getOpenAI(): OpenAI {
+  if (!_openai) _openai = new OpenAI();
+  return _openai;
+}
 
 export interface ChatMessage {
   role: "user" | "assistant";
@@ -116,7 +123,7 @@ PLATFORM CONTEXT:
 Keep responses under 200 words unless detailed steps are needed. Always be helpful and solution-oriented.`;
 
   try {
-    const completion = await openai.chat.completions.create({
+    const completion = await getOpenAI().chat.completions.create({
       model: "gpt-4o-mini",
       messages: [{ role: "system", content: systemPrompt }, ...conversationHistory],
       max_tokens: 600,
