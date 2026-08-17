@@ -23,6 +23,11 @@ import {
   type RoundResult,
   type SkipHints,
 } from "@/lib/concernSkipLearning";
+import {
+  getCachedFollowupQuestions,
+  setCachedFollowupQuestions,
+  applySkipHints,
+} from "@/lib/data/repositories/pg/concern-followup-cache";
 
 function generateFollowUpPrompt(customerConcern: string, guide: string, hintsBlock: string): string {
   return `You are an experienced automotive service advisor assistant helping a service advisor gather information from a customer about their vehicle issue.
@@ -146,32 +151,62 @@ export async function POST(request: NextRequest) {
       const db = await getDb();
       const symptomCategory = inferSymptomCategory(concern);
       const effectiveShopId = shopId || String(session.shopId);
-      const hints = await getSkipHints({ db, mosShopId: effectiveShopId, symptomCategory });
-      const biasedGuide = biasSymptomGuide(SYMPTOM_QUESTION_GUIDE, hints.avoid);
-      const hintsBlock = renderHintsForPrompt(hints);
+      let questions: string[];
 
-      const openai = getOpenAI();
-      const prompt = generateFollowUpPrompt(concern, biasedGuide, hintsBlock);
-      const startTime = Date.now();
-
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [
-          { role: "system", content: "You are an experienced automotive service advisor assistant." },
-          { role: "user", content: prompt }
-        ],
-        max_tokens: 1000,
-        temperature: 0.7,
+      // Check the global concern cache first so repeat concerns skip OpenAI.
+      // Fail-open: a DB/migration error is treated as a cache miss so the
+      // assistant keeps working even if Postgres is briefly unavailable.
+      const cachedQuestions = await getCachedFollowupQuestions(concern).catch((err) => {
+        console.warn("[Dashboard Concern Assistant] followup cache read failed (non-fatal):", err?.message);
+        return null;
       });
 
-      const elapsed = Date.now() - startTime;
-      trackOpenAiCall(Number(session.shopId), "/api/dashboard/concern-assistant:followup", completion, elapsed);
+      if (cachedQuestions !== null) {
+        // Cache HIT — apply this shop's skip hints as a post-filter so cached
+        // results still respect what the shop has avoided (drop) and preferred
+        // (promote to front).
+        const hints = await getSkipHints({ db, mosShopId: effectiveShopId, symptomCategory });
+        questions = applySkipHints(cachedQuestions, hints);
+        console.log(`[Dashboard Concern Assistant] followup cache HIT (${questions.length} questions after skip+prefer filter)`);
+      } else {
+        // Cache MISS — call OpenAI without shop-specific hint bias so the
+        // result is generic and reusable across all shops. Per-shop
+        // customisation (avoid drop + prefer reorder) is applied via
+        // post-processing on every read.
+        const openai = getOpenAI();
+        const prompt = generateFollowUpPrompt(concern, SYMPTOM_QUESTION_GUIDE, "");
+        const startTime = Date.now();
 
-      const responseText = completion.choices[0]?.message?.content || "";
-      const questions = responseText
-        .split('\n')
-        .map(line => line.replace(/^\d+\.\s*/, '').replace(/^-\s*/, '').replace(/^Q:\s*/i, '').trim())
-        .filter(line => line.length > 5 && line.endsWith('?'));
+        const completion = await openai.chat.completions.create({
+          model: "gpt-4o-mini",
+          messages: [
+            { role: "system", content: "You are an experienced automotive service advisor assistant." },
+            { role: "user", content: prompt }
+          ],
+          max_tokens: 1000,
+          temperature: 0.7,
+        });
+
+        const elapsed = Date.now() - startTime;
+        trackOpenAiCall(Number(session.shopId), "/api/dashboard/concern-assistant:followup", completion, elapsed);
+
+        const responseText = completion.choices[0]?.message?.content || "";
+        const rawQuestions = responseText
+          .split('\n')
+          .map(line => line.replace(/^\d+\.\s*/, '').replace(/^-\s*/, '').replace(/^Q:\s*/i, '').trim())
+          .filter(line => line.length > 5 && line.endsWith('?'));
+
+        // Cache for future requests (no-ops if empty — prevents empty-cache
+        // poisoning per the canned-jobs-new-shop-cache lesson).
+        await setCachedFollowupQuestions(concern, rawQuestions).catch((err) => {
+          console.warn("[Dashboard Concern Assistant] followup cache write failed (non-fatal):", err?.message);
+        });
+
+        // Apply this shop's skip hints as post-processing (avoid drop + prefer reorder).
+        const hints = await getSkipHints({ db, mosShopId: effectiveShopId, symptomCategory });
+        questions = applySkipHints(rawQuestions, hints);
+        console.log(`[Dashboard Concern Assistant] followup cache MISS — cached ${rawQuestions.length} questions, returning ${questions.length} after skip+prefer filter`);
+      }
 
       const conversation = {
         userId: session.email,

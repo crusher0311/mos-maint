@@ -467,6 +467,14 @@ async function main() {
       "model" text,
       "created_at" timestamp NOT NULL DEFAULT now()
     )`,
+    // Task #1139 — concern follow-up question cache (mirrors drizzle/0029_task1139_concern_followup_cache.sql)
+    `CREATE TABLE IF NOT EXISTS "concern_followup_cache" (
+      "id" varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+      "concern_hash" text NOT NULL,
+      "questions" jsonb NOT NULL,
+      "prompt_version" text NOT NULL,
+      "created_at" timestamp NOT NULL DEFAULT now()
+    )`,
   ];
 
   const fkStatements = [
@@ -487,6 +495,9 @@ async function main() {
     // Task #987 — sales script cache (mirrors drizzle/0024_task987_sales_script_cache.sql)
     `CREATE UNIQUE INDEX IF NOT EXISTS "ssc_wo_hash_idx" ON "sales_script_cache" ("work_order_id", "context_hash")`,
     `CREATE INDEX IF NOT EXISTS "ssc_shop_id_idx" ON "sales_script_cache" ("shop_id")`,
+    // Task #1139 — concern follow-up cache (mirrors drizzle/0029_task1139_concern_followup_cache.sql)
+    `CREATE UNIQUE INDEX IF NOT EXISTS "cfc_concern_hash_idx" ON "concern_followup_cache" ("concern_hash")`,
+    `CREATE INDEX IF NOT EXISTS "cfc_created_at_idx" ON "concern_followup_cache" ("created_at")`,
     // Task #901 — vehicle specs cache
     `CREATE INDEX IF NOT EXISTS "vehicle_specs_cache_vin_idx" ON "vehicle_specs_cache" ("vin")`,
     `CREATE INDEX IF NOT EXISTS "vehicle_specs_cache_expires_idx" ON "vehicle_specs_cache" ("expires_at")`,
