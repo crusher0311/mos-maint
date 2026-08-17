@@ -322,20 +322,17 @@ export async function GET(req: NextRequest) {
   // local) let heavy chunks run inline on the shared web instance during
   // OTHER shops' business hours, starving the event loop fleet-wide. The
   // queue hand-off above already ran; only the inline lane is deferred.
+  // NOTE: deferred shops are intentionally NOT pushed into `results` — the
+  // response computes shopsRemaining as shops.length - results.length, and a
+  // deferred shop must still count as remaining or an all-inline fleet would
+  // report 0 remaining while nothing ran.
   const bizBlock = inlineBusinessHoursBlock();
+  let inlineDeferredCount = 0;
   if (bizBlock.blocked && inlineShops.length > 0) {
+    inlineDeferredCount = inlineShops.length;
     console.log(
       `[Tekmetric Full-Page Cron] GLOBAL-BLOCK: deferring ${inlineShops.length} inline shop(s) — ${bizBlock.reason}`,
     );
-    for (const shop of inlineShops) {
-      results.push({
-        shopId: shop.shopId,
-        name: shop.name,
-        ok: true,
-        skipped: true,
-        reason: "inline_blocked_fleet_business_hours",
-      });
-    }
     inlineShops.length = 0;
   }
   // Giant shops get at most MAX_GIANTS_PER_TICK slices per tick (see the
@@ -446,6 +443,7 @@ export async function GET(req: NextRequest) {
     ok: true,
     processed: results,
     shopsRemaining: shops.length - results.length,
+    inlineDeferredBusinessHours: inlineDeferredCount || undefined,
     duration: `${Date.now() - startTime}ms`,
   });
 }

@@ -31,8 +31,15 @@ export function inlineBusinessHoursBlock(now: Date = new Date()): {
   if (process.env.FULLPAGE_INLINE_BUSINESS_BLOCK_DISABLED === "true") {
     return { blocked: false };
   }
-  const startHour = envHour("FULLPAGE_INLINE_BLOCK_START_UTC_HOUR", 12);
-  const endHour = envHour("FULLPAGE_INLINE_BLOCK_END_UTC_HOUR", 23);
+  let startHour = envHour("FULLPAGE_INLINE_BLOCK_START_UTC_HOUR", 12);
+  let endHour = envHour("FULLPAGE_INLINE_BLOCK_END_UTC_HOUR", 23);
+  // Equal start/end would silently disable the guard through tuning; treat
+  // it as misconfiguration and fall back to the defaults. Use the kill
+  // switch to disable intentionally.
+  if (startHour === endHour) {
+    startHour = 12;
+    endHour = 23;
+  }
   const day = now.getUTCDay(); // 0 Sun … 6 Sat
   if (day === 0 || day === 6) return { blocked: false };
   const hour = now.getUTCHours();
