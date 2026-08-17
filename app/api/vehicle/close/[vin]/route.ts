@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
 import { insertEvent } from "@/lib/data/repositories/events";
+import { findVehicleByVin } from "@/lib/data/repositories/vehicles";
 
 export const dynamic = "force-dynamic";
 
 /** Test seam — swap these in unit tests to avoid real DB / auth calls. */
-export const __deps = { getSession, getDb, insertEvent };
+export const __deps = { getSession, findVehicleByVin, insertEvent };
 
 export async function POST(
   req: Request,
@@ -30,11 +30,7 @@ export async function POST(
   // Verify the VIN belongs to the authenticated shop before writing any event.
   // A caller who posts a foreign VIN in the URL gets a 404 rather than a 403
   // to avoid leaking whether that VIN exists in the system at all.
-  const db = await __deps.getDb();
-  const vehicle = await db.collection("vehicles").findOne(
-    { vin: cleanVin, $or: [{ shopId: String(shopId) }, { shopId: shopId }] },
-    { projection: { _id: 1 } }
-  );
+  const vehicle = await __deps.findVehicleByVin(cleanVin, shopId);
   if (!vehicle) {
     return NextResponse.json({ error: "Vehicle not found" }, { status: 404 });
   }

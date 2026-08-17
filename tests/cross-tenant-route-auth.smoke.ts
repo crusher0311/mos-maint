@@ -404,25 +404,15 @@ async function testVehicleCloseRoute() {
   const VIN_A = "1HGCM82633A004352";
   const VIN_B = "2T1BURHE0JC037882";
 
-  function makeCloseDb(vehicleShopId: number, vehicleVin: string) {
-    return {
-      collection: (name: string) => ({
-        findOne: async (filter: any) => {
-          if (name === "vehicles") {
-            const filterVin = filter?.vin;
-            const filterOr: any[] = filter?.$or ?? [];
-            const matchesShop = filterOr.some(
-              (entry: any) => Number(entry.shopId) === vehicleShopId,
-            );
-            if (filterVin === vehicleVin && matchesShop) {
-              return { _id: "v1", vin: vehicleVin, shopId: vehicleShopId };
-            }
-            return null;
-          }
-          return null;
-        },
-      }),
-    } as any;
+  // Fake for the repository seam: returns the vehicle only when both the
+  // VIN and the (shop-scoped) shopId match, mirroring findVehicleByVin.
+  function makeCloseLookup(vehicleShopId: number, vehicleVin: string) {
+    return (async (vin: string, shopId?: string | number) => {
+      if (vin === vehicleVin && Number(shopId) === vehicleShopId) {
+        return { _id: "v1", vin: vehicleVin, shopId: vehicleShopId };
+      }
+      return null;
+    }) as any;
   }
 
   function makeCloseReq(vin: string) {
@@ -434,7 +424,7 @@ async function testVehicleCloseRoute() {
   // 5a. No session → 401; DB and insertEvent must not be reached
   {
     closeDeps.getSession = (async () => null) as any;
-    closeDeps.getDb = (async () => { throw new Error("getDb must not be reached"); }) as any;
+    closeDeps.findVehicleByVin = (async () => { throw new Error("vehicle lookup must not be reached"); }) as any;
     closeDeps.insertEvent = (async () => { throw new Error("insertEvent must not be reached"); }) as any;
     const res = await closePOST(makeCloseReq(VIN_A), { params: Promise.resolve({ vin: VIN_A }) });
     ok("no session → 401", res.status === 401);
@@ -444,7 +434,7 @@ async function testVehicleCloseRoute() {
   {
     const eventsWritten: any[] = [];
     closeDeps.getSession = async () => ({ shopId: SHOP_A } as any);
-    closeDeps.getDb = async () => makeCloseDb(SHOP_B, VIN_B);
+    closeDeps.findVehicleByVin = makeCloseLookup(SHOP_B, VIN_B);
     closeDeps.insertEvent = async (e: any) => { eventsWritten.push(e); };
     const res = await closePOST(makeCloseReq(VIN_B), { params: Promise.resolve({ vin: VIN_B }) });
     ok("cross-tenant VIN close → 404", res.status === 404, `got ${res.status}`);
@@ -455,7 +445,7 @@ async function testVehicleCloseRoute() {
   {
     const eventsWritten: any[] = [];
     closeDeps.getSession = async () => ({ shopId: SHOP_A } as any);
-    closeDeps.getDb = async () => makeCloseDb(SHOP_A, VIN_A);
+    closeDeps.findVehicleByVin = makeCloseLookup(SHOP_A, VIN_A);
     closeDeps.insertEvent = async (e: any) => { eventsWritten.push(e); };
     const res = await closePOST(makeCloseReq(VIN_A), { params: Promise.resolve({ vin: VIN_A }) });
     ok("same-shop VIN close → 200", res.status === 200, `got ${res.status}`);
