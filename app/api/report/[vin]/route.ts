@@ -2,29 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
 import { triggerPlanBuild } from "@/lib/vhi-rebuild";
-import { generateShareToken } from "@/lib/report-share";
+import { generateShareToken, verifyShareToken } from "@/lib/report-share";
 import { findLatestTekmetricWorkOrderByVinWithCustomerName } from "@/lib/data/repositories/tekmetric-work-orders";
-import crypto from "crypto";
 
-const SHARE_SECRET = process.env.REPORT_SHARE_SECRET || process.env.STRIPE_WEBHOOK_SECRET || "vhr-share-default-key";
 const TOKEN_MAX_AGE_MS = 15 * 24 * 60 * 60 * 1000;
-
-function verifyShareToken(token: string): { vin: string; shopId: string } | null {
-  try {
-    const decoded = Buffer.from(token, "base64url").toString("utf-8");
-    const parts = decoded.split(":");
-    if (parts.length !== 4) return null;
-    const [vin, shopId, expiresStr, signature] = parts;
-    const expiresAt = parseInt(expiresStr, 10);
-    if (Date.now() > expiresAt) return null;
-    const payload = `${vin}:${shopId}:${expiresAt}`;
-    const expected = crypto.createHmac("sha256", SHARE_SECRET).update(payload).digest("hex").slice(0, 16);
-    if (signature !== expected) return null;
-    return { vin, shopId };
-  } catch {
-    return null;
-  }
-}
 
 export async function GET(
   req: NextRequest,
