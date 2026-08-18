@@ -24,6 +24,12 @@ interface AuditReport {
   vehicleDisplay?: string;
   auditDate: string;
   findings: AuditFinding[];
+  /** Task #1145: outcome of the VHI-plan comparison (missing on old audits). */
+  vhiComparison?: {
+    status: "compared" | "skipped";
+    reason?: string;
+    missingCount?: number;
+  };
   summary: {
     totalFindings: number;
     critical: number;
@@ -660,6 +666,12 @@ export default function EstimateAssistPanel({
                   {report.workOrderNumber && (
                     <> &middot; WO# <span className="font-medium text-gray-700">{report.workOrderNumber}</span></>
                   )}
+                </div>
+              )}
+
+              {report.vhiComparison?.status === "skipped" && (
+                <div className="text-xs text-gray-500 mb-4 bg-gray-50 border border-gray-200 rounded-md px-3 py-2">
+                  VHI comparison skipped{report.vhiComparison.reason ? ` — ${report.vhiComparison.reason}` : ""}.
                 </div>
               )}
 

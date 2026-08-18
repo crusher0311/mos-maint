@@ -43,6 +43,18 @@ export interface AuditReport {
   auditDate: string;
   findings: AuditFinding[];
   summary: AuditSummary;
+  /**
+   * Task #1145: outcome of the VHI-plan comparison. `compared` means the
+   * cached VHI plan was checked for due/overdue items missing from the
+   * ticket (any gaps appear as findings); `skipped` (with `reason`) means
+   * the comparison couldn't run — no VIN, no cached plan, or a bounded
+   * lookup timeout. Missing on audits saved before this task.
+   */
+  vhiComparison?: {
+    status: "compared" | "skipped";
+    reason?: string;
+    missingCount?: number;
+  };
 }
 
 export interface AuditSummary {

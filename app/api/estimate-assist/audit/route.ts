@@ -20,6 +20,13 @@ import {
   buildAuthErrorBody,
 } from "@/lib/extension-auth";
 import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
+import { getCachedPlan } from "@/lib/plan-cache";
+import {
+  findMissingVhiItems,
+  buildMissingVhiFindings,
+  type VhiComparison,
+  type VhiComparisonItem,
+} from "@/lib/estimate-assist/vhi-audit-match";
 
 // Static rule logic (missing parts/labor, labor-hour ranges, companion
 // suggestions, dedupe/sort, score math) lives in
@@ -30,6 +37,11 @@ export type { AuditFinding, AuditReport } from "@/lib/estimate-assist/audit-engi
 // Budget for the optional AI-findings pass. The static rule findings are
 // already computed by then, so on timeout we return those instead of hanging.
 const AI_TIMEOUT_MS = 20_000;
+
+// Task #1145: bounded budget for the cached-VHI-plan read. This is a pure
+// cache lookup (getCachedPlan never triggers an on-demand rebuild); on
+// timeout or miss the audit proceeds with a "VHI comparison skipped" note.
+const VHI_LOOKUP_TIMEOUT_MS = 5_000;
 
 export const dynamic = "force-dynamic";
 
@@ -190,6 +202,9 @@ export async function POST(req: NextRequest) {
 
     let lineItems = body.lineItems || [];
     let vehicleInfo = body.vehicleInfo || null;
+    // Task #1145: VIN for the VHI comparison, resolved from whichever WO
+    // lookup succeeds below. Null → comparison skipped (never fails the audit).
+    let vehicleVin: string | null = null;
     let workOrderNumber: string | undefined;
     let workOrderId = body.workOrderId;
     // Provider + the provider's own primary RO id (from normalized
@@ -217,6 +232,7 @@ export async function POST(req: NextRequest) {
         if (wo) {
           workOrderNumber = wo.workOrderNumber;
           captureProvenance(wo);
+          if (wo.vehicle?.vin) vehicleVin = String(wo.vehicle.vin);
           if (!vehicleInfo && wo.vehicle) {
             vehicleInfo = {
               year: wo.vehicle.year,
@@ -235,6 +251,7 @@ export async function POST(req: NextRequest) {
             provider = "tekmetric";
             smsWorkOrderId = String(cached.workOrderId);
           }
+          if (cached?.vin) vehicleVin = String(cached.vin);
           if (!vehicleInfo && cached && (cached.vehicleYear || cached.vehicleMake)) {
             vehicleInfo = {
               year: cached.vehicleYear,
@@ -262,6 +279,7 @@ export async function POST(req: NextRequest) {
         workOrderId = String(wo._id);
         workOrderNumber = wo.workOrderNumber;
         captureProvenance(wo);
+        if (wo.vehicle?.vin) vehicleVin = String(wo.vehicle.vin);
 
         if (wo.vehicle) {
           vehicleInfo = {
@@ -316,6 +334,7 @@ export async function POST(req: NextRequest) {
               provider = "tekmetric";
               smsWorkOrderId = String(cached.workOrderId);
             }
+            if (!vehicleVin && cached.vin) vehicleVin = String(cached.vin);
             if (!vehicleInfo && (cached.vehicleYear || cached.vehicleMake)) {
               vehicleInfo = {
                 year: cached.vehicleYear,
@@ -354,6 +373,40 @@ export async function POST(req: NextRequest) {
 
     const findings = runStaticAuditRules(lineItems);
     let findingId = findings.length;
+
+    // Task #1145: compare the ticket against the vehicle's cached VHI plan
+    // and flag due/due-soon items that aren't quoted. Cache read only — a
+    // miss/timeout degrades to a "skipped" note, never a rebuild or an error.
+    let vhiComparison: VhiComparison = { status: "skipped", reason: "No VIN available for this repair order" };
+    if (vehicleVin) {
+      try {
+        const db = await __deps.getDb();
+        const cachedPlan = await withUpstreamTimeout(
+          getCachedPlan(db, vehicleVin.toUpperCase(), shopId, vehicleInfo?.mileage ?? null),
+          VHI_LOOKUP_TIMEOUT_MS,
+          "estimate-audit-vhi-lookup",
+          null,
+        );
+        const buckets = cachedPlan?.plan?.buckets;
+        if (buckets) {
+          const planItems: VhiComparisonItem[] = [
+            ...(buckets.overdue || []).map((it: any) => ({ ...it, status: "overdue" as const })),
+            ...(buckets.dueSoon || []).map((it: any) => ({ ...it, status: "due_soon" as const })),
+          ];
+          const missing = findMissingVhiItems(lineItems.map((li) => li.title), planItems);
+          const distLabel = cachedPlan?.plan?.distanceUnit === "kilometers" ? "km" : "mi";
+          const vhiFindings = buildMissingVhiFindings(missing, findingId, distLabel);
+          findingId += vhiFindings.length;
+          findings.push(...vhiFindings);
+          vhiComparison = { status: "compared", missingCount: missing.length };
+        } else {
+          vhiComparison = { status: "skipped", reason: "No VHI plan is cached for this vehicle yet" };
+        }
+      } catch (vhiErr: any) {
+        console.warn(`[Estimate Audit] VHI comparison failed (non-fatal): ${vhiErr?.message || vhiErr}`);
+        vhiComparison = { status: "skipped", reason: "VHI plan lookup failed" };
+      }
+    }
 
     let aiFindings: AuditFinding[] = [];
     try {
@@ -463,6 +516,7 @@ Only include genuinely useful findings. Do not repeat obvious items. Maximum 5 f
       auditDate: new Date().toISOString(),
       findings: deduped,
       summary,
+      vhiComparison,
     };
 
     try {

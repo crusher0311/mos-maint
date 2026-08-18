@@ -6273,6 +6273,13 @@ async function runEstimateAudit() {
       html += `<p style="font-size:11px; color:var(--gray-500); margin-bottom:8px;">${escEstimate(report.vehicleDisplay)}${report.workOrderNumber ? ' &middot; WO# ' + escEstimate(report.workOrderNumber) : ''}</p>`;
     }
 
+    // Task #1145: when the VHI comparison couldn't run (no VIN / no cached
+    // plan), say so — otherwise a gap-free ticket looks identical to one we
+    // never checked.
+    if (report.vhiComparison && report.vhiComparison.status === 'skipped') {
+      html += `<p style="font-size:10px; color:var(--gray-500); background:var(--gray-50, #f9fafb); border:1px solid var(--gray-200, #e5e7eb); border-radius:6px; padding:6px 8px; margin-bottom:8px;">VHI comparison skipped${report.vhiComparison.reason ? ' — ' + escEstimate(report.vhiComparison.reason) : ''}.</p>`;
+    }
+
     if (report.findings.length === 0) {
       html += '<p style="font-size:12px; color:#16a34a; text-align:center; padding:16px;">No issues found - this estimate looks complete!</p>';
     } else {
