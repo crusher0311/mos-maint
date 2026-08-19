@@ -308,6 +308,14 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
       showWhenLocked: true,
     },
     {
+      // Task #1146 — closed-RO Missed Opportunities report. Shares the
+      // Estimate Assist entitlement (it reuses that feature's matcher).
+      name: "Missed Opportunities",
+      href: "/dashboard/reports/missed-opportunities",
+      icon: <BarChart3 className="w-5 h-5" />,
+      featureId: "estimate_assist",
+    },
+    {
       name: "Protection Plans",
       href: "/dashboard/protection-plans",
       icon: <Shield className="w-5 h-5" />
