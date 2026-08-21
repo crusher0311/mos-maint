@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Detect Dog by MOS Tools",
-  "version": "1.33.2",
+  "version": "1.33.3",
   "description": "Your advisor's best friend — maintenance intelligence, AI job search, and oil sticker printing right inside your SMS",
   "permissions": [
     "storage",
@@ -66,6 +66,7 @@
       ],
       "js": [
         "telemetry-core.js",
+        "provider-action-grant-core.js",
         "adapters/shopware-content.js"
       ],
       "run_at": "document_idle"
@@ -102,6 +103,7 @@
       "js": [
         "undo-core.js",
         "telemetry-core.js",
+        "provider-action-grant-core.js",
         "adapters/autoflow-content.js",
         "realtime-subscriber.js",
         "vhi-coach.js"

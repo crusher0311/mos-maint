@@ -430,7 +430,50 @@ function getCsrfToken() {
   return null;
 }
 
-async function injectConcernViaApi(roId, text) {
+function authorizeShopwareAction(providerAction) {
+  const context = lastContext || detectContext();
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage(
+      {
+        action: 'AUTHORIZE_PROVIDER_ACTION',
+        provider: 'shopware',
+        providerAction,
+        shopId: context?.shopId,
+      },
+      (response) => {
+        if (chrome.runtime.lastError || !response?.success) {
+          showToast(
+            response?.error || 'Verify your MOS.Tools account to make changes',
+            'warning',
+          );
+          resolve(false);
+          return;
+        }
+        try {
+          MosProviderActionGrantCore.requireValidReceipt(response, {
+            provider: 'shopware',
+            action: providerAction,
+          });
+          resolve(response);
+        } catch (error) {
+          showToast('Provider authorization expired. Please try again.', 'warning');
+          resolve(null);
+        }
+      },
+    );
+  });
+}
+
+function providerAuthorizedFetch(authorization, providerAction, input, init) {
+  MosProviderActionGrantCore.requireValidReceipt(authorization, {
+    provider: 'shopware',
+    action: providerAction,
+    requireConsumed: true,
+  });
+  return fetch(input, init);
+}
+
+async function injectConcernViaApi(roId, text, authorization) {
   const csrfToken = getCsrfToken();
   if (!csrfToken) {
     console.warn('[MOS Tools] No CSRF token found, cannot use API');
@@ -438,7 +481,11 @@ async function injectConcernViaApi(roId, text) {
   }
 
   try {
-    const res = await fetch(`/work_orders/${roId}`, {
+    const res = await providerAuthorizedFetch(
+      authorization,
+      'shopware:update-concern',
+      `/work_orders/${roId}`,
+      {
       method: 'PATCH',
       headers: {
         'accept': 'application/json, text/javascript, */*; q=0.01',
@@ -452,7 +499,8 @@ async function injectConcernViaApi(roId, text) {
           customer_concern: text
         }
       })
-    });
+      },
+    );
 
     if (res.ok) {
       console.log('[MOS Tools] Concern injected via Shop-Ware API');
@@ -504,10 +552,14 @@ function injectConcernViaDom(text) {
 
 async function injectConcernText(text) {
   const context = detectContext();
+  const authorization = await authorizeShopwareAction('shopware:update-concern');
+  if (!authorization) {
+    return false;
+  }
 
   // Primary: Use the internal Shop-Ware API (PATCH /work_orders/{id})
   if (context.roId) {
-    const apiSuccess = await injectConcernViaApi(context.roId, text);
+    const apiSuccess = await injectConcernViaApi(context.roId, text, authorization);
     if (apiSuccess) {
       showToast('Customer concern saved', 'success');
       setTimeout(() => window.location.reload(), 1000);
@@ -973,7 +1025,15 @@ async function importServiceToRO(workOrderId, serviceId) {
   }
 
   try {
-    const res = await fetch(`/work_orders/${workOrderId}/import_service?service_id=${serviceId}`, {
+    const authorization = await authorizeShopwareAction('shopware:import-service');
+    if (!authorization) {
+      return { success: false, error: 'MOS.Tools verification required' };
+    }
+    const res = await providerAuthorizedFetch(
+      authorization,
+      'shopware:import-service',
+      `/work_orders/${workOrderId}/import_service?service_id=${serviceId}`,
+      {
       method: 'GET',
       headers: {
         'accept': 'application/json, text/javascript, */*; q=0.01',
@@ -981,7 +1041,8 @@ async function importServiceToRO(workOrderId, serviceId) {
         'x-requested-with': 'XMLHttpRequest'
       },
       credentials: 'same-origin'
-    });
+      },
+    );
 
     if (!res.ok) {
       console.warn('[MOS Tools] Import service failed:', res.status);
@@ -1052,7 +1113,13 @@ async function addServiceToRO(serviceName, workOrderId, vehicle) {
 // ==================== ADD FINDING TO RO ====================
 
 async function createNote(workOrderId, text, isDraft, csrfToken) {
-  const res = await fetch(`/work_orders/${workOrderId}/notes/`, {
+  const authorization = await authorizeShopwareAction('shopware:create-note');
+  if (!authorization) return null;
+  const res = await providerAuthorizedFetch(
+    authorization,
+    'shopware:create-note',
+    `/work_orders/${workOrderId}/notes/`,
+    {
     method: 'POST',
     headers: {
       'accept': 'application/json, text/javascript, */*; q=0.01',
@@ -1065,7 +1132,8 @@ async function createNote(workOrderId, text, isDraft, csrfToken) {
       note: { text },
       is_draft: isDraft
     })
-  });
+    },
+  );
 
   if (!res.ok) {
     const errBody = await res.text().catch(() => '');
@@ -1083,7 +1151,13 @@ async function createNote(workOrderId, text, isDraft, csrfToken) {
 }
 
 async function addRecommendationToNote(workOrderId, noteId, templateId, csrfToken) {
-  const res = await fetch(`/work_orders/${workOrderId}/notes/${noteId}/recommendations/`, {
+  const authorization = await authorizeShopwareAction('shopware:add-recommendation');
+  if (!authorization) return false;
+  const res = await providerAuthorizedFetch(
+    authorization,
+    'shopware:add-recommendation',
+    `/work_orders/${workOrderId}/notes/${noteId}/recommendations/`,
+    {
     method: 'POST',
     headers: {
       'accept': 'application/json, text/javascript, */*; q=0.01',
@@ -1102,7 +1176,8 @@ async function addRecommendationToNote(workOrderId, noteId, templateId, csrfToke
       work_order: null,
       past_recommendation: []
     })
-  });
+    },
+  );
 
   if (!res.ok) {
     const errBody = await res.text().catch(() => '');
@@ -1114,7 +1189,15 @@ async function addRecommendationToNote(workOrderId, noteId, templateId, csrfToke
 
 async function importProposedService(workOrderId, cannedJobId, csrfToken) {
   try {
-    const res = await fetch(`/work_order_services/?proposed=true&service_id=${cannedJobId}`, {
+    const authorization = await authorizeShopwareAction('shopware:import-proposed-service');
+    if (!authorization) {
+      return { success: false, error: 'MOS.Tools verification required' };
+    }
+    const res = await providerAuthorizedFetch(
+      authorization,
+      'shopware:import-proposed-service',
+      `/work_order_services/?proposed=true&service_id=${cannedJobId}`,
+      {
       method: 'GET',
       headers: {
         'accept': 'application/json, text/javascript, */*; q=0.01',
@@ -1122,7 +1205,8 @@ async function importProposedService(workOrderId, cannedJobId, csrfToken) {
         'x-requested-with': 'XMLHttpRequest'
       },
       credentials: 'same-origin'
-    });
+      },
+    );
 
     if (!res.ok) {
       console.warn('[MOS Tools] Import proposed service failed:', res.status);

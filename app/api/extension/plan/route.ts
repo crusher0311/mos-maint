@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { findEnrichedCannedJobs } from "@/lib/data/repositories/canned-jobs";
 import { findDviResultByRo } from "@/lib/data/repositories/dvi";
-import { validateExtensionToken, getUserShopIds, getAuthErrorStatus , buildAuthErrorBody } from "@/lib/extension-auth";
+import { validateExtensionToken, getUserShopIds, getAuthErrorStatus, buildAuthErrorBody, requireExtensionPrincipalScope } from "@/lib/extension-auth";
 import { checkShopFeatureGate } from "@/lib/extension-route-guard";
 import { resolveCarfaxConfig, fetchCarfaxWithCache, estimateMileageFromCarfax } from "@/lib/integrations/carfax";
 import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
@@ -1585,6 +1585,17 @@ async function _GET(request: NextRequest) {
     const mosShopId = shopResult.mosShopId;
     const shopDoc = shopResult.shopDoc;
     const provider = shopResult.provider;
+
+    const scopeFailure = requireExtensionPrincipalScope(auth, {
+      shopId: mosShopId,
+      provider: providerHint || provider,
+    });
+    if (scopeFailure) {
+      return NextResponse.json(
+        buildAuthErrorBody(scopeFailure),
+        { status: getAuthErrorStatus(scopeFailure), headers: corsHeaders }
+      );
+    }
 
     // Feature gate: VHI plan requires the `maintenance` feature.
     const denied = await checkShopFeatureGate(mosShopId, ["maintenance"], {

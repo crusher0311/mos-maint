@@ -5,7 +5,15 @@ import { insertCannedJobApplication } from "@/lib/data/repositories/canned-jobs"
 import { addCannedJobsToRepairOrder } from "@/lib/integrations/tekmetric";
 import { logRecommendationEvent } from "@/lib/enterprise";
 import { trackPushToRO } from "@/lib/extension-analytics";
-import { validateExtensionToken, getAuthErrorStatus, getUserShopIds, buildAuthErrorBody } from "@/lib/extension-auth";
+import {
+  validateExtensionToken,
+  getAuthErrorStatus,
+  getUserShopIds,
+  buildAuthErrorBody,
+  isExtensionBearerRequest,
+  requireExtensionPrincipalScope,
+  type ExtensionAuthResult,
+} from "@/lib/extension-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,9 +33,9 @@ export async function POST(req: NextRequest) {
   let sessionShopId: number;
   let isPlatformAdmin = false;
   let extUser: any = null;
+  let extensionAuth: ExtensionAuthResult | null = null;
 
-  const authHeader = req.headers.get("Authorization");
-  if (authHeader?.startsWith("Bearer ext_")) {
+  if (isExtensionBearerRequest(req)) {
     const extAuth = await validateExtensionToken(req);
     if (!extAuth.authorized || !extAuth.user) {
       // Return the canonical body (incl. the stable `code`) so the extension
@@ -39,6 +47,7 @@ export async function POST(req: NextRequest) {
         { status: getAuthErrorStatus(extAuth), headers: corsHeaders }
       );
     }
+    extensionAuth = extAuth;
     extUser = extAuth.user;
     sessionEmail = extAuth.user.email;
     sessionShopId = Number(extAuth.user.shopId);
@@ -131,6 +140,18 @@ export async function POST(req: NextRequest) {
   
   if (!shopId || !shop) {
     return NextResponse.json({ error: "No shop associated" }, { status: 400, headers: corsHeaders });
+  }
+  if (extensionAuth) {
+    const scopeFailure = requireExtensionPrincipalScope(extensionAuth, {
+      shopId,
+      provider: "tekmetric",
+    });
+    if (scopeFailure) {
+      return NextResponse.json(buildAuthErrorBody(scopeFailure), {
+        status: getAuthErrorStatus(scopeFailure),
+        headers: corsHeaders,
+      });
+    }
   }
   
   if (!tekmetricShopId) {

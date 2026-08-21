@@ -11,6 +11,7 @@ import {
   getUserShopIds,
   getAuthErrorStatus,
   buildAuthErrorBody,
+  requireExtensionPrincipalScope,
 } from "@/lib/extension-auth";
 import {
   resolveProtractorConfig,
@@ -47,8 +48,9 @@ async function _POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { shopId, workOrderId, servicePackageId } = body as {
+    const { shopId, provider, workOrderId, servicePackageId } = body as {
       shopId: number;
+      provider?: string;
       workOrderId: string;
       servicePackageId: string;
     };
@@ -72,6 +74,26 @@ async function _POST(req: NextRequest) {
       return NextResponse.json(
         { error: "Not authorized for this shop" },
         { status: 403, headers: corsHeaders }
+      );
+    }
+
+    const scopedProvider = String(provider || "protractor")
+      .toLowerCase()
+      .replace(/^shop[-_]ware$/, "shopware");
+    if (!["protractor", "autoflow"].includes(scopedProvider)) {
+      return NextResponse.json(
+        { error: "Provider scope mismatch", code: "PROVIDER_FORBIDDEN" },
+        { status: 403, headers: corsHeaders },
+      );
+    }
+    const scopeFailure = requireExtensionPrincipalScope(auth, {
+      shopId,
+      provider: scopedProvider,
+    });
+    if (scopeFailure) {
+      return NextResponse.json(
+        buildAuthErrorBody(scopeFailure),
+        { status: getAuthErrorStatus(scopeFailure), headers: corsHeaders }
       );
     }
 

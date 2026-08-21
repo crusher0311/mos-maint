@@ -64,7 +64,18 @@ try {
 
 // ==================== STATE ====================
 let isAuthenticated = false;
-let currentUserCanWrite = true; // Conservative default; refined via GET_MOS_AUTH.
+// Role-derived write permission (viewer roles / readOnly flag). Conservative
+// default; refined via GET_MOS_AUTH.
+let roleCanWrite = true;
+// Tiered session trust level (basic read-only vs verified). Derived by
+// session-tier-core.js from the login response's optional assurance /
+// capabilities fields. A basic session can never mutate, regardless of role.
+let sessionTier = null;        // raw derived object from MosSessionTierCore
+let sessionCanMutate = true;   // session permits mutations
+let sessionCanAdmin = true;    // session permits admin actions
+// Effective write permission consumed everywhere in the panel: BOTH the role
+// AND the session must allow writes. Recomputed by refreshEffectivePermissions.
+let currentUserCanWrite = true;
 let currentContext = null;
 let currentTab = 'plan';
 
@@ -624,6 +635,12 @@ function setupEventListeners() {
   // Labor Rates
   if (elements.ratesAutoApplyToggle) {
     elements.ratesAutoApplyToggle.addEventListener('change', async () => {
+      if (!currentUserCanWrite) {
+        // Revert the optimistic toggle and explain why.
+        elements.ratesAutoApplyToggle.checked = !elements.ratesAutoApplyToggle.checked;
+        notifyReadOnlyBlocked();
+        return;
+      }
       const enabled = elements.ratesAutoApplyToggle.checked;
       await sendMessage({ action: 'SET_LABOR_RATE_AUTO_APPLY', enabled });
       showNotification(`Auto-apply ${enabled ? 'enabled' : 'disabled'}`, 'info');
@@ -781,19 +798,122 @@ async function applyPlatformAdminVisibility() {
   try {
     const auth = await sendMessage({ action: 'GET_MOS_AUTH' });
     const u = auth?.user;
+    // Absorb the tiered session trust level from the same auth payload.
+    applySessionTier(auth?.sessionTier);
     const isAdmin = u?.role === 'platform_admin' || u?.isPlatformAdmin === true;
+    // A basic (unverified) session may never expose admin-only UI, even for a
+    // platform admin — matches the read-only gate on mutation controls below.
     document.querySelectorAll('[data-platform-admin-only="true"]').forEach(el => {
-      el.classList.toggle('hidden', !isAdmin);
+      el.classList.toggle('hidden', !(isAdmin && sessionCanAdmin));
     });
     // Mirror server-side checkExtensionWritePermission so read-only users
     // never see the "Create RO" entry point client-side.
     const READ_ONLY_ROLES = new Set(['viewer', 'read_only', 'readonly']);
     const role = (u?.role || '').toString().toLowerCase();
-    currentUserCanWrite = isAdmin || (!u?.readOnly && !READ_ONLY_ROLES.has(role));
+    roleCanWrite = isAdmin || (!u?.readOnly && !READ_ONLY_ROLES.has(role));
+    refreshEffectivePermissions();
     updateTabAccessibility();
   } catch (e) {
     console.warn('[MOS] platform-admin visibility check failed:', e);
   }
+}
+
+// Derive session-tier flags from the stored login response and paint the
+// session-tier banner (Basic read-only vs Verified session).
+function applySessionTier(rawTier) {
+  const core = globalThis.MosSessionTierCore;
+  // `rawTier` is the object the background already derived at login. If it's
+  // missing (legacy session predating this field), re-derive from an empty
+  // object which safely resolves to a verified session.
+  sessionTier = rawTier && typeof rawTier === 'object'
+    ? rawTier
+    : (core ? core.deriveSessionTier({}) : { tier: 'verified', isVerified: true, canMutate: true, canAdmin: true });
+  sessionCanMutate = sessionTier.canMutate !== false;
+  sessionCanAdmin = sessionTier.canAdmin !== false;
+  renderSessionTierBanner();
+}
+
+// Effective write permission is the AND of role permission and session trust.
+function refreshEffectivePermissions() {
+  currentUserCanWrite = !!roleCanWrite && !!sessionCanMutate;
+  applyMutationControlLock();
+}
+
+// Tell the advisor why a write was blocked. When it's specifically the session
+// tier (role would allow it, but the session is basic/unverified) surface the
+// verification prompt so the fix is obvious.
+function notifyReadOnlyBlocked() {
+  const core = globalThis.MosSessionTierCore;
+  if (roleCanWrite && !sessionCanMutate) {
+    const desc = core ? core.describeSessionTier(sessionTier || {}) : null;
+    showNotification(
+      (desc && desc.prompt) || 'Verify this session to make changes.',
+      'warning'
+    );
+  } else {
+    showNotification('Your account has read-only access.', 'warning');
+  }
+}
+
+// Visually disable every side-panel mutation control when the session/role is
+// read-only. Feature-gating and context-gating still apply on top of this; this
+// is a belt-and-braces lock so buttons rendered by many code paths (per-service
+// "+ Add", labor-rate Apply Now / Add Group, auto-apply toggle) all reflect the
+// basic-session state without each render path needing to know about it.
+function applyMutationControlLock() {
+  const locked = !currentUserCanWrite;
+  // NOTE: `.btn-add-failure` is intentionally excluded — it only navigates to
+  // the Lookup tab and runs a (read-only) search, so a basic session may use it.
+  const selectors = [
+    '.btn-add-toggle', '.btn-add-job', '.btn-add-canned',
+    '#rates-apply-now-btn', '#rates-add-btn', '#rates-auto-apply-toggle',
+    '#add-all-declined-btn',
+  ];
+  document.querySelectorAll(selectors.join(',')).forEach(el => {
+    el.classList.toggle('mos-write-locked', locked);
+    if (locked) {
+      el.setAttribute('disabled', 'disabled');
+      el.setAttribute('aria-disabled', 'true');
+      if (!el.dataset.mosLockTitle) {
+        el.dataset.mosLockTitle = el.getAttribute('title') || '';
+        el.setAttribute('title', 'Verify this session to make changes');
+      }
+    } else {
+      el.removeAttribute('disabled');
+      el.removeAttribute('aria-disabled');
+      if (el.dataset.mosLockTitle !== undefined) {
+        if (el.dataset.mosLockTitle) el.setAttribute('title', el.dataset.mosLockTitle);
+        else el.removeAttribute('title');
+        delete el.dataset.mosLockTitle;
+      }
+    }
+  });
+}
+
+function renderSessionTierBanner() {
+  const banner = document.getElementById('session-tier-banner');
+  if (!banner) return;
+  const core = globalThis.MosSessionTierCore;
+  const desc = core ? core.describeSessionTier(sessionTier || {}) : null;
+  // Only surface the banner for a basic (read-only) session — a verified
+  // session is the norm and needs no persistent chrome. This keeps the panel
+  // uncluttered while making the restricted state unmistakable.
+  const isBasic = sessionTier && sessionTier.isVerified === false;
+  if (!isBasic) {
+    banner.classList.add('hidden');
+    return;
+  }
+  banner.classList.remove('hidden', 'session-tier-verified', 'session-tier-basic');
+  banner.classList.add('session-tier-basic');
+  const iconEl = document.getElementById('session-tier-icon');
+  const labelEl = document.getElementById('session-tier-label');
+  const promptEl = document.getElementById('session-tier-prompt');
+  if (iconEl) {
+    // Lock glyph for the read-only state.
+    iconEl.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>';
+  }
+  if (labelEl) labelEl.textContent = desc ? desc.label : 'User / Basic (read-only)';
+  if (promptEl) promptEl.textContent = desc ? desc.prompt : 'Verify this session to make changes.';
 }
 
 const RO_INDEPENDENT_TABS = ['rates', 'concern', 'create-ro'];
@@ -1924,6 +2044,7 @@ async function handleUndoBarClick() {
                 method: 'POST',
                 body: JSON.stringify({
                   shopId: Number(snap.shopId),
+                  provider: currentContext?.provider || sessionTier?.provider || 'protractor',
                   workOrderId: it.workOrderId,
                   servicePackageId: it.servicePackageId,
                 }),
@@ -2063,6 +2184,9 @@ function setupAddDropdowns() {
       });
     });
   }
+
+  // Newly-rendered "+ Add" buttons must reflect a basic (read-only) session.
+  applyMutationControlLock();
 }
 
 function highlightCannedJob(serviceName, attempts = 0) {
@@ -3006,6 +3130,7 @@ function setupJobItemHandlers() {
       }
     });
   });
+  applyMutationControlLock();
 }
 
 // Store loaded canned jobs for filtering
@@ -3091,6 +3216,7 @@ function renderCannedJobs(jobs) {
       }
     });
   });
+  applyMutationControlLock();
 }
 
 function filterCannedJobs(searchTerm) {
@@ -3139,6 +3265,7 @@ async function handleAddService(service) {
 }
 
 async function handleSwAddFinding(service, isDraft = false) {
+  if (!currentUserCanWrite) { notifyReadOnlyBlocked(); return; }
   if (!currentContext || !currentContext.roId) {
     showNotification('No repair order context. Navigate to a work order first.', 'error');
     return;
@@ -3175,6 +3302,10 @@ async function handleSwAddFinding(service, isDraft = false) {
 // Task #888 — `source` marks where the job came from ('canned' makes the
 // server keep the template's own labor rate instead of the RO/cached rate).
 async function handleAddJob(job, source) {
+  if (!currentUserCanWrite) {
+    notifyReadOnlyBlocked();
+    return false;
+  }
   if (!currentContext) {
     alert('No repair order context. Please navigate to a repair order.');
     return false;
@@ -3266,6 +3397,7 @@ async function handleAddJob(job, source) {
           authRetryDelaysMs: [500, 1500, 4000, 8000, 12000],
           body: JSON.stringify({
             shopId: Number(mosShopId),
+            provider: currentContext.provider || sessionTier?.provider || 'protractor',
             roNumber: currentContext.roId ? String(currentContext.roId) : undefined,
             vin: currentContext.vehicle?.vin || undefined,
             // Prefer the GUID captured when this RO was just created in
@@ -3402,7 +3534,8 @@ function notifyPageJobCreated(urlPatterns, jobName, providerLabel) {
 
 async function handleAddCannedJob(job) {
   console.log('[MOS] handleAddCannedJob called:', job);
-  
+
+  if (!currentUserCanWrite) { notifyReadOnlyBlocked(); return; }
   if (!currentContext) {
     alert('No repair order context. Please navigate to a repair order.');
     return;
@@ -3458,6 +3591,7 @@ async function handleAddCannedJob(job) {
             authRetryDelaysMs: [500, 1500, 4000, 8000, 12000],
             body: JSON.stringify({
               shopId: Number(mosShopId),
+              provider: currentContext.provider || sessionTier?.provider || 'protractor',
               roNumber: currentContext.roId ? String(currentContext.roId) : undefined,
               vin: currentContext.vehicle?.vin || undefined,
               cannedJobId: String(cannedJobId),
@@ -3686,6 +3820,7 @@ function renderLaborRateRules() {
 }
 
 function showRateForm(editRule = null) {
+  if (!currentUserCanWrite) { notifyReadOnlyBlocked(); return; }
   elements.ratesForm.classList.remove('hidden');
   elements.ratesAddBtn.classList.add('hidden');
 
@@ -3770,6 +3905,7 @@ function hideRateForm() {
 }
 
 async function handleSaveRateGroup() {
+  if (!currentUserCanWrite) { notifyReadOnlyBlocked(); return; }
   const name = elements.rateFormName.value.trim();
   const makesRaw = elements.rateFormMakes.value.trim();
   const categoriesRaw = elements.rateFormCategories.value.trim();
@@ -3895,6 +4031,7 @@ async function handleDeleteRateGroup(ruleId) {
 }
 
 async function handleApplyLaborRateNow() {
+  if (!currentUserCanWrite) { notifyReadOnlyBlocked(); return; }
   if (!currentContext?.roId) {
     showNotification('Navigate to a repair order first', 'error');
     return;

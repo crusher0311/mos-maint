@@ -1952,8 +1952,78 @@ function afBridgeSend(type, extra, timeoutMs = 8000) {
 }
 
 const readAutoflowDvi = () => afBridgeSend('MOS_AF_READ_DVI');
-const writeAutoflowSheet = (params) => afBridgeSend('MOS_AF_WRITE_SHEET', { params });
-const writeAutoflowRvh = (params) => afBridgeSend('MOS_AF_WRITE_RVH', { params });
+
+function authorizeAutoflowAction(providerAction) {
+  const context = lastContext || detectContext();
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage(
+      {
+        action: 'AUTHORIZE_PROVIDER_ACTION',
+        provider: 'autoflow',
+        providerAction,
+        shopId: context?.shopId,
+      },
+      (response) => {
+        if (chrome.runtime.lastError || !response?.success) {
+          showToast(
+            response?.error || 'Verify your MOS.Tools account to make changes',
+            'warning',
+          );
+          resolve(false);
+          return;
+        }
+        try {
+          MosProviderActionGrantCore.requireValidReceipt(response, {
+            provider: 'autoflow',
+            action: providerAction,
+          });
+          resolve(response);
+        } catch (error) {
+          showToast('Provider authorization expired. Please try again.', 'warning');
+          resolve(null);
+        }
+      },
+    );
+  });
+}
+
+function afBridgeSendAuthorized(authorization, providerAction, type, extra) {
+  MosProviderActionGrantCore.requireValidReceipt(authorization, {
+    provider: 'autoflow',
+    action: providerAction,
+  });
+  return afBridgeSend(type, { ...(extra || {}), authorization });
+}
+
+const writeAutoflowSheet = async (params) => {
+  const providerAction = 'autoflow:write-dvi-sheet';
+  const authorization = await authorizeAutoflowAction(providerAction);
+  if (!authorization) {
+    return { ok: false, error: 'verification_required' };
+  }
+  return afBridgeSendAuthorized(
+    authorization,
+    providerAction,
+    'MOS_AF_WRITE_SHEET',
+    { params },
+  );
+};
+const writeAutoflowRvh = async (params) => {
+  const operation = String(params?.action || params?.request || 'write-rvh')
+    .replace(/[^a-z0-9_-]/gi, '')
+    .slice(0, 32);
+  const providerAction = `autoflow:${operation || 'write-rvh'}`;
+  const authorization = await authorizeAutoflowAction(providerAction);
+  if (!authorization) {
+    return { ok: false, error: 'verification_required' };
+  }
+  return afBridgeSendAuthorized(
+    authorization,
+    providerAction,
+    'MOS_AF_WRITE_RVH',
+    { params },
+  );
+};
 
 // MOS status string -> AutoFlow inspec_status (0=red/overdue, 1=yellow/due-soon, 2=green/ok).
 function mosStatusToAf(status) {

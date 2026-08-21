@@ -93,6 +93,23 @@ function stubAuth(user: FakeUser | null, error: string | null = null) {
   __deps.isSuperAdmin = isSuperAdmin;
 }
 
+function stubCapabilityDenied() {
+  __deps.validateExtensionToken = async (): Promise<ExtensionAuthResult> => ({
+    user: {
+      _id: "basic:session",
+      email: null,
+      username: null,
+      role: "user",
+      isPlatformAdmin: false,
+    },
+    authorized: false,
+    error: "Verify your MOS.Tools account to make changes",
+    code: "CAPABILITY_REQUIRED",
+    status: 403,
+  });
+  __deps.isSuperAdmin = isSuperAdmin;
+}
+
 async function run() {
   console.log("tekmetric-migration api-auth super-admin gate smoke");
 
@@ -235,6 +252,20 @@ async function run() {
     ok(
       "deny path keeps CORS headers",
       res.headers.get("Access-Control-Allow-Origin") === "*",
+    );
+  }
+
+  // Basic sessions are authenticated but intentionally lack admin
+  // capability. Preserve the validator's 403 instead of rewriting it to 401.
+  {
+    stubCapabilityDenied();
+    const res = await tokenStatusGET(makeReq({ withAuth: true }));
+    ok("Basic session: admin route returns 403", res.status === 403, `status=${res.status}`);
+    const body = await res.json();
+    ok(
+      "Basic session: stable capability error is preserved",
+      body.code === "CAPABILITY_REQUIRED",
+      `body=${JSON.stringify(body)}`,
     );
   }
 

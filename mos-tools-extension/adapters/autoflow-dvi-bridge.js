@@ -490,7 +490,36 @@
     }
   }
 
-  window.addEventListener("message", function (e) {
+  function expectedRvhAction(params) {
+    var operation = String((params && (params.action || params.request)) || "write-rvh")
+      .replace(/[^a-z0-9_-]/gi, "")
+      .slice(0, 32);
+    return "autoflow:" + (operation || "write-rvh");
+  }
+
+  async function consumeWriteGrant(authorization, expectedAction) {
+    if (!authorization || !authorization.grant) return false;
+    try {
+      var response = await fetch(
+        "https://mos.tools/api/extension/action-grant/consume",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            grant: authorization.grant,
+            provider: "autoflow",
+            action: expectedAction,
+          }),
+        }
+      );
+      var data = await response.json().catch(function () { return {}; });
+      return response.ok && data && data.consumed === true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  window.addEventListener("message", async function (e) {
     if (e.source !== window) return;
     var m = e.data;
     if (!m || typeof m !== "object" || !m.type) return;
@@ -503,12 +532,20 @@
         post("MOS_AF_DVI_DATA", m.requestId, readDvi());
       }
     } else if (m.type === "MOS_AF_WRITE_SHEET") {
+      if (!(await consumeWriteGrant(m.authorization, "autoflow:write-dvi-sheet"))) {
+        post("MOS_AF_WRITE_RESULT", m.requestId, { ok: false, error: "authorization_required" });
+        return;
+      }
       if (isV4Dvi()) {
         writeSheetV4(m.params || {}, m.requestId);
       } else {
         doRequest("request", m.params || {}, m.requestId);
       }
     } else if (m.type === "MOS_AF_WRITE_RVH") {
+      if (!(await consumeWriteGrant(m.authorization, expectedRvhAction(m.params)))) {
+        post("MOS_AF_WRITE_RESULT", m.requestId, { ok: false, error: "authorization_required" });
+        return;
+      }
       if (isV4Dvi()) {
         writeRvhV4(m.params || {}, m.requestId);
       } else {

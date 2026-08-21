@@ -3,7 +3,7 @@ import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 // extension. Gating it on a feature would be circular — the extension calls it
 // to learn which features are enabled.
 import { NextRequest, NextResponse } from "next/server";
-import { validateExtensionToken, getUserShopIds, getAuthErrorStatus , buildAuthErrorBody } from "@/lib/extension-auth";
+import { validateExtensionToken, getUserShopIds, getAuthErrorStatus, buildAuthErrorBody, requireExtensionPrincipalScope } from "@/lib/extension-auth";
 import { getFeatureEntitlements, ShopEntitlementsUnavailableError } from "@/lib/featureResolver";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { resolveInjectedButtonVisibility, INJECTED_BUTTON_PROVIDERS } from "@/lib/extension-button-visibility";
@@ -52,6 +52,16 @@ async function _GET(request: NextRequest) {
       shopResult = await findShopBySmsId(smsShopId, { userShopIds, isPlatformAdmin, providerHint: provider });
       if (shopResult) {
         mosShopId = shopResult.mosShopId;
+        const scopeFailure = requireExtensionPrincipalScope(auth, {
+          shopId: shopResult.mosShopId,
+          provider: provider || shopResult.provider,
+        });
+        if (scopeFailure) {
+          return NextResponse.json(
+            buildAuthErrorBody(scopeFailure),
+            { status: getAuthErrorStatus(scopeFailure), headers: corsHeaders }
+          );
+        }
       }
     }
 

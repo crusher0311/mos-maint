@@ -10,6 +10,7 @@ import {
   getUserShopIds,
   getAuthErrorStatus,
   buildAuthErrorBody,
+  requireExtensionPrincipalScope,
 } from "@/lib/extension-auth";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 
@@ -199,6 +200,18 @@ async function _POST(request: NextRequest) {
           isPlatformAdmin,
           providerHint: "tekmetric",
         });
+        if (r) {
+          // First-class principal scope enforcement: silently drop reports for
+          // shops the session token is not scoped to.
+          const scopeFailure = requireExtensionPrincipalScope(
+            { user: auth.user, principal: auth.principal },
+            { shopId: r.mosShopId, provider: "tekmetric" },
+          );
+          if (scopeFailure) {
+            shopCache.set(smsShopId, null);
+            return null;
+          }
+        }
         const v = r ? r.mosShopId : null;
         shopCache.set(smsShopId, v);
         return v;

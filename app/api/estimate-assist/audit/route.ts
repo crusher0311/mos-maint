@@ -18,6 +18,7 @@ import {
   validateExtensionToken,
   getAuthErrorStatus,
   buildAuthErrorBody,
+  isExtensionBearerRequest,
 } from "@/lib/extension-auth";
 import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
 import { getCachedPlan } from "@/lib/plan-cache";
@@ -168,8 +169,7 @@ export async function POST(req: NextRequest) {
     let sessionEmail: string | null = null;
     let shopId: number;
 
-    const authHeader = req.headers.get("Authorization");
-    if (authHeader?.startsWith("Bearer ext_")) {
+    if (isExtensionBearerRequest(req)) {
       const extAuth = await __deps.validateExtensionToken(req);
       if (!extAuth.authorized || !extAuth.user) {
         return NextResponse.json(

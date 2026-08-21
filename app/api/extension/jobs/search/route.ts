@@ -1,7 +1,7 @@
 import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
-import { validateExtensionToken, getUserShopIds, getAuthErrorStatus , buildAuthErrorBody } from "@/lib/extension-auth";
+import { validateExtensionToken, getUserShopIds, getAuthErrorStatus, buildAuthErrorBody, requireExtensionPrincipalScope } from "@/lib/extension-auth";
 import { checkShopFeatureGate } from "@/lib/extension-route-guard";
 import { scoreJob, buildSearchQuery, applyMinimumResults, buildCorroborationCounts, ScoredJob } from "@/lib/job-scoring";
 import { getEnterpriseByShopId } from "@/lib/enterprise";
@@ -149,6 +149,16 @@ async function _GET(request: NextRequest) {
         mosShopId = shopResult.mosShopId;
         provider = shopResult.provider;
         console.log(`[Jobs Search] Resolved shop from SMS ID ${smsShopId} -> MOS shop ${mosShopId}`);
+        const scopeFailure = requireExtensionPrincipalScope(auth, {
+          shopId: shopResult.mosShopId,
+          provider: providerParam || shopResult.provider,
+        });
+        if (scopeFailure) {
+          return NextResponse.json(
+            buildAuthErrorBody(scopeFailure),
+            { status: getAuthErrorStatus(scopeFailure), headers: corsHeaders }
+          );
+        }
       }
     }
     

@@ -8,7 +8,11 @@
  * than platform_admin: regular platform admins are denied with 403.
  */
 import { NextRequest, NextResponse } from "next/server";
-import { validateExtensionToken } from "@/lib/extension-auth";
+import {
+  buildAuthErrorBody,
+  getAuthErrorStatus,
+  validateExtensionToken,
+} from "@/lib/extension-auth";
 import { isSuperAdmin } from "@/lib/super-admins";
 
 // Test seam: smoke tests swap these out so we can exercise the gate
@@ -61,8 +65,8 @@ export async function requireMigAdmin(
     return {
       ok: false,
       response: NextResponse.json(
-        { error: auth.error || "Unauthorized" },
-        { status: 401, headers: tekMigCorsHeaders },
+        buildAuthErrorBody(auth),
+        { status: getAuthErrorStatus(auth), headers: tekMigCorsHeaders },
       ),
     };
   }

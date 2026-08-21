@@ -9,6 +9,7 @@ import {
   getUserShopIds,
   getAuthErrorStatus,
   buildAuthErrorBody,
+  requireExtensionPrincipalScope,
 } from "@/lib/extension-auth";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { rateLimit, clientIp } from "@/lib/rate";
@@ -310,6 +311,19 @@ export async function POST(request: NextRequest) {
           isPlatformAdmin,
           providerHint: providerHint || undefined,
         });
+        if (r) {
+          // First-class principal scope enforcement: silently drop events for
+          // shops the session token is not scoped to (fire-and-forget telemetry
+          // must never hard-error, but should not accept cross-shop events).
+          const scopeFailure = requireExtensionPrincipalScope(
+            { user: auth.user, principal: auth.principal },
+            { shopId: r.mosShopId, provider: providerHint || r.provider },
+          );
+          if (scopeFailure) {
+            shopCache.set(cacheKey, null);
+            return null;
+          }
+        }
         const v = r ? r.mosShopId : null;
         shopCache.set(cacheKey, v);
         return v;

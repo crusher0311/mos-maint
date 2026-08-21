@@ -13,6 +13,7 @@ import {
   type MongoShapedSession,
   type MongoShapedUser,
 } from "@/lib/data/repositories/pg/identity";
+import { lookupExtensionSession } from "@/lib/extension-session";
 
 export const SESSION_COOKIE = "session_token";
 
@@ -87,6 +88,44 @@ export async function getSession(): Promise<SessionInfo | null> {
     // extension even though its token is valid against /api/auth/verify.
     const hdrs = await headers();
     const authHeader = hdrs.get("authorization") || hdrs.get("Authorization");
+    if (authHeader?.toLowerCase().startsWith("bearer exts_")) {
+      const extToken = authHeader.substring(7);
+      try {
+        const lookup = await lookupExtensionSession(extToken);
+        // Basic is an extension-only principal. It must never be promoted into
+        // the MOS.Tools dashboard/getSession() authentication realm.
+        if (
+          lookup.status === "active" &&
+          lookup.principal.assurance === "verified" &&
+          lookup.principal.userId &&
+          lookup.principal.shopId
+        ) {
+          const user = await pgFindUserById(lookup.principal.userId);
+          if (user) {
+            const assigned = [
+              ...(user.shopId ? [user.shopId] : []),
+              ...(Array.isArray(user.shopIds) ? user.shopIds : []),
+            ].map(String);
+            const isPlatformAdmin =
+              user.role === "platform_admin" || user.isPlatformAdmin === true;
+            if (
+              isPlatformAdmin ||
+              assigned.includes(String(lookup.principal.shopId))
+            ) {
+              return {
+                token: extToken,
+                shopId: lookup.principal.shopId,
+                email: String(user.email ?? ""),
+                role: String(user.role ?? "user"),
+                isPlatformAdmin,
+              };
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("[Auth] Extension session fallback failed:", err);
+      }
+    }
     if (authHeader?.toLowerCase().startsWith("bearer ext_")) {
       const extToken = authHeader.substring(7);
       try {

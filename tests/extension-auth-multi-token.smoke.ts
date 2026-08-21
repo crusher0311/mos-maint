@@ -143,9 +143,9 @@ async function run() {
     resBogus.authorized === false && resBogus.code === "TOKEN_INVALID",
     JSON.stringify(resBogus));
 
-  // ---------- Case 4: refresh updates array entry, not scalar ----------
-  // Token E is 8 days old in the array (past 7-day refresh threshold). The
-  // refresh must touch extensionTokens.$[t], not extensionTokenCreatedAt.
+  // ---------- Case 4: compatibility reads never renew legacy tokens ----------
+  // Token E is 8 days old and remains valid within the fixed 30-day window,
+  // but validation must not move either timestamp forward.
   updates.length = 0;
   const tokE = "ext_user_111_E_old";
   const tokF = "ext_user_111_F_new";
@@ -161,16 +161,11 @@ async function run() {
   };
   const resE = await authMod.validateExtensionToken(makeReq(tokE));
   ok("8-day-old array token still accepted (within 30d TTL)", resE.authorized === true, JSON.stringify(resE));
-  const refreshUpdate = updates.find((u) =>
-    u.update?.$set && Object.keys(u.update.$set).some((k) => k.startsWith("extensionTokens.$"))
+  ok(
+    "legacy compatibility read did not renew any token timestamp",
+    updates.length === 0,
+    `updates seen: ${JSON.stringify(updates)}`,
   );
-  ok("refresh wrote to extensionTokens.$[t] entry", !!refreshUpdate,
-    `updates seen: ${JSON.stringify(updates)}`);
-  const touchedScalar = updates.some((u) =>
-    u.update?.$set?.extensionTokenCreatedAt !== undefined
-  );
-  ok("refresh did NOT touch the scalar extensionTokenCreatedAt", !touchedScalar,
-    `updates seen: ${JSON.stringify(updates)}`);
 
   console.log(`\nTotal failures: ${failed}`);
   if (failed > 0) process.exit(1);

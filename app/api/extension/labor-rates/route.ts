@@ -1,6 +1,6 @@
 import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 import { NextRequest, NextResponse } from "next/server";
-import { validateExtensionToken, getAuthErrorStatus, getUserShopIds , buildAuthErrorBody } from "@/lib/extension-auth";
+import { validateExtensionToken, getAuthErrorStatus, getUserShopIds, buildAuthErrorBody, requireExtensionPrincipalScope } from "@/lib/extension-auth";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { checkShopFeatureGate } from "@/lib/extension-route-guard";
 import { getDb } from "@/lib/mongo";
@@ -38,6 +38,16 @@ async function _GET(req: NextRequest) {
     const shopResult = await findShopBySmsId(smsShopId, { userShopIds, isPlatformAdmin, providerHint: provider });
     if (!shopResult) {
       return NextResponse.json({ ok: false, error: `No accessible shop configured for SMS shop ID ${smsShopId}` }, { status: 404, headers: CORS_HEADERS });
+    }
+    const scopeFailure = requireExtensionPrincipalScope(auth, {
+      shopId: shopResult.mosShopId,
+      provider: provider || shopResult.provider,
+    });
+    if (scopeFailure) {
+      return NextResponse.json(
+        buildAuthErrorBody(scopeFailure, { ok: false }),
+        { status: getAuthErrorStatus(scopeFailure), headers: CORS_HEADERS }
+      );
     }
     resolvedShopId = shopResult.mosShopId;
   } else if (userShopIds.length <= 1) {
@@ -111,6 +121,16 @@ async function _PUT(req: NextRequest) {
     const shopResult = await findShopBySmsId(smsShopId, { userShopIds, isPlatformAdmin, providerHint: provider });
     if (!shopResult) {
       return NextResponse.json({ ok: false, error: `No accessible shop configured for SMS shop ID ${smsShopId}` }, { status: 404, headers: CORS_HEADERS });
+    }
+    const scopeFailurePut = requireExtensionPrincipalScope(auth, {
+      shopId: shopResult.mosShopId,
+      provider: provider || shopResult.provider,
+    });
+    if (scopeFailurePut) {
+      return NextResponse.json(
+        buildAuthErrorBody(scopeFailurePut, { ok: false }),
+        { status: getAuthErrorStatus(scopeFailurePut), headers: CORS_HEADERS }
+      );
     }
     targetShopId = shopResult.mosShopId;
   } else if (userShopIds.length <= 1) {

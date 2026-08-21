@@ -1,6 +1,6 @@
 import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 import { NextRequest, NextResponse } from "next/server";
-import { validateExtensionToken, getUserShopIds, getAuthErrorStatus, buildAuthErrorBody } from "@/lib/extension-auth";
+import { validateExtensionToken, getUserShopIds, getAuthErrorStatus, buildAuthErrorBody, requireExtensionPrincipalScope } from "@/lib/extension-auth";
 import { checkShopFeatureGate } from "@/lib/extension-route-guard";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { loadVehicleHistory, matchLastPerformed } from "@/lib/last-performed";
@@ -51,7 +51,19 @@ async function _GET(request: NextRequest) {
     let mosShopId: number | null = null;
     if (smsShopId) {
       const shopResult = await findShopBySmsId(smsShopId, { userShopIds, isPlatformAdmin, providerHint: providerParam });
-      if (shopResult) mosShopId = shopResult.mosShopId;
+      if (shopResult) {
+        mosShopId = shopResult.mosShopId;
+        const scopeFailure = requireExtensionPrincipalScope(auth, {
+          shopId: shopResult.mosShopId,
+          provider: providerParam || shopResult.provider,
+        });
+        if (scopeFailure) {
+          return NextResponse.json(
+            buildAuthErrorBody(scopeFailure),
+            { status: getAuthErrorStatus(scopeFailure), headers: corsHeaders }
+          );
+        }
+      }
     }
     if (!mosShopId && auth.user.shopId) {
       mosShopId = parseInt(auth.user.shopId);

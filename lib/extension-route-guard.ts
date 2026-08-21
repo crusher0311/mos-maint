@@ -4,7 +4,13 @@ import {
   getAuthErrorStatus,
   getUserShopIds,
   buildAuthErrorBody,
+  requireExtensionCapabilities,
+  requireExtensionPrincipalScope,
 } from "@/lib/extension-auth";
+import type {
+  ExtensionCapability,
+  ExtensionSessionPrincipal,
+} from "@/lib/extension-session";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { getFeatureEntitlements, type FeatureKey } from "@/lib/featureResolver";
 
@@ -44,6 +50,8 @@ export interface ExtensionGuardOptions {
   corsHeaders?: Record<string, string>;
   /** Human-readable feature name used in error messages. Defaults to first requiredFeature. */
   featureLabel?: string;
+  /** Server-owned capabilities required in addition to authentication. */
+  requiredCapabilities?: ExtensionCapability[];
 }
 
 export type ExtensionGuardResult =
@@ -54,6 +62,7 @@ export type ExtensionGuardResult =
       mosShopId: number;
       shopDoc: any;
       provider: "tekmetric" | "protractor" | "shopware" | "autoflow" | "shopmonkey";
+      principal: ExtensionSessionPrincipal;
     }
   | {
       ok: false;
@@ -74,6 +83,20 @@ export async function guardExtensionShopRequest(
         buildAuthErrorBody(auth),
         { status: getAuthErrorStatus(auth), headers: corsHeaders },
       ),
+    };
+  }
+
+  const capabilityFailure = requireExtensionCapabilities(
+    auth,
+    options.requiredCapabilities ?? [],
+  );
+  if (capabilityFailure) {
+    return {
+      ok: false,
+      response: NextResponse.json(buildAuthErrorBody(capabilityFailure), {
+        status: getAuthErrorStatus(capabilityFailure),
+        headers: corsHeaders,
+      }),
     };
   }
 
@@ -107,6 +130,42 @@ export async function guardExtensionShopRequest(
     };
   }
 
+  const scopedProvider = String(options.provider || shopResult.provider)
+    .toLowerCase()
+    .replace(/^shop[-_]ware$/, "shopware") as
+      | "tekmetric"
+      | "protractor"
+      | "shopware"
+      | "autoflow"
+      | "shopmonkey";
+  const shopDoc = shopResult.shopDoc;
+  const supportsScopedProvider =
+    (scopedProvider === "tekmetric" &&
+      Boolean(shopDoc?.tekmetric?.shopId || shopDoc?.tekmetricShopId)) ||
+    (scopedProvider === "protractor" &&
+      Boolean(shopDoc?.protractor?.connectionId || shopDoc?.protractorConnectionId)) ||
+    (scopedProvider === "shopware" &&
+      Boolean(shopDoc?.shopware?.tenantId || shopDoc?.shopware?.tenantSubdomain)) ||
+    (scopedProvider === "shopmonkey" &&
+      Boolean(shopDoc?.shopmonkey?.locationId || shopDoc?.shopmonkey?.companyId)) ||
+    (scopedProvider === "autoflow" &&
+      Boolean(
+        shopDoc?.autoflow?.shopId ||
+          shopDoc?.autoflow?.subdomain ||
+          shopDoc?.autoflow?.domain ||
+          shopDoc?.autoflowDomain ||
+          shopDoc?.autoflow?.shopNumbers,
+      ));
+  if (!supportsScopedProvider) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: "Provider scope mismatch", code: "PROVIDER_FORBIDDEN" },
+        { status: 403, headers: corsHeaders },
+      ),
+    };
+  }
+
   if (!isPlatformAdmin && !userShopIds.includes(String(shopResult.mosShopId))) {
     return {
       ok: false,
@@ -116,6 +175,21 @@ export async function guardExtensionShopRequest(
       ),
     };
   }
+
+  const scopeFailure = requireExtensionPrincipalScope(auth, {
+    shopId: shopResult.mosShopId,
+    provider: scopedProvider,
+  });
+  if (scopeFailure) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        buildAuthErrorBody(scopeFailure),
+        { status: getAuthErrorStatus(scopeFailure), headers: corsHeaders },
+      ),
+    };
+  }
+  const principal = auth.principal ?? auth.user.extensionPrincipal;
 
   const required = options.requiredFeatures ?? [];
   if (required.length > 0 && !isPlatformAdmin) {
@@ -156,7 +230,8 @@ export async function guardExtensionShopRequest(
     isPlatformAdmin,
     mosShopId: Number(shopResult.mosShopId),
     shopDoc: shopResult.shopDoc,
-    provider: shopResult.provider,
+    provider: scopedProvider,
+    principal,
   };
 }
 

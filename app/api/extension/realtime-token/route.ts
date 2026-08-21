@@ -4,7 +4,7 @@ import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 // feature is disabled so the extension treats it as "fall back to polling".
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "node:crypto";
-import { validateExtensionToken, getUserShopIds, getAuthErrorStatus , buildAuthErrorBody } from "@/lib/extension-auth";
+import { validateExtensionToken, getUserShopIds, getAuthErrorStatus, buildAuthErrorBody, requireExtensionPrincipalScope } from "@/lib/extension-auth";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { isVhiRealtimeEnabled } from "@/lib/realtime/broadcast-vhi";
 
@@ -112,6 +112,17 @@ async function _POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Shop not found or access denied" },
         { status: 403, headers: corsHeaders }
+      );
+    }
+
+    const scopeFailure = requireExtensionPrincipalScope(auth, {
+      shopId: shopResult.mosShopId,
+      provider: provider || shopResult.provider,
+    });
+    if (scopeFailure) {
+      return NextResponse.json(
+        buildAuthErrorBody(scopeFailure),
+        { status: getAuthErrorStatus(scopeFailure), headers: corsHeaders }
       );
     }
 

@@ -2,7 +2,7 @@ import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 // gate-exempt: extension UI preferences (toggles, layout, etc.) — not tied to
 // any specific shop feature; should remain available regardless of plan.
 import { NextRequest, NextResponse } from "next/server";
-import { validateExtensionToken, getAuthErrorStatus, getUserShopIds , buildAuthErrorBody } from "@/lib/extension-auth";
+import { validateExtensionToken, getAuthErrorStatus, getUserShopIds, buildAuthErrorBody, requireExtensionPrincipalScope } from "@/lib/extension-auth";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { getDb } from "@/lib/mongo";
 import { sanitizeInjectedButtonVisibility } from "@/lib/extension-button-visibility";
@@ -40,6 +40,16 @@ async function _GET(request: NextRequest) {
       const shopResult = await findShopBySmsId(smsShopId, { userShopIds, isPlatformAdmin, providerHint: provider });
       if (!shopResult) {
         return NextResponse.json({ error: `No accessible shop configured for SMS shop ID ${smsShopId}` }, { status: 404, headers: corsHeaders });
+      }
+      const scopeFailure = requireExtensionPrincipalScope(auth, {
+        shopId: shopResult.mosShopId,
+        provider: shopResult.provider,
+      });
+      if (scopeFailure) {
+        return NextResponse.json(
+          buildAuthErrorBody(scopeFailure),
+          { status: getAuthErrorStatus(scopeFailure), headers: corsHeaders }
+        );
       }
       shopId = shopResult.mosShopId;
     }

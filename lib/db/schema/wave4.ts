@@ -48,6 +48,7 @@ import {
   uniqueIndex,
   index,
 } from "drizzle-orm/pg-core";
+import { randomUUID } from "node:crypto";
 
 /* ========================================================================== */
 /* enterprise_accounts                                                        */
@@ -232,6 +233,44 @@ export const sessions = pgTable(
   (t) => ({
     userIdx: index("sessions_user_idx").on(t.userId),
     expiresIdx: index("sessions_expires_idx").on(t.expiresAt),
+  }),
+);
+
+/** Opaque browser-extension sessions. Token material is never persisted. */
+export const extensionSessions = pgTable(
+  "extension_sessions",
+  {
+    id: text("id").primaryKey().$defaultFn(randomUUID),
+    tokenHash: text("token_hash").notNull(),
+    userId: text("user_id").references(() => users.id, { onDelete: "cascade" }),
+    shopId: integer("shop_id").notNull().references(() => shops.mosShopId, { onDelete: "cascade" }),
+    provider: text("provider").notNull(),
+    assurance: text("assurance").notNull(),
+    capabilities: jsonb("capabilities").notNull().default([]),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    tokenHashUniq: uniqueIndex("extension_sessions_token_hash_uniq").on(t.tokenHash),
+    activeShopIdx: index("extension_sessions_active_shop_idx").on(t.shopId, t.expiresAt),
+    userIdx: index("extension_sessions_user_idx").on(t.userId),
+  }),
+);
+
+export const extensionActionGrantUses = pgTable(
+  "extension_action_grant_uses",
+  {
+    grantHash: text("grant_hash").primaryKey(),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => extensionSessions.id, { onDelete: "cascade" }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    expiresIdx: index("extension_action_grant_uses_expires_idx").on(t.expiresAt),
   }),
 );
 

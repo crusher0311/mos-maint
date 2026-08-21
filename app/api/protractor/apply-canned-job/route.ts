@@ -13,6 +13,9 @@ import {
   validateExtensionToken,
   getAuthErrorStatus,
   buildAuthErrorBody,
+  isExtensionBearerRequest,
+  requireExtensionPrincipalScope,
+  type ExtensionAuthResult,
 } from "@/lib/extension-auth";
 
 export const runtime = "nodejs";
@@ -36,9 +39,9 @@ export async function POST(req: NextRequest) {
   // line of defense, so it must validate the token itself.
   let sessionEmail: string | null = null;
   let shopId: number;
+  let extensionAuth: ExtensionAuthResult | null = null;
 
-  const authHeader = req.headers.get("Authorization");
-  if (authHeader?.startsWith("Bearer ext_")) {
+  if (isExtensionBearerRequest(req)) {
     const extAuth = await validateExtensionToken(req);
     if (!extAuth.authorized || !extAuth.user) {
       return NextResponse.json(
@@ -46,6 +49,7 @@ export async function POST(req: NextRequest) {
         { status: getAuthErrorStatus(extAuth), headers: corsHeaders },
       );
     }
+    extensionAuth = extAuth;
     sessionEmail = extAuth.user.email ?? null;
     shopId = Number(extAuth.user.shopId);
   } else {
@@ -60,6 +64,18 @@ export async function POST(req: NextRequest) {
   const db = await getDb();
   if (!shopId) {
     return NextResponse.json({ error: "No shop associated" }, { status: 400, headers: corsHeaders });
+  }
+  if (extensionAuth) {
+    const scopeFailure = requireExtensionPrincipalScope(extensionAuth, {
+      shopId,
+      provider: "protractor",
+    });
+    if (scopeFailure) {
+      return NextResponse.json(buildAuthErrorBody(scopeFailure), {
+        status: getAuthErrorStatus(scopeFailure),
+        headers: corsHeaders,
+      });
+    }
   }
 
   let body: { vin?: string; cannedJobId?: string; cannedJobTitle?: string; workOrderId?: string };

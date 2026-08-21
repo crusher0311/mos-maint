@@ -1,5 +1,23 @@
 # Detect Dog by MOS Tools — Changelog
 
+## 1.33.3
+
+### Added
+- **Tiered session awareness (Basic read-only vs Verified).** The
+  extension-auth response may now describe the session's trust level via
+  optional `assurance` / `capabilities` fields. New pure module
+  `session-tier-core.js` normalizes these into a session tier — a
+  **basic** session is read-only, a **verified** session may mutate/admin.
+  When the server sends neither field (legacy backends), the session
+  resolves to verified so existing shops are never regressed. The side
+  panel now shows an amber "Basic (read-only) session" banner with a
+  verification prompt whenever the session is basic, and disables every
+  mutation/admin control (per-service "+ Add", Add All Declined, labor-rate
+  Apply Now / Add Group / auto-apply, undo bar, Create RO, and
+  platform-admin-only UI). Effective write permission is now
+  `role-allows-write AND session-is-verified`. No auth/server files were
+  changed — the UI consumes the fields defensively if present.
+
 ## 1.33.0 — 2026-08-13
 
 ### Added

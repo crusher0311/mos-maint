@@ -57,6 +57,16 @@
 
     <!-- Main app state -->
     <div id="main-state" class="hidden">
+      <!-- Session-tier banner: labels a Basic (read-only) vs Verified session
+           and, when basic, prompts the advisor to verify to unlock writes. -->
+      <div id="session-tier-banner" class="session-tier-banner hidden" role="status">
+        <span id="session-tier-icon" class="session-tier-icon" aria-hidden="true"></span>
+        <div class="session-tier-text">
+          <span id="session-tier-label" class="session-tier-label"></span>
+          <span id="session-tier-prompt" class="session-tier-prompt"></span>
+        </div>
+      </div>
+
       <!-- Context banner -->
       <div id="context-banner" class="context-banner">
         <div id="no-context" class="no-context">
@@ -1029,6 +1039,7 @@
   </div>
 
   <script src="telemetry-core.js"></script>
+  <script src="session-tier-core.js"></script>
   <script src="sidepanel.js"></script>
 </body>
 </html>

@@ -20,6 +20,15 @@ const READ_ONLY_ROLES = new Set(["viewer", "read_only", "readonly"]);
 
 export function checkExtensionWritePermission(user: any): string | null {
   if (!user) return "Not authenticated";
+  const principal = user.extensionPrincipal;
+  if (
+    principal &&
+    (principal.assurance !== "verified" ||
+      !Array.isArray(principal.capabilities) ||
+      !principal.capabilities.includes("write"))
+  ) {
+    return "Verify your MOS.Tools account to make changes";
+  }
   if (user.role === "platform_admin" || user.isPlatformAdmin === true) return null;
   if (user.readOnly === true) return "Your account is read-only";
   const role = (user.role || "").toString().toLowerCase();

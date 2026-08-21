@@ -10,12 +10,22 @@ const MosUndoCore = globalThis.MosUndoCore;
 // sanitize helpers shared with content scripts + sidepanel, Task #1112).
 import './telemetry-core.js';
 const MosTelemetryCore = globalThis.MosTelemetryCore;
+// Side-effect import: sets globalThis.MosSessionTierCore (pure logic that
+// derives the tiered session trust level — basic read-only vs verified — from
+// the extension-auth response's optional assurance/capabilities fields).
+import './session-tier-core.js';
+const MosSessionTierCore = globalThis.MosSessionTierCore;
+// Signed provider-action receipts are validated again at each direct mutation
+// sink so authorization cannot be detached from the operation it approved.
+import './provider-action-grant-core.js';
+const MosProviderActionGrantCore = globalThis.MosProviderActionGrantCore;
 
 // ==================== STATE MANAGEMENT ====================
 let mosApiToken = null;
 let mosApiUrl = null;
 let currentSmsContext = null;
 let mosShops = [];
+let mosSessionTier = null;
 
 // SMS-specific session tokens (memory-only for security)
 const smsTokens = {
@@ -51,7 +61,7 @@ let snifferActive = false;
 // chrome.storage callbacks complete (e.g. after service worker restart).
 const _stateReady = Promise.all([
   new Promise(resolve => {
-    chrome.storage.local.get(['mosApiToken', 'mosApiUrl', 'mosUser', 'mosShops'], (result) => {
+    chrome.storage.local.get(['mosApiToken', 'mosApiUrl', 'mosUser', 'mosShops', 'mosSessionTier'], (result) => {
       if (result.mosApiToken) {
         mosApiToken = result.mosApiToken;
         console.log("[MOS] Restored API token from storage");
@@ -63,6 +73,9 @@ const _stateReady = Promise.all([
       if (result.mosShops) {
         mosShops = result.mosShops;
         console.log("[MOS] Restored shops:", mosShops.length);
+      }
+      if (result.mosSessionTier) {
+        mosSessionTier = result.mosSessionTier;
       }
       resolve();
     });
@@ -273,26 +286,75 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === "MOS_LOGOUT") {
-    mosApiToken = null;
-    mosShops = [];
-    chrome.storage.local.remove(['mosApiToken', 'mosUser', 'mosShops', 'mosLoginEmail', 'mosLoginPass', 'mosRememberMe']);
-    sendResponse({ success: true });
-    return false;
+    const tokenToRevoke = mosApiToken;
+    const apiUrl = mosApiUrl;
+    (async () => {
+      if (tokenToRevoke && apiUrl && tokenToRevoke.startsWith('exts_')) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 2000);
+        try {
+          await fetch(`${apiUrl}/api/extension/session`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${tokenToRevoke}` },
+            signal: controller.signal,
+          });
+        } catch (_) {
+          // Local logout must still succeed if the network is unavailable.
+        } finally {
+          clearTimeout(timeout);
+        }
+      }
+      mosApiToken = null;
+      mosShops = [];
+      mosSessionTier = null;
+      await chrome.storage.local.remove([
+        'mosApiToken',
+        'mosUser',
+        'mosShops',
+        'mosSessionTier',
+        'mosLoginEmail',
+        'mosLoginPass',
+        'mosRememberMe',
+      ]);
+      sendResponse({ success: true });
+    })();
+    return true;
   }
 
   if (message.action === "GET_MOS_AUTH") {
     _stateReady.then(() => {
-      chrome.storage.local.get(['mosUser', 'mosShops'], (result) => {
+      chrome.storage.local.get(['mosUser', 'mosShops', 'mosSessionTier'], (result) => {
         sendResponse({
           isAuthenticated: !!mosApiToken,
           apiUrl: mosApiUrl,
           defaultExtensionTab: result.mosUser?.defaultExtensionTab || null,
           shopwareAddMode: result.mosUser?.shopwareAddMode || null,
           shops: result.mosShops || [],
-          user: result.mosUser || null
+          user: result.mosUser || null,
+          sessionTier: result.mosSessionTier || null
         });
       });
     });
+    return true;
+  }
+
+  // Content scripts never receive the MOS bearer token. They must ask this
+  // trusted service worker to obtain a short-lived, shop/provider/action-bound
+  // grant before a direct browser-to-provider mutation.
+  if (message.action === "AUTHORIZE_PROVIDER_ACTION") {
+    const provider = message.provider || currentSmsContext?.provider;
+    requestProviderActionGrant(
+      provider,
+      message.providerAction,
+      message.shopId || currentSmsContext?.shopId,
+      { deferConsumption: String(provider || '').toLowerCase() === 'autoflow' },
+    )
+      .then((result) => sendResponse({ success: true, ...result }))
+      .catch((err) => sendResponse({
+        success: false,
+        error: err?.message || 'MOS.Tools verification is required',
+        code: err?.code || null,
+      }));
     return true;
   }
 
@@ -1599,15 +1661,97 @@ function broadcastSnifferState(active) {
 }
 
 // ==================== MOS API FUNCTIONS ====================
+async function consumeProviderActionGrant(receipt) {
+  const response = await fetch(`${mosApiUrl}/api/extension/action-grant/consume`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      grant: receipt.grant,
+      provider: receipt.provider,
+      action: receipt.providerAction,
+    }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.consumed !== true) {
+    const error = new Error(data.error || 'Provider authorization could not be consumed');
+    error.code = data.code || 'PROVIDER_ACTION_GRANT_INVALID';
+    throw error;
+  }
+  return { ...receipt, consumed: true };
+}
+
+async function requestProviderActionGrant(provider, providerAction, shopId, options = {}) {
+  await _stateReady;
+  const normalizedProvider = String(provider || '').toLowerCase();
+  const normalizedAction = String(providerAction || '').trim();
+  const scopedShopId = shopId == null ? '' : String(shopId);
+  if (!mosApiToken || !mosApiUrl) {
+    throw new Error('Sign in to MOS.Tools to make changes');
+  }
+  if (!normalizedProvider || !normalizedAction || !scopedShopId) {
+    throw new Error('The current shop action could not be verified');
+  }
+  if (mosSessionTier && mosSessionTier.canMutate === false) {
+    const err = new Error('Verify your MOS.Tools account to make changes');
+    err.code = 'CAPABILITY_REQUIRED';
+    throw err;
+  }
+  const response = await fetch(`${mosApiUrl}/api/extension/action-grant`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${mosApiToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      provider: normalizedProvider,
+      smsShopId: scopedShopId,
+      action: normalizedAction,
+    }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data.grant) {
+    const err = new Error(
+      data.error ||
+      (response.status === 403
+        ? 'Verify your MOS.Tools account to make changes'
+        : 'Could not authorize this provider action'),
+    );
+    err.code = data.code || null;
+    throw err;
+  }
+  const receipt = {
+    grant: data.grant,
+    expiresAt: data.expiresAt,
+    shopId: data.shopId,
+    provider: data.provider,
+    providerAction: data.action,
+  };
+  MosProviderActionGrantCore.requireValidReceipt(receipt, {
+    provider: normalizedProvider,
+    action: normalizedAction,
+  });
+  if (options.deferConsumption === true) return receipt;
+  return consumeProviderActionGrant(receipt);
+}
+
 async function handleMosLogin(email, password, apiUrl, rememberMe = true) {
   try {
+    await _stateReady;
     // Remove trailing slash from API URL
     mosApiUrl = (apiUrl || 'https://mos.tools').replace(/\/+$/, '');
     
     const response = await fetch(`${mosApiUrl}/api/extension/auth`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
+      headers: {
+        'Content-Type': 'application/json',
+        ...(mosApiToken ? { 'Authorization': `Bearer ${mosApiToken}` } : {}),
+      },
+      body: JSON.stringify({
+        email,
+        password,
+        provider: currentSmsContext?.provider || undefined,
+        smsShopId: currentSmsContext?.shopId || undefined,
+      })
     });
 
     if (!response.ok) {
@@ -1619,12 +1763,24 @@ async function handleMosLogin(email, password, apiUrl, rememberMe = true) {
     mosApiToken = data.token;
     
     mosShops = data.shops || [];
-    
+
+    // Derive + persist the session's trust tier from the (optional)
+    // assurance/capabilities fields the server may return. Pure logic lives in
+    // session-tier-core.js so both the background and side panel agree on what
+    // "basic read-only" vs "verified" means. Legacy backends that send neither
+    // field resolve to a verified session (no regression).
+    const sessionTier = MosSessionTierCore
+      ? MosSessionTierCore.deriveSessionTier(data)
+      : { tier: 'verified', isVerified: true, canMutate: true, canAdmin: true, capabilities: null, source: 'default' };
+    console.log("[MOS] Session tier:", sessionTier.tier, "(source:", sessionTier.source + ")");
+    mosSessionTier = sessionTier;
+
     const storageData = {
       mosApiToken: data.token,
       mosApiUrl: mosApiUrl,
       mosUser: data.user,
       mosShops: mosShops,
+      mosSessionTier: sessionTier,
       mosRememberMe: rememberMe
     };
     
@@ -1637,7 +1793,7 @@ async function handleMosLogin(email, password, apiUrl, rememberMe = true) {
     
     chrome.storage.local.set(storageData);
 
-    console.log("[MOS] Login successful:", data.user?.email, "| token:", data.token?.substring(0, 20) + "...");
+    console.log("[MOS] Login successful:", data.user?.email, "| session:", sessionTier.tier);
 
     // Verify token works immediately. Task #502: a single 401 here used
     // to log "Token INVALID immediately after login" with no retry —
@@ -1658,7 +1814,7 @@ async function handleMosLogin(email, password, apiUrl, rememberMe = true) {
         console.log("[MOS] Token verify retry:", verifyRes.status);
         if (verifyRes.status === 401) {
           const body = await verifyRes.json().catch(() => ({}));
-          if (body?.code === 'TOKEN_INVALID' || body?.code === 'TOKEN_EXPIRED' || body?.code === 'TOKEN_MISSING') {
+          if (body?.code === 'TOKEN_INVALID' || body?.code === 'TOKEN_EXPIRED' || body?.code === 'TOKEN_REVOKED' || body?.code === 'TOKEN_MISSING') {
             console.error("[MOS] Token INVALID immediately after login!", body);
           } else {
             console.warn("[MOS] Token verify transient 401 after retry — leaving token in place", body);
@@ -1669,7 +1825,7 @@ async function handleMosLogin(email, password, apiUrl, rememberMe = true) {
       console.warn("[MOS] Token verify fetch failed:", e.message);
     }
 
-    return { success: true, user: data.user, shops: data.shops || [] };
+    return { success: true, user: data.user, shops: data.shops || [], sessionTier };
   } catch (err) {
     console.error("[MOS] Login error:", err);
     throw err;
@@ -1918,7 +2074,7 @@ const MOS_AUTH_RETRY_DELAYS_MS = [500, 1500, 4000];
 // won't fix it, and the token still works for other shops). Transient
 // blips never reach this decision: the retry budget + silent re-auth
 // above must all fail with the same terminal code first.
-const TERMINAL_AUTH_CODES = new Set(['TOKEN_INVALID', 'TOKEN_EXPIRED']);
+const TERMINAL_AUTH_CODES = new Set(['TOKEN_INVALID', 'TOKEN_EXPIRED', 'TOKEN_REVOKED']);
 
 function _jitter(ms) { return ms + Math.floor(Math.random() * (ms / 3)); }
 
@@ -2356,6 +2512,18 @@ function tekBuildRequest(endpoint, init = {}) {
 // Returns the raw Response (or throws on a network error) so callers
 // keep their existing `await res.text()` / `await res.json()` flow.
 async function tekSingleAttempt(endpointForReport, url, init, opts) {
+  const method = (init.method || 'GET').toUpperCase();
+  if (MUTATING_METHODS.has(method)) {
+    MosProviderActionGrantCore.requireValidReceipt(
+      opts.providerActionGrant,
+      {
+        provider: 'tekmetric',
+        action: opts.providerAction,
+        shopId: mosSessionTier?.shopId,
+        requireConsumed: true,
+      },
+    );
+  }
   const startedAt = Date.now();
   let response;
   let networkErr = null;
@@ -2366,7 +2534,6 @@ async function tekSingleAttempt(endpointForReport, url, init, opts) {
   }
   const elapsedMs = Date.now() - startedAt;
   const status = networkErr ? 0 : response.status;
-  const method = (init.method || 'GET').toUpperCase();
 
   // Queue the report. We deliberately swallow shape failures (e.g.
   // missing endpoint) — telemetry must not surface to the caller.
@@ -2426,6 +2593,19 @@ async function tekmetricFetch(endpoint, init = {}, opts = {}) {
   }
   const method = ((init.method || 'GET') + '').toUpperCase();
   const isMutating = MUTATING_METHODS.has(method);
+  let providerAction = null;
+  let providerActionGrant = null;
+  if (isMutating) {
+    const shape = String(tekSanitizeEndpointShape(endpoint) || 'request')
+      .replace(/[^a-z0-9._:/-]/gi, '')
+      .slice(0, 48);
+    providerAction = opts.providerAction || `tekmetric:${method.toLowerCase()}:${shape}`;
+    providerActionGrant = await requestProviderActionGrant(
+      'tekmetric',
+      providerAction,
+      opts.shopId || tekmetricShopId || currentSmsContext?.shopId,
+    );
+  }
   const fallbackStatuses = Array.isArray(opts.fallbackOnStatuses)
     ? opts.fallbackOnStatuses
     : DEFAULT_FALLBACK_STATUSES;
@@ -2434,6 +2614,8 @@ async function tekmetricFetch(endpoint, init = {}, opts = {}) {
   let response = await tekSingleAttempt(endpoint, built.url, built.init, {
     label: opts.label,
     shopId: opts.shopId,
+    providerAction,
+    providerActionGrant,
   });
 
   const shouldFallback = (status) =>
@@ -2452,6 +2634,8 @@ async function tekmetricFetch(endpoint, init = {}, opts = {}) {
           shopId: opts.shopId,
           isFallback: true,
           fallbackOf: opts.label || endpoint,
+          providerAction,
+          providerActionGrant,
         });
         if (fbResponse.ok) {
           response = fbResponse;
@@ -3801,7 +3985,6 @@ async function applyBuildRoFromVhi(context, selected, markerPrefix, tabId) {
   if (!Array.isArray(selected) || selected.length === 0) {
     return { success: false, error: "No items selected" };
   }
-
   // Marker handling.
   //
   // The server's proposal generator currently emits concern text starting
@@ -3935,6 +4118,18 @@ async function applyBuildRoFromVhi(context, selected, markerPrefix, tabId) {
     // demotes the result from "added" to "failed" so the toast tells the
     // truth instead of pretending success.
     try {
+      const providerAction = 'tekmetric:post:technician-concern';
+      const providerActionGrant = await requestProviderActionGrant(
+        'tekmetric',
+        providerAction,
+        shopId,
+      );
+      MosProviderActionGrantCore.requireValidReceipt(providerActionGrant, {
+        provider: 'tekmetric',
+        action: providerAction,
+        shopId: mosSessionTier?.shopId,
+        requireConsumed: true,
+      });
       const cRes = await tekmetricFetchWithBackoff(
         `${baseUrl}/api/repair-orders/${context.roId}/technician-concerns`,
         {
@@ -4516,6 +4711,18 @@ async function revertTekmetricSnapshot(snap) {
     for (const it of snap.items || []) {
       if (it?.concernId == null) continue;
       try {
+        const providerAction = 'tekmetric:delete:technician-concern';
+        const providerActionGrant = await requestProviderActionGrant(
+          'tekmetric',
+          providerAction,
+          shopId,
+        );
+        MosProviderActionGrantCore.requireValidReceipt(providerActionGrant, {
+          provider: 'tekmetric',
+          action: providerAction,
+          shopId: mosSessionTier?.shopId,
+          requireConsumed: true,
+        });
         const res = await tekmetricFetchWithBackoff(
           `${baseUrl}/api/repair-orders/${snap.roId}/technician-concerns/${it.concernId}`,
           {

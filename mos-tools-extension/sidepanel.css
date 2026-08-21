@@ -260,6 +260,58 @@ body {
   border-bottom: 1px solid var(--gray-200);
 }
 
+/* ==================== Session-tier banner ==================== */
+/* Labels the current session's trust level. Verified => subtle green;
+   Basic (read-only) => amber warning with a verify prompt. */
+.session-tier-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 16px;
+  font-size: 12px;
+  line-height: 1.35;
+  border-bottom: 1px solid var(--gray-200, #e5e7eb);
+}
+.session-tier-banner.session-tier-verified {
+  background: #ecfdf5;
+  color: #065f46;
+  border-bottom-color: #a7f3d0;
+}
+.session-tier-banner.session-tier-basic {
+  background: #fffbeb;
+  color: #92400e;
+  border-bottom-color: #fde68a;
+}
+.session-tier-icon {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+}
+.session-tier-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.session-tier-label {
+  font-weight: 700;
+}
+.session-tier-prompt {
+  font-weight: 500;
+  opacity: 0.95;
+}
+.session-tier-prompt:empty {
+  display: none;
+}
+
+/* Mutation controls disabled by a basic (read-only) session. */
+.mos-write-locked {
+  opacity: 0.5;
+  cursor: not-allowed !important;
+  pointer-events: none;
+}
+
 /* ==================== Create RO panel (Task #348) ==================== */
 .create-ro-wrap {
   padding: 12px;

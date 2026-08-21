@@ -36,6 +36,8 @@ import {
   billingStatusLog,
   stripeEvents,
   stripeWebhookEvents,
+  extensionSessions,
+  extensionActionGrantUses,
 } from "@/lib/db/schema/wave4";
 // platform_plans' canonical Drizzle definition is the wave2 one (the shape
 // prod actually has); the incompatible wave4 duplicate was removed (Task #1022).
@@ -519,6 +521,118 @@ export async function updateUserExtensionTokenTimestamp(
     .update(users)
     .set({ extensionTokenCreatedAt: ts, updatedAt: new Date() })
     .where(eq(users.id, String(userId)));
+}
+
+/* -------------------------------------------------------------------------- */
+/* extension sessions                                                         */
+/* -------------------------------------------------------------------------- */
+
+export interface ExtensionSessionRow {
+  id: string;
+  tokenHash: string;
+  userId: string | null;
+  shopId: number;
+  provider: string;
+  assurance: string;
+  capabilities: unknown[];
+  expiresAt: Date;
+  lastUsedAt: Date | null;
+  revokedAt: Date | null;
+  createdAt: Date;
+}
+
+export async function insertExtensionSession(
+  row: Omit<ExtensionSessionRow, "lastUsedAt" | "revokedAt" | "createdAt"> & {
+    lastUsedAt?: Date | null;
+    createdAt?: Date;
+  },
+): Promise<ExtensionSessionRow> {
+  const db = getDb();
+  const [inserted] = await db
+    .insert(extensionSessions)
+    .values({
+      id: row.id,
+      tokenHash: row.tokenHash,
+      userId: row.userId,
+      shopId: row.shopId,
+      provider: row.provider,
+      assurance: row.assurance,
+      capabilities: row.capabilities,
+      expiresAt: row.expiresAt,
+      lastUsedAt: row.lastUsedAt ?? new Date(),
+      createdAt: row.createdAt ?? new Date(),
+    })
+    .returning();
+  return inserted as ExtensionSessionRow;
+}
+
+export async function findExtensionSessionByTokenHash(
+  tokenHash: string,
+): Promise<ExtensionSessionRow | null> {
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(extensionSessions)
+    .where(eq(extensionSessions.tokenHash, tokenHash))
+    .limit(1);
+  return (rows[0] as ExtensionSessionRow | undefined) ?? null;
+}
+
+export async function touchExtensionSession(id: string, at = new Date()): Promise<void> {
+  const db = getDb();
+  await db
+    .update(extensionSessions)
+    .set({ lastUsedAt: at })
+    .where(eq(extensionSessions.id, id));
+}
+
+export async function revokeExtensionSessionById(
+  id: string,
+  at = new Date(),
+): Promise<void> {
+  const db = getDb();
+  await db
+    .update(extensionSessions)
+    .set({ revokedAt: at })
+    .where(eq(extensionSessions.id, id));
+}
+
+export async function consumeExtensionActionGrantUse(input: {
+  grantHash: string;
+  sessionId: string;
+  expiresAt: Date;
+  now?: Date;
+}): Promise<"consumed" | "replayed" | "inactive_session"> {
+  const db = getDb();
+  const now = input.now ?? new Date();
+  const sessions = await db
+    .select({
+      id: extensionSessions.id,
+      expiresAt: extensionSessions.expiresAt,
+      revokedAt: extensionSessions.revokedAt,
+    })
+    .from(extensionSessions)
+    .where(eq(extensionSessions.id, input.sessionId))
+    .limit(1);
+  const session = sessions[0];
+  if (
+    !session ||
+    session.revokedAt != null ||
+    session.expiresAt.getTime() <= now.getTime()
+  ) {
+    return "inactive_session";
+  }
+  const inserted = await db
+    .insert(extensionActionGrantUses)
+    .values({
+      grantHash: input.grantHash,
+      sessionId: input.sessionId,
+      expiresAt: input.expiresAt,
+      usedAt: now,
+    })
+    .onConflictDoNothing()
+    .returning({ grantHash: extensionActionGrantUses.grantHash });
+  return inserted.length === 1 ? "consumed" : "replayed";
 }
 
 /* -------------------------------------------------------------------------- */

@@ -4,14 +4,28 @@ import type { Db } from "mongodb";
 import { getDb } from "@/lib/mongo";
 import bcrypt from "bcryptjs";
 import { isSuperAdmin } from "@/lib/super-admins";
+import {
+  issueExtensionSession,
+  lookupExtensionSession,
+  revokeExtensionSession,
+  type ExtensionProvider,
+} from "@/lib/extension-session";
 
 /**
  * Test seam: tests can override `__deps.getDb` to swap in a fake DB.
  * Kept narrowly typed (`() => Promise<Db>`) so production callers still
  * get the real `Db` type and we don't leak `any` into the route.
  */
-export const __deps: { getDb: () => Promise<Db> } = {
+export const __deps: {
+  getDb: () => Promise<Db>;
+  issueExtensionSession: typeof issueExtensionSession;
+  lookupExtensionSession: typeof lookupExtensionSession;
+  revokeExtensionSession: typeof revokeExtensionSession;
+} = {
   getDb: () => getDb(),
+  issueExtensionSession,
+  lookupExtensionSession,
+  revokeExtensionSession,
 };
 
 const corsHeaders = {
@@ -48,7 +62,13 @@ export async function OPTIONS() {
 
 async function _POST(request: NextRequest) {
   try {
-    const { email, password } = await request.json();
+    const {
+      email,
+      password,
+      shopId: requestedShopId,
+      smsShopId: requestedSmsShopId,
+      provider: requestedProvider,
+    } = await request.json();
 
     if (!email || !password) {
       return NextResponse.json(
@@ -120,50 +140,6 @@ async function _POST(request: NextRequest) {
       }
     }
 
-    const extensionToken = `ext_${user._id.toString()}_${Date.now()}_${Math.random().toString(36).substring(2)}`;
-    const issuedAt = new Date();
-
-    // Task: multi-device concurrent sessions. Before this change the user doc
-    // had a single `extensionToken` slot, so every re-login (or login from a
-    // second tab/device) invalidated the previous device's token within
-    // seconds — Detect Dog's silent re-auth would then mint a new token,
-    // killing this one, and the two tabs would ping-pong forever (74x
-    // `Token not found in DB` for /labor-rates etc. observed in prod).
-    //
-    // We now ALSO push every issued token into `extensionTokens[]` (capped,
-    // pruned by age). `validateExtensionToken` checks both the legacy single
-    // field AND the array, so older tokens that are still within their 30-day
-    // TTL keep working until the device that issued them logs out or
-    // re-auths. The legacy `extensionToken` field is still written to the
-    // newest token so PG-canonical reads and back-compat code keep finding
-    // the latest session.
-    const MAX_TOKEN_AGE_MS = 30 * 24 * 60 * 60 * 1000;
-    const MAX_CONCURRENT_TOKENS = 10;
-    const existingTokens: Array<{ token?: string; createdAt?: Date | string; lastUsedAt?: Date | string }> =
-      Array.isArray((user as any).extensionTokens) ? (user as any).extensionTokens : [];
-    const freshTokens = existingTokens.filter((t) => {
-      if (!t?.token || !t?.createdAt) return false;
-      if (t.token === extensionToken) return false; // shouldn't collide, but be safe
-      const age = Date.now() - new Date(t.createdAt).getTime();
-      return age >= 0 && age < MAX_TOKEN_AGE_MS;
-    });
-    const nextTokens = [
-      { token: extensionToken, createdAt: issuedAt, lastUsedAt: issuedAt },
-      ...freshTokens,
-    ].slice(0, MAX_CONCURRENT_TOKENS);
-
-    await usersCollection.updateOne(
-      { _id: user._id },
-      {
-        $set: {
-          extensionToken,
-          extensionTokenCreatedAt: issuedAt,
-          extensionTokens: nextTokens,
-          shopIds: allShopIds
-        }
-      }
-    );
-
     const shopIdVariants = allShopIds.flatMap((id: number) => [id, String(id)]);
     const shopDocs = await db.collection("shops")
       .find({ shopId: { $in: shopIdVariants } })
@@ -178,6 +154,8 @@ async function _POST(request: NextRequest) {
         protractorConnectionId: 1,
         "shopware.tenantSubdomain": 1,
         "shopware.tenantId": 1,
+        "shopmonkey.locationId": 1,
+        "shopmonkey.companyId": 1,
         "autoflow.domain": 1,
         "autoflow.subdomain": 1,
         "autoflow.shopId": 1,
@@ -191,13 +169,193 @@ async function _POST(request: NextRequest) {
       })
       .toArray();
 
+    const detectProvider = (s: any): ExtensionProvider | null => {
+      let raw = String(
+        s?.integrationProvider ||
+          (s?.tekmetric?.shopId || s?.tekmetricShopId
+            ? "tekmetric"
+            : s?.protractor?.connectionId || s?.protractorConnectionId
+              ? "protractor"
+              : s?.shopware?.tenantId
+                ? "shopware"
+                : s?.shopmonkey?.locationId || s?.shopmonkey?.companyId
+                  ? "shopmonkey"
+                  : s?.autoflow?.domain || s?.autoflow?.subdomain || s?.autoflow?.shopId
+                    ? "autoflow"
+                    : ""),
+      ).toLowerCase();
+      if (raw === "shop-ware" || raw === "shop_ware") raw = "shopware";
+      return ["tekmetric", "protractor", "shopware", "shopmonkey", "autoflow"].includes(raw)
+        ? (raw as ExtensionProvider)
+        : null;
+    };
+
+    const smsIdsForShop = (s: any, provider: ExtensionProvider): string[] => {
+      const values =
+        provider === "tekmetric"
+          ? [s?.tekmetric?.shopId, s?.tekmetricShopId]
+          : provider === "protractor"
+            ? [s?.protractor?.connectionId, s?.protractorConnectionId]
+            : provider === "shopware"
+              ? [s?.shopware?.tenantId, s?.shopware?.tenantSubdomain]
+              : provider === "shopmonkey"
+                ? [s?.shopmonkey?.locationId, s?.shopmonkey?.companyId]
+                : [
+                    s?.autoflow?.shopId,
+                    s?.autoflow?.subdomain,
+                    s?.autoflow?.domain,
+                    s?.autoflowDomain,
+                    ...(Array.isArray(s?.autoflow?.shopNumbers)
+                      ? s.autoflow.shopNumbers
+                      : [s?.autoflow?.shopNumbers]),
+                  ];
+      return values
+        .filter((value) => value != null && value !== "")
+        .map((value) => String(value).replace(/\.autotext\.me$/i, ""));
+    };
+    const shopSupportsProvider = (s: any, provider: ExtensionProvider): boolean =>
+      provider === "tekmetric"
+        ? Boolean(s?.tekmetric?.shopId || s?.tekmetricShopId)
+        : provider === "protractor"
+          ? Boolean(s?.protractor?.connectionId || s?.protractorConnectionId)
+          : provider === "shopware"
+            ? Boolean(s?.shopware?.tenantId || s?.shopware?.tenantSubdomain)
+            : provider === "shopmonkey"
+              ? Boolean(s?.shopmonkey?.locationId || s?.shopmonkey?.companyId)
+              : Boolean(
+                  s?.autoflow?.shopId ||
+                    s?.autoflow?.subdomain ||
+                    s?.autoflow?.domain ||
+                    s?.autoflowDomain ||
+                    s?.autoflow?.shopNumbers,
+                );
+
+    const requestedId =
+      requestedShopId == null || requestedShopId === ""
+        ? null
+        : Number(requestedShopId);
+    if (requestedId != null && !allShopIds.includes(requestedId)) {
+      return NextResponse.json(
+        { error: "Requested shop is not assigned to this account" },
+        { status: 403, headers: corsHeaders },
+      );
+    }
+    const normalizedRequestedProvider = requestedProvider
+      ? String(requestedProvider).toLowerCase().replace(/^shop[-_]ware$/, "shopware")
+      : null;
+    const normalizedSmsShopId =
+      requestedSmsShopId == null || requestedSmsShopId === ""
+        ? null
+        : String(requestedSmsShopId).replace(/\.autotext\.me$/i, "");
+    const candidateProviders: ExtensionProvider[] = normalizedRequestedProvider
+      ? [normalizedRequestedProvider as ExtensionProvider]
+      : ["tekmetric", "protractor", "shopware", "shopmonkey", "autoflow"];
+    const contextMatches = normalizedSmsShopId
+      ? shopDocs.flatMap((shop: any) =>
+          candidateProviders
+            .filter(
+              (provider) =>
+                shopSupportsProvider(shop, provider) &&
+                smsIdsForShop(shop, provider).includes(normalizedSmsShopId),
+            )
+            .map((provider) => ({ shop, provider })),
+        )
+      : [];
+    const contextMatch = contextMatches.length === 1 ? contextMatches[0] : null;
+    const contextShop = contextMatch?.shop ?? null;
+    if (normalizedSmsShopId && !contextMatch) {
+      return NextResponse.json(
+        {
+          error:
+            contextMatches.length > 1
+              ? "The current shop context is ambiguous; select its provider"
+              : "The current shop is not assigned to this account",
+        },
+        { status: 403, headers: corsHeaders },
+      );
+    }
+    if (
+      contextShop &&
+      requestedId != null &&
+      Number(contextShop.shopId) !== requestedId
+    ) {
+      return NextResponse.json(
+        { error: "Requested shop does not match the current shop context" },
+        { status: 403, headers: corsHeaders },
+      );
+    }
+    const defaultShopId = allShopIds.includes(Number(user.shopId))
+      ? Number(user.shopId)
+      : allShopIds[0];
+    const scopeShopId = Number(contextShop?.shopId ?? requestedId ?? defaultShopId);
+    const scopeShop =
+      contextShop ?? shopDocs.find((s: any) => Number(s.shopId) === scopeShopId);
+    const detectedProvider = detectProvider(scopeShop);
+    const scopeProvider =
+      contextMatch?.provider ??
+      (normalizedRequestedProvider as ExtensionProvider | null) ??
+      detectedProvider;
+    if (
+      !scopeShopId ||
+      !scopeShop ||
+      !scopeProvider ||
+      !shopSupportsProvider(scopeShop, scopeProvider)
+    ) {
+      return NextResponse.json(
+        { error: "A configured shop is required for extension access" },
+        { status: 403, headers: corsHeaders },
+      );
+    }
+    // New logins use first-class, revocable sessions. The returned token is
+    // opaque; only its SHA-256 hash is persisted. Existing ext_ tokens remain
+    // readable by the validator for the bounded compatibility window.
+    const issued = await __deps.issueExtensionSession({
+      shopId: scopeShopId,
+      provider: scopeProvider,
+      assurance: "verified",
+      userId: user._id.toString(),
+      isAdmin:
+        user.isPlatformAdmin === true ||
+        user.role === "platform_admin" ||
+        isSuperAdmin(user.email),
+      canWrite:
+        user.readOnly !== true &&
+        !["viewer", "read_only", "readonly"].includes(
+          String(user.role || "").toLowerCase(),
+        ),
+    });
+    console.info(
+      `[Extension Session] issued assurance=verified shop=${scopeShopId} provider=${scopeProvider}`,
+    );
+
+    // Password verification upgrades a Basic principal by rotating to this
+    // verified token and revoking the lower-assurance session. Legacy ext_
+    // user-document tokens remain untouched during the compatibility window.
+    const priorToken = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+    if (priorToken?.startsWith("exts_")) {
+      try {
+        const prior = await __deps.lookupExtensionSession(priorToken);
+        if (
+          prior.status === "active" &&
+          prior.principal.assurance === "basic" &&
+          prior.principal.shopId === scopeShopId &&
+          prior.principal.provider === scopeProvider
+        ) {
+          await __deps.revokeExtensionSession(prior.principal.sessionId);
+          console.info(
+            `[Extension Session] rotated assurance=basic->verified shop=${scopeShopId}`,
+          );
+        }
+      } catch (error) {
+        console.warn(
+          "[Extension Session] unable to revoke upgraded Basic session",
+          error,
+        );
+      }
+    }
+
     const shops = shopDocs.map((s: any) => {
-      const provider = s.integrationProvider
-        || (s.tekmetric?.shopId ? "tekmetric"
-          : s.protractor?.connectionId ? "protractor"
-          : s.shopware?.tenantId ? "shopware"
-          : s.autoflow?.domain ? "autoflow"
-          : "unknown");
+      const provider = detectProvider(s) || "unknown";
 
       let smsShopId: string | null = null;
       if (provider === "tekmetric") {
@@ -206,6 +364,8 @@ async function _POST(request: NextRequest) {
         smsShopId = s.protractor?.connectionId || s.protractorConnectionId || null;
       } else if (provider === "shopware") {
         smsShopId = s.shopware?.tenantSubdomain || s.shopware?.tenantId || null;
+      } else if (provider === "shopmonkey") {
+        smsShopId = s.shopmonkey?.locationId || s.shopmonkey?.companyId || null;
       } else if (provider === "autoflow") {
         smsShopId = s.autoflow?.subdomain || s.autoflow?.shopId || s.autoflow?.domain || null;
       }
@@ -214,6 +374,7 @@ async function _POST(request: NextRequest) {
       if (s.tekmetric?.shopId || s.tekmetricShopId) integrations.push("tekmetric");
       if (s.protractor?.connectionId || s.protractorConnectionId) integrations.push("protractor");
       if (s.shopware?.tenantId) integrations.push("shopware");
+      if (s.shopmonkey?.locationId || s.shopmonkey?.companyId) integrations.push("shopmonkey");
       if (s.autoflow?.domain || s.autoflow?.subdomain || s.autoflow?.shopId) integrations.push("autoflow");
 
       let writeProvider: string | null = null;
@@ -259,16 +420,30 @@ async function _POST(request: NextRequest) {
       };
     });
 
-    const primaryShop = shopDocs.find((s: any) => s.shopId === user.shopId);
+    const primaryShop = shopDocs.find((s: any) => Number(s.shopId) === scopeShopId);
     const effectiveSwMode = user.shopwareAddMode || primaryShop?.preferences?.shopwareAddMode || "finding-published";
 
     return NextResponse.json({
-      token: extensionToken,
+      token: issued.token,
+      assurance: issued.principal.assurance,
+      capabilities: issued.principal.capabilities,
+      expiresAt: issued.principal.expiresAt.toISOString(),
+      session: {
+        assurance: issued.principal.assurance,
+        capabilities: issued.principal.capabilities,
+        shopId: issued.principal.shopId,
+        provider: issued.principal.provider,
+        smsShopId:
+          normalizedSmsShopId ??
+          smsIdsForShop(scopeShop, scopeProvider)[0] ??
+          null,
+        expiresAt: issued.principal.expiresAt.toISOString(),
+      },
       user: {
         id: user._id.toString(),
         email: user.email,
         name: user.name,
-        shopId: user.shopId,
+        shopId: scopeShopId,
         shopIds: allShopIds,
         role: user.role,
         isPlatformAdmin: user.isPlatformAdmin === true || user.role === 'platform_admin',

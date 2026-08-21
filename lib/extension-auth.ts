@@ -7,9 +7,19 @@ import {
 } from "@/lib/db/wave4-write-mode";
 import {
   findUserByExtensionToken,
+  findUserById,
   updateUserExtensionTokenTimestamp,
   type MongoShapedUser,
 } from "@/lib/data/repositories/pg/identity";
+import {
+  lookupExtensionSession,
+  hasExtensionCapability,
+  type ExtensionCapability,
+  type ExtensionSessionPrincipal,
+} from "@/lib/extension-session";
+import { ObjectId } from "mongodb";
+import { lookupPolicy } from "@/lib/extension-route-policy";
+import { isSuperAdmin } from "@/lib/super-admins";
 
 /**
  * Stable error codes returned in the JSON body of every 401/503 from
@@ -29,7 +39,10 @@ export type ExtensionAuthCode =
   | "TOKEN_MISSING"
   | "TOKEN_INVALID"
   | "TOKEN_EXPIRED"
+  | "TOKEN_REVOKED"
   | "SHOP_FORBIDDEN"
+  | "PROVIDER_FORBIDDEN"
+  | "CAPABILITY_REQUIRED"
   | "AUTH_LOOKUP_FAILED";
 
 export interface ExtensionAuthResult {
@@ -38,6 +51,13 @@ export interface ExtensionAuthResult {
   error: string | null;
   code?: ExtensionAuthCode;
   serverError?: boolean;
+  status?: number;
+  principal?: ExtensionSessionPrincipal;
+}
+
+export function isExtensionBearerRequest(request: NextRequest): boolean {
+  const header = request.headers.get("Authorization") || "";
+  return /^Bearer\s+ext(?:s)?_/i.test(header);
 }
 
 /**
@@ -48,17 +68,35 @@ export interface ExtensionAuthResult {
 export const __deps: {
   getDb: typeof getDb;
   findUserByExtensionToken: typeof findUserByExtensionToken;
+  findUserById: typeof findUserById;
+  lookupExtensionSession: typeof lookupExtensionSession;
   updateUserExtensionTokenTimestamp: typeof updateUserExtensionTokenTimestamp;
   isIdentityPgCanonical: typeof isIdentityPgCanonical;
 } = {
   getDb,
   findUserByExtensionToken,
+  findUserById,
+  lookupExtensionSession,
   updateUserExtensionTokenTimestamp,
   isIdentityPgCanonical,
 };
 
 const MAX_TOKEN_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
-const TOKEN_REFRESH_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000; // refresh after 7 days of use
+const EXTENSION_READ_ONLY_ROLES = new Set(["viewer", "read_only", "readonly"]);
+
+function capabilitiesForVerifiedUser(user: any): ExtensionCapability[] {
+  const capabilities: ExtensionCapability[] = ["read"];
+  const role = String(user?.role || "").toLowerCase();
+  const isAdmin =
+    role === "platform_admin" ||
+    user?.isPlatformAdmin === true ||
+    isSuperAdmin(user?.email);
+  if (isAdmin || (user?.readOnly !== true && !EXTENSION_READ_ONLY_ROLES.has(role))) {
+    capabilities.push("write", "provider_action");
+  }
+  if (isAdmin) capabilities.push("admin");
+  return capabilities;
+}
 
 /**
  * Enterprise auto-access. So that an enterprise OWNER/ADMIN no longer has to be
@@ -152,7 +190,7 @@ export async function validateExtensionToken(
     token = request.nextUrl.searchParams.get("_token");
   }
 
-  if (!token || !token.startsWith("ext_")) {
+  if (!token || (!token.startsWith("ext_") && !token.startsWith("exts_"))) {
     const hasAuthHeader = !!authHeader;
     const hasQueryToken = !!request.nextUrl.searchParams.get("_token");
     console.log(`[Extension Auth] No valid token: hasAuthHeader=${hasAuthHeader}, hasQueryToken=${hasQueryToken}, path=${request.nextUrl.pathname}`);
@@ -165,6 +203,151 @@ export async function validateExtensionToken(
       method: request.method,
     });
     return { user: null, authorized: false, error: "Missing authorization", code: "TOKEN_MISSING" };
+  }
+
+  // First-class sessions are canonical in Postgres and keep the bearer token
+  // opaque: only a SHA-256 hash is stored. Legacy ext_ user-document tokens
+  // are intentionally handled below during the bounded rollout window.
+  if (token.startsWith("exts_")) {
+    try {
+      const lookup = await __deps.lookupExtensionSession(token);
+      if (lookup.status !== "active") {
+        const code: ExtensionAuthCode =
+          lookup.status === "expired"
+            ? "TOKEN_EXPIRED"
+            : lookup.status === "revoked"
+              ? "TOKEN_REVOKED"
+              : "TOKEN_INVALID";
+        return {
+          user: null,
+          authorized: false,
+          error:
+            lookup.status === "expired"
+              ? "Token expired"
+              : lookup.status === "revoked"
+                ? "Token revoked"
+                : "Invalid token",
+          code,
+        };
+      }
+
+      const principal = lookup.principal;
+      let sessionUser: any;
+      if (principal.assurance === "basic") {
+        // Never trust persisted capability drift to elevate a Basic row.
+        principal.capabilities = ["read"];
+        // A Basic principal is deliberately not backed by a users row. It is
+        // presented to the UI as a normal user while capability checks remain
+        // authoritative for every mutation/admin decision.
+        sessionUser = {
+          _id: `basic:${principal.sessionId}`,
+          id: `basic:${principal.sessionId}`,
+          email: null,
+          name: "Basic",
+          role: "user",
+          shopId: principal.shopId,
+          shopIds: principal.shopId == null ? [] : [principal.shopId],
+          isPlatformAdmin: false,
+          readOnly: true,
+        };
+      } else {
+        if (!principal.userId) {
+          return {
+            user: null,
+            authorized: false,
+            error: "Verified session has no user identity",
+            code: "TOKEN_INVALID",
+          };
+        }
+        if (__deps.isIdentityPgCanonical()) {
+          sessionUser = await __deps.findUserById(principal.userId);
+        } else {
+          const mongo = await __deps.getDb();
+          const idCandidates: unknown[] = [principal.userId];
+          if (ObjectId.isValid(principal.userId)) {
+            idCandidates.push(new ObjectId(principal.userId));
+          }
+          sessionUser = await mongo
+            .collection("users")
+            .findOne({ _id: { $in: idCandidates } });
+        }
+        if (!sessionUser) {
+          return {
+            user: null,
+            authorized: false,
+            error: "Session user no longer exists",
+            code: "TOKEN_INVALID",
+          };
+        }
+
+        // Verified sessions inherit the matched account's CURRENT authority.
+        // Role/read-only changes therefore take effect immediately instead of
+        // leaving stale write/admin claims valid until token expiry.
+        principal.capabilities = capabilitiesForVerifiedUser(sessionUser);
+
+        // Re-check assignment on every request so removing a user from a shop
+        // takes effect without mutating or revoking the user record itself.
+        const assigned = getUserShopIds(sessionUser);
+        const platformAdmin =
+          sessionUser.role === "platform_admin" ||
+          sessionUser.isPlatformAdmin === true;
+        if (
+          principal.shopId == null ||
+          (!platformAdmin && !assigned.includes(String(principal.shopId)))
+        ) {
+          return {
+            user: sessionUser,
+            authorized: false,
+            error: "Unauthorized shop access",
+            code: "SHOP_FORBIDDEN",
+            status: 403,
+            principal,
+          };
+        }
+
+        // Downstream legacy routes sometimes read user.shopId/shopIds directly
+        // instead of getUserShopIds(). Keep the matched account's role and
+        // preferences, but present only the session-bound shop to route code.
+        sessionUser = {
+          ...sessionUser,
+          shopId: principal.shopId,
+          shopIds: [principal.shopId],
+          accessibleShopIds: [principal.shopId],
+        };
+      }
+
+      sessionUser.extensionPrincipal = principal;
+      if (
+        requiredShopId &&
+        String(principal.shopId) !== String(requiredShopId)
+      ) {
+        return {
+          user: sessionUser,
+          authorized: false,
+          error: "Session is scoped to a different shop",
+          code: "SHOP_FORBIDDEN",
+          status: 403,
+          principal,
+        };
+      }
+
+      const authorizedResult: ExtensionAuthResult = {
+        user: sessionUser,
+        authorized: true,
+        error: null,
+        principal,
+      };
+      return enforceExtensionRoutePolicy(request, authorizedResult);
+    } catch (err) {
+      console.error("[Extension Session] lookup failed:", err);
+      return {
+        user: null,
+        authorized: false,
+        error: "Server error",
+        code: "AUTH_LOOKUP_FAILED",
+        serverError: true,
+      };
+    }
   }
 
   // W4 cutover (#346): PG-canonical read when the flag is on.
@@ -292,42 +475,9 @@ export async function validateExtensionToken(
       return { user: null, authorized: false, error: "Token expired", code: "TOKEN_EXPIRED" };
     }
 
-    if (tokenAge > TOKEN_REFRESH_THRESHOLD_MS) {
-      const ts = new Date();
-      try {
-        if (matchedTokenEntry) {
-          // Refresh only the per-device entry — don't touch the scalar
-          // `extensionToken`/`extensionTokenCreatedAt`, which belong to a
-          // different (newer) device's session.
-          if (!db) db = await __deps.getDb();
-          await db.collection("users").updateOne(
-            { _id: user._id ?? user.id },
-            { $set: { "extensionTokens.$[t].lastUsedAt": ts, "extensionTokens.$[t].createdAt": ts } },
-            { arrayFilters: [{ "t.token": token }] }
-          );
-        } else if (pgCanonical) {
-          await __deps.updateUserExtensionTokenTimestamp(String(user.id ?? user._id), ts);
-          await shadowWriteMongoIdentity(
-            "users.extensionTokenCreatedAt",
-            async () => {
-              const m = await __deps.getDb();
-              await m.collection("users").updateOne(
-                { _id: user._id ?? user.id },
-                { $set: { extensionTokenCreatedAt: ts } },
-              );
-            },
-          );
-        } else {
-          if (!db) db = await __deps.getDb();
-          await db.collection("users").updateOne(
-            { _id: user._id },
-            { $set: { extensionTokenCreatedAt: ts } }
-          );
-        }
-      } catch (err) {
-        console.warn("[Extension Auth] Failed to refresh token timestamp:", err);
-      }
-    }
+    // Compatibility is deliberately bounded: legacy user-document tokens are
+    // readable until their original 30-day expiry, but validation never
+    // renews that timestamp. New logins rotate onto revocable exts_ sessions.
   }
 
   // Enterprise auto-access: expand owner/admin reach to all shops sharing their
@@ -356,11 +506,66 @@ export async function validateExtensionToken(
     }
   }
 
-  return { user, authorized: true, error: null };
+  const legacyPrincipal: ExtensionSessionPrincipal = {
+    sessionId: `legacy:${String((user as any).id ?? (user as any)._id ?? "unknown")}`,
+    userId: String((user as any).id ?? (user as any)._id ?? ""),
+    assurance: "verified",
+    capabilities: capabilitiesForVerifiedUser(user),
+    expiresAt:
+      effectiveCreatedAt != null
+        ? new Date(effectiveCreatedAt.getTime() + MAX_TOKEN_AGE_MS)
+        : new Date(Date.now() + MAX_TOKEN_AGE_MS),
+    isLegacy: true,
+  };
+  (user as any).extensionPrincipal = legacyPrincipal;
+  return enforceExtensionRoutePolicy(request, {
+    user,
+    authorized: true,
+    error: null,
+    principal: legacyPrincipal,
+  });
+}
+
+export function enforceExtensionRoutePolicy(
+  request: Pick<NextRequest, "method" | "nextUrl">,
+  auth: ExtensionAuthResult,
+): ExtensionAuthResult {
+  const pathname = request.nextUrl.pathname;
+  const tiers = lookupPolicy(pathname, request.method);
+  if (!tiers) {
+    // Only the extension namespace is fail-closed for an unknown route.
+    // A small, explicitly linted set of extension-backed routes outside the
+    // namespace is also in POLICY_MAP and reaches the checks below.
+    if (!pathname.startsWith("/api/extension/")) return auth;
+    console.error(
+      `[Extension Auth] no capability policy for ${request.method} ${pathname}`,
+    );
+    return {
+      ...auth,
+      authorized: false,
+      error: "Extension route is not authorized",
+      code: "CAPABILITY_REQUIRED",
+      status: 403,
+    };
+  }
+  if (tiers.includes("public") || tiers.includes("preflight")) return auth;
+  const required: ExtensionCapability[] = [];
+  if (tiers.includes("read")) required.push("read");
+  if (tiers.includes("write")) required.push("write");
+  if (tiers.includes("provider_action")) required.push("provider_action");
+  if (tiers.includes("admin")) required.push("admin");
+  return requireExtensionCapabilities(auth, required) ?? auth;
 }
 
 export function getAuthErrorStatus(auth: ExtensionAuthResult): number {
   if (auth.serverError) return 503;
+  if (auth.status) return auth.status;
+  if (
+    auth.code === "CAPABILITY_REQUIRED" ||
+    auth.code === "PROVIDER_FORBIDDEN"
+  ) {
+    return 403;
+  }
   return 401;
 }
 
@@ -382,7 +587,74 @@ export function buildAuthErrorBody(
   };
 }
 
+export function requireExtensionCapabilities(
+  auth: Pick<ExtensionAuthResult, "user" | "principal">,
+  required: ExtensionCapability[],
+): ExtensionAuthResult | null {
+  const principal =
+    auth.principal ??
+    (auth.user?.extensionPrincipal as ExtensionSessionPrincipal | undefined);
+  const missing = required.filter(
+    (capability) => !hasExtensionCapability(principal, capability),
+  );
+  if (missing.length === 0) return null;
+  return {
+    user: auth.user ?? null,
+    authorized: false,
+    error:
+      principal?.assurance === "basic"
+        ? "Verify your MOS.Tools account to make changes"
+        : "This session does not have the required capability",
+    code: "CAPABILITY_REQUIRED",
+    status: 403,
+    principal,
+  };
+}
+
+export function getExtensionPrincipal(user: any): ExtensionSessionPrincipal | undefined {
+  return user?.extensionPrincipal as ExtensionSessionPrincipal | undefined;
+}
+
+export function requireExtensionPrincipalScope(
+  auth: Pick<ExtensionAuthResult, "user" | "principal">,
+  scope: { shopId: string | number; provider?: string | null },
+): ExtensionAuthResult | null {
+  const principal =
+    auth.principal ??
+    (auth.user?.extensionPrincipal as ExtensionSessionPrincipal | undefined);
+  if (!principal || principal.isLegacy) return null;
+  if (String(principal.shopId) !== String(scope.shopId)) {
+    return {
+      user: auth.user ?? null,
+      authorized: false,
+      error: "Session is scoped to a different shop",
+      code: "SHOP_FORBIDDEN",
+      status: 403,
+      principal,
+    };
+  }
+  if (
+    scope.provider &&
+    String(principal.provider).toLowerCase() !==
+      String(scope.provider).toLowerCase().replace(/^shop[-_]ware$/, "shopware")
+  ) {
+    return {
+      user: auth.user ?? null,
+      authorized: false,
+      error: "Session is scoped to a different provider",
+      code: "PROVIDER_FORBIDDEN",
+      status: 403,
+      principal,
+    };
+  }
+  return null;
+}
+
 export function getUserShopIds(user: any): string[] {
+  const principal = user?.extensionPrincipal as ExtensionSessionPrincipal | undefined;
+  if (principal && !principal.isLegacy) {
+    return principal.shopId == null ? [] : [String(principal.shopId)];
+  }
   const shopIds: string[] = [];
   
   if (user.shopId) {

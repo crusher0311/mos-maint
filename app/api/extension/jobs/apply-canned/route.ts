@@ -1,6 +1,6 @@
 import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 import { NextRequest, NextResponse } from "next/server";
-import { validateExtensionToken, getUserShopIds, getAuthErrorStatus , buildAuthErrorBody } from "@/lib/extension-auth";
+import { validateExtensionToken, getUserShopIds, getAuthErrorStatus, buildAuthErrorBody, requireExtensionPrincipalScope } from "@/lib/extension-auth";
 import { insertCannedJobApplication } from "@/lib/data/repositories/canned-jobs";
 import {
   applyCannedJobToWorkOrder,
@@ -35,8 +35,9 @@ async function _POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { shopId, roNumber, vin, cannedJobId, cannedJobTitle } = body as {
+    const { shopId, provider, roNumber, vin, cannedJobId, cannedJobTitle } = body as {
       shopId: number;
+      provider?: string;
       roNumber?: string;
       vin?: string;
       cannedJobId: string;
@@ -56,6 +57,26 @@ async function _POST(req: NextRequest) {
       return NextResponse.json(
         { error: "Not authorized for this shop" },
         { status: 403, headers: corsHeaders }
+      );
+    }
+
+    const scopedProvider = String(provider || "protractor")
+      .toLowerCase()
+      .replace(/^shop[-_]ware$/, "shopware");
+    if (!["protractor", "autoflow"].includes(scopedProvider)) {
+      return NextResponse.json(
+        { error: "Provider scope mismatch", code: "PROVIDER_FORBIDDEN" },
+        { status: 403, headers: corsHeaders },
+      );
+    }
+    const scopeFailure = requireExtensionPrincipalScope(auth, {
+      shopId,
+      provider: scopedProvider,
+    });
+    if (scopeFailure) {
+      return NextResponse.json(
+        buildAuthErrorBody(scopeFailure),
+        { status: getAuthErrorStatus(scopeFailure), headers: corsHeaders }
       );
     }
 
