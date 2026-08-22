@@ -1,14 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requirePlatformAdmin } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
 import { ObjectId } from "mongodb";
+import { deletePlatformAdminNotification, markPlatformAdminNotificationRead } from "@/lib/notifications";
+
+export const __deps = {
+  requirePlatformAdmin,
+  deletePlatformAdminNotification,
+  markPlatformAdminNotificationRead,
+};
 
 export async function PATCH(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const session = await requirePlatformAdmin();
+    await __deps.requirePlatformAdmin();
     
     const { id } = params;
     
@@ -16,23 +22,24 @@ export async function PATCH(
       return NextResponse.json({ ok: false, error: "Invalid notification ID" }, { status: 400 });
     }
 
-    const body = await req.json();
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json({ ok: false, error: "Invalid JSON body" }, { status: 400 });
+    }
     
-    if (body.read === true) {
-      const db = await getDb();
-      const result = await db.collection("notifications").updateOne(
-        { _id: new ObjectId(id), userId: `admin:${session.email}` },
-        { $set: { read: true } }
-      );
-      return NextResponse.json({ ok: result.modifiedCount > 0 });
+    if (body && typeof body === "object" && "read" in body && body.read === true) {
+      const changed = await __deps.markPlatformAdminNotificationRead(id);
+      return NextResponse.json({ ok: true, changed });
     }
 
     return NextResponse.json({ ok: false, error: "Invalid update" }, { status: 400 });
   } catch (error: any) {
-    console.error("Error updating admin notification:", error);
     if (error.message === "Unauthorized" || error.message === "Not a platform admin") {
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
+    console.error("Error updating admin notification:", error);
     return NextResponse.json({ ok: false, error: "Failed to update notification" }, { status: 500 });
   }
 }
@@ -42,7 +49,7 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const session = await requirePlatformAdmin();
+    await __deps.requirePlatformAdmin();
     
     const { id } = params;
     
@@ -50,18 +57,13 @@ export async function DELETE(
       return NextResponse.json({ ok: false, error: "Invalid notification ID" }, { status: 400 });
     }
 
-    const db = await getDb();
-    const result = await db.collection("notifications").deleteOne({
-      _id: new ObjectId(id),
-      userId: `admin:${session.email}`,
-    });
-    
-    return NextResponse.json({ ok: result.deletedCount > 0 });
+    const deleted = await __deps.deletePlatformAdminNotification(id);
+    return NextResponse.json({ ok: true, deleted });
   } catch (error: any) {
-    console.error("Error deleting admin notification:", error);
     if (error.message === "Unauthorized" || error.message === "Not a platform admin") {
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
+    console.error("Error deleting admin notification:", error);
     return NextResponse.json({ ok: false, error: "Failed to delete notification" }, { status: 500 });
   }
 }

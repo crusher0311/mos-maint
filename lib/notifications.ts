@@ -14,6 +14,8 @@ export interface Notification {
   metadata?: Record<string, unknown>;
 }
 
+export const PLATFORM_ADMIN_INBOX_USER_ID = repo.PLATFORM_ADMIN_INBOX_USER_ID;
+
 export async function createNotification(
   notification: Omit<Notification, "_id" | "read" | "createdAt">,
 ): Promise<ObjectId | null> {
@@ -103,6 +105,57 @@ export async function getPlatformAdminNotifications(limit: number = 20): Promise
   } catch (error) {
     console.error("Error fetching admin notifications:", error);
     return [];
+  }
+}
+
+export async function createPlatformAdminNotification(
+  notification: Omit<Notification, "_id" | "userId" | "read" | "createdAt"> & { logicalId: string },
+): Promise<ObjectId | null> {
+  try {
+    const { logicalId, ...doc } = notification;
+    return await repo.upsertPlatformAdminNotification({
+      ...doc,
+      platformAdminNotificationKey: logicalId,
+    }) as ObjectId;
+  } catch (error) {
+    console.error("Error creating shared admin notification:", error);
+    return null;
+  }
+}
+
+export async function getPlatformAdminUnreadNotifications(limit = 20): Promise<Notification[]> {
+  try {
+    return (await repo.findForAdmins(limit, true)) as Notification[];
+  } catch (error) {
+    console.error("Error fetching unread admin notifications:", error);
+    return [];
+  }
+}
+
+export async function markPlatformAdminNotificationRead(notificationId: string): Promise<boolean> {
+  try {
+    return await repo.markOneAdminNotificationRead(notificationId);
+  } catch (error) {
+    console.error("Error marking shared admin notification as read:", error);
+    return false;
+  }
+}
+
+export async function markAllPlatformAdminNotificationsRead(): Promise<number> {
+  try {
+    return await repo.markAllAdminNotificationsRead();
+  } catch (error) {
+    console.error("Error marking shared admin notifications as read:", error);
+    return 0;
+  }
+}
+
+export async function deletePlatformAdminNotification(notificationId: string): Promise<boolean> {
+  try {
+    return await repo.deleteOneAdminNotification(notificationId);
+  } catch (error) {
+    console.error("Error deleting shared admin notification:", error);
+    return false;
   }
 }
 

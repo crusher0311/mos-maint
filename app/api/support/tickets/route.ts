@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { ObjectId } from "mongodb";
 import { sendEmail, makeTicketCreatedEmail, makeNewTicketAdminEmail } from "@/lib/email";
-import { createNotificationsForUsers } from "@/lib/notifications";
+import { createPlatformAdminNotification } from "@/lib/notifications";
 import { getPlatformAdminEmails } from "@/lib/super-admins";
 import {
   countSupportTickets,
@@ -188,15 +188,15 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-      const platformAdminEmails = await getPlatformAdminEmails();
-      const adminUserIds = platformAdminEmails.map(email => `admin:${email}`);
-      await createNotificationsForUsers(adminUserIds, {
+      await createPlatformAdminNotification({
+        logicalId: `ticket_created:${insertedId}`,
         type: "ticket_created",
         title: `New Ticket: ${ticketNumber}`,
         message: `${shopName || session.email} submitted: ${subject}`,
         link: `/platform-admin/tickets?id=${insertedId}`,
         metadata: { ticketId: insertedId.toString(), ticketNumber },
       });
+      const platformAdminEmails = await getPlatformAdminEmails();
 
       for (let i = 0; i < platformAdminEmails.length; i++) {
         const adminEmail = platformAdminEmails[i];

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getSessionById, linkSessionToTicket } from "@/lib/support-chat";
 import { sendEmail, makeTicketCreatedEmail, makeNewTicketAdminEmail } from "@/lib/email";
-import { createNotification } from "@/lib/notifications";
+import { createNotification, createPlatformAdminNotification } from "@/lib/notifications";
 import { getPlatformAdminEmails } from "@/lib/super-admins";
 import { insertSupportTicket } from "@/lib/data/repositories/support-tickets";
 import { findShopByExactShopId } from "@/lib/data/repositories/shops";
@@ -75,6 +75,14 @@ export async function POST(req: NextRequest) {
     link: `/support/tickets/${ticketId}`
   });
 
+  await createPlatformAdminNotification({
+    logicalId: `system:${ticketId}`,
+    type: "system",
+    title: "New Escalated Ticket",
+    message: `${session.email} escalated chat to ticket: ${ticketSubject}`,
+    link: `/platform-admin/tickets/${ticketId}`,
+    metadata: { ticketId, ticketNumber, source: "chat" },
+  });
   const platformAdminEmails = await getPlatformAdminEmails();
   for (let i = 0; i < platformAdminEmails.length; i++) {
     const adminEmail = platformAdminEmails[i];
@@ -84,13 +92,6 @@ export async function POST(req: NextRequest) {
     try {
       const adminEmailContent = makeNewTicketAdminEmail(ticketNumber, ticketSubject, "general", "medium", "Escalated from Chat");
       await sendEmail({ to: adminEmail, ...adminEmailContent });
-      await createNotification({
-        userId: `admin:${adminEmail}`,
-        type: "system",
-        title: "New Escalated Ticket",
-        message: `${session.email} escalated chat to ticket: ${ticketSubject}`,
-        link: `/platform-admin/tickets/${ticketId}`
-      });
     } catch (adminEmailErr) {
       console.error(`Failed to send admin email to ${adminEmail}:`, adminEmailErr);
     }

@@ -1,37 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requirePlatformAdmin } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
-import { markAllAsRead } from "@/lib/notifications";
+import {
+  getAdminUnreadCount,
+  getPlatformAdminNotifications,
+  getPlatformAdminUnreadNotifications,
+  markAllPlatformAdminNotificationsRead,
+} from "@/lib/notifications";
+
+export const __deps = {
+  requirePlatformAdmin,
+  getAdminUnreadCount,
+  getPlatformAdminNotifications,
+  getPlatformAdminUnreadNotifications,
+  markAllPlatformAdminNotificationsRead,
+};
 
 export async function GET(req: NextRequest) {
-  let session;
   try {
-    session = await requirePlatformAdmin();
+    await __deps.requirePlatformAdmin();
   } catch {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
   const { searchParams } = new URL(req.url);
-  const limit = parseInt(searchParams.get("limit") || "20");
+  const requestedLimit = Number(searchParams.get("limit") || "20");
+  const limit = Number.isInteger(requestedLimit) && requestedLimit > 0 ? Math.min(requestedLimit, 100) : 20;
   const unreadOnly = searchParams.get("unreadOnly") === "true";
 
   try {
-    const db = await getDb();
-    const query: any = { userId: `admin:${session.email}` };
-    if (unreadOnly) {
-      query.read = false;
-    }
-    
-    const notifications = await db.collection("notifications")
-      .find(query)
-      .sort({ createdAt: -1 })
-      .limit(limit)
-      .toArray();
-    
-    const unreadCount = await db.collection("notifications").countDocuments({
-      userId: `admin:${session.email}`,
-      read: false,
-    });
+    const notifications = unreadOnly
+      ? await __deps.getPlatformAdminUnreadNotifications(limit)
+      : await __deps.getPlatformAdminNotifications(limit);
+    const unreadCount = await __deps.getAdminUnreadCount();
 
     return NextResponse.json({
       ok: true,
@@ -45,17 +45,21 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  let session;
   try {
-    session = await requirePlatformAdmin();
+    await __deps.requirePlatformAdmin();
   } catch {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
-  const body = await req.json();
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ ok: false, error: "Invalid JSON body" }, { status: 400 });
+  }
   
-  if (body.action === "markAllRead") {
-    const count = await markAllAsRead(`admin:${session.email}`);
+  if (body && typeof body === "object" && "action" in body && body.action === "markAllRead") {
+    const count = await __deps.markAllPlatformAdminNotificationsRead();
     return NextResponse.json({ ok: true, markedCount: count });
   }
 

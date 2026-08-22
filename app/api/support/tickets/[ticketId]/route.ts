@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { ObjectId } from "mongodb";
-import { createNotificationsForUsers } from "@/lib/notifications";
+import { createPlatformAdminNotification } from "@/lib/notifications";
 import { SUPER_ADMIN_EMAILS } from "@/lib/super-admins";
 import { sendEmail } from "@/lib/email";
 import {
@@ -73,13 +73,14 @@ export async function POST(
       return NextResponse.json({ error: "Cannot reply to a closed ticket" }, { status: 400 });
     }
 
+    const messageId = new ObjectId().toString();
     const result = await findOneAndUpdateSupportTicketById(
       ticketId,
       {
         $set: { updatedAt: new Date() },
         $push: {
           messages: {
-            id: new ObjectId().toString(),
+            id: messageId,
             from: "user",
             fromEmail: session.email,
             fromName: session.name || session.email.split("@")[0],
@@ -92,13 +93,13 @@ export async function POST(
     );
 
     try {
-      const adminUserIds = SUPER_ADMIN_EMAILS.map(email => `admin:${email}`);
-      await createNotificationsForUsers(adminUserIds, {
+      await createPlatformAdminNotification({
+        logicalId: `ticket_message:${ticketId}:${messageId}`,
         type: "ticket_message",
         title: `User Reply: ${ticket.ticketNumber}`,
         message: message.substring(0, 100) + (message.length > 100 ? "..." : ""),
         link: `/platform-admin/tickets?id=${ticketId}`,
-        metadata: { ticketId, ticketNumber: ticket.ticketNumber }
+        metadata: { ticketId, ticketNumber: ticket.ticketNumber, messageId }
       });
 
       for (const adminEmail of SUPER_ADMIN_EMAILS) {

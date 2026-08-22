@@ -13,7 +13,7 @@ import {
   ChatMessage,
 } from "@/lib/support-chat";
 import { sendEmail, makeTicketCreatedEmail, makeNewTicketAdminEmail } from "@/lib/email";
-import { createNotification } from "@/lib/notifications";
+import { createNotification, createPlatformAdminNotification } from "@/lib/notifications";
 import { getPlatformAdminEmails } from "@/lib/super-admins";
 
 const CORS_HEADERS = {
@@ -210,19 +210,20 @@ async function handleEscalate(user: any, body: any) {
   }
 
   try {
+    await createPlatformAdminNotification({
+      logicalId: `system:${ticketId}`,
+      type: "system",
+      title: "New Escalated Ticket (Extension)",
+      message: `${user.email} escalated chat to ticket: ${ticketSubject}`,
+      link: `/platform-admin/tickets/${ticketId}`,
+      metadata: { ticketId, ticketNumber, source: "extension-chat" },
+    });
     const platformAdminEmails = await getPlatformAdminEmails();
     for (let i = 0; i < platformAdminEmails.length; i++) {
       const adminEmail = platformAdminEmails[i];
       if (i > 0) await new Promise((r) => setTimeout(r, 600));
       const adminEmailContent = makeNewTicketAdminEmail(ticketNumber, ticketSubject, "General", "Medium", "Escalated from Extension Chat");
       await sendEmail({ to: adminEmail, ...adminEmailContent });
-      await createNotification({
-        userId: `admin:${adminEmail}`,
-        type: "system",
-        title: "New Escalated Ticket (Extension)",
-        message: `${user.email} escalated chat to ticket: ${ticketSubject}`,
-        link: `/platform-admin/tickets/${ticketId}`,
-      });
     }
   } catch (e) {
     console.error("[Extension Support] Failed to notify admins:", e);
@@ -306,7 +307,8 @@ async function handleTicket(user: any, body: any) {
     source: "extension",
   };
 
-  await insertSupportTicket(ticket);
+  const insertedId = await insertSupportTicket(ticket);
+  const ticketId = insertedId.toString();
 
   try {
     const categoryLabels: Record<string, string> = {
@@ -325,19 +327,20 @@ async function handleTicket(user: any, body: any) {
   }
 
   try {
+    await createPlatformAdminNotification({
+      logicalId: `system:${ticketId}`,
+      type: "system",
+      title: "New Support Ticket (Extension)",
+      message: `${user.email}: ${subject}`,
+      link: `/platform-admin/tickets?id=${ticketId}`,
+      metadata: { ticketId, ticketNumber, source: "extension" },
+    });
     const platformAdminEmails = await getPlatformAdminEmails();
     for (let i = 0; i < platformAdminEmails.length; i++) {
       const adminEmail = platformAdminEmails[i];
       if (i > 0) await new Promise((r) => setTimeout(r, 600));
       const adminEmailContent = makeNewTicketAdminEmail(ticketNumber, subject, category || "General", priority || "Medium", "Extension");
       await sendEmail({ to: adminEmail, ...adminEmailContent });
-      await createNotification({
-        userId: `admin:${adminEmail}`,
-        type: "system",
-        title: "New Support Ticket (Extension)",
-        message: `${user.email}: ${subject}`,
-        link: `/platform-admin/tickets`,
-      });
     }
   } catch (e) {
     console.error("[Extension Support] Failed to notify admins:", e);

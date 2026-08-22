@@ -471,8 +471,10 @@ export const adminAuditLogs = pgTable(
   }),
 );
 
-/** `notifications` — per-user inbox. ID is the Mongo ObjectId hex string so
- * the existing URL surface (`/api/notifications/[id]`) keeps working. */
+/** `notifications` — exact-user inbox rows plus a shared platform-admin
+ * identity. Shared events carry their stable logical key in `metadata`, so
+ * this shape also supports legacy fan-out deduplication without a migration.
+ * ID remains the Mongo ObjectId hex string for existing API URLs. */
 export const notifications = pgTable(
   "notifications",
   {

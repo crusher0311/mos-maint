@@ -1,21 +1,18 @@
 import { NextResponse } from "next/server";
 import { requirePlatformAdmin } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import { getAdminUnreadCount } from "@/lib/notifications";
+
+export const __deps = { requirePlatformAdmin, getAdminUnreadCount };
 
 export async function GET() {
-  let session;
   try {
-    session = await requirePlatformAdmin();
+    await __deps.requirePlatformAdmin();
   } catch {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
   try {
-    const db = await getDb();
-    const unreadCount = await db.collection("notifications").countDocuments({
-      userId: `admin:${session.email}`,
-      read: false,
-    });
+    const unreadCount = await __deps.getAdminUnreadCount();
 
     return NextResponse.json({
       ok: true,
