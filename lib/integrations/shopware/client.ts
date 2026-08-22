@@ -12,6 +12,10 @@ import type {
   ShopWareTenant,
   ShopWarePartnerAuthorization,
 } from './types';
+import {
+  buildRepairOrderQuery,
+  type ShopWareRepairOrderQuery,
+} from './request-query';
 
 const SW_PROD_BASE = 'https://api.shop-ware.com/api/v1';
 const SW_SANDBOX_BASE = 'https://api.shop-ware-api-sandbox.com/api/v1';
@@ -112,14 +116,16 @@ export async function shopWareRequest<T = any>(
 export async function getAllPages<T>(
   path: string,
   shopId?: number,
-  extraParams?: Record<string, string>
+  extraParams?: URLSearchParams | Record<string, string>
 ): Promise<T[]> {
   const results: T[] = [];
   let page = 1;
   let hasMore = true;
 
   while (hasMore) {
-    const params = new URLSearchParams({ per_page: '100', page: String(page), ...extraParams });
+    const params = new URLSearchParams(extraParams);
+    params.set('per_page', '100');
+    params.set('page', String(page));
     const sep = path.includes('?') ? '&' : '?';
     const data = await shopWareRequest<ShopWarePaginatedResponse<T>>(
       `${path}${sep}${params.toString()}`,
@@ -214,8 +220,9 @@ export async function getRepairOrder(
   associations = 'services,services.labors,services.parts,customer,vehicle'
 ): Promise<ShopWareRepairOrder> {
   try {
+    const query = buildRepairOrderQuery({ associations });
     return await shopWareRequest<ShopWareRepairOrder>(
-      `/tenants/${tenantId}/repair_orders/${roId}?associations=${associations}`,
+      `/tenants/${tenantId}/repair_orders/${roId}?${query.toString()}`,
       {},
       shopId
     );
@@ -261,23 +268,10 @@ export async function getRepairOrder(
 export async function getRepairOrders(
   tenantId: number,
   shopId?: number,
-  params?: {
-    updated_after?: string;
-    closed_after?: string;
-    shop_id?: number;
-    customer_id?: number;
-    vehicle_id?: number;
-    associations?: string;
-  }
+  params?: ShopWareRepairOrderQuery
 ): Promise<ShopWareRepairOrder[]> {
-  const extra: Record<string, string> = {};
   const associations = params?.associations ?? 'services,services.labors,services.parts,customer,vehicle';
-  if (associations) extra.associations = associations;
-  if (params?.updated_after) extra.updated_after = params.updated_after;
-  if (params?.closed_after) extra.closed_after = params.closed_after;
-  if (params?.shop_id) extra.shop_id = String(params.shop_id);
-  if (params?.customer_id) extra.customer_id = String(params.customer_id);
-  if (params?.vehicle_id) extra.vehicle_id = String(params.vehicle_id);
+  const extra = buildRepairOrderQuery({ ...params, associations });
 
   try {
     return await getAllPages<ShopWareRepairOrder>(`/tenants/${tenantId}/repair_orders`, shopId, extra);
@@ -286,7 +280,7 @@ export async function getRepairOrders(
     if (!isServerError || !associations) throw err;
 
     console.warn(`[Shop-Ware] List ROs with associations failed, retrying without associations`);
-    const { associations: _, ...extraNoAssoc } = extra;
+    const extraNoAssoc = buildRepairOrderQuery({ ...params, associations: undefined });
     return getAllPages<ShopWareRepairOrder>(`/tenants/${tenantId}/repair_orders`, shopId, extraNoAssoc);
   }
 }
