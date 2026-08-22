@@ -13,6 +13,7 @@ import {
 } from "@/lib/data/repositories/pg/identity";
 import {
   lookupExtensionSession,
+  revokeExtensionSession,
   hasExtensionCapability,
   type ExtensionCapability,
   type ExtensionSessionPrincipal,
@@ -70,6 +71,7 @@ export const __deps: {
   findUserByExtensionToken: typeof findUserByExtensionToken;
   findUserById: typeof findUserById;
   lookupExtensionSession: typeof lookupExtensionSession;
+  revokeExtensionSession: typeof revokeExtensionSession;
   updateUserExtensionTokenTimestamp: typeof updateUserExtensionTokenTimestamp;
   isIdentityPgCanonical: typeof isIdentityPgCanonical;
 } = {
@@ -77,6 +79,7 @@ export const __deps: {
   findUserByExtensionToken,
   findUserById,
   lookupExtensionSession,
+  revokeExtensionSession,
   updateUserExtensionTokenTimestamp,
   isIdentityPgCanonical,
 };
@@ -84,7 +87,7 @@ export const __deps: {
 const MAX_TOKEN_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const EXTENSION_READ_ONLY_ROLES = new Set(["viewer", "read_only", "readonly"]);
 
-function capabilitiesForVerifiedUser(user: any): ExtensionCapability[] {
+export function capabilitiesForVerifiedUser(user: any): ExtensionCapability[] {
   const capabilities: ExtensionCapability[] = ["read"];
   const role = String(user?.role || "").toLowerCase();
   const isAdmin =
@@ -96,6 +99,21 @@ function capabilitiesForVerifiedUser(user: any): ExtensionCapability[] {
   }
   if (isAdmin) capabilities.push("admin");
   return capabilities;
+}
+
+export function isActiveExtensionUser(user: any): boolean {
+  return (
+    Boolean(user) &&
+    user.disabled !== true &&
+    user.isActive !== false &&
+    user.active !== false &&
+    user.deleted !== true &&
+    user.isDeleted !== true &&
+    user.deletedAt == null &&
+    !["disabled", "deleted", "inactive", "suspended"].includes(
+      String(user.status || "active").toLowerCase(),
+    )
+  );
 }
 
 /**
@@ -277,6 +295,22 @@ export async function validateExtensionToken(
             authorized: false,
             error: "Session user no longer exists",
             code: "TOKEN_INVALID",
+          };
+        }
+        if (!isActiveExtensionUser(sessionUser)) {
+          try {
+            await __deps.revokeExtensionSession(principal.sessionId);
+          } catch (error) {
+            console.warn(
+              "[Extension Auth] unable to revoke inactive-user session",
+              error,
+            );
+          }
+          return {
+            user: null,
+            authorized: false,
+            error: "Session user is inactive",
+            code: "TOKEN_REVOKED",
           };
         }
 

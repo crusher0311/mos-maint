@@ -61,6 +61,12 @@ const POLICY_MAP: Record<string, PolicyTier[]> = {
   "/api/extension/auth|POST": ["public"],
   "/api/extension/auth|OPTIONS": ["preflight"],
 
+  // ── bootstrap ────────────────────────────────────────────────────────────
+  // POST: public — exchanges a live provider-session proof for a short-lived,
+  // provider/shop-bound extension session. The proof adapter establishes auth.
+  "/api/extension/bootstrap|POST": ["public"],
+  "/api/extension/bootstrap|OPTIONS": ["preflight"],
+
   // ── auth-token ───────────────────────────────────────────────────────────
   // POST: write + provider_action — stores a provider x-auth-token for a shop
   "/api/extension/auth-token|POST": ["write", "provider_action"],

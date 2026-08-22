@@ -88,3 +88,34 @@ export async function listUsers(
   if (projection) cursor.project(projection);
   return cursor.toArray() as Promise<UserDoc[]>;
 }
+
+/**
+ * Candidate source for the extension's provider-session identity match.
+ *
+ * Identity matching intentionally remains in the extension bootstrap domain
+ * layer. This repository method only supplies a backend-neutral, read-only
+ * user snapshot with credential material removed.
+ */
+export async function listExtensionBootstrapCandidateUsers(): Promise<UserDoc[]> {
+  if (isIdentityPgCanonical()) {
+    const rows = (await pg.listUsersByPredicate({})).filter(Boolean) as UserDoc[];
+    return rows.map((row) => {
+      const {
+        password,
+        passwordHash,
+        extensionToken,
+        ...safe
+      } = row;
+      void password;
+      void passwordHash;
+      void extensionToken;
+      return safe;
+    });
+  }
+
+  const col = await collection();
+  return col
+    .find({})
+    .project({ password: 0, passwordHash: 0, extensionToken: 0 })
+    .toArray() as Promise<UserDoc[]>;
+}

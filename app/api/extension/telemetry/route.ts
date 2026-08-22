@@ -38,6 +38,7 @@ const EVENT_TTL_SECONDS = 30 * 24 * 60 * 60; // 30 days
 const ALLOWED_EVENTS = new Set<string>([
   "auth.soft_expired",
   "auth.token_invalid_cleared",
+  "auth.bootstrap",
   "api.fetch_failure",
   "action.dropped",
   // Task #884: a DVI-like page (AutoFlow v3/v4) yielded an incomplete

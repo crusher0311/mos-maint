@@ -260,6 +260,8 @@ const elements = {
   apiUrlInput: document.getElementById('api-url'),
   rememberMeCheckbox: document.getElementById('remember-me'),
   loginError: document.getElementById('login-error'),
+  bootstrapStatus: document.getElementById('bootstrap-status'),
+  sessionStepUpBtn: document.getElementById('session-step-up-btn'),
   
   // Header
   refreshBtn: document.getElementById('refresh-btn'),
@@ -502,31 +504,59 @@ function enrichContextWithMosShop(context) {
 
 // ==================== INITIALIZATION ====================
 async function init() {
+  setupEventListeners();
   const authStatus = await sendMessage({ action: 'GET_MOS_AUTH' });
+  const contextStatus = await sendMessage({ action: 'GET_SMS_CONTEXT' });
   
   if (authStatus.isAuthenticated) {
-    isAuthenticated = true;
-    mosShops = authStatus.shops || [];
-
-    if (authStatus.defaultExtensionTab) {
-      userDefaultTab = sanitizeDefaultTab(authStatus.defaultExtensionTab);
-      currentTab = userDefaultTab;
-    }
-    if (authStatus.shopwareAddMode) {
-      shopwareAddMode = authStatus.shopwareAddMode;
-    }
-
-    showMainState();
-    
-    const contextStatus = await sendMessage({ action: 'GET_SMS_CONTEXT' });
+    applyAuthenticatedState(authStatus);
     if (contextStatus.context) {
       updateContext(contextStatus.context);
     }
   } else {
-    showLoginState();
+    let bootstrap = null;
+    if (contextStatus.context?.provider && contextStatus.context?.shopId) {
+      bootstrap = await sendMessage({
+        action: 'MOS_BOOTSTRAP',
+        context: contextStatus.context,
+      }).catch(() => ({ success: false, outcome: 'verification_needed' }));
+    }
+    if (bootstrap?.success) {
+      const refreshed = await sendMessage({ action: 'GET_MOS_AUTH' });
+      applyAuthenticatedState(refreshed);
+      updateContext(contextStatus.context);
+    } else {
+      showLoginState();
+      showBootstrapOutcome(bootstrap?.outcome);
+    }
   }
-  
-  setupEventListeners();
+}
+
+function applyAuthenticatedState(authStatus) {
+  isAuthenticated = true;
+  mosShops = authStatus.shops || [];
+  if (authStatus.defaultExtensionTab) {
+    userDefaultTab = sanitizeDefaultTab(authStatus.defaultExtensionTab);
+    currentTab = userDefaultTab;
+  }
+  if (authStatus.shopwareAddMode) {
+    shopwareAddMode = authStatus.shopwareAddMode;
+  }
+  applySessionTier(authStatus.sessionTier);
+  showMainState();
+}
+
+function showBootstrapOutcome(outcome) {
+  if (!elements.bootstrapStatus) return;
+  const copy = {
+    unsupported: 'Automatic access is not available for this provider yet. Sign in with MOS.Tools to continue.',
+    verification_needed: 'Automatic access could not verify this provider session. Sign in with MOS.Tools to continue.',
+    rate_limited: 'Automatic access is temporarily paused. Sign in with MOS.Tools or try again shortly.',
+    error: 'Automatic access is temporarily unavailable. Sign in with MOS.Tools to continue.',
+  };
+  const message = copy[outcome];
+  elements.bootstrapStatus.textContent = message || '';
+  elements.bootstrapStatus.classList.toggle('hidden', !message);
 }
 
 function setPasswordVisibility(show) {
@@ -545,6 +575,12 @@ function setPasswordVisibility(show) {
 function setupEventListeners() {
   // Login form
   elements.loginForm.addEventListener('submit', handleLogin);
+  if (elements.sessionStepUpBtn) {
+    elements.sessionStepUpBtn.addEventListener('click', () => {
+      showLoginState();
+      showBootstrapOutcome(null);
+    });
+  }
 
   // Show/hide password toggle
   if (elements.togglePasswordBtn) {
@@ -707,6 +743,17 @@ function setupEventListeners() {
     if (message.action === 'SMS_CONTEXT_CHANGED') {
       updateContext(message.context);
     }
+    if (message.action === 'MOS_BOOTSTRAP_RESOLVED') {
+      if (message.outcome === 'basic' || message.outcome === 'matched_user') {
+        sendMessage({ action: 'GET_MOS_AUTH' }).then((auth) => {
+          if (auth?.isAuthenticated) applyAuthenticatedState(auth);
+        }).catch(() => {});
+      } else {
+        isAuthenticated = false;
+        showLoginState();
+        showBootstrapOutcome(message.outcome);
+      }
+    }
     if (message.action === 'SWITCH_TO_STICKER_TAB') {
       if (message.context) {
         updateContext(message.context);
@@ -789,6 +836,7 @@ function showMainState() {
   elements.loadingState.classList.add('hidden');
   elements.loginState.classList.add('hidden');
   elements.mainState.classList.remove('hidden');
+  showBootstrapOutcome(null);
   showSupportFab();
   applyPlatformAdminVisibility();
 }
@@ -895,25 +943,39 @@ function renderSessionTierBanner() {
   if (!banner) return;
   const core = globalThis.MosSessionTierCore;
   const desc = core ? core.describeSessionTier(sessionTier || {}) : null;
-  // Only surface the banner for a basic (read-only) session — a verified
-  // session is the norm and needs no persistent chrome. This keeps the panel
-  // uncluttered while making the restricted state unmistakable.
+  // Explicit verified login is the normal state. Provider-resolved sessions
+  // stay labeled so the advisor can distinguish Basic from a named MOS match.
   const isBasic = sessionTier && sessionTier.isVerified === false;
-  if (!isBasic) {
+  const isBootstrapMatch =
+    sessionTier?.authSource === 'bootstrap' &&
+    sessionTier?.resolution === 'matched_user';
+  if (!isBasic && !isBootstrapMatch) {
     banner.classList.add('hidden');
     return;
   }
   banner.classList.remove('hidden', 'session-tier-verified', 'session-tier-basic');
-  banner.classList.add('session-tier-basic');
+  banner.classList.add(isBasic ? 'session-tier-basic' : 'session-tier-verified');
   const iconEl = document.getElementById('session-tier-icon');
   const labelEl = document.getElementById('session-tier-label');
   const promptEl = document.getElementById('session-tier-prompt');
   if (iconEl) {
-    // Lock glyph for the read-only state.
-    iconEl.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>';
+    iconEl.innerHTML = isBasic
+      ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>'
+      : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4 4L19 6"/></svg>';
   }
-  if (labelEl) labelEl.textContent = desc ? desc.label : 'User / Basic (read-only)';
-  if (promptEl) promptEl.textContent = desc ? desc.prompt : 'Verify this session to make changes.';
+  if (labelEl) {
+    labelEl.textContent = isBasic
+      ? 'Basic access (read-only)'
+      : `Signed in as ${sessionTier.displayName || 'MOS.Tools user'}`;
+  }
+  if (promptEl) {
+    promptEl.textContent = isBasic
+      ? (desc ? desc.prompt : 'Sign in to MOS.Tools to make changes.')
+      : 'Matched to your existing MOS.Tools permissions.';
+  }
+  if (elements.sessionStepUpBtn) {
+    elements.sessionStepUpBtn.classList.toggle('hidden', !isBasic);
+  }
 }
 
 const RO_INDEPENDENT_TABS = ['rates', 'concern', 'create-ro'];

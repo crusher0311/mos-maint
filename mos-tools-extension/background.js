@@ -26,6 +26,21 @@ let mosApiUrl = null;
 let currentSmsContext = null;
 let mosShops = [];
 let mosSessionTier = null;
+let mosUser = null;
+let mosAuthSource = null; // "explicit" (password) or "bootstrap"
+let mosBootstrapContextKey = null;
+let pendingBootstrapAuth = null;
+let authEpoch = 0;
+let explicitLoginInFlight = false;
+let bootstrapInFlight = null;
+let bootstrapInFlightToken = null;
+let bootstrapInFlightKey = null;
+const smsContextsByTab = new Map();
+const tekmetricProofsByTab = new Map();
+let activeTabId = null;
+chrome.tabs.query({ active: true, currentWindow: true })
+  .then((tabs) => { activeTabId = tabs[0]?.id ?? null; })
+  .catch(() => {});
 
 // SMS-specific session tokens (memory-only for security)
 const smsTokens = {
@@ -64,6 +79,7 @@ const _stateReady = Promise.all([
     chrome.storage.local.get(['mosApiToken', 'mosApiUrl', 'mosUser', 'mosShops', 'mosSessionTier'], (result) => {
       if (result.mosApiToken) {
         mosApiToken = result.mosApiToken;
+        mosAuthSource = 'explicit';
         console.log("[MOS] Restored API token from storage");
       }
       if (result.mosApiUrl) {
@@ -77,6 +93,9 @@ const _stateReady = Promise.all([
       if (result.mosSessionTier) {
         mosSessionTier = result.mosSessionTier;
       }
+      if (result.mosUser) {
+        mosUser = result.mosUser;
+      }
       resolve();
     });
   }),
@@ -89,11 +108,7 @@ const _stateReady = Promise.all([
     });
   }),
   new Promise(resolve => {
-    chrome.storage.session.get(['tekmetricToken', 'tekmetricShopId', 'tekmetricBaseUrl', 'currentSmsContext'], (result) => {
-      if (result.tekmetricToken) {
-        smsTokens.tekmetric = result.tekmetricToken;
-        console.log("[Tekmetric] Restored session token");
-      }
+    chrome.storage.session.get(['tekmetricShopId', 'tekmetricBaseUrl', 'currentSmsContext'], (result) => {
       if (result.tekmetricShopId) {
         tekmetricShopId = result.tekmetricShopId;
       }
@@ -102,8 +117,30 @@ const _stateReady = Promise.all([
       }
       if (result.currentSmsContext) {
         currentSmsContext = result.currentSmsContext;
+        if (currentSmsContext._tabId) {
+          smsContextsByTab.set(currentSmsContext._tabId, currentSmsContext);
+        }
       }
+      // Clean up credentials persisted by older extension builds.
+      chrome.storage.session.remove(['tekmetricToken']);
       resolve();
+    });
+  }),
+  // A restored bootstrap bearer remains pending until a fresh, tab-scoped
+  // provider proof rotates it. Service-worker wake alone must never revive
+  // access after the provider session logged out or changed accounts.
+  new Promise(resolve => {
+    chrome.storage.session.get(['mosBootstrapAuth'], (result) => {
+      const auth = result.mosBootstrapAuth;
+      // Never let session-scoped bootstrap state win a startup race with a
+      // durable explicit login.
+      chrome.storage.local.get(['mosApiToken'], (local) => {
+        if (!local.mosApiToken && auth?.token && auth?.apiUrl) {
+          pendingBootstrapAuth = auth;
+          mosApiUrl = auth.apiUrl;
+        }
+        resolve();
+      });
     });
   }),
   new Promise(resolve => {
@@ -118,10 +155,12 @@ const _stateReady = Promise.all([
 // ==================== TEKMETRIC TOKEN CAPTURE ====================
 chrome.webRequest.onBeforeSendHeaders.addListener(
   (details) => {
+    let requestOrigin = null;
     // Capture base URL
     try {
       const url = new URL(details.url);
       if (url.hostname.includes('tekmetric.com')) {
+        requestOrigin = url.origin;
         tekmetricBaseUrl = url.origin;
         chrome.storage.session.set({ tekmetricBaseUrl });
       }
@@ -180,27 +219,68 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
       });
     }
 
-    // Capture auth token from header (memory + session storage only)
+    // Capture the current provider credential in memory only. It is never
+    // written to Chrome storage or logs; a service-worker restart simply waits
+    // for the next authenticated Tekmetric request.
     const tokenHeader = details.requestHeaders.find(
       (h) => h.name.toLowerCase() === "x-auth-token"
     );
     if (tokenHeader && tokenHeader.value) {
-      const isNewToken = !smsTokens.tekmetric;
-      smsTokens.tekmetric = tokenHeader.value;
-      chrome.storage.session.set({ tekmetricToken: tokenHeader.value });
+      let tabTokenChanged = false;
+      let tabContext = null;
+      if (details.tabId >= 0 && requestOrigin) {
+        const priorTabProof = tekmetricProofsByTab.get(details.tabId);
+        tekmetricProofsByTab.set(details.tabId, {
+          token: tokenHeader.value,
+          origin: requestOrigin,
+          seenAt: Date.now(),
+        });
+        tabContext = smsContextsByTab.get(details.tabId) || null;
+        tabTokenChanged = priorTabProof?.token !== tokenHeader.value;
+
+        // Context often arrives before the first authenticated API call. Retry
+        // bootstrap with proof captured from that SAME tab.
+        if (tabTokenChanged && tabContext?.provider === 'tekmetric') {
+          _stateReady.then(async () => {
+            if (mosAuthSource === 'explicit' || explicitLoginInFlight) return;
+            if (
+              mosAuthSource === 'bootstrap' &&
+              mosBootstrapContextKey?.startsWith(`${details.tabId}:`)
+            ) {
+              await clearBootstrapAuth(true);
+            }
+            await handleMosBootstrap(details.tabId, tabContext);
+          }).catch(() => {});
+        }
+      }
 
       // If we just got the token and have a pending context, try auto-apply
-      if (isNewToken && laborRateAutoApply && mosApiToken && currentSmsContext?.roId && currentSmsContext.roId !== lastAppliedRoId) {
-        autoApplyLaborRate(currentSmsContext).catch(err => {
+      if (
+        tabTokenChanged &&
+        details.tabId === activeTabId &&
+        laborRateAutoApply &&
+        mosApiToken &&
+        tabContext?.roId &&
+        tabContext.roId !== lastAppliedRoId
+      ) {
+        autoApplyLaborRate(tabContext).catch(err => {
           console.warn("[LaborRate] Deferred auto-apply error:", err.message);
         });
       }
 
       // Relay x-auth-token to MOS backend for server-side inspection fetching (debounced per shop)
       const now = Date.now();
-      const shopRelayKey = tekmetricShopId || 'unknown';
+      const relayShopId = tabContext?.shopId || null;
+      const shopRelayKey = relayShopId || 'unknown';
       const lastRelay = xAuthTokenRelayMap[shopRelayKey] || 0;
-      if (mosApiToken && mosApiUrl && tekmetricShopId && (now - lastRelay > XAUTH_RELAY_INTERVAL)) {
+      if (
+        details.tabId === activeTabId &&
+        mosAuthSource === 'explicit' &&
+        mosApiToken &&
+        mosApiUrl &&
+        relayShopId &&
+        (now - lastRelay > XAUTH_RELAY_INTERVAL)
+      ) {
         fetch(`${mosApiUrl}/api/extension/auth-token`, {
           method: 'POST',
           headers: {
@@ -209,13 +289,13 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
           },
           body: JSON.stringify({
             provider: 'tekmetric',
-            smsShopId: tekmetricShopId,
+            smsShopId: relayShopId,
             token: tokenHeader.value
           })
         }).then(res => {
           if (res.ok) {
             xAuthTokenRelayMap[shopRelayKey] = Date.now();
-            console.log("[MOS] Relayed x-auth-token for shop", tekmetricShopId);
+            console.log("[MOS] Relayed x-auth-token for shop", relayShopId);
           } else {
             console.warn("[MOS] x-auth-token relay failed:", res.status);
           }
@@ -244,6 +324,91 @@ chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })
   .then(() => console.log('[MOS] Side panel opens on action click'))
   .catch((error) => console.error('[MOS] Failed to set side panel behavior:', error));
 
+async function syncActiveTabContext(tabId) {
+  await _stateReady;
+  activeTabId = tabId;
+  const context = smsContextsByTab.get(tabId) || null;
+  currentSmsContext = context;
+  if (context) {
+    await chrome.storage.session.set({ currentSmsContext: context });
+  } else {
+    await chrome.storage.session.remove(['currentSmsContext']);
+  }
+
+  chrome.runtime.sendMessage({
+    action: "SMS_CONTEXT_CHANGED",
+    tabId,
+    context,
+  }).catch(() => {});
+
+  if (mosAuthSource === 'explicit' || explicitLoginInFlight) return;
+  const activeKey = bootstrapContextKey(tabId, context);
+  const boundKey = mosBootstrapContextKey || pendingBootstrapAuth?.contextKey || null;
+  if (boundKey && boundKey !== activeKey) {
+    await clearBootstrapAuth(true);
+  }
+  if (context?.provider && context?.shopId) {
+    await handleMosBootstrap(tabId, context);
+  }
+}
+
+chrome.tabs.onActivated.addListener(({ tabId }) => {
+  activeTabId = tabId;
+  syncActiveTabContext(tabId).catch(() => {});
+});
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  smsContextsByTab.delete(tabId);
+  tekmetricProofsByTab.delete(tabId);
+  const boundKey = mosBootstrapContextKey || pendingBootstrapAuth?.contextKey || "";
+  if (boundKey.startsWith(`${tabId}:`)) {
+    clearBootstrapAuth(true).catch(() => {});
+  }
+});
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (!changeInfo.url) return;
+  let supportedProviderPage = false;
+  try {
+    const hostname = new URL(changeInfo.url).hostname.toLowerCase();
+    supportedProviderPage =
+      hostname.endsWith('tekmetric.com') ||
+      hostname.endsWith('shop-ware.com') ||
+      hostname.endsWith('shop-ware-api-sandbox.com') ||
+      hostname.endsWith('shopmonkey.cloud') ||
+      hostname.endsWith('autoflow.com') ||
+      hostname.endsWith('autotext.me');
+  } catch (_) {}
+  if (supportedProviderPage) return;
+  smsContextsByTab.delete(tabId);
+  tekmetricProofsByTab.delete(tabId);
+  const boundKey = mosBootstrapContextKey || pendingBootstrapAuth?.contextKey || "";
+  if (boundKey.startsWith(`${tabId}:`)) {
+    clearBootstrapAuth(true).catch(() => {});
+  }
+});
+
+// A rejected Tekmetric API call is direct evidence that the tab proof is no
+// longer current. Invalidate its scoped MOS bootstrap session immediately.
+chrome.webRequest.onCompleted.addListener(
+  (details) => {
+    if (details.tabId < 0 || ![401, 403].includes(details.statusCode)) return;
+    tekmetricProofsByTab.delete(details.tabId);
+    const boundKey = mosBootstrapContextKey || pendingBootstrapAuth?.contextKey || "";
+    if (boundKey.startsWith(`${details.tabId}:`)) {
+      clearBootstrapAuth(true).catch(() => {});
+    }
+  },
+  {
+    urls: [
+      "https://shop.tekmetric.com/api/*",
+      "https://sandbox.tekmetric.com/api/*",
+      "https://cba.tekmetric.com/api/*",
+    ],
+    types: ["xmlhttprequest"],
+  },
+);
+
 // ==================== MESSAGE HANDLERS ====================
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Handle keepalive ping silently
@@ -266,6 +431,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   
   console.log("[MOS] Message received:", message.action);
 
+  // A content script in a background tab must never drive work with a
+  // bootstrap principal bound to the foreground tab. SET_SMS_CONTEXT is the
+  // only exception: it records tab-local context but performs no side effects
+  // until that tab is active.
+  if (
+    mosAuthSource === 'bootstrap' &&
+    sender.tab?.id != null &&
+    message.action !== 'SET_SMS_CONTEXT' &&
+    sender.tab.id !== activeTabId
+  ) {
+    sendResponse({
+      success: false,
+      error: 'This provider tab is not active',
+      code: 'SHOP_FORBIDDEN',
+    });
+    return false;
+  }
+
   // -------------------- Telemetry (task #511) --------------------
   // Content scripts can't talk to /api/extension/telemetry directly (no
   // mosApiToken in their scope), so they relay via the background worker.
@@ -285,10 +468,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.action === "MOS_BOOTSTRAP") {
+    handleMosBootstrap(sender.tab?.id, message.context)
+      .then(result => sendResponse(result))
+      .catch(err => sendResponse({ success: false, outcome: 'error', error: err.message }));
+    return true;
+  }
+
   if (message.action === "MOS_LOGOUT") {
-    const tokenToRevoke = mosApiToken;
-    const apiUrl = mosApiUrl;
     (async () => {
+      await _stateReady;
+      authEpoch += 1;
+      explicitLoginInFlight = false;
+      const tokenToRevoke = mosApiToken || pendingBootstrapAuth?.token;
+      const apiUrl = mosApiUrl || pendingBootstrapAuth?.apiUrl;
       if (tokenToRevoke && apiUrl && tokenToRevoke.startsWith('exts_')) {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 2000);
@@ -306,7 +499,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
       mosApiToken = null;
       mosShops = [];
+      mosUser = null;
       mosSessionTier = null;
+      mosAuthSource = null;
+      mosBootstrapContextKey = null;
+      pendingBootstrapAuth = null;
       await chrome.storage.local.remove([
         'mosApiToken',
         'mosUser',
@@ -316,25 +513,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         'mosLoginPass',
         'mosRememberMe',
       ]);
+      await chrome.storage.session.remove(['mosBootstrapAuth']);
       sendResponse({ success: true });
     })();
     return true;
   }
 
   if (message.action === "GET_MOS_AUTH") {
-    _stateReady.then(() => {
-      chrome.storage.local.get(['mosUser', 'mosShops', 'mosSessionTier'], (result) => {
-        sendResponse({
-          isAuthenticated: !!mosApiToken,
-          apiUrl: mosApiUrl,
-          defaultExtensionTab: result.mosUser?.defaultExtensionTab || null,
-          shopwareAddMode: result.mosUser?.shopwareAddMode || null,
-          shops: result.mosShops || [],
-          user: result.mosUser || null,
-          sessionTier: result.mosSessionTier || null
-        });
+    (async () => {
+      await _stateReady;
+      await ensureBootstrapBoundToActiveTab();
+      sendResponse({
+        isAuthenticated: !!mosApiToken,
+        apiUrl: mosApiUrl,
+        defaultExtensionTab: mosUser?.defaultExtensionTab || null,
+        shopwareAddMode: mosUser?.shopwareAddMode || null,
+        shops: mosShops || [],
+        user: mosUser || null,
+        sessionTier: mosSessionTier || null,
+        authSource: mosAuthSource,
       });
-    });
+    })();
     return true;
   }
 
@@ -372,42 +571,80 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // The lockstep is enforced by mos-tools-extension/scripts/
   // check-sms-context-protocol.cjs (run via `npm run lint:sms-context`).
   if (message.action === "SET_SMS_CONTEXT") {
-    currentSmsContext = message.context;
-    if (sender?.tab?.id) currentSmsContext._tabId = sender.tab.id;
-    chrome.storage.session.set({ currentSmsContext });
-    console.log("[MOS] SMS context updated:", currentSmsContext);
-    
-    // Notify side panel of context change
-    chrome.runtime.sendMessage({ 
-      action: "SMS_CONTEXT_CHANGED", 
-      context: currentSmsContext 
-    }).catch(() => {});
-    
-    // Auto-apply labor rate if enabled and we have a new RO
-    if (laborRateAutoApply && mosApiToken && currentSmsContext?.roId && currentSmsContext.roId !== lastAppliedRoId) {
-      autoApplyLaborRate(currentSmsContext).catch(err => {
-        console.warn("[LaborRate] Auto-apply error:", err.message);
-      });
+    const incomingContext = { ...(message.context || {}) };
+    if (sender?.tab?.id) incomingContext._tabId = sender.tab.id;
+    if (incomingContext._tabId) {
+      smsContextsByTab.set(incomingContext._tabId, incomingContext);
     }
+    console.log("[MOS] SMS context updated:", incomingContext);
 
-    // Fetch and relay inspections for this RO (Tekmetric reads the live
-    // inspection via its SMS API). AutoFlow is read-only — we can't read
-    // its inspection, so the VHI Coach overlay is driven straight from the
-    // VIN + shop + mileage the AutoFlow adapter scrapes.
-    if (currentSmsContext?.roId && currentSmsContext?.provider === 'tekmetric') {
-      fetchAndRelayInspections(currentSmsContext).catch(err => {
-        console.warn("[MOS Inspections] Fetch error:", err.message);
-      });
-    } else if (currentSmsContext?.provider === 'autoflow' && currentSmsContext?.vin) {
-      fetchVhiCoachForAutoflow(currentSmsContext).catch(err => {
-        console.warn("[VHI Coach] AutoFlow fetch error:", err.message);
-      });
-    } else if (sender?.tab?.id) {
-      chrome.tabs.sendMessage(sender.tab.id, { action: "VHI_COACH_HIDE" }).catch(() => {});
-    }
+    (async () => {
+      try {
+        if (!(await tabIsActive(incomingContext._tabId))) {
+          sendResponse({ success: true, active: false });
+          return;
+        }
 
-    sendResponse({ success: true });
-    return false;
+        const previousBootstrapKey =
+          mosBootstrapContextKey || pendingBootstrapAuth?.contextKey || null;
+        const nextBootstrapKey = bootstrapContextKey(
+          incomingContext._tabId,
+          incomingContext,
+        );
+        currentSmsContext = incomingContext;
+        await chrome.storage.session.set({ currentSmsContext: incomingContext });
+
+        if (
+          (mosAuthSource === 'bootstrap' || pendingBootstrapAuth) &&
+          previousBootstrapKey &&
+          previousBootstrapKey !== nextBootstrapKey
+        ) {
+          await clearBootstrapAuth(true);
+        }
+
+        if (
+          mosAuthSource !== 'explicit' &&
+          incomingContext?.provider &&
+          incomingContext?.shopId
+        ) {
+          handleMosBootstrap(incomingContext._tabId, incomingContext).catch(() => {});
+        }
+
+        chrome.runtime.sendMessage({
+          action: "SMS_CONTEXT_CHANGED",
+          tabId: incomingContext._tabId,
+          context: incomingContext,
+        }).catch(() => {});
+
+        // Automatic effects are allowed only for the active source tab.
+        if (
+          laborRateAutoApply &&
+          mosApiToken &&
+          incomingContext?.roId &&
+          incomingContext.roId !== lastAppliedRoId
+        ) {
+          autoApplyLaborRate(incomingContext).catch(err => {
+            console.warn("[LaborRate] Auto-apply error:", err.message);
+          });
+        }
+
+        if (incomingContext?.roId && incomingContext?.provider === 'tekmetric') {
+          fetchAndRelayInspections(incomingContext).catch(err => {
+            console.warn("[MOS Inspections] Fetch error:", err.message);
+          });
+        } else if (incomingContext?.provider === 'autoflow' && incomingContext?.vin) {
+          fetchVhiCoachForAutoflow(incomingContext).catch(err => {
+            console.warn("[VHI Coach] AutoFlow fetch error:", err.message);
+          });
+        } else if (sender?.tab?.id) {
+          chrome.tabs.sendMessage(sender.tab.id, { action: "VHI_COACH_HIDE" }).catch(() => {});
+        }
+        sendResponse({ success: true, active: true });
+      } catch (error) {
+        sendResponse({ success: false, error: error?.message || 'Context update failed' });
+      }
+    })();
+    return true;
   }
 
   if (message.action === "GET_SHOP_FEATURES") {
@@ -419,6 +656,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         // fetch went to "null/api/..." and failed with "Failed to fetch"
         // on every attempt (Task: AutoFlow v4 feature-fetch loop).
         await _stateReady;
+        await ensureBootstrapBoundToActiveTab();
         const shopId = message.shopId || currentSmsContext?.shopId;
         if (!mosApiToken || !shopId) {
           sendResponse({ success: false, features: {} });
@@ -732,6 +970,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     (async () => {
       try {
         await _stateReady;
+        await ensureBootstrapBoundToActiveTab();
         if (!mosApiToken || !mosApiUrl) {
           sendResponse({ success: false, error: "Not signed in to MOS" });
           return;
@@ -769,6 +1008,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     (async () => {
       try {
         await _stateReady;
+        await ensureBootstrapBoundToActiveTab();
         if (!mosApiToken || !mosApiUrl) {
           sendResponse({ success: false, error: "Not signed in to MOS" });
           return;
@@ -805,6 +1045,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     (async () => {
       try {
         await _stateReady;
+        await ensureBootstrapBoundToActiveTab();
         if (!mosApiToken || !mosApiUrl) {
           sendResponse({ success: false, error: "Not signed in to MOS" });
           return;
@@ -846,6 +1087,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "GET_VHI_REALTIME_TOKEN") {
     (async () => {
       await _stateReady;
+      await ensureBootstrapBoundToActiveTab();
       if (!mosApiToken || !mosApiUrl) {
         sendResponse({ success: false, reason: "not_connected" });
         return;
@@ -994,11 +1236,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === "GET_SMS_CONTEXT") {
-    sendResponse({
-      context: currentSmsContext,
-      hasToken: !!smsTokens[currentSmsContext?.provider]
-    });
-    return false;
+    (async () => {
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true }).catch(() => []);
+      const activeTabId = tabs[0]?.id;
+      const context = smsContextsByTab.get(activeTabId) ||
+        (currentSmsContext?._tabId === activeTabId ? currentSmsContext : null);
+      sendResponse({
+        context,
+        hasToken: context?.provider === 'tekmetric'
+          ? !!tekmetricProofsByTab.get(activeTabId)?.token
+          : !!smsTokens[context?.provider],
+      });
+    })();
+    return true;
   }
 
   // -------------------- MOS API Calls --------------------
@@ -1180,10 +1430,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === "GET_TEKMETRIC_STATE") {
+    const session = tekmetricSessionForContext(currentSmsContext);
     sendResponse({
-      hasToken: !!smsTokens.tekmetric,
-      shopId: tekmetricShopId,
-      baseUrl: tekmetricBaseUrl
+      hasToken: !!session,
+      shopId: currentSmsContext?.shopId || tekmetricShopId,
+      baseUrl: session?.origin || null,
     });
     return false;
   }
@@ -1358,7 +1609,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             sendResponse({ success: false, error: result.error || 'Failed to add concern' });
           }
         } else {
-          if (!smsTokens.tekmetric) {
+          if (!tekmetricSessionForContext(currentSmsContext)) {
             sendResponse({ success: false, error: 'No Tekmetric auth token' });
             return;
           }
@@ -1378,6 +1629,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               shopId: currentSmsContext.shopId,
               label: 'concern.add-customer-concern',
               signalUserOnError: true,
+              context: currentSmsContext,
             }
           );
 
@@ -1682,6 +1934,7 @@ async function consumeProviderActionGrant(receipt) {
 
 async function requestProviderActionGrant(provider, providerAction, shopId, options = {}) {
   await _stateReady;
+  await ensureBootstrapBoundToActiveTab();
   const normalizedProvider = String(provider || '').toLowerCase();
   const normalizedAction = String(providerAction || '').trim();
   const scopedShopId = shopId == null ? '' : String(shopId);
@@ -1735,8 +1988,21 @@ async function requestProviderActionGrant(provider, providerAction, shopId, opti
 }
 
 async function handleMosLogin(email, password, apiUrl, rememberMe = true) {
+  let loginEpoch = null;
+  let priorBootstrapToken = null;
+  let priorBootstrapApiUrl = null;
   try {
     await _stateReady;
+    explicitLoginInFlight = true;
+    loginEpoch = ++authEpoch;
+    priorBootstrapToken = mosAuthSource === 'bootstrap'
+      ? mosApiToken
+      : pendingBootstrapAuth?.token;
+    priorBootstrapApiUrl = mosApiUrl || pendingBootstrapAuth?.apiUrl;
+    const activeTabs = await chrome.tabs.query({ active: true, currentWindow: true }).catch(() => []);
+    const activeTabId = activeTabs[0]?.id;
+    const loginContext = smsContextsByTab.get(activeTabId) ||
+      (currentSmsContext?._tabId === activeTabId ? currentSmsContext : null);
     // Remove trailing slash from API URL
     mosApiUrl = (apiUrl || 'https://mos.tools').replace(/\/+$/, '');
     
@@ -1749,8 +2015,8 @@ async function handleMosLogin(email, password, apiUrl, rememberMe = true) {
       body: JSON.stringify({
         email,
         password,
-        provider: currentSmsContext?.provider || undefined,
-        smsShopId: currentSmsContext?.shopId || undefined,
+        provider: loginContext?.provider || undefined,
+        smsShopId: loginContext?.shopId || undefined,
       })
     });
 
@@ -1760,9 +2026,20 @@ async function handleMosLogin(email, password, apiUrl, rememberMe = true) {
     }
 
     const data = await response.json();
+    if (authEpoch !== loginEpoch) {
+      await revokeExtensionBearer(data.token, mosApiUrl);
+      throw new Error('Login was superseded by a newer authentication action');
+    }
     mosApiToken = data.token;
-    
+    mosUser = data.user || null;
     mosShops = data.shops || [];
+    mosAuthSource = 'explicit';
+    mosBootstrapContextKey = null;
+    pendingBootstrapAuth = null;
+    await chrome.storage.session.remove(['mosBootstrapAuth']);
+    if (priorBootstrapToken && priorBootstrapToken !== data.token) {
+      await revokeExtensionBearer(priorBootstrapToken, priorBootstrapApiUrl);
+    }
 
     // Derive + persist the session's trust tier from the (optional)
     // assurance/capabilities fields the server may return. Pure logic lives in
@@ -1829,6 +2106,230 @@ async function handleMosLogin(email, password, apiUrl, rememberMe = true) {
   } catch (err) {
     console.error("[MOS] Login error:", err);
     throw err;
+  } finally {
+    if (loginEpoch === authEpoch) explicitLoginInFlight = false;
+  }
+}
+
+function bootstrapContextKey(tabId, context) {
+  if (!tabId || !context?.provider || context?.shopId == null) return null;
+  const provider = String(context.provider).toLowerCase().replace(/^shop[-_]ware$/, 'shopware');
+  return `${tabId}:${provider}:${String(context.shopId)}`;
+}
+
+function broadcastBootstrapState(outcome, extra = {}) {
+  chrome.runtime.sendMessage({
+    action: 'MOS_BOOTSTRAP_RESOLVED',
+    outcome,
+    ...extra,
+  }).catch(() => {});
+}
+
+async function revokeExtensionBearer(token, apiUrl) {
+  if (!token?.startsWith('exts_') || !apiUrl) return;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 2000);
+  try {
+    await fetch(`${apiUrl}/api/extension/session`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${token}` },
+      signal: controller.signal,
+    });
+  } catch (_) {
+    // Local scope invalidation remains authoritative for this extension.
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function clearBootstrapAuth(revoke = false) {
+  if (mosAuthSource !== 'bootstrap' && !pendingBootstrapAuth) return;
+  authEpoch += 1;
+  const priorToken = mosAuthSource === 'bootstrap'
+    ? mosApiToken
+    : pendingBootstrapAuth?.token;
+  const priorApiUrl = mosApiUrl || pendingBootstrapAuth?.apiUrl;
+  mosApiToken = null;
+  mosUser = null;
+  mosShops = [];
+  mosSessionTier = null;
+  mosAuthSource = null;
+  mosBootstrapContextKey = null;
+  pendingBootstrapAuth = null;
+  await chrome.storage.session.remove(['mosBootstrapAuth']);
+  broadcastBootstrapState('verification_needed');
+  if (revoke) await revokeExtensionBearer(priorToken, priorApiUrl);
+}
+
+async function tabIsActive(tabId) {
+  try {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    activeTabId = tabs[0]?.id ?? null;
+    return activeTabId === tabId;
+  } catch (_) {
+    // If Chrome temporarily refuses the query, the later context-key check
+    // still prevents a stale result from crossing shops.
+    return true;
+  }
+}
+
+async function ensureBootstrapBoundToActiveTab() {
+  if (mosAuthSource !== 'bootstrap') return true;
+  const tabs = await chrome.tabs.query({ active: true, currentWindow: true }).catch(() => []);
+  const activeTabId = tabs[0]?.id;
+  const activeContext = smsContextsByTab.get(activeTabId) ||
+    (currentSmsContext?._tabId === activeTabId ? currentSmsContext : null);
+  const activeKey = bootstrapContextKey(activeTabId, activeContext);
+  if (!activeKey || activeKey !== mosBootstrapContextKey) {
+    await clearBootstrapAuth(true);
+    return false;
+  }
+  return true;
+}
+
+async function handleMosBootstrap(tabId, context) {
+  await _stateReady;
+  tabId = tabId || context?._tabId;
+  const key = bootstrapContextKey(tabId, context);
+  if (!key || context?._tabId !== tabId || !(await tabIsActive(tabId))) {
+    return { success: false, outcome: 'verification_needed' };
+  }
+  if (mosAuthSource === 'explicit' || explicitLoginInFlight) {
+    return { success: true, outcome: 'already_authenticated' };
+  }
+  if (mosAuthSource === 'bootstrap' && mosApiToken && mosBootstrapContextKey === key) {
+    return {
+      success: true,
+      outcome: mosSessionTier?.resolution || (mosSessionTier?.isVerified ? 'matched_user' : 'basic'),
+      user: mosUser,
+      sessionTier: mosSessionTier,
+    };
+  }
+
+  const provider = String(context.provider || '').toLowerCase().replace(/^shop[-_]ware$/, 'shopware');
+  // Tekmetric is the only provider with a server-probeable browser-session
+  // proof today. Other providers still call the common adapter so the UI gets
+  // an explicit unsupported outcome; no cookies or page data are forwarded.
+  const tabProof = provider === 'tekmetric'
+    ? tekmetricProofsByTab.get(tabId)
+    : null;
+  const proofToken = tabProof?.token || null;
+  const proofOrigin = tabProof?.origin || null;
+  if (provider === 'tekmetric' && (!proofToken || !proofOrigin)) {
+    broadcastBootstrapState('verification_needed');
+    return { success: false, outcome: 'verification_needed' };
+  }
+  if (
+    bootstrapInFlight &&
+    bootstrapInFlightToken === proofToken &&
+    bootstrapInFlightKey === key
+  ) {
+    return bootstrapInFlight;
+  }
+  const attemptEpoch = ++authEpoch;
+
+  const attempt = (async () => {
+    const apiUrl = (mosApiUrl || 'https://mos.tools').replace(/\/+$/, '');
+    const priorToken = mosAuthSource === 'bootstrap'
+      ? mosApiToken
+      : (
+          pendingBootstrapAuth?.contextKey === key
+            ? pendingBootstrapAuth.token
+            : null
+        );
+    const response = await fetch(`${apiUrl}/api/extension/bootstrap`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(priorToken ? { 'Authorization': `Bearer ${priorToken}` } : {}),
+      },
+      body: JSON.stringify({
+        provider,
+        smsShopId: String(context.shopId),
+        proof: provider === 'tekmetric'
+          ? { kind: 'tekmetric_x_auth', token: proofToken, origin: proofOrigin }
+          : undefined,
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.ok || !data.token) {
+      const outcome = data.outcome || 'verification_needed';
+      if (authEpoch === attemptEpoch) broadcastBootstrapState(outcome);
+      return { success: false, outcome };
+    }
+
+    // A slow proof exchange must not grant a session after that source tab
+    // navigated to another provider/shop or stopped being the active tab.
+    const latest = smsContextsByTab.get(tabId);
+    const latestProof = tekmetricProofsByTab.get(tabId);
+    if (
+      authEpoch !== attemptEpoch ||
+      mosAuthSource === 'explicit' ||
+      explicitLoginInFlight ||
+      bootstrapContextKey(tabId, latest) !== key ||
+      !(await tabIsActive(tabId)) ||
+      (
+        provider === 'tekmetric' &&
+        (latestProof?.token !== proofToken || latestProof?.origin !== proofOrigin)
+      )
+    ) {
+      await revokeExtensionBearer(data.token, apiUrl);
+      return { success: false, outcome: 'verification_needed' };
+    }
+
+    const derivedTier = MosSessionTierCore
+      ? MosSessionTierCore.deriveSessionTier(data)
+      : {
+          tier: data.assurance || 'basic',
+          isVerified: data.assurance === 'verified',
+          canMutate: data.assurance === 'verified',
+          canAdmin: false,
+        };
+    const sessionTier = {
+      ...derivedTier,
+      authSource: 'bootstrap',
+      resolution: data.outcome,
+      displayName: data.outcome === 'matched_user'
+        ? (data.user?.name || data.user?.email || 'MOS.Tools user')
+        : null,
+    };
+    mosApiToken = data.token;
+    mosApiUrl = apiUrl;
+    mosShops = data.shops || [];
+    mosUser = data.user || null;
+    mosSessionTier = sessionTier;
+    mosAuthSource = 'bootstrap';
+    mosBootstrapContextKey = key;
+    pendingBootstrapAuth = null;
+    await chrome.storage.session.set({
+      mosBootstrapAuth: {
+        token: data.token,
+        apiUrl,
+        shops: mosShops,
+        user: mosUser,
+        sessionTier,
+        contextKey: key,
+      },
+    });
+    reportTelemetry('auth.bootstrap', {
+      provider,
+      smsShopId: String(context.shopId),
+      reason: data.outcome,
+    });
+    broadcastBootstrapState(data.outcome, { user: data.user, sessionTier });
+    return { success: true, outcome: data.outcome, user: data.user, shops: mosShops, sessionTier };
+  })();
+  bootstrapInFlight = attempt;
+  bootstrapInFlightToken = proofToken;
+  bootstrapInFlightKey = key;
+  try {
+    return await attempt;
+  } finally {
+    if (bootstrapInFlight === attempt) {
+      bootstrapInFlight = null;
+      bootstrapInFlightToken = null;
+      bootstrapInFlightKey = null;
+    }
   }
 }
 
@@ -2118,6 +2619,7 @@ async function _doMosFetch(endpoint, options, token) {
 
 async function handleMosApiRequest(endpoint, options = {}) {
   await _stateReady;
+  await ensureBootstrapBoundToActiveTab();
   if (!mosApiToken) {
     throw new Error("Not authenticated with MOS");
   }
@@ -2331,8 +2833,13 @@ function compute429BackoffMs(attempt, retryAfterHeader) {
   return Math.min(exponential + jitter, TEK_MAX_BACKOFF_MS);
 }
 
-async function tekmetricFetchWithBackoff(url, init, label) {
+async function tekmetricFetchWithBackoff(url, init, label, tekmetricSession = null) {
   for (let attempt = 1; attempt <= TEK_MAX_429_RETRIES + 1; attempt++) {
+    if (tekmetricSession && !isCurrentTekmetricSession(tekmetricSession)) {
+      const error = new Error('Tekmetric account or active tab changed during this operation');
+      error.code = 'STALE_PROVIDER_CONTEXT';
+      throw error;
+    }
     const response = await fetch(url, init);
     if (response.status !== 429 || attempt > TEK_MAX_429_RETRIES) {
       return response;
@@ -2480,11 +2987,29 @@ function tekShowToastOnActiveTab(message, type = 'error') {
 // re: headers — if the caller already passed `x-auth-token`, theirs wins
 // (preserves backwards compatibility with any caller that needs to use
 // a different token, e.g. the per-shop relay path).
-function tekBuildRequest(endpoint, init = {}) {
+function tekmetricSessionForContext(context = currentSmsContext, sourceTabId = null) {
+  const tabId = sourceTabId ?? context?._tabId ?? activeTabId;
+  if (tabId == null || tabId !== activeTabId) return null;
+  const session = tekmetricProofsByTab.get(tabId);
+  return session?.token && session?.origin
+    ? { ...session, tabId }
+    : null;
+}
+
+function isCurrentTekmetricSession(session) {
+  if (!session || session.tabId !== activeTabId) return false;
+  const latest = tekmetricProofsByTab.get(session.tabId);
+  return latest?.token === session.token && latest?.origin === session.origin;
+}
+
+function tekBuildRequest(endpoint, init = {}, session) {
   if (!endpoint || typeof endpoint !== 'string') {
     throw new Error('tekmetricFetch: endpoint must be a non-empty string');
   }
-  const baseUrl = tekmetricBaseUrl || 'https://shop.tekmetric.com';
+  if (!isCurrentTekmetricSession(session)) {
+    throw new Error('No current Tekmetric session for the active provider tab');
+  }
+  const baseUrl = session.origin;
   const url = endpoint.startsWith('http')
     ? endpoint
     : `${baseUrl}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
@@ -2496,8 +3021,8 @@ function tekBuildRequest(endpoint, init = {}) {
     Object.keys(callerHeaders).map(k => k.toLowerCase())
   );
   const mergedHeaders = { ...callerHeaders };
-  if (!lowerKeys.has('x-auth-token') && smsTokens.tekmetric) {
-    mergedHeaders['x-auth-token'] = smsTokens.tekmetric;
+  if (!lowerKeys.has('x-auth-token')) {
+    mergedHeaders['x-auth-token'] = session.token;
   }
   if (!lowerKeys.has('content-type') && init.body != null) {
     mergedHeaders['content-type'] = 'application/json';
@@ -2528,7 +3053,12 @@ async function tekSingleAttempt(endpointForReport, url, init, opts) {
   let response;
   let networkErr = null;
   try {
-    response = await tekmetricFetchWithBackoff(url, init, opts.label || endpointForReport);
+    response = await tekmetricFetchWithBackoff(
+      url,
+      init,
+      opts.label || endpointForReport,
+      opts.session,
+    );
   } catch (err) {
     networkErr = err;
   }
@@ -2588,7 +3118,10 @@ const DEFAULT_FALLBACK_STATUSES = [404];
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 async function tekmetricFetch(endpoint, init = {}, opts = {}) {
-  if (!smsTokens.tekmetric) {
+  const session =
+    opts.session ||
+    tekmetricSessionForContext(opts.context || currentSmsContext, opts.tabId);
+  if (!isCurrentTekmetricSession(session)) {
     throw new Error('No Tekmetric session token. Open a Tekmetric tab first.');
   }
   const method = ((init.method || 'GET') + '').toUpperCase();
@@ -2610,12 +3143,13 @@ async function tekmetricFetch(endpoint, init = {}, opts = {}) {
     ? opts.fallbackOnStatuses
     : DEFAULT_FALLBACK_STATUSES;
 
-  const built = tekBuildRequest(endpoint, init);
+  const built = tekBuildRequest(endpoint, init, session);
   let response = await tekSingleAttempt(endpoint, built.url, built.init, {
     label: opts.label,
     shopId: opts.shopId,
     providerAction,
     providerActionGrant,
+    session,
   });
 
   const shouldFallback = (status) =>
@@ -2628,7 +3162,7 @@ async function tekmetricFetch(endpoint, init = {}, opts = {}) {
       if (!fb || !fb.endpoint) continue;
       console.log(`[tekmetricFetch] Primary ${endpoint} returned ${response.status}, trying fallback ${fb.endpoint}`);
       try {
-        const fbBuilt = tekBuildRequest(fb.endpoint, fb.init || {});
+        const fbBuilt = tekBuildRequest(fb.endpoint, fb.init || {}, session);
         const fbResponse = await tekSingleAttempt(fb.endpoint, fbBuilt.url, fbBuilt.init, {
           label: fb.label || opts.label,
           shopId: opts.shopId,
@@ -2636,6 +3170,7 @@ async function tekmetricFetch(endpoint, init = {}, opts = {}) {
           fallbackOf: opts.label || endpoint,
           providerAction,
           providerActionGrant,
+          session,
         });
         if (fbResponse.ok) {
           response = fbResponse;
@@ -2697,7 +3232,9 @@ async function handleTekmetricApiRequest(endpoint, options = {}) {
  */
 async function fetchRoAuditLineItems(shopId, roId) {
   await _stateReady;
-  if (!smsTokens.tekmetric) {
+  await ensureBootstrapBoundToActiveTab();
+  const tekmetricSession = tekmetricSessionForContext(currentSmsContext);
+  if (!tekmetricSession) {
     return { success: false, error: "No Tekmetric session. Navigate to a repair order first." };
   }
   const effectiveShopId = shopId || tekmetricShopId;
@@ -2718,6 +3255,7 @@ async function fetchRoAuditLineItems(shopId, roId) {
           endpoint: `/api/shop/${effectiveShopId}/jobs?repairOrderId=${roId}`,
           label: 'estimate-audit.get-jobs.fallback',
         }],
+        session: tekmetricSession,
       }
     );
     if (estRes.ok) {
@@ -2748,7 +3286,11 @@ async function fetchRoAuditLineItems(shopId, roId) {
       const jobsRes = await tekmetricFetch(
         `/api/shop/${effectiveShopId}/jobs?repairOrderId=${roId}`,
         {},
-        { shopId: effectiveShopId, label: 'estimate-audit.get-jobs.empty-estimate' }
+        {
+          shopId: effectiveShopId,
+          label: 'estimate-audit.get-jobs.empty-estimate',
+          session: tekmetricSession,
+        }
       );
       if (jobsRes.ok) {
         const jobsBody = await jobsRes.json();
@@ -2807,7 +3349,8 @@ async function fetchRoAuditLineItems(shopId, roId) {
 }
 
 async function createTekmetricJob(shopId, roId, jobData) {
-  if (!smsTokens.tekmetric) {
+  const tekmetricSession = tekmetricSessionForContext(currentSmsContext);
+  if (!tekmetricSession) {
     return { success: false, error: "No Tekmetric session. Navigate to a repair order first." };
   }
 
@@ -2822,7 +3365,11 @@ async function createTekmetricJob(shopId, roId, jobData) {
     const roRes = await tekmetricFetch(
       `/api/shop/${effectiveShopId}/repair-order/${roId}`,
       {},
-      { shopId: effectiveShopId, label: 'createTekmetricJob.fetch-ro' }
+      {
+        shopId: effectiveShopId,
+        label: 'createTekmetricJob.fetch-ro',
+        session: tekmetricSession,
+      }
     );
 
     if (!roRes.ok) {
@@ -2969,6 +3516,7 @@ async function createTekmetricJob(shopId, roId, jobData) {
         shopId: effectiveShopId,
         label: 'createTekmetricJob.post-job',
         signalUserOnError: true,
+        session: tekmetricSession,
       }
     );
 
@@ -3394,9 +3942,11 @@ function findMatchingRule(rules, vehicleData) {
 // ==================== TEKMETRIC INSPECTION FETCH ====================
 async function fetchAndRelayInspections(context) {
   await _stateReady;
+  await ensureBootstrapBoundToActiveTab();
   if (!context?.roId) return;
   if (context.provider && context.provider !== 'tekmetric') return;
-  if (!smsTokens.tekmetric) return;
+  const tekmetricSession = tekmetricSessionForContext(context);
+  if (!tekmetricSession) return;
   if (context.roId === lastInspectionFetchRoId) return;
 
   const shopId = context.shopId || tekmetricShopId;
@@ -3406,7 +3956,7 @@ async function fetchAndRelayInspections(context) {
     const res = await tekmetricFetch(
       `/api/shop/${shopId}/repair-orders/${context.roId}/inspections`,
       {},
-      { shopId, label: 'inspections.list.relay' }
+      { shopId, label: 'inspections.list.relay', session: tekmetricSession }
     );
 
     if (!res.ok) {
@@ -3552,6 +4102,7 @@ async function postVhiCoachData(context, taskNames, provider) {
 // REFETCH_VHI_COACH.
 async function fetchVhiCoachForAutoflow(context) {
   await _stateReady;
+  await ensureBootstrapBoundToActiveTab();
   if (!mosApiToken || !mosApiUrl) return;
   if (!context?.vin || !context?.shopId) return;
   if (context.vin.length !== 17) return;
@@ -3578,6 +4129,7 @@ async function fetchVhiCoachForAutoflow(context) {
 
 async function fetchVhiCoachData(context, inspections) {
   await _stateReady;
+  await ensureBootstrapBoundToActiveTab();
   if (!mosApiToken || !mosApiUrl) return;
   if (!context?.vin || !context?.shopId) return;
   if (context.vin.length !== 17) return;
@@ -3621,7 +4173,7 @@ async function fetchVhiCoachData(context, inspections) {
 
 // Shared inspection loader for both pre-fill phases. Returns
 // { success:false, error } or { success:true, inspArr }.
-async function fetchTekmetricInspections(shopId, roId, inspId) {
+async function fetchTekmetricInspections(shopId, roId, inspId, tekmetricSession) {
   let inspArr;
   try {
     // Listing → detail-by-known-id fallback when the listing endpoint
@@ -3642,6 +4194,7 @@ async function fetchTekmetricInspections(shopId, roId, inspId) {
         label: 'prefill-dvi.list-inspections',
         signalUserOnError: true,
         fallbacks,
+        session: tekmetricSession,
       }
     );
     if (!res.ok) return { success: false, error: `Failed to fetch inspections (${res.status})` };
@@ -3687,8 +4240,10 @@ function flattenInspectionTasks(inspection) {
 // script. Mirrors AutoFlow's AF_ANALYZE_PREFILL two-phase flow.
 async function analyzePrefillDvi(context, inspId, tabId) {
   await _stateReady;
+  await ensureBootstrapBoundToActiveTab();
   if (!mosApiToken || !mosApiUrl) return { success: false, error: "Not connected to MOS" };
-  if (!smsTokens.tekmetric) return { success: false, error: "No Tekmetric session token" };
+  const tekmetricSession = tekmetricSessionForContext(context, tabId);
+  if (!tekmetricSession) return { success: false, error: "No Tekmetric session token" };
   if (!context?.vin || context.vin.length !== 17) return { success: false, error: "No VIN detected" };
   if (!context?.mileage) return { success: false, error: "No mileage detected on this RO" };
 
@@ -3703,7 +4258,12 @@ async function analyzePrefillDvi(context, inspId, tabId) {
     }).catch(() => {});
   }
 
-  const fetched = await fetchTekmetricInspections(shopId, context.roId, inspId);
+  const fetched = await fetchTekmetricInspections(
+    shopId,
+    context.roId,
+    inspId,
+    tekmetricSession,
+  );
   if (!fetched.success) return fetched;
   const inspArr = fetched.inspArr;
 
@@ -3826,13 +4386,20 @@ async function analyzePrefillDvi(context, inspId, tabId) {
 // approved task. Undo snapshot behavior is unchanged from the pre-review flow.
 async function applyPrefillDvi(context, inspectionId, approved, tabId) {
   await _stateReady;
+  await ensureBootstrapBoundToActiveTab();
   if (!mosApiToken || !mosApiUrl) return { success: false, error: "Not connected to MOS" };
-  if (!smsTokens.tekmetric) return { success: false, error: "No Tekmetric session token" };
+  const tekmetricSession = tekmetricSessionForContext(context, tabId);
+  if (!tekmetricSession) return { success: false, error: "No Tekmetric session token" };
 
   const shopId = context.shopId || tekmetricShopId;
   if (!shopId) return { success: false, error: "No shop ID" };
 
-  const fetched = await fetchTekmetricInspections(shopId, context.roId, inspectionId);
+  const fetched = await fetchTekmetricInspections(
+    shopId,
+    context.roId,
+    inspectionId,
+    tekmetricSession,
+  );
   if (!fetched.success) return fetched;
   const inspection = fetched.inspArr.find(i => String(i.id) === String(inspectionId));
   if (!inspection) return { success: false, error: "Inspection not found" };
@@ -3868,7 +4435,7 @@ async function applyPrefillDvi(context, inspectionId, approved, tabId) {
           method: "PUT",
           body: JSON.stringify(putBody),
         },
-        { shopId, label: 'prefill-dvi.put-task' }
+        { shopId, label: 'prefill-dvi.put-task', session: tekmetricSession }
       );
 
       if (res.ok) {
@@ -3929,6 +4496,7 @@ async function applyPrefillDvi(context, inspectionId, approved, tabId) {
 
 async function fetchBuildRoFromVhiPreview(context) {
   await _stateReady;
+  await ensureBootstrapBoundToActiveTab();
   if (!mosApiToken || !mosApiUrl) return { success: false, error: "Not connected to MOS" };
   if (!context?.vin || context.vin.length !== 17) return { success: false, error: "No VIN detected" };
   if (!context?.mileage) return { success: false, error: "No mileage detected on this RO" };
@@ -3976,10 +4544,12 @@ async function fetchBuildRoFromVhiPreview(context) {
 
 async function applyBuildRoFromVhi(context, selected, markerPrefix, tabId) {
   await _stateReady;
-  if (!smsTokens.tekmetric) return { success: false, error: "No Tekmetric session token" };
+  await ensureBootstrapBoundToActiveTab();
+  const tekmetricSession = tekmetricSessionForContext(context, tabId);
+  if (!tekmetricSession) return { success: false, error: "No Tekmetric session token" };
   if (!context?.roId) return { success: false, error: "No RO ID in context" };
 
-  const baseUrl = tekmetricBaseUrl || "https://shop.tekmetric.com";
+  const baseUrl = tekmetricSession.origin;
   const shopId = context.shopId || tekmetricShopId;
   if (!shopId) return { success: false, error: "No shop ID" };
   if (!Array.isArray(selected) || selected.length === 0) {
@@ -4042,9 +4612,10 @@ async function applyBuildRoFromVhi(context, selected, markerPrefix, tabId) {
     const concernsRes = await tekmetricFetchWithBackoff(
       `${baseUrl}/api/repair-orders/${context.roId}/technician-concerns`,
       {
-        headers: { "x-auth-token": smsTokens.tekmetric, "content-type": "application/json" },
+        headers: { "x-auth-token": tekmetricSession.token, "content-type": "application/json" },
       },
-      `build-ro-from-vhi GET concerns ${context.roId}`
+      `build-ro-from-vhi GET concerns ${context.roId}`,
+      tekmetricSession,
     );
     if (concernsRes.ok) {
       const data = await concernsRes.json();
@@ -4081,6 +4652,9 @@ async function applyBuildRoFromVhi(context, selected, markerPrefix, tabId) {
   let failed = 0;
 
   for (let i = 0; i < selected.length; i++) {
+    if (!isCurrentTekmetricSession(tekmetricSession)) {
+      return { success: false, error: "Tekmetric account or tab changed during this operation" };
+    }
     const item = selected[i];
     const sk = item.serviceKey;
     const titleKey = (item.title || "").trim();
@@ -4135,7 +4709,7 @@ async function applyBuildRoFromVhi(context, selected, markerPrefix, tabId) {
         {
           method: "POST",
           headers: {
-            "x-auth-token": smsTokens.tekmetric,
+            "x-auth-token": tekmetricSession.token,
             "content-type": "application/json",
             accept: "application/json",
           },
@@ -4153,7 +4727,8 @@ async function applyBuildRoFromVhi(context, selected, markerPrefix, tabId) {
             inspectionTask: rewriteVhiMarker(item.concern),
           }),
         },
-        `build-ro-from-vhi POST concern ${sk}`
+        `build-ro-from-vhi POST concern ${sk}`,
+        tekmetricSession,
       );
       const cBody = await cRes.text();
       let cData = null;
@@ -4211,12 +4786,16 @@ async function applyBuildRoFromVhi(context, selected, markerPrefix, tabId) {
   //    real outcome instead of a misleading success toast.
   if (added > 0) {
     try {
+      if (!isCurrentTekmetricSession(tekmetricSession)) {
+        throw new Error("Tekmetric account or tab changed during verification");
+      }
       const verifyRes = await tekmetricFetchWithBackoff(
         `${baseUrl}/api/repair-orders/${context.roId}/technician-concerns`,
         {
-          headers: { "x-auth-token": smsTokens.tekmetric, "content-type": "application/json" },
+          headers: { "x-auth-token": tekmetricSession.token, "content-type": "application/json" },
         },
-        `build-ro-from-vhi VERIFY concerns ${context.roId}`
+        `build-ro-from-vhi VERIFY concerns ${context.roId}`,
+        tekmetricSession,
       );
       if (verifyRes.ok) {
         const verifyData = await verifyRes.json();
@@ -4332,8 +4911,10 @@ async function applyBuildRoFromVhi(context, selected, markerPrefix, tabId) {
 
 async function fetchEnhancedFindings(context, inspId, tabId) {
   await _stateReady;
+  await ensureBootstrapBoundToActiveTab();
   if (!mosApiToken || !mosApiUrl) return { success: false, error: "Not connected to MOS" };
-  if (!smsTokens.tekmetric) return { success: false, error: "No Tekmetric session token" };
+  const tekmetricSession = tekmetricSessionForContext(context, tabId);
+  if (!tekmetricSession) return { success: false, error: "No Tekmetric session token" };
 
   const shopId = context.shopId || tekmetricShopId;
   if (!shopId) return { success: false, error: "No shop ID" };
@@ -4358,6 +4939,7 @@ async function fetchEnhancedFindings(context, inspId, tabId) {
         label: 'enhance-findings.list-inspections',
         signalUserOnError: true,
         fallbacks,
+        session: tekmetricSession,
       }
     );
     if (!res.ok) return { success: false, error: `Failed to fetch inspections (${res.status})` };
@@ -4482,7 +5064,9 @@ async function fetchEnhancedFindings(context, inspId, tabId) {
 
 async function applyEnhancedFindings(context, inspectionId, approved, tabId) {
   await _stateReady;
-  if (!smsTokens.tekmetric) return { success: false, error: "No Tekmetric session token" };
+  await ensureBootstrapBoundToActiveTab();
+  const tekmetricSession = tekmetricSessionForContext(context, tabId);
+  if (!tekmetricSession) return { success: false, error: "No Tekmetric session token" };
 
   const shopId = context.shopId || tekmetricShopId;
   if (!shopId) return { success: false, error: "No shop ID" };
@@ -4502,6 +5086,7 @@ async function applyEnhancedFindings(context, inspectionId, approved, tabId) {
         shopId,
         label: 'apply-enhanced.list-inspections',
         fallbacks,
+        session: tekmetricSession,
       }
     );
     if (!res.ok) return { success: false, error: `Failed to fetch inspections (${res.status})` };
@@ -4550,7 +5135,7 @@ async function applyEnhancedFindings(context, inspectionId, approved, tabId) {
           method: "PUT",
           body: JSON.stringify(putBody),
         },
-        { shopId, label: 'enhance-notes.put-task' }
+        { shopId, label: 'enhance-notes.put-task', session: tekmetricSession }
       );
       if (res.ok) {
         applied++;
@@ -4671,9 +5256,11 @@ async function clearUndoSnapshot(key) {
 // Best-effort per item: one failure doesn't abort the rest.
 async function revertTekmetricSnapshot(snap) {
   await _stateReady;
-  if (!smsTokens.tekmetric) return { success: false, error: "No Tekmetric session token" };
+  await ensureBootstrapBoundToActiveTab();
+  const tekmetricSession = tekmetricSessionForContext(currentSmsContext);
+  if (!tekmetricSession) return { success: false, error: "No Tekmetric session token" };
   const shopId = snap.shopId || tekmetricShopId;
-  const baseUrl = tekmetricBaseUrl || "https://shop.tekmetric.com";
+  const baseUrl = tekmetricSession.origin;
   let reverted = 0;
   let failed = 0;
   const failedItems = [];
@@ -4691,7 +5278,7 @@ async function revertTekmetricSnapshot(snap) {
         const res = await tekmetricFetch(
           `/api/shop/${shopId}/job/${it.jobId}`,
           { method: "DELETE" },
-          { shopId, label: "undo.delete-job" }
+          { shopId, label: "undo.delete-job", session: tekmetricSession }
         );
         // 404 = already gone (deleted in the SMS or a prior partial undo) —
         // that item is done; don't hold the snapshot open for it.
@@ -4727,9 +5314,10 @@ async function revertTekmetricSnapshot(snap) {
           `${baseUrl}/api/repair-orders/${snap.roId}/technician-concerns/${it.concernId}`,
           {
             method: "DELETE",
-            headers: { "x-auth-token": smsTokens.tekmetric, "content-type": "application/json" },
+            headers: { "x-auth-token": tekmetricSession.token, "content-type": "application/json" },
           },
-          `undo DELETE concern ${it.concernId}`
+          `undo DELETE concern ${it.concernId}`,
+          tekmetricSession,
         );
         if (res.ok) reverted++; else { failed++; failedItems.push(it.title || String(it.concernId)); }
       } catch (err) {
@@ -4746,7 +5334,7 @@ async function revertTekmetricSnapshot(snap) {
         const res = await tekmetricFetch(
           `/api/shop/${shopId}/repair-orders/${snap.roId}/inspections/${it.inspectionId}/tasks/${it.task.id}`,
           { method: "PUT", body: JSON.stringify(it.task) },
-          { shopId, label: "undo.put-task" }
+          { shopId, label: "undo.put-task", session: tekmetricSession }
         );
         if (res.ok) reverted++; else { failed++; failedItems.push(it.task.name || String(it.task.id)); }
       } catch (err) {
@@ -4762,7 +5350,9 @@ async function revertTekmetricSnapshot(snap) {
 
 async function autoApplyLaborRate(context, options = {}) {
   await _stateReady;
+  await ensureBootstrapBoundToActiveTab();
   if (!mosApiToken || !context?.roId) return;
+  if (mosSessionTier?.canMutate === false) return;
 
   // Currently only supports Tekmetric
   if (context.provider && context.provider !== 'tekmetric') {
@@ -4770,7 +5360,8 @@ async function autoApplyLaborRate(context, options = {}) {
     return;
   }
 
-  if (!smsTokens.tekmetric) {
+  const tekmetricSession = tekmetricSessionForContext(context);
+  if (!tekmetricSession) {
     console.log("[LaborRate] Waiting for Tekmetric token, will retry when captured");
     return;
   }
@@ -4790,7 +5381,7 @@ async function autoApplyLaborRate(context, options = {}) {
     const res = await tekmetricFetch(
       `/api/shop/${shopId}/repair-order/${context.roId}`,
       {},
-      { shopId, label: 'labor-rate.get-ro' }
+      { shopId, label: 'labor-rate.get-ro', context }
     );
     if (!res.ok) {
       console.warn("[LaborRate] Failed to fetch RO details:", res.status);
@@ -4824,6 +5415,7 @@ async function autoApplyLaborRate(context, options = {}) {
           endpoint: `/api/shop/${shopId}/jobs?repairOrderId=${context.roId}`,
           label: 'labor-rate.get-jobs.fallback',
         }],
+        context,
       }
     );
     if (estRes.ok) {
@@ -4865,7 +5457,7 @@ async function autoApplyLaborRate(context, options = {}) {
       const jobsRes = await tekmetricFetch(
         `/api/shop/${shopId}/jobs?repairOrderId=${context.roId}`,
         {},
-        { shopId, label: 'labor-rate.get-jobs.empty-estimate' }
+        { shopId, label: 'labor-rate.get-jobs.empty-estimate', context }
       );
       if (jobsRes.ok) {
         const jobsBody = await jobsRes.json();
@@ -4909,7 +5501,7 @@ async function autoApplyLaborRate(context, options = {}) {
       const custRes = await tekmetricFetch(
         `/api/shop/${shopId}/customer/${customer.id}`,
         {},
-        { shopId, label: 'labor-rate.get-customer' }
+        { shopId, label: 'labor-rate.get-customer', context }
       );
       if (custRes.ok) {
         const custData = await custRes.json();
@@ -5061,7 +5653,7 @@ async function autoApplyLaborRate(context, options = {}) {
         const res = await tekmetricFetch(
           `/api/shop/${shopId}/job`,
           { method: 'POST', body: JSON.stringify(jobPayload) },
-          { shopId, label: 'labor-rate.post-job-unmatched' }
+          { shopId, label: 'labor-rate.post-job-unmatched', context }
         );
         if (res.ok) {
           unmatchedUpdated++;
@@ -5168,7 +5760,7 @@ async function applyLaborRatePerJob(matchedRule, rateInCents, roData, context, o
       const res = await tekmetricFetch(
         `/api/shop/${shopId}/job`,
         { method: 'POST', body: JSON.stringify(jobPayload) },
-        { shopId, label: 'labor-rate.post-job-per-category' }
+        { shopId, label: 'labor-rate.post-job-per-category', context }
       );
       ownJobPostInFlight = false;
 
@@ -5259,6 +5851,7 @@ async function applyLaborRateToRO(matchedRule, rateInCents, roData, context, opt
         shopId: context.shopId || tekmetricShopId,
         label: 'labor-rate.put-ro-summary',
         signalUserOnError: true,
+        context,
       }
     );
 
