@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
 import crypto from 'node:crypto';
-import { MongoClient, BulkWriteOperation } from 'mongodb';
+import { MongoClient, type AnyBulkWriteOperation } from 'mongodb';
 
 const {
   DATAONE_SFTP_HOST,
@@ -125,7 +125,7 @@ async function loadVehiclesFile(client: MongoClient, filePath: string) {
   const { headers, rows } = await parseDelimitedFile(filePath);
   const col = client.db(MONGODB_DB).collection<VehicleDoc>('vehicles');
 
-  const ops: BulkWriteOperation<VehicleDoc>[] = [];
+  const ops: AnyBulkWriteOperation<VehicleDoc>[] = [];
   for (const r of rows) {
     const mapped = mapVehicle(rowToMap(headers, r));
     if (!mapped) continue;
@@ -167,4 +167,7 @@ async function main() {
   console.log('Done.');
 }
 
-main().catch((e) =>
+main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});
