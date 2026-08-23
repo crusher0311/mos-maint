@@ -37,7 +37,7 @@ export async function listUnresolvedAutoflowNumbers(
     .find({ resolvedShopId: null })
     .sort({ lastSeenAt: -1 })
     .limit(limit)
-    .toArray() as Promise<UnresolvedAutoflowNumberDoc[]>;
+    .toArray() as unknown as Promise<UnresolvedAutoflowNumberDoc[]>;
 }
 
 // AutoFlow-connected shops (attach targets) + shops already carrying v4

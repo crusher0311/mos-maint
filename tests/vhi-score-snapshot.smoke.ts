@@ -286,7 +286,7 @@ async function run() {
   // partner icons.
   {
     const oil = formatVhiItem(
-      item({ key: "oil", serviceKey: null, title: "Oil Change" }),
+      item({ key: "oil", serviceKey: undefined, title: "Oil Change" }),
       { bucket: "overdue" },
     );
     eq("formatVhiItem: oil item → oil_change service icon key", oil.serviceIconKey, "oil_change");

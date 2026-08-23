@@ -4,12 +4,12 @@
 import { testFetch, runTest, assert, assertOk, TestResult } from "./test-utils";
 
 const BASE_URL = process.env.E2E_BASE_URL || `https://${process.env.REPLIT_DEV_DOMAIN}`;
-const TEST_SECRET = process.env.E2E_TEST_SECRET;
-
-if (!TEST_SECRET) {
+if (!process.env.E2E_TEST_SECRET) {
   console.error("E2E_TEST_SECRET environment variable required");
   process.exit(1);
 }
+
+const TEST_SECRET: string = process.env.E2E_TEST_SECRET;
 
 const api = testFetch(BASE_URL, TEST_SECRET, {
   shopId: 25,

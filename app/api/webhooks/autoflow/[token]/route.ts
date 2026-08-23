@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
 async function findShopByToken(token: string) {
   const db = await getDb();
   return db
-    .collection("shops")
+    .collection<{ shopId: string | number; name?: string }>("shops")
     .findOne({ webhookToken: token }, { projection: { shopId: 1, name: 1 } });
 }
 

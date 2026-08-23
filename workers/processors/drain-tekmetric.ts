@@ -37,6 +37,12 @@ const DRAIN_POISON_THRESHOLD = Math.max(
   Number(process.env.TEKMETRIC_DRAIN_POISON_THRESHOLD) || 5,
 );
 
+interface ShopMappingDoc {
+  shopId?: number | string;
+  tekmetric?: { shopId?: number | string | null };
+  tekmetricShopId?: number | string | null;
+}
+
 export async function processDrainTekmetric(
   job: Job<DrainJobData>,
 ): Promise<{ shopsProcessed: number; complete: boolean }> {
@@ -56,24 +62,36 @@ export async function processDrainTekmetric(
   const db = await getDb();
 
   // Resolve the shop set: explicit allowlist, or "every shop with a
-  // tekmetric mapping that isn't marked complete".
-  let targetShopIds: number[];
+  // tekmetric mapping that isn't marked complete". Either way we resolve
+  // each shop's Tekmetric shopId (from `tekmetric.shopId` or the legacy
+  // flat `tekmetricShopId`) so `backfillShopChunk` can address the right
+  // Tekmetric tenant.
+  const shopQuery: Record<string, unknown> = {
+    $or: [
+      { "tekmetric.shopId": { $exists: true, $ne: null } },
+      { tekmetricShopId: { $exists: true, $ne: null } },
+    ],
+  };
   if (shopIds && shopIds.length > 0) {
-    targetShopIds = shopIds.slice();
+    shopQuery.shopId = { $in: shopIds };
   } else {
-    const rows = await db
-      .collection("shops")
-      .find({
-        $or: [
-          { "tekmetric.shopId": { $exists: true, $ne: null } },
-          { tekmetricShopId: { $exists: true, $ne: null } },
-        ],
-        tekmetricBackfillComplete: { $ne: true },
-      })
-      .project({ shopId: 1, "tekmetric.shopId": 1, tekmetricShopId: 1 })
-      .toArray();
-    targetShopIds = rows.map((r: any) => Number(r.shopId)).filter(Number.isFinite);
+    shopQuery.tekmetricBackfillComplete = { $ne: true };
   }
+  const rows = await db
+    .collection<ShopMappingDoc>("shops")
+    .find(shopQuery)
+    .project({ shopId: 1, "tekmetric.shopId": 1, tekmetricShopId: 1 })
+    .toArray();
+
+  const tekmetricShopIdByShop = new Map<number, number>();
+  for (const r of rows) {
+    const shopId = Number(r.shopId);
+    const tekmetricShopId = Number(r.tekmetric?.shopId ?? r.tekmetricShopId);
+    if (Number.isFinite(shopId) && Number.isFinite(tekmetricShopId)) {
+      tekmetricShopIdByShop.set(shopId, tekmetricShopId);
+    }
+  }
+  const targetShopIds: number[] = [...tekmetricShopIdByShop.keys()];
 
   // Poisoned-shop guard: skip shops already flagged as poisoned so the
   // drain doesn't re-walk a permanently failing shop on every pass.
@@ -93,8 +111,10 @@ export async function processDrainTekmetric(
   for (const shopId of targetShopIds) {
     if (Date.now() >= deadlineMs) break;
     if (poisonedIds.has(shopId)) continue;
+    const tekmetricShopId = tekmetricShopIdByShop.get(shopId);
+    if (tekmetricShopId == null) continue;
     try {
-      await backfillShopChunk(db, shopId);
+      await backfillShopChunk(db, shopId, tekmetricShopId);
       shopsProcessed++;
       // Success fully resets the consecutive-failure streak and clears
       // any poison flag (self-heal after a transient bad spell).

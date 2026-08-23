@@ -154,7 +154,7 @@ const config: ProtractorConfig = {
   configured: true,
 };
 __protractorClientTestHooks.resolveProtractorConfig = async () => config;
-__protractorClientTestHooks.acquireDistributedRateLimitSlot = async () => ({ acquired: true, waitedMs: 0 });
+__protractorClientTestHooks.acquireDistributedRateLimitSlot = async () => ({ acquired: true, waitedMs: 0, currentCount: 0 });
 __protractorClientTestHooks.trackApiRequest = async () => {};
 __protractorClientTestHooks.retryBaseDelayMs = 5;
 

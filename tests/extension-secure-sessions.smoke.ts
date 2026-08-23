@@ -90,6 +90,7 @@ async function run() {
     const basicAuth = {
       user: readResult.user,
       authorized: true,
+      error: null,
       principal: readResult.principal,
     };
     const restrictedEntries = allPolicyEntries().filter((entry) =>

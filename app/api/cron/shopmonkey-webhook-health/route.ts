@@ -143,7 +143,7 @@ export async function GET(req: NextRequest) {
       }
       const html = `<div style="font-family:system-ui,sans-serif;line-height:1.5"><h2>Shopmonkey Webhook Health — Daily Check</h2>${lines.join("\n")}<p style="color:#666;font-size:13px">Sent by /api/cron/shopmonkey-webhook-health</p></div>`;
       const subject = `[MOS] Shopmonkey webhook health: ${toAlertSilent.length} silent, ${toAlertDrop.length} drop`;
-      for (const admin of admins as Array<{ email: string }>) {
+      for (const admin of admins as unknown as Array<{ email: string }>) {
         try {
           await __deps.sendEmail({ to: admin.email, subject, html });
           emailed++;

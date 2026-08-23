@@ -5,6 +5,22 @@ import { getSession } from "@/lib/auth";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+interface DeclinedServiceEntry {
+  serviceKey: string;
+  serviceName?: string;
+  mileage: number | null;
+  reason: string | null;
+  declinedAt: Date;
+  declinedBy: string;
+}
+
+interface VehicleDeclinedDoc {
+  vin?: string;
+  shopId?: string | number;
+  declinedServices?: DeclinedServiceEntry[];
+  updatedAt?: Date;
+}
+
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ vin: string }> }
@@ -55,16 +71,16 @@ export async function POST(
     );
   }
 
-  const declinedEntry = {
+  const declinedEntry: DeclinedServiceEntry = {
     serviceKey,
     serviceName,
     mileage: mileage || null,
     reason: reason || null,
     declinedAt: new Date(),
-    declinedBy: session.userId,
+    declinedBy: session.email,
   };
 
-  const result = await db.collection("vehicles").updateOne(
+  const result = await db.collection<VehicleDeclinedDoc>("vehicles").updateOne(
     { 
       $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }],
       vin: vin.toUpperCase() 
@@ -105,7 +121,7 @@ export async function DELETE(
     return NextResponse.json({ error: "serviceKey required" }, { status: 400 });
   }
 
-  await db.collection("vehicles").updateOne(
+  await db.collection<VehicleDeclinedDoc>("vehicles").updateOne(
     { 
       $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }],
       vin: vin.toUpperCase() 

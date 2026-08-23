@@ -432,7 +432,7 @@ export async function findCachedWorkOrderCustomerName(
     if (!shouldShadowWriteMongoPlanCache()) return null;
   }
   const m = await mongo(db);
-  return m.collection("cached_work_orders").findOne(
+  return m.collection("cached_work_orders").findOne<{ customerName?: string | null }>(
     {
       vin: vin.toUpperCase(),
       shopId: shopIdIn(shopId),
@@ -620,7 +620,7 @@ export async function getReportApprovedItemsDoc(
     if (!shouldShadowWriteMongoPlanCache()) return null;
   }
   const m = await mongo(db);
-  return m.collection("report_approved_items").findOne({
+  return m.collection("report_approved_items").findOne<{ approvedServiceKeys?: string[]; updatedAt?: Date }>({
     vin: vin.toUpperCase(),
     shopId: shopIdIn(shopId),
   });

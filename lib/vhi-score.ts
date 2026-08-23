@@ -411,11 +411,28 @@ export async function getVhiFromAnalysisCache(
   const { getMaintenanceAnalysisDoc } = await import(
     "@/lib/data/repositories/plan-cache-store"
   );
-  const doc = await getMaintenanceAnalysisDoc(shopId, vin, db);
+  const rawDoc = await getMaintenanceAnalysisDoc(shopId, vin, db);
 
-  if (!doc || !doc.recommendations || !Array.isArray(doc.recommendations) || doc.recommendations.length === 0) {
+  if (
+    !rawDoc ||
+    !rawDoc.recommendations ||
+    !Array.isArray(rawDoc.recommendations) ||
+    rawDoc.recommendations.length === 0
+  ) {
     return null;
   }
+
+  // The store returns an untyped Record; narrow to the fields this reader
+  // consumes so downstream date/number math and the returned payload stay
+  // strongly typed.
+  const doc = rawDoc as {
+    recommendations: Array<Record<string, unknown> & { status?: unknown }>;
+    analyzedAt?: Date | string | number | null;
+    mileageAtAnalysis?: number | null;
+    mileageSource?: string | null;
+    mileageEstimateDetails?: Record<string, unknown> | null;
+    mileageDiscrepancy?: AnalysisCacheVhiResult["mileageDiscrepancy"];
+  };
 
   const analyzedAt = doc.analyzedAt ? new Date(doc.analyzedAt).getTime() : 0;
   if (Date.now() - analyzedAt > ANALYSIS_CACHE_MAX_AGE_MS) {
@@ -432,9 +449,9 @@ export async function getVhiFromAnalysisCache(
   }
 
   const recs = doc.recommendations;
-  const overdue = recs.filter((r: any) => r.status === "overdue");
-  const dueSoon = recs.filter((r: any) => r.status === "due_soon");
-  const upcoming = recs.filter((r: any) => r.status === "upcoming");
+  const overdue = recs.filter((r) => r.status === "overdue");
+  const dueSoon = recs.filter((r) => r.status === "due_soon");
+  const upcoming = recs.filter((r) => r.status === "upcoming");
 
   const rawBuckets = {
     overdue: overdue.map(convertRecToTriaged),

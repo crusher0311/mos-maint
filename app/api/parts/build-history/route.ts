@@ -49,7 +49,7 @@ async function buildTekmetricPartsHistory(shopId: number) {
     console.log(`[Parts History] Found ${existingJobs.length} existing Tekmetric jobs in index`);
     
     // Just update part cross-references from existing job data
-    const partsUpdated = await updatePartCrossReferences(existingJobs);
+    const partsUpdated = await updatePartCrossReferences(existingJobs as unknown[] as Parameters<typeof updatePartCrossReferences>[0]);
     results.workOrdersProcessed = existingJobs.length;
     results.jobsIndexed = existingJobs.length;
     results.partsIndexed = partsUpdated;

@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 
 export default function ResetForm() {
   const sp = useSearchParams();
-  const token = sp.get("token") || "";
+  const token = sp?.get("token") || "";
 
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);

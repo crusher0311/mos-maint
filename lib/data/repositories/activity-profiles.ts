@@ -613,7 +613,7 @@ export async function loadActivityProfileMap(
     .find(filter, { projection: { _id: 0 } })
     .toArray();
   const map = new Map<number, ActivityProfile>();
-  for (const d of docs) map.set(Number(d.shopId), d as ActivityProfile);
+  for (const d of docs) map.set(Number(d.shopId), d as unknown as ActivityProfile);
   return map;
 }
 
@@ -623,7 +623,7 @@ export async function getAllActivityProfiles(): Promise<ActivityProfile[]> {
     .collection(PROFILE_COLLECTION)
     .find({}, { projection: { _id: 0 } })
     .sort({ shopId: 1 })
-    .toArray()) as ActivityProfile[];
+    .toArray()) as unknown as ActivityProfile[];
 }
 
 /* --------------------------- scheduler gate hook -------------------------- */

@@ -131,7 +131,7 @@ const lifetimeFluidRow: PlanItem = {
   category: "Transmission",
   intervalMiles: 120000,
   intervalMonths: null,
-  last: undefined,
+  last: null,
   dueAtMiles: 120000,
   dueAtDate: null,
   milesToGo: 34980,

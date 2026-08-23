@@ -212,7 +212,7 @@ async function main() {
   const samples7d: number[] = [];
   const samplesLookback: number[] = [];
   const samples30d: number[] = [];
-  for (const row of latencyDocs as Array<{
+  for (const row of latencyDocs as unknown as Array<{
     handlerDurationMs: any;
     receivedAt: Date;
   }>) {

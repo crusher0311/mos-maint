@@ -16,7 +16,16 @@
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { filterNavItemsByFeatures } from "../lib/sidebar-nav";
+import { filterNavItemsByFeatures, type GatedNavNode } from "../lib/sidebar-nav";
+
+interface NavItem extends GatedNavNode {
+  name: string;
+  href: string;
+  featureId?: string;
+  showWhenLocked?: boolean;
+  isModal?: boolean;
+  children?: NavItem[];
+}
 
 function main() {
   const nav = [
@@ -60,7 +69,7 @@ function main() {
   // Locked treatment (task 971): a gated item that opts in via
   // showWhenLocked stays visible with locked:true when un-entitled,
   // and stays unlocked (no `locked` flag) when entitled.
-  const lockedNav = [
+  const lockedNav: NavItem[] = [
     { name: "Estimate Assist", href: "/dashboard/estimate-audit", featureId: "estimate_assist", showWhenLocked: true },
     { name: "Quick Sticker", href: "#quick-sticker", featureId: "oil_sticker", showWhenLocked: true, isModal: true },
     { name: "Grp", href: "#", featureId: "keytags", showWhenLocked: true, children: [{ name: "x", href: "#" }] },

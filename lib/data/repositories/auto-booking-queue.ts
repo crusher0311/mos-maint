@@ -134,7 +134,7 @@ export async function deleteQueueItems(filter: QueueFilter): Promise<number> {
   return res.deletedCount;
 }
 
-export async function aggregateQueue<T = Document>(
+export async function aggregateQueue<T extends Document = Document>(
   pipeline: Document[],
 ): Promise<T[]> {
   const col = await collection();

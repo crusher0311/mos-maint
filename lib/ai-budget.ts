@@ -36,6 +36,7 @@ export const DAILY_TOKEN_BUDGETS: Record<BillingPlan, number | null> = {
   enterprise: null,
   demo: null,
   oil_sticker_legacy: 50_000,
+  detect_dog_founder: null,
 };
 
 interface BudgetCacheEntry {

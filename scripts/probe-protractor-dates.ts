@@ -24,7 +24,7 @@ async function main() {
     GROUP BY shop_id ORDER BY shop_id
   `);
   console.log("WORK ORDERS (protractor):");
-  for (const r of wo.rows ?? wo) {
+  for (const r of wo) {
     console.log(JSON.stringify(r));
   }
 
@@ -38,7 +38,7 @@ async function main() {
     GROUP BY j.shop_id ORDER BY j.shop_id
   `);
   console.log("\nSERVICE JOBS (protractor):");
-  for (const r of sj.rows ?? sj) {
+  for (const r of sj) {
     console.log(JSON.stringify(r));
   }
   process.exit(0);

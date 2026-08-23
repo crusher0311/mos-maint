@@ -13,7 +13,19 @@ import {
   updateQueueItem,
   updateQueueItemById,
 } from "@/lib/data/repositories/auto-booking-queue";
-import { findShopByExactShopId } from "@/lib/data/repositories/shops";
+import { findShopByExactShopId, type ShopDoc } from "@/lib/data/repositories/shops";
+
+interface AutoBookingShopDoc extends ShopDoc {
+  autoBooking?: AutoBookingSettings;
+  enabledFeatures?: unknown;
+  billingStatus?: string;
+  plan?: string;
+  integrations?: string[];
+  tekmetric?: { shopId?: number | string };
+  protractor?: { connectionId?: number | string };
+  protractorConnectionId?: number | string;
+  timezone?: string;
+}
 
 export interface AutoBookingSettings {
   enabled: boolean;
@@ -129,7 +141,7 @@ function getPreferredTime(settings: AutoBookingSettings): string {
 }
 
 export async function getAutoBookingSettings(shopId: number): Promise<AutoBookingSettings | null> {
-  const shop = await findShopByExactShopId(shopId, {
+  const shop = await findShopByExactShopId<AutoBookingShopDoc>(shopId, {
     autoBooking: 1,
     enabledFeatures: 1,
     billingStatus: 1,
@@ -388,7 +400,7 @@ async function pushAppointmentToSMS(
   booking: AutoBookingQueueDoc,
 ): Promise<{ success: boolean; externalId?: string; provider?: string; error?: string }> {
   // Get shop details to determine which SMS to use
-  const shop = await findShopByExactShopId(booking.shopId, {
+  const shop = await findShopByExactShopId<AutoBookingShopDoc>(booking.shopId, {
     integrations: 1,
     tekmetric: 1,
     protractor: 1,
@@ -422,6 +434,10 @@ async function pushAppointmentToSMS(
   const shopTimezone = shop.timezone || 'America/Chicago';
   const autoBookingSettings = shop.autoBooking as AutoBookingSettings | undefined;
   const appointmentDuration = autoBookingSettings?.appointmentDuration || 60; // Default 60 minutes
+
+  if (!booking.scheduledTime) {
+    return { success: false, error: "Booking is missing a scheduled time" };
+  }
   
   // Calculate timezone offset for the scheduled date
   const scheduledDateTime = new Date(`${booking.scheduledDate}T${booking.scheduledTime}:00`);
@@ -440,7 +456,7 @@ async function pushAppointmentToSMS(
   if (hasTekmetric) {
     try {
       const { createAppointment } = await import("@/lib/integrations/tekmetric");
-      const tekmetricShopId = Number(shop.tekmetric.shopId);
+      const tekmetricShopId = Number(shop.tekmetric?.shopId);
       
       // Find both customer and vehicle IDs from cached data
       const { customerId: tekmetricCustomerId, vehicleId: tekmetricVehicleId } = 
@@ -480,7 +496,7 @@ async function pushAppointmentToSMS(
         
         const vehicleDesc = [vYear, vMake, vModel].filter(Boolean).join(' ') || 'Vehicle';
         const appointment = await createAppointment({
-          shopId: Number(shop.tekmetric.shopId),
+          shopId: Number(shop.tekmetric?.shopId),
           customerId: tekmetricCustomerId,
           vehicleId: tekmetricVehicleId,
           startTime: startTimeStr,
@@ -629,8 +645,8 @@ export async function findTekmetricCustomerAndVehicle(
   // Fallback: Try API for vehicle if still missing
   if (!vehicleId && vin) {
     try {
-      const { getVehicles } = await import("@/lib/integrations/tekmetric");
-      const result = await getVehicles(tekmetricShopId, { search: vin.toUpperCase(), size: 5 });
+      const { searchVehiclesByVin } = await import("@/lib/integrations/tekmetric");
+      const result = await searchVehiclesByVin(tekmetricShopId, vin.toUpperCase());
       
       if (result.content && result.content.length > 0) {
         const match = result.content.find(v => v.vin?.toUpperCase() === vin.toUpperCase());
@@ -885,7 +901,7 @@ export async function triggerAutoBookingFromSticker(
       });
       const existingBooking = existingBookings[0] ?? null;
 
-      if (existingBooking) {
+      if (existingBooking && existingBooking._id) {
         const existingServiceDueDate = existingBooking.serviceDueDate || existingBooking.scheduledDate;
 
         if (existingServiceDueDate === nextServiceDate) {

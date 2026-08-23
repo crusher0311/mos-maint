@@ -31,7 +31,7 @@ async function run() {
   console.log("middleware redirectToLogin smoke");
 
   // Ensure DEV_AUTO_LOGIN fall-through doesn't mask the bug under test.
-  process.env.NODE_ENV = "production";
+  (process.env as Record<string, string | undefined>).NODE_ENV = "production";
   delete process.env.DEV_AUTO_LOGIN;
 
   // (1) Non-public page without session cookie → 307 to /login?next=...

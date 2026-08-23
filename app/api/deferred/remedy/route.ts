@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "@/lib/auth";
+import { getSession } from "@/lib/auth";
 import {
   upsertRemediedDeferredWorkDoc,
   deleteLegacyPlanCacheEntry,
@@ -7,7 +7,7 @@ import {
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await getServerSession();
+    const session = await getSession();
     if (!session?.shopId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
       carfaxDescription,
       carfaxLocation,
       remediedAt: now,
-      remediedBy: session.userId || session.email || "unknown",
+      remediedBy: session.email || "unknown",
     });
 
     // Legacy dead-collection cleanup (`plan_cache` has no writers).

@@ -33,7 +33,7 @@ interface Enterprise {
 
 export default function EnterpriseUsersPage() {
   const searchParams = useSearchParams();
-  const enterpriseId = searchParams.get("id");
+  const enterpriseId = searchParams?.get("id");
 
   const [enterprise, setEnterprise] = useState<Enterprise | null>(null);
   const [shops, setShops] = useState<Shop[]>([]);

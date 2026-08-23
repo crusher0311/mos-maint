@@ -236,7 +236,7 @@ export async function POST(req: NextRequest) {
 
     trackPushToRO({
       shopId,
-      userId: sessionEmail,
+      userId: sessionEmail ?? undefined,
       vin: vin?.toUpperCase(),
       jobTitle: cannedJobTitle || `Canned Job ${cannedJobId}`,
       jobSource: "canned",

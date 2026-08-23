@@ -6,7 +6,7 @@ import { Loader2, CheckCircle, XCircle } from "lucide-react";
 
 export default function SetupCompleteContent() {
   const searchParams = useSearchParams();
-  const pendingId = searchParams.get("pending_id");
+  const pendingId = searchParams?.get("pending_id");
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
   const [error, setError] = useState("");
 

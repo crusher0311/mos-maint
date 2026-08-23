@@ -96,7 +96,7 @@ export async function upsertVehicle(
   };
 }
 
-export async function aggregateVehicles<T = Document>(
+export async function aggregateVehicles<T extends Document = Document>(
   pipeline: Document[],
 ): Promise<T[]> {
   const col = await collection();

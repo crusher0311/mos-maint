@@ -56,22 +56,19 @@ const lightGasSpecs: VehicleSpecs = {
   bodyType: "SUV",
   driveType: "4WD",
   displacement: 5.3,
-  fuelType: "gas",
-};
+  fuelType: "gas", acesVehicleId: null, acesEngineId: null, submodelKey: null, };
 const lightGasAltSpecs: VehicleSpecs = {
   gvwrBand: "light",
   bodyType: "SUV",
   driveType: "4WD",
   displacement: 6.2,
-  fuelType: "gas",
-};
+  fuelType: "gas", acesVehicleId: null, acesEngineId: null, submodelKey: null, };
 const heavyDieselSpecs: VehicleSpecs = {
   gvwrBand: "heavy",
   bodyType: "Pickup",
   driveType: "4WD",
   displacement: 6.7,
-  fuelType: "diesel",
-};
+  fuelType: "diesel", acesVehicleId: null, acesEngineId: null, submodelKey: null, };
 
 // ---------- 1. Platform resolver coverage ----------
 {

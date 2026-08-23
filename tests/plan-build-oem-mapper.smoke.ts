@@ -45,6 +45,10 @@ const dataOneRow: MaintenanceItem = {
   ],
   miles: 10000,
   months: 12,
+  intervalMilesNormal: 10000,
+  intervalMonthsNormal: 12,
+  intervalMilesSevere: null,
+  intervalMonthsSevere: null,
 };
 
 const mapped = toOEMItem(dataOneRow);

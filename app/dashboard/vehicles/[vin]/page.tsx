@@ -10,7 +10,34 @@ import { resolveProtractorConfig, fetchAllActiveInspections, fetchInvoicesForVeh
 import VehicleDetailClient from "./VehicleDetailClient";
 import { estimateMileageFromCarfax } from "@/lib/integrations/carfax";
 import { resolveShopDistanceUnit } from "@/lib/shop-distance-unit";
+import type { ShopDistanceDoc } from "@/lib/shop-distance-unit";
 import { getLatestRepairOrderMilesForVin } from "@/lib/miles";
+import type { ObjectId } from "mongodb";
+
+interface VehicleDeclinedService {
+  serviceKey: string;
+  serviceName: string;
+  mileage?: number | null;
+  reason?: string | null;
+  declinedAt: string;
+}
+
+interface VehicleRecord {
+  _id: ObjectId | null;
+  vin: string;
+  year?: number | null;
+  make?: string | null;
+  model?: string | null;
+  license?: string | null;
+  lastMileage?: number | null;
+  odometer?: number | null;
+  updatedAt?: Date | string | null;
+  customerId?: ObjectId | number | string | null;
+  hasComponents?: Record<string, boolean>;
+  declinedServices?: VehicleDeclinedService[];
+  tekmetric?: { vehicleId?: number; customerId?: number; [key: string]: unknown };
+  [key: string]: unknown;
+}
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -131,7 +158,7 @@ export default async function VehicleDetailPage({ params }: PageProps) {
   const { vin: vinParam } = await params;
   const vin = String(vinParam || "").toUpperCase();
 
-  let vehicle = await db.collection("vehicles").findOne(
+  let vehicle: VehicleRecord | null = await db.collection("vehicles").findOne(
     { 
       $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }],
       vin 
@@ -152,7 +179,7 @@ export default async function VehicleDetailPage({ params }: PageProps) {
         tekmetric: 1,
       },
     }
-  );
+  ) as VehicleRecord | null;
 
   // If not in vehicles collection, try to build from events (AutoFlow data)
   if (!vehicle) {
@@ -367,7 +394,7 @@ export default async function VehicleDetailPage({ params }: PageProps) {
 
   const customer = vehicle.customerId
     ? await db.collection("customers").findOne(
-        { _id: vehicle.customerId },
+        { _id: vehicle.customerId as ObjectId },
         { projection: { firstName: 1, lastName: 1, name: 1, email: 1, phone: 1 } }
       )
     : null;
@@ -669,7 +696,9 @@ export default async function VehicleDetailPage({ params }: PageProps) {
     { shopId },
     { projection: { integrationProvider: 1, smsProvider: 1, "preferences.distanceUnit": 1, "preferences.distanceUnitSource": 1, geo: 1 } }
   );
-  const distanceUnit: "miles" | "kilometers" = resolveShopDistanceUnit(shopWithPrefs);
+  const distanceUnit: "miles" | "kilometers" = resolveShopDistanceUnit(
+    shopWithPrefs as ShopDistanceDoc | null
+  );
 
   // Protractor inspections (DVI data from AutoVitals pushed to Protractor)
   let protractorDvi: any = null;
@@ -703,13 +732,13 @@ export default async function VehicleDetailPage({ params }: PageProps) {
     <VehicleDetailClient
       vehicle={{
         vin: vehicle.vin,
-        year: vehicle.year,
-        make: vehicle.make,
-        model: vehicle.model,
-        license: vehicle.license,
-        lastMileage: vehicle.lastMileage,
-        odometer: vehicle.odometer,
-        updatedAt: vehicle.updatedAt,
+        year: vehicle.year ?? undefined,
+        make: vehicle.make ?? undefined,
+        model: vehicle.model ?? undefined,
+        license: vehicle.license ?? undefined,
+        lastMileage: vehicle.lastMileage ?? undefined,
+        odometer: vehicle.odometer ?? undefined,
+        updatedAt: vehicle.updatedAt ? new Date(vehicle.updatedAt).toISOString() : undefined,
         hasComponents: vehicle.hasComponents || {},
         declinedServices: vehicle.declinedServices || [],
       }}
@@ -728,7 +757,18 @@ export default async function VehicleDetailPage({ params }: PageProps) {
       dvi={dvi}
       tekmetricDvi={tekmetricDvi}
       protractorDvi={protractorDvi}
-      carfax={carfax}
+      carfax={{
+        ok: carfax.ok,
+        serviceRecords: ("serviceRecords" in carfax && Array.isArray(carfax.serviceRecords)
+          ? carfax.serviceRecords.map((r) => ({
+              date: r?.date ?? undefined,
+              odometer: typeof r?.odometer === "number" ? r.odometer : undefined,
+              description: r?.description ?? undefined,
+              source: r?.location ?? undefined,
+            }))
+          : undefined),
+        error: "error" in carfax ? carfax.error : undefined,
+      }}
       localOe={localOe}
       mpd={mpd}
       latestRoNumber={latestRoNumber}

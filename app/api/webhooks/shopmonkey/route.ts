@@ -244,7 +244,7 @@ export async function POST(req: NextRequest) {
     // Bump dashboard freshness by invalidating any cached plan for this vehicle.
     if (order.vehicle?.vin) {
       try {
-        await invalidateCachedPlan(Number(shop.shopId), order.vehicle.vin);
+        await invalidateCachedPlan(db, order.vehicle.vin, Number(shop.shopId), "plan_cache_invalidate");
       } catch (err: any) {
         console.warn(`[Shopmonkey Webhook] plan-cache invalidate failed for order #${orderNumber}: ${err?.message}`);
       }

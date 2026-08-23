@@ -258,7 +258,7 @@ export default function VehicleDetailClient({
   distanceUnit = "miles"
 }: VehicleDetailClientProps) {
   const searchParams = useSearchParams();
-  const tabParam = searchParams.get("tab") as TabId | null;
+  const tabParam = searchParams?.get("tab") as TabId | null;
   const [activeTab, setActiveTab] = useState<TabId>(tabParam && ["oe", "dvi", "carfax", "specs"].includes(tabParam) ? tabParam : "oe");
   const [specsData, setSpecsData] = useState<VehicleSpecsGrouped | null>(null);
   const specsAttemptedVinRef = useRef<string | null>(null);

@@ -21,7 +21,7 @@ async function main() {
     max: 1,
     idle_timeout: 30,
     connect_timeout: 30,
-    connection: { statement_timeout: "600000" },
+    connection: { statement_timeout: 600000 },
   });
   const db = drizzle(client);
 

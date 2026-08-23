@@ -50,17 +50,20 @@
 // (DATAONE_DATABASE_URL, see lib/integrations/dataone-local.ts). If that
 // endpoint is connection-saturated, the decode still fails. Run off-peak.
 
+import type { Filter, Document, ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongo";
 import {
   enrichVinsWithAcesStrict,
+  enrichVinWithAces,
   extractTekmetricPcdb,
   extractShopWarePcdb,
 } from "@/lib/job-index-aces";
 import { pingDataOneDb } from "@/lib/integrations/dataone-local";
 import { extractJobIndexFromWorkOrder, upsertJobIndexEntries } from "@/lib/job-index";
 import { indexTekmetricWorkOrderJobs } from "@/lib/integrations/tekmetric/job-index";
-import { NormalizedIngestionService } from "@/lib/integrations/core/normalized-ingestion";
-import { shopWareAdapter } from "@/lib/integrations/shopware";
+import { extractShopwareJobIndex } from "@/lib/integrations/shopware/webhook-job-index";
+import { upsertShopwareJobIndexEntries } from "@/lib/data/repositories/shopware-cache";
+import type { ShopWareRepairOrder } from "@/lib/integrations/shopware/types";
 import { getDb as getPgDb } from "@/lib/db/drizzle";
 import { jobIndex as pgJobIndex } from "@/lib/db/schema/wave3";
 import { normalizedWorkOrders, normalizedVehicles } from "@/lib/db/schema/normalized";
@@ -134,12 +137,13 @@ async function findSourceWorkOrder(
   workOrderId: string,
 ): Promise<{ collection: string; doc: any } | null> {
   for (const src of SOURCE_COLLECTIONS) {
-    const doc = await db.collection(src.name).findOne({
+    const filter: Filter<Document> = {
       $and: [
         { $or: [{ shopId }, { shopId: String(shopId) }] },
-        { $or: [{ workOrderId }, { workOrderId: Number(workOrderId) }, { id: workOrderId }, { id: Number(workOrderId) }, { _id: workOrderId }] },
+        { $or: [{ workOrderId }, { workOrderId: Number(workOrderId) }, { id: workOrderId }, { id: Number(workOrderId) }, { _id: workOrderId as unknown as ObjectId }] },
       ],
-    });
+    };
+    const doc = await db.collection(src.name).findOne(filter);
     if (doc) return { collection: src.name, doc };
   }
   return null;
@@ -249,29 +253,28 @@ async function reindexFromSourceTables(
             reindexed++;
           }
         } else if (src.name === "shopware_repair_orders") {
-          // SW reindex via NormalizedIngestionService.writeToJobIndex (made
-          // public for this rebuild). We instantiate per shop with the
-          // Shop-Ware adapter, extract the service-job list from the raw RO
-          // payload, and write the missing job_index entries directly. This
-          // bypasses the full normalize pipeline (we don't need to upsert
-          // the underlying NWO/customer/vehicle rows again — those came in
-          // through the original SW sync) but still produces job_index
-          // entries with ACES + per-line PCDB attached via the existing
-          // dual-write code path.
-          const enterpriseId = (srcDoc.enterpriseId as string | undefined) ?? null;
-          const svc = new NormalizedIngestionService(
-            db,
-            "shopware" as any,
-            shopId,
-            enterpriseId,
-            {},
-            shopWareAdapter,
+          // SW reindex via the pure Shop-Ware job_index builder (the same one
+          // the live webhook route uses). We decode the RO VIN to ACES once and
+          // attach the IDs to every entry, then upsert. This bypasses the full
+          // normalize pipeline (we don't need to re-upsert the underlying
+          // NWO/customer/vehicle rows — those came in through the original SW
+          // sync) but still produces job_index entries with ACES + per-line
+          // PCDB attached.
+          const shopDoc = await db.collection("shops").findOne(
+            { shopId: { $in: [shopId, String(shopId)] } },
+            { projection: { "shopware.tenantId": 1 } },
           );
-          const sw = srcDoc.data || srcDoc;
-          const serviceJobs = shopWareAdapter.extractServiceJobsFromWorkOrder(sw);
-          if (serviceJobs.length > 0) {
-            await svc.writeToJobIndex(sw, serviceJobs);
-            reindexed++;
+          const tenantId = Number(shopDoc?.shopware?.tenantId);
+          const ro = (srcDoc.data || srcDoc) as ShopWareRepairOrder;
+          if (Number.isFinite(tenantId) && ro?.vehicle?.vin) {
+            const aces = await enrichVinWithAces(
+              ro.vehicle.vin.toUpperCase(),
+            ).catch(() => null);
+            const entries = extractShopwareJobIndex(shopId, ro, tenantId, aces);
+            if (entries.length > 0) {
+              await upsertShopwareJobIndexEntries(entries);
+              reindexed++;
+            }
           }
         }
       } catch (err) {

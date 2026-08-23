@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
           shopId: shop.shopId,
           shopName: shop.name,
           status: "error",
-          error: error.message
+          error: error instanceof Error ? error.message : String(error)
         });
       }
     }

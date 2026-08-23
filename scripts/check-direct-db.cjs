@@ -202,7 +202,6 @@ const ALLOWLIST = new Set([
   "app/api/external/appointments/route.ts",
   "app/api/external/recommendations/[vin]/route.ts",
   "app/api/external/shops/route.ts",
-  "app/api/external/vehicles/[vin]/maintenance/route.ts",
   "app/api/external/vehicles/[vin]/route.ts",
   "app/api/external/vehicles/[vin]/vhi/route.ts",
   "app/api/external/vhi/analyze/route.ts",

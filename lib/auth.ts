@@ -4,6 +4,7 @@ import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
+import { ObjectId } from "mongodb";
 import { getTestAuthFromHeaders, isTestAuthEnabled } from "@/lib/test-auth";
 import { isIdentityPgCanonical } from "@/lib/db/wave4-write-mode";
 import {
@@ -219,7 +220,15 @@ export async function getSession(): Promise<SessionInfo | null> {
   // raw driver shape but is read with the same accessors below.
   let sess:
     | MongoShapedSession
-    | { token: string; userId: unknown; shopId?: number; mustChangePassword?: boolean; expiresAt: Date }
+    | {
+        token: string;
+        userId: unknown;
+        shopId?: number;
+        mustChangePassword?: boolean;
+        isImpersonation?: boolean;
+        impersonatedBy?: string;
+        expiresAt: Date;
+      }
     | null = null;
   let user:
     | MongoShapedUser
@@ -232,17 +241,26 @@ export async function getSession(): Promise<SessionInfo | null> {
     if (!user) return devAutoLoginEnabled ? devSession : null;
   } else {
     const db = await getDb();
-    sess = await db.collection("sessions").findOne({
+    const mongoSess = await db.collection("sessions").findOne({
       token,
       expiresAt: { $gt: new Date() },
     });
+    sess = mongoSess as unknown as {
+      token: string;
+      userId: unknown;
+      shopId?: number;
+      mustChangePassword?: boolean;
+      isImpersonation?: boolean;
+      impersonatedBy?: string;
+      expiresAt: Date;
+    } | null;
     if (!sess) {
       // Stale cookie (session wiped, expired, or container restart). In dev, fall back to auto-login
       // so engineers don't have to manually clear cookies after every Mongo reset.
       return devAutoLoginEnabled ? devSession : null;
     }
     user = await db.collection("users").findOne(
-      { _id: sess.userId },
+      { _id: sess.userId as ObjectId },
       {
         projection: {
           email: 1,

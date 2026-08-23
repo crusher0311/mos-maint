@@ -144,7 +144,7 @@ export async function listRecommendationEvents(
   return col.find(filter).toArray();
 }
 
-export async function aggregateRecommendationEvents<T = Document>(
+export async function aggregateRecommendationEvents<T extends Document = Document>(
   pipeline: Document[],
 ): Promise<T[]> {
   const col = await eventsCollection();

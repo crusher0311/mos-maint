@@ -275,7 +275,7 @@ export async function GET(req: NextRequest) {
         { isPlatformAdmin: true, email: { $exists: true, $ne: null } },
         { projection: { email: 1 } },
       )
-      .toArray()) as Array<{ email: string }>;
+      .toArray()) as unknown as Array<{ email: string }>;
 
     if (admins.length === 0) {
       console.warn(

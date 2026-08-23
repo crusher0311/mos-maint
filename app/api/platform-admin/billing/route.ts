@@ -360,10 +360,13 @@ export async function PATCH(req: NextRequest) {
             expand: ["items.data.price.product"],
           });
 
+          const periodItem = subscription.items?.data?.[0];
+          const periodStart = periodItem?.current_period_start;
+          const periodEnd = periodItem?.current_period_end;
           stripeSubData = {
             status: subscription.status,
-            currentPeriodStart: subscription.current_period_start ? new Date(subscription.current_period_start * 1000) : null,
-            currentPeriodEnd: subscription.current_period_end ? new Date(subscription.current_period_end * 1000) : null,
+            currentPeriodStart: periodStart ? new Date(periodStart * 1000) : null,
+            currentPeriodEnd: periodEnd ? new Date(periodEnd * 1000) : null,
             cancelAtPeriodEnd: subscription.cancel_at_period_end,
           };
 

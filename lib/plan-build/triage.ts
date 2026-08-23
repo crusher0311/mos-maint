@@ -1304,7 +1304,7 @@ export function triage({
       category: cm.category,
       intervalMiles,
       intervalMonths,
-      last,
+      last: last ?? undefined,
       lastSource: last ? lastSource : null,
       dueAtMiles,
       dueAtDate,

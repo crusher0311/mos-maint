@@ -115,7 +115,7 @@ export async function runDataQualityCheck(shopId?: number): Promise<DataQualityR
   // 3. Find invalid VINs (not 17 characters)
   const invalidVins = await db.collection("vehicles").find({
     ...shopFilter,
-    vin: { $exists: true, $ne: null, $ne: "" },
+    vin: { $exists: true, $nin: [null, ""] },
     $expr: { $ne: [{ $strLenCP: "$vin" }, 17] }
   }).toArray();
 
@@ -155,7 +155,7 @@ export async function runDataQualityCheck(shopId?: number): Promise<DataQualityR
 
   // 5. Find duplicate emails
   const duplicateEmails = await db.collection("customers").aggregate([
-    { $match: { ...shopFilter, email: { $exists: true, $ne: null, $ne: "" } } },
+    { $match: { ...shopFilter, email: { $exists: true, $nin: [null, ""] } } },
     {
       $group: {
         _id: { email: "$email", shopId: "$shopId" },

@@ -878,12 +878,12 @@ export default function EstimateAssistPanel({
                   <span className="text-xs font-medium px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">
                     {String(est.category || "")}
                   </span>
-                  {est.safetyRelated && (
+                  {Boolean(est.safetyRelated) && (
                     <span className="text-xs font-medium px-2 py-0.5 bg-red-100 text-red-600 rounded-full">
                       Safety Related
                     </span>
                   )}
-                  {est.aiEnhanced && (
+                  {Boolean(est.aiEnhanced) && (
                     <span className="text-xs font-medium px-2 py-0.5 bg-purple-100 text-purple-600 rounded-full">
                       AI Enhanced
                     </span>
@@ -1017,7 +1017,7 @@ export default function EstimateAssistPanel({
                         <div>
                           <span className="font-medium text-gray-900">{String(job.title)}</span>
                           <span className="text-sm text-gray-500 ml-2">{String(job.category)}</span>
-                          {job.safetyRelated && (
+                          {Boolean(job.safetyRelated) && (
                             <span className="text-xs text-red-600 ml-2">Safety</span>
                           )}
                         </div>

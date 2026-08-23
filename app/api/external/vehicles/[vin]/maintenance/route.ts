@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createExternalEndpoint } from "@/lib/external-api/middleware";
-import { getDb } from "@/lib/mongo";
+import { classifyMaintenanceScheduleFailure } from "@/lib/external-api/maintenance-schedule";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,17 +20,22 @@ export const GET = createExternalEndpoint(
     
     const mileage = Number(req.nextUrl.searchParams.get("mileage")) || undefined;
     
-    const db = await getDb();
-    
     try {
-      const { getOEMMaintenanceSchedule } = await import("@/lib/dataone");
+      const { getMaintenanceSchedule } = await import("@/lib/integrations/dataone-api");
       
-      const schedule = await getOEMMaintenanceSchedule(vin, mileage);
-      
-      if (!schedule) {
+      const schedule = await getMaintenanceSchedule(vin);
+
+      const failure = classifyMaintenanceScheduleFailure(schedule);
+      if (failure) {
         return NextResponse.json(
-          { error: "Maintenance schedule not found for this VIN" },
-          { status: 404 }
+          {
+            error:
+              failure.status === 404
+                ? "Maintenance schedule not found for this VIN"
+                : "Failed to fetch maintenance schedule",
+            message: failure.error,
+          },
+          { status: failure.status },
         );
       }
       

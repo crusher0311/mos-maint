@@ -47,7 +47,7 @@ async function run() {
   console.log("middleware extension-backend allowlist smoke (Task #734)");
 
   // Don't let DEV_AUTO_LOGIN mask the short-circuit branch.
-  process.env.NODE_ENV = "production";
+  (process.env as Record<string, string | undefined>).NODE_ENV = "production";
   delete process.env.DEV_AUTO_LOGIN;
 
   // (1) Allowlisted extension-backend routes must NOT be 401'd by the

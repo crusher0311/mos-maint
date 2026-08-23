@@ -25,7 +25,7 @@
  *   - TEKMETRIC_WEBHOOK_PUBLIC_URL=https://<your-domain>/api/webhooks/tekmetric
  */
 
-import { getValidAccessToken } from "@/lib/integrations/tekmetric/auth";
+import { getValidToken } from "@/lib/integrations/tekmetric/auth";
 import { upsertWebhookSubscription } from "@/lib/data/repositories/tekmetric-ops";
 
 const DEFAULT_EVENTS = [
@@ -82,7 +82,7 @@ export async function subscribeShopToTekmetricWebhooks(opts: {
 
   let token: string;
   try {
-    token = await (deps.getToken ? deps.getToken() : getValidAccessToken());
+    token = await (deps.getToken ? deps.getToken() : getValidToken());
   } catch (err: any) {
     return { ok: false, reason: `auth_failed: ${err?.message || "unknown"}` };
   }

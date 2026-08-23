@@ -46,7 +46,7 @@ async function run() {
   console.log("middleware static-asset bypass smoke (task #507)");
 
   // Don't let DEV_AUTO_LOGIN mask the auth-redirect branch.
-  process.env.NODE_ENV = "production";
+  (process.env as Record<string, string | undefined>).NODE_ENV = "production";
   delete process.env.DEV_AUTO_LOGIN;
 
   // (1) Static assets from public/ must NOT match the matcher — Next.js

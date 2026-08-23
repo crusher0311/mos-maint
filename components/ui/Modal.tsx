@@ -147,7 +147,7 @@ export function ConfirmModal({
 
   const buttonVariants = {
     danger: 'danger' as const,
-    warning: 'warning' as const,
+    warning: 'primary' as const,
     info: 'primary' as const
   };
 

@@ -35,7 +35,7 @@ async function collection(): Promise<Collection<AutoVitalsVehicleCacheDoc>> {
   return db.collection<AutoVitalsVehicleCacheDoc>(COLLECTION);
 }
 
-export interface AutoVitalsVehicleUpsertInput {
+export type AutoVitalsVehicleUpsertInput = {
   vehicleId: number;
   vin?: string;
   year?: number;

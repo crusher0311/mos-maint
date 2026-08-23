@@ -49,9 +49,9 @@ export async function GET(req: NextRequest) {
   try {
     const result = await fetchPendingDviLinks(LINKS_PER_RUN);
     return NextResponse.json({
+      ...result,
       ok: true,
       durationMs: Date.now() - started,
-      ...result,
     });
   } catch (e: any) {
     console.error(`[DviLinks] cron fetch pass failed: ${e?.message || e}`);

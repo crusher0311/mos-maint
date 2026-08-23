@@ -233,7 +233,7 @@ export async function POST(req: NextRequest, ctx: { params: { token: string } })
               vin: woVin,
               shopId,
               provider: "protractor",
-              roNumber: result.workOrder.WorkOrderNumber || objectId,
+              roNumber: String(result.workOrder.WorkOrderNumber || objectId),
               mileage: woMileageCreate,
               source: "webhook",
             }).catch((err: any) =>
@@ -250,7 +250,7 @@ export async function POST(req: NextRequest, ctx: { params: { token: string } })
               workOrderId: objectId
             });
             
-            if (savedWO?.packageSummaries?.length > 0) {
+            if (savedWO && savedWO.packageSummaries?.length > 0) {
               const attribution = await attributeRevenueFromWorkOrder(
                 shopId,
                 objectId,
@@ -309,7 +309,7 @@ export async function POST(req: NextRequest, ctx: { params: { token: string } })
               vin,
               shopId,
               provider: "protractor",
-              roNumber: result.workOrder.WorkOrderNumber || objectId,
+              roNumber: String(result.workOrder.WorkOrderNumber || objectId),
               mileage: woMileage,
               authorizedJobs,
               source: "webhook",

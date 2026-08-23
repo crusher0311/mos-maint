@@ -23,7 +23,7 @@ const baseTargetVehicle = {
   model: "Accord",
 };
 
-function specs(over: Partial<VehicleSpecs>): VehicleSpecs {
+function specs(over: Partial<VehicleSpecs> & Record<string, unknown>): VehicleSpecs {
   return {
     year: 2018,
     make: "honda",

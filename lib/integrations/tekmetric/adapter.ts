@@ -1,4 +1,4 @@
-import { findShopByShopId } from '@/lib/data/repositories/shops';
+import { findShopByShopId, type ShopDoc } from '@/lib/data/repositories/shops';
 import type { 
   IIntegrationAdapter, 
   IntegrationConfig,
@@ -24,7 +24,7 @@ import {
 import { transformVehicle, transformRepairOrder, transformCannedJob } from './transform';
 import { resolveShopDistanceUnit } from '@/lib/shop-distance-unit';
 
-interface TekmetricShopDoc {
+interface TekmetricShopDoc extends ShopDoc {
   shopId: number | string;
   integrationProvider?: string | null;
   smsProvider?: string | null;

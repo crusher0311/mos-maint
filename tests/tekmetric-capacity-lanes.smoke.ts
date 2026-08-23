@@ -35,7 +35,7 @@ import {
 } from "../lib/integrations/tekmetric/shared-rate-limiter";
 import { hasBackgroundCredentials } from "../lib/integrations/tekmetric/auth";
 import { resolveAuthLane } from "../lib/integrations/tekmetric/client";
-import { makeFakeDb } from "./utils/fake-mongo";
+import { makeFakeDb, type Doc } from "./utils/fake-mongo";
 
 let failed = 0;
 function ok(name: string, cond: boolean, detail?: string) {
@@ -57,8 +57,9 @@ function withLimiterFakeDb() {
       let doc = data.find((d: any) => d._id === id);
       if (!doc) {
         if (!opts?.upsert) return null;
-        doc = { _id: id, ...(update.$setOnInsert || {}), ...(update.$set || {}) };
-        data.push(doc);
+        const created: Doc = { _id: id, ...(update.$setOnInsert || {}), ...(update.$set || {}) };
+        doc = created;
+        data.push(created);
       }
       for (const [k, v] of Object.entries(update.$inc || {})) {
         doc[k] = (Number(doc[k]) || 0) + Number(v);

@@ -44,7 +44,7 @@ function jsonPost(url: string, body: unknown): NextRequest {
   });
 }
 
-async function expect401(name: string, resPromise: Promise<Response>) {
+async function expect401(name: string, resPromise: Response | Promise<Response>) {
   let res: Response;
   try {
     res = await resPromise;

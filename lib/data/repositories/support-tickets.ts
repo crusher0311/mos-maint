@@ -274,7 +274,7 @@ async function updateManySupportTicketsMongo(
   return { matchedCount: res.matchedCount, modifiedCount: res.modifiedCount };
 }
 
-export async function aggregateSupportTickets<T = Document>(
+export async function aggregateSupportTickets<T extends Document = Document>(
   pipeline: Document[],
 ): Promise<T[]> {
   if (isSupportTicketsPgCanonical()) {
@@ -283,7 +283,7 @@ export async function aggregateSupportTickets<T = Document>(
   return aggregateSupportTicketsMongo<T>(pipeline);
 }
 
-async function aggregateSupportTicketsMongo<T = Document>(
+async function aggregateSupportTicketsMongo<T extends Document = Document>(
   pipeline: Document[],
 ): Promise<T[]> {
   const col = await collection();

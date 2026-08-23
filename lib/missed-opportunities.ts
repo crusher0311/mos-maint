@@ -77,8 +77,8 @@ export interface MissedOpportunitySummary {
 export function planItemsFromBuckets(
   buckets:
     | {
-        overdue?: Array<Record<string, unknown>> | null;
-        dueSoon?: Array<Record<string, unknown>> | null;
+        overdue?: ReadonlyArray<unknown> | null;
+        dueSoon?: ReadonlyArray<unknown> | null;
       }
     | null
     | undefined,

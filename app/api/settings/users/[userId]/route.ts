@@ -180,7 +180,7 @@ export async function PATCH(
         allowedShopIds = enterpriseShops.map(s => String(s.shopId));
       }
       
-      const invalidShopIds = requestedShopIds.filter(id => !allowedShopIds.includes(id));
+      const invalidShopIds = requestedShopIds.filter((id: string) => !allowedShopIds.includes(id));
       if (invalidShopIds.length > 0) {
         return NextResponse.json({ 
           error: "Cannot assign user to shops outside your enterprise" 

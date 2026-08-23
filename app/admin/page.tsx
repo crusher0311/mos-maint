@@ -163,7 +163,7 @@ export default async function AdminDashboard() {
               <div className="flow-root">
                 <ul className="-mb-8">
                   {stats.recentEvents.map((event, eventIdx) => (
-                    <li key={event._id}>
+                    <li key={String(event._id)}>
                       <div className="relative pb-8">
                         {eventIdx !== stats.recentEvents.length - 1 ? (
                           <span

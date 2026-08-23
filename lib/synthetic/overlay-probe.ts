@@ -370,13 +370,14 @@ export async function runOverlayProbe(
       latencyMs: Date.now() - t0,
     };
   } finally {
+    type StandInServer = Awaited<ReturnType<typeof startStandInServer>>;
     try {
-      if (browser) await browser.close();
+      if (browser) await (browser as Browser).close();
     } catch {
       /* ignore */
     }
     try {
-      if (server) await server.close();
+      if (server) await (server as StandInServer).close();
     } catch {
       /* ignore */
     }

@@ -30,7 +30,7 @@ async function collection(): Promise<Collection<AutoVitalsInspectionCacheDoc>> {
   return db.collection<AutoVitalsInspectionCacheDoc>(COLLECTION);
 }
 
-export interface AutoVitalsInspectionUpsertInput {
+export type AutoVitalsInspectionUpsertInput = {
   appointmentId: number;
   inspectionResultId?: number;
   completedAt?: string;

@@ -1,3 +1,4 @@
+import type { IndexSpecification } from "mongodb";
 import { getDb } from "../lib/mongo";
 
 async function createIndexes() {
@@ -7,7 +8,7 @@ async function createIndexes() {
 
   console.log("[Indexes] Creating indexes on job_index collection...");
 
-  const indexes = [
+  const indexes: Array<{ keys: IndexSpecification; name: string }> = [
     { keys: { shopId: 1, "job.keywords": 1 }, name: "shopId_keywords" },
     { keys: { shopId: 1, performedAt: -1 }, name: "shopId_performedAt" },
     { keys: { shopId: 1, "vehicle.make": 1, "vehicle.model": 1 }, name: "shopId_make_model" },

@@ -2,8 +2,11 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "./schema";
 
+type Schema = typeof schema;
+type Database = ReturnType<typeof drizzle<Schema>>;
+
 let _client: ReturnType<typeof postgres> | null = null;
-let _db: ReturnType<typeof drizzle> | null = null;
+let _db: Database | null = null;
 
 function getConnectionString(): string {
   const url = process.env.DATAONE_DATABASE_URL || process.env.DATABASE_URL;
@@ -27,7 +30,7 @@ export function getClient(): ReturnType<typeof postgres> {
   return _client;
 }
 
-export function getDb() {
+export function getDb(): Database {
   if (!_db) {
     _db = drizzle(getClient(), { schema });
   }

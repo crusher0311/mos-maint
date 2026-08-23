@@ -31,7 +31,7 @@ export const GET = createExternalEndpoint(
       const cachedRecs = await getRecommendationsCacheDoc(shopId, vin, db);
       
       if (cachedRecs && !includeAI) {
-        const cacheAge = Date.now() - new Date(cachedRecs.updatedAt).getTime();
+        const cacheAge = Date.now() - new Date(cachedRecs.updatedAt as string | number | Date).getTime();
         const maxAge = 24 * 60 * 60 * 1000;
         
         if (cacheAge < maxAge) {
@@ -48,7 +48,7 @@ export const GET = createExternalEndpoint(
       const { getMaintenanceRecommendations } = await import("@/lib/recommendations");
       
       const recommendations = await getMaintenanceRecommendations(vin, {
-        shopId,
+        shopId: String(shopId),
         mileage,
         includeAI,
       });

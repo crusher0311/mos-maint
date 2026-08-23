@@ -88,19 +88,20 @@ export async function pgUpsertCachedPlan(
   doc: Omit<PgCachedPlanDoc, "vin" | "shopId">,
 ): Promise<void> {
   const db = getDb();
+  const createdAt = doc.createdAt as Date;
   const payload = {
     mileage: doc.mileage ?? null,
     plan: doc.plan,
-    createdAt: doc.createdAt,
+    createdAt,
     expiresAt: doc.expiresAt,
     schemaVersion: doc.schemaVersion,
   };
   await db
     .insert(cachedPlans)
-    .values({ shopId, vin: vin.toUpperCase(), payload, cachedAt: doc.createdAt })
+    .values({ shopId, vin: vin.toUpperCase(), payload, cachedAt: createdAt })
     .onConflictDoUpdate({
       target: [cachedPlans.shopId, cachedPlans.vin],
-      set: { payload, cachedAt: doc.createdAt },
+      set: { payload, cachedAt: createdAt },
     });
 }
 

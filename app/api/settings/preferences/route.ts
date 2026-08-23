@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
 import { getEnterpriseByShopId } from "@/lib/enterprise";
-import { isOverrideUnit } from "@/lib/shop-distance-unit";
+import { isOverrideUnit, type ShopDistanceDoc } from "@/lib/shop-distance-unit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -94,7 +94,7 @@ export async function PUT(req: NextRequest) {
   // following its location. This is the deliberate-intent flag the resolver
   // (resolveShopDistanceUnit) honors above country.
   if (distanceUnit) {
-    const shopForGuard = await db.collection("shops").findOne(
+    const shopForGuard = await db.collection<ShopDistanceDoc>("shops").findOne(
       { shopId: Number(sess.shopId) },
       { projection: { integrationProvider: 1, smsProvider: 1, geo: 1 } }
     );

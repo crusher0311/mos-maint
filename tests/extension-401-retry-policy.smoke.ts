@@ -84,6 +84,7 @@ function loadHandler() {
     mosApiToken: null,
     mosApiUrl: "http://test",
     _stateReady: Promise.resolve(),
+    ensureBootstrapBoundToActiveTab: async () => {},
     handleMosLogin: async () => { throw new Error("re-auth disabled"); },
   };
   vm.createContext(context);
@@ -110,7 +111,7 @@ async function run() {
   {
     const ctx = loadHandler();
     ctx.mosApiToken = "ext_keep_me";
-    let removed = false;
+    let removed: boolean = false;
     ctx.chrome.storage.local.remove = (_k: any, cb?: any) => { removed = true; if (cb) cb(); };
     let calls = 0;
     ctx.fetch = async () => {
@@ -129,7 +130,7 @@ async function run() {
   {
     const ctx = loadHandler();
     ctx.mosApiToken = "ext_doomed";
-    let removed = false;
+    let removed = Boolean(false);
     ctx.chrome.storage.local.remove = (_k: any, cb?: any) => { removed = true; if (cb) cb(); };
     ctx.fetch = async () => makeJsonResponse(401, { error: "x", code: "TOKEN_INVALID" });
     let threw: any = null;
@@ -145,7 +146,7 @@ async function run() {
   {
     const ctx = loadHandler();
     ctx.mosApiToken = "ext_keep_me_through_blip";
-    let removed = false;
+    let removed: boolean = false;
     ctx.chrome.storage.local.remove = (_k: any, cb?: any) => { removed = true; if (cb) cb(); };
     ctx.fetch = async () => makeJsonResponse(401, { error: "x", code: "AUTH_LOOKUP_FAILED" });
     let threw: any = null;
@@ -169,7 +170,7 @@ async function run() {
   {
     const ctx = loadHandler();
     ctx.mosApiToken = "ext_expired_doomed";
-    let removed = false;
+    let removed = Boolean(false);
     ctx.chrome.storage.local.remove = (_k: any, cb?: any) => { removed = true; if (cb) cb(); };
     ctx.fetch = async () => makeJsonResponse(401, { error: "x", code: "TOKEN_EXPIRED" });
     let threw: any = null;
@@ -185,7 +186,7 @@ async function run() {
   {
     const ctx = loadHandler();
     ctx.mosApiToken = "ext_expired_blip_keep";
-    let removed = false;
+    let removed: boolean = false;
     ctx.chrome.storage.local.remove = (_k: any, cb?: any) => { removed = true; if (cb) cb(); };
     let calls = 0;
     ctx.fetch = async () => {
@@ -203,7 +204,7 @@ async function run() {
   {
     const ctx = loadHandler();
     ctx.mosApiToken = "ext_shop_forbidden_keep";
-    let removed = false;
+    let removed: boolean = false;
     ctx.chrome.storage.local.remove = (_k: any, cb?: any) => { removed = true; if (cb) cb(); };
     ctx.fetch = async () => makeJsonResponse(401, { error: "x", code: "SHOP_FORBIDDEN" });
     let threw: any = null;
@@ -224,7 +225,7 @@ async function run() {
   {
     const ctx = loadHandler();
     ctx.mosApiToken = "ext_503";
-    let removed = false;
+    let removed: boolean = false;
     ctx.chrome.storage.local.remove = (_k: any, cb?: any) => { removed = true; if (cb) cb(); };
     ctx.fetch = async () => makeJsonResponse(503, { error: "down", code: "AUTH_LOOKUP_FAILED" });
     let threw: any = null;
@@ -269,7 +270,7 @@ async function run() {
     // (5b) widened budget rides the same blip out to success.
     const ctx = loadHandler();
     ctx.mosApiToken = "ext_wide_budget";
-    let removed = false;
+    let removed: boolean = false;
     ctx.chrome.storage.local.remove = (_k: any, cb?: any) => { removed = true; if (cb) cb(); };
     let calls = 0;
     ctx.fetch = async () => {
@@ -291,7 +292,7 @@ async function run() {
     // widened budget — TOKEN_INVALID persists, so the token is cleared.
     const ctx = loadHandler();
     ctx.mosApiToken = "ext_wide_but_dead";
-    let removed = false;
+    let removed = Boolean(false);
     ctx.chrome.storage.local.remove = (_k: any, cb?: any) => { removed = true; if (cb) cb(); };
     ctx.fetch = async () => makeJsonResponse(401, { error: "x", code: "TOKEN_INVALID" });
     let threw: any = null;

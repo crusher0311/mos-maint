@@ -13,7 +13,15 @@ export interface PushToROEvent {
   vehicleMake?: string;
   vehicleModel?: string;
   jobTitle: string;
-  jobSource: "plan" | "failures" | "lookup" | "canned" | "autocomplete" | "deferred";
+  jobSource:
+    | "plan"
+    | "failures"
+    | "lookup"
+    | "canned"
+    | "autocomplete"
+    | "deferred"
+    | "extension_protractor"
+    | "canned_extension_protractor";
   repairOrderId?: string;
   laborAmount?: number;
   partsAmount?: number;

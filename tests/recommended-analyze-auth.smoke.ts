@@ -19,6 +19,7 @@ import {
   POST,
   __deps,
 } from "../app/api/recommended/analyze/route";
+import { ObjectId } from "mongodb";
 
 // ---------------------------------------------------------------------------
 // Test harness
@@ -72,7 +73,10 @@ function stubOk(loggedShopIds: number[], budgetShopIds: number[]) {
     return null; // not blocked
   };
   __deps.callOpenAIFn = async () => ({ ok: true, text: `\`\`\`json\n${AI_RESPONSE_JSON}\n\`\`\`` });
-  __deps.logUsage = async ({ shopId }: any) => { loggedShopIds.push(Number(shopId)); };
+  __deps.logUsage = async ({ shopId }) => {
+    loggedShopIds.push(Number(shopId));
+    return { acknowledged: true, insertedId: new ObjectId() };
+  };
   __deps.trackApiRequest = (async () => {}) as any;
 }
 

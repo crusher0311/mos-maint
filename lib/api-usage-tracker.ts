@@ -214,7 +214,7 @@ export async function acquireDistributedRateLimitSlot(
   
   if (isCircuitBreakerOpen(bucketId)) {
     const state = circuitBreakerState[bucketId];
-    const remainingMs = state.openUntil - Date.now();
+    const remainingMs = (state?.openUntil ?? Date.now()) - Date.now();
     console.log(`[CircuitBreaker] ${bucketId} circuit open, skipping request (${Math.round(remainingMs/1000)}s remaining)`);
     return { acquired: false, waitedMs: 0, currentCount: limitPerMinute, circuitOpen: true };
   }
@@ -445,15 +445,16 @@ export async function getApiUsageStats(provider?: ApiProvider): Promise<Provider
       // Build display name: "Shop Name (Location)" or just "Shop Name"
       const displayName = shop.locationIdentifier 
         ? `${shop.name} (${shop.locationIdentifier})`
-        : shop.name;
+        : shop.name ?? "";
       
       // Map by MOS shopId
-      if (shop.shopId) {
-        shopNameMap.set(shop.shopId, displayName);
+      if (shop.shopId != null && shop.shopId !== "") {
+        shopNameMap.set(Number(shop.shopId), displayName);
       }
       // Also map by Tekmetric shop ID
-      const tekShopId = shop.tekmetric?.shopId || shop.tekmetricShopId;
-      if (tekShopId) {
+      const tekmetric = shop.tekmetric as { shopId?: number | string } | undefined;
+      const tekShopId = tekmetric?.shopId ?? (shop.tekmetricShopId as number | string | undefined);
+      if (tekShopId != null && tekShopId !== "") {
         shopNameMap.set(Number(tekShopId), displayName);
       }
     }
@@ -670,8 +671,8 @@ export async function getErrorDetails(query: DrillDownQuery): Promise<{
     errors: errors.map(e => ({
       _id: e._id?.toString(),
       timestamp: e.timestamp,
-      provider: e.provider,
-      shopId: e.shopId,
+      provider: e.provider as ApiProvider,
+      shopId: e.shopId ?? undefined,
       shopName: e.shopName,
       endpoint: e.endpoint,
       method: e.method,
@@ -743,8 +744,8 @@ export async function getShopRequests(
     requests: requests.map(r => ({
       _id: r._id?.toString(),
       timestamp: r.timestamp,
-      provider: r.provider,
-      shopId: r.shopId,
+      provider: r.provider as ApiProvider,
+      shopId: r.shopId ?? undefined,
       shopName: r.shopName,
       endpoint: r.endpoint,
       method: r.method,
@@ -774,8 +775,8 @@ export async function getRequestById(requestId: string): Promise<ErrorRecord | n
   return {
     _id: record._id?.toString(),
     timestamp: record.timestamp,
-    provider: record.provider,
-    shopId: record.shopId,
+    provider: record.provider as ApiProvider,
+    shopId: record.shopId ?? undefined,
     shopName: record.shopName,
     endpoint: record.endpoint,
     method: record.method,

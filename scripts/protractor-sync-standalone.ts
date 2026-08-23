@@ -44,7 +44,7 @@ import {
   upsertProtractorWorkOrderSnapshot,
   upsertProtractorVehicleSnapshot,
 } from "../lib/integrations/protractor";
-import { NormalizedIngestionService } from "../lib/normalized-ingestion";
+import { NormalizedIngestionService } from "../lib/integrations/core/normalized-ingestion";
 import pLimit from "p-limit";
 
 const BASE_SYNC_INTERVAL_MS = 60 * 1000; // 60 seconds for standalone

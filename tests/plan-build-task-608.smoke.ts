@@ -144,8 +144,6 @@ const buckets = triage({
   today,
   dviFindings: [],
   vehicleYear: 2014,
-  shopId: 100,
-  carfaxStatus: "ok" as any,
 });
 
 const allRows = [

@@ -37,7 +37,7 @@ export async function GET(
 
     // Wave 1 (task #342): viewed_vins count is canonical in Postgres.
     const { pgGetViewedVinCount } = await import("@/lib/db/repositories/wave1");
-    const vinViewCount = await pgGetViewedVinCount(shopId);
+    const vinViewCount = await pgGetViewedVinCount(Number(shopId));
 
     const trialEndsAtRaw = shop.trial?.endsAt || shop.trialEndsAt || null;
     const trialEndsAt = trialEndsAtRaw ? new Date(trialEndsAtRaw) : null;
@@ -516,7 +516,7 @@ export async function DELETE(
     // W4 cutover (#346): mirror revocation into PG so the deleted
     // shop's sessions can't survive against the PG-canonical reader.
     await dualWritePgIdentity("sessions.delete(shop-delete)", () =>
-      pgDeleteSessionsByShopId(shopId),
+      pgDeleteSessionsByShopId(Number(shopId)),
     );
 
     await db.collection("audit_logs").insertOne({

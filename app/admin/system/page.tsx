@@ -21,7 +21,7 @@ async function getSystemHealth() {
           const indexes = await db.collection(name).indexes();
           return { name, count, indexCount: indexes.length, status: 'healthy' };
         } catch (error) {
-          return { name, count: 0, indexCount: 0, status: 'error', error: error.message };
+          return { name, count: 0, indexCount: 0, status: 'error', error: error instanceof Error ? error.message : String(error) };
         }
       })
     );
@@ -59,7 +59,7 @@ async function getSystemHealth() {
     return {
       database: {
         connected: false,
-        error: error.message
+        error: error instanceof Error ? error.message : String(error)
       },
       activity: {
         recentEvents: 0,

@@ -98,7 +98,9 @@ export async function listUsers(
  */
 export async function listExtensionBootstrapCandidateUsers(): Promise<UserDoc[]> {
   if (isIdentityPgCanonical()) {
-    const rows = (await pg.listUsersByPredicate({})).filter(Boolean) as UserDoc[];
+    const rows = (await pg.listUsersByPredicate({})).filter(
+      (u): u is NonNullable<typeof u> => Boolean(u),
+    ) as unknown as UserDoc[];
     return rows.map((row) => {
       const {
         password,

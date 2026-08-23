@@ -140,7 +140,7 @@ export async function getAdminAuditLogsCursor(
  * roll-ups that would explode the repository surface if expressed as
  * named functions for every variant.
  */
-export async function aggregateAdminAuditLogs<T = Document>(
+export async function aggregateAdminAuditLogs<T extends Document = Document>(
   pipeline: Document[],
 ): Promise<T[]> {
   const col = await adminAuditLogsCollection();

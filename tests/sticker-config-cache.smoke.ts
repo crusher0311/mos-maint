@@ -28,7 +28,7 @@ function check(name: string, cond: boolean) {
   }
 }
 
-const quietLog = { warn: () => {}, error: () => {}, log: () => {} };
+const quietLog = { warn: () => {}, error: () => {}, log: () => {} } as unknown as Console;
 
 function makeStorage(initial: Record<string, any> = {}) {
   const store: Record<string, any> = { ...initial };

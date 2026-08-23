@@ -121,7 +121,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       message: "DVI data synced successfully",
-      inspectionId: insertedId.toString(),
+      inspectionId: String(insertedId),
       itemsCount: inspection?.results?.length || 0,
       immediateCount,
       cautionCount,

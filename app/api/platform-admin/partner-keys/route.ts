@@ -113,7 +113,7 @@ export async function POST(req: NextRequest) {
       partnerId,
       partnerName,
       perms,
-      session.email || session.userId || "platform_admin",
+      session.email || "platform_admin",
       {
         rateLimitTier: "enterprise",
         rateLimit: rateLimit ? Number(rateLimit) : undefined,

@@ -3,7 +3,12 @@
 
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getFeatureEntitlements, FEATURE_KEYS, FEATURE_METADATA } from "@/lib/featureResolver";
+import {
+  getFeatureEntitlements,
+  FEATURE_KEYS,
+  FEATURE_METADATA,
+  isTrialBillingStatus,
+} from "@/lib/featureResolver";
 import { FEATURES } from "@/lib/features";
 import { getDb } from "@/lib/mongo";
 
@@ -34,7 +39,8 @@ export async function GET() {
   const trialDaysLeft = trialEndsAt
     ? Math.max(0, Math.ceil((trialEndsAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000)))
     : null;
-  const trialActive = !!trialEndsAt && (entitlements.billing.status === "trial" || entitlements.billing.status === "trialing");
+  const trialActive =
+    !!trialEndsAt && isTrialBillingStatus(entitlements.billing.status);
 
   const enabledFeatureIds: string[] = [];
   for (const key of FEATURE_KEYS) {

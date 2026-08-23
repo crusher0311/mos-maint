@@ -76,7 +76,7 @@ async function main() {
   for (let i = 0; i < 3; i++) {
     await recordRoundResults({
       db: fake.db as any,
-      shopId: 42,
+      mosShopId: 42,
       symptomCategory: "BRAKES",
       results: [
         { question: "Are any warning lights on?", answered: i === 0 },
@@ -107,7 +107,7 @@ async function main() {
   section("getSkipHints — guardrail + ranking");
   const hints42 = await getSkipHints({
     db: fake.db as any,
-    shopId: 42,
+    mosShopId: 42,
     symptomCategory: "BRAKES",
   });
   ok(
@@ -124,7 +124,7 @@ async function main() {
       // Only asked twice — under MIN_ASKED_FOR_HIGH_SKIP=3 — so should NOT surface.
       await recordRoundResults({
         db: fake.db as any,
-        shopId: 42,
+        mosShopId: 42,
         symptomCategory: "BRAKES",
         results: [
           { question: "Does the brake pedal feel different?", answered: false },
@@ -133,7 +133,7 @@ async function main() {
       });
       const h = await getSkipHints({
         db: fake.db as any,
-        shopId: 42,
+        mosShopId: 42,
         symptomCategory: "BRAKES",
       });
       return !h.avoid.some((a) => /pedal feel different/i.test(a.question));
@@ -149,7 +149,7 @@ async function main() {
   for (let i = 0; i < 3; i++) {
     await recordRoundResults({
       db: fake.db as any,
-      shopId: 77,
+      mosShopId: 77,
       symptomCategory: "BRAKES",
       results: [{ question: "Are any warning lights on?", answered: false }],
     });

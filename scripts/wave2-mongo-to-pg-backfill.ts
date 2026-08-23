@@ -206,7 +206,7 @@ async function streamCollection<T extends MongoDoc>(
   let buf: T[] = [];
   let total = skip;
   for await (const doc of cursor) {
-    buf.push(doc);
+    buf.push(doc as T);
     if (buf.length >= batch) {
       await handler(buf);
       total += buf.length;

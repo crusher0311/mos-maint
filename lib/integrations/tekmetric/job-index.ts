@@ -98,7 +98,10 @@ export type TekmetricJobIndexEntry = {
     totalAmount: number;
   };
   
-  metadata: {
+  // Populated on write via dot-path `metadata.*` $set/$setOnInsert (see the
+  // updateOne calls below), never as part of the in-memory entry literal, so
+  // it's optional on the entry type.
+  metadata?: {
     indexedAt: Date;
     sourceType: "tekmetric";
   };

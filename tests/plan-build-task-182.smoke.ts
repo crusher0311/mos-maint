@@ -55,15 +55,13 @@ const lightDutySpecs: VehicleSpecs = {
   bodyType: "Sedan",
   driveType: "FWD",
   displacement: 1.5,
-  fuelType: "gas",
-};
+  fuelType: "gas", acesVehicleId: null, acesEngineId: null, submodelKey: null, };
 const heavyDutySpecs: VehicleSpecs = {
   gvwrBand: "heavy",
   bodyType: "Pickup",
   driveType: "4WD",
   displacement: 6.7,
-  fuelType: "diesel",
-};
+  fuelType: "diesel", acesVehicleId: null, acesEngineId: null, submodelKey: null, };
 
 // ---------- 1. Same-VIN fast path ----------
 {
@@ -144,12 +142,10 @@ const heavyDutySpecs: VehicleSpecs = {
   // fuel must also survive the fuel gate.
   const tGasSpecs: VehicleSpecs = {
     gvwrBand: "light", bodyType: "Sedan", driveType: "FWD",
-    displacement: 1.5, fuelType: "gas",
-  };
+    displacement: 1.5, fuelType: "gas", acesVehicleId: null, acesEngineId: null, submodelKey: null, };
   const jDieselSpecs: VehicleSpecs = {
     gvwrBand: "light", bodyType: "Sedan", driveType: "FWD",
-    displacement: 1.5, fuelType: "diesel",
-  };
+    displacement: 1.5, fuelType: "diesel", acesVehicleId: null, acesEngineId: null, submodelKey: null, };
   const fuelSpecsDisagreement = scoreJob(
     donor, target, tGasSpecs, jDieselSpecs, "brake", { now: FIXED_NOW },
   );
@@ -291,8 +287,7 @@ const heavyDutySpecs: VehicleSpecs = {
     bodyType: "Pickup",
     driveType: "4WD",
     displacement: 5.0,
-    fuelType: "gas",
-  };
+    fuelType: "gas", acesVehicleId: null, acesEngineId: null, submodelKey: null, };
   // Task #364: the fuel safety gate now only fires for powertrain donor
   // jobs (a brake job on a diesel truck is the same brake job whether the
   // target burns gas or diesel). So we use a powertrain donor here to
@@ -499,8 +494,7 @@ const heavyDutySpecs: VehicleSpecs = {
     bodyType: "Pickup",
     driveType: "4WD",
     displacement: 5.0,
-    fuelType: "gas",
-  };
+    fuelType: "gas", acesVehicleId: null, acesEngineId: null, submodelKey: null, };
   const crossScored = scoreJob(crossDonor, crossTarget, lightTargetSpecs, crossSpecs, "brake", {
     now: FIXED_NOW,
     currentShopId: 25,

@@ -130,7 +130,7 @@ export async function updateRepairPattern(
         lastPerformed: sql`GREATEST(${shopRepairPatterns.lastPerformed}, ${params.performedDate})`,
         firstPerformed: sql`LEAST(${shopRepairPatterns.firstPerformed}, ${params.performedDate})`,
         vinsSeen: vinAppend,
-      } as Partial<typeof shopRepairPatterns.$inferInsert>,
+      },
     });
 }
 

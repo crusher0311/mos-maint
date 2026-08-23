@@ -38,7 +38,7 @@ function ok(name: string, cond: boolean, detail?: string) {
 // Shared fakes
 // ------------------------------------------------------------------
 
-const SESSION = { email: "advisor@shop.test", shopId: 42, role: "admin" };
+const SESSION = { token: "sess-token", email: "advisor@shop.test", shopId: 42, role: "admin" };
 
 function jsonReq(url: string, body: any, headers: Record<string, string> = {}) {
   return new NextRequest(`http://localhost${url}`, {

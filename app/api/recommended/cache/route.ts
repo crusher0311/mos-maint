@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         ok: true,
         cached: true,
-        ...cached.result
+        ...(cached.result as Record<string, unknown> | undefined ?? {})
       });
     }
 

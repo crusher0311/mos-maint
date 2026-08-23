@@ -185,7 +185,6 @@ async function run() {
         _id: "u3",
         email: "ok@b.com",
         extensionToken: "ext_ok_token",
-        // @ts-expect-error: extra fields ignored by our fake
         shopId: 1,
         shopIds: [1],
       } as any,

@@ -93,6 +93,7 @@ export async function getTargetedUsers(target: AnnouncementTarget): Promise<Anno
         { email: 1, shopId: 1 },
       );
       for (const user of users) {
+        if (!user.email || !user._id) continue;
         recipients.push({
           email: user.email,
           userId: user._id.toString(),
@@ -105,6 +106,7 @@ export async function getTargetedUsers(target: AnnouncementTarget): Promise<Anno
         { email: 1, shopId: 1 },
       );
       for (const user of users) {
+        if (!user.email || !user._id) continue;
         recipients.push({
           email: user.email,
           userId: user._id.toString(),
@@ -117,6 +119,7 @@ export async function getTargetedUsers(target: AnnouncementTarget): Promise<Anno
         { email: 1, shopId: 1, role: 1 },
       );
       for (const user of users) {
+        if (!user.email || !user._id) continue;
         recipients.push({
           email: user.email,
           userId: user._id.toString(),
@@ -145,8 +148,14 @@ export async function getTargetedUsers(target: AnnouncementTarget): Promise<Anno
         { shopId: 1, name: 1 },
       );
 
-      const shopIds = shops.map((s) => s.shopId);
-      const shopNameMap = new Map(shops.map((s) => [s.shopId, s.name]));
+      const shopIds = shops
+        .map((s) => s.shopId)
+        .filter((id): id is number => typeof id === "number");
+      const shopNameMap = new Map(
+        shops
+          .filter((s) => typeof s.shopId === "number")
+          .map((s) => [s.shopId as number, s.name]),
+      );
 
       if (shopIds.length > 0) {
         const users = await usersRepo.listUsers(
@@ -154,11 +163,13 @@ export async function getTargetedUsers(target: AnnouncementTarget): Promise<Anno
           { email: 1, shopId: 1 },
         );
         for (const user of users) {
+          if (!user.email || !user._id) continue;
           recipients.push({
             email: user.email,
             userId: user._id.toString(),
             shopId: user.shopId,
-            shopName: shopNameMap.get(user.shopId),
+            shopName:
+              typeof user.shopId === "number" ? shopNameMap.get(user.shopId) : undefined,
           });
         }
       }

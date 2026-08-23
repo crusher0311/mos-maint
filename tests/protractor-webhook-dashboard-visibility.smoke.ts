@@ -229,7 +229,10 @@ function wireDashboardDeps(
   dashboardRoute.__deps.cookies = fakeCookies(
     opts.sid === undefined ? SID : opts.sid,
   ) as any;
-  dashboardRoute.__deps.createIngestionService = makeFakeIngestionFactory(opts.calls) as any;
+  // The dashboard read path no longer ingests inline (drift is handled off the
+  // read path), so `__deps` has no `createIngestionService` seam to override.
+  // We keep the `opts.calls` counter so callers can still assert it stays 0.
+  void makeFakeIngestionFactory;
   return () => Object.assign(dashboardRoute.__deps, orig);
 }
 
@@ -295,7 +298,7 @@ async function run() {
       ok("  → displayMiles is null for zero-mileage RO", row1?.displayMiles === null, `miles=${row1?.displayMiles}`);
 
       // Opt into legacy behavior: showOnlyWithMileage = true → hidden.
-      const shop = fake.collections.shops.find((s: any) => s.shopId === SHOP_ID);
+      const shop = fake.collections.shops.find((s: any) => s.shopId === SHOP_ID)!;
       shop.preferences = { showOnlyWithMileage: true };
       const dashRes2 = await dashboardRoute.GET(dashboardReq());
       const body2 = await dashRes2.json();
@@ -362,7 +365,7 @@ async function run() {
     const dashCalls = { count: 0 };
     const restoreDash = wireDashboardDeps(fake, { calls: dashCalls });
     try {
-      const beforeRow = fake.collections.normalized_work_orders.find((r: any) => r.sourceId === "WO3003");
+      const beforeRow = fake.collections.normalized_work_orders.find((r: any) => r.sourceId === "WO3003")!;
       const beforeUpdatedAt = beforeRow.updatedAt as Date;
 
       const dashRes = await dashboardRoute.GET(dashboardReq());
@@ -373,7 +376,7 @@ async function run() {
         `count=${dashCalls.count}`,
       );
 
-      const afterRow = fake.collections.normalized_work_orders.find((r: any) => r.sourceId === "WO3003");
+      const afterRow = fake.collections.normalized_work_orders.find((r: any) => r.sourceId === "WO3003")!;
       ok(
         "stale normalized_work_orders.updatedAt is left untouched by the read",
         (afterRow.updatedAt as Date).getTime() === beforeUpdatedAt.getTime(),

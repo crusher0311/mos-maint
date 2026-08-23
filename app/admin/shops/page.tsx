@@ -4,14 +4,26 @@ import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
-async function getShopsWithStats() {
+interface ShopWithStats {
+  _id: string;
+  name?: string;
+  shopId?: string | number;
+  stats: {
+    users: number;
+    customers: number;
+    vehicles: number;
+    lastActivity: Date | null;
+  };
+}
+
+async function getShopsWithStats(): Promise<ShopWithStats[]> {
   const db = await getDb();
   
   const shops = await db.collection("shops").find({}).toArray();
   
   // Get stats for each shop
   const shopsWithStats = await Promise.all(
-    shops.map(async (shop) => {
+    shops.map(async (shop): Promise<ShopWithStats> => {
       const [userCount, customerCount, vehicleCount, lastActivity] = await Promise.all([
         db.collection("users").countDocuments({ shopId: shop.shopId }),
         db.collection("customers").countDocuments({ shopId: shop.shopId }),
@@ -24,7 +36,9 @@ async function getShopsWithStats() {
       ]);
 
       return {
-        ...shop,
+        _id: String(shop._id),
+        name: shop.name,
+        shopId: shop.shopId,
         stats: {
           users: userCount,
           customers: customerCount,

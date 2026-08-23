@@ -86,6 +86,7 @@ async function fetchAndCacheTekmetricCannedJobs(
   tekmetricShopId: number | string,
   mosShopId: number,
 ): Promise<any[]> {
+  const tekShopIdNum = Number(tekmetricShopId);
   let cannedJobs: any[] = [];
   try {
     console.log(`[Extension Canned Jobs] Fetching from Tekmetric API for shop ${tekmetricShopId}`);
@@ -99,7 +100,7 @@ async function fetchAndCacheTekmetricCannedJobs(
       // than blocking the extension for the full 14s+ we saw in production),
       // and if we got nothing the stale-cache fallback kicks in.
       let response = await withUpstreamTimeout(
-        getCannedJobs(tekmetricShopId, { page, size: 100 }),
+        getCannedJobs(tekShopIdNum, { page, size: 100 }),
         5000,
         `tekmetric canned-jobs page=${page} shop=${tekmetricShopId}`,
         null as any,
@@ -110,7 +111,7 @@ async function fetchAndCacheTekmetricCannedJobs(
       if (!response && page === 0) {
         console.warn(`[Extension Canned Jobs] page 0 timed out for shop ${tekmetricShopId} — retrying once (8s)`);
         response = await withUpstreamTimeout(
-          getCannedJobs(tekmetricShopId, { page, size: 100 }),
+          getCannedJobs(tekShopIdNum, { page, size: 100 }),
           8000,
           `tekmetric canned-jobs retry page=0 shop=${tekmetricShopId}`,
           null as any,
@@ -218,13 +219,13 @@ async function _GET(request: NextRequest) {
 
       if (cacheHasJobs && cacheAge < ONE_HOUR) {
         // Fresh cache — serve it.
-        cannedJobs = cached.cannedJobs;
+        cannedJobs = cached!.cannedJobs;
         source = "cache";
         console.log(`[Extension Canned Jobs] Cache hit for Protractor shop ${mosShopId}: ${cannedJobs.length} jobs`);
       } else if (cacheHasJobs) {
         // Stale cache — serve it immediately and refresh in the background so
         // the user never waits on the upstream fetch (stale-while-revalidate).
-        cannedJobs = cached.cannedJobs;
+        cannedJobs = cached!.cannedJobs;
         source = "stale_revalidate";
         console.log(`[Extension Canned Jobs] Serving stale Protractor cache for shop ${mosShopId} (age=${Math.round(cacheAge / 1000)}s) and revalidating in background`);
         revalidateInBackground(`protractor shop=${mosShopId}`, () =>
@@ -240,9 +241,9 @@ async function _GET(request: NextRequest) {
           // the live fetch produced nothing.
           const stale = await db.collection("protractor_canned_jobs_cache").findOne({ shopId: mosShopId });
           if (stale?.cannedJobs?.length > 0) {
-            cannedJobs = stale.cannedJobs;
+            cannedJobs = stale!.cannedJobs;
             source = "stale_cache";
-            console.warn(`[Extension Canned Jobs] Served ${cannedJobs.length} stale Protractor canned jobs for shop ${mosShopId} (fetchedAt=${stale.fetchedAt})`);
+            console.warn(`[Extension Canned Jobs] Served ${cannedJobs.length} stale Protractor canned jobs for shop ${mosShopId} (fetchedAt=${stale!.fetchedAt})`);
           }
         }
       }
@@ -256,14 +257,14 @@ async function _GET(request: NextRequest) {
 
       if (cacheHasJobs && cacheAge < ONE_HOUR) {
         // Fresh cache — serve it.
-        cannedJobs = cached.cannedJobs;
+        cannedJobs = cached!.cannedJobs;
         source = "cache";
         console.log(`[Extension Canned Jobs] Cache hit for Tekmetric shop ${tekmetricShopId}: ${cannedJobs.length} jobs`);
       } else if (cacheHasJobs) {
         // Stale cache — serve it immediately and refresh in the background
         // (stale-while-revalidate) so the user never blocks on the upstream
         // fetch right after the 1-hour TTL expires.
-        cannedJobs = cached.cannedJobs;
+        cannedJobs = cached!.cannedJobs;
         source = "stale_revalidate";
         console.log(`[Extension Canned Jobs] Serving stale Tekmetric cache for shop ${tekmetricShopId} (age=${Math.round(cacheAge / 1000)}s) and revalidating in background`);
         revalidateInBackground(`tekmetric shop=${tekmetricShopId}`, () =>
@@ -281,9 +282,9 @@ async function _GET(request: NextRequest) {
             shopId: tekmetricShopId,
           });
           if (stale?.cannedJobs?.length > 0) {
-            cannedJobs = stale.cannedJobs;
+            cannedJobs = stale!.cannedJobs;
             source = "stale_cache";
-            console.warn(`[Extension Canned Jobs] Served ${cannedJobs.length} stale canned jobs for shop ${tekmetricShopId} (fetchedAt=${stale.fetchedAt})`);
+            console.warn(`[Extension Canned Jobs] Served ${cannedJobs.length} stale canned jobs for shop ${tekmetricShopId} (fetchedAt=${stale!.fetchedAt})`);
           }
         }
       }

@@ -231,15 +231,15 @@ export async function GET(req: NextRequest) {
   // last hour and alert if p95 crosses threshold with enough samples to be
   // statistically meaningful. We pull just the field, not whole rows, so this
   // stays cheap even at 5K-shop volume.
-  const latencyRows = await db.collection("tekmetric_webhook_logs").find(
+  const latencyRows = await db.collection<{ handlerDurationMs?: unknown }>("tekmetric_webhook_logs").find(
     {
       receivedAt: { $gte: since1h },
       handlerDurationMs: { $exists: true, $ne: null },
     },
-    { projection: { handlerDurationMs: 1 } } as any
+    { projection: { handlerDurationMs: 1 } }
   ).toArray();
   const latencyValues: number[] = [];
-  for (const row of latencyRows as Array<{ handlerDurationMs: any }>) {
+  for (const row of latencyRows) {
     const v = Number(row.handlerDurationMs);
     if (Number.isFinite(v)) latencyValues.push(v);
   }
@@ -452,7 +452,7 @@ export async function GET(req: NextRequest) {
           ? `[MOS] Tekmetric webhook silence: ${toAlertSilent.length} shop(s) flagged`
           : `[MOS] Tekmetric webhook health: ${subjectParts.join(", ")}`;
 
-      for (const admin of admins as Array<{ email: string }>) {
+      for (const admin of admins as unknown as Array<{ email: string }>) {
         try {
           await __deps.sendEmail({
             to: admin.email,

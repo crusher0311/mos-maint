@@ -347,7 +347,7 @@ export async function GET(req: NextRequest) {
             are deduped — you'll only be re-paged when something new breaks or reasons change.
           </p>
         </div>`;
-      for (const admin of admins as Array<{ email: string }>) {
+      for (const admin of admins as unknown as Array<{ email: string }>) {
         try {
           await __deps.sendEmail({
             to: admin.email,
@@ -585,7 +585,7 @@ export async function GET(req: NextRequest) {
             <code>/api/admin/sync-health</code>.
           </p>
         </div>`;
-      for (const admin of admins as Array<{ email: string }>) {
+      for (const admin of admins as unknown as Array<{ email: string }>) {
         try {
           await __deps.sendEmail({
             to: admin.email,

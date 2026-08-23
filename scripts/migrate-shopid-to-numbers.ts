@@ -4,6 +4,7 @@
  * Run this after setting up your environment variables
  */
 
+import type { IndexDescription } from "mongodb";
 import { getDb } from "../lib/mongo";
 
 async function migrateCollection(collectionName: string) {
@@ -44,7 +45,7 @@ async function createIndexes() {
   const db = await getDb();
   
   // Core collections indexes
-  const collections = [
+  const collections: Array<{ name: string; indexes: IndexDescription[] }> = [
     {
       name: "users",
       indexes: [

@@ -78,7 +78,7 @@ export async function GET(req: NextRequest) {
     >();
     const coverageWindow = runs.slice(0, coverageWindowRuns);
     for (const run of coverageWindow) {
-      const ts: Date | null = run.startedAt || run.createdAt || null;
+      const ts: Date | null = (run.startedAt as Date | undefined) || (run.createdAt as Date | undefined) || null;
       const results: any[] = Array.isArray(run.results) ? run.results : [];
       for (const r of results) {
         const sid = Number(r.shopId);

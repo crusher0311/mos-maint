@@ -62,7 +62,7 @@ export async function GET() {
     const configuredPricing: Record<string, number> = {
       starter: billingSettings?.starterPrice ?? 49,
       professional: billingSettings?.mosProPrice ?? 99,
-      enterprise: billingSettings?.enterprisePrice ?? 199,
+      enterprise: (billingSettings as { enterprisePrice?: number } | null)?.enterprisePrice ?? 199,
       detect_dog_founder: billingSettings?.detectDogFounderPrice ?? 229.95,
     };
 

@@ -266,6 +266,7 @@ export async function middleware(req: NextRequest) {
     // requests before they hit any handler at all.
     const mcpCookie = req.cookies.get(MUST_CHANGE_PASSWORD_COOKIE)?.value;
     if (
+      sessionToken &&
       mcpCookie &&
       !isPasswordChangeAllowedPath(pathname) &&
       (await isMustChangePasswordCookieValid(sessionToken, mcpCookie))

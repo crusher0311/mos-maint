@@ -156,7 +156,7 @@ export async function countUsage(filter: UsageFilter): Promise<number> {
   return col.countDocuments(filter);
 }
 
-export async function aggregateUsage<T = Document>(pipeline: Document[]): Promise<T[]> {
+export async function aggregateUsage<T extends Document = Document>(pipeline: Document[]): Promise<T[]> {
   const col = await usageCollection();
   return col.aggregate<T>(pipeline).toArray();
 }

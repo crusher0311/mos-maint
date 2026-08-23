@@ -172,7 +172,7 @@ async function main() {
   );
   ok(
     "summary entries omit the csv blob",
-    !("csv" in (list[0] as Record<string, unknown>)),
+    !("csv" in (list[0] as unknown as Record<string, unknown>)),
   );
   ok(
     "summary entries expose serialisable createdAt",

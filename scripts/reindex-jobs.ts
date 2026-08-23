@@ -1,4 +1,4 @@
-import { reindexFromStoredData } from "../lib/tekmetric-job-index";
+import { reindexFromStoredData } from "../lib/integrations/tekmetric/job-index";
 
 async function main() {
   console.log("Starting full reindex from stored data...");

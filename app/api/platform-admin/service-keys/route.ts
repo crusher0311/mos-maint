@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
     const keyMap: Record<string, { count: number; samples: Set<string>; buckets: Record<string, number> }> = {};
     const unmapped: { name: string; vin: string; bucket: string }[] = [];
 
-    for (const plan of plans) {
+    for (const plan of plans as Array<{ plan?: { buckets?: Record<string, unknown> }; vin?: string }>) {
       const buckets = plan.plan?.buckets || {};
       for (const [bucketName, items] of Object.entries(buckets)) {
         if (!Array.isArray(items)) continue;
@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
             keyMap[key].buckets[bucketName] = (keyMap[key].buckets[bucketName] || 0) + 1;
           } else {
             if (unmapped.length < 200) {
-              unmapped.push({ name: title, vin: plan.vin, bucket: bucketName });
+              unmapped.push({ name: title, vin: plan.vin ?? "", bucket: bucketName });
             }
           }
         }

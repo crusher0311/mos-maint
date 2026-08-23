@@ -412,7 +412,7 @@ export async function GET(req: NextRequest) {
         syncHealthUrl: linkBase,
       });
       const subject = buildAlertEmailSubject(toAlert.length, slow.length);
-      for (const admin of admins as Array<{ email: string }>) {
+      for (const admin of admins as unknown as Array<{ email: string }>) {
         try {
           await __deps.sendEmail({
             to: admin.email,
@@ -479,7 +479,7 @@ export async function GET(req: NextRequest) {
           syncHealthUrl: linkBase,
         });
         const subject = buildRecoveryEmailSubject(name);
-        for (const admin of admins as Array<{ email: string }>) {
+        for (const admin of admins as unknown as Array<{ email: string }>) {
           try {
             await __deps.sendEmail({
               to: admin.email,

@@ -30,7 +30,7 @@ interface AvailableUser {
 
 function ShopManagementContent() {
   const searchParams = useSearchParams();
-  const enterpriseId = searchParams.get("id");
+  const enterpriseId = searchParams?.get("id");
   
   const [enterprise, setEnterprise] = useState<Enterprise | null>(null);
   const [allShops, setAllShops] = useState<Shop[]>([]);

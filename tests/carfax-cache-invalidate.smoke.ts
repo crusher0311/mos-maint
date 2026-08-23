@@ -53,9 +53,10 @@ function makeFakeCollection(seed: Doc[] = []) {
     updateOne: async (q: any, update: any, opts: any = {}) => {
       let target = docs.find((d) => matchesQuery(d, q));
       if (!target && opts.upsert) {
-        target = { ...q };
-        docs.push(target);
-        if (update.$setOnInsert) Object.assign(target, update.$setOnInsert);
+        const created: Doc = { ...q };
+        target = created;
+        docs.push(created);
+        if (update.$setOnInsert) Object.assign(created, update.$setOnInsert);
       }
       if (!target) return { matchedCount: 0, modifiedCount: 0 };
       if (update.$set) Object.assign(target, update.$set);

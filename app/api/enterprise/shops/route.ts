@@ -246,7 +246,7 @@ export async function POST(req: NextRequest) {
         enterpriseShopIds,
         email,
         shopId: Number(shopId),
-        grantedBy: session.email || String(session.userId || ""),
+        grantedBy: session.email || "",
       });
       if (!grant.ok && grant.error !== "User already has access to this shop") {
         console.error(`Enterprise shop create: failed to grant ${email} access to shop ${shopId}:`, grant.error);

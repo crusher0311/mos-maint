@@ -63,36 +63,31 @@ const lightGasSpecs: VehicleSpecs = {
   bodyType: "Pickup",
   driveType: "4WD",
   displacement: 5.0,
-  fuelType: "gas",
-};
+  fuelType: "gas", acesVehicleId: null, acesEngineId: null, submodelKey: null, };
 const lightGasSmallEngineSpecs: VehicleSpecs = {
   gvwrBand: "light",
   bodyType: "Pickup",
   driveType: "4WD",
   displacement: 2.7,
-  fuelType: "gas",
-};
+  fuelType: "gas", acesVehicleId: null, acesEngineId: null, submodelKey: null, };
 const heavyDieselSpecs: VehicleSpecs = {
   gvwrBand: "heavy",
   bodyType: "Pickup",
   driveType: "4WD",
   displacement: 6.7,
-  fuelType: "diesel",
-};
+  fuelType: "diesel", acesVehicleId: null, acesEngineId: null, submodelKey: null, };
 const mediumDieselSpecs: VehicleSpecs = {
   gvwrBand: "medium",
   bodyType: "Pickup",
   driveType: "4WD",
   displacement: 6.7,
-  fuelType: "diesel",
-};
+  fuelType: "diesel", acesVehicleId: null, acesEngineId: null, submodelKey: null, };
 const mediumGasSpecs: VehicleSpecs = {
   gvwrBand: "medium",
   bodyType: "Pickup",
   driveType: "4WD",
   displacement: 6.2,
-  fuelType: "gas",
-};
+  fuelType: "gas", acesVehicleId: null, acesEngineId: null, submodelKey: null, };
 
 // ---------- 1. Classifier ----------
 {

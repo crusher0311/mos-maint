@@ -161,7 +161,7 @@ export async function GET(req: NextRequest) {
   ).toArray();
   const samples24h: number[] = [];
   const samples7d: number[] = [];
-  for (const row of latencySamples as Array<{ handlerDurationMs: number; receivedAt: Date }>) {
+  for (const row of latencySamples as unknown as Array<{ handlerDurationMs: number; receivedAt: Date }>) {
     const ms = Number(row.handlerDurationMs);
     if (!Number.isFinite(ms)) continue;
     samples7d.push(ms);

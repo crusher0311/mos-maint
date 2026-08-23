@@ -33,7 +33,7 @@ export default async function ShopDviBestPracticesPage({ params }: PageProps) {
 
   const [rows, shopDoc] = await Promise.all([
     listShopDviBestPractices(shopId),
-    findShopByExactShopId<{ name?: string }>(shopId, { name: 1 }),
+    findShopByExactShopId<import("@/lib/data/repositories/shops").ShopDoc & { name?: string }>(shopId, { name: 1 }),
   ]);
 
   const authoredKeys = new Set(rows.map((r) => r.serviceKey));

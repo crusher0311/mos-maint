@@ -76,6 +76,10 @@ const fakeDataOneItems: MaintenanceItem[] = [
     intervals: [],
     miles: null,
     months: null,
+    intervalMilesNormal: null,
+    intervalMonthsNormal: null,
+    intervalMilesSevere: null,
+    intervalMonthsSevere: null,
   },
   {
     maintenance_id: 9002,
@@ -87,6 +91,10 @@ const fakeDataOneItems: MaintenanceItem[] = [
     ],
     miles: null,
     months: null,
+    intervalMilesNormal: null,
+    intervalMonthsNormal: null,
+    intervalMilesSevere: null,
+    intervalMonthsSevere: null,
   },
   {
     maintenance_id: 9003,
@@ -99,6 +107,10 @@ const fakeDataOneItems: MaintenanceItem[] = [
     ],
     miles: 10000,
     months: 12,
+    intervalMilesNormal: 10000,
+    intervalMonthsNormal: 12,
+    intervalMilesSevere: null,
+    intervalMonthsSevere: null,
   },
   {
     maintenance_id: 9004,
@@ -108,6 +120,10 @@ const fakeDataOneItems: MaintenanceItem[] = [
     intervals: [],
     miles: null,
     months: null,
+    intervalMilesNormal: null,
+    intervalMonthsNormal: null,
+    intervalMilesSevere: null,
+    intervalMonthsSevere: null,
   },
 ];
 

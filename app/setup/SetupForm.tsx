@@ -5,9 +5,9 @@ import { useEffect, useMemo, useState } from "react";
 
 export default function SetupForm() {
   const sp = useSearchParams();
-  const shopId = sp.get("shopId") || "";
-  const token = sp.get("token") || "";
-  const emailFromLink = useMemo(() => (sp.get("email") || "").toLowerCase(), [sp]);
+  const shopId = sp?.get("shopId") || "";
+  const token = sp?.get("token") || "";
+  const emailFromLink = useMemo(() => (sp?.get("email") || "").toLowerCase(), [sp]);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

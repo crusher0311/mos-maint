@@ -41,8 +41,9 @@ export async function GET() {
 
     const categorySet = new Set<string>();
     for (const job of Array.isArray(jobs) ? jobs : []) {
-      if (job.category) categorySet.add(job.category);
-      if (job.type) categorySet.add(job.type);
+      const extra = job as { category?: unknown; type?: unknown };
+      if (typeof extra.category === "string") categorySet.add(extra.category);
+      if (typeof extra.type === "string") categorySet.add(extra.type);
     }
 
     const categories = Array.from(categorySet).sort();

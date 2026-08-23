@@ -13,7 +13,7 @@ interface CannedJob {
 
 function MappingsContent() {
   const searchParams = useSearchParams();
-  const enterpriseId = searchParams.get("id");
+  const enterpriseId = searchParams?.get("id");
   
   const [enterprise, setEnterprise] = useState<any>(null);
   const [mappings, setMappings] = useState<Record<string, string>>({});

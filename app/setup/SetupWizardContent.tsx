@@ -12,7 +12,7 @@ interface FormData {
 
 export default function SetupWizardContent() {
   const searchParams = useSearchParams();
-  const wasCancelled = searchParams.get("cancelled") === "true";
+  const wasCancelled = searchParams?.get("cancelled") === "true";
   
   const [formData, setFormData] = useState<FormData>({
     shopName: "",

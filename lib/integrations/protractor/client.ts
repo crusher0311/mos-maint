@@ -1121,7 +1121,14 @@ async function protractorSoapWorkOrderUpdate(
       });
 
       const latencyMs = Date.now() - startTime;
-      trackApiRequest('protractor', `/WorkOrder/${workOrderId}`, 'POST-SOAP', res.statusCode, latencyMs, shopId);
+      trackApiRequest(
+        'protractor',
+        `/WorkOrder/${workOrderId}`,
+        'POST-SOAP',
+        res.statusCode,
+        latencyMs,
+        shopId === undefined ? undefined : Number(shopId)
+      );
 
       if (res.statusCode === 200 && !res.body.includes('<soap:Fault>')) {
         const resultMatch = res.body.match(/WorkOrderUpdateResult>([\s\S]*?)<\//);

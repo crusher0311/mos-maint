@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ announcements: [] });
     }
 
-    const announcements = await getActiveAnnouncements(session.userId);
+    const announcements = await getActiveAnnouncements(session.email);
 
     return NextResponse.json({ announcements });
   } catch (error) {

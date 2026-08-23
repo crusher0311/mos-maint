@@ -15,16 +15,17 @@ export async function transcribeAudio(
 ): Promise<{ transcript: string; provider: string }> {
   if (process.env.DEEPGRAM_API_KEY) {
     try {
-      const { createClient } = await import("@deepgram/sdk");
-      const dg = createClient(process.env.DEEPGRAM_API_KEY);
-      const { result, error } = await dg.listen.prerecorded.transcribeFile(audio, {
+      const { DeepgramClient } = await import("@deepgram/sdk");
+      const dg = new DeepgramClient({ apiKey: process.env.DEEPGRAM_API_KEY });
+      const result = await dg.listen.v1.media.transcribeFile(new Uint8Array(audio), {
         model: "nova-2",
         smart_format: true,
-        mimetype: mime,
-      } as any);
-      if (error) throw new Error(String((error as any)?.message || error));
+      });
       const transcript =
-        result?.results?.channels?.[0]?.alternatives?.[0]?.transcript?.trim() || "";
+        ("results" in result
+          ? result.results.channels?.[0]?.alternatives?.[0]?.transcript
+          : undefined
+        )?.trim() || "";
       if (transcript) return { transcript, provider: "deepgram" };
       console.warn("[SalesCoach] Deepgram returned empty transcript; falling back to OpenAI");
     } catch (err: any) {

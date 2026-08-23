@@ -487,7 +487,7 @@ export async function tekmetricRequest<T = any>(
         // request that queued 4s at the shared bucket and then still 429'd
         // doesn't pay 4s + a full exponential sleep. Retry-After is upstream's
         // explicit floor, so when present it is honored as-is.
-        const limiterWaitMs = rateSlot.waitedMs + sharedSlot.waitedMs;
+        const limiterWaitMs = (rateSlot.waitedMs ?? 0) + sharedSlot.waitedMs;
         const computedBackoff = compute429Backoff(attempt, retryAfter);
         const backoffMs = retryAfter
           ? computedBackoff
@@ -592,13 +592,14 @@ export async function getCustomer(customerId: number, shopId?: number): Promise<
 
 export async function getVehicles(
   shopId: number,
-  options?: { page?: number; size?: number; customerId?: number }
+  options?: { page?: number; size?: number; customerId?: number; search?: string }
 ): Promise<PaginatedResponse<TekmetricVehicle>> {
   const params = new URLSearchParams();
   params.set('shop', String(shopId));
   if (options?.page !== undefined) params.set('page', String(options.page));
   if (options?.size !== undefined) params.set('size', String(options.size));
   if (options?.customerId) params.set('customerId', String(options.customerId));
+  if (options?.search) params.set('search', options.search);
   
   return tekmetricRequest<PaginatedResponse<TekmetricVehicle>>(`/vehicles?${params.toString()}`, {}, shopId);
 }
@@ -625,6 +626,15 @@ export async function getRepairOrders(
     status?: string;
     updatedAfter?: Date;
     updatedBefore?: Date;
+    // Tekmetric-native query params used by the sync/backfill paths.
+    // `repairOrderStatusId` filters by one or more status IDs;
+    // `updatedDateStart`/`updatedDateEnd` are ISO date strings (an
+    // alternative to the Date-typed updatedAfter/updatedBefore above);
+    // `sortDirection` orders by updated date.
+    repairOrderStatusId?: number | number[];
+    updatedDateStart?: string;
+    updatedDateEnd?: string;
+    sortDirection?: 'ASC' | 'DESC';
   }
 ): Promise<PaginatedResponse<TekmetricRepairOrder>> {
   const params = new URLSearchParams();
@@ -634,8 +644,17 @@ export async function getRepairOrders(
   if (options?.vehicleId) params.set('vehicleId', String(options.vehicleId));
   if (options?.customerId) params.set('customerId', String(options.customerId));
   if (options?.status) params.set('status', options.status);
+  if (options?.repairOrderStatusId !== undefined) {
+    const ids = Array.isArray(options.repairOrderStatusId)
+      ? options.repairOrderStatusId
+      : [options.repairOrderStatusId];
+    for (const id of ids) params.append('repairOrderStatusId', String(id));
+  }
+  if (options?.sortDirection) params.set('sortDirection', options.sortDirection);
   if (options?.updatedAfter) params.set('updatedDateStart', options.updatedAfter.toISOString().split('T')[0]);
+  else if (options?.updatedDateStart) params.set('updatedDateStart', options.updatedDateStart);
   if (options?.updatedBefore) params.set('updatedDateEnd', options.updatedBefore.toISOString().split('T')[0]);
+  else if (options?.updatedDateEnd) params.set('updatedDateEnd', options.updatedDateEnd);
   
   return tekmetricRequest<PaginatedResponse<TekmetricRepairOrder>>(`/repair-orders?${params.toString()}`, {}, shopId);
 }

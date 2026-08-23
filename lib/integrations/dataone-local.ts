@@ -449,7 +449,7 @@ export async function decodeVinLocal(vin: string, hint?: DecodeHint): Promise<De
     }
 
     // Multiple candidates — try the hint first.
-    let pool = rows;
+    let pool: VinReferenceData[] = rows;
     if (hint) {
       const scored = rows.map((r) => ({ r, s: scoreCandidate(r, hint) }));
       const max = scored.reduce((m, x) => (x.s > m ? x.s : m), 0);

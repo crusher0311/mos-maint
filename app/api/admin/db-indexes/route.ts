@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
   try {
     const db = await getDb();
     const shops = db.collection("shops");
-    const counters = db.collection("counters");
+    const counters = db.collection<{ _id: string; seq?: number }>("counters");
     const setupTokens = db.collection("setup_tokens");
     const users = db.collection("users");
     const sessions = db.collection("sessions");

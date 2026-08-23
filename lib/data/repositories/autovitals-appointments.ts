@@ -36,7 +36,7 @@ async function collection(): Promise<Collection<AutoVitalsAppointmentCacheDoc>> 
   return db.collection<AutoVitalsAppointmentCacheDoc>(COLLECTION);
 }
 
-export interface AutoVitalsAppointmentUpsertInput {
+export type AutoVitalsAppointmentUpsertInput = {
   appointmentId: number;
   vehicleId?: number;
   vin?: string;

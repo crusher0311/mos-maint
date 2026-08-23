@@ -47,6 +47,7 @@ export function PlanLauncher() {
   const [isLoadingCache, setIsLoadingCache] = useState(false);
   const [recentPlans, setRecentPlans] = useState<RecentPlan[]>([]);
   const [cacheStatus, setCacheStatus] = useState<"stale" | "loading" | "ready">("stale");
+  const [shopId, setShopId] = useState<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -69,13 +70,18 @@ export function PlanLauncher() {
         setAllVehicles(vehicles);
         setCacheStatus("ready");
 
-        const vehiclesToPrefetch = vehicles.map((v: Vehicle) => ({
-          vin: v.displayVin,
-          mileage: typeof v.displayMileage === 'number' ? v.displayMileage : 
-                   typeof v.displayMileage === 'string' ? parseInt(v.displayMileage.replace(/,/g, ''), 10) || null : null,
-          inProgress: !v.dviDone,
-        }));
-        queueMultiplePrefetch(vehiclesToPrefetch, 10);
+        const resolvedShopId: number | null = data.shopId ?? data.user?.shopId ?? null;
+        setShopId(resolvedShopId);
+
+        if (resolvedShopId) {
+          const vehiclesToPrefetch = vehicles.map((v: Vehicle) => ({
+            vin: v.displayVin,
+            mileage: typeof v.displayMileage === 'number' ? v.displayMileage :
+                     typeof v.displayMileage === 'string' ? parseInt(v.displayMileage.replace(/,/g, ''), 10) || null : null,
+            inProgress: !v.dviDone,
+          }));
+          queueMultiplePrefetch(vehiclesToPrefetch, resolvedShopId, 10);
+        }
       }
     } catch (error) {
       console.error("Failed to load vehicle cache:", error);
@@ -174,10 +180,10 @@ export function PlanLauncher() {
   };
 
   const handleVehicleHover = (vehicle: Vehicle) => {
-    if (!isPrefetched(vehicle.displayVin)) {
+    if (shopId && !isPrefetched(vehicle.displayVin)) {
       const mileage = typeof vehicle.displayMileage === 'number' ? vehicle.displayMileage : 
                      typeof vehicle.displayMileage === 'string' ? parseInt(vehicle.displayMileage.replace(/,/g, ''), 10) || null : null;
-      queuePrefetch(vehicle.displayVin, mileage, "high");
+      queuePrefetch(vehicle.displayVin, mileage, shopId, "high");
     }
   };
 
@@ -249,7 +255,9 @@ export function PlanLauncher() {
                       </p>
                     </div>
                     {isPrefetched(vehicle.displayVin) && (
-                      <Zap className="w-4 h-4 text-green-500 flex-shrink-0" title="Data cached" />
+                      <span title="Data cached" className="flex-shrink-0">
+                        <Zap className="w-4 h-4 text-green-500" />
+                      </span>
                     )}
                   </button>
                 ))}
@@ -291,7 +299,9 @@ export function PlanLauncher() {
                       </p>
                     </div>
                     {isPrefetched(plan.vin) && (
-                      <Zap className="w-4 h-4 text-green-500 flex-shrink-0" title="Data cached" />
+                      <span title="Data cached" className="flex-shrink-0">
+                        <Zap className="w-4 h-4 text-green-500" />
+                      </span>
                     )}
                   </button>
                 ))}

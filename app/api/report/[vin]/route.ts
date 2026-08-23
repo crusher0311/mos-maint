@@ -60,7 +60,7 @@ export async function GET(
 
       if (!mileage) {
         const analysisDoc = await getMaintenanceAnalysisDoc(Number(shopId), vin, db);
-        mileage = analysisDoc?.mileageAtAnalysis ?? null;
+        mileage = (analysisDoc?.mileageAtAnalysis as number | null | undefined) ?? null;
       }
 
       if (mileage) {
@@ -77,12 +77,21 @@ export async function GET(
       }
     }
 
-    const plan = cachedPlan.plan;
+    const plan = cachedPlan.plan as {
+      buckets?: { overdue?: unknown[]; dueSoon?: unknown[]; upcoming?: unknown[] };
+      customerName?: string | null;
+      vehicle?: unknown;
+      currentMiles?: number | null;
+      dataQuality?: unknown;
+    };
     const buckets = plan.buckets || {};
 
-    const approvedDoc = await getReportApprovedItemsDoc(Number(shopId), vin, db);
+    const approvedDoc = await getReportApprovedItemsDoc(Number(shopId), vin, db) as {
+      approvedServiceKeys?: string[];
+      updatedAt?: string | Date;
+    } | null;
     const approvedServiceKeys: string[] = [];
-    if (approvedDoc?.approvedServiceKeys?.length > 0) {
+    if (approvedDoc?.approvedServiceKeys?.length && approvedDoc.approvedServiceKeys.length > 0) {
       const ageMs = approvedDoc.updatedAt ? Date.now() - new Date(approvedDoc.updatedAt).getTime() : Infinity;
       if (ageMs < 7 * 24 * 60 * 60 * 1000) {
         approvedServiceKeys.push(...approvedDoc.approvedServiceKeys);

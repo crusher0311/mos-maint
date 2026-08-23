@@ -201,8 +201,8 @@ export async function POST(request: NextRequest) {
     );
     resolvedLocationId = corrected.locationId;
     resolvedCompanyId = corrected.companyId;
-    locationIdSource = corrected.locationIdSource;
-    companyIdSource = corrected.companyIdSource;
+    locationIdSource = corrected.locationIdSource === "manual" ? "manual" : corrected.locationIdSource === "auto" ? "auto" : null;
+    companyIdSource = corrected.companyIdSource === "manual" ? "manual" : corrected.companyIdSource === "auto" ? "auto" : null;
     const finalValidation = corrected.validation;
     if (finalValidation.status !== "ok") {
       console.warn(

@@ -6,15 +6,13 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  const sess = await getSession(req);
+  const sess = await getSession();
   if (!sess) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const { user } = sess;
 
   const limit = clampInt(req.nextUrl.searchParams.get("limit"), 50, 1, 200);
 
   const docs = await listRecentEvents(
-    { shopId: user.shopId },
+    { shopId: sess.shopId },
     {
       limit,
       projection: {

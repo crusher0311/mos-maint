@@ -1,4 +1,5 @@
 import { getDb } from "./mongo";
+import { ObjectId } from "mongodb";
 import { getDb as getPgDb } from "./db/drizzle";
 import { platformFeatures } from "./db/schema/platform-features";
 import {
@@ -60,7 +61,7 @@ export {
 };
 export type { FeatureKey, FeatureSettings, BillingPlan };
 
-export type BillingStatus = "trial" | "active" | "past_due" | "suspended" | "canceled" | "enterprise" | "demo";
+export type BillingStatus = "trial" | "trialing" | "active" | "past_due" | "suspended" | "canceled" | "enterprise" | "demo";
 
 export interface ShopBilling {
   plan: BillingPlan;
@@ -70,6 +71,10 @@ export interface ShopBilling {
   gracePeriodEndsAt?: Date | null;
   gracePeriodExtendedBy?: string | null;
   gracePeriodExtendedAt?: Date | null;
+}
+
+export function isTrialBillingStatus(status: BillingStatus): boolean {
+  return status === "trial" || status === "trialing";
 }
 
 export interface FeatureEntitlements {
@@ -255,8 +260,14 @@ export async function getFeatureEntitlements(
       return createDefaultEntitlements();
     }
     if (shop.enterpriseId) {
-      const enterprise = await db.collection("enterprise_accounts").findOne({
-        _id: shop.enterpriseId
+      const enterpriseId = ObjectId.isValid(shop.enterpriseId)
+        ? new ObjectId(shop.enterpriseId)
+        : shop.enterpriseId;
+      const enterprise = await db.collection<{
+        _id: string | ObjectId;
+        featureSettings?: Partial<FeatureSettings>;
+      }>("enterprise_accounts").findOne({
+        _id: enterpriseId,
       });
       if (enterprise?.featureSettings) {
         enterpriseFeatures = enterprise.featureSettings;
@@ -264,8 +275,8 @@ export async function getFeatureEntitlements(
     }
   }
 
-  const plan: BillingPlan = shop.billing?.plan || "trial";
-  const status: BillingStatus = shop.billing?.status || "trial";
+  const plan: BillingPlan = (shop.billing?.plan as BillingPlan) || "trial";
+  const status: BillingStatus = (shop.billing?.status as BillingStatus) || "trial";
 
   const shopFeatures: Partial<FeatureSettings> = normalizeShopFeatureOverrides(
     shop.enabledFeatures,
@@ -294,7 +305,7 @@ export async function getFeatureEntitlements(
   };
 
   const isBillingActive = () => {
-    return status === "active" || status === "trial" || status === "enterprise" || status === "demo" || status === "past_due";
+    return status === "active" || isTrialBillingStatus(status) || status === "enterprise" || status === "demo" || status === "past_due";
   };
 
   const isFeatureEnabled = (feature: FeatureKey) => {

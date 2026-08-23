@@ -29,7 +29,7 @@ import { getDb as getPgDb } from "@/lib/db/drizzle";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { sql } from "drizzle-orm";
 
-interface LegacyIdRow {
+interface LegacyIdRow extends Record<string, unknown> {
   shopId: string;
   n: number;
 }

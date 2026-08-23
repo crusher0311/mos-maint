@@ -29,10 +29,11 @@ export const GET = createExternalEndpoint(
     
     if (!vehicle) {
       try {
-        const { decodeVin } = await import("@/lib/dataone");
-        const decoded = await decodeVin(vin);
+        const { decodeVin } = await import("@/lib/integrations/dataone-api");
+        const result = await decodeVin(vin);
         
-        if (decoded) {
+        if (result.ok && result.decoded) {
+          const decoded = result.decoded;
           return NextResponse.json({
             success: true,
             vin,
@@ -41,8 +42,8 @@ export const GET = createExternalEndpoint(
               year: decoded.year,
               make: decoded.make,
               model: decoded.model,
-              engine: decoded.engine,
-              transmission: decoded.transmission,
+              engine: decoded.engine_name,
+              transmission: decoded.trans_name,
             }
           });
         }

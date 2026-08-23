@@ -1,6 +1,10 @@
 // app/api/cron/dashboard-refresh/route.ts
 import { NextResponse } from "next/server";
-import { countEvents } from "@/lib/data/repositories/events";
+import type { Filter } from "mongodb";
+import {
+  countEvents,
+  type EventDoc,
+} from "@/lib/data/repositories/events";
 
 export async function GET(request: Request) {
   try {
@@ -23,8 +27,8 @@ export async function GET(request: Request) {
     });
 
     const eventsWithRO = await countEvents({
-      "payload.ticket.roNumber": { $exists: true, $ne: null, $ne: "" } as any,
-    });
+      "payload.ticket.roNumber": { $exists: true, $nin: [null, ""] },
+    } as Filter<EventDoc>);
 
     console.log(`Dashboard refresh: ${recentEvents} events in last hour, ${totalEvents} total, ${eventsWithRO} with RO#`);
 

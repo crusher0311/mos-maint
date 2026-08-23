@@ -18,7 +18,7 @@ import {
   type ExtensionCapability,
   type ExtensionSessionPrincipal,
 } from "@/lib/extension-session";
-import { ObjectId } from "mongodb";
+import { ObjectId, type Filter, type Document } from "mongodb";
 import { lookupPolicy } from "@/lib/extension-route-policy";
 import { isSuperAdmin } from "@/lib/super-admins";
 
@@ -281,13 +281,13 @@ export async function validateExtensionToken(
           sessionUser = await __deps.findUserById(principal.userId);
         } else {
           const mongo = await __deps.getDb();
-          const idCandidates: unknown[] = [principal.userId];
+          const idCandidates: (string | ObjectId)[] = [principal.userId];
           if (ObjectId.isValid(principal.userId)) {
             idCandidates.push(new ObjectId(principal.userId));
           }
           sessionUser = await mongo
             .collection("users")
-            .findOne({ _id: { $in: idCandidates } });
+            .findOne({ _id: { $in: idCandidates } } as Filter<Document>);
         }
         if (!sessionUser) {
           return {
@@ -392,7 +392,7 @@ export async function validateExtensionToken(
   let db: Awaited<ReturnType<typeof getDb>> | null = null;
   let user:
     | MongoShapedUser
-    | { _id?: unknown; id?: unknown; extensionTokenCreatedAt?: Date; email?: string; shopId?: unknown }
+    | { _id?: unknown; id?: unknown; extensionTokenCreatedAt?: Date; email?: string; shopId?: unknown; role?: string }
     | null = null;
   // Multi-device concurrent-sessions support: a user may have several active
   // tokens at once (one per device/tab). Tokens live both in the legacy
@@ -402,12 +402,12 @@ export async function validateExtensionToken(
   // one keeps working until its own 30-day TTL elapses or the user
   // explicitly logs that device out. Locked in by
   // `tests/extension-auth-multi-token.smoke.ts`.
-  const mongoTokenFilter = {
+  const mongoTokenFilter: Filter<Document> = {
     $or: [
       { extensionToken: token },
       { extensionTokens: { $elemMatch: { token } } },
     ],
-  } as const;
+  };
   try {
     if (pgCanonical) {
       user = await __deps.findUserByExtensionToken(token);

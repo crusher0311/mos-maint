@@ -40,6 +40,18 @@ export interface BackfillProgressDoc extends Document {
   lastActivityAt?: Date;
   lastAttemptedAt?: Date;
   retryCount?: number;
+  logicVersion?: number;
+  currentChunkStart?: Date;
+  currentCursor?: string;
+  lastInvoiceCount?: number;
+  lastChunkMetrics?: { durationMs?: number; [k: string]: unknown };
+  recentChunkMetrics?: Array<Record<string, unknown>>;
+  pendingAttempt?: {
+    chunkEnd?: Date | string;
+    days?: number;
+    startedAt?: Date | string;
+    [k: string]: unknown;
+  };
   [k: string]: unknown;
 }
 

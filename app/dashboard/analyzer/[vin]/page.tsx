@@ -16,14 +16,17 @@ export default async function AnalyzerPage({ params }: Props) {
   const evidence = await buildEvidenceForVIN(vin);
 
   // 2) Run the analyzer once on the server
-  const analysis = await analyzeMaintenance(evidence);
+  const analysis = await analyzeMaintenance({
+    vin: evidence.vehicle.vin,
+    miles: evidence.current_odometer_miles ?? evidence.last_known_mileage ?? null,
+  });
 
   return (
     <main className="mx-auto max-w-7xl p-6 space-y-6">
       <h1 className="text-2xl font-semibold">Analyzer: {vin}</h1>
 
       {/* Analysis results */}
-      <AnalyzerResults analysis={analysis} />
+      <AnalyzerResults result={analysis} />
 
       {/* Raw evidence (DVI, CARFAX, OE) */}
       <EvidencePanel evidence={evidence} />

@@ -85,8 +85,9 @@ function makeNotificationDb(seed: Doc[]) {
     async findOneAndUpdate(filter: Doc, update: Doc, opts: Doc) {
       let found = docs.find((doc) => matches(doc, filter));
       if (!found && opts?.upsert) {
-        found = { _id: filter._id || new ObjectId(), ...update.$setOnInsert };
-        docs.push(found);
+        const created: Doc = { _id: filter._id || new ObjectId(), ...update.$setOnInsert };
+        found = created;
+        docs.push(created);
       }
       return found || null;
     },
@@ -248,7 +249,7 @@ async function testRoutes() {
     listDeps.requirePlatformAdmin = (async () => {
       throw new Error("Not a platform admin");
     }) as any;
-    let response = await listNotifications(new Request("http://localhost/api/platform-admin/notifications") as any);
+    let response: Response = await listNotifications(new Request("http://localhost/api/platform-admin/notifications") as any);
     assert.equal(response.status, 401, "non-admin list request is rejected");
 
     const sample = [notification({ userId: PLATFORM_ADMIN_INBOX_USER_ID })];

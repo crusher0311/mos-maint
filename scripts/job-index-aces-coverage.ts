@@ -285,7 +285,7 @@ async function main() {
     const { normalizedVehicles } = await import("@/lib/db/schema/normalized");
     const { sql, eq, isNotNull, and } = await import("drizzle-orm");
     const pg = getPgDb();
-    const baseWhere = shopId !== null ? eq(normalizedVehicles.shopId, String(shopId)) : undefined;
+    const baseWhere = shopId !== null ? eq(normalizedVehicles.shopId, shopId) : undefined;
     const wrap = (extra?: any) => (baseWhere && extra ? and(baseWhere, extra) : (baseWhere ?? extra));
 
     const [{ count: nvTotal }] = await pg

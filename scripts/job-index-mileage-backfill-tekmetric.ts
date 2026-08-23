@@ -281,7 +281,7 @@ async function main() {
           );
         }
         await new Promise((r) => setTimeout(r, cooldownMin * 60 * 1000));
-        consecutive429s = 0;
+        budgetExhaustedHits = 0;
       }
 
       // Throttle

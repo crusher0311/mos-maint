@@ -488,7 +488,7 @@ export async function GET(req: NextRequest) {
       if (toAlertRecovered.length > 0) subjectParts.push(`${toAlertRecovered.length} recovered`);
       const subject = `[MOS] Protractor webhook health: ${subjectParts.join(", ")}`;
 
-      for (const admin of admins as Array<{ email: string }>) {
+      for (const admin of admins as unknown as Array<{ email: string }>) {
         try {
           await __deps.sendEmail({
             to: admin.email,

@@ -4,7 +4,30 @@ import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 
-const endpoints = [
+interface ApiEndpointParam {
+  name: string;
+  type: string;
+  description: string;
+  required?: boolean;
+}
+
+interface ApiEndpoint {
+  method: string;
+  path: string;
+  title: string;
+  description: string;
+  permission: string;
+  params?: ApiEndpointParam[];
+  requestBody?: Record<string, unknown>;
+  response: Record<string, unknown>;
+}
+
+interface ApiCategory {
+  category: string;
+  items: ApiEndpoint[];
+}
+
+const endpoints: ApiCategory[] = [
   {
     category: "Appointments",
     items: [

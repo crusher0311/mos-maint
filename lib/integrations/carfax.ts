@@ -773,7 +773,7 @@ export async function estimateMileageFromCarfax(
   const daysSinceNewest = (Date.now() - newest.date.getTime()) / (1000 * 60 * 60 * 24);
   const yearsSinceNewest = daysSinceNewest / 365;
 
-  let confidence: string;
+  let confidence: "low" | "good" | "fair" | "very-low";
   if (useRecent && records.length >= 3) {
     confidence = "good";
   } else if (useRecent) {

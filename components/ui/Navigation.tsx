@@ -34,7 +34,7 @@ export function Navigation({ items, title, className = "" }: NavigationProps) {
   };
 
   const isActive = (href: string) => {
-    return pathname === href || pathname.startsWith(href + "/");
+    return pathname === href || (pathname?.startsWith(href + "/") ?? false);
   };
 
   const renderNavigationItem = (item: NavigationItem, level = 0) => {

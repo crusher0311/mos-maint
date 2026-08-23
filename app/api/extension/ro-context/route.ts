@@ -232,6 +232,7 @@ async function _GET(request: NextRequest) {
             getOrder(mosShopId, String(roId)),
             5000,
             `shopmonkey ro-context /order/${roId}`,
+            null,
           ).catch(() => null);
           if (ro) {
             if (!vin) vin = ro.vehicle?.vin?.toUpperCase() ?? null;

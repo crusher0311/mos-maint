@@ -111,7 +111,7 @@ export async function listShopsByQuery(
   const col = await collection();
   const cursor = col.find(query);
   if (projection) cursor.project(projection);
-  return (await cursor.toArray()) as ShopDoc[];
+  return (await cursor.toArray()) as unknown as ShopDoc[];
 }
 
 export async function listShopsByShopIds(

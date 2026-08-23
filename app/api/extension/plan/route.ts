@@ -2082,7 +2082,8 @@ async function _GET(request: NextRequest) {
     // below CARFAX so Detect Dog anchors on the same (fresher) value as the
     // partner VHI endpoint. vehicles.* has no recurring sync, so it's stale.
     if ((!mileage || mileage <= 0) && vehicle) {
-      const snapshotMiles = vehicle.currentMileage || vehicle.mileage || vehicle.lastMileage || null;
+      const vMiles = vehicle as { currentMileage?: number; mileage?: number; lastMileage?: number };
+      const snapshotMiles = vMiles.currentMileage || vMiles.mileage || vMiles.lastMileage || null;
       if (snapshotMiles && snapshotMiles > 0) {
         mileage = snapshotMiles;
         console.log(`[Extension] Using vehicles snapshot mileage ${mileage} for ${vin} (open RO + CARFAX unavailable)`);
@@ -2105,7 +2106,8 @@ async function _GET(request: NextRequest) {
       const shopHistoryReadings = priorKnownMileage != null
         ? [{ mileage: priorKnownMileage, date: currentRoDate ?? null }]
         : [];
-      const snapshotMiles = vehicle?.currentMileage || vehicle?.mileage || vehicle?.lastMileage || null;
+      const vMiles2 = vehicle as { currentMileage?: number; mileage?: number; lastMileage?: number } | null;
+      const snapshotMiles = vMiles2?.currentMileage || vMiles2?.mileage || vMiles2?.lastMileage || null;
       const carfaxReadings: { odometer: number; date: string | null }[] = [];
       if (snapshotMiles && snapshotMiles > 0) carfaxReadings.push({ odometer: snapshotMiles, date: null });
       if (mileageEstimateDetails?.lastRecordedMileage) {
@@ -2337,7 +2339,7 @@ async function _GET(request: NextRequest) {
             item.milesToGo = milesToGo;
             const converted = convertItem(item, targetBucket);
             converted.milesToGo = milesToGo;
-            const recat = computeEstimatedDate(converted.milesToGo, item.intervalMiles, item.intervalMonths, item.last?.date, item.dueAtDate);
+            const recat = computeEstimatedDate(converted.milesToGo ?? null, item.intervalMiles ?? null, item.intervalMonths ?? null, item.last?.date, item.dueAtDate);
             converted.daysToGo = recat.daysToGo;
             converted.estimatedDueDate = recat.estimatedDueDate;
             (targetBucket === "overdue" ? plan.overdue : targetBucket === "dueSoon" ? plan.dueSoon : plan.recommended).push(converted);
@@ -2459,7 +2461,7 @@ async function _GET(request: NextRequest) {
 
       console.log(`[Extension Plan] TIMING CACHE_HIT_RETURN total=${Date.now() - reqStart}ms vin=${vin?.toUpperCase()} shop=${mosShopId}`);
       return NextResponse.json({
-        vehicle: { ...cachedVehicle, vin: cachedVehicle.vin || vin?.toUpperCase() || null },
+        vehicle: { ...cachedVehicle, vin: (cachedVehicle as { vin?: string | null }).vin || vin?.toUpperCase() || null },
         mileage: cachedPlan.plan.currentMiles || mileage,
         mileageEstimated,
         mileageEstimateDetails: mileageEstimated ? mileageEstimateDetails : undefined,
@@ -2635,7 +2637,7 @@ async function _GET(request: NextRequest) {
     // Build a map for fuzzy matching service names to canned jobs
     const cannedJobMap = new Map<string, any>();
     for (const cj of cannedJobs) {
-      const name = (cj.title || cj.name || '').toLowerCase().trim();
+      const name = String(cj.title || cj.name || '').toLowerCase().trim();
       if (name) {
         cannedJobMap.set(name, cj);
       }

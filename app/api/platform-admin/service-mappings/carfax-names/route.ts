@@ -10,7 +10,7 @@ export async function GET() {
     const names = await db.collection("carfax_cache").aggregate([
       { $unwind: "$serviceRecords" },
       { $group: { _id: "$serviceRecords.description" } },
-      { $match: { _id: { $ne: null, $ne: "" } } },
+      { $match: { _id: { $nin: [null, ""] } } },
       { $sort: { _id: 1 } }
     ]).toArray();
 

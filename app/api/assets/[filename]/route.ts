@@ -25,7 +25,7 @@ export async function GET(
     const filePath = path.join(process.cwd(), "public", filename);
     const fileBuffer = await readFile(filePath);
 
-    return new NextResponse(fileBuffer, {
+    return new NextResponse(new Uint8Array(fileBuffer), {
       status: 200,
       headers: {
         "Content-Type": contentType,

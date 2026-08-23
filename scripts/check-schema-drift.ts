@@ -93,6 +93,7 @@ async function main() {
 
     console.log("Applying migrations via scripts/apply-normalized-migration.ts...");
     const applyEnv: NodeJS.ProcessEnv = {
+      ...process.env,
       DATABASE_URL: connStr,
       DATAONE_DATABASE_URL: connStr, // apply script prefers this var; pin both
     };

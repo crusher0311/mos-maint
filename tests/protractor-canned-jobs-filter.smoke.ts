@@ -142,8 +142,14 @@ ok(
 // say "enriched" when *every* template has the detail-shape marker; one
 // fallback in the batch must downgrade to "sync-partial" so
 // fetchCannedJobsWithCache will still self-heal via background re-enrich.
-const enrichedTpl = { ID: "t1", ServicePackageHeader: { Title: "Oil Change" } };
-const summaryFallbackTpl = { ID: "t2", Code: "OIL" }; // no ServicePackageHeader
+const enrichedTpl: { ID: string; ServicePackageHeader?: unknown; Code?: string } = {
+  ID: "t1",
+  ServicePackageHeader: { Title: "Oil Change" },
+};
+const summaryFallbackTpl: { ID: string; ServicePackageHeader?: unknown; Code?: string } = {
+  ID: "t2",
+  Code: "OIL",
+}; // no ServicePackageHeader
 
 ok(
   "classify — empty batch is sync-partial (nothing to short-circuit)",

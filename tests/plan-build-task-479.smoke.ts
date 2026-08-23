@@ -120,7 +120,7 @@ console.log("\n5) computeIntervalProgress miles axis suppressed after normalizat
     },
     currentMiles,
     undefined,
-    "mi"
+    "miles"
   );
   const milesText = JSON.stringify(progress ?? {});
   ok(

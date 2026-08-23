@@ -192,7 +192,9 @@ type TekmetricRepairOrder = {
 
 type TekmetricJob = {
   id: number;
+  repairOrderId: number;
   name: string;
+  authorized: boolean;
   laborTotal?: number;
   partsTotal?: number;
   subtotal?: number;
@@ -364,8 +366,8 @@ async function getShopsNeedingBackfill(db: any): Promise<ShopToBackfill[]> {
         shopId,
         name: shop.name || shop.locationIdentifier || `Shop ${shopId}`,
         tekmetricShopId: Number(tekmetricShopId),
-        progressDate: progress?.currentChunkEnd ? new Date(progress.currentChunkEnd) : null,
-        lastRunAt: progress?.lastRunAt ? new Date(progress.lastRunAt) : null,
+        progressDate: progress?.currentChunkEnd ? new Date(progress.currentChunkEnd as string | number | Date) : null,
+        lastRunAt: progress?.lastRunAt ? new Date(progress.lastRunAt as string | number | Date) : null,
       });
     }
   }
@@ -1999,7 +2001,7 @@ async function _GETImpl(req: NextRequest) {
   // (cursor regressions, clobbered skip windows, double-counted totals).
   // Lease has a TTL — a crashed drain won't lock cron out forever.
   const drainLock = await getDrainLock();
-  if (drainLock && drainLock.expiresAt && new Date(drainLock.expiresAt) > new Date()) {
+  if (drainLock && drainLock.expiresAt && new Date(drainLock.expiresAt as string | number | Date) > new Date()) {
     return NextResponse.json({
       ok: true,
       skipped: true,
@@ -2330,7 +2332,7 @@ async function _POSTImpl(req: NextRequest) {
   // the manual POST trigger (used by wave1-backfill.ts and admin-clicked
   // single-shop kicks) so nothing races the drain worker.
   const drainLock = await getDrainLock();
-  if (drainLock && drainLock.expiresAt && new Date(drainLock.expiresAt) > new Date()) {
+  if (drainLock && drainLock.expiresAt && new Date(drainLock.expiresAt as string | number | Date) > new Date()) {
     return NextResponse.json({
       ok: true,
       skipped: true,

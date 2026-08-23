@@ -12,7 +12,7 @@ async function main() {
       AND closed_date IS NULL AND completed_date IS NULL
     GROUP BY 1,2 ORDER BY n DESC LIMIT 12
   `);
-  for (const r of a.rows ?? a) console.log(JSON.stringify(r));
+  for (const r of a) console.log(JSON.stringify(r));
 
   console.log("\nB) garbage ancient dates (< 1990):");
   const b = await pg.execute(sql`
@@ -23,7 +23,7 @@ async function main() {
       AND coalesce(closed_date, completed_date) < '1990-01-01'
     GROUP BY shop_id ORDER BY n DESC
   `);
-  for (const r of b.rows ?? b) console.log(JSON.stringify(r));
+  for (const r of b) console.log(JSON.stringify(r));
 
   console.log("\nC) shop 143 sample of NULL-date rows:");
   const c = await pg.execute(sql`
@@ -34,7 +34,7 @@ async function main() {
       AND shop_id = 143 AND closed_date IS NULL AND completed_date IS NULL
     ORDER BY created_at DESC LIMIT 8
   `);
-  for (const r of c.rows ?? c) console.log(JSON.stringify(r));
+  for (const r of c) console.log(JSON.stringify(r));
   process.exit(0);
 }
 main().catch((e) => { console.error(e); process.exit(1); });

@@ -61,7 +61,7 @@ export async function GET(req: NextRequest) {
     const recommendations = await listRecommendationDocs(shopId, vin, db);
 
     const formattedRecs = recommendations.map(rec => ({
-      id: rec._id.toString(),
+      id: String(rec._id),
       name: rec.name || rec.serviceName,
       description: rec.description,
       source: rec.source || 'oem',

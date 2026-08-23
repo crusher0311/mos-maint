@@ -70,9 +70,10 @@ export async function POST(req: NextRequest) {
 
     twiml.dial({
       callerId: config.phoneNumber || fromNumber,
+    }).number({
       statusCallback: statusCallbackUrl,
-      statusCallbackEvent: "initiated ringing answered completed",
-    }).number(toNumber);
+      statusCallbackEvent: ["initiated", "ringing", "answered", "completed"],
+    }, toNumber);
 
     return new NextResponse(twiml.toString(), {
       headers: { "Content-Type": "text/xml" },

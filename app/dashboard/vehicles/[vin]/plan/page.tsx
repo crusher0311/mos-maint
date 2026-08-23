@@ -226,8 +226,8 @@ function fillCarfaxMileageGaps(
     const recTime = rec.date.getTime();
 
     // Find closest known points before and after
-    let before: { date: Date; miles: number } | null = null;
-    let after: { date: Date; miles: number } | null = null;
+    let before: { date: Date; miles: number; index: number } | null = null;
+    let after: { date: Date; miles: number; index: number } | null = null;
 
     for (const kp of knownPoints) {
       if (kp.date.getTime() <= recTime) {
@@ -380,7 +380,15 @@ type OEMItem = {
   intervalMilesSevere?: number | null;
   intervalMonthsSevere?: number | null;
 };
-type LastDone = { miles?: number | null; date?: Date | null; source?: "carfax" | "protractor" | "shop" };
+type LastDone = {
+  miles?: number | null;
+  date?: Date | null;
+  source?: "carfax" | "protractor" | "shop";
+  /** Task #434: stable id of the parent service when the anchor was implied. */
+  impliedFromParentKey?: string | null;
+  /** Task #434: human-readable parent service name for implied anchors. */
+  impliedFromParentName?: string | null;
+};
 
 // Display names for normalized service keys
 const SERVICE_KEY_DISPLAY_NAMES: Record<string, string> = {
@@ -658,7 +666,7 @@ type TriagedItem = {
   daysToGo?: number | null;
   bump?: "red" | "yellow" | null;
   source?: "oem" | "dvi" | "protractor" | "common" | "declined";
-  dviSource?: "autoflow" | "autovitals" | "tekmetric";
+  dviSource?: "autoflow" | "autovitals" | "tekmetric" | "autoserve1" | "mastertech";
   reason?: string;
   declined?: DeclinedServiceEntry | null;
   usingShopInterval?: boolean;
@@ -695,6 +703,8 @@ type TriagedItem = {
   intervalMilesSevere?: number | null;
   intervalMonthsSevere?: number | null;
   bestPracticeBlurb?: string | null;
+  /** Task #434: whether the anchor was a direct match or implied from a parent service. */
+  lastSource?: "direct" | "implied" | null;
 };
 
 type ShopIntervalOverride = {
@@ -2359,6 +2369,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
     // Convert cached items back to TriagedItem format (dates stored as ISO strings)
     const convertCacheItem = (item: TriagedItemCache): TriagedItem => ({
       ...item,
+      action: (item.action as ServiceAction | null | undefined) ?? null,
       last: item.last ? {
         miles: item.last.miles,
         date: item.last.date ? new Date(item.last.date) : null,
@@ -2390,7 +2401,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
       
       for (const dw of protractorDeferredWork) {
         const title = dw.Title || dw.ServicePackageHeader?.Title || dw.Code || dw.Description || "Deferred Service";
-        const serviceKey = toKeyFromName(title);
+        const serviceKey = toKeyFromName(title) ?? `protractor_deferred_${dw.ID}`;
         
         // Skip if already in buckets (as OEM or other item)
         if (existingKeys.has(serviceKey)) continue;
@@ -2407,7 +2418,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
           dueAtDate: null,
           milesToGo: null,
           daysToGo: null,
-          bump: "overdue",
+          bump: null,
           source: "protractor",
           reason: "Previously recommended but not performed",
           protractorDeferredId: dw.ID,

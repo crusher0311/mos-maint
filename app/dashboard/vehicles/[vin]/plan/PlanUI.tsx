@@ -4,9 +4,9 @@
 import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui";
 import { Button } from "@/components/ui";
-// import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Tabs } from "@/components/ui";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
-// import { ChevronDown, ChevronUp, Clipboard, Printer, Share2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Clipboard, Printer, Share2 } from "lucide-react";
 import { getProgressTriggers, formatTriggerSuffix, type ProgressStatus } from "@/lib/vhi-progress";
 
 type TriagedItem = {
@@ -108,7 +108,7 @@ function ServiceCard({ t, severity, currentMiles }: { t: TriagedItem; severity: 
           <div className="min-w-0">
             <CardTitle className="text-sm truncate">{t.title}</CardTitle>
             <div className="mt-1 flex flex-wrap items-center gap-1 sm:gap-2 text-xs text-neutral-600">
-              {t.category && <Badge variant="secondary" className="text-xs">{t.category}</Badge>}
+              {t.category && <Badge variant="default" className="text-xs">{t.category}</Badge>}
               <Badge className={`${badgeColor} text-white text-xs`}>
                 {severity === "soon"
                   ? `DUE SOON${triggerSuffix.toUpperCase()}`
@@ -117,7 +117,7 @@ function ServiceCard({ t, severity, currentMiles }: { t: TriagedItem; severity: 
               {t.bump === "red" && <Badge className="bg-red-600 text-white text-xs">DVI 🔴</Badge>}
               {t.bump === "yellow" && <Badge className="bg-amber-600 text-white text-xs">DVI 🟡</Badge>}
               {(t.intervalMiles || t.intervalMonths) && (
-                <Badge variant="outline" className="text-xs hidden sm:inline-flex">
+                <Badge variant="default" className="text-xs hidden sm:inline-flex">
                   OEM: {t.intervalMiles ? `${fmtMiles(t.intervalMiles)} mi` : ""}
                   {t.intervalMiles && t.intervalMonths ? " / " : ""}
                   {t.intervalMonths ? `${t.intervalMonths} mo` : ""}
@@ -135,7 +135,7 @@ function ServiceCard({ t, severity, currentMiles }: { t: TriagedItem; severity: 
             >
               <Clipboard className="h-3.5 w-3.5 sm:h-4 sm:w-4 sm:mr-1" /> <span className="hidden sm:inline">Copy</span>
             </Button>
-            <Button variant="default" size="sm" title="Add to RO (stub)" className="h-7 sm:h-8 px-2 sm:px-3 text-xs">
+            <Button variant="primary" size="sm" title="Add to RO (stub)" className="h-7 sm:h-8 px-2 sm:px-3 text-xs">
               + RO
             </Button>
           </div>
@@ -228,12 +228,14 @@ export function PlanUI({
                 </Button>
               </div>
               <div className="ml-1 sm:ml-2">
-                <Tabs value={mode} onValueChange={(v) => setMode(v as any)}>
-                  <TabsList className="h-7 sm:h-8">
-                    <TabsTrigger value="advisor" className="text-xs sm:text-sm px-2 sm:px-3">Advisor</TabsTrigger>
-                    <TabsTrigger value="client" className="text-xs sm:text-sm px-2 sm:px-3">Client</TabsTrigger>
-                  </TabsList>
-                </Tabs>
+                <Tabs
+                  defaultTab={mode}
+                  onChange={(v) => setMode(v as "advisor" | "client")}
+                  tabs={[
+                    { id: "advisor", label: "Advisor", content: null },
+                    { id: "client", label: "Client", content: null },
+                  ]}
+                />
               </div>
             </div>
           </div>
@@ -242,37 +244,50 @@ export function PlanUI({
 
       {/* Buckets */}
       <div className="mx-auto max-w-5xl px-3 sm:px-6">
-        <Tabs defaultValue="overdue">
-          <TabsList className="mb-3">
-            <TabsTrigger value="overdue">Overdue ({counts.o})</TabsTrigger>
-            <TabsTrigger value="soon">Due Soon ({counts.s})</TabsTrigger>
-            <TabsTrigger value="upcoming">Upcoming ({counts.u})</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="overdue" className="space-y-3">
-            {buckets.overdue.length === 0 ? (
-              <div className="text-sm text-neutral-500">Nothing overdue 🎉</div>
-            ) : (
-              buckets.overdue.map((t) => <ServiceCard key={t.key} t={t} severity="overdue" currentMiles={currentMiles} />)
-            )}
-          </TabsContent>
-
-          <TabsContent value="soon" className="space-y-3">
-            {buckets.dueSoon.length === 0 ? (
-              <div className="text-sm text-neutral-500">Nothing due soon.</div>
-            ) : (
-              buckets.dueSoon.map((t) => <ServiceCard key={t.key} t={t} severity="soon" currentMiles={currentMiles} />)
-            )}
-          </TabsContent>
-
-          <TabsContent value="upcoming" className="space-y-3">
-            {buckets.upcoming.length === 0 ? (
-              <div className="text-sm text-neutral-500">No upcoming items.</div>
-            ) : (
-              buckets.upcoming.map((t) => <ServiceCard key={t.key} t={t} severity="upcoming" currentMiles={currentMiles} />)
-            )}
-          </TabsContent>
-        </Tabs>
+        <Tabs
+          defaultTab="overdue"
+          tabs={[
+            {
+              id: "overdue",
+              label: `Overdue (${counts.o})`,
+              content: (
+                <div className="space-y-3">
+                  {buckets.overdue.length === 0 ? (
+                    <div className="text-sm text-neutral-500">Nothing overdue 🎉</div>
+                  ) : (
+                    buckets.overdue.map((t) => <ServiceCard key={t.key} t={t} severity="overdue" currentMiles={currentMiles} />)
+                  )}
+                </div>
+              ),
+            },
+            {
+              id: "soon",
+              label: `Due Soon (${counts.s})`,
+              content: (
+                <div className="space-y-3">
+                  {buckets.dueSoon.length === 0 ? (
+                    <div className="text-sm text-neutral-500">Nothing due soon.</div>
+                  ) : (
+                    buckets.dueSoon.map((t) => <ServiceCard key={t.key} t={t} severity="soon" currentMiles={currentMiles} />)
+                  )}
+                </div>
+              ),
+            },
+            {
+              id: "upcoming",
+              label: `Upcoming (${counts.u})`,
+              content: (
+                <div className="space-y-3">
+                  {buckets.upcoming.length === 0 ? (
+                    <div className="text-sm text-neutral-500">No upcoming items.</div>
+                  ) : (
+                    buckets.upcoming.map((t) => <ServiceCard key={t.key} t={t} severity="upcoming" currentMiles={currentMiles} />)
+                  )}
+                </div>
+              ),
+            },
+          ]}
+        />
       </div>
     </div>
   );

@@ -174,13 +174,13 @@ function makeFakeDb() {
     // Run #1: first failure → no page yet.
     const r1 = await runReal({ ...baseDeps, steps: failingSteps });
     assert(r1.alerts.length === 0, "1st failure does NOT page");
-    assert(sent.length === 0, "1st failure sends no email");
+    assert.strictEqual(sent.length, 0, "1st failure sends no email");
 
     // Run #2: second consecutive failure → page exactly once.
     const r2 = await runReal({ ...baseDeps, steps: failingSteps });
     assert(r2.alerts.some((a: any) => a.kind === "page" && a.step === "apply_canned_job"),
       `2nd consecutive failure pages (got ${JSON.stringify(r2.alerts)})`);
-    assert(sent.length === 1, `2nd failure sends exactly 1 email, got ${sent.length}`);
+    assert.strictEqual(sent.length, 1, `2nd failure sends exactly 1 email, got ${sent.length}`);
     assert(/synthetic prod smoke/i.test(sent[0].subject + sent[0].html),
       "email mentions synthetic prod smoke");
     assert(/curl [\s\S]*synthetic-prod-smoke/.test(sent[0].html),
@@ -189,13 +189,13 @@ function makeFakeDb() {
     // Run #3: still failing, already alerted → does NOT page again.
     const r3 = await runReal({ ...baseDeps, steps: failingSteps });
     assert(r3.alerts.length === 0, "3rd failure (already alerted) does NOT re-page");
-    assert(sent.length === 1, "no additional email on the 3rd consecutive failure");
+    assert.strictEqual(sent.length, 1, "no additional email on the 3rd consecutive failure");
 
     // Run #4: recovery → recovery email + state cleared.
     const r4 = await runReal({ ...baseDeps, steps: [fakeStep("apply_canned_job", true)] });
     assert(r4.alerts.some((a: any) => a.kind === "recover"),
       "recovery emits a recover alert");
-    assert(sent.length === 2, `recovery sends 1 more email, got ${sent.length}`);
+    assert.strictEqual(sent.length, 2, `recovery sends 1 more email, got ${sent.length}`);
     assert(/recovered/i.test(sent[1].subject), "recovery email subject says recovered");
 
     // Synthetic-tagging contract: every persisted run carries synthetic=true.

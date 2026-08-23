@@ -784,7 +784,7 @@ async function _POST(request: NextRequest) {
           estimateMileageFromCarfax(mosShopId!, vin),
           STICKER_CARFAX_TIMEOUT_MS,
           `sticker.predictiveDate shop=${mosShopId}`,
-          { estimated: false, milesPerDay: 0 } as Awaited<ReturnType<typeof estimateMileageFromCarfax>>,
+          { estimated: false, mileage: null, reason: "sticker predictive date timed out" } as Awaited<ReturnType<typeof estimateMileageFromCarfax>>,
         );
         if (estimate.estimated && estimate.milesPerDay > 0) {
           const daysToMileage = Math.ceil(intervalMileage / estimate.milesPerDay);

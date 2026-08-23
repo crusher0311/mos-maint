@@ -27,7 +27,8 @@ export async function GET(
     const cached = await getCachedAutoVitalsInspection(appointmentId, user.shopId);
     
     const cacheMaxAge = 6 * 60 * 60 * 1000;
-    if (cached && cached.updatedAt && Date.now() - new Date(cached.updatedAt).getTime() < cacheMaxAge) {
+    const cachedUpdatedAt = (cached as { updatedAt?: string | Date } | null)?.updatedAt;
+    if (cached && cachedUpdatedAt && Date.now() - new Date(cachedUpdatedAt).getTime() < cacheMaxAge) {
       return NextResponse.json({ 
         inspection: cached, 
         source: "cache" 

@@ -24,6 +24,7 @@ import type {
 } from "mongodb";
 import { ObjectId } from "mongodb";
 import { sql as dsql, and, eq, gte, lte, type SQL } from "drizzle-orm";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
 // `desc` removed — order-by uses an inline `sql` template that
 // supports NULLS LAST without an extra `as any` cast.
 import { getDb } from "@/lib/data/db";
@@ -139,7 +140,7 @@ function buildWhere(filter: Filter<EventDoc>): SQL | undefined {
   const clauses: SQL[] = [];
   const f = filter as Record<string, unknown>;
 
-  const eqStr = (col: typeof pgEvents.provider, v: unknown) =>
+  const eqStr = (col: AnyPgColumn, v: unknown) =>
     clauses.push(eq(col, String(v)));
 
   if (f.provider !== undefined) eqStr(pgEvents.provider, f.provider);
@@ -149,7 +150,7 @@ function buildWhere(filter: Filter<EventDoc>): SQL | undefined {
   if (f.vin !== undefined) eqStr(pgEvents.vin, f.vin);
   if (f.vehicleVin !== undefined) eqStr(pgEvents.vehicleVin, f.vehicleVin);
 
-  const addRange = (col: typeof pgEvents.receivedAt, raw: unknown) => {
+  const addRange = (col: AnyPgColumn, raw: unknown) => {
     if (raw instanceof Date) {
       clauses.push(eq(col, raw));
       return;
@@ -197,6 +198,15 @@ function buildWhere(filter: Filter<EventDoc>): SQL | undefined {
           clauses.push(dsql`${pgEvents.payload} #>> ${pathLiteral}::text[] IS NOT NULL`);
         } else {
           clauses.push(dsql`${pgEvents.payload} #>> ${pathLiteral}::text[] <> ${String(v)}`);
+        }
+      }
+      if (Array.isArray(o.$nin)) {
+        for (const v of o.$nin) {
+          if (v === null) {
+            clauses.push(dsql`${pgEvents.payload} #>> ${pathLiteral}::text[] IS NOT NULL`);
+          } else {
+            clauses.push(dsql`${pgEvents.payload} #>> ${pathLiteral}::text[] <> ${String(v)}`);
+          }
         }
       }
     } else if (op !== undefined) {
@@ -302,7 +312,7 @@ export async function streamEvents(
  * on the Mongo path until that caller is rewritten in the W3b
  * follow-up.
  */
-export async function aggregateEvents<T = Document>(
+export async function aggregateEvents<T extends Document = Document>(
   pipeline: Document[],
 ): Promise<T[]> {
   const col = await collection();

@@ -693,6 +693,7 @@ type TekmetricJob = {
   id: number;
   repairOrderId: number;
   name: string;
+  authorized?: boolean;
   laborTotal?: number;
   partsTotal?: number;
   subtotal?: number;

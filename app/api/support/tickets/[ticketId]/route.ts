@@ -4,9 +4,12 @@ import { ObjectId } from "mongodb";
 import { createPlatformAdminNotification } from "@/lib/notifications";
 import { SUPER_ADMIN_EMAILS } from "@/lib/super-admins";
 import { sendEmail } from "@/lib/email";
+import type { UpdateFilter } from "mongodb";
 import {
   findOneAndUpdateSupportTicketById,
   findSupportTicketById,
+  type SupportTicketDoc,
+  type SupportTicketMessage,
 } from "@/lib/data/repositories/support-tickets";
 
 export async function GET(
@@ -74,21 +77,27 @@ export async function POST(
     }
 
     const messageId = new ObjectId().toString();
+    const newMessage: SupportTicketMessage = {
+      id: messageId,
+      from: "user",
+      fromEmail: session.email,
+      fromName: session.email.split("@")[0],
+      message,
+      createdAt: new Date(),
+    };
+    // SupportTicketDoc carries an open `[extra: string]: unknown` index
+    // signature, which makes MongoDB's mapped `PushOperator<SupportTicketDoc>`
+    // reject even a correctly-shaped `messages` push. Build the operator as its
+    // own value and widen through `unknown` to the intended UpdateFilter.
+    const update = {
+      $set: { updatedAt: new Date() },
+      $push: {
+        messages: newMessage,
+      },
+    } as unknown as UpdateFilter<SupportTicketDoc>;
     const result = await findOneAndUpdateSupportTicketById(
       ticketId,
-      {
-        $set: { updatedAt: new Date() },
-        $push: {
-          messages: {
-            id: messageId,
-            from: "user",
-            fromEmail: session.email,
-            fromName: session.name || session.email.split("@")[0],
-            message,
-            createdAt: new Date(),
-          },
-        },
-      },
+      update,
       { userEmail: session.email },
     );
 

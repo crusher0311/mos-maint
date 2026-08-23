@@ -10,13 +10,13 @@ import type {
   BackfillOptions,
   BackfillResult,
 } from '@/lib/integrations/core/types';
-import { findShopByShopId } from '@/lib/data/repositories/shops';
+import { findShopByShopId, type ShopDoc } from '@/lib/data/repositories/shops';
 import { resolveProtractorConfig, protractorFetch, testConnection as testProtractorConnection, type ProtractorCannedJobsListSource } from './client';
 import { transformVehicle, transformWorkOrder, transformCannedJob, transformDeferredWork } from './transform';
 import type { ProtractorVehicle, ProtractorWorkOrder, ProtractorCannedJob, ProtractorDeferredWork } from './client';
 import { withUpstreamTimeout } from '@/lib/with-upstream-timeout';
 
-interface ProtractorShopDoc {
+interface ProtractorShopDoc extends ShopDoc {
   shopId: number | string;
   preferences?: {
     distanceUnit?: 'miles' | 'kilometers';
@@ -60,7 +60,11 @@ export class ProtractorAdapter implements IIntegrationAdapter {
   }
 
   async testConnection(shopId: number): Promise<Result<{ message: string }>> {
-    const result = await testProtractorConnection(shopId);
+    const config = await resolveProtractorConfig(shopId);
+    if (!config.configured) {
+      return { ok: false, error: 'Protractor is not configured for this shop' };
+    }
+    const result = await testProtractorConnection(config.connectionId, config.apiKey);
     if (!result.ok) {
       return { ok: false, error: result.error || 'Connection test failed' };
     }

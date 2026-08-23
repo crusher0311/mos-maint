@@ -197,7 +197,7 @@ export async function upsertCustomerFromAutoflow(shopId: number, payload: RawPay
     // Each anonymous/partial webhook payload must get its OWN record —
     // never a selector-based upsert (a {shopId}-only selector would
     // collapse distinct customers into one row per shop).
-    customerId = await insertCustomer({ shopId, ...customerOnInsert, ...baseSet });
+    customerId = await insertCustomer({ ...customerOnInsert, ...baseSet });
   } else {
     const existing = await findCustomerIdBySelectors(selectors);
     if (existing?._id) {

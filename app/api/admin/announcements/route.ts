@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
       target: targetConfig,
       deliveryChannels: deliveryChannels || { inApp: true, email: true },
       status: sendNow ? "sent" : "draft",
-      createdBy: session.userId,
+      createdBy: session.email,
     });
 
     if (!announcementId) {

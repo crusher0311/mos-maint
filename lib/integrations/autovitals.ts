@@ -1,4 +1,4 @@
-import { findShopByExactShopId } from "@/lib/data/repositories/shops";
+import { findShopByExactShopId, type ShopDoc } from "@/lib/data/repositories/shops";
 import {
   upsertAutoVitalsVehicle,
   findAutoVitalsVehicleByVin,
@@ -446,7 +446,7 @@ export async function getCachedAutoVitalsInspection(
   return cached as AutoVitalsInspectionResult | null;
 }
 
-interface AutoVitalsShopDoc {
+interface AutoVitalsShopDoc extends ShopDoc {
   shopId: number | string;
   autovitals?: {
     shopId: number;
@@ -616,7 +616,7 @@ export async function fetchAutoVitalsInspectionByVin(
     ? Date.now() - new Date(cachedInspection.updatedAt).getTime() 
     : Infinity;
   
-  if (cachedInspection && cacheAge < ttlMs && cachedInspection.items?.length > 0) {
+  if (cachedInspection && cacheAge < ttlMs && (cachedInspection.items?.length ?? 0) > 0) {
     console.log(`[AutoVitals] Using cached inspection for VIN ${vin}, age: ${Math.round(cacheAge / 1000 / 60)}m`);
     return {
       ok: true,

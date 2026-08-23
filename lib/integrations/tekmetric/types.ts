@@ -71,10 +71,34 @@ export interface TekmetricRepairOrder {
     text?: string;
     colorCode?: string;
   };
+  // Tekmetric's richer status/label associations returned on the RO
+  // detail endpoint. `status` (above) is the legacy string form; these
+  // carry the structured `{ id, code, name }` objects the sync writers read.
+  repairOrderStatus?: {
+    id?: number;
+    code?: string;
+    name?: string;
+  };
+  repairOrderLabel?: {
+    id?: number;
+    code?: string;
+    name?: string;
+  };
+  repairOrderCustomLabel?: {
+    id?: number;
+    code?: string;
+    name?: string;
+  };
+  color?: string;
   mileageIn?: number;
   mileageOut?: number;
+  // Odometer readings as returned on the RO detail endpoint (distinct from
+  // the vehicle-level mileageIn/mileageOut).
+  milesIn?: number;
+  milesOut?: number;
   poNumber?: string;
   completedDate?: string;
+  postedDate?: string;
   createdDate?: string;
   updatedDate?: string;
   totalAmount?: number;

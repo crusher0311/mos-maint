@@ -206,11 +206,12 @@ async function findConfiguredShop(preferred: number | null): Promise<number | nu
 
 async function main() {
   const args = parseArgs();
-  const shopId = await findConfiguredShop(args.shop);
-  if (shopId == null) {
+  const resolvedShopId = await findConfiguredShop(args.shop);
+  if (resolvedShopId == null) {
     console.error("[probe] No configured Protractor shop found. Pass --shop=N.");
     process.exit(1);
   }
+  const shopId: number = resolvedShopId;
 
   const config = await resolveProtractorConfig(shopId);
   if (!config.configured) {
