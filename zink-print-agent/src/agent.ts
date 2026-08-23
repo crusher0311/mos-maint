@@ -110,11 +110,15 @@ export class PrintAgent {
   async processJob(job: PrintJob): Promise<boolean> {
     const startedAt = Date.now();
     try {
-      const target = job.printer ?? this.cfg.printer;
-      const port = job.printer?.port ?? this.cfg.printer.port;
+      // The local config is the sole authority for a LAN destination. Never
+      // trust a host/port from a cloud job: doing so would turn this agent into
+      // a shop-LAN TCP probe. `printerId` selects which agent claims a job;
+      // each agent's own config selects the physical printer it may contact.
+      const target = this.cfg.printer;
+      const port = this.cfg.printer.port;
 
-      const header = buildZinkHeader(job.options ?? {});
       const jpeg = base64ToImageBuffer(job.imageBase64);
+      const header = buildZinkHeader(job.options ?? {}, jpeg.length);
 
       const host = await this.printer.resolveAddress(
         target.address,

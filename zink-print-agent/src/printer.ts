@@ -5,8 +5,8 @@
  * addressed by a static IP or an mDNS name like "zink.local". This module:
  *   - resolves an address to a connectable host (IP passthrough, mDNS lookup
  *     for *.local, hostname passthrough otherwise), and
- *   - opens a socket, writes the XML header then the JPEG bytes, and reports
- *     a structured result.
+ *   - opens a socket, completes the printer's XML setup handshake, sends the
+ *     exact JPEG bytes, and waits for the printer's final status.
  */
 
 import net from "node:net";
@@ -122,11 +122,29 @@ export interface SendOptions {
   connectTimeoutMs?: number;
 }
 
+const STATUS_END = "</status>";
+
+function parseStatusResponse(xml: string, stage: "setup" | "image"): void {
+  const codeMatch = xml.match(/<code>\s*(-?\d+)\s*<\/code>/i);
+  if (!codeMatch) {
+    throw new Error(`printer ${stage} response did not include a status code`);
+  }
+  const code = Number(codeMatch[1]);
+  const comment =
+    xml.match(/<comment>\s*([\s\S]*?)\s*<\/comment>/i)?.[1]?.trim() || "";
+  if (code !== 0) {
+    throw new Error(
+      `printer rejected ${stage} (code ${code})${comment ? `: ${comment}` : ""}`,
+    );
+  }
+}
+
 /**
- * Open a TCP socket to the printer and write the XML header followed by the
- * JPEG buffer, then half-close so the printer sees EOF. Resolves once the
- * bytes are flushed and the connection closes; rejects on connect/socket
- * timeout or any socket error.
+ * Open one TCP socket and follow the VC-500W application protocol:
+ * write the XML print setup, wait for a successful XML status response, write
+ * exactly the declared JPEG bytes, then wait for the final successful status.
+ * Rejects with stage/host context on timeout, malformed status, printer error,
+ * or socket failure.
  */
 export function sendToPrinter(
   host: string,
@@ -140,6 +158,8 @@ export function sendToPrinter(
   return new Promise<void>((resolve, reject) => {
     const socket = new net.Socket();
     let settled = false;
+    let stage: "setup" | "image" = "setup";
+    let responseBuffer = "";
 
     const fail = (err: Error) => {
       if (settled) return;
@@ -149,7 +169,11 @@ export function sendToPrinter(
       } catch {
         // ignore
       }
-      reject(err);
+      reject(
+        new Error(
+          `printer ${stage} exchange with ${host}:${port} failed: ${err.message}`,
+        ),
+      );
     };
 
     const succeed = () => {
@@ -161,26 +185,45 @@ export function sendToPrinter(
     socket.setTimeout(connectTimeoutMs);
 
     socket.on("timeout", () => {
-      fail(new Error(`printer socket to ${host}:${port} timed out after ${connectTimeoutMs}ms`));
+      fail(new Error(`timed out after ${connectTimeoutMs}ms`));
     });
     socket.on("error", (err: Error) => {
       fail(err);
     });
     socket.on("close", () => {
-      // If we already errored/timed out this is a no-op; otherwise the
-      // printer closed cleanly after consuming the job.
-      succeed();
+      if (!settled) {
+        fail(new Error("connection closed before the printer confirmed the job"));
+      }
+    });
+    socket.on("data", (chunk: Buffer) => {
+      if (settled) return;
+      responseBuffer += chunk.toString("utf8");
+      const end = responseBuffer.indexOf(STATUS_END);
+      if (end === -1) return;
+
+      const statusXml = responseBuffer.slice(0, end + STATUS_END.length);
+      responseBuffer = responseBuffer.slice(end + STATUS_END.length);
+      try {
+        parseStatusResponse(statusXml, stage);
+      } catch (err) {
+        fail(err instanceof Error ? err : new Error(String(err)));
+        return;
+      }
+
+      if (stage === "setup") {
+        stage = "image";
+        socket.write(jpeg, (err) => {
+          if (err) fail(err);
+        });
+        return;
+      }
+
+      socket.end(() => succeed());
     });
 
     socket.connect(port, host, () => {
-      socket.write(header, "utf8");
-      socket.write(jpeg, (err) => {
-        if (err) {
-          fail(err);
-          return;
-        }
-        // Half-close: flush our bytes and signal EOF to the printer.
-        socket.end();
+      socket.write(header, "utf8", (err) => {
+        if (err) fail(err);
       });
     });
   });

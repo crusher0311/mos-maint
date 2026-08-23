@@ -91,7 +91,12 @@ const STATUS_BADGE: Record<JobRow["status"], string> = {
 
 function ConfigEditor({ shop, onSaved }: { shop: ShopRow; onSaved: () => void }) {
   const existing = shop.configs[0];
+  const inferredPrinterId =
+    existing?.printerId ??
+    shop.agents.find((agent) => agent.printerId !== "default")?.printerId ??
+    "";
   const [address, setAddress] = useState(existing?.address ?? "");
+  const [printerId, setPrinterId] = useState(inferredPrinterId);
   const [port, setPort] = useState<number>(existing?.port ?? 9100);
   const [cut, setCut] = useState<0 | 1>(existing?.defaultCut ?? 1);
   const [speed, setSpeed] = useState<0 | 1>(existing?.defaultSpeed ?? 0);
@@ -115,7 +120,7 @@ function ConfigEditor({ shop, onSaved }: { shop: ShopRow; onSaved: () => void })
           cut,
           speed,
           width,
-          printerId: existing?.printerId ?? null,
+          printerId: printerId.trim() || null,
         }),
       });
       if (!res.ok) {
@@ -136,13 +141,22 @@ function ConfigEditor({ shop, onSaved }: { shop: ShopRow; onSaved: () => void })
       <div className="text-xs font-semibold uppercase text-gray-500 mb-3">
         Printer Config
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
         <div className="col-span-2">
           <label className="block text-xs text-gray-600 mb-1">Address / Host</label>
           <input
             value={address}
             onChange={(e) => setAddress(e.target.value)}
             placeholder="e.g. 192.168.1.50"
+            className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-600 mb-1">Printer ID</label>
+          <input
+            value={printerId}
+            onChange={(e) => setPrinterId(e.target.value)}
+            placeholder="front-counter"
             className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
           />
         </div>
@@ -171,8 +185,8 @@ function ConfigEditor({ shop, onSaved }: { shop: ShopRow; onSaved: () => void })
             onChange={(e) => setCut(Number(e.target.value) as 0 | 1)}
             className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm bg-white"
           >
-            <option value={1}>Cut (1)</option>
-            <option value={0}>No cut (0)</option>
+            <option value={1}>Full cut (1)</option>
+            <option value={0}>Half cut (0)</option>
           </select>
         </div>
         <div>
@@ -182,8 +196,8 @@ function ConfigEditor({ shop, onSaved }: { shop: ShopRow; onSaved: () => void })
             onChange={(e) => setSpeed(Number(e.target.value) as 0 | 1)}
             className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm bg-white"
           >
-            <option value={0}>Normal (0)</option>
-            <option value={1}>Fast (1)</option>
+            <option value={0}>Vivid · 317 lpi (0)</option>
+            <option value={1}>Normal · 264 lpi (1)</option>
           </select>
         </div>
         <div className="flex items-end">
@@ -205,7 +219,41 @@ function ConfigEditor({ shop, onSaved }: { shop: ShopRow; onSaved: () => void })
 
 function ShopCard({ shop, onChanged }: { shop: ShopRow; onChanged: () => void }) {
   const [busyJob, setBusyJob] = useState<string | null>(null);
+  const [testJobId, setTestJobId] = useState<string | null>(null);
+  const [testError, setTestError] = useState("");
+  const [sendingTest, setSendingTest] = useState(false);
   const anyOnline = shop.agents.some((a) => a.online);
+  const testJob = testJobId
+    ? shop.recentJobs.find((job) => job.id === testJobId)
+    : null;
+
+  const sendPilotTest = async () => {
+    setSendingTest(true);
+    setTestError("");
+    try {
+      const config = shop.configs[0];
+      const res = await fetch("/api/platform-admin/zink-print/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          shopId: shop.shopId,
+          printerId: config?.printerId ?? null,
+          cut: config?.defaultCut ?? 1,
+          speed: config?.defaultSpeed ?? 0,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || `Test enqueue failed (${res.status})`);
+      }
+      setTestJobId(data.jobId);
+      onChanged();
+    } catch (e: any) {
+      setTestError(e.message || "Failed to queue pilot test");
+    } finally {
+      setSendingTest(false);
+    }
+  };
 
   const jobAction = async (job: JobRow, action: "requeue" | "clear") => {
     if (action === "clear" && !confirm("Permanently remove this job from the queue?")) {
@@ -290,6 +338,39 @@ function ShopCard({ shop, onChanged }: { shop: ShopRow; onChanged: () => void })
         )}
 
         <ConfigEditor shop={shop} onSaved={onChanged} />
+
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 p-3">
+          <button
+            onClick={sendPilotTest}
+            disabled={sendingTest || !shop.configs[0]?.address}
+            className="inline-flex items-center gap-1.5 rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            title="Queue the fixed MOS pilot test pattern through the cloud agent"
+          >
+            {sendingTest ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Send className="h-3.5 w-3.5" />
+            )}
+            Send pilot test
+          </button>
+          <div className="text-xs text-blue-900">
+            {!shop.configs[0]?.address
+              ? "Save a printer address first."
+              : testError
+                ? <span className="text-red-700">{testError}</span>
+                : testJob
+                  ? (
+                    <span>
+                      Test <span className="font-mono">{testJob.id.slice(-8)}</span>:{" "}
+                      <strong>{testJob.status}</strong>
+                      {testJob.error ? ` — ${testJob.error}` : ""}
+                    </span>
+                  )
+                  : testJobId
+                    ? "Test queued; waiting for the next status refresh…"
+                    : "Queues a known image and traces it below without opening the printer LAN."}
+          </div>
+        </div>
 
         {/* Recent jobs */}
         <div>
@@ -394,6 +475,11 @@ export default function ZinkPrintAdminPage() {
 
   useEffect(() => {
     load();
+  }, [load]);
+
+  useEffect(() => {
+    const timer = window.setInterval(load, 5000);
+    return () => window.clearInterval(timer);
   }, [load]);
 
   return (

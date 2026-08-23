@@ -1,5 +1,5 @@
 {
-  "cloudBaseUrl": "https://app.mosmaintenance.com",
+  "cloudBaseUrl": "https://mos.tools",
   "shopApiKey": "REPLACE_WITH_YOUR_SHOP_API_KEY",
   "printer": {
     "address": "zink.local",

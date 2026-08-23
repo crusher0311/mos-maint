@@ -9,6 +9,19 @@ import {
   ApiKey 
 } from "./api-keys";
 
+/**
+ * Test seam for route-level API-key regression coverage. Production keeps the
+ * imported implementations; smoke tests replace these functions so they can
+ * exercise the real route wrappers without touching the live API-key store.
+ */
+export const __deps = {
+  validateApiKey,
+  checkPermission,
+  checkRateLimit,
+  logApiUsage,
+  updateApiKeyUsage,
+};
+
 export interface ExternalApiContext {
   apiKey: ApiKey;
   shopId: number;
@@ -70,7 +83,7 @@ export function withExternalAuth(
         ));
       }
       
-      const validation = await validateApiKey(rawKey);
+      const validation = await __deps.validateApiKey(rawKey);
       
       if (!validation.valid || !validation.apiKey) {
         statusCode = 401;
@@ -82,7 +95,7 @@ export function withExternalAuth(
       
       apiKey = validation.apiKey;
       
-      const hasPermission = await checkPermission(apiKey, requiredPermission);
+      const hasPermission = await __deps.checkPermission(apiKey, requiredPermission);
       if (!hasPermission) {
         statusCode = 403;
         return withRequestIdHeader(NextResponse.json(
@@ -95,7 +108,7 @@ export function withExternalAuth(
         ));
       }
       
-      const rateLimitCheck = await checkRateLimit(apiKey.keyHash, apiKey.rateLimit);
+      const rateLimitCheck = await __deps.checkRateLimit(apiKey.keyHash, apiKey.rateLimit);
       if (!rateLimitCheck.allowed) {
         statusCode = 429;
         return withRequestIdHeader(NextResponse.json(
@@ -153,11 +166,11 @@ export function withExternalAuth(
         const responseTime = Date.now() - startTime;
         
         if (statusCode >= 200 && statusCode < 300) {
-          await updateApiKeyUsage(apiKey.keyHash)
+          await __deps.updateApiKeyUsage(apiKey.keyHash)
             .catch(err => console.error("[External API] Failed to update usage:", err));
         }
         
-        await logApiUsage({
+        await __deps.logApiUsage({
           keyHash: apiKey.keyHash,
           shopId: apiKey.shopId,
           endpoint: req.nextUrl.pathname,

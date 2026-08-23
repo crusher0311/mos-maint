@@ -31,7 +31,11 @@ import {
   resolveJobOptions,
 } from "@/lib/print-queue/repository";
 import { toJpegBase64, renderKeytagBuffer } from "@/lib/print-queue/render";
-import type { ZinkPrintOptions } from "@/lib/print-queue/types";
+import {
+  PrintPayloadTooLargeError,
+  type ZinkPrintOptions,
+} from "@/lib/print-queue/types";
+import { readPrintJsonBody } from "@/lib/print-queue/request-body";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -58,11 +62,19 @@ function normalizeOptions(raw: any): ZinkPrintOptions | undefined {
 async function _POST(req: NextRequest) {
   let body: any;
   try {
-    body = await req.json();
-  } catch {
+    body = await readPrintJsonBody(req);
+  } catch (error) {
     return NextResponse.json(
-      { error: "Invalid JSON body" },
-      { status: 400, headers: corsHeaders },
+      {
+        error:
+          error instanceof PrintPayloadTooLargeError
+            ? error.message
+            : "Invalid JSON body",
+      },
+      {
+        status: error instanceof PrintPayloadTooLargeError ? 413 : 400,
+        headers: corsHeaders,
+      },
     );
   }
 
@@ -117,7 +129,10 @@ async function _POST(req: NextRequest) {
     console.error("[Print Enqueue] image preparation failed:", err?.message);
     return NextResponse.json(
       { error: "Failed to prepare print image", message: err?.message },
-      { status: 500, headers: corsHeaders },
+      {
+        status: err instanceof PrintPayloadTooLargeError ? 413 : 500,
+        headers: corsHeaders,
+      },
     );
   }
 
@@ -129,23 +144,11 @@ async function _POST(req: NextRequest) {
       ? body.printerId.trim()
       : null;
 
-  // Per-job printer override (rare); falls back to the agent's own config.
-  const printer =
-    body?.printer && typeof body.printer.address === "string"
-      ? {
-          address: body.printer.address,
-          ...(body.printer.port != null ? { port: Number(body.printer.port) } : {}),
-        }
-      : config?.address
-        ? { address: config.address, port: config.port }
-        : undefined;
-
   const jobId = await enqueuePrintJob({
     shopId,
     imageBase64,
     printerId,
     options,
-    printer,
     kind: type,
     meta: {
       requestedBy: guard.user?.email ?? null,

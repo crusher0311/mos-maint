@@ -30,18 +30,48 @@ export async function PUT(req: NextRequest) {
     }
 
     const shopId = Number(body?.shopId);
-    if (!Number.isFinite(shopId) || shopId <= 0) {
+    if (!Number.isSafeInteger(shopId) || shopId <= 0) {
       return NextResponse.json({ error: "shopId is required" }, { status: 400 });
     }
 
     if (body?.address != null && typeof body.address !== "string") {
       return NextResponse.json({ error: "address must be a string" }, { status: 400 });
     }
+    if (typeof body?.address === "string" && body.address.trim() === "") {
+      return NextResponse.json({ error: "address cannot be empty" }, { status: 400 });
+    }
+    if (body?.port != null) {
+      const port = Number(body.port);
+      if (!Number.isInteger(port) || port < 1 || port > 65535) {
+        return NextResponse.json(
+          { error: "port must be an integer between 1 and 65535" },
+          { status: 400 },
+        );
+      }
+    }
+    if (body?.width != null) {
+      const width = Number(body.width);
+      if (!Number.isSafeInteger(width) || width <= 0) {
+        return NextResponse.json(
+          { error: "width must be a positive integer" },
+          { status: 400 },
+        );
+      }
+    }
     if (body?.cut != null && body.cut !== 0 && body.cut !== 1) {
       return NextResponse.json({ error: "cut must be 0 or 1" }, { status: 400 });
     }
     if (body?.speed != null && body.speed !== 0 && body.speed !== 1) {
       return NextResponse.json({ error: "speed must be 0 or 1" }, { status: 400 });
+    }
+    if (
+      body?.printerId != null &&
+      (typeof body.printerId !== "string" || body.printerId.trim().length > 80)
+    ) {
+      return NextResponse.json(
+        { error: "printerId must be a string of at most 80 characters" },
+        { status: 400 },
+      );
     }
 
     const config = await upsertPrinterConfig(shopId, {

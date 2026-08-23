@@ -117,6 +117,8 @@
     "test:carfax-match": "tsx tests/carfax-match.smoke.ts",
     "test:last-performed-match": "tsx tests/last-performed-match.smoke.ts",
     "test:print-queue": "tsx tests/print-queue.smoke.ts",
+    "test:print-agent-auth": "tsx tests/print-agent-auth.smoke.ts",
+    "pretest:smoke": "npm run test:print-agent-auth",
     "test:middleware-static-asset-bypass": "tsx tests/middleware-static-asset-bypass.smoke.ts",
     "test:middleware-extension-backend-allowlist": "tsx tests/middleware-extension-backend-allowlist.smoke.ts",
     "test:unit-format": "tsx tests/unit-format.smoke.ts",

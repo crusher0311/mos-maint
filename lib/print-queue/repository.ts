@@ -13,6 +13,8 @@ import type { Collection, Document } from "mongodb";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongo";
 import {
+  MAX_PRINT_IMAGE_BASE64_CHARS,
+  PrintPayloadTooLargeError,
   AGENT_ONLINE_THRESHOLD_MS,
   DEFAULT_PRINTER_ID,
   PRINTER_DEFAULTS,
@@ -50,20 +52,24 @@ export interface EnqueueInput {
   imageBase64: string;
   printerId?: string | null;
   options?: ZinkPrintOptions;
-  printer?: PrintJobDoc["printer"];
   kind?: PrintJobDoc["kind"];
   meta?: Record<string, unknown>;
 }
 
 /** Write a new pending job. Returns the new job id as a string. */
 export async function enqueuePrintJob(input: EnqueueInput): Promise<string> {
+  if (
+    typeof input.imageBase64 !== "string" ||
+    input.imageBase64.length > MAX_PRINT_IMAGE_BASE64_CHARS
+  ) {
+    throw new PrintPayloadTooLargeError("Queued JPEG exceeds the size limit");
+  }
   const now = new Date();
   const doc: PrintJobDoc = {
     shopId: input.shopId,
     status: "pending",
     imageBase64: input.imageBase64,
     printerId: input.printerId ?? null,
-    printer: input.printer,
     options: input.options,
     kind: input.kind,
     meta: input.meta,
@@ -136,11 +142,28 @@ export async function claimNextJob(
     | null;
   if (!doc) return null;
 
+  if (
+    typeof doc.imageBase64 !== "string" ||
+    doc.imageBase64.length > MAX_PRINT_IMAGE_BASE64_CHARS
+  ) {
+    await col.updateOne(
+      { _id: doc._id, shopId, status: "in-flight" },
+      {
+        $set: {
+          status: "failed",
+          error: "Queued JPEG exceeds the size limit; re-render and requeue it",
+          failedAt: now,
+          updatedAt: now,
+        },
+      },
+    );
+    return null;
+  }
+
   const job: AgentPrintJob = {
     id: String(doc._id),
     imageBase64: doc.imageBase64,
   };
-  if (doc.printer) job.printer = doc.printer;
   if (doc.options) job.options = doc.options;
   return job;
 }
@@ -306,7 +329,9 @@ export async function recordAgentPoll(
   const pid = printerId && printerId.trim() !== "" ? printerId.trim() : DEFAULT_PRINTER_ID;
   const now = new Date();
   const set: Document = { shopId, printerId: pid, lastPollAt: now };
-  if (agentVersion && agentVersion.trim() !== "") set.agentVersion = agentVersion.trim();
+  if (agentVersion && agentVersion.trim() !== "") {
+    set.agentVersion = agentVersion.trim().slice(0, 64);
+  }
   const col = await heartbeatCol();
   await col.updateOne({ shopId, printerId: pid }, { $set: set }, { upsert: true });
 }

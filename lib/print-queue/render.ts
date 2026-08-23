@@ -11,6 +11,12 @@
 import { renderKeytagLegacy, renderKeytagDesigner } from "@/lib/canvas-renderer";
 import type { DesignerLayout } from "@/lib/keytag-designer-types";
 import { resolvePaperSize } from "@/lib/keytag-paper-sizes";
+import {
+  MAX_PRINT_IMAGE_BASE64_CHARS,
+  MAX_PRINT_IMAGE_BYTES,
+  MAX_PRINT_IMAGE_INPUT_CHARS,
+  PrintPayloadTooLargeError,
+} from "@/lib/print-queue/types";
 
 const DATA_URI_RE = /^data:([\w/+.-]+);base64,(.*)$/s;
 
@@ -20,22 +26,36 @@ const DATA_URI_RE = /^data:([\w/+.-]+);base64,(.*)$/s;
  * encoding as JPEG keeps the wire payload aligned with the contract.
  */
 export async function toJpegBase64(input: Buffer | string): Promise<string> {
-  const { createCanvas, loadImage } = require("canvas");
-
   let buf: Buffer;
   if (Buffer.isBuffer(input)) {
+    if (input.length > MAX_PRINT_IMAGE_BYTES) {
+      throw new PrintPayloadTooLargeError("Source image exceeds the 4 MiB limit");
+    }
     buf = input;
   } else {
+    if (input.length > MAX_PRINT_IMAGE_INPUT_CHARS) {
+      throw new PrintPayloadTooLargeError("Encoded source image exceeds the size limit");
+    }
     let b64 = input.trim();
     const m = b64.match(DATA_URI_RE);
     if (m) b64 = m[2];
     b64 = b64.replace(/\s+/g, "");
+    if (b64.length > MAX_PRINT_IMAGE_BASE64_CHARS) {
+      throw new PrintPayloadTooLargeError("Encoded source image exceeds the size limit");
+    }
+    if (!/^[A-Za-z0-9+/]*={0,2}$/.test(b64) || b64.length % 4 === 1) {
+      throw new Error("image payload is not valid base64");
+    }
     buf = Buffer.from(b64, "base64");
   }
   if (buf.length === 0) {
     throw new Error("image payload decoded to zero bytes");
   }
+  if (buf.length > MAX_PRINT_IMAGE_BYTES) {
+    throw new PrintPayloadTooLargeError("Decoded source image exceeds the 4 MiB limit");
+  }
 
+  const { createCanvas, loadImage } = require("canvas");
   const img = await loadImage(buf);
   const canvas = createCanvas(img.width, img.height);
   const ctx = canvas.getContext("2d");
@@ -46,6 +66,9 @@ export async function toJpegBase64(input: Buffer | string): Promise<string> {
   ctx.drawImage(img, 0, 0, img.width, img.height);
 
   const jpeg = canvas.toBuffer("image/jpeg", { quality: 0.92 });
+  if (jpeg.length > MAX_PRINT_IMAGE_BYTES) {
+    throw new PrintPayloadTooLargeError("Rendered JPEG exceeds the 4 MiB limit");
+  }
   return jpeg.toString("base64");
 }
 

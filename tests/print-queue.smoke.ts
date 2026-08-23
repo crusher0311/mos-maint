@@ -20,7 +20,13 @@ import path from "node:path";
 import { ObjectId } from "mongodb";
 
 import * as repo from "../lib/print-queue/repository";
-import { STALE_INFLIGHT_MS } from "../lib/print-queue/types";
+import { renderPilotTestJpeg } from "../lib/print-queue/pilot-test";
+import { readPrintJsonBody } from "../lib/print-queue/request-body";
+import {
+  MAX_PRINT_IMAGE_BASE64_CHARS,
+  STALE_INFLIGHT_MS,
+} from "../lib/print-queue/types";
+import { MAX_ENCODED_IMAGE_CHARS as AGENT_MAX_IMAGE_BASE64_CHARS } from "../zink-print-agent/src/limits";
 
 let failed = 0;
 function ok(name: string, cond: boolean, detail?: string) {
@@ -150,6 +156,11 @@ async function run() {
   const SHOP_A = 101;
   const SHOP_B = 202;
 
+  ok(
+    "server and agent image limits stay synchronized",
+    MAX_PRINT_IMAGE_BASE64_CHARS === AGENT_MAX_IMAGE_BASE64_CHARS,
+  );
+
   // --- enqueue + claim FIFO ---
   const j1 = await repo.enqueuePrintJob({ shopId: SHOP_A, imageBase64: "AAAA", kind: "keytag" });
   const j2 = await repo.enqueuePrintJob({ shopId: SHOP_A, imageBase64: "BBBB", kind: "sticker" });
@@ -204,6 +215,61 @@ async function run() {
   const claimRightPrinter = await repo.claimNextJob(SHOP_A, "front-counter");
   ok("matching-printer agent claims tagged job", claimRightPrinter?.id === tagged);
 
+  // A legacy/malicious persisted target must never cross the cloud contract.
+  const legacyTargetId = new ObjectId();
+  await jobsCol.insertOne({
+    _id: legacyTargetId,
+    shopId: SHOP_A,
+    status: "pending",
+    imageBase64: "LEGACY",
+    printerId: null,
+    printer: { address: "10.0.0.1", port: 22 },
+    attempts: 0,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+  const legacyClaim = await repo.claimNextJob(SHOP_A);
+  ok("cloud contract strips legacy LAN target fields", !!legacyClaim && !("printer" in legacyClaim));
+
+  const oversizedImage = "A".repeat(MAX_PRINT_IMAGE_BASE64_CHARS + 1);
+  await assert.rejects(
+    () => repo.enqueuePrintJob({ shopId: SHOP_A, imageBase64: oversizedImage }),
+    /size limit/,
+  );
+  ok("enqueue rejects an oversized encoded JPEG", true);
+
+  const oversizedId = new ObjectId();
+  await jobsCol.insertOne({
+    _id: oversizedId,
+    shopId: SHOP_A,
+    status: "pending",
+    imageBase64: oversizedImage,
+    printerId: null,
+    attempts: 0,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+  const oversizedClaim = await repo.claimNextJob(SHOP_A);
+  const oversizedDoc = jobsCol.docs.find((doc) => doc._id.equals(oversizedId));
+  ok("legacy oversized jobs are failed instead of sent to an agent", oversizedClaim === null);
+  ok(
+    "legacy oversized job records an actionable terminal error",
+    oversizedDoc.status === "failed" && /size limit/.test(oversizedDoc.error),
+  );
+
+  await assert.rejects(
+    () =>
+      readPrintJsonBody(
+        new Request("http://print.test", {
+          method: "POST",
+          body: JSON.stringify({ imageBase64: "A".repeat(64) }),
+        }),
+        32,
+      ),
+    /size limit/,
+  );
+  ok("chunked request reader rejects before buffering past its cap", true);
+
   // --- stale in-flight recovery ---
   const stuck = await repo.enqueuePrintJob({ shopId: SHOP_A, imageBase64: "EEEE" });
   const firstClaim = await repo.claimNextJob(SHOP_A);
@@ -229,6 +295,18 @@ async function run() {
   ok("resolveJobOptions: default fills the rest", opts.speed === 1 && opts.width === 640);
   const optsNoCfg = repo.resolveJobOptions(null);
   ok("resolveJobOptions: hardware defaults with no config", optsNoCfg.cut === 1 && optsNoCfg.speed === 0 && optsNoCfg.width === 640);
+
+  // --- deterministic operator acceptance image ---
+  const pilotImageA = renderPilotTestJpeg(opts);
+  const pilotImageB = renderPilotTestJpeg(opts);
+  ok(
+    "pilot acceptance image is a JPEG",
+    pilotImageA[0] === 0xff && pilotImageA[1] === 0xd8,
+  );
+  ok(
+    "pilot acceptance image is deterministic for the same options",
+    pilotImageA.equals(pilotImageB),
+  );
 
   // --- admin: re-queue a failed job (Milestone 3) ---
   const reqJob = await repo.enqueuePrintJob({ shopId: SHOP_A, imageBase64: "RRRR" });

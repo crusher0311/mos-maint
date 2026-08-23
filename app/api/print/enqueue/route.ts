@@ -29,8 +29,10 @@ import {
 import { toJpegBase64 } from "@/lib/print-queue/render";
 import {
   PRINTER_DEFAULTS,
+  PrintPayloadTooLargeError,
   type ZinkPrintOptions,
 } from "@/lib/print-queue/types";
+import { readPrintJsonBody } from "@/lib/print-queue/request-body";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -92,9 +94,17 @@ export async function POST(req: NextRequest) {
 
   let body: any;
   try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    body = await readPrintJsonBody(req);
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error:
+          error instanceof PrintPayloadTooLargeError
+            ? error.message
+            : "Invalid JSON body",
+      },
+      { status: error instanceof PrintPayloadTooLargeError ? 413 : 400 },
+    );
   }
 
   if (typeof body?.imageBase64 !== "string" || body.imageBase64.trim() === "") {
@@ -115,7 +125,7 @@ export async function POST(req: NextRequest) {
     console.error("[Print Enqueue/session] image prep failed:", err?.message);
     return NextResponse.json(
       { error: "Failed to prepare print image", message: err?.message },
-      { status: 500 },
+      { status: err instanceof PrintPayloadTooLargeError ? 413 : 500 },
     );
   }
 
@@ -127,16 +137,11 @@ export async function POST(req: NextRequest) {
       ? body.printerId.trim()
       : null;
 
-  const printer = config?.address
-    ? { address: config.address, port: config.port }
-    : undefined;
-
   const jobId = await enqueuePrintJob({
     shopId,
     imageBase64,
     printerId,
     options,
-    printer,
     kind: type,
     meta: {
       requestedBy: session.email ?? null,

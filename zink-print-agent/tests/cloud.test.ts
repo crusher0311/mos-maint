@@ -8,13 +8,19 @@ import type { AckJobRequest } from "../src/contract";
 interface MockState {
   pollAuth: string | null;
   pollPath: string | null;
+  pollVersion: string | null;
   acks: Array<{ id: string; body: AckJobRequest; auth: string | null }>;
 }
 
 async function startMockCloud(
   handler: (req: http.IncomingMessage, res: http.ServerResponse, state: MockState) => void,
 ): Promise<{ baseUrl: string; state: MockState; close: () => Promise<void> }> {
-  const state: MockState = { pollAuth: null, pollPath: null, acks: [] };
+  const state: MockState = {
+    pollAuth: null,
+    pollPath: null,
+    pollVersion: null,
+    acks: [],
+  };
   const server = http.createServer((req, res) => handler(req, res, state));
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const { port } = server.address() as AddressInfo;
@@ -33,10 +39,14 @@ function readBody(req: http.IncomingMessage): Promise<string> {
   });
 }
 
-test("pollJobs sends bearer auth + printerId and parses jobs[]", async () => {
+test("pollJobs sends bearer auth + printerId + agent version and parses jobs[]", async () => {
   const mock = await startMockCloud((req, res, state) => {
     state.pollAuth = req.headers.authorization ?? null;
     state.pollPath = req.url ?? null;
+    state.pollVersion =
+      typeof req.headers["x-agent-version"] === "string"
+        ? req.headers["x-agent-version"]
+        : null;
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(
       JSON.stringify({
@@ -49,6 +59,7 @@ test("pollJobs sends bearer auth + printerId and parses jobs[]", async () => {
     baseUrl: mock.baseUrl,
     apiKey: "secret-key",
     printerId: "front-counter",
+    agentVersion: "1.1.0",
   });
   const jobs = await client.pollJobs();
 
@@ -57,6 +68,7 @@ test("pollJobs sends bearer auth + printerId and parses jobs[]", async () => {
   assert.equal(mock.state.pollAuth, "Bearer secret-key");
   assert.ok(mock.state.pollPath?.includes("/api/print-agent/jobs"));
   assert.ok(mock.state.pollPath?.includes("printerId=front-counter"));
+  assert.equal(mock.state.pollVersion, "1.1.0");
 
   await mock.close();
 });
@@ -89,6 +101,39 @@ test("pollJobs throws when jobs[] is missing", async () => {
   });
   const client = new CloudClient({ baseUrl: mock.baseUrl, apiKey: "k" });
   await assert.rejects(() => client.pollJobs(), /missing jobs/);
+  await mock.close();
+});
+
+test("pollJobs rejects an oversized streamed response before JSON parsing", async () => {
+  const mock = await startMockCloud((_req, res) => {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.write('{"jobs":[{"imageBase64":"');
+    res.write("A".repeat(80));
+    res.end('"}]}');
+  });
+  const client = new CloudClient({
+    baseUrl: mock.baseUrl,
+    apiKey: "k",
+    maxPollResponseBytes: 64,
+  });
+  await assert.rejects(() => client.pollJobs(), /cloud response exceeds 64 byte limit/);
+  await mock.close();
+});
+
+test("pollJobs rejects an oversized declared response without reading it", async () => {
+  const mock = await startMockCloud((_req, res) => {
+    res.writeHead(200, {
+      "Content-Type": "application/json",
+      "Content-Length": "1000",
+    });
+    res.end("{}");
+  });
+  const client = new CloudClient({
+    baseUrl: mock.baseUrl,
+    apiKey: "k",
+    maxPollResponseBytes: 64,
+  });
+  await assert.rejects(() => client.pollJobs(), /cloud response exceeds 64 byte limit/);
   await mock.close();
 });
 

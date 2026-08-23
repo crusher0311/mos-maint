@@ -13,22 +13,33 @@
 
 import type { ObjectId } from "mongodb";
 
-/** ZINK print options that map directly to the agent's XML header fields. */
-export interface ZinkPrintOptions {
-  /** Print-head width in pixels. Always 640 for current ZINK hardware. */
-  width?: number;
-  /** 1 = full cut, 0 = kiss cut. */
-  cut?: 0 | 1;
-  /** 0 = vivid, 1 = draft. */
-  speed?: 0 | 1;
+/** Keep synchronized with zink-print-agent/src/limits.ts. */
+export const MAX_PRINT_IMAGE_BYTES = 4 * 1024 * 1024;
+export const MAX_PRINT_IMAGE_BASE64_CHARS =
+  4 * Math.ceil(MAX_PRINT_IMAGE_BYTES / 3);
+export const MAX_PRINT_IMAGE_INPUT_CHARS =
+  MAX_PRINT_IMAGE_BASE64_CHARS + 128;
+export const MAX_PRINT_REQUEST_BODY_BYTES =
+  MAX_PRINT_IMAGE_BASE64_CHARS + 64 * 1024;
+
+export class PrintPayloadTooLargeError extends Error {
+  constructor(message = "Print payload exceeds the size limit") {
+    super(message);
+    this.name = "PrintPayloadTooLargeError";
+  }
 }
 
-/** Optional per-job printer override (falls back to the agent config). */
-export interface JobPrinterTarget {
-  /** mDNS name (e.g. "zink.local"), hostname, or static IP. */
-  address: string;
-  /** TCP port. Defaults to 9100 when omitted. */
-  port?: number;
+/** ZINK print options that map directly to the agent's XML header fields. */
+export interface ZinkPrintOptions {
+  /**
+   * Expected raster width in pixels. Current generated images use 640px.
+   * The VC-500W setup XML itself uses width=0 + autofit=1.
+   */
+  width?: number;
+  /** 1 = full cut, 0 = half cut. */
+  cut?: 0 | 1;
+  /** 0 = vivid (317 lpi), 1 = normal/color (264 lpi). */
+  speed?: 0 | 1;
 }
 
 /** Lifecycle states a job moves through. */
@@ -40,6 +51,8 @@ export type JobOutcome = "success" | "failure";
 /**
  * A single pending print job as handed to the agent by the cloud.
  * Mirrors `PrintJob` in the agent contract — keep in sync.
+ * The physical printer host/port is deliberately absent and remains local
+ * agent configuration.
  */
 export interface AgentPrintJob {
   /** Stable, unique job id used when acking (the Mongo `_id` as a string). */
@@ -49,8 +62,6 @@ export interface AgentPrintJob {
    * URI prefix).
    */
   imageBase64: string;
-  /** Optional printer override for this job. */
-  printer?: JobPrinterTarget;
   /** Optional ZINK print options. Sensible defaults applied when omitted. */
   options?: ZinkPrintOptions;
 }
@@ -83,12 +94,10 @@ export interface PrintJobDoc {
   imageBase64: string;
   /**
    * Optional device routing hint. When set, only an agent polling with a
-   * matching `printerId` (or with a per-job printer override absent) will
-   * claim it. Per-device routing UX lands in Milestone 3.
+   * matching `printerId` will claim it. Physical LAN addresses are local-agent
+   * configuration and are never part of the cloud-to-agent job contract.
    */
   printerId?: string | null;
-  /** Optional per-job printer override applied by the agent. */
-  printer?: JobPrinterTarget;
   /** ZINK options, defaulted from the shop's printer config at enqueue. */
   options?: ZinkPrintOptions;
   /** What produced this job, for triage. */
@@ -121,9 +130,9 @@ export interface PrinterConfigDoc {
   address: string;
   /** TCP port. Defaults to 9100. */
   port: number;
-  /** Default cut mode applied to outgoing jobs (1 = full, 0 = kiss). */
+  /** Default cut mode applied to outgoing jobs (1 = full, 0 = half). */
   defaultCut: 0 | 1;
-  /** Default speed applied to outgoing jobs (0 = vivid, 1 = draft). */
+  /** Default speed applied to outgoing jobs (0 = vivid, 1 = normal/color). */
   defaultSpeed: 0 | 1;
   /** Default print-head width in pixels. */
   defaultWidth: number;

@@ -38,11 +38,8 @@ const EXTENSION_BACKEND_PATHS = new Set([
   "/api/vehicle/common-failures",
 ]);
 
-// Paths a user with `mustChangePassword: true` is allowed to reach before
-// they have set a new password. Everything else is blocked / redirected.
-// Includes `/dashboard/setup-shop` so the existing first-time onboarding
-// flow (which also clears the flag) keeps working for newly provisioned
-// shops where the flag is set on the user from the start.
+const PRINT_AGENT_ACK_PATH_RE =
+  /^\/api\/print-agent\/jobs\/[^/]+\/ack$/;
 const PASSWORD_CHANGE_ALLOWED_PATHS = new Set([
   "/change-password",
   "/api/auth/change-password",
@@ -68,6 +65,7 @@ function isPublicPath(pathname: string) {
   if (pathname.startsWith("/api/e2e/")) return true;
   if (pathname.startsWith("/api/extension/")) return true;
   if (EXTENSION_BACKEND_PATHS.has(pathname)) return true;
+  if (isPrintAgentPath(pathname)) return true;
   if (pathname.startsWith("/api/cron/")) return true;
   if (pathname.startsWith("/api/platform-admin/log-stream")) return true;
   if (pathname.startsWith("/api/platform-admin/emergency-reset")) return true;
@@ -304,3 +302,10 @@ export const config = {
     "/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:png|jpg|jpeg|svg|webp|ico|gif|css|js|woff|woff2|ttf|otf|eot|map|txt|xml|json|mp4|webm)$).*)",
   ],
 };
+
+function isPrintAgentPath(pathname: string): boolean {
+  return (
+    pathname === "/api/print-agent/jobs" ||
+    PRINT_AGENT_ACK_PATH_RE.test(pathname)
+  );
+}

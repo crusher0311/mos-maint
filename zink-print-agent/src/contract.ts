@@ -25,23 +25,23 @@
 
 /** ZINK print options that map directly to the XML header fields. */
 export interface ZinkPrintOptions {
-  /** Print-head width in pixels. Always 640 for current ZINK hardware. */
+  /**
+   * Expected raster width in pixels. Current generated images use 640px.
+   * The VC-500W setup XML itself uses width=0 + autofit=1.
+   */
   width?: number;
-  /** 1 = full cut, 0 = kiss cut. */
+  /** 1 = full cut, 0 = half cut. */
   cut?: 0 | 1;
-  /** 0 = vivid, 1 = draft. */
+  /** 0 = vivid (317 lpi), 1 = normal/color (264 lpi). */
   speed?: 0 | 1;
 }
 
-/** Optional per-job printer override (falls back to the agent config). */
-export interface JobPrinterTarget {
-  /** mDNS name (e.g. "zink.local"), hostname, or static IP. */
-  address: string;
-  /** TCP port. Defaults to 9100 when omitted. */
-  port?: number;
-}
-
-/** A single pending print job handed to the agent by the cloud. */
+/**
+ * A single pending print job handed to the agent by the cloud.
+ * The cloud never supplies a LAN target: `printerId` selects the polling
+ * agent, while the physical host/port come only from that agent's local
+ * config.
+ */
 export interface PrintJob {
   /** Stable, unique job id used when acking. */
   id: string;
@@ -50,8 +50,6 @@ export interface PrintJob {
    * string or a `data:image/jpeg;base64,...` data URI.
    */
   imageBase64: string;
-  /** Optional printer override for this job. */
-  printer?: JobPrinterTarget;
   /** Optional ZINK print options. Sensible defaults applied when omitted. */
   options?: ZinkPrintOptions;
 }

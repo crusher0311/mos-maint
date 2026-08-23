@@ -12,9 +12,37 @@ import { PrintAgent } from "./agent";
 import { createLogger } from "./logger";
 
 // Kept in sync with package.json "version".
-export const AGENT_VERSION = "1.0.0";
+export const AGENT_VERSION = "1.1.0";
+
+function printHelp(): void {
+  process.stdout.write(
+    [
+      `MOS Tools ZINK Print Agent ${AGENT_VERSION}`,
+      "",
+      "Usage:",
+      "  zink-print-agent-win.exe [--config <path>]",
+      "  zink-print-agent-win.exe --version",
+      "  zink-print-agent-win.exe --help",
+      "",
+      "Config path order:",
+      "  1. --config <path> or --config=<path>",
+      "  2. ZINK_AGENT_CONFIG environment variable",
+      "  3. config.json in the current working directory",
+      "",
+    ].join("\n"),
+  );
+}
 
 async function main(): Promise<void> {
+  if (process.argv.includes("--help") || process.argv.includes("-h")) {
+    printHelp();
+    return;
+  }
+  if (process.argv.includes("--version") || process.argv.includes("-v")) {
+    process.stdout.write(`${AGENT_VERSION}\n`);
+    return;
+  }
+
   const log = createLogger();
   let config;
   try {

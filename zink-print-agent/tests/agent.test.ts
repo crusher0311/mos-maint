@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { PrintAgent, type AgentRuntimeConfig, type CloudPort, type PrinterPort } from "../src/agent";
 import type { AckJobRequest, PrintJob } from "../src/contract";
 import { createLogger } from "../src/logger";
+import { VALID_JPEG_BASE64, VALID_JPEG_BYTES } from "./fixtures/jpeg";
+import { MAX_IMAGE_INPUT_CHARS } from "../src/limits";
 
 const QUIET = createLogger("error");
 
@@ -32,7 +34,7 @@ function makePrinter(overrides: Partial<PrinterPort> = {}): {
 
 const JOB: PrintJob = {
   id: "job-1",
-  imageBase64: Buffer.from([0xff, 0xd8, 0x01, 0x02]).toString("base64"),
+  imageBase64: VALID_JPEG_BASE64,
 };
 
 test("processJob resolves, prints, and acks success", async () => {
@@ -49,7 +51,12 @@ test("processJob resolves, prints, and acks success", async () => {
   assert.equal(ok, true);
   assert.equal(sends.length, 1);
   assert.equal(sends[0].host, "192.168.1.5");
-  assert.equal(sends[0].header, "<print><width>640</width><cut>1</cut><speed>0</speed></print>");
+  assert.match(sends[0].header, /<mode>vivid<\/mode>/);
+  assert.match(
+    sends[0].header,
+    new RegExp(`<datasize>${VALID_JPEG_BYTES.length}</datasize>`),
+  );
+  assert.match(sends[0].header, /<cutmode>full<\/cutmode>/);
   assert.equal(acks.length, 1);
   assert.equal(acks[0].ack.status, "success");
 });
@@ -95,18 +102,18 @@ test("processJob survives an mDNS resolution timeout", async () => {
   assert.match(acks[0].ack.error ?? "", /timed out/);
 });
 
-test("processJob honors a per-job printer override", async () => {
+test("processJob ignores a hostile cloud printer override", async () => {
   const acks: Array<{ id: string; ack: AckJobRequest }> = [];
   const cloud: CloudPort = {
     pollJobs: async () => [],
     ackJob: async (id, ack) => acks.push({ id, ack }),
   };
-  let resolvedAddr = "";
+  const resolvedAddrs: string[] = [];
   let usedPort = 0;
   const port: PrinterPort = {
     resolveAddress: async (addr) => {
-      resolvedAddr = addr;
-      return "10.0.0.9";
+      resolvedAddrs.push(addr);
+      return "192.168.1.5";
     },
     sendToPrinter: async (_host, _header, _jpeg, opts) => {
       usedPort = opts.port;
@@ -114,11 +121,82 @@ test("processJob honors a per-job printer override", async () => {
   };
   const agent = new PrintAgent(CFG, { cloud, printer: port, logger: QUIET });
 
-  await agent.processJob({ ...JOB, printer: { address: "10.0.0.9", port: 9200 } });
+  await agent.processJob({
+    ...JOB,
+    // Deliberately simulate an unexpected field from an old/malicious server.
+    printer: { address: "10.0.0.9", port: 9200 },
+  } as PrintJob & { printer: { address: string; port: number } });
 
-  assert.equal(resolvedAddr, "10.0.0.9");
-  assert.equal(usedPort, 9200);
+  assert.deepEqual(resolvedAddrs, ["zink.local"]);
+  assert.equal(usedPort, 9100);
   assert.equal(acks[0].ack.status, "success");
+});
+
+test("processJob rejects malformed JPEG before resolving or opening a socket", async () => {
+  const acks: Array<{ id: string; ack: AckJobRequest }> = [];
+  const cloud: CloudPort = {
+    pollJobs: async () => [],
+    ackJob: async (id, ack) => acks.push({ id, ack }),
+  };
+  let resolutions = 0;
+  let sends = 0;
+  const port: PrinterPort = {
+    resolveAddress: async () => {
+      resolutions += 1;
+      return "192.168.1.5";
+    },
+    sendToPrinter: async () => {
+      sends += 1;
+    },
+  };
+  const agent = new PrintAgent(CFG, { cloud, printer: port, logger: QUIET });
+
+  const ok = await agent.processJob({
+    ...JOB,
+    // SOI + superficially valid SOS + EOI, but no frame or entropy stream.
+    imageBase64: Buffer.from([
+      0xff, 0xd8, 0xff, 0xda, 0x00, 0x02, 0x00, 0x00, 0xff, 0xd9,
+    ]).toString("base64"),
+  });
+
+  assert.equal(ok, false);
+  assert.equal(resolutions, 0);
+  assert.equal(sends, 0);
+  assert.equal(acks[0].ack.status, "failure");
+  assert.match(acks[0].ack.error ?? "", /not a valid JPEG/);
+});
+
+test("processJob rejects an oversized encoded image before LAN activity", async () => {
+  const acks: Array<{ id: string; ack: AckJobRequest }> = [];
+  let resolutions = 0;
+  let sends = 0;
+  const agent = new PrintAgent(CFG, {
+    cloud: {
+      pollJobs: async () => [],
+      ackJob: async (id, ack) => acks.push({ id, ack }),
+    },
+    printer: {
+      resolveAddress: async () => {
+        resolutions += 1;
+        return "192.168.1.5";
+      },
+      sendToPrinter: async () => {
+        sends += 1;
+      },
+    },
+    logger: QUIET,
+  });
+
+  const ok = await agent.processJob({
+    ...JOB,
+    imageBase64: "A".repeat(MAX_IMAGE_INPUT_CHARS + 1),
+  });
+
+  assert.equal(ok, false);
+  assert.equal(resolutions, 0);
+  assert.equal(sends, 0);
+  assert.equal(acks[0].ack.status, "failure");
+  assert.match(acks[0].ack.error ?? "", /encoded size limit/);
 });
 
 test("processJob does not throw even if the ack itself fails", async () => {
