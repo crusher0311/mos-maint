@@ -137,6 +137,39 @@ async function run() {
   });
   ok("rejects a distributed replay claim", replay.status === "replayed");
 
+  // Duplicate simultaneous bootstraps: the twin exchange within the grace
+  // budget must succeed instead of surfacing a replayed error.
+  replayAllowed = true;
+  __deps.rateLimit = async () =>
+    ({
+      allowed: true,
+      remaining: 1, // limit 3, count 2 → the second exchange of the same proof
+      limit: 3,
+      resetAt: new Date(),
+      bucketKey: "fixture",
+    }) as any;
+  const duplicate = await verifyProviderSessionProof({
+    provider: "tekmetric",
+    smsShopId: "1234",
+    proof: {
+      kind: "tekmetric_x_auth",
+      token: "current-browser-token-123456",
+      origin: "https://shop.tekmetric.com",
+    },
+  });
+  ok(
+    "a duplicate exchange within the grace budget still verifies",
+    duplicate.status === "verified",
+  );
+  __deps.rateLimit = async () =>
+    ({
+      allowed: replayAllowed,
+      remaining: replayAllowed ? 0 : 0,
+      limit: 1,
+      resetAt: new Date(),
+      bucketKey: "fixture",
+    }) as any;
+
   replayAllowed = true;
   __deps.fetch = async (url: string | URL | Request) =>
     new Response(

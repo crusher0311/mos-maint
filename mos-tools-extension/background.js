@@ -2253,6 +2253,22 @@ async function handleMosBootstrap(tabId, context) {
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok || !data.ok || !data.token) {
+      // A duplicate bootstrap can lose the single-use proof race while its
+      // twin already installed a session for this exact context. Never
+      // surface a login error when we are, in fact, logged in.
+      if (
+        mosAuthSource === 'bootstrap' &&
+        mosApiToken &&
+        mosBootstrapContextKey === key
+      ) {
+        return {
+          success: true,
+          outcome: mosSessionTier?.resolution || (mosSessionTier?.isVerified ? 'matched_user' : 'basic'),
+          user: mosUser,
+          shops: mosShops,
+          sessionTier: mosSessionTier,
+        };
+      }
       const outcome = data.outcome || 'verification_needed';
       if (authEpoch === attemptEpoch) broadcastBootstrapState(outcome);
       return { success: false, outcome };

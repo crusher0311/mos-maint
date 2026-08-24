@@ -526,8 +526,16 @@ async function init() {
       applyAuthenticatedState(refreshed);
       updateContext(contextStatus.context);
     } else {
-      showLoginState();
-      showBootstrapOutcome(bootstrap?.outcome);
+      // A losing duplicate bootstrap can report failure moments after its
+      // twin installed a session. Re-check auth before showing an error.
+      const recheck = await sendMessage({ action: 'GET_MOS_AUTH' }).catch(() => null);
+      if (recheck?.isAuthenticated) {
+        applyAuthenticatedState(recheck);
+        if (contextStatus.context) updateContext(contextStatus.context);
+      } else {
+        showLoginState();
+        showBootstrapOutcome(bootstrap?.outcome);
+      }
     }
   }
 }
@@ -752,9 +760,21 @@ function setupEventListeners() {
           if (auth?.isAuthenticated) applyAuthenticatedState(auth);
         }).catch(() => {});
       } else {
-        isAuthenticated = false;
-        showLoginState();
-        showBootstrapOutcome(message.outcome);
+        // Ignore a losing duplicate's failure broadcast when a session was
+        // installed moments before — the user is actually logged in.
+        sendMessage({ action: 'GET_MOS_AUTH' }).then((auth) => {
+          if (auth?.isAuthenticated) {
+            applyAuthenticatedState(auth);
+          } else {
+            isAuthenticated = false;
+            showLoginState();
+            showBootstrapOutcome(message.outcome);
+          }
+        }).catch(() => {
+          isAuthenticated = false;
+          showLoginState();
+          showBootstrapOutcome(message.outcome);
+        });
       }
     }
     if (message.action === 'SWITCH_TO_STICKER_TAB') {

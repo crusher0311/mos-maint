@@ -200,11 +200,20 @@ async function readJson(response: Response): Promise<any> {
   }
 }
 
+// The sidepanel/background can race and fire two bootstrap exchanges for the
+// same proof within the same second. Strict single-use made the losing twin
+// surface "verification_needed" to a user who was actually just logged in.
+// A small duplicate-exchange grace keeps the proof effectively single-use for
+// abuse purposes (bounded to a few exchanges inside the short proof lifetime,
+// each still live-verified against the provider) while letting a same-window
+// duplicate succeed instead of erroring.
+const PROOF_EXCHANGE_GRACE_LIMIT = 3;
+
 async function claimProofOnce(
   provider: BootstrapProvider,
   smsShopId: string,
   token: string,
-): Promise<boolean> {
+): Promise<"claimed" | "grace" | "replayed"> {
   const fingerprint = crypto
     .createHash("sha256")
     .update(`${provider}\0${smsShopId}\0${token}`)
@@ -212,10 +221,12 @@ async function claimProofOnce(
   const claimed = await __deps.rateLimit({
     // Only a one-way fingerprint is stored; provider credentials never are.
     id: `extension-bootstrap-proof:${fingerprint}`,
-    limit: 1,
+    limit: PROOF_EXCHANGE_GRACE_LIMIT,
     windowSeconds: Math.ceil(PROOF_LIFETIME_MS / 1000),
   });
-  return claimed.allowed;
+  if (!claimed.allowed) return "replayed";
+  // remaining === limit - count, so the first exchange sees limit - 1.
+  return claimed.remaining === claimed.limit - 1 ? "claimed" : "grace";
 }
 
 /**
@@ -329,12 +340,20 @@ export async function verifyProviderSessionProof(input: {
       };
     }
 
-    if (!(await claimProofOnce(provider, smsShopId, token))) {
+    const claim = await claimProofOnce(provider, smsShopId, token);
+    if (claim === "replayed") {
       return {
         status: "replayed",
         provider,
         reason: "This proof was already exchanged",
       };
+    }
+    if (claim === "grace") {
+      // Observability for the duplicate-bootstrap race: the twin exchange
+      // succeeds instead of erroring, but we still want to see it in prod.
+      console.info(
+        `[Extension Bootstrap] proofStatus=duplicate_grace provider=${provider} shop=${shop.mosShopId} — duplicate exchange of the same proof within its lifetime`,
+      );
     }
 
     const verifiedAt = new Date(__deps.now());
