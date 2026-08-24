@@ -306,6 +306,71 @@ export async function GET(req: NextRequest) {
   );
 }
 
+// [P7] verifyShareToken() — signed report share-link route.
+{
+  const content = `
+import { NextRequest, NextResponse } from "next/server";
+import { verifyShareToken } from "@/lib/report-share";
+
+export async function GET(req: NextRequest) {
+  const token = req.nextUrl.searchParams.get("token");
+  const verified = token ? verifyShareToken(token) : null;
+  if (!verified) {
+    return NextResponse.json({ error: "Invalid or expired report link" }, { status: 403 });
+  }
+  return NextResponse.json({ ok: true });
+}
+`;
+  assert('[P7] verifyShareToken() call — lint must pass', guardMatches(content));
+}
+
+// [P7n] verifyShareToken import-only must NOT pass.
+{
+  const content = `
+import { NextRequest, NextResponse } from "next/server";
+import { verifyShareToken } from "@/lib/report-share";
+
+export async function GET(req: NextRequest) {
+  return NextResponse.json({ ok: true });
+}
+`;
+  assert('[P7n] import-only verifyShareToken — lint must flag as unguarded', !guardMatches(content));
+}
+
+// [P8] consumeExtensionActionGrant() — one-time provider action grant route.
+{
+  const content = `
+import { NextRequest, NextResponse } from "next/server";
+import { consumeExtensionActionGrant } from "@/lib/extension-action-grant";
+
+export async function POST(request: NextRequest) {
+  const body = await request.json().catch(() => ({}));
+  const consumed = await consumeExtensionActionGrant(String(body.grant || ""), {
+    provider: "tekmetric",
+    action: "print",
+  });
+  if (consumed.status !== "consumed") {
+    return NextResponse.json({ error: "invalid grant" }, { status: 403 });
+  }
+  return NextResponse.json({ ok: true });
+}
+`;
+  assert('[P8] consumeExtensionActionGrant() call — lint must pass', guardMatches(content));
+}
+
+// [P8n] consumeExtensionActionGrant import-only must NOT pass.
+{
+  const content = `
+import { NextRequest, NextResponse } from "next/server";
+import { consumeExtensionActionGrant } from "@/lib/extension-action-grant";
+
+export async function POST(request: NextRequest) {
+  return NextResponse.json({ ok: true });
+}
+`;
+  assert('[P8n] import-only consumeExtensionActionGrant — lint must flag as unguarded', !guardMatches(content));
+}
+
 // ---------------------------------------------------------------------------
 // Summary
 // ---------------------------------------------------------------------------

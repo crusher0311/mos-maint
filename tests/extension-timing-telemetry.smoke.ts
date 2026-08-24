@@ -97,6 +97,9 @@ function loadHandler() {
     mosApiUrl: "http://test",
     _stateReady: Promise.resolve(),
     handleMosLogin: async () => { throw new Error("re-auth disabled"); },
+    // Tiered-session bootstrap (v1.33.4): a no-op here — this suite tests
+    // timing/telemetry attribution, not session-tier bootstrap behavior.
+    ensureBootstrapBoundToActiveTab: async () => {},
   };
   vm.createContext(context);
   vm.runInContext(slice + "\nthis.__handleMosApiRequest = handleMosApiRequest;", context);

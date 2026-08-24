@@ -179,6 +179,17 @@ const AUTH_PATTERNS = [
   // Tekmetric migration admin auth — call syntax required
   /\brequireMigAdmin\s*\(/,
 
+  // Signed report share-link verification (REPORT_SHARE_SECRET HMAC) — call
+  // syntax required. verifyShareToken() returns null for a bad/expired token
+  // and the route 403s without it, so the call is proof of protection.
+  /\bverifyShareToken\s*\(/,
+
+  // One-time extension provider-action grant consumption — call syntax
+  // required. consumeExtensionActionGrant() atomically validates + burns a
+  // server-issued single-use grant (replay-safe); the route 403s unless the
+  // grant consumes cleanly.
+  /\bconsumeExtensionActionGrant\s*\(/,
+
   // API key / secret header checks
   /x-api-secret/i,
   /\bX-API-Key\b/,
