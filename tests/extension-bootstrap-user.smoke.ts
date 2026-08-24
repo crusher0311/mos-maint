@@ -68,6 +68,28 @@ ok(
   }) === null,
 );
 
+const pinned = user({
+  providerIdentities: [
+    { provider: "tekmetric", subject: "employee-7", smsShopId: "1234" },
+  ],
+});
+ok(
+  "pinned subject blocks a different provider account even with matching email",
+  matchExistingExtensionUser({
+    ...proof,
+    employee: { subject: "attacker-99", verifiedEmail: "advisor@example.com" },
+    users: [pinned],
+  }) === null,
+);
+ok(
+  "pinned subject still matches at a new tenant the user is assigned to",
+  matchExistingExtensionUser({
+    ...proof,
+    smsShopId: "9999",
+    users: [pinned],
+  })?._id === "u1",
+);
+
 const mapped = user({
   email: "different@example.com",
   extensionProviderIdentities: {
@@ -79,13 +101,15 @@ ok(
   matchExistingExtensionUser({ ...proof, users: [mapped] })?._id === "u1",
 );
 ok(
-  "does not let matching email bypass a provider/tenant mismatch",
+  // Subjects are provider-global, so the same subject may elevate at a new
+  // tenant; only a DIFFERENT subject is blocked from using email fallback.
+  "does not let matching email bypass a pinned-subject mismatch",
   matchExistingExtensionUser({
     ...proof,
     users: [
       user({
         extensionProviderIdentities: {
-          tekmetric: [{ subject: "employee-7", smsShopId: "9999" }],
+          tekmetric: [{ subject: "someone-else-42", smsShopId: "1234" }],
         },
       }),
     ],

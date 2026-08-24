@@ -121,3 +121,40 @@ export async function listExtensionBootstrapCandidateUsers(): Promise<UserDoc[]>
     .project({ password: 0, passwordHash: 0, extensionToken: 0 })
     .toArray() as Promise<UserDoc[]>;
 }
+
+/**
+ * Pins a provider identity (immutable provider account id + tenant) to a
+ * user after a successful bootstrap email match. Once pinned, the bootstrap
+ * matcher requires the same provider subject and disables email fallback for
+ * that user, closing the "insider re-points their provider profile email at
+ * an admin's address" elevation path.
+ */
+export async function recordExtensionProviderIdentity(input: {
+  userId: string;
+  provider: string;
+  subject: string;
+  smsShopId: string;
+}): Promise<void> {
+  if (isIdentityPgCanonical()) {
+    // PG identity rows have no provider-identity storage yet; skip the pin
+    // (matching behavior is unchanged) rather than failing bootstrap.
+    console.warn(
+      "[Extension Bootstrap] provider-identity pin skipped: identity is PG-canonical",
+    );
+    return;
+  }
+  const { ObjectId } = await import("mongodb");
+  const col = await collection();
+  await col.updateOne(
+    { _id: new ObjectId(input.userId) },
+    {
+      $addToSet: {
+        providerIdentities: {
+          provider: input.provider,
+          subject: input.subject,
+          smsShopId: input.smsShopId,
+        },
+      },
+    } as never,
+  );
+}

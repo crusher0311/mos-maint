@@ -119,13 +119,16 @@ export function matchExistingExtensionUser(input: {
     const providerMappings = mappings.filter(
       (mapping) => mapping.provider === input.provider,
     );
+    // Once a user is pinned to a provider subject (immutable provider
+    // account id), only that subject may elevate as them — the email
+    // fallback is disabled so a same-shop insider cannot re-point their own
+    // provider profile email at this user's address and inherit their
+    // authority. The subject is provider-global, so a pinned user still
+    // elevates at other locations they're assigned to (which pins those
+    // tenants too).
     const mappedIdentityMatch =
       Boolean(subject) &&
-      providerMappings.some(
-        (mapping) =>
-          mapping.subject === subject &&
-          mapping.smsShopId === String(input.smsShopId),
-      );
+      providerMappings.some((mapping) => mapping.subject === subject);
     if (providerMappings.length > 0) return mappedIdentityMatch;
     return Boolean(verifiedEmail && userEmail(user) === verifiedEmail);
   });

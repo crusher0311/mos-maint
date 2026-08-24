@@ -36,7 +36,22 @@ export const __deps = {
     windowSeconds: number;
   }) => (await import("@/lib/rate")).rateLimit(opts),
   now: () => Date.now(),
+  recordProviderIdentity: async (input: {
+    userId: string;
+    provider: string;
+    subject: string;
+    smsShopId: string;
+  }) =>
+    (await import("@/lib/data/repositories/users")).recordExtensionProviderIdentity(
+      input,
+    ),
 };
+
+/** Bounded, control-character-free rendering of caller-supplied ids for logs. */
+function safeLogId(value: unknown): string {
+  const raw = String(value ?? "");
+  return /^[A-Za-z0-9_.:-]{1,64}$/.test(raw) ? raw : "invalid";
+}
 
 function clientIp(request: Request): string {
   const forwarded = (request.headers.get("x-forwarded-for") || "")
@@ -158,7 +173,7 @@ async function _POST(request: NextRequest) {
       // otherwise every invalid/expired/replayed/wrong-shop failure collapses
       // into an undiagnosable `verification_needed` line.
       console.info(
-        `[Extension Bootstrap] outcome=${outcome} provider=${proof.provider} smsShopId=${String(body?.smsShopId ?? "")} proofStatus=${proof.status} reason="${proof.reason}"`,
+        `[Extension Bootstrap] outcome=${outcome} provider=${proof.provider} smsShopId=${safeLogId(body?.smsShopId)} proofStatus=${proof.status} reason="${proof.reason}"`,
       );
       return publicOutcome(
         outcome,
@@ -206,6 +221,24 @@ async function _POST(request: NextRequest) {
           expiresAt,
         });
 
+    // Pin the provider subject on first email-match elevation. From then on
+    // only this provider account can elevate as this MOS user (email
+    // fallback is disabled by the matcher once a mapping exists), closing
+    // the "insider re-points their provider profile email" elevation path.
+    // Best-effort: a pin failure must not fail a verified bootstrap.
+    if (matchedUser && matchedUserId && proof.employee?.subject) {
+      try {
+        await __deps.recordProviderIdentity({
+          userId: matchedUserId,
+          provider: proof.provider,
+          subject: proof.employee.subject,
+          smsShopId: proof.smsShopId,
+        });
+      } catch {
+        console.warn("[Extension Bootstrap] provider-identity pin failed");
+      }
+    }
+
     await revokeSupersededSession(request, matchedUserId);
 
     const user = matchedUser
@@ -241,19 +274,20 @@ async function _POST(request: NextRequest) {
       writeProvider: null,
     };
     const outcome = matchedUser ? "matched_user" : "basic";
-    // Privacy-safe rollout signal: no token or provider response data is
-    // logged. On a non-match we log a masked employee identity (2 chars +
-    // domain) so "why didn't this user elevate" is diagnosable in prod.
-    const maskedEmployee = (() => {
+    // Privacy-safe rollout signal: no token, email, or provider response
+    // data is logged. On a non-match we log a non-reversible correlation id
+    // for the employee email (compare offline by hashing a candidate
+    // address) so "why didn't this user elevate" is diagnosable in prod.
+    const employeeSignal = (() => {
       if (matchedUser) return "";
       const email = String(proof.employee?.verifiedEmail ?? "");
-      const at = email.indexOf("@");
-      const masked =
-        at > 0 ? `${email.slice(0, 2)}***${email.slice(at)}` : "none";
-      return ` employee=${masked} subject=${proof.employee?.subject != null ? "yes" : "no"}`;
+      const emailRef = email
+        ? crypto.createHash("sha256").update(email).digest("hex").slice(0, 12)
+        : "none";
+      return ` employeeRef=${emailRef} subject=${proof.employee?.subject != null ? "yes" : "no"}`;
     })();
     console.info(
-      `[Extension Bootstrap] outcome=${outcome} shop=${proof.shopId} provider=${proof.provider}${maskedEmployee}`,
+      `[Extension Bootstrap] outcome=${outcome} shop=${proof.shopId} provider=${proof.provider}${employeeSignal}`,
     );
     return NextResponse.json(
       {

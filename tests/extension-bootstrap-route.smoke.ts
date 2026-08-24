@@ -95,6 +95,7 @@ async function run() {
     return issued("verified", input.userId) as any;
   };
 
+  __deps.recordProviderIdentity = async () => {};
   __deps.listCandidateUsers = async () => [];
   let response = await POST(request());
   let body: any = await response.json();
