@@ -37,6 +37,9 @@ let bootstrapInFlightToken = null;
 let bootstrapInFlightKey = null;
 const smsContextsByTab = new Map();
 const tekmetricProofsByTab = new Map();
+// Shopmonkey per-user browser bearer, captured from the SPA's own API calls.
+// Memory-only, same lifecycle rules as tekmetricProofsByTab.
+const shopmonkeyProofsByTab = new Map();
 let activeTabId = null;
 chrome.tabs.query({ active: true, currentWindow: true })
   .then((tabs) => { activeTabId = tabs[0]?.id ?? null; })
@@ -219,6 +222,43 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
       });
     }
 
+    // Shopmonkey: capture the SPA's per-user bearer (memory only, never
+    // stored or logged). The server independently probes the public API's
+    // current-user endpoint with it — mirror of the Tekmetric flow below.
+    try {
+      const smUrl = new URL(details.url);
+      if (smUrl.hostname.endsWith('shopmonkey.cloud') && details.tabId >= 0) {
+        const authHeader = (details.requestHeaders || []).find(
+          (h) => h.name.toLowerCase() === 'authorization'
+        );
+        const bearerMatch = authHeader?.value?.match(/^Bearer\s+(\S{20,4096})$/i);
+        if (bearerMatch) {
+          const priorSmProof = shopmonkeyProofsByTab.get(details.tabId);
+          shopmonkeyProofsByTab.set(details.tabId, {
+            token: bearerMatch[1],
+            origin: smUrl.origin,
+            seenAt: Date.now(),
+          });
+          const smContext = smsContextsByTab.get(details.tabId) || null;
+          if (
+            priorSmProof?.token !== bearerMatch[1] &&
+            smContext?.provider === 'shopmonkey'
+          ) {
+            _stateReady.then(async () => {
+              if (mosAuthSource === 'explicit' || explicitLoginInFlight) return;
+              if (
+                mosAuthSource === 'bootstrap' &&
+                mosBootstrapContextKey?.startsWith(`${details.tabId}:`)
+              ) {
+                await clearBootstrapAuth(true);
+              }
+              await handleMosBootstrap(details.tabId, smContext);
+            }).catch(() => {});
+          }
+        }
+      }
+    } catch (e) {}
+
     // Capture the current provider credential in memory only. It is never
     // written to Chrome storage or logs; a service-worker restart simply waits
     // for the next authenticated Tekmetric request.
@@ -312,11 +352,14 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
       "https://cba.tekmetric.com/api/*",
       "https://*.autoflow.com/api/*",
       "https://*.autotext.me/api/*",
-      "https://*.shop-ware.com/api/*"
+      "https://*.shop-ware.com/api/*",
+      "https://*.shopmonkey.cloud/*"
     ],
     types: ["xmlhttprequest"]
   },
-  ["requestHeaders"]
+  // `extraHeaders` keeps the Authorization header visible on cross-origin
+  // (CORS) Shopmonkey API calls in modern Chrome.
+  ["requestHeaders", "extraHeaders"]
 );
 
 // ==================== SIDE PANEL BEHAVIOR ====================
@@ -360,6 +403,7 @@ chrome.tabs.onActivated.addListener(({ tabId }) => {
 chrome.tabs.onRemoved.addListener((tabId) => {
   smsContextsByTab.delete(tabId);
   tekmetricProofsByTab.delete(tabId);
+  shopmonkeyProofsByTab.delete(tabId);
   const boundKey = mosBootstrapContextKey || pendingBootstrapAuth?.contextKey || "";
   if (boundKey.startsWith(`${tabId}:`)) {
     clearBootstrapAuth(true).catch(() => {});
@@ -382,6 +426,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (supportedProviderPage) return;
   smsContextsByTab.delete(tabId);
   tekmetricProofsByTab.delete(tabId);
+  shopmonkeyProofsByTab.delete(tabId);
   const boundKey = mosBootstrapContextKey || pendingBootstrapAuth?.contextKey || "";
   if (boundKey.startsWith(`${tabId}:`)) {
     clearBootstrapAuth(true).catch(() => {});
@@ -394,6 +439,7 @@ chrome.webRequest.onCompleted.addListener(
   (details) => {
     if (details.tabId < 0 || ![401, 403].includes(details.statusCode)) return;
     tekmetricProofsByTab.delete(details.tabId);
+    shopmonkeyProofsByTab.delete(details.tabId);
     const boundKey = mosBootstrapContextKey || pendingBootstrapAuth?.contextKey || "";
     if (boundKey.startsWith(`${details.tabId}:`)) {
       clearBootstrapAuth(true).catch(() => {});
@@ -404,6 +450,7 @@ chrome.webRequest.onCompleted.addListener(
       "https://shop.tekmetric.com/api/*",
       "https://sandbox.tekmetric.com/api/*",
       "https://cba.tekmetric.com/api/*",
+      "https://*.shopmonkey.cloud/*",
     ],
     types: ["xmlhttprequest"],
   },
@@ -1245,7 +1292,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         context,
         hasToken: context?.provider === 'tekmetric'
           ? !!tekmetricProofsByTab.get(activeTabId)?.token
-          : !!smsTokens[context?.provider],
+          : context?.provider === 'shopmonkey'
+            ? !!shopmonkeyProofsByTab.get(activeTabId)?.token
+            : !!smsTokens[context?.provider],
       });
     })();
     return true;
@@ -2207,15 +2256,19 @@ async function handleMosBootstrap(tabId, context) {
   }
 
   const provider = String(context.provider || '').toLowerCase().replace(/^shop[-_]ware$/, 'shopware');
-  // Tekmetric is the only provider with a server-probeable browser-session
-  // proof today. Other providers still call the common adapter so the UI gets
-  // an explicit unsupported outcome; no cookies or page data are forwarded.
-  const tabProof = provider === 'tekmetric'
-    ? tekmetricProofsByTab.get(tabId)
-    : null;
+  // Tekmetric (x-auth-token) and Shopmonkey (per-user bearer) have
+  // server-probeable browser-session proofs. Other providers still call the
+  // common adapter so the UI gets an explicit unsupported outcome; no cookies
+  // or page data are forwarded.
+  const proofsByProvider = {
+    tekmetric: tekmetricProofsByTab,
+    shopmonkey: shopmonkeyProofsByTab,
+  };
+  const proofMap = proofsByProvider[provider] || null;
+  const tabProof = proofMap ? proofMap.get(tabId) : null;
   const proofToken = tabProof?.token || null;
   const proofOrigin = tabProof?.origin || null;
-  if (provider === 'tekmetric' && (!proofToken || !proofOrigin)) {
+  if (proofMap && (!proofToken || !proofOrigin)) {
     broadcastBootstrapState('verification_needed');
     return { success: false, outcome: 'verification_needed' };
   }
@@ -2248,7 +2301,9 @@ async function handleMosBootstrap(tabId, context) {
         smsShopId: String(context.shopId),
         proof: provider === 'tekmetric'
           ? { kind: 'tekmetric_x_auth', token: proofToken, origin: proofOrigin }
-          : undefined,
+          : provider === 'shopmonkey' && proofToken
+            ? { kind: 'shopmonkey_bearer', token: proofToken, origin: proofOrigin }
+            : undefined,
       }),
     });
     const data = await response.json().catch(() => ({}));
@@ -2277,7 +2332,7 @@ async function handleMosBootstrap(tabId, context) {
     // A slow proof exchange must not grant a session after that source tab
     // navigated to another provider/shop or stopped being the active tab.
     const latest = smsContextsByTab.get(tabId);
-    const latestProof = tekmetricProofsByTab.get(tabId);
+    const latestProof = proofMap ? proofMap.get(tabId) : null;
     if (
       authEpoch !== attemptEpoch ||
       mosAuthSource === 'explicit' ||
@@ -2285,7 +2340,7 @@ async function handleMosBootstrap(tabId, context) {
       bootstrapContextKey(tabId, latest) !== key ||
       !(await tabIsActive(tabId)) ||
       (
-        provider === 'tekmetric' &&
+        proofMap != null &&
         (latestProof?.token !== proofToken || latestProof?.origin !== proofOrigin)
       )
     ) {
