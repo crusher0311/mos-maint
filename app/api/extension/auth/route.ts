@@ -261,40 +261,59 @@ async function _POST(request: NextRequest) {
             .map((provider) => ({ shop, provider })),
         )
       : [];
-    const contextMatch = contextMatches.length === 1 ? contextMatches[0] : null;
-    const contextShop = contextMatch?.shop ?? null;
-    if (normalizedSmsShopId && !contextMatch) {
-      return NextResponse.json(
-        {
-          error:
-            contextMatches.length > 1
-              ? "The current shop context is ambiguous; select its provider"
-              : "The current shop is not assigned to this account",
-        },
-        { status: 403, headers: corsHeaders },
+    // Tab-supplied provider/smsShopId context is ADVISORY scoping only, never
+    // a gate for a credentialed login (Task #1164). The bootstrap rollout made
+    // the sidepanel forward the active tab's context on manual sign-in, and a
+    // context that failed to resolve to exactly one assigned shop (new shop
+    // not yet resolvable by SMS id, ambiguous, stale, or unassigned) used to
+    // 403 a login whose credentials were valid. Now: a resolvable context
+    // scopes the session; an unresolvable/ambiguous one is logged and ignored,
+    // and the login falls back to the user's assigned shops. The only hard
+    // gate kept is the EXPLICIT requestedShopId check above — the user asking
+    // for a shop they aren't assigned to is a genuine security boundary.
+    let contextMatch = contextMatches.length === 1 ? contextMatches[0] : null;
+    if (normalizedSmsShopId && contextMatches.length !== 1) {
+      console.info(
+        `[Extension Auth] context advisory-miss smsShopId=${normalizedSmsShopId} matches=${contextMatches.length} provider=${normalizedRequestedProvider || "any"} — signing in without tab-context scoping`,
       );
     }
+    // An explicit requestedShopId (already verified as assigned) wins over a
+    // conflicting tab context — the user made a deliberate choice.
     if (
-      contextShop &&
+      contextMatch &&
       requestedId != null &&
-      Number(contextShop.shopId) !== requestedId
+      Number(contextMatch.shop.shopId) !== requestedId
     ) {
-      return NextResponse.json(
-        { error: "Requested shop does not match the current shop context" },
-        { status: 403, headers: corsHeaders },
+      console.info(
+        `[Extension Auth] context conflicts with requested shop ${requestedId} — using requested shop`,
       );
+      contextMatch = null;
     }
+    const contextShop = contextMatch?.shop ?? null;
     const defaultShopId = allShopIds.includes(Number(user.shopId))
       ? Number(user.shopId)
       : allShopIds[0];
-    const scopeShopId = Number(contextShop?.shopId ?? requestedId ?? defaultShopId);
-    const scopeShop =
+    let scopeShopId = Number(contextShop?.shopId ?? requestedId ?? defaultShopId);
+    let scopeShop =
       contextShop ?? shopDocs.find((s: any) => Number(s.shopId) === scopeShopId);
-    const detectedProvider = detectProvider(scopeShop);
-    const scopeProvider =
-      contextMatch?.provider ??
-      (normalizedRequestedProvider as ExtensionProvider | null) ??
-      detectedProvider;
+    let scopeProvider: ExtensionProvider | null =
+      contextMatch?.provider ?? detectProvider(scopeShop);
+    // If the chosen shop has no detectable provider configuration, fall back
+    // to any assigned shop that does — valid credentials plus at least one
+    // configured shop must always produce a session.
+    if (!scopeShop || !scopeProvider || !shopSupportsProvider(scopeShop, scopeProvider)) {
+      const fallback = shopDocs
+        .map((s: any) => ({ shop: s, provider: detectProvider(s) }))
+        .find(
+          (entry: any) =>
+            entry.provider && shopSupportsProvider(entry.shop, entry.provider),
+        );
+      if (fallback) {
+        scopeShop = fallback.shop;
+        scopeShopId = Number(fallback.shop.shopId);
+        scopeProvider = fallback.provider;
+      }
+    }
     if (
       !scopeShopId ||
       !scopeShop ||
@@ -433,8 +452,11 @@ async function _POST(request: NextRequest) {
         capabilities: issued.principal.capabilities,
         shopId: issued.principal.shopId,
         provider: issued.principal.provider,
+        // Only echo the tab-supplied sms id when it actually resolved to the
+        // scoped shop; an ignored advisory context must not mislabel the
+        // session's shop identity.
         smsShopId:
-          normalizedSmsShopId ??
+          (contextMatch ? normalizedSmsShopId : null) ??
           smsIdsForShop(scopeShop, scopeProvider)[0] ??
           null,
         expiresAt: issued.principal.expiresAt.toISOString(),

@@ -76,7 +76,12 @@ async function revokeSupersededSession(
 }
 
 function publicOutcome(
-  outcome: "unsupported" | "verification_needed" | "rate_limited" | "error",
+  outcome:
+    | "unsupported"
+    | "unavailable"
+    | "verification_needed"
+    | "rate_limited"
+    | "error",
   status: number,
   reason?: string,
 ) {
@@ -84,7 +89,10 @@ function publicOutcome(
     {
       ok: false,
       outcome,
-      reason: outcome === "unsupported" ? reason : outcome,
+      reason:
+        outcome === "unsupported" || outcome === "unavailable"
+          ? reason
+          : outcome,
     },
     { status, headers: corsHeaders },
   );
@@ -137,14 +145,22 @@ async function _POST(request: NextRequest) {
       proof: body?.proof,
     });
     if (proof.status !== "verified") {
-      const unsupported = proof.status === "unsupported";
+      // `unsupported` (provider has no proof mechanism) and `unavailable`
+      // (shop not resolvable/allowlisted — e.g. a brand-new shop) are normal
+      // "sign in with MOS.Tools instead" outcomes, not verification failures.
+      const outcome =
+        proof.status === "unsupported"
+          ? ("unsupported" as const)
+          : proof.status === "unavailable"
+            ? ("unavailable" as const)
+            : ("verification_needed" as const);
       console.info(
-        `[Extension Bootstrap] outcome=${unsupported ? "unsupported" : "verification_needed"} provider=${proof.provider}`,
+        `[Extension Bootstrap] outcome=${outcome} provider=${proof.provider}`,
       );
       return publicOutcome(
-        unsupported ? "unsupported" : "verification_needed",
-        unsupported ? 200 : 401,
-        unsupported ? proof.reason : undefined,
+        outcome,
+        outcome === "verification_needed" ? 401 : 200,
+        outcome === "verification_needed" ? undefined : proof.reason,
       );
     }
 

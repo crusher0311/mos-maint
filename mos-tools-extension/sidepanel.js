@@ -550,6 +550,9 @@ function showBootstrapOutcome(outcome) {
   if (!elements.bootstrapStatus) return;
   const copy = {
     unsupported: 'Automatic access is not available for this provider yet. Sign in with MOS.Tools to continue.',
+    // A shop that isn't set up for automatic access yet (e.g. brand-new) is a
+    // normal state — render a plain sign-in prompt, not an alarming error.
+    unavailable: 'Sign in with your MOS.Tools account to continue.',
     verification_needed: 'Automatic access could not verify this provider session. Sign in with MOS.Tools to continue.',
     rate_limited: 'Automatic access is temporarily paused. Sign in with MOS.Tools or try again shortly.',
     error: 'Automatic access is temporarily unavailable. Sign in with MOS.Tools to continue.',
@@ -1483,6 +1486,10 @@ async function handleLogin(e) {
   const rememberMe = elements.rememberMeCheckbox.checked;
   
   elements.loginError.classList.add('hidden');
+  // Manual sign-in supersedes any lingering bootstrap ("automatic access")
+  // status. Clear it so a failure below surfaces the REAL auth error instead
+  // of the stale "Automatic access could not verify…" copy (Task #1164).
+  showBootstrapOutcome(null);
   elements.loginForm.querySelector('button').disabled = true;
   elements.loginForm.querySelector('button').textContent = 'Signing in...';
   

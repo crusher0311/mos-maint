@@ -147,6 +147,7 @@
 - [Triage read-path quirks](triage-read-path-quirks.md) — job_index has no timestamps (use _id); normalized Mongo mirror COLLSCANs on shopId — bound reads with maxTimeMS; rethrow NEXT_REDIRECT in admin API catches.
 - [DataOne shares canonical Supabase PG](dataone-shared-db-brownout.md) — disk-IO brownout makes OEM lookups take minutes → web tier clogs; breaker in dataone-api fails fast (env-tunable).
 - [Slow-query analyzer seams](slow-query-analyzer.md) — Mongo monitorCommands + postgres-js then-patch (never Proxy the Query); slow_queries self-capture guard; instrumentation-reachable modules can't import bare node crypto.
+- [Extension bootstrap outcomes](extension-bootstrap-outcomes.md) — tab context is advisory for manual login (only explicit unassigned requestedShopId 403s); shop-miss/allowlist/kill-switch = calm `unavailable`, not `verification_needed`.
 - [Extension session authority](extension-session-authority.md) — Basic/verified authority is server-owned; browser-direct writes require one-time server-consumed grants at the actual sink.
 - [Media storage on Render](render-media-storage.md) — Replit object-storage sidecar absent on Render prod; use GridFS with tight caps; extension uploads are base64-JSON.
 - [Deepgram SDK v5 has no createClient](deepgram-sdk-v5-rest.md) — pinned v5 dropped the classic API; POST audio to the REST /v1/listen endpoint instead.

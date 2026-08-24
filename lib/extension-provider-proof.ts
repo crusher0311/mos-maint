@@ -21,7 +21,13 @@ export type ProviderProofResult =
       expiresAt: Date;
     }
   | {
-      status: "unsupported" | "invalid" | "expired" | "replayed";
+      /**
+       * `unavailable` = the shop can't use bootstrap at all (lookup miss for a
+       * new/unlinked shop, or not allowlisted). It is NOT a verification
+       * failure — the sidepanel should render a normal "please sign in"
+       * prompt, not an alarming verification error (Task #1164).
+       */
+      status: "unsupported" | "unavailable" | "invalid" | "expired" | "replayed";
       provider: Exclude<ExtensionProvider, "protractor">;
       reason: string;
     };
@@ -260,13 +266,16 @@ export async function verifyProviderSessionProof(input: {
     isPlatformAdmin: true,
     providerHint: "tekmetric",
   });
+  // A shop that can't be resolved (brand-new / not yet linked by SMS id) or
+  // isn't allowlisted for bootstrap is a normal "sign in instead" situation,
+  // not a failed verification of the provider session.
   if (
     !shop ||
     shop.provider !== "tekmetric" ||
     !enabledForShop(provider, shop.mosShopId)
   ) {
     return {
-      status: "invalid",
+      status: "unavailable",
       provider,
       reason: "Bootstrap is unavailable for this shop",
     };

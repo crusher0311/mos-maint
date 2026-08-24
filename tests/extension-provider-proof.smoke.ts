@@ -192,7 +192,9 @@ async function run() {
       origin: "https://shop.tekmetric.com",
     },
   });
-  ok("honors the global rollout kill switch", killed.status === "invalid");
+  // Task #1164: feature-off (kill switch / allowlist / lookup miss) is a calm
+  // `unavailable` outcome (plain sign-in prompt), not a verification failure.
+  ok("honors the global rollout kill switch", killed.status === "unavailable");
 }
 
 run()
