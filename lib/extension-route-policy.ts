@@ -82,6 +82,27 @@ const POLICY_MAP: Record<string, PolicyTier[]> = {
   // POST: read — records analytics metadata, no provider mutation
   "/api/extension/analytics/push-to-ro|POST": ["read"],
 
+  // ── auto-dvi (Task #991) ─────────────────────────────────────────────────
+  // generate: read — composes a vehicle-specific inspection from the VHI +
+  // shop checklist; pure read, nothing persisted.
+  "/api/extension/auto-dvi/generate|POST": ["read"],
+  "/api/extension/auto-dvi/generate|OPTIONS": ["preflight"],
+  // media: write — stores a base64 photo against an inspection item (GridFS).
+  "/api/extension/auto-dvi/media|POST": ["write"],
+  "/api/extension/auto-dvi/media|OPTIONS": ["preflight"],
+  // push: write + provider_action — pushes the confirmed inspection into the
+  // open work order in the provider (Protractor/Tekmetric) as inspection lines.
+  "/api/extension/auto-dvi/push|POST": ["write", "provider_action"],
+  "/api/extension/auto-dvi/push|OPTIONS": ["preflight"],
+  // results: write — load/save per-item technician findings (GET is modelled
+  // as POST-with-action to keep one guarded JSON body shape).
+  "/api/extension/auto-dvi/results|POST": ["write"],
+  "/api/extension/auto-dvi/results|OPTIONS": ["preflight"],
+  // voice: read — transcribes base64 audio into structured findings; nothing
+  // persisted (same tier as vin-plate-ocr).
+  "/api/extension/auto-dvi/voice|POST": ["read"],
+  "/api/extension/auto-dvi/voice|OPTIONS": ["preflight"],
+
   // ── build-ro-from-vhi ────────────────────────────────────────────────────
   "/api/extension/build-ro-from-vhi|POST": ["write", "provider_action"],
   "/api/extension/build-ro-from-vhi|OPTIONS": ["preflight"],
