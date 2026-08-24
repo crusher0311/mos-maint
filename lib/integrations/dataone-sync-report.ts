@@ -1,8 +1,9 @@
 import postgres from "postgres";
 import { sendEmail } from "@/lib/email";
 import { getPlatformAdminEmails } from "@/lib/super-admins";
+import { instrumentPgClientForSlowQueries } from "@/lib/slow-query/tracker";
 
-const sql = postgres(process.env.DATABASE_URL!);
+const sql = instrumentPgClientForSlowQueries(postgres(process.env.DATABASE_URL!));
 
 export interface TableStats {
   table_name: string;

@@ -1,16 +1,19 @@
 import { NextResponse } from "next/server";
 import { requirePlatformAdmin } from "@/lib/auth";
 import postgres from "postgres";
+import { instrumentPgClientForSlowQueries } from "@/lib/slow-query/tracker";
 
 let _sql: ReturnType<typeof postgres> | null = null;
 
 function getSql() {
   if (!_sql) {
     const connStr = process.env.DATAONE_DATABASE_URL || process.env.DATABASE_URL!;
-    _sql = postgres(connStr, {
-      connect_timeout: 30,
-      idle_timeout: 20,
-    });
+    _sql = instrumentPgClientForSlowQueries(
+      postgres(connStr, {
+        connect_timeout: 30,
+        idle_timeout: 20,
+      }),
+    );
   }
   return _sql;
 }

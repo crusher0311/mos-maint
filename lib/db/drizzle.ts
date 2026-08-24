@@ -1,6 +1,7 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "./schema";
+import { instrumentPgClientForSlowQueries } from "@/lib/slow-query/tracker";
 
 type Schema = typeof schema;
 type Database = ReturnType<typeof drizzle<Schema>>;
@@ -20,12 +21,16 @@ function getConnectionString(): string {
 
 export function getClient(): ReturnType<typeof postgres> {
   if (!_client) {
-    _client = postgres(getConnectionString(), {
-      max: 2,
-      idle_timeout: 30,
-      connect_timeout: 30,
-      max_lifetime: 60 * 30,
-    });
+    // Task #1161 — slow-query analyzer. When tracking is disabled the
+    // instrument call returns the stock client unchanged (zero overhead).
+    _client = instrumentPgClientForSlowQueries(
+      postgres(getConnectionString(), {
+        max: 2,
+        idle_timeout: 30,
+        connect_timeout: 30,
+        max_lifetime: 60 * 30,
+      }),
+    );
   }
   return _client;
 }

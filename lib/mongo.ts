@@ -1,5 +1,9 @@
 // lib/mongo.ts
 import { MongoClient, Db } from "mongodb";
+import {
+  attachMongoSlowQueryMonitor,
+  mongoMonitorEnabled,
+} from "@/lib/slow-query/tracker";
 
 let clientPromise: Promise<MongoClient> | undefined;
 
@@ -52,13 +56,26 @@ export async function getMongoClient(): Promise<MongoClient> {
 
   const uri = getMongoUri();
 
+  // Task #1161 — slow-query analyzer. Command monitoring is only turned on
+  // when tracking is enabled (SLOW_QUERY_TRACKING_DISABLED unset), so the
+  // kill-switched hot path pays zero event-emission overhead.
+  const monitor = mongoMonitorEnabled();
+  const options = monitor
+    ? { ...MONGO_OPTIONS, monitorCommands: true }
+    : MONGO_OPTIONS;
+  const makeClient = () => {
+    const client = new MongoClient(uri, options);
+    if (monitor) attachMongoSlowQueryMonitor(client);
+    return client.connect();
+  };
+
   if (process.env.NODE_ENV === "development") {
     if (!global._mongoClientPromise) {
-      global._mongoClientPromise = new MongoClient(uri, MONGO_OPTIONS).connect();
+      global._mongoClientPromise = makeClient();
     }
     clientPromise = global._mongoClientPromise;
   } else {
-    clientPromise = new MongoClient(uri, MONGO_OPTIONS).connect();
+    clientPromise = makeClient();
   }
   return clientPromise!;
 }
