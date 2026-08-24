@@ -101,17 +101,26 @@ export function verifyExtensionActionGrantSignature(
   if (!grant.startsWith(GRANT_PREFIX)) return null;
   const [payload, signature] = grant.slice(GRANT_PREFIX.length).split(".");
   if (!payload || !signature) return null;
-  const expectedSignature = crypto
-    .createHmac("sha256", signingSecret())
-    .update(payload)
-    .digest();
-  const actualSignature = decode(signature);
+  // Compare the *encoded* signature strings, not decoded bytes. Base64url has
+  // discarded trailing bits, so many strings decode to the same bytes; a
+  // byte-level compare accepts those non-canonical spellings. That both made
+  // the forged-signature smoke test flaky (a last-char flip can be a decode
+  // no-op ~25% of the time) and — worse — let one logical grant exist under
+  // multiple spellings with distinct grantHash values, side-stepping the
+  // one-time replay guard.
+  const expectedSignature = Buffer.from(
+    encode(crypto.createHmac("sha256", signingSecret()).update(payload).digest()),
+  );
+  const actualSignature = Buffer.from(signature);
   if (
     expectedSignature.length !== actualSignature.length ||
     !crypto.timingSafeEqual(expectedSignature, actualSignature)
   ) {
     return null;
   }
+  // Reject non-canonical payload spellings for the same reason: the replay
+  // ledger hashes the full grant string.
+  if (encode(decode(payload)) !== payload) return null;
   let claims: ExtensionActionGrantClaims;
   try {
     claims = JSON.parse(decode(payload).toString("utf8"));
