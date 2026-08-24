@@ -941,6 +941,14 @@ function applyMutationControlLock() {
   });
 }
 
+// The green "Signed in as …" confirmation is transient: it auto-hides a few
+// seconds after each new matched session (keyed by expiry, so a fresh login
+// re-shows it). The Basic banner stays persistent — it is the read-only
+// warning plus the sign-in prompt, not a confirmation.
+const MATCHED_BANNER_HIDE_MS = 10000;
+let matchedBannerHiddenKey = null;
+let matchedBannerTimer = null;
+
 function renderSessionTierBanner() {
   const banner = document.getElementById('session-tier-banner');
   if (!banner) return;
@@ -952,9 +960,29 @@ function renderSessionTierBanner() {
   const isBootstrapMatch =
     sessionTier?.authSource === 'bootstrap' &&
     sessionTier?.resolution === 'matched_user';
+  const matchedKey = isBootstrapMatch
+    ? `${sessionTier.displayName || ''}|${sessionTier.expiresAt || ''}`
+    : null;
+  if (!isBootstrapMatch && matchedBannerTimer) {
+    clearTimeout(matchedBannerTimer);
+    matchedBannerTimer = null;
+  }
   if (!isBasic && !isBootstrapMatch) {
     banner.classList.add('hidden');
     return;
+  }
+  if (isBootstrapMatch && matchedKey === matchedBannerHiddenKey) {
+    banner.classList.add('hidden');
+    return;
+  }
+  if (isBootstrapMatch && !matchedBannerTimer) {
+    matchedBannerTimer = setTimeout(() => {
+      matchedBannerTimer = null;
+      matchedBannerHiddenKey = matchedKey;
+      // Re-render instead of hiding directly, so a state that changed while
+      // the timer was pending (e.g. downgraded to Basic) paints correctly.
+      renderSessionTierBanner();
+    }, MATCHED_BANNER_HIDE_MS);
   }
   banner.classList.remove('hidden', 'session-tier-verified', 'session-tier-basic');
   banner.classList.add(isBasic ? 'session-tier-basic' : 'session-tier-verified');
