@@ -154,8 +154,11 @@ async function _POST(request: NextRequest) {
           : proof.status === "unavailable"
             ? ("unavailable" as const)
             : ("verification_needed" as const);
+      // Log the internal proof status + reason (never the proof itself) —
+      // otherwise every invalid/expired/replayed/wrong-shop failure collapses
+      // into an undiagnosable `verification_needed` line.
       console.info(
-        `[Extension Bootstrap] outcome=${outcome} provider=${proof.provider}`,
+        `[Extension Bootstrap] outcome=${outcome} provider=${proof.provider} proofStatus=${proof.status} reason="${proof.reason}"`,
       );
       return publicOutcome(
         outcome,
