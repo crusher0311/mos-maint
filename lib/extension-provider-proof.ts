@@ -162,12 +162,16 @@ function verifiedEmailFromProfile(raw: any): string | undefined {
   )
     .trim()
     .toLowerCase();
-  const explicitlyVerified =
-    profile.emailVerified === true ||
-    profile.email_verified === true ||
-    profile.isEmailVerified === true ||
-    profile.verifiedEmail === true;
-  return explicitlyVerified && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)
+  // Tekmetric's /api/profile carries no emailVerified-style flag at all
+  // (live-confirmed shape: id/email/firstName/...), so requiring an explicit
+  // affirmative flag silently disabled email matching for the entire fleet.
+  // The profile email IS the credential this authenticated session logged in
+  // with, so treat it as verified unless the provider explicitly negates it.
+  const explicitlyUnverified =
+    profile.emailVerified === false ||
+    profile.email_verified === false ||
+    profile.isEmailVerified === false;
+  return !explicitlyUnverified && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)
     ? email
     : undefined;
 }
