@@ -241,10 +241,19 @@ async function _POST(request: NextRequest) {
       writeProvider: null,
     };
     const outcome = matchedUser ? "matched_user" : "basic";
-    // Privacy-safe rollout signal: no token, email, subject, or provider
-    // response data is logged.
+    // Privacy-safe rollout signal: no token or provider response data is
+    // logged. On a non-match we log a masked employee identity (2 chars +
+    // domain) so "why didn't this user elevate" is diagnosable in prod.
+    const maskedEmployee = (() => {
+      if (matchedUser) return "";
+      const email = String(proof.employee?.verifiedEmail ?? "");
+      const at = email.indexOf("@");
+      const masked =
+        at > 0 ? `${email.slice(0, 2)}***${email.slice(at)}` : "none";
+      return ` employee=${masked} subject=${proof.employee?.subject != null ? "yes" : "no"}`;
+    })();
     console.info(
-      `[Extension Bootstrap] outcome=${outcome} shop=${proof.shopId} provider=${proof.provider}`,
+      `[Extension Bootstrap] outcome=${outcome} shop=${proof.shopId} provider=${proof.provider}${maskedEmployee}`,
     );
     return NextResponse.json(
       {
