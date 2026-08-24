@@ -1,9 +1,9 @@
 ---
 name: Extension bootstrap auto-elevation
-description: Why bootstrap email-match elevation (matched_user) can silently never fire and how to diagnose
+description: Identity-trust rules for bootstrap email-match elevation and why it can silently never fire
 ---
-Bootstrap auto-elevation (verified session with the matched MOS user's permissions) requires ALL of: proof verified, MOS user active + assigned to the resolved mosShopId (shopIds strings/ints both OK), and a usable provider identity — subject mapping OR verified email.
+Auto-elevation (matched_user) requires: verified proof, active MOS user assigned to the resolved shop, single unambiguous identity. Trust rules: the provider profile email counts as verified unless the provider explicitly negates it (Tekmetric has NO emailVerified-style flag — requiring an affirmative flag silently disabled matching fleet-wide). On first email-match elevation the provider subject is PINNED to the MOS user (providerIdentities); thereafter only that subject elevates and email fallback is off for that user — this is the guard against an insider re-pointing their provider profile email at an admin. Subjects are provider-global, so a pinned user still elevates at other assigned tenants.
 
-**Why:** it silently never fired fleet-wide because the email extractor required an affirmative emailVerified-style flag that Tekmetric's /api/profile simply doesn't have; every proof carried subject-only, and subject matching needs pre-existing provider identity mappings nobody has. Symptom: outcome=basic everywhere, zero matched_user in logs, while local match probes succeed.
+**Why:** email match alone proves the session's email, not keyboard ownership or email ownership; pinning closes the email-repoint elevation path while keeping zero-friction login.
 
-**How to apply:** treat provider login email as verified unless explicitly negated. Diagnose with masked `employee=`/`subject=` on basic outcomes. Also: extension reuses a valid basic session for its full 8h TTL — after granting shop access, revoke the shop's basic extension_sessions rows (prod PG) to force re-bootstrap. Sidepanel can render a failure even when a twin request succeeded (proof single-use ⇒ duplicate request gets `replayed`).
+**How to apply:** never log raw provider emails (hash correlation id) or unsanitized caller ids; symptom of a dead matcher is zero matched_user outcomes fleet-wide while local match probes succeed. Extension reuses a valid basic session for its full TTL — revoke the shop's basic extension_sessions to force re-bootstrap after access changes.
