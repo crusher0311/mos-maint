@@ -1802,6 +1802,7 @@ function renderPlan(data, reqRoId, reqShopId) {
     ).join('');
   }
   updateAddAllDeclinedButton(data);
+  updateAutoDviSection();
   
   // Render due soon
   elements.dueSoonSection.classList.toggle('hidden', !hasDueSoon);
@@ -1958,6 +1959,8 @@ async function handleAddAllDeclinedWork() {
     if (btn) { btn.disabled = false; btn.textContent = originalLabel; }
   }
 }
+
+let autoDviInFlight = false;
 
 // ==================== SIDE-PANEL UNDO (Task #1094) ====================
 // Side-panel write actions (add job / canned job / declined add-all) capture
@@ -7861,4 +7864,513 @@ async function handleCroSubmit() {
     createRoState.submitting = false;
     if (btn) { btn.disabled = false; btn.textContent = 'Create Repair Order'; }
   }
+}
+
+function updateAutoDviSection() {
+  const section = document.getElementById('auto-dvi-section');
+  const btn = document.getElementById('auto-dvi-btn');
+  if (!section || !btn) return;
+  const provider = currentContext?.provider;
+  const supported = provider === 'tekmetric' || provider === 'protractor';
+  const show = shopFeatures.auto_dvi === true && supported && currentUserCanWrite &&
+    !!currentContext?.vin;
+  section.classList.toggle('hidden', !show);
+  if (show && !btn._mosClickBound) {
+    btn._mosClickBound = true;
+    btn.addEventListener('click', handleAutoDviGenerate);
+  }
+  const voiceBtn = autoDviVoiceBtn();
+  if (voiceBtn) {
+    // Dictation appears once a checklist has been generated for this vehicle.
+    voiceBtn.classList.toggle('hidden', !show || !autoDviData);
+    if (!voiceBtn._mosClickBound) {
+      voiceBtn._mosClickBound = true;
+      voiceBtn.addEventListener('click', handleAutoDviVoiceToggle);
+    }
+  }
+  // New vehicle/RO — drop the previous checklist.
+  const body = document.getElementById('auto-dvi-body');
+  if (body && autoDviData && autoDviData.vin !== (currentContext?.vin || '').toUpperCase()) {
+    autoDviData = null;
+    autoDviFindings = {};
+    body.innerHTML = '';
+    body.classList.add('hidden');
+  }
+}
+
+function autoDviGetFinding(itemId) {
+  if (!autoDviFindings[itemId]) {
+    autoDviFindings[itemId] = { rating: null, notes: '', recommendation: '', mediaCount: 0 };
+  }
+  return autoDviFindings[itemId];
+}
+function escapeAutoDviHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function renderAutoDviChecklist(data) {
+  const body = document.getElementById('auto-dvi-body');
+  if (!body) return;
+  const vBtn = autoDviVoiceBtn();
+  if (vBtn && !autoDviRecorder) vBtn.classList.remove('hidden');
+  const items = data.items || [];
+  const hidden = data.hidden || [];
+  const ratingBtn = (itemId, rating, label, color, active) =>
+    `<button class="auto-dvi-rate" data-item="${escapeAutoDviHtml(itemId)}" data-rating="${rating}" title="${label}"
+       style="width:16px;height:16px;border-radius:50%;border:2px solid ${color};background:${active ? color : 'transparent'};cursor:pointer;padding:0;flex-shrink:0;"></button>`;
+  const renderRow = (it, idx) => {
+    // Recalls: own section, opt-in (unchecked), no rating dots — they are a
+    // category of their own, not technician findings.
+    if (it.source === 'recall') {
+      return `<li style="padding:3px 0;">
+        <label style="display:flex;align-items:flex-start;gap:6px;cursor:pointer;">
+          <input type="checkbox" class="auto-dvi-check" data-idx="${idx}" style="margin-top:2px;">
+          <div style="min-width:0;flex:1;">
+            <div style="font-size:12px;">${escapeAutoDviHtml(it.name)}</div>
+            ${it.notes ? `<div style="font-size:10px;color:#888;">${escapeAutoDviHtml(it.notes)}</div>` : ''}
+          </div>
+        </label>
+      </li>`;
+    }
+    const meta = it.source === 'vhi'
+      ? `From plan${it.bucket ? ' (' + escapeAutoDviHtml(String(it.bucket).replace('_', ' ')) + ')' : ''}`
+      : `Shop item${it.group ? ' \u2014 ' + escapeAutoDviHtml(it.group) : ''}`;
+    const f = autoDviGetFinding(it.id);
+    const hasDetail = !!(f.notes || f.recommendation || f.mediaCount > 0);
+    return `<li style="padding:3px 0;">
+      <div style="display:flex;align-items:flex-start;gap:6px;">
+        <input type="checkbox" class="auto-dvi-check" data-idx="${idx}" checked style="margin-top:2px;">
+        <div style="min-width:0;flex:1;">
+          <div style="font-size:12px;">${escapeAutoDviHtml(it.lineTitle)}</div>
+          <div style="font-size:10px;color:#888;">${meta}${f.mediaCount > 0 ? ` \u00b7 \ud83d\udcf7${f.mediaCount}` : ''}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;margin-top:1px;">
+          ${ratingBtn(it.id, 'green', 'Good', '#16a34a', f.rating === 'green')}
+          ${ratingBtn(it.id, 'yellow', 'Monitor', '#eab308', f.rating === 'yellow')}
+          ${ratingBtn(it.id, 'red', 'Needs attention', '#dc2626', f.rating === 'red')}
+          <button class="auto-dvi-detail-toggle" data-item="${escapeAutoDviHtml(it.id)}" title="Notes & photo"
+            style="border:none;background:none;cursor:pointer;font-size:12px;padding:0 2px;color:${hasDetail ? '#2563eb' : '#aaa'};">\u270e</button>
+        </div>
+      </div>
+      <div class="auto-dvi-detail hidden" data-item="${escapeAutoDviHtml(it.id)}" style="margin:4px 0 4px 22px;">
+        <textarea class="auto-dvi-notes" data-item="${escapeAutoDviHtml(it.id)}" rows="2" placeholder="Technician notes"
+          style="width:100%;font-size:11px;padding:3px 6px;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;">${escapeAutoDviHtml(f.notes)}</textarea>
+        <textarea class="auto-dvi-rec" data-item="${escapeAutoDviHtml(it.id)}" rows="1" placeholder="Recommendation"
+          style="width:100%;font-size:11px;padding:3px 6px;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;margin-top:2px;">${escapeAutoDviHtml(f.recommendation)}</textarea>
+        <label style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:#2563eb;cursor:pointer;margin-top:2px;">
+          \ud83d\udcf7 Add photo
+          <input type="file" class="auto-dvi-photo" data-item="${escapeAutoDviHtml(it.id)}" data-name="${escapeAutoDviHtml(it.name)}"
+            accept="image/jpeg,image/png,image/webp" capture="environment" style="display:none;">
+        </label>
+      </div>
+    </li>`;
+  };
+  const itemRows = items.map((it, idx) => (it.source === 'recall' ? '' : renderRow(it, idx))).join('');
+  const recallRows = items.map((it, idx) => (it.source === 'recall' ? renderRow(it, idx) : '')).join('');
+  const recallBlock = recallRows.trim()
+    ? `<div style="margin-top:6px;border:1px solid #fcd34d;border-radius:6px;padding:4px 8px;">
+        <div style="font-size:10px;font-weight:600;color:#92400e;text-transform:uppercase;letter-spacing:.03em;">Open safety recalls</div>
+        <div style="font-size:10px;color:#888;">Dealer repairs at no charge \u2014 check any to include on the RO.</div>
+        <ul style="list-style:none;padding:0;margin:2px 0 0;">${recallRows}</ul>
+      </div>`
+    : '';
+  const hiddenBlock = hidden.length > 0
+    ? `<details style="margin-top:4px;"><summary style="font-size:11px;color:#888;cursor:pointer;">${hidden.length} shop item${hidden.length !== 1 ? 's' : ''} hidden as duplicates</summary>
+        <ul style="list-style:none;padding-left:10px;margin:4px 0;">${hidden.map((h) =>
+          `<li style="font-size:10px;color:#888;padding:1px 0;">${escapeAutoDviHtml(h.item?.name)} \u2014 ${escapeAutoDviHtml(h.reason)}</li>`).join('')}</ul>
+      </details>`
+    : '';
+  body.innerHTML = items.length === 0
+    ? '<div style="font-size:12px;color:#888;">No inspection items for this vehicle.</div>'
+    : `<ul style="list-style:none;padding:0;margin:0;">${itemRows}</ul>${recallBlock}${hiddenBlock}
+       <button id="auto-dvi-push-btn" class="btn-add" style="margin-top:6px;">+ Add Inspection to RO</button>`;
+  body.classList.remove('hidden');
+  const pushBtn = document.getElementById('auto-dvi-push-btn');
+  if (pushBtn) pushBtn.addEventListener('click', handleAutoDviPush);
+
+  // Rating dots: tap toggles; re-render keeps checkbox state via findings only.
+  body.querySelectorAll('.auto-dvi-rate').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const f = autoDviGetFinding(btn.dataset.item);
+      f.rating = f.rating === btn.dataset.rating ? null : btn.dataset.rating;
+      // repaint just this row's three dots
+      body.querySelectorAll(`.auto-dvi-rate[data-item="${CSS.escape(btn.dataset.item)}"]`).forEach((b) => {
+        const colors = { green: '#16a34a', yellow: '#eab308', red: '#dc2626' };
+        b.style.background = f.rating === b.dataset.rating ? colors[b.dataset.rating] : 'transparent';
+      });
+      autoDviQueueSave();
+    });
+  });
+  body.querySelectorAll('.auto-dvi-detail-toggle').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const panel = body.querySelector(`.auto-dvi-detail[data-item="${CSS.escape(btn.dataset.item)}"]`);
+      if (panel) panel.classList.toggle('hidden');
+    });
+  });
+  body.querySelectorAll('.auto-dvi-notes, .auto-dvi-rec').forEach((ta) => {
+    ta.addEventListener('input', () => {
+      const f = autoDviGetFinding(ta.dataset.item);
+      if (ta.classList.contains('auto-dvi-notes')) f.notes = ta.value;
+      else f.recommendation = ta.value;
+      autoDviQueueSave();
+    });
+  });
+  body.querySelectorAll('.auto-dvi-photo').forEach((input) => {
+    input.addEventListener('change', () => {
+      const file = input.files && input.files[0];
+      input.value = '';
+      if (file) handleAutoDviPhotoUpload(input.dataset.item, input.dataset.name, file);
+    });
+  });
+}
+
+let autoDviRecorder = null;
+const AUTO_DVI_MAX_PHOTO_BYTES = 8 * 1024 * 1024;
+
+let autoDviData = null; // last generate response for the current vehicle
+
+let autoDviFindings = {};
+
+async function handleAutoDviPush() {
+  const pushBtn = document.getElementById('auto-dvi-push-btn');
+  if (autoDviInFlight || !autoDviData) return;
+  const selected = [];
+  document.querySelectorAll('.auto-dvi-check').forEach((cb) => {
+    if (cb.checked) {
+      const item = (autoDviData.items || [])[Number(cb.dataset.idx)];
+      if (item) {
+        const f = autoDviGetFinding(item.id);
+        selected.push({
+          name: item.name,
+          serviceKey: item.serviceKey || null,
+          rating: f.rating,
+          notes: f.notes || null,
+          recommendation: f.recommendation || null,
+          // Plan context — server auto-fills inspection line notes from it.
+          source: item.source || 'vhi',
+          bucket: item.bucket || null,
+          action: item.action || null,
+          dueAtMiles: item.dueAtMiles ?? null,
+          milesToGo: item.milesToGo ?? null,
+          itemNotes: item.notes || null,
+        });
+      }
+    }
+  });
+  if (selected.length === 0) {
+    showNotification('Select at least one inspection item first.', 'info');
+    return;
+  }
+  autoDviInFlight = true;
+  const reqPlanCacheKey = planCacheKey(currentContext);
+  const originalLabel = pushBtn ? pushBtn.textContent : '';
+  if (pushBtn) { pushBtn.disabled = true; pushBtn.textContent = 'Adding\u2026'; }
+  try {
+    const result = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: '/api/extension/auto-dvi/push',
+      options: {
+        method: 'POST',
+        body: JSON.stringify({
+          shopId: currentContext.shopId,
+          vin: currentContext.vin,
+          provider: currentContext.provider,
+          roId: currentContext.roId || null,
+          roNumber: currentContext.roNumber || (currentContext.roId ? String(currentContext.roId) : null),
+          workOrderGuid: getRecentlyCreatedWoGuid(currentContext.vehicle?.vin || currentContext.vin, currentContext.roId) || null,
+          items: selected,
+        }),
+      },
+    }, 90000, 'Still writing the inspection \u2014 please keep this panel open\u2026');
+    if (result?.error) throw new Error(result.error);
+
+    if (result?.mode === 'client_write') {
+      // Tekmetric: the server resolved the RO and composed the job; the
+      // actual write happens here via the page session.
+      const res = await sendMessage({
+        action: 'CREATE_TEKMETRIC_JOB',
+        shopId: currentContext.shopId,
+        roId: result.repairOrderId,
+        jobData: result.job,
+      }, undefined, 'Still adding the inspection \u2014 please keep this panel open\u2026');
+      if (!res?.success) throw new Error(res?.error || 'Could not add the inspection job to the RO.');
+      markServiceOnEstimate(result.job?.name || 'Vehicle Inspection', reqPlanCacheKey);
+      showNotification(`Inspection added to the RO (${selected.length} line${selected.length !== 1 ? 's' : ''}).`, 'success');
+    } else {
+      showNotification(`Inspection written to the work order (${result?.lineCount || selected.length} lines).`, 'success');
+    }
+  } catch (err) {
+    console.error('[MOS] Auto DVI push error:', err);
+    showNotification(err.message || 'Could not write the inspection to the RO.', 'error');
+  } finally {
+    autoDviInFlight = false;
+    if (pushBtn) { pushBtn.disabled = false; pushBtn.textContent = originalLabel; }
+  }
+}
+
+async function handleAutoDviGenerate() {
+  const btn = document.getElementById('auto-dvi-btn');
+  const body = document.getElementById('auto-dvi-body');
+  if (autoDviInFlight || !body) return;
+  if (!currentContext?.shopId || !currentContext?.vin) {
+    showNotification('Missing shop or vehicle VIN — reload the repair order first.', 'error');
+    return;
+  }
+  autoDviInFlight = true;
+  const originalLabel = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Generating…'; }
+  try {
+    const result = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: '/api/extension/auto-dvi/generate',
+      options: {
+        method: 'POST',
+        body: JSON.stringify({
+          shopId: currentContext.shopId,
+          vin: currentContext.vin,
+          mileage: currentContext.scrapedOdometer ? Number(currentContext.scrapedOdometer) : undefined,
+          provider: currentContext.provider,
+        }),
+      },
+    }, 45000, 'Still building this vehicle\u2019s inspection \u2014 please keep this panel open\u2026');
+    if (result?.error) throw new Error(result.error);
+    autoDviData = result;
+    await autoDviLoadSavedFindings();
+    // Prefill plan-suggested ratings (overdue → red, due soon → yellow)
+    // where the tech hasn't rated the item, so the checklist matches the VHI.
+    for (const it of result?.items || []) {
+      if (!it.defaultRating) continue;
+      const f = autoDviGetFinding(it.id);
+      if (!f.rating) f.rating = it.defaultRating;
+    }
+    renderAutoDviChecklist(result);
+  } catch (err) {
+    console.error('[MOS] Auto DVI generate error:', err);
+    showNotification(err.message || 'Could not generate the inspection.', 'error');
+  } finally {
+    autoDviInFlight = false;
+    if (btn) { btn.disabled = false; btn.textContent = originalLabel; }
+  }
+}
+
+async function autoDviLoadSavedFindings() {
+  if (!currentContext?.shopId || !currentContext?.vin) return;
+  try {
+    const result = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: '/api/extension/auto-dvi/results',
+      options: {
+        method: 'POST',
+        body: JSON.stringify({
+          shopId: currentContext.shopId,
+          provider: currentContext.provider,
+          vin: currentContext.vin,
+          action: 'load',
+        }),
+      },
+    });
+    for (const it of result?.results?.items || []) {
+      autoDviFindings[it.itemId] = {
+        rating: it.rating || null,
+        notes: it.notes || '',
+        recommendation: it.recommendation || '',
+        mediaCount: Array.isArray(it.media) ? it.media.length : 0,
+      };
+    }
+  } catch (err) {
+    console.warn('[MOS] Auto DVI saved findings load failed (non-fatal):', err?.message);
+  }
+}
+
+async function handleAutoDviPhotoUpload(itemId, itemName, file) {
+  if (file.size > AUTO_DVI_MAX_PHOTO_BYTES) {
+    showNotification('Photo too large (max 8MB).', 'error');
+    return;
+  }
+  try {
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('Could not read the photo.'));
+      reader.readAsDataURL(file);
+    });
+    const result = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: '/api/extension/auto-dvi/media',
+      options: {
+        method: 'POST',
+        body: JSON.stringify({
+          shopId: currentContext.shopId,
+          provider: currentContext.provider,
+          vin: currentContext.vin,
+          itemId,
+          itemName,
+          mimeType: file.type || 'image/jpeg',
+          filename: file.name || null,
+          imageBase64: dataUrl,
+        }),
+      },
+    }, 60000, 'Still uploading the photo \u2014 please keep this panel open\u2026');
+    if (result?.error) throw new Error(result.error);
+    const f = autoDviGetFinding(itemId);
+    f.mediaCount = (f.mediaCount || 0) + 1;
+    showNotification('Photo attached to the inspection item.', 'success');
+    if (autoDviData) renderAutoDviChecklist(autoDviData);
+  } catch (err) {
+    console.error('[MOS] Auto DVI photo upload error:', err);
+    showNotification(err.message || 'Could not upload the photo.', 'error');
+  }
+}
+
+let autoDviSaveTimer = null;
+
+function autoDviQueueSave() {
+  if (autoDviSaveTimer) clearTimeout(autoDviSaveTimer);
+  autoDviSaveTimer = setTimeout(async () => {
+    if (!autoDviData || !currentContext?.shopId || !currentContext?.vin) return;
+    const items = (autoDviData.items || [])
+      .filter((it) => autoDviFindings[it.id])
+      .map((it) => {
+        const f = autoDviFindings[it.id];
+        return {
+          itemId: it.id,
+          name: it.name,
+          rating: f.rating,
+          notes: f.notes || null,
+          recommendation: f.recommendation || null,
+        };
+      });
+    if (items.length === 0) return;
+    try {
+      await sendMessage({
+        action: 'MOS_API_REQUEST',
+        endpoint: '/api/extension/auto-dvi/results',
+        options: {
+          method: 'POST',
+          body: JSON.stringify({
+            shopId: currentContext.shopId,
+            provider: currentContext.provider,
+            vin: currentContext.vin,
+            items,
+          }),
+        },
+      });
+    } catch (err) {
+      console.warn('[MOS] Auto DVI findings autosave failed (non-fatal):', err?.message);
+    }
+  }, 1000);
+}
+
+let autoDviRecChunks = [];
+
+function autoDviApplyVoiceFindings(findings, language) {
+  let applied = 0;
+  let added = 0;
+  for (const f of findings || []) {
+    if (!f || !f.itemId) continue;
+    applied++;
+    const exists = (autoDviData.items || []).some((it) => it.id === f.itemId);
+    if (!exists) {
+      autoDviData.items = autoDviData.items || [];
+      autoDviData.items.push({
+        id: f.itemId,
+        name: f.name,
+        lineTitle: f.lineTitle || ('Inspected: ' + f.name),
+        source: 'shop',
+        serviceKey: null,
+        group: 'Dictated',
+      });
+      added++;
+    }
+    const cur = autoDviGetFinding(f.itemId);
+    if (f.rating) cur.rating = f.rating;
+    if (f.notes) cur.notes = cur.notes ? (cur.notes + ' ' + f.notes) : f.notes;
+    if (f.recommendation && !cur.recommendation) cur.recommendation = f.recommendation;
+  }
+  autoDviQueueSave();
+  renderAutoDviChecklist(autoDviData);
+  const langNote = language && !/^en/i.test(language) ? ' (translated from ' + language + ')' : '';
+  showNotification('Applied ' + applied + ' finding' + (applied === 1 ? '' : 's') +
+    (added ? ', ' + added + ' new item' + (added === 1 ? '' : 's') : '') + langNote + '.', 'success');
+}
+
+async function handleAutoDviVoiceToggle() {
+  const btn = autoDviVoiceBtn();
+  if (!btn) return;
+  if (autoDviRecorder) {
+    autoDviRecorder.stop();
+    return;
+  }
+  if (!autoDviData) {
+    showNotification('Generate the inspection first, then dictate findings.', 'error');
+    return;
+  }
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (err) {
+    showNotification('Microphone access was denied. Allow the mic for this panel and try again.', 'error');
+    return;
+  }
+  const rec = new MediaRecorder(stream, MediaRecorder.isTypeSupported('audio/webm') ? { mimeType: 'audio/webm' } : undefined);
+  autoDviRecChunks = [];
+  rec.ondataavailable = (e) => { if (e.data.size > 0) autoDviRecChunks.push(e.data); };
+  rec.onstop = async () => {
+    stream.getTracks().forEach((t) => t.stop());
+    autoDviRecorder = null;
+    btn.textContent = '\u23F3 Processing\u2026';
+    btn.disabled = true;
+    try {
+      const blob = new Blob(autoDviRecChunks, { type: rec.mimeType || 'audio/webm' });
+      autoDviRecChunks = [];
+      if (blob.size < 1000) return; // accidental tap
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error('Could not read the recording.'));
+        reader.readAsDataURL(blob);
+      });
+      const base64 = String(dataUrl).split(',')[1] || '';
+      const result = await sendMessage({
+        action: 'MOS_API_REQUEST',
+        endpoint: '/api/extension/auto-dvi/voice',
+        options: {
+          method: 'POST',
+          body: JSON.stringify({
+            shopId: currentContext.shopId,
+            provider: currentContext.provider,
+            vin: currentContext.vin,
+            audioBase64: base64,
+            mimeType: blob.type || 'audio/webm',
+            items: autoDviChecklistPayload(),
+          }),
+          timeoutMs: 90000,
+        },
+      }, 95000, 'Still processing the dictation \u2014 please keep this panel open\u2026');
+      if (result?.error) {
+        throw new Error(result.transcript
+          ? result.error + ' \u2014 heard: \u201C' + String(result.transcript).slice(0, 160) + '\u201D'
+          : result.error);
+      }
+      autoDviApplyVoiceFindings(result.findings || [], result.language || null);
+    } catch (err) {
+      console.error('[MOS] Auto DVI voice error:', err);
+      showNotification(err.message || 'Could not process the dictation.', 'error');
+    } finally {
+      btn.textContent = '\uD83C\uDFA4 Dictate';
+      btn.disabled = false;
+    }
+  };
+  rec.start();
+  autoDviRecorder = rec;
+  btn.textContent = '\u23F9 Stop & apply';
+}
+
+function autoDviVoiceBtn() { return document.getElementById('auto-dvi-voice-btn'); }
+
+function autoDviChecklistPayload() {
+  return (autoDviData?.items || [])
+    .filter((it) => it.source !== 'recall')
+    .map((it) => ({ itemId: it.id, name: it.name, serviceKey: it.serviceKey || null }));
 }

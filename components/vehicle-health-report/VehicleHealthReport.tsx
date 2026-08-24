@@ -6,7 +6,7 @@ import ServiceIcon from "./ServiceIcon";
 import ScoreSimulator from "./ScoreSimulator";
 import { getOELogoUrl } from "@/lib/oe-logos";
 
-type ReportTab = "recommendations" | "plan" | "improve";
+type ReportTab = "recommendations" | "plan" | "improve" | "dvi";
 
 interface LastService {
   miles: number | null;
@@ -100,6 +100,23 @@ interface VHIData {
     carfaxStatus?: string;
     anchorCount?: number;
     reasons?: string[];
+  };
+  /**
+   * Task #991 — customer-facing DVI: technician inspection findings for
+   * this vehicle. When present (shop has Auto DVI + recorded findings),
+   * the report shows an "Inspection" tab. Media streams through the
+   * token-authorized /api/report/[vin]/media/[mediaId] route.
+   */
+  dvi?: {
+    updatedAt?: string | null;
+    items: Array<{
+      itemId: string;
+      name: string;
+      rating: "green" | "yellow" | "red" | null;
+      notes: string | null;
+      recommendation: string | null;
+      media: Array<{ mediaId: string; kind: "photo" | "video"; contentType: string }>;
+    }>;
   };
 }
 
@@ -371,10 +388,29 @@ export default function VehicleHealthReport({
   );
   const showEngineFlagCallout = hasEngineRiskFlag || hasOilLevelSafetyCheck;
 
+  const dviItems = data.dvi?.items || [];
   const tabs: { key: ReportTab; label: string }[] = [
     { key: "recommendations", label: "Recommendations" },
     { key: "plan", label: "Plan" },
     { key: "improve", label: "Improve My Score" },
+    ...(dviItems.length > 0 ? ([{ key: "dvi", label: "Inspection" }] as { key: ReportTab; label: string }[]) : []),
+  ];
+  // Media on the shared report reuses the page's own share token.
+  const shareToken =
+    typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("token") || "" : "";
+  const dviMediaUrl = (mediaId: string) =>
+    `/api/report/${encodeURIComponent(data.vin)}/media/${encodeURIComponent(mediaId)}?token=${encodeURIComponent(shareToken)}`;
+  const DVI_GROUPS: Array<{
+    rating: "red" | "yellow" | "green" | null;
+    title: string;
+    badge: string;
+    badgeClass: string;
+    cardClass: string;
+  }> = [
+    { rating: "red", title: "Needs Attention", badge: "Attention", badgeClass: "bg-red-100 text-red-700 border-red-300", cardClass: "border-red-200 bg-red-50/50" },
+    { rating: "yellow", title: "Monitor", badge: "Monitor", badgeClass: "bg-amber-100 text-amber-800 border-amber-300", cardClass: "border-amber-200 bg-amber-50/50" },
+    { rating: "green", title: "Checked & Good", badge: "Good", badgeClass: "bg-green-100 text-green-700 border-green-300", cardClass: "border-green-200 bg-green-50/40" },
+    { rating: null, title: "Also Inspected", badge: "Inspected", badgeClass: "bg-gray-100 text-gray-600 border-gray-300", cardClass: "border-gray-200 bg-gray-50" },
   ];
 
   return (
@@ -854,6 +890,77 @@ export default function VehicleHealthReport({
           {/* IMPROVE MY SCORE TAB */}
           {activeTab === "improve" && (
             <ScoreSimulator data={data} currentScore={score} />
+          )}
+
+          {/* INSPECTION (DVI) TAB — Task #991 */}
+          {activeTab === "dvi" && dviItems.length > 0 && (
+            <div className="px-4 py-5 space-y-5">
+              <div>
+                <h3 className="text-base sm:text-lg font-bold text-gray-900">Digital Vehicle Inspection</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  What our technician checked on your vehicle
+                  {data.dvi?.updatedAt
+                    ? ` · ${new Date(data.dvi.updatedAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`
+                    : ""}
+                </p>
+              </div>
+              {DVI_GROUPS.map((group) => {
+                const groupItems = dviItems.filter((it) => (it.rating ?? null) === group.rating);
+                if (groupItems.length === 0) return null;
+                return (
+                  <div key={group.title}>
+                    <h4 className="text-sm font-bold text-gray-800 mb-2">
+                      {group.title} ({groupItems.length})
+                    </h4>
+                    <div className="space-y-2">
+                      {groupItems.map((it) => (
+                        <div key={it.itemId} className={`border rounded-lg p-3 ${group.cardClass}`}>
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <div className="font-semibold text-sm text-gray-900">{it.name}</div>
+                              {it.notes && (
+                                <p className="text-xs text-gray-600 mt-1 leading-relaxed">{it.notes}</p>
+                              )}
+                              {it.recommendation && (
+                                <p className="text-xs text-gray-800 mt-1 leading-relaxed">
+                                  <span className="font-semibold">Recommendation:</span> {it.recommendation}
+                                </p>
+                              )}
+                            </div>
+                            <span className={`text-[10px] font-bold uppercase border rounded-full px-2 py-0.5 shrink-0 ${group.badgeClass}`}>
+                              {group.badge}
+                            </span>
+                          </div>
+                          {it.media.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {it.media.map((m) =>
+                                m.kind === "video" ? (
+                                  <video
+                                    key={m.mediaId}
+                                    src={dviMediaUrl(m.mediaId)}
+                                    controls
+                                    preload="metadata"
+                                    className="h-28 rounded-lg border border-gray-200 bg-black"
+                                  />
+                                ) : (
+                                  <a key={m.mediaId} href={dviMediaUrl(m.mediaId)} target="_blank" rel="noreferrer">
+                                    <img
+                                      src={dviMediaUrl(m.mediaId)}
+                                      alt={it.name}
+                                      className="h-28 w-auto rounded-lg border border-gray-200 object-cover"
+                                    />
+                                  </a>
+                                ),
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
 

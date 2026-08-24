@@ -22,7 +22,16 @@ export const FEATURE_KEYS = [
   "estimate_assist",
   "dvi_prefill",
   "enhance_notes",
+  "auto_dvi",
 ] as const;
+
+// Task #991: `auto_dvi` ships dark — OFF everywhere (every tier, every plan
+// fallback) until a platform admin seeds/enables it per shop or tier. The
+// founder wildcard (buildAllFeaturesEnabled) still turns it on for founder
+// shops, which is the intended dev/test path. Keep any newly-dark features
+// in this list so the `[...FEATURE_KEYS]` tier fallbacks don't leak them on.
+export const DARK_LAUNCH_KEYS: readonly string[] = ["auto_dvi"];
+const LAUNCHED_KEYS = FEATURE_KEYS.filter((k) => !DARK_LAUNCH_KEYS.includes(k));
 
 export type FeatureKey = typeof FEATURE_KEYS[number];
 
@@ -69,10 +78,10 @@ export const PLAN_FALLBACK_KEYS: Record<BillingPlan, readonly FeatureKey[]> = {
   trial:              ["maintenance"],
   starter:            ["maintenance", "oil_sticker"],
   plus:               ["maintenance", "job_lookup", "common_failures", "oil_sticker", "concern_assistant", "estimate_assist", "dvi_prefill", "enhance_notes"],
-  elite:              [...FEATURE_KEYS],
-  professional:       [...FEATURE_KEYS],
-  enterprise:         [...FEATURE_KEYS],
-  demo:               [...FEATURE_KEYS],
+  elite:              [...LAUNCHED_KEYS],
+  professional:       [...LAUNCHED_KEYS],
+  enterprise:         [...LAUNCHED_KEYS],
+  demo:               [...LAUNCHED_KEYS],
   oil_sticker_legacy: ["oil_sticker", "auto_booking", "labor_rates"],
   // The founder plan is a wildcard — every current and future feature is
   // on. The fallback list is computed dynamically in featureResolver's

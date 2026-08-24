@@ -1,0 +1,35 @@
+1.9.3 Update Work Order 
+Create or update a work order. If the work order exists by ID then the work order will be  updated. Otherwise a new work order will be created. New work order should have work order  number set to 0. You can read the actual work order number from the reply.  
+Work order with type “Appointment” or “Estimate” can have service packages and service  package lines freely added, updated, or deleted. 
+Work order with type “WorkOrder” can have service packages and service package lines  added. Service package line’s service advisor and technician, rank, can be updated.  
+To update an existing service package’s title, description, or URL for inspection, the API key  needs to have an additional parameter UpdateWorkOrderPackage set to “Yes” inside the  location’s web service API setup. 
+To update service package line’s description, quantity, price, or material line’s line code, part  number, manufacturer, part terminology, the API key needs to have an additional parameter  UpdateWorkOrderLine set to “Yes” inside the location’s web service API setup. 
+We do not recommend updating service packages or service package lines from the web service  API as it might have unintended consequences when modification call is made via the API  while the user is actively editing the work order. 
+You cannot remove service package or service package line. 
+REST 
+URL: /WorkOrder/{workOrderID} 
+Method: Post 
+XML Web Service 
+WSDL: /WorkOrderServices.asmx?WSDL 
+URL: /WorkOrderServices.asmx 
+Method: WorkOrderUpdate 
+Parameters 
+workOrderID 	Type GUID. The work order ID.
+workOrder 	Type string. WorkOrder object serialized in  the string format. For REST call, this value is  passed in the request body.
+
+
+Result 
+A WorkOrder object that contains the up to date value.
+28 
+1.9.4 Update Inspection Results 
+Use to insert or update existing inspection result. The service packages can contain one or more  existing service package data or new service package data. Any service package and/or  inspection line that exists by ID will be updated. Any service package and/or inspection line  that does not exist will be created. Only service package with Chapter set to “Inspection” will  be processed. Only service package general information and inspection lines will be processed.  Service package lines will be ignored. 
+REST 
+URL: /WorkOrder/{workOrderID}/Inspection 
+Method: Post 
+XML Web Service 
+WSDL: /WorkOrderServices.asmx?WSDL 
+URL: /WorkOrderServices.asmx 
+Method: InspectionResultUpdate 
+Parameters
+workOrderID 	Type GUID. The work order ID that the  inspection belongs to.
+inspections 	Type string. ServicePackages object serialized  in the string format. For REST call, this value  is passed in the request body.

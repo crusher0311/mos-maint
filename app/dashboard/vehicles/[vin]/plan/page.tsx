@@ -64,6 +64,7 @@ import { listEnrollmentsForVehicle } from "@/lib/data/repositories/protection-pl
 import { listJobNamesForVehicle } from "@/lib/data/repositories/job-index";
 import { gatherDviLinkFindings } from "@/lib/dvi-links/plan-findings";
 import { getFeatureEntitlements } from "@/lib/featureResolver";
+import AutoDviPanel from "./AutoDviPanel";
 import { ShareReportButton } from "@/components/ui/ShareReportButton";
 import { IntervalProgressRow } from "@/components/ui/IntervalProgressRow";
 import { getProgressTriggers, formatTriggerSuffix } from "@/lib/vhi-progress";
@@ -2868,6 +2869,16 @@ async function PlanContent({ params, searchParams }: PageProps) {
           </div>
         </div>
       </div>
+
+      {/* Task #991 — Auto DVI: generate a vehicle-specific inspection from
+          this VHI plus the shop's custom items. Feature-gated (dark launch). */}
+      {featureEntitlements.effectiveFeatures.auto_dvi && (
+        <AutoDviPanel
+          vin={vin}
+          mileage={null}
+          isProtractor={Boolean((shop as any)?.protractor?.configured ?? (shop as any)?.protractor)}
+        />
+      )}
 
       {/* Print-only header with shop logo */}
       <div className="hidden print:block mb-6 border-b pb-4 mx-auto max-w-5xl px-4 sm:px-6">

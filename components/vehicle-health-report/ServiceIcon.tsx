@@ -3,7 +3,7 @@
 import React from "react";
 import { ICON_KEY_TO_IMAGE, resolveServiceIconKey } from "@/lib/service-icons";
 
-const iconPaths: Record<string, JSX.Element> = {
+const iconPaths: Record<string, React.JSX.Element> = {
   brake_pads_front: (
     <g>
       <circle cx="16" cy="16" r="12" fill="none" stroke="currentColor" strokeWidth="2" />

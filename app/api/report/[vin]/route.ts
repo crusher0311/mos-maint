@@ -4,6 +4,8 @@ import { getSession } from "@/lib/auth";
 import { triggerPlanBuild } from "@/lib/vhi-rebuild";
 import { generateShareToken, verifyShareToken } from "@/lib/report-share";
 import { findLatestTekmetricWorkOrderByVinWithCustomerName } from "@/lib/data/repositories/tekmetric-work-orders";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
+import { readInspectionResults } from "@/lib/data/repositories/auto-dvi";
 
 const TOKEN_MAX_AGE_MS = 15 * 24 * 60 * 60 * 1000;
 
@@ -133,6 +135,40 @@ export async function GET(
     const distanceUnit: "miles" | "kilometers" =
       shop?.preferences?.distanceUnit === "kilometers" ? "kilometers" : "miles";
 
+    // Task #991 — customer-facing DVI tab: when the shop has Auto DVI and
+    // technicians recorded findings for this vehicle, include them so the
+    // shared report can render an "Inspection" tab. Best-effort: any failure
+    // here just omits the tab, never breaks the report.
+    let dvi: any = undefined;
+    try {
+      const entitlements = await getFeatureEntitlements(Number(shopId));
+      if (entitlements.effectiveFeatures?.auto_dvi) {
+        const results = await readInspectionResults(Number(shopId), vin);
+        const withFindings = (results?.items || []).filter(
+          (it) => it.rating || (it.notes || "").trim() || (it.recommendation || "").trim() || (it.media || []).length > 0,
+        );
+        if (withFindings.length > 0) {
+          dvi = {
+            updatedAt: results?.updatedAt ?? null,
+            items: withFindings.map((it) => ({
+              itemId: it.itemId,
+              name: it.name,
+              rating: it.rating ?? null,
+              notes: it.notes ?? null,
+              recommendation: it.recommendation ?? null,
+              media: (it.media || []).map((m) => ({
+                mediaId: m.mediaId,
+                kind: m.kind,
+                contentType: m.contentType,
+              })),
+            })),
+          };
+        }
+      }
+    } catch (err: any) {
+      console.warn("[Report API] DVI block skipped:", err?.message);
+    }
+
     return NextResponse.json({
       plan: {
         vehicle: plan.vehicle || {},
@@ -150,6 +186,7 @@ export async function GET(
         // a gray "Insufficient History" badge instead of red 0/CRITICAL
         // when CARFAX + shop history give us nothing to anchor against.
         dataQuality: plan.dataQuality ?? undefined,
+        dvi,
       },
       shopName: shop.name || shop.shopName || "",
       shopPhone: shop.phone || shop.contact?.phone || "",

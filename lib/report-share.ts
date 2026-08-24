@@ -48,7 +48,7 @@ export function verifyShareToken(
     if (parts.length !== 4) return null;
     const [vin, shopId, expiresStr, signature] = parts;
     const expiresAt = parseInt(expiresStr, 10);
-    if (Date.now() > expiresAt) return null;
+    if (!Number.isFinite(expiresAt) || Date.now() > expiresAt) return null;
     const payload = `${vin}:${shopId}:${expiresAt}`;
 
     // Primary key — required; throws if REPORT_SHARE_SECRET is unset.

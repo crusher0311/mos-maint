@@ -200,6 +200,17 @@
             <p>No VHI data available for this vehicle.</p>
           </div>
           <div id="plan-content" class="hidden">
+            <!-- Task #991 — Auto DVI: generate a vehicle-specific inspection
+                 from the VHI + the shop's custom items, then write it to the
+                 open RO as an "Inspection" package. Feature-gated (auto_dvi). -->
+            <section id="auto-dvi-section" class="plan-section hidden">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                <h3 class="section-title">Vehicle Inspection</h3>
+                <button id="auto-dvi-btn" class="btn-add" title="Generate this vehicle's inspection from its health report" style="flex-shrink:0;">Generate Inspection</button>
+                <button id="auto-dvi-voice-btn" class="btn-add hidden" title="Speak the whole inspection in any language — items, ratings and notes are built from the audio" style="flex-shrink:0;">&#127908; Dictate</button>
+              </div>
+              <div id="auto-dvi-body" class="hidden" style="margin-top:6px;"></div>
+            </section>
             <section id="overdue-section" class="plan-section hidden">
               <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
                 <h3 class="section-title section-overdue">Needs attention <span id="overdue-count" class="section-count count-overdue"></span></h3>

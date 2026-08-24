@@ -1892,7 +1892,30 @@ export type ProtractorInspectionItem = {
   Pictures?: Array<{ URL?: string; Description?: string }>;
 };
 
-// Fetch inspections for a specific work order (DVI data pushed from AutoVitals)
+export async function updateInspectionResults(
+  shopId: number | string,
+  workOrderGuid: string,
+  servicePackages: { ItemCollection: any[] }
+): Promise<{ ok: boolean; error?: string; data?: any }> {
+  const config = await resolveProtractorConfig(shopId);
+  if (!config.configured) {
+    return { ok: false, error: "Protractor not configured for this shop" };
+  }
+  const numShopId = typeof shopId === "string" ? parseInt(shopId, 10) : shopId;
+  const result = await protractorFetch<any>(
+    `/WorkOrder/${workOrderGuid}/Inspection`,
+    config,
+    { method: "POST", body: JSON.stringify(servicePackages) },
+    0,
+    numShopId,
+    { priority: true }
+  );
+  if (!result.ok) {
+    console.log(`[Protractor] InspectionResultUpdate for WO ${workOrderGuid} failed: ${result.error}`);
+    return { ok: false, error: result.error };
+  }
+  return { ok: true, data: result.data };
+}
 export async function fetchActiveInspections(
   shopId: number | string,
   workOrderId: string

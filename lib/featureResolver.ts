@@ -98,6 +98,7 @@ export const FEATURE_METADATA: Record<FeatureKey, { name: string; description: s
   concern_assistant:  { name: "Concern Assistant",           description: "AI-powered customer concern intake with follow-up questions and RO injection" },
   estimate_assist:    { name: "Estimate Assist",             description: "AI-powered estimate language and audit suggestions" },
   dvi_prefill:        { name: "DVI Pre-fill",                description: "Auto-fill Tekmetric DVI ratings from VHI maintenance data" },
+  auto_dvi:           { name: "Auto DVI",                     description: "Auto-build a vehicle-specific inspection from VHI data plus the shop's custom items, and write it to the work order" },
   enhance_notes:      { name: "Enhance Notes",               description: "Rewrite technician findings into customer-facing language with AI" },
 };
 
@@ -128,6 +129,8 @@ const FEATURE_SLUG_TO_KEY: Record<string, FeatureKey> = {
   "dvi_prefill": "dvi_prefill",
   "enhance-notes": "enhance_notes",
   "enhance_notes": "enhance_notes",
+  "auto-dvi": "auto_dvi",
+  "auto_dvi": "auto_dvi",
 };
 
 /**

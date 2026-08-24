@@ -6,6 +6,20 @@ import {
 } from "@/lib/data/repositories/platform-features";
 
 const DEFAULT_FEATURES = [
+  // Task #991 — Auto DVI ships dark: no tiers include it until an admin
+  // enables it per shop or adds a tier here. Seeding the row (rather than
+  // leaving it unseeded) makes the OFF state explicit and admin-editable.
+  {
+    order: 0,
+    name: "Auto DVI",
+    slug: "auto_dvi",
+    description: "Auto-build a vehicle-specific inspection from VHI maintenance data plus the shop's custom inspection items, and write it to the open work order.",
+    category: "core",
+    status: "active",
+    icon: "ClipboardCheck",
+    compatibleSMS: ["protractor", "tekmetric"],
+    includedInTiers: [],
+  },
   // CORE FEATURES - Can be purchased individually or as add-ons to other core features
   {
     order: 1,

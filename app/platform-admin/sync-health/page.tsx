@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useState, useEffect, useRef } from "react";
+import React, { Fragment, useState, useEffect, useRef } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -2024,7 +2024,7 @@ export default function SyncHealthPage() {
   const renderRunNowProgress = (rn: RunNowState) => {
     const statusMeta: Record<
       RunNowStatus,
-      { label: string; color: string; icon: JSX.Element }
+      { label: string; color: string; icon: React.JSX.Element }
     > = {
       running: {
         label: "Streaming",

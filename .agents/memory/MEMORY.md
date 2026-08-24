@@ -147,3 +147,6 @@
 - [Triage read-path quirks](triage-read-path-quirks.md) — job_index has no timestamps (use _id); normalized Mongo mirror COLLSCANs on shopId — bound reads with maxTimeMS; rethrow NEXT_REDIRECT in admin API catches.
 - [DataOne shares canonical Supabase PG](dataone-shared-db-brownout.md) — disk-IO brownout makes OEM lookups take minutes → web tier clogs; breaker in dataone-api fails fast (env-tunable).
 - [Extension session authority](extension-session-authority.md) — Basic/verified authority is server-owned; browser-direct writes require one-time server-consumed grants at the actual sink.
+- [Media storage on Render](render-media-storage.md) — Replit object-storage sidecar absent on Render prod; use GridFS with tight caps; extension uploads are base64-JSON.
+- [Deepgram SDK v5 has no createClient](deepgram-sdk-v5-rest.md) — pinned v5 dropped the classic API; POST audio to the REST /v1/listen endpoint instead.
+- [DVI product direction](dvi-product-direction.md) — MOS Auto DVI replaces third-party DVIs (no AutoFlow write-back); Protractor API inspections are read-only; ratings ride titles as [Red]/[Yellow] tags.

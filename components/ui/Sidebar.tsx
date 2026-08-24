@@ -342,6 +342,7 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
         { name: "Shop Intervals", href: "/dashboard/settings/intervals" },
         { name: "Canned Jobs", href: "/dashboard/settings/canned-jobs" },
         { name: "Inspection Maintenance", href: "/dashboard/settings/inspection" },
+        { name: "Auto DVI Items", href: "/dashboard/settings/auto-dvi", featureId: "auto_dvi" },
         { name: "Integrations", href: "/dashboard/settings/integrations" }
       ]
     },
