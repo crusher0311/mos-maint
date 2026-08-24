@@ -194,6 +194,46 @@ export async function GET(req: NextRequest) {
   assert('[P1] getSession() call — lint must pass', guardMatches(content));
 }
 
+// [P-sig] Calls verifySignature() imported from a sibling module — the
+// extracted-webhook-HMAC pattern (Next route types forbid extra exports from
+// route.ts, so the timingSafeEqual/secret code lives next door).
+{
+  const content = `
+import { NextRequest, NextResponse } from "next/server";
+import { verifySignature } from "./verify-signature";
+import { getDb } from "@/lib/mongo";
+
+export async function POST(req: NextRequest) {
+  const rawBody = await req.text();
+  const sigError = verifySignature(rawBody, req);
+  if (sigError) return NextResponse.json({ error: sigError }, { status: 401 });
+  const db = await getDb();
+  await db.collection("webhook_logs").insertOne({ rawBody });
+  return NextResponse.json({ ok: true });
+}
+`;
+  assert('[P-sig] verifySignature() call — lint must pass', guardMatches(content));
+}
+
+// [N-sig] Only IMPORTS verifySignature (never calls it) — must NOT pass.
+{
+  const content = `
+import { NextRequest, NextResponse } from "next/server";
+import { verifySignature } from "./verify-signature";
+import { getDb } from "@/lib/mongo";
+
+export async function POST(req: NextRequest) {
+  const db = await getDb();
+  const rows = await db.collection("webhook_logs").find({}).toArray();
+  return NextResponse.json(rows);
+}
+`;
+  assert(
+    '[N-sig] import-only verifySignature (no call) — lint must flag as unguarded',
+    !guardMatches(content),
+  );
+}
+
 // [P2] Calls requirePlatformAdmin() — admin-only route.
 {
   const content = `

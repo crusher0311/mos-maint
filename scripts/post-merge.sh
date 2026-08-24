@@ -3,6 +3,31 @@ set -e
 
 npm install --legacy-peer-deps
 
+# Release-gating lint checks (Task: catch prebuild gate failures at merge
+# time instead of at Render deploy). These are the fast lints from the
+# "prebuild" chain that have twice killed prod builds after a merge
+# (auth-lint patterns 2026-08-22, extension-route-policy POLICY_MAP
+# 2026-08-24). A failure here fails post-merge setup loudly, naming the
+# gate, while the merging agent's context is still fresh.
+RELEASE_GATES=(
+  "lint:unauthed-routes"
+  "lint:extension-gates"
+  "lint:direct-db"
+  "lint:lockfile"
+)
+for gate in "${RELEASE_GATES[@]}"; do
+  echo "[release-gates] running $gate ..."
+  if ! npm run "$gate"; then
+    echo ""
+    echo "[release-gates] FAILED: $gate"
+    echo "[release-gates] This gate also runs in the Render prebuild — the merged"
+    echo "[release-gates] change would BREAK THE PRODUCTION BUILD as-is."
+    echo "[release-gates] Fix the violation (see output above) before pushing."
+    exit 1
+  fi
+done
+echo "[release-gates] all release-gating lints passed"
+
 # Chrome extension publish: DO NOT auto-publish from post-merge.
 #
 # Standing rule from replit.md (set 2026-05-06): NEVER auto-publish the

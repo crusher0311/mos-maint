@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { verifySignature } from "./verify-signature";
 import { getDb } from "@/lib/mongo";
 import type { Db } from "mongodb";
 import { indexTekmetricWorkOrderJobs } from "@/lib/integrations/tekmetric/job-index";
@@ -13,49 +14,10 @@ import { insertWebhookLog as insertTekmetricWebhookLog } from "@/lib/data/reposi
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/**
- * Test seam: tests can override `__deps.getDb` to swap in a fake DB and
- * `__deps.defer` to intercept the fire-and-forget background work the route
- * dispatches after writing the inline cache row.
- *
- * `defer` is what implements step 3 of TEKMETRIC_5K_SCALING_PLAN.md (task #376):
- * heavy NIS dual-writes and `getVehicle`/`getCustomer` enrichment fetches are
- * pushed off the request thread so the webhook returns in <500ms while the
- * cache + indexer + plan-invalidate work that drives dashboard freshness still
- * runs inline. Errors are logged but never affect the 200 OK back to Tekmetric
- * (preserves the soft-fail contract Tekmetric depends on for retries).
- *
- * Production callers go through the real implementations unchanged. The
- * latency smoke test (tests/tekmetric-webhook-latency.smoke.ts) overrides
- * `defer` to capture promises so it can both measure the inline budget and
- * assert the deferred work eventually completed.
- */
-type DeferFn = (fn: () => Promise<void>) => void;
-const defaultDefer: DeferFn = (fn) => {
-  // Use setImmediate so the deferred work runs after the current
-  // request/response cycle has yielded — the handler can return its 200 OK
-  // first, then the NIS dual-write / enrichment kick off. Any thrown errors
-  // are logged but never surface to Tekmetric.
-  setImmediate(() => {
-    fn().catch((err: any) => {
-      console.error(
-        "[Tekmetric Webhook] Deferred work failed:",
-        err?.message || err,
-      );
-    });
-  });
-};
-export const __deps: {
-  getDb: typeof getDb;
-  defer: DeferFn;
-  insertWebhookLog: typeof insertTekmetricWebhookLog;
-} = {
-  getDb,
-  defer: defaultDefer,
-  // Webhook-log writes go through the flag-gated Mongo/PG repository;
-  // exposed here so smoke tests can capture them alongside the fake db.
-  insertWebhookLog: insertTekmetricWebhookLog,
-};
+// Test seam `__deps` lives in ./deps (sibling module) because Next's
+// generated route types reject non-handler exports from route.ts. Tests
+// import `__deps` from there; the route uses it via this import.
+import { __deps } from "./deps";
 
 const TERMINAL_STATUSES = ["invoice", "invoiced", "posted", "deleted", "void", "closed"];
 
@@ -189,57 +151,9 @@ function captureHeaders(req: NextRequest): Record<string, string> {
   return out;
 }
 
-/**
- * Step 3b — HMAC signature verification framework.
- *
- * Default behavior: if `TEKMETRIC_WEBHOOK_SIGNING_SECRET` is unset, we skip
- * verification entirely (matches pre-3b behavior — accept everything).
- *
- * When the secret IS set, we require a valid HMAC-SHA256 signature in the
- * configured header. The header name and algorithm are env-tunable so we can
- * adjust once Tekmetric confirms the exact format (the captured headers in
- * `tekmetric_webhook_logs.headers` make this introspectable).
- *
- * Returns null if OK, or an error string for a 401 response.
- */
-export function __verifySignature(rawBody: string, req: NextRequest): string | null {
-  return verifySignature(rawBody, req);
-}
-
-function verifySignature(rawBody: string, req: NextRequest): string | null {
-  const secret = process.env.TEKMETRIC_WEBHOOK_SIGNING_SECRET;
-  if (!secret) return null; // verification disabled
-
-  const headerName = (process.env.TEKMETRIC_WEBHOOK_SIGNATURE_HEADER || "x-tekmetric-signature").toLowerCase();
-  const algo = process.env.TEKMETRIC_WEBHOOK_SIGNATURE_ALGO || "sha256";
-  // Encoding can be "hex" (default) or "base64" — Tekmetric's exact format will
-  // be confirmed from the captured headers (3b introspection) before enabling.
-  const encoding = (process.env.TEKMETRIC_WEBHOOK_SIGNATURE_ENCODING || "hex").toLowerCase();
-  const provided = req.headers.get(headerName);
-  if (!provided) return `missing signature header: ${headerName}`;
-
-  const crypto = require("crypto");
-  const expected = crypto.createHmac(algo, secret).update(rawBody).digest(encoding);
-
-  // Strip a "sha256=" / "hmac-sha256=" prefix if present (common formats).
-  const normalized = provided.includes("=") && provided.indexOf("=") < provided.length - 1
-    ? provided.substring(provided.indexOf("=") + 1)
-    : provided;
-
-  try {
-    const a = encoding === "base64"
-      ? Buffer.from(expected, "base64")
-      : Buffer.from(expected, "hex");
-    const b = encoding === "base64"
-      ? Buffer.from(normalized, "base64")
-      : Buffer.from(normalized, "hex");
-    if (a.length !== b.length || a.length === 0) return "signature length mismatch";
-    if (!crypto.timingSafeEqual(a, b)) return "signature mismatch";
-    return null;
-  } catch (err: any) {
-    return `signature parse error: ${err?.message || "unknown"}`;
-  }
-}
+// Step 3b — HMAC signature verification lives in ./verify-signature (a
+// sibling module) because Next's generated route types reject non-handler
+// exports from route.ts, and the smoke test imports the seam directly.
 
 export async function POST(req: NextRequest) {
   // Step 2 of task #376: capture wall-clock duration of the inline-handled

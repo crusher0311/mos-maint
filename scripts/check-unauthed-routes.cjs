@@ -164,6 +164,14 @@ const AUTH_PATTERNS = [
   /\bverifyHmac\s*\(/,
   /\bverifySecret\s*\(/,
 
+  // Extracted webhook signature-verification helper — call syntax required.
+  // Next's generated route types forbid non-handler exports from route.ts,
+  // so HMAC verification may live in a sibling module (e.g.
+  // app/api/webhooks/tekmetric/verify-signature.ts) and the route file only
+  // shows the call site. Import lines are stripped by sanitization, so a
+  // bare import without a call does NOT satisfy this.
+  /\bverifySignature\s*\(/,
+
   // Render log-stream webhook secret
   /\bLOG_STREAM_SECRET\b/,
 

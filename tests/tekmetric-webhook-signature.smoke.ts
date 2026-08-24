@@ -20,7 +20,7 @@
 
 import crypto from "node:crypto";
 import { NextRequest } from "next/server";
-import { __verifySignature } from "../app/api/webhooks/tekmetric/route";
+import { __verifySignature } from "../app/api/webhooks/tekmetric/verify-signature";
 
 let failed = 0;
 function ok(name: string, cond: boolean, detail?: string) {

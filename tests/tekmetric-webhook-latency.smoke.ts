@@ -23,7 +23,8 @@
 
 import { NextRequest } from "next/server";
 import { makeFakeDb } from "./utils/fake-mongo";
-import { __deps, POST } from "../app/api/webhooks/tekmetric/route";
+import { __deps } from "../app/api/webhooks/tekmetric/deps";
+import { POST } from "../app/api/webhooks/tekmetric/route";
 
 let failed = 0;
 function ok(name: string, cond: boolean, detail?: string) {

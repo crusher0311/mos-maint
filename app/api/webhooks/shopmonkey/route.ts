@@ -70,7 +70,7 @@ function captureHeaders(req: NextRequest): Record<string, string> {
  *
  * Returns null if OK (or disabled), or an error string for a 401 response.
  */
-export function __verifySignature(rawBody: string, req: NextRequest): string | null {
+function __verifySignature(rawBody: string, req: NextRequest): string | null { // retained (unexported): Next route types forbid extra exports
   return verifySignature(rawBody, req);
 }
 

@@ -1,3 +1,4 @@
+- [Next route extra exports break typecheck](next-route-type-exports.md) — test seams (__deps etc.) must live in sibling modules; auth lint must see the seam call site.
 - [Side-panel add-to-RO undo](sidepanel-undo-adds.md) — per-provider revert constraints; partial undo must keep failed items retryable; Shop-Ware has no delete path so its adds aren't snapshotted.
 - [Extension undo & button visibility](extension-undo-and-button-visibility.md) — server-resolved hide-only per-user button map (fail open); undo snapshots in chrome.storage via UMD undo-core.js; AutoFlow delete_rvh verified vs public source JS; ext commits must bump manifest version.
 - [Plan-pregen storm](plan-pregen-storm.md) — speeding up a slow cron unleashes its completion-triggered fan-out (web event-loop starvation); clean Mongo + uniform slowness = web CPU, not DB.
