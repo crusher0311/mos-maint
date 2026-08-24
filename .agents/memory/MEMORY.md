@@ -156,3 +156,4 @@
 - [DVI product direction](dvi-product-direction.md) — MOS Auto DVI replaces third-party DVIs (no AutoFlow write-back); Protractor API inspections are read-only; ratings ride titles as [Red]/[Yellow] tags.
 - [Slow-query caller tags](slow-query-caller-tags.md) — caller attribution via http.Server emit patch + ALS; tags built ONLY from route templates (unmatched paths fully redacted — raw segments carry secrets like join codes/webhook tokens).
 - [Route files export handlers only](route-file-exports.md) — exporting test seams (__deps/__verifySignature) from a Next route.ts fails `npm run typecheck` via .next/types; put seams in a sibling module.
+- [Tekmetric by-employee org users](tekmetric-byemployee-orgshops.md) — org-level users have shops only under orgShops; bootstrap shop check must walk it or they all fail as wrong-shop.
