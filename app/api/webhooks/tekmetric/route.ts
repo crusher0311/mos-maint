@@ -14,9 +14,8 @@ import { insertWebhookLog as insertTekmetricWebhookLog } from "@/lib/data/reposi
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Test seam `__deps` lives in ./deps (sibling module) because Next's
-// generated route types reject non-handler exports from route.ts. Tests
-// import `__deps` from there; the route uses it via this import.
+// Test seam (`__deps`: getDb / defer / insertWebhookLog) lives in ./deps.ts —
+// Next's generated route types reject non-handler exports from route.ts.
 import { __deps } from "./deps";
 
 const TERMINAL_STATUSES = ["invoice", "invoiced", "posted", "deleted", "void", "closed"];
@@ -153,7 +152,7 @@ function captureHeaders(req: NextRequest): Record<string, string> {
 
 // Step 3b — HMAC signature verification lives in ./verify-signature (a
 // sibling module) because Next's generated route types reject non-handler
-// exports from route.ts, and the smoke test imports the seam directly.
+// exports from route.ts; imported at the top of this file.
 
 export async function POST(req: NextRequest) {
   // Step 2 of task #376: capture wall-clock duration of the inline-handled

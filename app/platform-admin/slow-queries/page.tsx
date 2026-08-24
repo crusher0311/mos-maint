@@ -245,7 +245,7 @@ export default function SlowQueriesPage() {
                 <input
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
-                  placeholder="Search shape, collection, source…"
+                  placeholder="Search shape, collection, source, caller…"
                   className="border border-gray-200 rounded-lg pl-8 pr-3 py-1.5 text-sm w-72"
                 />
               </div>
@@ -277,13 +277,14 @@ export default function SlowQueriesPage() {
                 <th className="px-4 py-3">Collection / Table</th>
                 <th className="px-4 py-3">Op</th>
                 <th className="px-4 py-3">Rows</th>
+                <th className="px-4 py-3">Caller</th>
                 <th className="px-4 py-3">Source</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {entries.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-gray-400">
+                  <td colSpan={8} className="px-4 py-10 text-center text-gray-400">
                     <Database className="w-8 h-8 mx-auto mb-2 text-gray-300" />
                     No slow queries captured in this window
                   </td>
@@ -312,13 +313,16 @@ export default function SlowQueriesPage() {
                     <td className="px-4 py-2.5 text-gray-500 tabular-nums">
                       {e.docsExamined ?? e.rowsReturned ?? "—"}
                     </td>
+                    <td className="px-4 py-2.5 text-gray-600 text-xs font-mono max-w-[220px] truncate" title={e.caller || undefined}>
+                      {e.caller || "—"}
+                    </td>
                     <td className="px-4 py-2.5 text-gray-500 text-xs">
-                      {e.caller || e.source || "—"}
+                      {e.source || "—"}
                     </td>
                   </tr>
                   {expanded === e.id && (
                     <tr key={`${e.id}-shape`}>
-                      <td colSpan={7} className="px-4 py-3 bg-gray-50">
+                      <td colSpan={8} className="px-4 py-3 bg-gray-50">
                         <pre className="text-xs text-gray-700 whitespace-pre-wrap break-all font-mono">
                           {e.shape}
                         </pre>

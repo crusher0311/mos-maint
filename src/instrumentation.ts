@@ -116,6 +116,23 @@ async function ensureCriticalIndexes() {
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
 
+  // Task #1162: slow-query caller attribution — patch http.Server so every
+  // inbound request (web API routes AND the cron scheduler's internal
+  // /api/cron/* invocations) runs inside an AsyncLocalStorage context tagged
+  // with its normalized route path. The slow-query tracker reads the tag at
+  // capture time. No-op overhead when SLOW_QUERY_TRACKING_DISABLED=1.
+  try {
+    const { installSlowQueryCallerTagging } = await import(
+      "@/lib/slow-query/caller-context"
+    );
+    installSlowQueryCallerTagging();
+  } catch (err: any) {
+    console.warn(
+      "[SlowQuery] caller tagging install failed:",
+      err?.message || String(err),
+    );
+  }
+
   // Run unconditionally so QA/prod web boots all guarantee the indexes
   // are present, regardless of whether the cron scheduler is enabled.
   await ensureCriticalIndexes();

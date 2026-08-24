@@ -36,6 +36,12 @@ import {
   checkSlowQuerySpike,
 } from "../lib/slow-query/alerter";
 import type { SlowQueryRecord } from "../lib/slow-query/core";
+import {
+  normalizeCallerPath,
+  runWithSlowQueryCaller,
+  getSlowQueryCaller,
+  installSlowQueryCallerTagging,
+} from "../lib/slow-query/caller-context";
 
 function makeRecord(over: Partial<SlowQueryRecord> = {}): SlowQueryRecord {
   return {
@@ -451,6 +457,106 @@ async function main() {
     assert.equal(r.spiking, true, "worst-case latency pages");
     assert.ok(String(r.reason).includes("latency"));
     console.log("✓ spike alerter: shared-state claim, cross-instance dedup, single clear");
+  }
+
+  // ------------------------------------------- 6. Caller attribution (#1162)
+  {
+    // Tags derive from route TEMPLATES, never from request path values:
+    // dynamic segments become :param placeholders from the app/ tree.
+    assert.equal(
+      normalizeCallerPath("/api/vehicles/1FTFW1ET5DFC10312/specs?x=1"),
+      "/api/vehicles/:vin/specs",
+    );
+    assert.equal(
+      normalizeCallerPath("http://localhost:3000/api/cron/protractor-sync?secret=x"),
+      "/api/cron/protractor-sync",
+    );
+    // Security regressions (#1162 review): route-embedded secrets — short
+    // enrollment codes and arbitrary webhook tokens — must NEVER appear in a
+    // caller tag, regardless of length or character class.
+    for (const secret of ["shortcode99", "aB3xY9zQ", "secrettoken", "x".repeat(30)]) {
+      const joined = normalizeCallerPath(`/api/join/${secret}`);
+      assert.equal(joined, "/api/join/:code", `join code redacted (${secret})`);
+      const hook = normalizeCallerPath(`/api/webhooks/protractor/${secret}`);
+      assert.equal(hook, "/api/webhooks/protractor/:token", `webhook token redacted (${secret})`);
+      assert.ok(!String(joined).includes(secret) && !String(hook).includes(secret));
+    }
+    // Unmatched paths (404 probes, static assets) are fully redacted — no
+    // raw segment is ever persisted.
+    assert.equal(normalizeCallerPath("/no/such/route/SECRETVALUE"), "/…");
+    assert.equal(normalizeCallerPath("/api/join/deeper/extra"), "/…");
+    assert.equal(normalizeCallerPath("/"), "/");
+    assert.equal(normalizeCallerPath(""), null);
+    assert.equal(normalizeCallerPath(undefined), null);
+
+    // Outside any tagged context → null (no attribution, never throws).
+    assert.equal(getSlowQueryCaller(), null);
+
+    // runWithSlowQueryCaller propagates through awaits into recordSlowQuery.
+    __resetBuffer();
+    await runWithSlowQueryCaller("cron:test-job", async () => {
+      await new Promise((r) => setTimeout(r, 5));
+      assert.equal(getSlowQueryCaller(), "cron:test-job");
+      recordSlowQuery(makeRecord());
+    });
+    assert.equal(__getBuffer().length, 1);
+    assert.equal(__getBuffer()[0].caller, "cron:test-job", "record picks up ALS caller");
+    assert.equal(getSlowQueryCaller(), null, "context does not leak out");
+
+    // Kill switch: no ALS frame is created (negligible disabled overhead).
+    process.env.SLOW_QUERY_TRACKING_DISABLED = "1";
+    runWithSlowQueryCaller("should-not-tag", () => {
+      assert.equal(getSlowQueryCaller(), null, "disabled → no tagging");
+    });
+    delete process.env.SLOW_QUERY_TRACKING_DISABLED;
+
+    // PG instrumentation resolves the caller at first-await time.
+    process.env.SLOW_QUERY_THRESHOLD_MS = "1";
+    const fakeClient: any = (..._a: any[]) => ({
+      then(onF: any, onR: any) {
+        return new Promise((r) => setTimeout(() => r(["row"]), 10)).then(onF, onR);
+      },
+    });
+    const wrapped: any = instrumentPgClientForSlowQueries(fakeClient);
+    __resetBuffer();
+    await runWithSlowQueryCaller("/api/some-route", async () => {
+      await wrapped`select * from customers where id = $1`;
+    });
+    assert.equal(__getBuffer().length, 1);
+    assert.equal(__getBuffer()[0].caller, "/api/some-route", "pg capture tagged");
+    delete process.env.SLOW_QUERY_THRESHOLD_MS;
+    __resetBuffer();
+
+    // HTTP tagging: a real http server's request handler runs inside an ALS
+    // context tagged with the normalized path (idempotent install).
+    assert.equal(installSlowQueryCallerTagging(), true);
+    assert.equal(installSlowQueryCallerTagging(), true, "install is idempotent");
+    const http = await import("node:http");
+    const seen: Array<string | null> = [];
+    const server = http.createServer((req, res) => {
+      seen.push(getSlowQueryCaller());
+      // Async continuations keep the tag too.
+      setTimeout(() => {
+        seen.push(getSlowQueryCaller());
+        res.end("ok");
+      }, 5);
+    });
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));
+    const port = (server.address() as any).port;
+    await new Promise<void>((resolve, reject) => {
+      http.get(`http://127.0.0.1:${port}/api/join/sekretcode123?q=1`, (res) => {
+        res.resume();
+        res.on("end", () => resolve());
+        res.on("error", reject);
+      });
+    });
+    await new Promise<void>((r) => server.close(() => r()));
+    assert.deepEqual(
+      seen,
+      ["/api/join/:code", "/api/join/:code"],
+      "http request handler + async continuations tagged with normalized path",
+    );
+    console.log("✓ caller attribution: normalization, ALS propagation, http tagging");
   }
 
   console.log("\nAll slow-query analyzer smoke tests passed.");

@@ -28,6 +28,7 @@ import {
   sqlTargetTable,
   type SlowQueryRecord,
 } from "./core";
+import { getSlowQueryCaller } from "./caller-context";
 
 const FLUSH_INTERVAL_MS = 15000;
 const FLUSH_BATCH_SIZE = 50;
@@ -99,6 +100,11 @@ export function recordSlowQuery(record: SlowQueryRecord): void {
       droppedSinceLastFlush++;
       return;
     }
+    // Caller attribution (task #1162): recordSlowQuery runs synchronously at
+    // operation settle, still inside the originating async context, so the
+    // ALS caller tag (route path / cron name) is read here as a fallback for
+    // any capture site that didn't resolve it earlier.
+    if (record.caller == null) record.caller = getSlowQueryCaller();
     buffer.push(record);
     if (
       buffer.length >= FLUSH_BATCH_SIZE ||
@@ -148,6 +154,7 @@ export function mongoMonitorEnabled(): boolean {
 interface StartedCommand {
   commandName: string;
   command: Record<string, unknown>;
+  caller: string | null;
 }
 
 /**
@@ -165,9 +172,13 @@ export function attachMongoSlowQueryMonitor(client: {
     try {
       if (isIgnoredMongoCommand(ev.commandName)) return;
       if (started.size >= STARTED_MAP_CAP) return; // shed under storm
+      // Capture the caller tag at commandStarted: the started event fires in
+      // the originating async context, while the completion events are
+      // emitted from the driver's socket handling where ALS context is lost.
       started.set(ev.requestId, {
         commandName: ev.commandName,
         command: ev.command,
+        caller: getSlowQueryCaller(),
       });
     } catch {
       /* never break the driver */
@@ -203,6 +214,7 @@ export function attachMongoSlowQueryMonitor(client: {
         durationMs,
         rowsReturned,
         source: slowQuerySource(),
+        caller: entry?.caller ?? getSlowQueryCaller(),
       });
     } catch {
       /* never break the driver */
@@ -229,6 +241,7 @@ function timeQuery(q: any, text: string): any {
   const origThen = q.then.bind(q);
   let startedAt = 0;
   let settled = false;
+  let caller: string | null = null;
   const settle = () => {
     if (settled || !startedAt) return;
     settled = true;
@@ -246,10 +259,16 @@ function timeQuery(q: any, text: string): any {
       shapeHash: shapeHash("pg", target, shape),
       durationMs,
       source: slowQuerySource(),
+      caller,
     });
   };
   q.then = function patchedThen(onFulfilled?: any, onRejected?: any) {
-    if (!startedAt) startedAt = Date.now();
+    if (!startedAt) {
+      startedAt = Date.now();
+      // The first await happens in the caller's async context; settle may
+      // run after context transitions, so resolve the tag up front.
+      caller = getSlowQueryCaller();
+    }
     return origThen(
       (res: any) => {
         try {

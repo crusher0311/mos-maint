@@ -153,3 +153,5 @@
 - [Media storage on Render](render-media-storage.md) — Replit object-storage sidecar absent on Render prod; use GridFS with tight caps; extension uploads are base64-JSON.
 - [Deepgram SDK v5 has no createClient](deepgram-sdk-v5-rest.md) — pinned v5 dropped the classic API; POST audio to the REST /v1/listen endpoint instead.
 - [DVI product direction](dvi-product-direction.md) — MOS Auto DVI replaces third-party DVIs (no AutoFlow write-back); Protractor API inspections are read-only; ratings ride titles as [Red]/[Yellow] tags.
+- [Slow-query caller tags](slow-query-caller-tags.md) — caller attribution via http.Server emit patch + ALS; tags built ONLY from route templates (unmatched paths fully redacted — raw segments carry secrets like join codes/webhook tokens).
+- [Route files export handlers only](route-file-exports.md) — exporting test seams (__deps/__verifySignature) from a Next route.ts fails `npm run typecheck` via .next/types; put seams in a sibling module.
