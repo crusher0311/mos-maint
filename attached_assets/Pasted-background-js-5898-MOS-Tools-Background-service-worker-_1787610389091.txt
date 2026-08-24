@@ -1,0 +1,68 @@
+background.js:5898 [MOS Tools] Background service worker loaded
+background.js:87 [MOS] Restored API URL: https://mos.tools
+background.js:324 [MOS] Side panel opens on action click
+background.js:432 [MOS] Message received: SET_SMS_CONTEXT
+background.js:579 [MOS] SMS context updated: Object
+background.js:432 [MOS] Message received: GET_SHOP_FEATURES
+background.js:432 [MOS] Message received: GET_SHOP_FEATURES
+background.js:432 [MOS] Message received: UNDO_SNAPSHOT_LIST
+background.js:3973 [MOS Inspections] Fetched 1 inspection(s) for RO 359009504
+background.js:432 [MOS] Message received: SET_SMS_CONTEXT
+background.js:579 [MOS] SMS context updated: Object
+background.js:432 [MOS] Message received: PREFETCH_STICKER_CONFIG
+background.js:432 [MOS] Message received: GET_MOS_AUTH
+background.js:432 [MOS] Message received: GET_SMS_CONTEXT
+background.js:432 [MOS] Message received: GET_MOS_AUTH
+background.js:432 [MOS] Message received: MOS_API_REQUEST
+background.js:432 [MOS] Message received: UNDO_SNAPSHOT_LIST
+background.js:432 [MOS] Message received: MOS_API_REQUEST
+background.js:432 [MOS] Message received: MOS_API_REQUEST
+background.js:432 [MOS] Message received: MOS_API_REQUEST
+sidepanel.js:1693 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:1700 [MOS] Updated VIN from API: KNMAT2MV2JP516558
+sidepanel.js:1703 [MOS] Plan response mileage: 134740 estimated: true fromCache: true
+sidepanel.js:1736 [MOS] Updated RO number from API: 853078099
+sidepanel.js:1741 [MOS] Updated customer name from API: Carmen Pedraza
+sidepanel.js:1693 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:1700 [MOS] Updated VIN from API: KNMAT2MV2JP516558
+sidepanel.js:1703 [MOS] Plan response mileage: 134740 estimated: true fromCache: true
+sidepanel.js:1736 [MOS] Updated RO number from API: 853078099
+sidepanel.js:1741 [MOS] Updated customer name from API: Carmen Pedraza
+background.js:432 [MOS] Message received: SET_SMS_CONTEXT
+background.js:579 [MOS] SMS context updated: Object
+background.js:432 [MOS] Message received: GET_SHOP_FEATURES
+background.js:432 [MOS] Message received: GET_SHOP_FEATURES
+background.js:432 [MOS] Message received: MOS_API_REQUEST
+background.js:432 [MOS] Message received: UNDO_SNAPSHOT_LIST
+sidepanel.js:1693 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:1700 [MOS] Updated VIN from API: KNMAT2MV2JP516558
+sidepanel.js:1703 [MOS] Plan response mileage: 134740 estimated: true fromCache: true
+sidepanel.js:1736 [MOS] Updated RO number from API: 853078099
+sidepanel.js:1741 [MOS] Updated customer name from API: Carmen Pedraza
+background.js:432 [MOS] Message received: UNDO_SNAPSHOT_LIST
+background.js:432 [MOS] Message received: SET_SMS_CONTEXT
+background.js:579 [MOS] SMS context updated: Object
+background.js:432 [MOS] Message received: MOS_API_REQUEST
+background.js:432 [MOS] Message received: UNDO_SNAPSHOT_LIST
+sidepanel.js:1325 [MOS] Features load transient (attempt 1); keeping last-known-good Not authenticated with MOS
+fetchShopFeatures @ sidepanel.js:1325
+background.js:2698 [MOS] 401 transient retry 1/3 on /api/extension/features?shopId=471&provider=tekmetric | code=TOKEN_REVOKED | sleep=558ms
+background.js:432 [MOS] Message received: GET_MOS_AUTH
+background.js:432 [MOS] Message received: GET_MOS_AUTH
+sidepanel.js:1693 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:1700 [MOS] Updated VIN from API: KNMAT2MV2JP516558
+sidepanel.js:1703 [MOS] Plan response mileage: 134740 estimated: true fromCache: true
+sidepanel.js:1736 [MOS] Updated RO number from API: 853078099
+sidepanel.js:1741 [MOS] Updated customer name from API: Carmen Pedraza
+background.js:2698 [MOS] 401 transient retry 2/3 on /api/extension/features?shopId=471&provider=tekmetric | code=TOKEN_REVOKED | sleep=1885ms
+background.js:432 [MOS] Message received: MOS_API_REQUEST
+background.js:432 [MOS] Message received: PREFETCH_STICKER_CONFIG
+sidepanel.js:1693 [MOS] Updated context with vehicle from API: Object
+sidepanel.js:1700 [MOS] Updated VIN from API: KNMAT2MV2JP516558
+sidepanel.js:1703 [MOS] Plan response mileage: 134740 estimated: true fromCache: true
+sidepanel.js:1736 [MOS] Updated RO number from API: 853078099
+sidepanel.js:1741 [MOS] Updated customer name from API: Carmen Pedraza
+background.js:2698 [MOS] 401 transient retry 3/3 on /api/extension/features?shopId=471&provider=tekmetric | code=TOKEN_REVOKED | sleep=4522ms
+[NEW] Explain Console errors by using Copilot in Edge: click  to explain an error. Learn moreDon't show again
+background.js:2754 [MOS] 401 unresolved on /api/extension/features?shopId=471&provider=tekmetric (code=TOKEN_REVOKED) — keeping token, surfacing soft session-expired
+_handleMosApiRequestTimed @ background.js:2754
