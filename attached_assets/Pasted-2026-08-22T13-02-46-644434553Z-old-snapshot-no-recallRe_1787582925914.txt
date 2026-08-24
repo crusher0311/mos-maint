@@ -1,0 +1,50 @@
+2026-08-22T13:02:46.644434553Z   ✓ old snapshot (no recallRecords field): re-parsed from stored raw
+2026-08-22T13:02:46.644449182Z   ✓ VIN lookup is uppercased
+2026-08-22T13:02:46.644456422Z   ✓ new snapshot: stored recallRecords served without re-parse
+2026-08-22T13:02:46.64448094Z   ✓ ok:false snapshot -> null
+2026-08-22T13:02:46.644498184Z   ✓ missing snapshot -> null
+2026-08-22T13:02:46.644827207Z   ✓ happy path persists recallRecords on the snapshot
+2026-08-22T13:02:46.644830455Z   ✓ happy path persists numberOfRecallRecords
+2026-08-22T13:02:46.644900155Z   ✓ failed re-fetch PRESERVES stored recallRecords
+2026-08-22T13:02:46.644952799Z   ✓ empty-but-ok re-fetch does NOT wipe stored recallRecords
+2026-08-22T13:02:46.645009839Z   ✓ empty-but-ok re-fetch WITH fresh recalls updates recallRecords
+2026-08-22T13:02:46.64501701Z   ✓ …and still preserves the prior serviceRecords
+2026-08-22T13:02:46.645107496Z   ✓ recall-only snapshot written with its recallRecords
+2026-08-22T13:02:46.645129243Z   ✓ FAILED refetch preserves recall-only snapshot's recallRecords
+2026-08-22T13:02:46.645131074Z   ✓ FAILED refetch keeps ok:true on recall-only snapshot
+2026-08-22T13:02:46.645158716Z   ✓ EMPTY-but-ok refetch preserves recall-only snapshot's recallRecords
+2026-08-22T13:02:46.645160516Z   ✓ EMPTY-but-ok refetch stamps lastEmptyFetchAt on recall-only snapshot
+2026-08-22T13:02:46.645252094Z   ✓ first-ever failure doc has recallRecords:null
+2026-08-22T13:02:46.645256621Z 
+2026-08-22T13:02:46.645258614Z All CARFAX recall smoke checks passed.
+2026-08-22T13:02:46.774634102Z 
+2026-08-22T13:02:46.774648081Z > mos-maintenance-mvp@1.8.0 lint:direct-db
+2026-08-22T13:02:46.774649713Z > node scripts/check-direct-db.cjs
+2026-08-22T13:02:46.774651083Z 
+2026-08-22T13:02:46.89353134Z [check-direct-db] OK — 362 allowlisted file(s); 0 unauthorized direct getDb()/getMongoClient() calls.
+2026-08-22T13:02:47.004790782Z 
+2026-08-22T13:02:47.004811879Z > mos-maintenance-mvp@1.8.0 lint:unauthed-routes
+2026-08-22T13:02:47.004814339Z > node scripts/check-unauthed-routes.cjs
+2026-08-22T13:02:47.004816384Z 
+2026-08-22T13:02:47.096454994Z 
+2026-08-22T13:02:47.096476211Z [check-unauthed-routes] 2 route(s) under app/api/ have no recognized auth guard:
+2026-08-22T13:02:47.096478682Z 
+2026-08-22T13:02:47.096805589Z   - app/api/extension/action-grant/consume/route.ts
+2026-08-22T13:02:47.096816655Z   - app/api/report/[vin]/route.ts [GET]
+2026-08-22T13:02:47.096846002Z 
+2026-08-22T13:02:47.096856288Z Each route must include at least one of the following:
+2026-08-22T13:02:47.096860377Z   • getSession() / requireSession() / requirePlatformAdmin() / requireAdmin()
+2026-08-22T13:02:47.096863362Z   • CRON_SECRET Bearer-token check
+2026-08-22T13:02:47.0968659Z   • validateExtensionToken() or createExternalEndpoint()
+2026-08-22T13:02:47.096870088Z   • Webhook HMAC/signature verification (timingSafeEqual, verifyHmac, verifySecret, etc.)
+2026-08-22T13:02:47.096872789Z   • A NODE_ENV === 'development' gate (dev-only routes)
+2026-08-22T13:02:47.096874945Z 
+2026-08-22T13:02:47.096877922Z If the route is genuinely public (health ping, OAuth callback, static redirect,
+2026-08-22T13:02:47.096881414Z etc.) add it to the PUBLIC_ALLOWLIST in scripts/check-unauthed-routes.cjs with
+2026-08-22T13:02:47.096883595Z a comment explaining why no auth is needed.
+2026-08-22T13:02:47.096885487Z 
+2026-08-22T13:02:47.096887953Z Reminder: never add a data-returning route to the allowlist — add an auth guard
+2026-08-22T13:02:47.096890759Z to the route instead.
+2026-08-22T13:02:47.096892022Z 
+2026-08-22T13:02:47.141448614Z ==> Build failed 😞
+2026-08-22T13:02:47.141459613Z ==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys
