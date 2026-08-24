@@ -137,6 +137,9 @@ function extractTekmetricShopIds(raw: any): Set<string> {
       "employee",
       "ownedShops",
       "employeeShops",
+      // Org-level Tekmetric users (multi-location groups) get their shops
+      // under `orgShops`, with `employeeShops` empty.
+      "orgShops",
     ]) {
       if (unwrapped[key] != null) visit(unwrapped[key], true);
     }

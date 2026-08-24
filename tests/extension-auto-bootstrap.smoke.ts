@@ -20,7 +20,18 @@ const html = fs.readFileSync("mos-tools-extension/sidepanel.html", "utf8");
 const manifest = JSON.parse(fs.readFileSync("mos-tools-extension/manifest.json", "utf8"));
 
 console.log("extension automatic bootstrap wiring");
-ok("manifest version was bumped", manifest.version === "1.33.4");
+// Minimum-version compare, not equality — a hardcoded pin fails every future
+// bump and silently blocks deploys (see smoke-version-pin-blocks-deploys).
+const versionAtLeast = (v: string, min: string) => {
+  const a = v.split(".").map(Number);
+  const b = min.split(".").map(Number);
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const d = (a[i] || 0) - (b[i] || 0);
+    if (d !== 0) return d > 0;
+  }
+  return true;
+};
+ok("manifest version was bumped", versionAtLeast(manifest.version, "1.33.4"));
 ok("context updates trigger automatic bootstrap", /SET_SMS_CONTEXT[\s\S]+handleMosBootstrap/.test(background));
 ok("provider token capture retries bootstrap", /tabTokenChanged[\s\S]+handleMosBootstrap/.test(background));
 ok("bootstrap auth is session-scoped", /chrome\.storage\.session\.set\(\{\s*mosBootstrapAuth/.test(background));

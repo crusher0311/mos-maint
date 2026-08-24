@@ -158,7 +158,7 @@ async function _POST(request: NextRequest) {
       // otherwise every invalid/expired/replayed/wrong-shop failure collapses
       // into an undiagnosable `verification_needed` line.
       console.info(
-        `[Extension Bootstrap] outcome=${outcome} provider=${proof.provider} proofStatus=${proof.status} reason="${proof.reason}"`,
+        `[Extension Bootstrap] outcome=${outcome} provider=${proof.provider} smsShopId=${String(body?.smsShopId ?? "")} proofStatus=${proof.status} reason="${proof.reason}"`,
       );
       return publicOutcome(
         outcome,
