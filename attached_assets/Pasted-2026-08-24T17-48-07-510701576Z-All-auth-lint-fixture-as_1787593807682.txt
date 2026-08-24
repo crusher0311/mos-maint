@@ -1,0 +1,50 @@
+2026-08-24T17:48:07.510701576Z All auth-lint fixture assertions passed.
+2026-08-24T17:48:07.510702716Z 
+2026-08-24T17:48:07.613111585Z 
+2026-08-24T17:48:07.61312321Z > mos-maintenance-mvp@1.8.0 lint:mojibake
+2026-08-24T17:48:07.613125143Z > node scripts/check-mojibake.cjs
+2026-08-24T17:48:07.613126532Z 
+2026-08-24T17:48:07.692076782Z check-mojibake: OK (no mojibake sequences found)
+2026-08-24T17:48:07.792137848Z 
+2026-08-24T17:48:07.792153088Z > mos-maintenance-mvp@1.8.0 lint:no-migrate-tab
+2026-08-24T17:48:07.792155118Z > node mos-tools-extension/scripts/check-no-migrate-tab.cjs
+2026-08-24T17:48:07.792156339Z 
+2026-08-24T17:48:07.867147281Z [check-no-migrate-tab] OK — 4 file(s) clean of Migrate-tab tokens.
+2026-08-24T17:48:07.969352337Z 
+2026-08-24T17:48:07.969364105Z > mos-maintenance-mvp@1.8.0 lint:extension-gates
+2026-08-24T17:48:07.969366728Z > node scripts/check-extension-gates.cjs
+2026-08-24T17:48:07.969368809Z 
+2026-08-24T17:48:08.008812279Z [check-extension-gates] FAIL — 10 violation(s):
+2026-08-24T17:48:08.008823917Z 
+2026-08-24T17:48:08.009167914Z   • [policy] app/api/extension/auto-dvi/generate/route.ts — exports OPTIONS but "/api/extension/auto-dvi/generate|OPTIONS" is not in lib/extension-route-policy.ts.
+2026-08-24T17:48:08.009171245Z     Add an entry to POLICY_MAP with the appropriate tier(s).
+2026-08-24T17:48:08.009172491Z 
+2026-08-24T17:48:08.00917946Z   • [policy] app/api/extension/auto-dvi/generate/route.ts — exports POST but "/api/extension/auto-dvi/generate|POST" is not in lib/extension-route-policy.ts.
+2026-08-24T17:48:08.009180988Z     Add an entry to POLICY_MAP with the appropriate tier(s).
+2026-08-24T17:48:08.009182218Z 
+2026-08-24T17:48:08.009207659Z   • [policy] app/api/extension/auto-dvi/media/route.ts — exports OPTIONS but "/api/extension/auto-dvi/media|OPTIONS" is not in lib/extension-route-policy.ts.
+2026-08-24T17:48:08.009215265Z     Add an entry to POLICY_MAP with the appropriate tier(s).
+2026-08-24T17:48:08.009217234Z 
+2026-08-24T17:48:08.009222449Z   • [policy] app/api/extension/auto-dvi/media/route.ts — exports POST but "/api/extension/auto-dvi/media|POST" is not in lib/extension-route-policy.ts.
+2026-08-24T17:48:08.009223963Z     Add an entry to POLICY_MAP with the appropriate tier(s).
+2026-08-24T17:48:08.009225328Z 
+2026-08-24T17:48:08.009226807Z   • [policy] app/api/extension/auto-dvi/push/route.ts — exports OPTIONS but "/api/extension/auto-dvi/push|OPTIONS" is not in lib/extension-route-policy.ts.
+2026-08-24T17:48:08.009228123Z     Add an entry to POLICY_MAP with the appropriate tier(s).
+2026-08-24T17:48:08.009229255Z 
+2026-08-24T17:48:08.009233726Z   • [policy] app/api/extension/auto-dvi/push/route.ts — exports POST but "/api/extension/auto-dvi/push|POST" is not in lib/extension-route-policy.ts.
+2026-08-24T17:48:08.009235062Z     Add an entry to POLICY_MAP with the appropriate tier(s).
+2026-08-24T17:48:08.009236211Z 
+2026-08-24T17:48:08.009263945Z   • [policy] app/api/extension/auto-dvi/results/route.ts — exports OPTIONS but "/api/extension/auto-dvi/results|OPTIONS" is not in lib/extension-route-policy.ts.
+2026-08-24T17:48:08.009265405Z     Add an entry to POLICY_MAP with the appropriate tier(s).
+2026-08-24T17:48:08.009269854Z 
+2026-08-24T17:48:08.00927795Z   • [policy] app/api/extension/auto-dvi/results/route.ts — exports POST but "/api/extension/auto-dvi/results|POST" is not in lib/extension-route-policy.ts.
+2026-08-24T17:48:08.009284101Z     Add an entry to POLICY_MAP with the appropriate tier(s).
+2026-08-24T17:48:08.009285536Z 
+2026-08-24T17:48:08.009374125Z   • [policy] app/api/extension/auto-dvi/voice/route.ts — exports OPTIONS but "/api/extension/auto-dvi/voice|OPTIONS" is not in lib/extension-route-policy.ts.
+2026-08-24T17:48:08.009376257Z     Add an entry to POLICY_MAP with the appropriate tier(s).
+2026-08-24T17:48:08.009377376Z 
+2026-08-24T17:48:08.00938089Z   • [policy] app/api/extension/auto-dvi/voice/route.ts — exports POST but "/api/extension/auto-dvi/voice|POST" is not in lib/extension-route-policy.ts.
+2026-08-24T17:48:08.009382217Z     Add an entry to POLICY_MAP with the appropriate tier(s).
+2026-08-24T17:48:08.009383397Z 
+2026-08-24T17:48:08.053108795Z ==> Build failed 😞
+2026-08-24T17:48:08.053123814Z ==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys
