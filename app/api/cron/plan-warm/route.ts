@@ -7,6 +7,7 @@ import {
 } from "@/lib/data/repositories/missed-opportunities";
 import { getFeatureEntitlements } from "@/lib/featureResolver";
 import { triggerPlanBuild } from "@/lib/vhi-rebuild";
+import { resolvePeakPolicy } from "@/lib/plan-warm-peak";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -65,8 +66,21 @@ export async function GET(req: NextRequest) {
 
   const startedAt = Date.now();
   const maxShops = Math.max(1, Number(process.env.PLAN_WARM_MAX_SHOPS || "20"));
-  const maxVinsPerShop = Math.max(1, Number(process.env.PLAN_WARM_MAX_VINS_PER_SHOP || "40"));
-  const concurrency = Math.max(1, Number(process.env.PLAN_WARM_CONCURRENCY || "2"));
+
+  // Task #1147: plan builds run on the WEB process, so peak-hour ticks are
+  // throttled (or skipped, per PLAN_WARM_PEAK_MODE) instead of spending the
+  // full warm budget while real users are on the box. Off-peak ticks — and
+  // the every-4h cadence that keeps plans inside the 4h TTL — are unchanged.
+  const peakPolicy = resolvePeakPolicy(new Date(), {
+    maxVinsPerShop: Math.max(1, Number(process.env.PLAN_WARM_MAX_VINS_PER_SHOP || "40")),
+    concurrency: Math.max(1, Number(process.env.PLAN_WARM_CONCURRENCY || "2")),
+  });
+  if (peakPolicy.action === "skip") {
+    console.log(`[PlanWarm] skipped: peak_hours (PLAN_WARM_PEAK_MODE=skip)`);
+    return NextResponse.json({ ok: true, skipped: "peak_hours" });
+  }
+  const maxVinsPerShop = peakPolicy.maxVinsPerShop;
+  const concurrency = peakPolicy.concurrency;
   const deadlineMs = Number(process.env.PLAN_WARM_DEADLINE_MS || String(4 * 60 * 1000));
   const deadlineHitRef = { hit: false };
   const pastDeadline = () => {
@@ -196,6 +210,7 @@ export async function GET(req: NextRequest) {
       alreadyCached: totalAlreadyCached,
       failed: totalFailed,
       skippedNoMileage: totalSkippedNoMileage,
+      peakThrottled: peakPolicy.action === "throttle",
       deadlineHit: deadlineHitRef.hit,
       durationMs: Date.now() - startedAt,
       perShop,
