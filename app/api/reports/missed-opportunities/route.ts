@@ -55,10 +55,11 @@ export async function GET(req: NextRequest) {
     const forceRefresh = req.nextUrl.searchParams.get("refresh") === "1";
 
     const cached = await getCachedMissedOppReport(shopId, windowDays);
+    const cacheHasCurrentShape =
+      cached && hasCurrentMissedOpportunityReportShape(cached.report);
     const fresh =
-      cached &&
-      Date.now() - new Date(cached.generatedAt).getTime() < REPORT_TTL_MS &&
-      hasCurrentMissedOpportunityReportShape(cached.report);
+      cacheHasCurrentShape &&
+      Date.now() - new Date(cached.generatedAt).getTime() < REPORT_TTL_MS;
     if (cached && fresh && !forceRefresh) {
       return NextResponse.json({
         ok: true,
@@ -83,7 +84,7 @@ export async function GET(req: NextRequest) {
         computeErr?.message || computeErr,
         computeErr?.cause ? `| cause: ${computeErr.cause?.message || computeErr.cause}` : "",
       );
-      if (cached) {
+      if (cached && cacheHasCurrentShape) {
         return NextResponse.json({
           ok: true,
           cached: true,

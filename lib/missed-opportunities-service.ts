@@ -10,9 +10,8 @@
  *   2. For each unique VIN, read the vehicle's cached VHI plan (Mongo
  *      cached_plans / PG cache facade via the plan-cache repository) with
  *      bounded concurrency. Cache miss => the RO is "not evaluated".
- *   3. Run the shared Task #1145 RO-line ↔ VHI matcher per RO. Every
- *      service-job title is passed — declined jobs included, because a
- *      declined item was presented and therefore counts as quoted.
+ *   3. Reconcile each cached due recommendation against ticket work into
+ *      performed, deferred/declined, or not-quoted outcomes.
  *
  * Results are cached per (shop, window) in Mongo by the caller (the API
  * route) so page loads serve the cache and recompute at most every
@@ -25,12 +24,26 @@ import { getDb as getPg } from "@/lib/db/drizzle";
 import {
   normalizedWorkOrders,
   normalizedServiceJobs,
+  normalizedLineItems,
 } from "@/lib/db/schema/normalized";
 import { findCachedPlanForVehicle } from "@/lib/data/repositories/missed-opportunities";
-import { findDisplayRoNumbersByIds } from "@/lib/data/repositories/protractor-work-orders";
+import {
+  findCachedWorkOrdersByIds,
+  findDisplayRoNumbersByIds,
+  type ProtractorWorkOrderCacheDoc,
+} from "@/lib/data/repositories/protractor-work-orders";
+import {
+  findCachedInvoiceSnapshotsByIds,
+  type ProtractorInvoiceSnapshotDoc,
+} from "@/lib/data/repositories/protractor-invoices";
+import {
+  findInvoiceCacheEntriesByIds,
+  type ProtractorInvoiceCacheDoc,
+} from "@/lib/data/repositories/protractor-invoice-cache";
 import {
   planItemsFromBuckets,
-  evaluateRoLines,
+  evaluateMissedOpportunityRecommendations,
+  missedItemsFromRecommendations,
   summarizeMissedOpportunities,
   MISSED_OPPORTUNITY_REPORT_VERSION,
   type MissedOpportunityReport,
@@ -40,8 +53,15 @@ import {
 import {
   classifyTicketJobStatus,
   normalizeTicketJobAmount,
+  resolveProtractorRecordedAmount,
   type MissedOpportunityTicketJob,
 } from "@/lib/missed-opportunity-ticket-details";
+import {
+  extractProtractorServicePackages,
+  getRecordedProtractorPackageTotal,
+  matchNormalizedServiceJobsToCachedProtractorPackages,
+  resolveCachedProtractorPackageStatus,
+} from "@/lib/integrations/protractor/package-normalization";
 
 /** Hard cap on ROs evaluated per run — large shops degrade to "newest N". */
 export const MAX_ROS_PER_RUN = 300;
@@ -77,6 +97,8 @@ export async function computeMissedOpportunityReport(
       odometerOut: normalizedWorkOrders.odometerOut,
       odometerIn: normalizedWorkOrders.odometerIn,
       serviceAdvisorName: normalizedWorkOrders.serviceAdvisorName,
+      provenance: normalizedWorkOrders.provenance,
+      rawData: normalizedWorkOrders.rawData,
     })
     .from(normalizedWorkOrders)
     .where(
@@ -118,8 +140,8 @@ export async function computeMissedOpportunityReport(
     }
   }
 
-  // Service jobs (ALL of them — declined included; declined counts as
-  // quoted) for the scoped ROs, one batched query.
+  // Service jobs (all dispositions, including deferred/declined) for the
+  // scoped ROs, one batched query.
   const titlesByWo = new Map<string, string[]>();
   const ticketJobsByWo = new Map<string, MissedOpportunityTicketJob[]>();
   if (scoped.length > 0) {
@@ -127,10 +149,12 @@ export async function computeMissedOpportunityReport(
       .select({
         id: normalizedServiceJobs.id,
         workOrderId: normalizedServiceJobs.workOrderId,
+        jobNumber: normalizedServiceJobs.jobNumber,
         title: normalizedServiceJobs.title,
         status: normalizedServiceJobs.status,
         total: normalizedServiceJobs.total,
         sequence: normalizedServiceJobs.sequence,
+        provenance: normalizedServiceJobs.provenance,
       })
       .from(normalizedServiceJobs)
       .where(
@@ -148,18 +172,150 @@ export async function computeMissedOpportunityReport(
         asc(normalizedServiceJobs.sequence),
         asc(normalizedServiceJobs.id),
       );
+
+    // A historical normalized Protractor total of zero is ambiguous because
+    // old ingestion defaulted missing prices to zero. Recover real package
+    // evidence from cached snapshots first, then non-zero normalized line
+    // prices. This remains bounded to the already-scoped jobs and never calls
+    // Protractor.
+    const linePricesByJob = new Map<string, string[]>();
+    if (jobs.length > 0) {
+      const lineItems = await pg
+        .select({
+          serviceJobId: normalizedLineItems.serviceJobId,
+          extendedPrice: normalizedLineItems.extendedPrice,
+        })
+        .from(normalizedLineItems)
+        .where(
+          and(
+            eq(normalizedLineItems.shopId, shopId),
+            inArray(
+              normalizedLineItems.serviceJobId,
+              jobs.map((job) => job.id),
+            ),
+            sql`(${normalizedLineItems.softDelete}->>'isDeleted')::boolean IS DISTINCT FROM true`,
+          ),
+        );
+      for (const line of lineItems) {
+        const amount = normalizeTicketJobAmount(line.extendedPrice);
+        if (amount == null) continue;
+        linePricesByJob.set(line.serviceJobId, [
+          ...(linePricesByJob.get(line.serviceJobId) || []),
+          amount,
+        ]);
+      }
+    }
+
+    const sourceIds = scoped
+      .filter((wo) => provenanceSourceSystem(wo.provenance) === "protractor")
+      .flatMap((wo) => protractorWorkOrderSourceIds(wo.provenance));
+    let cachedWorkOrders: ProtractorWorkOrderCacheDoc[] = [];
+    let cachedInvoices: ProtractorInvoiceSnapshotDoc[] = [];
+    let rawInvoiceCache: ProtractorInvoiceCacheDoc[] = [];
+    if (sourceIds.length > 0) {
+      [cachedWorkOrders, cachedInvoices, rawInvoiceCache] = await Promise.all([
+        findCachedWorkOrdersByIds(shopId, sourceIds).catch((err: any) => {
+          console.warn(
+            `[MissedOpps] Shop ${shopId}: cached Protractor work-order lookup failed: ${err?.message || err}`,
+          );
+          return [];
+        }),
+        findCachedInvoiceSnapshotsByIds(shopId, sourceIds).catch((err: any) => {
+          console.warn(
+            `[MissedOpps] Shop ${shopId}: cached Protractor invoice lookup failed: ${err?.message || err}`,
+          );
+          return [];
+        }),
+        findInvoiceCacheEntriesByIds(shopId, sourceIds).catch((err: any) => {
+          console.warn(
+            `[MissedOpps] Shop ${shopId}: raw Protractor invoice-cache lookup failed: ${err?.message || err}`,
+          );
+          return [];
+        }),
+      ]);
+    }
+    const cachedBySourceId = new Map(
+      cachedWorkOrders.map((doc) => [String(doc.workOrderId), doc]),
+    );
+    const invoiceBySourceId = new Map(
+      cachedInvoices.map((doc) => [String(doc.invoiceId), doc]),
+    );
+    const rawInvoiceBySourceId = new Map(
+      rawInvoiceCache.map((doc) => [String(doc.invoiceId), doc]),
+    );
+    const cachedPackagesByJobId = new Map<string, any>();
+    for (const wo of scoped) {
+      if (provenanceSourceSystem(wo.provenance) !== "protractor") continue;
+      const woJobs = jobs.filter((job) => job.workOrderId === wo.id);
+      const cached = protractorWorkOrderSourceIds(wo.provenance)
+        .map((id) => cachedBySourceId.get(id))
+        .find(Boolean);
+      const cachedInvoice = protractorWorkOrderSourceIds(wo.provenance)
+        .map((id) => invoiceBySourceId.get(id))
+        .find(Boolean);
+      const rawInvoice = protractorWorkOrderSourceIds(wo.provenance)
+        .map((id) => rawInvoiceBySourceId.get(id))
+        .find(Boolean);
+      const packages = firstProtractorPackages(
+        (wo.rawData as any)?.rawPayload,
+        wo.rawData,
+        rawInvoice?.invoice,
+        rawInvoice,
+        cachedInvoice?.rawPayload,
+        cachedInvoice,
+        cachedInvoice?.servicePackages
+          ? { ServicePackages: cachedInvoice.servicePackages }
+          : null,
+        cached?.rawPayload,
+        cached,
+        cached?.servicePackages
+          ? { ServicePackages: cached.servicePackages }
+          : null,
+      );
+      const matches = matchNormalizedServiceJobsToCachedProtractorPackages(
+        woJobs,
+        packages,
+      );
+      for (const [job, servicePackage] of matches) {
+        cachedPackagesByJobId.set(job.id, servicePackage);
+      }
+    }
+
     for (const j of jobs) {
       const list = titlesByWo.get(j.workOrderId) || [];
       if (j.title) list.push(j.title);
       titlesByWo.set(j.workOrderId, list);
+      const sourceSystem = provenanceSourceSystem(j.provenance);
+      const cachedPackage =
+        sourceSystem === "protractor"
+          ? cachedPackagesByJobId.get(j.id)
+          : undefined;
+      const cachedTotal =
+        cachedPackage != null
+          ? normalizeTicketJobAmount(
+              getRecordedProtractorPackageTotal(cachedPackage),
+            )
+          : null;
+      const normalizedTotal = normalizeTicketJobAmount(j.total);
+      const normalizedLinePrices = linePricesByJob.get(j.id) || [];
+      const totalPrice =
+        sourceSystem === "protractor"
+          ? resolveProtractorRecordedAmount({
+              cachedPackageTotal: cachedTotal,
+              normalizedLinePrices,
+              normalizedJobTotal: normalizedTotal,
+            })
+          : normalizedTotal;
+      const recordedStatus =
+        cachedPackage != null
+          ? resolveCachedProtractorPackageStatus(cachedPackage, j.status || null)
+          : j.status || null;
       const ticketJobs = ticketJobsByWo.get(j.workOrderId) || [];
       ticketJobs.push({
         title: j.title,
-        recordedStatus: j.status || null,
-        displayGroup: classifyTicketJobStatus(j.status),
-        // normalized_service_jobs.total is canonical dollars for every
-        // provider. Keep it decimal-safe and retain legitimate zero values.
-        totalPrice: normalizeTicketJobAmount(j.total),
+        recordedStatus,
+        displayGroup: classifyTicketJobStatus(recordedStatus),
+        totalPrice,
       });
       ticketJobsByWo.set(j.workOrderId, ticketJobs);
     }
@@ -219,6 +375,7 @@ export async function computeMissedOpportunityReport(
       advisorName: wo.serviceAdvisorName || null,
       lineTitleCount: titles.length,
       ticketJobs,
+      recommendations: [],
     };
     if (!vin) {
       return { ...base, evaluated: false, skipReason: "No VIN on the repair order", missedItems: [] };
@@ -230,8 +387,18 @@ export async function computeMissedOpportunityReport(
     if (titles.length === 0) {
       return { ...base, evaluated: false, skipReason: "No service jobs on the repair order", missedItems: [] };
     }
-    const missedItems = evaluateRoLines(titles, planItems);
-    return { ...base, evaluated: true, skipReason: null, missedItems };
+    const recommendations = evaluateMissedOpportunityRecommendations(
+      ticketJobs,
+      planItems,
+    );
+    const missedItems = missedItemsFromRecommendations(recommendations);
+    return {
+      ...base,
+      evaluated: true,
+      skipReason: null,
+      missedItems,
+      recommendations,
+    };
   });
 
   const summary = summarizeMissedOpportunities(rows);
@@ -241,7 +408,7 @@ export async function computeMissedOpportunityReport(
     windowDays,
     generatedAt: new Date().toISOString(),
     summary,
-    rows: rows.filter((r) => r.evaluated && r.missedItems.length > 0),
+    rows: rows.filter((r) => r.evaluated && r.recommendations.length > 0),
     notEvaluated: rows
       .filter((r) => !r.evaluated)
       .map(({ workOrderId, workOrderNumber, closedDate, vin, vehicle, skipReason }) => ({
@@ -317,4 +484,36 @@ function vehicleLabelFrom(vehicle: unknown): string | null {
   if (!v) return null;
   const bits = [v.year, v.make, v.model].filter(Boolean);
   return bits.length > 0 ? bits.join(" ") : null;
+}
+
+function provenanceSourceSystem(value: unknown): string | null {
+  const source = (value as any)?.sourceSystem;
+  return typeof source === "string" ? source.toLowerCase() : null;
+}
+
+function protractorWorkOrderSourceIds(value: unknown): string[] {
+  const ids = Array.isArray((value as any)?.sourceIds)
+    ? (value as any).sourceIds
+    : [];
+  return Array.from(
+    new Set(
+      ids
+        .filter(
+          (sourceId: any) =>
+            sourceId?.system === "protractor" &&
+            ["invoice_id", "work_order_id"].includes(sourceId?.idType),
+        )
+        .map((sourceId: any) => String(sourceId.idValue || "").trim())
+        .filter(Boolean),
+    ),
+  );
+}
+
+function firstProtractorPackages(...sources: unknown[]): any[] {
+  for (const source of sources) {
+    if (!source || typeof source !== "object") continue;
+    const packages = extractProtractorServicePackages(source);
+    if (packages.length > 0) return packages;
+  }
+  return [];
 }

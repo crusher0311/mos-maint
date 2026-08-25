@@ -4,10 +4,13 @@
 // backfill and onboarding pre-warm both populate this so subsequent
 // Protractor reads can hit Mongo instead of paying per-invoice API cost.
 // TTL is enforced at read time via `cachedAt`.
-import type { Collection } from "mongodb";
+import type { Collection, Filter } from "mongodb";
 import { getDb } from "@/lib/data/db";
+import { isProtractorCachePgCanonical } from "@/lib/db/integration-cache-write-mode";
+import * as pg from "./pg/protractor-cache";
 
 const COLLECTION = "protractor_invoice_cache";
+const MAX_BATCH_LOOKUP_IDS = 600;
 
 export interface ProtractorInvoiceCacheDoc {
   shopId: number;
@@ -32,6 +35,51 @@ export async function findFreshInvoiceCacheEntry(
     invoiceId,
     cachedAt: { $gt: new Date(Date.now() - ttlMs) },
   });
+}
+
+/**
+ * Bounded raw-invoice lookup. Report generation intentionally accepts stale
+ * entries because it is reconstructing a historical closed ticket, not using
+ * the payload as a live provider view.
+ */
+export async function findInvoiceCacheEntriesByIds(
+  shopId: number,
+  invoiceIds: string[],
+): Promise<ProtractorInvoiceCacheDoc[]> {
+  const ids = Array.from(
+    new Set(invoiceIds.map((id) => String(id || "").trim()).filter(Boolean)),
+  ).slice(0, MAX_BATCH_LOOKUP_IDS);
+  if (ids.length === 0) return [];
+  if (isProtractorCachePgCanonical()) {
+    const canonical = (await pg.findInvoiceCacheEntriesByIds(
+      shopId,
+      ids,
+    )) as unknown as ProtractorInvoiceCacheDoc[];
+    const found = new Set(canonical.map((doc) => String(doc.invoiceId)));
+    const missingIds = ids.filter((id) => !found.has(id));
+    if (missingIds.length === 0) return canonical;
+    // Raw invoice-cache writers are still partly Mongo-backed. Fill only PG
+    // misses so a fresh cached invoice is not hidden by the read cutover.
+    return [
+      ...canonical,
+      ...(await findInvoiceCacheEntriesByIdsMongo(shopId, missingIds)),
+    ];
+  }
+  return findInvoiceCacheEntriesByIdsMongo(shopId, ids);
+}
+
+async function findInvoiceCacheEntriesByIdsMongo(
+  shopId: number,
+  ids: string[],
+): Promise<ProtractorInvoiceCacheDoc[]> {
+  const col = await collection();
+  return col
+    .find({
+      shopId,
+      invoiceId: { $in: ids },
+    } as Filter<ProtractorInvoiceCacheDoc>)
+    .sort({ cachedAt: -1 })
+    .toArray();
 }
 
 /**

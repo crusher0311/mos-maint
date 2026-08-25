@@ -346,6 +346,170 @@ export function summarizeProtractorPackage(
   };
 }
 
+/**
+ * Returns the amount Protractor actually recorded for a package. This differs
+ * from summarizeProtractorPackage().total for an empty/unpriced package: the
+ * summary intentionally uses zero as its arithmetic default, while callers
+ * repairing historical prices need to distinguish "recorded $0" from "no
+ * price was recorded".
+ */
+export function getRecordedProtractorPackageTotal(
+  servicePackage: any,
+): number | null {
+  const priceSummary =
+    servicePackage?.PriceSummary &&
+    typeof servicePackage.PriceSummary === "object"
+      ? servicePackage.PriceSummary
+      : {};
+  const packagePriceFields = [
+    priceSummary.SellTotal,
+    priceSummary.SellSubtotal,
+    servicePackage?.Total,
+    servicePackage?.GrandTotal,
+    servicePackage?.TotalAmount,
+    servicePackage?.Subtotal,
+    servicePackage?.Price,
+  ];
+  const linePriceFields = getProtractorPackageLines(servicePackage).flatMap(
+    (line) => {
+      const linePriceSummary =
+        line?.PriceSummary && typeof line.PriceSummary === "object"
+          ? line.PriceSummary
+          : {};
+      const lineType = String(
+        line?.Type ?? line?.LineType ?? line?.lineType ?? "",
+      ).toLowerCase();
+      return [
+        linePriceSummary.SellPrice,
+        linePriceSummary.SellTotal,
+        linePriceSummary.SellSubtotal,
+        line?.Price,
+        line?.UnitPrice,
+        line?.unitPrice,
+        line?.ExtendedTotal,
+        line?.ExtendedPrice,
+        line?.extendedPrice,
+        line?.Total,
+        line?.total,
+        ...(lineType.includes("labor")
+          ? [line?.Rate, line?.LaborRate, line?.laborRate]
+          : []),
+      ];
+    },
+  );
+  const hasExplicitPrice = [...packagePriceFields, ...linePriceFields].some(
+    (value) => toFiniteNumber(value) !== undefined,
+  );
+  return hasExplicitPrice ? summarizeProtractorPackage(servicePackage).total : null;
+}
+
+type MatchableServiceJob = {
+  jobNumber?: unknown;
+  sequence?: unknown;
+  title?: unknown;
+};
+
+function normalizedMatchValue(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const normalized = String(value).trim().toLowerCase();
+  return normalized || null;
+}
+
+export function normalizeProtractorPackageTitle(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const normalized = String(value)
+    .normalize("NFKD")
+    .toLowerCase()
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+  return normalized || null;
+}
+
+function getPackageSequence(servicePackage: any): string | null {
+  return normalizedMatchValue(
+    servicePackage?.Sequence ?? servicePackage?._sourceSequence,
+  );
+}
+
+function getPackageTitle(servicePackage: any): string | null {
+  return normalizeProtractorPackageTitle(
+    servicePackage?.ServicePackageHeader?.Title ??
+      servicePackage?.Title ??
+      servicePackage?.Name ??
+      servicePackage?.ServiceDescription ??
+      servicePackage?.Description,
+  );
+}
+
+/**
+ * Matches normalized jobs to packages from a cached work-order snapshot only.
+ * A package is consumed at most once. ID matches are preferred, followed by a
+ * sequence that is unique on both sides, then a normalized title unique on
+ * both sides.
+ */
+export function matchNormalizedServiceJobsToCachedProtractorPackages<
+  T extends MatchableServiceJob,
+>(serviceJobs: readonly T[], servicePackages: readonly any[]): Map<T, any> {
+  const matches = new Map<T, any>();
+  const availableJobs = new Set(serviceJobs);
+  const availablePackages = new Set(servicePackages);
+
+  const consume = (job: T, servicePackage: any) => {
+    matches.set(job, servicePackage);
+    availableJobs.delete(job);
+    availablePackages.delete(servicePackage);
+  };
+
+  for (const job of serviceJobs) {
+    const id = normalizedMatchValue(job.jobNumber);
+    if (!id) continue;
+    const servicePackage = Array.from(availablePackages).find(
+      (candidate) =>
+        normalizedMatchValue(getProtractorPackageIdentity(candidate)) === id,
+    );
+    if (servicePackage) consume(job, servicePackage);
+  }
+
+  const matchUnique = (
+    jobKey: (job: T) => string | null,
+    packageKey: (servicePackage: any) => string | null,
+  ) => {
+    const jobsByKey = new Map<string, T[]>();
+    const packagesByKey = new Map<string, any[]>();
+    for (const job of availableJobs) {
+      const key = jobKey(job);
+      if (key) jobsByKey.set(key, [...(jobsByKey.get(key) || []), job]);
+    }
+    for (const servicePackage of availablePackages) {
+      const key = packageKey(servicePackage);
+      if (key) {
+        packagesByKey.set(key, [
+          ...(packagesByKey.get(key) || []),
+          servicePackage,
+        ]);
+      }
+    }
+    for (const [key, jobs] of jobsByKey) {
+      const packages = packagesByKey.get(key);
+      if (jobs.length === 1 && packages?.length === 1) {
+        consume(jobs[0], packages[0]);
+      }
+    }
+  };
+
+  matchUnique(
+    (job) => normalizedMatchValue(job.sequence),
+    getPackageSequence,
+  );
+  matchUnique(
+    (job) => normalizeProtractorPackageTitle(job.title),
+    getPackageTitle,
+  );
+  return matches;
+}
+
 export function normalizeProtractorServiceJobStatus(
   status: unknown,
   isDeferred = false,
@@ -371,4 +535,23 @@ export function normalizeProtractorServiceJobStatus(
   }
   if (compact === "warranty") return "warranty";
   return "completed";
+}
+
+/**
+ * A cached package can carry better deferred/status provenance than an older
+ * normalized row, but package snapshots without a status must not overwrite a
+ * valid normalized disposition with normalizeProtractorServiceJobStatus's
+ * arithmetic default.
+ */
+export function resolveCachedProtractorPackageStatus(
+  servicePackage: any,
+  fallbackStatus: ServiceJobStatus | null,
+): ServiceJobStatus | null {
+  if (servicePackage?._isDeferred === true) {
+    return normalizeProtractorServiceJobStatus(servicePackage?.Status, true);
+  }
+  const cachedStatus = String(servicePackage?.Status ?? "").trim();
+  return cachedStatus
+    ? normalizeProtractorServiceJobStatus(cachedStatus)
+    : fallbackStatus;
 }

@@ -14,6 +14,8 @@ import {
 import * as pg from "./pg/protractor-cache";
 
 const COLLECTION = "protractor_work_orders";
+/** Up to two cache identities for each of the report's 300 scoped ROs. */
+const MAX_BATCH_LOOKUP_IDS = 600;
 
 export interface ProtractorWorkOrderCacheDoc extends Document {
   shopId: number;
@@ -187,6 +189,34 @@ export async function findCachedWorkOrderById(
     { shopId, workOrderId } as Filter<ProtractorWorkOrderCacheDoc>,
     { projection: { rawPayload: 0, servicePackages: 0 }, sort: { fetchedAt: -1 } },
   );
+}
+
+/**
+ * Bounded cache-only lookup used when recovering package details for already
+ * normalized jobs. Unlike the single-record lookup, this intentionally
+ * includes servicePackages and rawPayload.
+ */
+export async function findCachedWorkOrdersByIds(
+  shopId: number,
+  workOrderIds: string[],
+): Promise<ProtractorWorkOrderCacheDoc[]> {
+  const ids = Array.from(
+    new Set(workOrderIds.map((id) => String(id || "").trim()).filter(Boolean)),
+  ).slice(0, MAX_BATCH_LOOKUP_IDS);
+  if (ids.length === 0) return [];
+  if (isProtractorCachePgCanonical()) {
+    return (await pg.findCachedWorkOrdersByIds(
+      shopId,
+      ids,
+    )) as ProtractorWorkOrderCacheDoc[];
+  }
+  const col = await collection();
+  return col
+    .find(
+      { shopId, workOrderId: { $in: ids } } as Filter<ProtractorWorkOrderCacheDoc>,
+    )
+    .sort({ fetchedAt: -1 })
+    .toArray();
 }
 
 /**

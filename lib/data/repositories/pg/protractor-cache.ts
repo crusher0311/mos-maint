@@ -18,9 +18,16 @@
  */
 import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { getDb } from "@/lib/db/drizzle";
-import { protractorWorkOrders, protractorVehicles } from "@/lib/db/schema/wave3";
+import {
+  protractorInvoiceCache,
+  protractorInvoices,
+  protractorWorkOrders,
+  protractorVehicles,
+} from "@/lib/db/schema/wave3";
 
 type AnyDoc = Record<string, unknown>;
+/** Up to two cache identities for each of the report's 300 scoped ROs. */
+const MAX_BATCH_LOOKUP_IDS = 600;
 
 /* -------------------------------------------------------------------------- */
 /* work orders                                                                 */
@@ -175,6 +182,81 @@ export async function findCachedWorkOrderById(
     )
     .limit(1);
   return rows.length ? reconstructWorkOrder(rows[0]) : null;
+}
+
+export async function findCachedWorkOrdersByIds(
+  shopId: number,
+  workOrderIds: string[],
+): Promise<AnyDoc[]> {
+  const ids = Array.from(
+    new Set(workOrderIds.map((id) => String(id || "").trim()).filter(Boolean)),
+  ).slice(0, MAX_BATCH_LOOKUP_IDS);
+  if (ids.length === 0) return [];
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(protractorWorkOrders)
+    .where(
+      and(
+        eq(protractorWorkOrders.shopId, shopId),
+        inArray(protractorWorkOrders.workOrderId, ids),
+      ),
+    )
+    .orderBy(desc(protractorWorkOrders.fetchedAt));
+  return rows.map(reconstructWorkOrder);
+}
+
+export async function findCachedInvoiceSnapshotsByIds(
+  shopId: number,
+  invoiceIds: string[],
+): Promise<AnyDoc[]> {
+  const ids = Array.from(
+    new Set(invoiceIds.map((id) => String(id || "").trim()).filter(Boolean)),
+  ).slice(0, MAX_BATCH_LOOKUP_IDS);
+  if (ids.length === 0) return [];
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(protractorInvoices)
+    .where(
+      and(
+        eq(protractorInvoices.shopId, shopId),
+        inArray(protractorInvoices.invoiceId, ids),
+      ),
+    )
+    .orderBy(desc(protractorInvoices.fetchedAt));
+  return rows.map((row) => ({
+    ...(row.payload as AnyDoc),
+    shopId: row.shopId,
+    invoiceId: row.invoiceId,
+  }));
+}
+
+export async function findInvoiceCacheEntriesByIds(
+  shopId: number,
+  invoiceIds: string[],
+): Promise<AnyDoc[]> {
+  const ids = Array.from(
+    new Set(invoiceIds.map((id) => String(id || "").trim()).filter(Boolean)),
+  ).slice(0, MAX_BATCH_LOOKUP_IDS);
+  if (ids.length === 0) return [];
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(protractorInvoiceCache)
+    .where(
+      and(
+        eq(protractorInvoiceCache.shopId, shopId),
+        inArray(protractorInvoiceCache.invoiceId, ids),
+      ),
+    )
+    .orderBy(desc(protractorInvoiceCache.cachedAt));
+  return rows.map((row) => ({
+    ...(row.payload as AnyDoc),
+    shopId: row.shopId,
+    invoiceId: row.invoiceId,
+    cachedAt: row.cachedAt,
+  }));
 }
 
 export async function findDisplayRoNumbersByIds(

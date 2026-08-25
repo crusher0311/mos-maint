@@ -49,6 +49,12 @@ export interface VhiComparisonItem {
   inspectOnly?: boolean;
   /** Verb from the source row ("inspect", "replace", ...). */
   action?: string | null;
+  /** Plan provenance retained for recommendation reporting. */
+  source?: "oem" | "dvi" | "protractor" | "common" | "declined" | null;
+  /** DVI provider, when this recommendation originated in an inspection. */
+  dviSource?: "autoflow" | "autovitals" | "tekmetric" | "autoserve1" | "mastertech" | null;
+  /** DVI severity carried by cached red/yellow findings. */
+  bump?: "red" | "yellow" | null;
 }
 
 export interface MissingVhiItem {
@@ -78,7 +84,7 @@ export function isInspectOnlyVhiItem(item: VhiComparisonItem): boolean {
 }
 
 /** All canonical service keys derivable from a free-form job/line title. */
-function keysFromTitle(title: string): string[] {
+export function canonicalServiceKeysFromTitle(title: string): string[] {
   const keys = new Set<string>();
   const named = toKeyFromName(title);
   if (named) keys.add(named);
@@ -86,11 +92,41 @@ function keysFromTitle(title: string): string[] {
   return Array.from(keys);
 }
 
+/** Stable canonical key used to dedupe plan recommendations. */
+export function canonicalServiceKeyForItem(item: Pick<VhiComparisonItem, "title" | "serviceKey">): string {
+  const explicit = String(item.serviceKey || "").trim();
+  if (explicit && !explicit.startsWith("misc_")) return explicit;
+  const derived = canonicalServiceKeysFromTitle(String(item.title || "").trim());
+  if (derived.length > 0) return derived[0];
+  return `title:${Array.from(normalizeTokens(String(item.title || ""))).sort().join(" ")}`;
+}
+
 /** Subset check: every token of `a` present in `b` (both non-empty). */
 function tokensSubset(a: Set<string>, b: Set<string>): boolean {
   if (a.size === 0 || b.size === 0) return false;
   for (const t of a) if (!b.has(t)) return false;
   return true;
+}
+
+/**
+ * Conservative plan-item ↔ ticket-title match shared by the recommendation
+ * model. Canonical service identity wins, followed by the same normalized
+ * token-containment fallback used by findMissingVhiItems.
+ */
+export function ticketTitleMatchesVhiItem(
+  rawTitle: string | null | undefined,
+  item: Pick<VhiComparisonItem, "title" | "serviceKey">,
+): boolean {
+  const ticketTitle = String(rawTitle || "").trim();
+  const itemTitle = String(item.title || "").trim();
+  if (!ticketTitle || !itemTitle) return false;
+  const ticketKeys = canonicalServiceKeysFromTitle(ticketTitle);
+  const itemKeys = new Set(canonicalServiceKeysFromTitle(itemTitle));
+  if (item.serviceKey && !item.serviceKey.startsWith("misc_")) itemKeys.add(item.serviceKey);
+  if (ticketKeys.some((key) => itemKeys.has(key))) return true;
+  const ticketTokens = normalizeTokens(ticketTitle);
+  const itemTokens = normalizeTokens(itemTitle);
+  return tokensSubset(itemTokens, ticketTokens) || tokensSubset(ticketTokens, itemTokens);
 }
 
 /**
@@ -107,7 +143,7 @@ export function findMissingVhiItems(
   for (const raw of roLineTitles || []) {
     const title = String(raw || "").trim();
     if (!title) continue;
-    for (const k of keysFromTitle(title)) roKeys.add(k);
+    for (const k of canonicalServiceKeysFromTitle(title)) roKeys.add(k);
     const tokens = normalizeTokens(title);
     if (tokens.size > 0) roTokenSets.push(tokens);
   }
@@ -123,7 +159,7 @@ export function findMissingVhiItems(
     if (item.serviceKey && !item.serviceKey.startsWith("misc_")) {
       itemKeys.add(item.serviceKey);
     }
-    for (const k of keysFromTitle(title)) itemKeys.add(k);
+    for (const k of canonicalServiceKeysFromTitle(title)) itemKeys.add(k);
     let quoted = false;
     for (const k of itemKeys) {
       if (roKeys.has(k)) {

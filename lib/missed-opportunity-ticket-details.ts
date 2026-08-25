@@ -103,3 +103,28 @@ export function sumTicketJobAmounts(
     hasUnavailable,
   };
 }
+
+/**
+ * Recover a Protractor ticket amount without turning an ingestion-defaulted
+ * zero into a fake recorded price. Cached package evidence is authoritative,
+ * non-zero normalized lines are the next-best evidence, and a non-zero job
+ * total is the final fallback. A cached package's explicit zero stays $0.00.
+ */
+export function resolveProtractorRecordedAmount(input: {
+  cachedPackageTotal: unknown;
+  normalizedLinePrices: ReadonlyArray<unknown>;
+  normalizedJobTotal: unknown;
+}): string | null {
+  const cached = normalizeTicketJobAmount(input.cachedPackageTotal);
+  if (cached != null) return cached;
+
+  const lines = input.normalizedLinePrices
+    .map(normalizeTicketJobAmount)
+    .filter((amount): amount is string => amount != null);
+  if (lines.some((amount) => amount !== "0.00")) {
+    return sumTicketJobAmounts(lines.map((totalPrice) => ({ totalPrice }))).total;
+  }
+
+  const normalized = normalizeTicketJobAmount(input.normalizedJobTotal);
+  return normalized && normalized !== "0.00" ? normalized : null;
+}

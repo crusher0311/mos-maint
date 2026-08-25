@@ -30,6 +30,8 @@ import {
   normalizeMissedOpportunityReportCache,
   hasCurrentMissedOpportunityReportShape,
   MISSED_OPPORTUNITY_REPORT_VERSION,
+  evaluateMissedOpportunityRecommendations,
+  missedItemsFromRecommendations,
   type MissedOpportunityRo,
   type MissedOpportunityReport,
   type VhiComparisonItem,
@@ -47,17 +49,143 @@ function ok(name: string, cond: boolean, detail?: string) {
 console.log("planItemsFromBuckets:");
 {
   const items = planItemsFromBuckets({
-    overdue: [{ title: "Engine Oil & Filter Replace", serviceKey: "engine_oil" }],
-    dueSoon: [{ title: "Cabin Air Filter Replace", serviceKey: "cabin_air_filter" }],
+    overdue: [{
+      title: "Engine Oil & Filter Replace",
+      serviceKey: "engine_oil",
+      source: "dvi",
+      dviSource: "tekmetric",
+      bump: "red",
+    }],
+    dueSoon: [{
+      title: "Cabin Air Filter Replace",
+      serviceKey: "cabin_air_filter",
+      source: "dvi",
+      dviSource: "autoflow",
+      bump: "yellow",
+    }],
   });
   ok("flattens both buckets", items.length === 2);
   ok("stamps overdue status", items[0].status === "overdue");
   ok("stamps due_soon status", items[1].status === "due_soon");
+  ok(
+    "preserves red DVI provenance",
+    items[0].source === "dvi" && items[0].dviSource === "tekmetric" && items[0].bump === "red",
+  );
+  ok(
+    "preserves yellow DVI provenance",
+    items[1].source === "dvi" && items[1].dviSource === "autoflow" && items[1].bump === "yellow",
+  );
   ok("null-safe", planItemsFromBuckets(null).length === 0);
   ok(
     "missing arrays tolerated",
     planItemsFromBuckets({ overdue: null, dueSoon: undefined }).length === 0,
   );
+}
+
+console.log("Recommendation outcomes, matching, and dedupe:");
+{
+  const planItems: VhiComparisonItem[] = [
+    {
+      title: "Brake Fluid Exchange",
+      serviceKey: "brake_fluid",
+      status: "overdue",
+    },
+    {
+      title: "Brake Fluid Flush",
+      serviceKey: "brake_fluid",
+      status: "overdue",
+      source: "dvi",
+      dviSource: "tekmetric",
+      bump: "red",
+    },
+    {
+      title: "Cabin Air Filter Replace",
+      serviceKey: "cabin_air_filter",
+      status: "due_soon",
+      source: "dvi",
+      bump: "yellow",
+    },
+    {
+      title: "Coolant Exchange",
+      serviceKey: "coolant",
+      status: "overdue",
+    },
+    {
+      title: "Transmission Fluid Exchange",
+      serviceKey: "transmission_fluid",
+      status: "overdue",
+    },
+  ];
+  const recommendations = evaluateMissedOpportunityRecommendations(
+    [
+      {
+        title: "Brake Fluid Flush",
+        recordedStatus: "declined",
+        displayGroup: "deferred_declined",
+        totalPrice: "89.95",
+      },
+      {
+        title: "Brake Fluid Service",
+        recordedStatus: "completed",
+        displayGroup: "approved_performed",
+        totalPrice: "109.95",
+      },
+      {
+        title: "Cabin Filter",
+        recordedStatus: "deferred",
+        displayGroup: "deferred_declined",
+        totalPrice: "0",
+      },
+      {
+        title: "Coolant Flush",
+        recordedStatus: "declined",
+        displayGroup: "deferred_declined",
+        totalPrice: null,
+      },
+    ],
+    planItems,
+  );
+  ok("DVI + VHI canonical service counts once", recommendations.length === 4);
+  const brake = recommendations.find((r) => r.serviceKey === "brake_fluid");
+  ok("deduped provenance is both", brake?.source === "both");
+  ok("performed takes precedence over deferred", brake?.outcome === "invoiced_performed");
+  ok("winning matched price is attached", brake?.recordedPrice === "109.95");
+  const cabin = recommendations.find((r) => r.serviceKey === "cabin_air_filter");
+  ok("DVI-only source retained", cabin?.source === "dvi");
+  ok("deferred recommendation classified", cabin?.outcome === "deferred_declined");
+  ok("explicit zero price preserved", cabin?.recordedPrice === "0.00");
+  const coolant = recommendations.find((r) => r.serviceKey === "coolant");
+  ok("missing recorded price remains null", coolant?.recordedPrice === null);
+  const transmission = recommendations.find((r) => r.serviceKey === "transmission_fluid");
+  ok("unmatched recommendation is not quoted", transmission?.outcome === "not_quoted");
+  ok("unmatched recommendation has no price", transmission?.recordedPrice === null);
+  const overlay = evaluateMissedOpportunityRecommendations([], [{
+    title: "Engine Air Filter Replace",
+    serviceKey: "engine_air_filter",
+    status: "due_soon",
+    source: "oem",
+    dviSource: "autoflow",
+    bump: "yellow",
+  }])[0];
+  ok("single VHI row with a DVI marker is both", overlay?.source === "both");
+  ok("DVI severity survives recommendation modeling", overlay?.dviSeverity === "yellow");
+  const missed = missedItemsFromRecommendations(recommendations);
+  ok("legacy missed excludes performed", !missed.some((m) => m.serviceKey === "brake_fluid"));
+  ok("legacy missed includes deferred and unquoted", missed.length === 3);
+
+  const summary = summarizeMissedOpportunities([
+    row({ recommendations, missedItems: missed }),
+  ]);
+  const sourceCount = Object.values(summary.recommendationsBySource)
+    .reduce((total, rollup) => total + rollup.count, 0);
+  const outcomeCount = Object.values(summary.recommendationsByOutcome)
+    .reduce((total, rollup) => total + rollup.count, 0);
+  ok("source rollups reconcile", sourceCount === summary.totalRecommendations);
+  ok("outcome rollups reconcile", outcomeCount === summary.totalRecommendations);
+  ok("source subtotal is exact", summary.recommendationsBySource.both.recordedDollarSubtotal === "109.95");
+  ok("outcome subtotal includes explicit zero", summary.recommendationsByOutcome.deferred_declined.recordedDollarSubtotal === "0.00");
+  ok("unavailable prices counted", summary.recommendationsByOutcome.deferred_declined.unavailableCount === 1);
+  ok("unmatched unavailable counted", summary.recommendationsByOutcome.not_quoted.unavailableCount === 1);
 }
 
 console.log("Quoted vs declined vs missing:");
@@ -143,6 +271,7 @@ function row(partial: Partial<MissedOpportunityRo>): MissedOpportunityRo {
     evaluated: partial.evaluated ?? true,
     skipReason: partial.skipReason ?? null,
     missedItems: partial.missedItems ?? [],
+    recommendations: partial.recommendations ?? [],
   };
 }
 
@@ -171,6 +300,22 @@ console.log("Cached report compatibility:");
     reportVersion: MISSED_OPPORTUNITY_REPORT_VERSION,
   };
   ok("current report shape accepted", hasCurrentMissedOpportunityReportShape(current));
+  const oldRowShape = {
+    ...current,
+    rows: current.rows.map(({ recommendations: _recommendations, ...rest }) => rest),
+  };
+  ok(
+    "current version without recommendations is invalidated",
+    !hasCurrentMissedOpportunityReportShape(oldRowShape),
+  );
+  const oldSummaryShape = {
+    ...current,
+    summary: { ...current.summary, totalRecommendations: undefined },
+  };
+  ok(
+    "current version without recommendation summary is invalidated",
+    !hasCurrentMissedOpportunityReportShape(oldSummaryShape),
+  );
   const normalizedCurrent = normalizeMissedOpportunityReportCache(current);
   ok("current ticket jobs retained", Array.isArray(normalizedCurrent.rows[0]?.ticketJobs));
 }

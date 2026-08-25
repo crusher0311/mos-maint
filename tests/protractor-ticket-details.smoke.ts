@@ -9,7 +9,10 @@
 import { ProtractorAdapter } from "../lib/integrations/core/normalized-adapter";
 import {
   extractProtractorServicePackages,
+  getRecordedProtractorPackageTotal,
+  matchNormalizedServiceJobsToCachedProtractorPackages,
   normalizeProtractorServiceJobStatus,
+  resolveCachedProtractorPackageStatus,
 } from "../lib/integrations/protractor/package-normalization";
 import { extractJobIndexFromWorkOrder } from "../lib/job-index";
 import {
@@ -21,6 +24,7 @@ import {
 import {
   classifyTicketJobStatus,
   normalizeTicketJobAmount,
+  resolveProtractorRecordedAmount,
 } from "../lib/missed-opportunity-ticket-details";
 import {
   buildRepairFilter,
@@ -201,6 +205,95 @@ ok("package-level total wins when present", approx(mappedById.get("bg-cooling")?
 ok("legitimate package-level zero stays zero", mappedById.get("zero-dollar")?.total === 0);
 ok("duplicate ID-less line charges are both retained", approx(mappedById.get("duplicate-lines")?.total, 50));
 ok("space/hyphen status variant is recognized", normalizeProtractorServiceJobStatus("IN-PROGRESS") === "in_progress");
+ok(
+  "recorded package total is recovered",
+  getRecordedProtractorPackageTotal(rawById.get("bg-cooling")) === 229.99,
+);
+ok(
+  "recorded total falls back to priced lines",
+  getRecordedProtractorPackageTotal(rawById.get("bg-engine")) === 69.95,
+);
+ok(
+  "recorded explicit zero is not treated as missing",
+  getRecordedProtractorPackageTotal(rawById.get("zero-dollar")) === 0,
+);
+ok(
+  "unpriced package has no recorded total",
+  getRecordedProtractorPackageTotal({
+    ID: "unpriced",
+    ServicePackageLines: [{ Type: "Labor", Hours: 1 }],
+  }) === null,
+);
+ok(
+  "deferred package retains recorded line total",
+  rawById.get("oil-change")?._isDeferred === true &&
+    getRecordedProtractorPackageTotal(rawById.get("oil-change")) === 99.95,
+);
+
+const matchingPackages = [
+  { ID: "id-wins", Sequence: 8, ServicePackageHeader: { Title: "Wrong title" } },
+  { ID: "sequence-package", Sequence: 2, ServicePackageHeader: { Title: "Other" } },
+  { ID: "title-package", Sequence: 7, ServicePackageHeader: { Title: "• Brake Fluid Exchange" } },
+];
+const matchingJobs = [
+  { jobNumber: "id-wins", sequence: 2, title: "Other" },
+  { jobNumber: "missing", sequence: 2, title: "Not the title" },
+  { jobNumber: "also-missing", sequence: 99, title: "Brake fluid exchange" },
+];
+const packageMatches =
+  matchNormalizedServiceJobsToCachedProtractorPackages(
+    matchingJobs,
+    matchingPackages,
+  );
+ok("package ID is the strongest cached match", packageMatches.get(matchingJobs[0])?.ID === "id-wins");
+ok("unique package sequence is the second cached match", packageMatches.get(matchingJobs[1])?.ID === "sequence-package");
+ok("unique normalized title is the final cached match", packageMatches.get(matchingJobs[2])?.ID === "title-package");
+ok(
+  "cached package total wins over stale normalized values",
+  resolveProtractorRecordedAmount({
+    cachedPackageTotal: "229.99",
+    normalizedLinePrices: ["25.00"],
+    normalizedJobTotal: "0.00",
+  }) === "229.99",
+);
+ok(
+  "normalized non-zero lines recover a missing package total",
+  resolveProtractorRecordedAmount({
+    cachedPackageTotal: null,
+    normalizedLinePrices: ["40.00", "29.95"],
+    normalizedJobTotal: "0.00",
+  }) === "69.95",
+);
+ok(
+  "cached explicit zero remains a recorded free package",
+  resolveProtractorRecordedAmount({
+    cachedPackageTotal: 0,
+    normalizedLinePrices: [],
+    normalizedJobTotal: 0,
+  }) === "0.00",
+);
+ok(
+  "defaulted normalized zeros remain unavailable without source evidence",
+  resolveProtractorRecordedAmount({
+    cachedPackageTotal: null,
+    normalizedLinePrices: ["0.00"],
+    normalizedJobTotal: "0.00",
+  }) === null,
+);
+ok(
+  "statusless cached pricing does not overwrite normalized declined status",
+  resolveCachedProtractorPackageStatus(
+    { ID: "priced-without-status", Total: 125 },
+    "declined",
+  ) === "declined",
+);
+ok(
+  "cached deferred provenance overrides a stale normalized status",
+  resolveCachedProtractorPackageStatus(
+    { ID: "deferred", _isDeferred: true },
+    "completed",
+  ) === "deferred",
+);
 
 console.log("Normalized surfaces:");
 const embedded = adapter.extractServiceJobsFromWorkOrder(invoice);
@@ -274,6 +367,7 @@ const reportRow = (ticketJobs: MissedOpportunityRo["ticketJobs"]): MissedOpportu
   evaluated: true,
   skipReason: null,
   missedItems: afterStatusAndPriceRepair,
+  recommendations: [],
 });
 const beforeSummary = summarizeMissedOpportunities([
   reportRow(
