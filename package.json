@@ -14,6 +14,8 @@
     "build": "next build",
     "test:plan-build": "npm run test:plan-build-task-163 && npm run test:plan-build-task-165 && npm run test:plan-build-task-181 && npm run test:plan-build-task-196 && npm run test:plan-build-task-198 && npm run test:plan-build-task-219 && npm run test:plan-build-task-236 && npm run test:plan-build-task-246 && npm run test:plan-build-task-253 && npm run test:plan-build-task-339 && npm run test:plan-build-task-476 && npm run test:vhi-mileage-freshness && npm run test:plan-build-task-479 && npm run test:plan-build-task-608 && npm run test:plan-build-declined-standalone && npm run test:plan-build-task-1118 && npm run test:plan-build-task-617 && npm run test:plan-build-task-649 && npm run test:plan-build-triage-time-only && npm run test:plan-cache-oem-missing && npm run test:plan-build-cache-write && npm run test:protection-plan",
     "test:shopware-connect-errors": "npm run test:shopware-repair-order-query && tsx tests/shopware-connect-errors.smoke.ts",
+    "test:myoilsticker-migration-resume": "tsx tests/myoilsticker-migration-resume.smoke.ts",
+    "test:myoilsticker-migration": "tsx tests/myoilsticker-migration-mapping.smoke.ts",
     "test:shopware-repair-order-query": "tsx tests/shopware-repair-order-query.smoke.ts",
     "test:initial-sync-lock": "tsx tests/tekmetric-initial-sync-lock.smoke.ts",
     "test:plan-build-task-649": "tsx tests/plan-build-task-649.smoke.ts",
