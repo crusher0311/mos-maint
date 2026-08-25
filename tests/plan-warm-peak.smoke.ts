@@ -9,6 +9,7 @@
  */
 import assert from "node:assert";
 import { parsePeakHours, isPeakHourUtc, resolvePeakPolicy } from "../lib/plan-warm-peak";
+import { selectPlanWarmCandidates } from "../lib/plan-warm-selection";
 
 const caps = { maxVinsPerShop: 40, concurrency: 2 };
 const at = (hourUtc: number) => new Date(Date.UTC(2026, 7, 25, hourUtc, 35, 0));
@@ -72,4 +73,56 @@ assert.equal(isPeakHourUtc(at(13), null), false, "null window never peak");
   assert.equal(p.maxVinsPerShop, 3, "custom peak VIN cap");
 }
 
-console.log("plan-warm-peak smoke: all assertions passed");
+// Repeated runs skip valid plans before applying the build cap, so a shop
+// with more than 40 vehicles advances to the next batch.
+async function verifyPlanWarmProgression() {
+  const vehicles = Array.from({ length: 80 }, (_, index) => ({
+    vin: `VIN-${String(index + 1).padStart(3, "0")}`,
+    mileage: 10_000 + index,
+  }));
+  const cached = new Set<string>();
+  let activeLookups = 0;
+  let maxActiveLookups = 0;
+  const isCached = async ({ vin }: { vin: string }) => {
+    activeLookups++;
+    maxActiveLookups = Math.max(maxActiveLookups, activeLookups);
+    await Promise.resolve();
+    activeLookups--;
+    return cached.has(vin);
+  };
+
+  const first = await selectPlanWarmCandidates({
+    vehicles,
+    maxCandidates: 40,
+    concurrency: 2,
+    isCached,
+  });
+  assert.deepEqual(
+    first.pending.map(({ vin }) => vin),
+    vehicles.slice(0, 40).map(({ vin }) => vin),
+    "first run selects the first uncached batch",
+  );
+  first.pending.forEach(({ vin }) => cached.add(vin));
+
+  const second = await selectPlanWarmCandidates({
+    vehicles,
+    maxCandidates: 40,
+    concurrency: 2,
+    isCached,
+  });
+  assert.equal(second.alreadyCached, 40, "second run skips the first valid batch");
+  assert.deepEqual(
+    second.pending.map(({ vin }) => vin),
+    vehicles.slice(40, 80).map(({ vin }) => vin),
+    "second run selects the next uncached batch",
+  );
+  assert.equal(second.pending.length, 40, "cache hits do not consume the build budget");
+  assert.ok(maxActiveLookups <= 2, "cache selection respects the concurrency cap");
+}
+
+verifyPlanWarmProgression()
+  .then(() => console.log("plan-warm-peak smoke: all assertions passed"))
+  .catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });

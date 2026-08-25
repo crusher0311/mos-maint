@@ -240,13 +240,13 @@ export default function MissedOpportunitiesPage() {
               <p>
                 This report compares closed ROs against each vehicle&apos;s cached Vehicle Health
                 Inspection (VHI) plan. To keep it free to run, it only reads plans that already
-                exist — it never rebuilds them. A vehicle&apos;s plan is built when someone views
-                that vehicle in the MOS extension side panel (and refreshed for about 4 hours after).
+                exist — it never rebuilds them while you wait.
               </p>
               <p>
-                <span className="font-medium">To populate this report:</span> open repair orders in
-                your shop management system with the MOS extension side panel active. Each vehicle
-                viewed builds its plan, and its closed ROs will be evaluated on the next refresh.
+                MOS warms these vehicle plans automatically in the background. Coverage fills
+                progressively, especially for larger shops or report windows, so it may take
+                several warming runs before every eligible closed RO can be evaluated. Check back
+                later and refresh the report as coverage fills.
               </p>
             </div>
           )}

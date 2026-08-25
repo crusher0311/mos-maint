@@ -8,6 +8,7 @@ import {
 import { getFeatureEntitlements } from "@/lib/featureResolver";
 import { triggerPlanBuild } from "@/lib/vhi-rebuild";
 import { resolvePeakPolicy } from "@/lib/plan-warm-peak";
+import { selectPlanWarmCandidates } from "@/lib/plan-warm-selection";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -140,12 +141,21 @@ export async function GET(req: NextRequest) {
         perShop.push({ shopId, skipped: "vehicle_listing_failed", error: err?.message });
         continue;
       }
-      const pending = vehicles.slice(0, maxVinsPerShop);
-
       let warmed = 0;
-      let alreadyCached = 0;
-      let failed = 0;
-      let skippedNoMileage = 0;
+      const selection = await selectPlanWarmCandidates({
+        vehicles,
+        maxCandidates: maxVinsPerShop,
+        concurrency,
+        pastDeadline,
+        isCached: async ({ vin, mileage }) =>
+          !!(await findCachedPlanForVehicle(shopId, vin, mileage)),
+        onCacheLookupError: ({ vin }, err) => {
+          const message = err instanceof Error ? err.message : String(err);
+          console.warn(`[PlanWarm] Shop ${shopId} VIN ${vin}: cache lookup failed: ${message}`);
+        },
+      });
+      const { pending, alreadyCached, skippedNoMileage } = selection;
+      let failed = selection.cacheLookupFailures;
       let cursor = 0;
 
       await Promise.all(
@@ -155,20 +165,7 @@ export async function GET(req: NextRequest) {
             const idx = cursor++;
             if (idx >= pending.length) return;
             const { vin, mileage } = pending[idx];
-            if (!mileage) {
-              // plan-build refuses to build without mileage; don't waste a call.
-              skippedNoMileage++;
-              continue;
-            }
             try {
-              // Idempotence: identical validity semantics to the report's
-              // read (expiry, schema version, mileage tolerance) so we skip
-              // exactly the VINs the report can already evaluate.
-              const cached = await findCachedPlanForVehicle(shopId, vin, mileage);
-              if (cached) {
-                alreadyCached++;
-                continue;
-              }
               const built = await triggerPlanBuild(
                 shopId,
                 vin,
@@ -195,6 +192,7 @@ export async function GET(req: NextRequest) {
         windowDays,
         windowVins: vehicles.length,
         attempted: pending.length,
+        scanned: selection.scanned,
         warmed,
         alreadyCached,
         failed,
