@@ -66,9 +66,13 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ ok: true, cached: false, report });
     } catch (computeErr: any) {
       // Degrade to the stale cache instead of a hard error when we have one.
+      // DrizzleQueryError's message is just the SQL text; the actionable
+      // driver error lives on `cause` — log both so the next failure is
+      // diagnosable from the log feed.
       console.error(
         `[MissedOpps] Shop ${shopId}: compute failed:`,
         computeErr?.message || computeErr,
+        computeErr?.cause ? `| cause: ${computeErr.cause?.message || computeErr.cause}` : "",
       );
       if (cached) {
         return NextResponse.json({

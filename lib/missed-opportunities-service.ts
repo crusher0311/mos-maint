@@ -19,7 +19,8 @@
  * REPORT_TTL_MS.
  */
 
-import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { buildCloseDateSincePredicate } from "@/lib/missed-opportunities-query";
 import { getDb as getPg } from "@/lib/db/drizzle";
 import {
   normalizedWorkOrders,
@@ -71,7 +72,12 @@ export async function computeMissedOpportunityReport(
       and(
         eq(normalizedWorkOrders.shopId, shopId),
         inArray(normalizedWorkOrders.status, [...TERMINAL_STATUSES]),
-        gte(closeDate, since),
+        // NOTE: `closeDate` is a raw sql`` expression, so drizzle has no
+        // column encoder for the right-hand side — a JS Date param would
+        // reach postgres-js unserialized and throw ERR_INVALID_ARG_TYPE.
+        // Bind an ISO string and cast explicitly instead (see
+        // buildCloseDateSincePredicate + tests/missed-opportunities.smoke.ts).
+        buildCloseDateSincePredicate(closeDate, since),
         sql`(${normalizedWorkOrders.softDelete}->>'isDeleted')::boolean IS DISTINCT FROM true`,
         sql`${normalizedWorkOrders.isInternal} = false`,
       ),

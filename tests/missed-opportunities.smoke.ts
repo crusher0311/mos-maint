@@ -15,6 +15,9 @@
  *    only, top-missed grouping by serviceKey with title fallback, ordering.
  *  - normalizeWindowDays clamping.
  */
+import { sql } from "drizzle-orm";
+import { PgDialect } from "drizzle-orm/pg-core";
+import { buildCloseDateSincePredicate } from "../lib/missed-opportunities-query";
 import {
   planItemsFromBuckets,
   evaluateRoLines,
@@ -145,6 +148,39 @@ console.log("Window normalization:");
   ok("unknown → 30", normalizeWindowDays("14") === 30);
   ok("garbage → 30", normalizeWindowDays("abc") === 30);
   ok("null → 30", normalizeWindowDays(null) === 30);
+}
+
+console.log("Window-filter parameter binding (Task #1180 regression):");
+{
+  // The closed-at expression is a raw sql`` coalesce, so drizzle has no
+  // column encoder for the comparison's right-hand side. If a raw JS Date
+  // is ever bound as the param again, postgres-js throws
+  // ERR_INVALID_ARG_TYPE and every report compute 500s. Guard: the built
+  // query must bind ONLY string params (ISO date), never a Date instance.
+  const closeDate = sql<Date | null>`coalesce("closed_date", "completed_date")`;
+  const since = new Date("2026-08-01T00:00:00.000Z");
+  const predicate = buildCloseDateSincePredicate(closeDate, since);
+  const q = new PgDialect().sqlToQuery(predicate);
+  ok("exactly one bound param", q.params.length === 1, `got ${q.params.length}`);
+  ok(
+    "param is an ISO string, not a Date",
+    typeof q.params[0] === "string" && q.params[0] === since.toISOString(),
+    `got ${typeof q.params[0]}: ${String(q.params[0])}`,
+  );
+  ok(
+    "no Date instance among params",
+    !q.params.some((p) => p instanceof Date),
+  );
+  ok(
+    "SQL casts the param to timestamptz",
+    /::timestamptz/.test(q.sql),
+    q.sql,
+  );
+  ok(
+    "SQL compares coalesce >= param",
+    /coalesce\("closed_date", "completed_date"\) >= \$1/.test(q.sql),
+    q.sql,
+  );
 }
 
 if (failed > 0) {
