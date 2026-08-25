@@ -125,6 +125,13 @@ export async function listShopsByShopIds(
   return listShopsByQuery({ shopId: { $in: shopIds } }, projection);
 }
 
+export async function listAllShops(): Promise<ShopDoc[]> {
+  if (isIdentityPgCanonical()) {
+    return (await pg.listAllShops()) as unknown as ShopDoc[];
+  }
+  return listShopsByQuery({});
+}
+
 // NOT flag-gated: no live callers in the app/lib tree (grep found
 // none), and it takes an arbitrary Mongo UpdateFilter. Leaving it
 // Mongo-only avoids adding an untested translation path with no
