@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
-import { issueExtensionActionGrant } from "@/lib/extension-action-grant";
+import {
+  isValidExtensionProviderAction,
+  issueExtensionActionGrant,
+} from "@/lib/extension-action-grant";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -25,9 +28,23 @@ async function _POST(request: NextRequest) {
   const provider = String(body.provider || "").toLowerCase();
   const smsShopId = String(body.smsShopId || "");
   const action = String(body.action || "");
-  if (!provider || !smsShopId || !action) {
+  if (!provider || !smsShopId) {
     return NextResponse.json(
-      { error: "provider, smsShopId, and action are required" },
+      {
+        error: "provider and smsShopId are required",
+        code: "PROVIDER_ACTION_REQUEST_INVALID",
+      },
+      { status: 400, headers: corsHeaders },
+    );
+  }
+  if (!isValidExtensionProviderAction(action)) {
+    return NextResponse.json(
+      {
+        error: action
+          ? "Provider action has unsupported syntax"
+          : "action is required",
+        code: "PROVIDER_ACTION_INVALID",
+      },
       { status: 400, headers: corsHeaders },
     );
   }

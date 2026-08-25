@@ -150,12 +150,13 @@ ok(
 
 const now = Date.now();
 const nowSeconds = Math.floor(now / 1000);
+const releasedAddToRoAction = "tekmetric:post:/api/shop/id/job";
 const claims = {
   version: 1,
   sessionId: "session-1",
   shopId: 7,
   provider: "tekmetric",
-  action: "tekmetric:post:job",
+  action: releasedAddToRoAction,
   issuedAt: nowSeconds,
   expiresAt: nowSeconds + 90,
   nonce: "0123456789abcdef01234567",
@@ -166,13 +167,13 @@ const receipt = {
   expiresAt: new Date(claims.expiresAt * 1000).toISOString(),
   shopId: 7,
   provider: "tekmetric",
-  providerAction: "tekmetric:post:job",
+  providerAction: releasedAddToRoAction,
 };
 ok(
-  "receipt core accepts an exact short-lived provider/action/shop binding",
+  "receipt core accepts the released Add to RO action with exact short-lived scope",
   grantCore.validateReceipt(
     receipt,
-    { provider: "tekmetric", action: "tekmetric:post:job", shopId: 7 },
+    { provider: "tekmetric", action: releasedAddToRoAction, shopId: 7 },
     now,
   ).ok,
 );
@@ -180,7 +181,11 @@ ok(
   "receipt core rejects action replay",
   !grantCore.validateReceipt(
     receipt,
-    { provider: "tekmetric", action: "tekmetric:delete:job", shopId: 7 },
+    {
+      provider: "tekmetric",
+      action: "tekmetric:delete:/api/shop/id/job",
+      shopId: 7,
+    },
     now,
   ).ok,
 );
@@ -188,7 +193,7 @@ ok(
   "receipt core rejects expiry",
   !grantCore.validateReceipt(
     receipt,
-    { provider: "tekmetric", action: "tekmetric:post:job", shopId: 7 },
+    { provider: "tekmetric", action: releasedAddToRoAction, shopId: 7 },
     now + 91_000,
   ).ok,
 );

@@ -4,11 +4,13 @@ import * as sessions from "../lib/extension-session";
 import {
   __deps as actionGrantDeps,
   consumeExtensionActionGrant,
+  isValidExtensionProviderAction,
   issueExtensionActionGrant,
   verifyExtensionActionGrant,
 } from "../lib/extension-action-grant";
 import { checkExtensionWritePermission } from "../lib/extension-write-guard";
 import { allPolicyEntries } from "../lib/extension-route-policy";
+import { POST as actionGrantPOST } from "../app/api/extension/action-grant/route";
 
 let failed = 0;
 function ok(name: string, condition: boolean, detail?: string) {
@@ -23,6 +25,14 @@ function request(path: string, method = "GET", token = "exts_test") {
   return new NextRequest(`http://localhost${path}`, {
     method,
     headers: { authorization: `Bearer ${token}` },
+  });
+}
+
+function jsonPost(path: string, body: unknown) {
+  return new NextRequest(`http://localhost${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
   });
 }
 
@@ -192,11 +202,85 @@ async function run() {
     ok("active lookup touches use tracking", lookedUp.status === "active" && touched === "lookup-1");
 
     process.env.SESSION_SECRET = "extension-action-grant-test-secret";
+    const addToRoAction = "tekmetric:post:/api/shop/id/job";
+    ok(
+      "released Tekmetric Add to RO action syntax is valid",
+      isValidExtensionProviderAction(addToRoAction),
+    );
+    ok(
+      "endpoint-scoped Tekmetric mutation methods all use the bounded action contract",
+      ["post", "put", "patch", "delete"].every((method) => {
+        const action = `tekmetric:${method}:/api/shop/id/job`;
+        const methodGrant = issueExtensionActionGrant({
+          sessionId: "verified-1",
+          shopId: 7,
+          provider: "tekmetric",
+          action,
+          now: new Date("2026-08-21T12:00:00Z"),
+        });
+        return verifyExtensionActionGrant(methodGrant.grant, {
+          sessionId: "verified-1",
+          shopId: 7,
+          provider: "tekmetric",
+          action,
+          now: new Date("2026-08-21T12:00:30Z"),
+        }) !== null;
+      }),
+    );
+    ok(
+      "malformed and overlong provider actions remain rejected",
+      [
+        "",
+        "tekmetric:post:/api/shop/{id}/job",
+        "tekmetric:post:/api/shop/id/job?repairOrderId=123",
+        "tekmetric:post:/api/shop/id/job\nother",
+        `tekmetric:post:/${"a".repeat(80)}`,
+      ].every((action) => !isValidExtensionProviderAction(action)),
+    );
+
+    const missingActionResponse = await actionGrantPOST(
+      jsonPost("/api/extension/action-grant", {
+        provider: "tekmetric",
+        smsShopId: "7",
+      }),
+    );
+    const missingActionBody = await missingActionResponse.json();
+    ok(
+      "missing action returns a stable client error",
+      missingActionResponse.status === 400 &&
+        missingActionBody.code === "PROVIDER_ACTION_INVALID",
+    );
+    const malformedActionResponse = await actionGrantPOST(
+      jsonPost("/api/extension/action-grant", {
+        provider: "tekmetric",
+        smsShopId: "7",
+        action: "tekmetric:post:/api/shop/{id}/job",
+      }),
+    );
+    const malformedActionBody = await malformedActionResponse.json();
+    ok(
+      "malformed action returns a stable client error instead of a 500",
+      malformedActionResponse.status === 400 &&
+        malformedActionBody.code === "PROVIDER_ACTION_INVALID",
+    );
+    const releasedActionResponse = await actionGrantPOST(
+      jsonPost("/api/extension/action-grant", {
+        provider: "tekmetric",
+        smsShopId: "7",
+        action: addToRoAction,
+      }),
+    );
+    ok(
+      "released Add to RO action passes route validation and reaches authentication",
+      releasedActionResponse.status === 401,
+      `got ${releasedActionResponse.status}`,
+    );
+
     const actionGrant = issueExtensionActionGrant({
       sessionId: "verified-1",
       shopId: 7,
       provider: "tekmetric",
-      action: "tekmetric:post:job",
+      action: addToRoAction,
       now: new Date("2026-08-21T12:00:00Z"),
     });
     ok(
@@ -205,7 +289,7 @@ async function run() {
         sessionId: "verified-1",
         shopId: 7,
         provider: "tekmetric",
-        action: "tekmetric:post:job",
+        action: addToRoAction,
         now: new Date("2026-08-21T12:00:30Z"),
       }) !== null,
     );
@@ -215,7 +299,17 @@ async function run() {
         sessionId: "verified-1",
         shopId: 8,
         provider: "tekmetric",
-        action: "tekmetric:post:job",
+        action: addToRoAction,
+        now: new Date("2026-08-21T12:00:30Z"),
+      }) === null,
+    );
+    ok(
+      "action grant rejects cross-session replay",
+      verifyExtensionActionGrant(actionGrant.grant, {
+        sessionId: "verified-2",
+        shopId: 7,
+        provider: "tekmetric",
+        action: addToRoAction,
         now: new Date("2026-08-21T12:00:30Z"),
       }) === null,
     );
@@ -225,7 +319,7 @@ async function run() {
         sessionId: "verified-1",
         shopId: 7,
         provider: "tekmetric",
-        action: "tekmetric:post:job",
+        action: addToRoAction,
         now: new Date("2026-08-21T12:02:01Z"),
       }) === null,
     );
@@ -237,11 +331,42 @@ async function run() {
       consumedHashes.add(input.grantHash);
       return "consumed";
     }) as any;
+    const actionMismatch = await consumeExtensionActionGrant(
+      actionGrant.grant,
+      {
+        provider: "tekmetric",
+        action: "tekmetric:delete:/api/shop/id/job",
+        now: new Date("2026-08-21T12:00:30Z"),
+      },
+    );
+    const providerMismatch = await consumeExtensionActionGrant(
+      actionGrant.grant,
+      {
+        provider: "shopware",
+        action: addToRoAction,
+        now: new Date("2026-08-21T12:00:30Z"),
+      },
+    );
+    const expiredConsumption = await consumeExtensionActionGrant(
+      actionGrant.grant,
+      {
+        provider: "tekmetric",
+        action: addToRoAction,
+        now: new Date("2026-08-21T12:02:01Z"),
+      },
+    );
+    ok(
+      "mismatched and expired grants are rejected before consumption",
+      actionMismatch.status === "invalid" &&
+        providerMismatch.status === "invalid" &&
+        expiredConsumption.status === "invalid" &&
+        consumedHashes.size === 0,
+    );
     const firstConsumption = await consumeExtensionActionGrant(
       actionGrant.grant,
       {
         provider: "tekmetric",
-        action: "tekmetric:post:job",
+        action: addToRoAction,
         now: new Date("2026-08-21T12:00:30Z"),
       },
     );
@@ -249,7 +374,7 @@ async function run() {
       actionGrant.grant,
       {
         provider: "tekmetric",
-        action: "tekmetric:post:job",
+        action: addToRoAction,
         now: new Date("2026-08-21T12:00:31Z"),
       },
     );
@@ -263,7 +388,7 @@ async function run() {
       (actionGrant.grant.endsWith("a") ? "b" : "a");
     const forgedConsumption = await consumeExtensionActionGrant(forgedGrant, {
       provider: "tekmetric",
-      action: "tekmetric:post:job",
+      action: addToRoAction,
       now: new Date("2026-08-21T12:00:30Z"),
     });
     ok(

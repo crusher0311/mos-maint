@@ -3,6 +3,14 @@ import { consumeExtensionActionGrantUse } from "@/lib/data/repositories/pg/ident
 
 const GRANT_PREFIX = "extg_";
 const DEFAULT_TTL_SECONDS = 90;
+const PROVIDER_ACTION_PATTERN = /^[a-z0-9._:/-]{1,80}$/i;
+
+export function isValidExtensionProviderAction(action: unknown): action is string {
+  return (
+    typeof action === "string" &&
+    PROVIDER_ACTION_PATTERN.test(action)
+  );
+}
 
 export interface ExtensionActionGrantClaims {
   version: 1;
@@ -49,7 +57,7 @@ export function issueExtensionActionGrant(input: {
   ttlSeconds?: number;
   now?: Date;
 }): { grant: string; claims: ExtensionActionGrantClaims } {
-  if (!/^[a-z0-9._:-]{1,80}$/i.test(input.action)) {
+  if (!isValidExtensionProviderAction(input.action)) {
     throw new Error("Invalid provider action");
   }
   const nowSeconds = Math.floor((input.now ?? new Date()).getTime() / 1000);
