@@ -40,6 +40,7 @@ const drizzleMigrationFiles = [
   "0030_extension_sessions.sql",
   "0031_task1161_slow_queries.sql",
   "0032_task1183_nwo_close_date_idx.sql",
+  "0033_task1188_prod_index_parity.sql",
 ];
 
 async function main() {
