@@ -51,7 +51,7 @@ function authorized(req: NextRequest): boolean {
  *     (comma-separated) overrides the target list for staged rollout.
  *   - **Idempotent.** VINs with a valid cached plan are skipped, so repeated
  *     runs only rebuild what the 4h TTL expired.
- *   - **Bounded.** Caps on shops/run, VINs/shop, build concurrency, and a
+ *   - **Bounded.** Caps on shops/run, builds/shop, build concurrency, and a
  *     wall-clock deadline that exits before the scheduler timeout;
  *     unfinished shops resume next run (cache-hit skips make that cheap).
  *
@@ -112,6 +112,8 @@ export async function GET(req: NextRequest) {
     targets = targets.slice(0, maxShops);
 
     const perShop: Array<Record<string, unknown>> = [];
+    let totalScanned = 0;
+    let totalBuildsAttempted = 0;
     let totalWarmed = 0;
     let totalAlreadyCached = 0;
     let totalFailed = 0;
@@ -171,6 +173,7 @@ export async function GET(req: NextRequest) {
         },
       });
       const { pending, alreadyCached, skippedNoMileage } = selection;
+      let buildsAttempted = 0;
       let failed = selection.cacheLookupFailures + selection.mileageResolutionFailures;
       let cursor = 0;
 
@@ -186,6 +189,7 @@ export async function GET(req: NextRequest) {
               mileageSource,
               mileageEstimateDetails,
             } = pending[idx];
+            buildsAttempted++;
             try {
               const built = await triggerPlanBuild(
                 shopId,
@@ -205,6 +209,8 @@ export async function GET(req: NextRequest) {
         }),
       );
 
+      totalScanned += selection.scanned;
+      totalBuildsAttempted += buildsAttempted;
       totalWarmed += warmed;
       totalAlreadyCached += alreadyCached;
       totalFailed += failed;
@@ -213,8 +219,8 @@ export async function GET(req: NextRequest) {
         shopId,
         windowDays,
         windowVins: vehicles.length,
-        attempted: pending.length,
         scanned: selection.scanned,
+        buildsAttempted,
         warmed,
         alreadyCached,
         failed,
@@ -226,6 +232,8 @@ export async function GET(req: NextRequest) {
       ok: true,
       shopsTargeted: targets.length,
       shopsProcessed: perShop.length,
+      scanned: totalScanned,
+      buildsAttempted: totalBuildsAttempted,
       warmed: totalWarmed,
       alreadyCached: totalAlreadyCached,
       failed: totalFailed,
