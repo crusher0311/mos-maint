@@ -154,3 +154,4 @@
 - [Route files export handlers only](route-file-exports.md) — exporting test seams (__deps/__verifySignature) from a Next route.ts fails `npm run typecheck` via .next/types…
 - [Bootstrap proof duplicate grace](bootstrap-proof-duplicate-grace.md) — proof claim allows 3 exchanges/90s (duplicate_grace log); clients re-check auth before showing bootstrap errors.
 - [Extension bootstrap auto-elevation](extension-bootstrap-elevation.md) — matched_user needs shop assignment + usable identity (Tekmetric has no emailVerified flag); orgShops quirk in tekmetric-byemployee-orgshops.md.
+- [AutoFlow bootstrap infeasible](autoflow-bootstrap-proof-findings.md) — no provider-attested current-user proof on v3 (cookie-only) or v4 (Inertia props + bearer w/ only broadcasting/auth); stays unsupported.

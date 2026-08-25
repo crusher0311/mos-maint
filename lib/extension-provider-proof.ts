@@ -252,11 +252,19 @@ async function claimProofOnce(
  *   is never involved.
  *
  * Shop-Ware and AutoFlow intentionally remain unsupported. Shop-Ware exposes
- * no independently verifiable current-session subject at all. AutoFlow (v3
- * PHP `*.autotext.me` / v4 Laravel `app.autoflow.com`) is cookie-based with
- * no confirmed identity endpoint; verifying it would require forwarding the
- * whole session cookie to guessed endpoints, which fails the "server-probeable
- * single-purpose proof" bar. Both keep the calm `unsupported` outcome.
+ * no independently verifiable current-session subject at all. AutoFlow was
+ * re-probed for this in depth (see docs/autoflow-bootstrap-proof-findings.md):
+ * - v3 (`*.autotext.me`, PHP) is cookie-session only — no bearer/identity XHR;
+ *   verifying it would require forwarding the whole session cookie, which fails
+ *   the "narrow single-purpose credential, no wholesale cookie" bar.
+ * - v4 (`app.autoflow.com`, Laravel + Inertia + Vue) renders the current
+ *   operator from server-side page props (`$page.props.auth.user`), not a
+ *   probeable XHR. Every identity route (`/api/user`, `/api/v1/me`, …) 404s.
+ *   The only bearer-validating endpoint, `POST /api/broadcasting/auth`, returns
+ *   a channel signature (401 on a bad token) but never discloses the operator's
+ *   email or a stable subject, so it cannot drive `matched_user` elevation.
+ * With no provider-attested current-user subject on either version, AutoFlow
+ * keeps the calm `unsupported` outcome — never forwarding cookies or probing.
  */
 export async function verifyProviderSessionProof(input: {
   provider: string;

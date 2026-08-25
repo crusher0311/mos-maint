@@ -1,5 +1,6 @@
 import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "node:crypto";
 import type { Db } from "mongodb";
 import { getDb } from "@/lib/mongo";
 import bcrypt from "bcryptjs";
@@ -65,14 +66,15 @@ async function _POST(request: NextRequest) {
     const {
       email,
       password,
+      loginCode,
       shopId: requestedShopId,
       smsShopId: requestedSmsShopId,
       provider: requestedProvider,
     } = await request.json();
 
-    if (!email || !password) {
+    if (!email || (!password && !loginCode)) {
       return NextResponse.json(
-        { error: "Email and password are required" },
+        { error: "Email and password (or sign-in code) are required" },
         { status: 400, headers: corsHeaders }
       );
     }
@@ -93,6 +95,51 @@ async function _POST(request: NextRequest) {
 
     let user: any = null;
 
+    if (!password && loginCode) {
+      // Passwordless sign-in: verify the single-use emailed code (issued by
+      // /api/extension/auth/request-code). Proof of inbox ownership stands in
+      // for the password; the rest of the flow (shop selection, access checks,
+      // verified 30-day session) is identical to a password login.
+      const emailLower = String(email).toLowerCase().trim();
+      const codes = db.collection("extension_login_codes");
+      const now = new Date();
+      const codeDoc = await codes.findOne(
+        { emailLower, usedAt: null, expiresAt: { $gt: now } },
+        { sort: { createdAt: -1 } },
+      );
+      const submitted = String(loginCode).trim();
+      const submittedHash = crypto
+        .createHash("sha256")
+        .update(submitted, "utf8")
+        .digest("hex");
+      if (
+        !codeDoc ||
+        Number(codeDoc.attempts || 0) >= 5 ||
+        !/^\d{6}$/.test(submitted) ||
+        submittedHash !== codeDoc.codeHash
+      ) {
+        if (codeDoc) {
+          await codes.updateOne({ _id: codeDoc._id }, { $inc: { attempts: 1 } });
+        }
+        return NextResponse.json(
+          { error: "Invalid or expired sign-in code" },
+          { status: 401, headers: corsHeaders },
+        );
+      }
+      // Single use: consume atomically so a replayed code loses the race.
+      const consumed = await codes.updateOne(
+        { _id: codeDoc._id, usedAt: null },
+        { $set: { usedAt: now } },
+      );
+      if (consumed.modifiedCount !== 1) {
+        return NextResponse.json(
+          { error: "Invalid or expired sign-in code" },
+          { status: 401, headers: corsHeaders },
+        );
+      }
+      user = candidates.find((c: any) => c.active !== false) || candidates[0];
+      console.info("[Extension Session] login-code verified for account");
+    } else {
     for (const candidate of candidates) {
       const dbHash = candidate.passwordHash;
       let passOk = false;
@@ -117,6 +164,7 @@ async function _POST(request: NextRequest) {
         user = candidate;
         break;
       }
+    }
     }
 
     if (!user) {

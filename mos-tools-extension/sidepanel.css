@@ -216,6 +216,30 @@ body {
   cursor: not-allowed;
 }
 
+.btn-secondary {
+  width: 100%;
+  margin-top: 8px;
+  padding: 12px;
+  background: transparent;
+  color: var(--primary);
+  border: 1px solid var(--primary);
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-secondary:hover {
+  background: var(--gray-100, #f4f4f5);
+}
+
+.btn-secondary:disabled {
+  color: var(--gray-400);
+  border-color: var(--gray-400);
+  cursor: not-allowed;
+}
+
 .error-text {
   color: var(--danger);
   font-size: 13px;

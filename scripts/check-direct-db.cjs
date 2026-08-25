@@ -60,6 +60,9 @@ const ALLOWLIST = new Set([
   "app/api/auth/change-password/route.ts",
   "app/api/auth/complete-setup/route.ts",
   "app/api/auth/forgot/route.ts",
+  // Passwordless extension sign-in: issues single-use emailed codes in the
+  // extension_login_codes collection (mirrors auth/forgot's token store).
+  "app/api/extension/auth/request-code/route.ts",
   "app/api/auth/invite/route.ts",
   "app/api/auth/login/route.ts",
   "app/api/auth/me/route.ts",

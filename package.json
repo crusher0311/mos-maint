@@ -210,11 +210,13 @@
     "test:tekmetric-webhook-first-cadence": "tsx tests/tekmetric-webhook-first-cadence.smoke.ts",
     "test:tekmetric-webhook-subscribe-retry": "tsx tests/tekmetric-webhook-subscribe-retry.smoke.ts",
     "test:extension-create-idempotency": "tsx tests/extension-create-clientRequestId.smoke.ts",
-    "test:extension-principal-scope": "tsx tests/extension-principal-scope.smoke.ts && npm run test:extension-secure-sessions && npm run test:extension-direct-provider-grants && npm run test:extension-auth-context-advisory && npm run test:extension-bootstrap-unavailable",
+    "test:extension-principal-scope": "tsx tests/extension-principal-scope.smoke.ts && npm run test:extension-secure-sessions && npm run test:extension-direct-provider-grants && npm run test:extension-auth-context-advisory && npm run test:extension-bootstrap-unavailable && npm run test:extension-provider-proof && npm run test:extension-login-code",
     "test:typecheck-behavior-regressions": "tsx tests/typecheck-behavior-regressions.smoke.ts",
     "typecheck": "tsc --noEmit",
     "test:slow-query-analyzer": "tsx tests/slow-query-analyzer.smoke.ts && npm run test:slow-query-mongo-monitor",
-    "test:slow-query-mongo-monitor": "tsx tests/slow-query-mongo-monitor.smoke.ts"
+    "test:slow-query-mongo-monitor": "tsx tests/slow-query-mongo-monitor.smoke.ts",
+    "test:extension-provider-proof": "tsx tests/extension-provider-proof.smoke.ts",
+    "test:extension-login-code": "tsx tests/extension-login-code.smoke.ts"
   },
   "dependencies": {
     "@deepgram/sdk": "^5.0.0",

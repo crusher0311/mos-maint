@@ -260,6 +260,10 @@ const elements = {
   apiUrlInput: document.getElementById('api-url'),
   rememberMeCheckbox: document.getElementById('remember-me'),
   loginError: document.getElementById('login-error'),
+  loginCodeGroup: document.getElementById('login-code-group'),
+  loginCodeInput: document.getElementById('login-code'),
+  emailCodeBtn: document.getElementById('email-code-btn'),
+  codeStatus: document.getElementById('code-status'),
   bootstrapStatus: document.getElementById('bootstrap-status'),
   sessionStepUpBtn: document.getElementById('session-step-up-btn'),
   
@@ -586,6 +590,9 @@ function setPasswordVisibility(show) {
 function setupEventListeners() {
   // Login form
   elements.loginForm.addEventListener('submit', handleLogin);
+  if (elements.emailCodeBtn) {
+    elements.emailCodeBtn.addEventListener('click', handleRequestLoginCode);
+  }
   if (elements.sessionStepUpBtn) {
     elements.sessionStepUpBtn.addEventListener('click', () => {
       showLoginState();
@@ -843,6 +850,13 @@ function showLoginState() {
   elements.loginState.classList.remove('hidden');
   elements.mainState.classList.add('hidden');
   setPasswordVisibility(false);
+  // Reset passwordless-code UI to its default (hidden) state.
+  if (elements.loginCodeGroup) {
+    elements.loginCodeGroup.classList.add('hidden');
+    elements.loginCodeInput.value = '';
+    elements.codeStatus.classList.add('hidden');
+    elements.passwordInput.required = true;
+  }
   chrome.storage.local.get(['mosLoginEmail', 'mosRememberMe'], (stored) => {
     if (stored.mosRememberMe !== false && stored.mosLoginEmail) {
       elements.emailInput.value = stored.mosLoginEmail;
@@ -1525,13 +1539,53 @@ function updateTabAccessibility() {
 }
 
 // ==================== AUTHENTICATION ====================
+async function handleRequestLoginCode() {
+  const email = (elements.emailInput.value || '').trim();
+  const apiUrl = elements.apiUrlInput.value || 'https://mos.tools';
+  if (!email) {
+    elements.loginError.textContent = 'Enter your email first, then request a code.';
+    elements.loginError.classList.remove('hidden');
+    elements.emailInput.focus();
+    return;
+  }
+  elements.loginError.classList.add('hidden');
+  elements.emailCodeBtn.disabled = true;
+  elements.emailCodeBtn.textContent = 'Sending…';
+  try {
+    const result = await sendMessage({ action: 'MOS_REQUEST_LOGIN_CODE', email, apiUrl });
+    if (!result || result.success === false) {
+      throw new Error((result && result.error) || 'Could not send the code');
+    }
+    // Passwordless mode: password becomes optional, code field appears.
+    elements.passwordInput.required = false;
+    elements.loginCodeGroup.classList.remove('hidden');
+    elements.loginCodeInput.value = '';
+    elements.loginCodeInput.focus();
+    elements.codeStatus.textContent = `If ${email} has an account, a 6-digit code is on its way. Enter it above and press Sign In.`;
+    elements.codeStatus.classList.remove('hidden');
+  } catch (err) {
+    elements.loginError.textContent = err.message || 'Could not send the code';
+    elements.loginError.classList.remove('hidden');
+  } finally {
+    elements.emailCodeBtn.disabled = false;
+    elements.emailCodeBtn.textContent = 'Email me a sign-in code';
+  }
+}
+
 async function handleLogin(e) {
   e.preventDefault();
   
   const email = elements.emailInput.value;
   const password = elements.passwordInput.value;
+  const loginCode = elements.loginCodeInput ? elements.loginCodeInput.value.trim() : '';
   const apiUrl = elements.apiUrlInput.value || 'https://mos.tools';
   const rememberMe = elements.rememberMeCheckbox.checked;
+
+  if (!password && !loginCode) {
+    elements.loginError.textContent = 'Enter your password, or request a sign-in code by email.';
+    elements.loginError.classList.remove('hidden');
+    return;
+  }
   
   elements.loginError.classList.add('hidden');
   // Manual sign-in supersedes any lingering bootstrap ("automatic access")
@@ -1545,7 +1599,8 @@ async function handleLogin(e) {
     const result = await sendMessage({
       action: 'MOS_LOGIN',
       email,
-      password,
+      password: password || undefined,
+      loginCode: (!password && loginCode) ? loginCode : undefined,
       apiUrl,
       rememberMe
     });

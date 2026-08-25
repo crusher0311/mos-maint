@@ -509,7 +509,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   // -------------------- MOS Authentication --------------------
   if (message.action === "MOS_LOGIN") {
-    handleMosLogin(message.email, message.password, message.apiUrl, message.rememberMe !== false)
+    handleMosLogin(message.email, message.password, message.apiUrl, message.rememberMe !== false, message.loginCode)
+      .then(result => sendResponse(result))
+      .catch(err => sendResponse({ success: false, error: err.message }));
+    return true;
+  }
+
+  if (message.action === "MOS_REQUEST_LOGIN_CODE") {
+    handleRequestLoginCode(message.email, message.apiUrl)
       .then(result => sendResponse(result))
       .catch(err => sendResponse({ success: false, error: err.message }));
     return true;
@@ -2036,7 +2043,25 @@ async function requestProviderActionGrant(provider, providerAction, shopId, opti
   return consumeProviderActionGrant(receipt);
 }
 
-async function handleMosLogin(email, password, apiUrl, rememberMe = true) {
+// Passwordless sign-in step 1: ask the server to email a single-use 6-digit
+// code. Always resolves success (no account enumeration); step 2 is a normal
+// MOS_LOGIN with { loginCode } instead of a password.
+async function handleRequestLoginCode(email, apiUrl) {
+  await _stateReady;
+  const base = (apiUrl || mosApiUrl || 'https://mos.tools').replace(/\/+$/, '');
+  const response = await fetch(`${base}/api/extension/auth/request-code`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.error || `Could not send the code (${response.status})`);
+  }
+  return { success: true };
+}
+
+async function handleMosLogin(email, password, apiUrl, rememberMe = true, loginCode = undefined) {
   let loginEpoch = null;
   let priorBootstrapToken = null;
   let priorBootstrapApiUrl = null;
@@ -2063,7 +2088,8 @@ async function handleMosLogin(email, password, apiUrl, rememberMe = true) {
       },
       body: JSON.stringify({
         email,
-        password,
+        password: password || undefined,
+        loginCode: (!password && loginCode) ? loginCode : undefined,
         provider: loginContext?.provider || undefined,
         smsShopId: loginContext?.shopId || undefined,
       })
@@ -2112,7 +2138,9 @@ async function handleMosLogin(email, password, apiUrl, rememberMe = true) {
     
     if (rememberMe) {
       storageData.mosLoginEmail = email;
-      storageData.mosLoginPass = password;
+      // Code logins have no password to remember; keep any previously stored
+      // one rather than clobbering it with undefined.
+      if (password) storageData.mosLoginPass = password;
     } else {
       chrome.storage.local.remove(['mosLoginEmail', 'mosLoginPass']);
     }

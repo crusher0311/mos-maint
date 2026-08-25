@@ -231,6 +231,9 @@ const PUBLIC_ALLOWLIST = new Set([
   "app/api/auth/logout/route.ts",
   "app/api/auth/forgot/route.ts",
   "app/api/auth/reset/route.ts",
+  // Extension passwordless sign-in step 1 — public by design (like forgot):
+  // emails a single-use code; never reveals whether the account exists.
+  "app/api/extension/auth/request-code/route.ts",
   "app/api/auth/setup/route.ts",
   "app/api/auth/setup-shop/route.ts",
   "app/api/auth/setup-complete/route.ts",

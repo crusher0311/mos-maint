@@ -352,6 +352,25 @@ async function run() {
     "autoflow keeps the calm unsupported outcome (no confirmed identity endpoint)",
     autoflowUnsupported.status === "unsupported" && !autoflowFetched,
   );
+  // Even when the extension supplies a bearer-shaped proof (v4 localStorage
+  // token), AutoFlow must stay unsupported and NEVER live-probe: discovery
+  // found no provider endpoint that attests the operator's identity, and the
+  // cookie-only v3 path forbids wholesale cookie forwarding. See
+  // docs/autoflow-bootstrap-proof-findings.md.
+  autoflowFetched = false;
+  const autoflowWithProof = await verifyProviderSessionProof({
+    provider: "autoflow",
+    smsShopId: "harrells-nc87",
+    proof: {
+      kind: "autoflow_bearer",
+      token: "af-localstorage-bearer-token-123456",
+      origin: "https://app.autoflow.com",
+    },
+  });
+  ok(
+    "autoflow ignores a supplied bearer proof and never probes the provider",
+    autoflowWithProof.status === "unsupported" && !autoflowFetched,
+  );
 
   let unsupportedFetched = false;
   __deps.fetch = async () => {
