@@ -53,8 +53,12 @@ export async function computeMissedOpportunityReport(
   const pg = getPg();
   const since = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
 
-  // Closed ROs in window, newest close first. `closed_date` is indexed;
-  // completed_date fills for providers that never stamp closedDate.
+  // Closed ROs in window, newest close first. completed_date fills for
+  // providers that never stamp closedDate. This exact 2-arg coalesce
+  // expression is served by nwo_shop_close_date_idx
+  // (drizzle/0032_task1183_nwo_close_date_idx.sql) — keep the expression
+  // in sync with that index or the query degrades to a multi-second
+  // shop_id scan on large shops (Task #1183).
   const closeDate = sql<Date | null>`coalesce(${normalizedWorkOrders.closedDate}, ${normalizedWorkOrders.completedDate})`;
   const wos = await pg
     .select({
