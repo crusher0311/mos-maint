@@ -5,6 +5,14 @@ import { getDb } from "@/lib/mongo";
 import crypto from "crypto";
 import { enrichVinsWithAces } from "@/lib/job-index-aces";
 import { extractProtractorLineCost } from "@/lib/integrations/protractor/part-cost";
+import {
+  extractProtractorServicePackages,
+  getProtractorPackageIdentity,
+  getProtractorPackageLines,
+  normalizeProtractorPackageLine,
+  normalizeProtractorServiceJobStatus,
+  summarizeProtractorPackage,
+} from "@/lib/integrations/protractor/package-normalization";
 
 // Round a money value to cents so float-representation blips
 // (e.g. 267.29999999999995 vs 267.3) don't flip the content hash.
@@ -255,20 +263,7 @@ export function extractJobIndexFromWorkOrder(
   const entries: JobIndexEntry[] = [];
   
   const vehicle = workOrder.ServiceItem || workOrder.vehicle || {};
-  const servicePackages = workOrder.ServicePackages?.ItemCollection || 
-                          workOrder.ServicePackages || 
-                          [];
-  
-  // Also capture DeferredServicePackages - these are declined/recommended services with pricing
-  const deferredPackages = workOrder.DeferredServicePackages?.ItemCollection || 
-                           workOrder.DeferredServicePackages || 
-                           [];
-  
-  // Combine both completed and deferred packages for indexing
-  const allPackages = [
-    ...(Array.isArray(servicePackages) ? servicePackages.map(p => ({ ...p, _isDeferred: false })) : []),
-    ...(Array.isArray(deferredPackages) ? deferredPackages.map(p => ({ ...p, _isDeferred: true })) : []),
-  ];
+  const allPackages = extractProtractorServicePackages(workOrder);
   
   if (allPackages.length === 0) {
     return entries;
@@ -282,71 +277,39 @@ export function extractJobIndexFromWorkOrder(
   for (const pkg of allPackages) {
     const title = pkg.ServicePackageHeader?.Title || pkg.Title || pkg.title || "";
     const description = pkg.ServicePackageHeader?.Description || pkg.Description || pkg.description || "";
-    const isDeferred = pkg._isDeferred === true;
+    const disposition = normalizeProtractorServiceJobStatus(
+      pkg.Status,
+      pkg._isDeferred === true,
+    );
+    const isDeferred = disposition === "deferred" || disposition === "declined";
     
     if (!title) continue;
     
     const lines: JobLineItem[] = [];
     let laborHours = 0;
-    let laborAmount = 0;
-    let partsAmount = 0;
-    let totalAmount = 0;
-    
-    const packageLines = pkg.ServicePackageLines?.ItemCollection || 
-                         pkg.ServicePackageLines || 
-                         pkg.lines || 
-                         [];
+    const pricing = summarizeProtractorPackage(pkg);
+    const packageLines = getProtractorPackageLines(pkg);
     
     if (Array.isArray(packageLines)) {
       for (const line of packageLines) {
-        const lineType = normalizeLineType(line.Type || line.LineType || line.lineType);
-        const quantity = parseFloat(line.Quantity || line.quantity || "1") || 1;
-        
-        // Handle Protractor's nested PriceSummary structure and flat fields
-        const priceSummary = line.PriceSummary || {};
-        const unitPrice = parseFloat(
-          priceSummary.SellPrice || 
-          line.Price || 
-          line.UnitPrice || 
-          line.unitPrice || 
-          "0"
-        ) || 0;
-        const extendedPrice = parseFloat(
-          priceSummary.SellTotal || 
-          priceSummary.SellSubtotal ||
-          line.ExtendedPrice || 
-          line.ExtendedTotal || 
-          line.Total || 
-          line.total || 
-          "0"
-        ) || (quantity * unitPrice);
-        
-        // Task #681 — capture the real part cost from Protractor's flat
-        // Cost/TotalCost fields (non-labor only; labor TotalCost is the labor
-        // total, not a parts cost).
-        const lineCost = lineType === "labor" ? {} : extractProtractorLineCost(line);
+        const normalized = normalizeProtractorPackageLine(line);
+        const lineType = normalizeLineType(normalized.lineType);
+        const quantity = normalized.quantity;
         lines.push({
           lineType,
-          description: line.Description || line.description || "",
-          partNumber: line.PartNumber || line.partNumber || undefined,
-          manufacturer: line.Manufacturer || line.manufacturer || undefined,
+          description: normalized.description,
+          partNumber: normalized.partNumber || undefined,
+          manufacturer: normalized.manufacturer || undefined,
           quantity,
-          unitPrice,
-          extendedPrice,
-          ...(lineCost.cost !== undefined ? { cost: lineCost.cost } : {}),
-          ...(lineCost.extendedCost !== undefined ? { extendedCost: lineCost.extendedCost } : {}),
+          unitPrice: normalized.unitPrice,
+          extendedPrice: normalized.extendedPrice,
+          ...(normalized.cost !== undefined ? { cost: normalized.cost } : {}),
+          ...(normalized.extendedCost !== undefined ? { extendedCost: normalized.extendedCost } : {}),
         });
         
         if (lineType === "labor") {
-          // Check for explicit hours field first, only fallback to quantity if no hours specified
-          const hoursValue = line.EstimatedHours ?? line.Hours ?? null;
-          const hours = hoursValue !== null ? (parseFloat(hoursValue) || 0) : quantity;
-          laborHours += hours;
-          laborAmount += extendedPrice;
-        } else if (lineType === "part") {
-          partsAmount += extendedPrice;
+          laborHours += quantity;
         }
-        totalAmount += extendedPrice;
       }
     }
     
@@ -371,7 +334,7 @@ export function extractJobIndexFromWorkOrder(
       shopId,
       workOrderId: workOrder.ID || workOrder.id,
       workOrderNumber: workOrder.WorkOrderNumber || workOrder.workOrderNumber,
-      servicePackageId: pkg.ID || pkg.id,
+      servicePackageId: getProtractorPackageIdentity(pkg) || "",
       performedAt: new Date(performedAt),
       isDeferred, // Track if this was deferred/declined work
       mileage: woMileage,
@@ -398,9 +361,9 @@ export function extractJobIndexFromWorkOrder(
       
       totals: {
         laborHours,
-        laborAmount,
-        partsAmount,
-        totalAmount,
+        laborAmount: pricing.laborTotal,
+        partsAmount: pricing.partsTotal,
+        totalAmount: pricing.total,
       },
       
       metadata: {

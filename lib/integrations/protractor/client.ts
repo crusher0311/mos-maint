@@ -15,11 +15,12 @@ import {
 import { findCachedWorkOrderByRoNumber } from "@/lib/data/repositories/protractor-work-orders";
 import { trackApiRequest, acquireDistributedRateLimitSlot } from "@/lib/api-usage-tracker";
 import {
-  extractProtractorLineCost,
   getShopPartCostRatio,
   resolvePartLineCost,
   logPartCostResolution,
 } from "./part-cost";
+import { normalizeProtractorPackageLine } from "./package-normalization";
+export { normalizeProtractorPackageLine } from "./package-normalization";
 
 const BASE_URL_V1 = "https://integration.protractor.com/IntegrationServices/1.0";
 const BASE_URL_V2 = "https://integration.protractor.com/IntegrationServices/2.0";
@@ -2990,120 +2991,6 @@ export function extractServicePackageTemplateContent(template: any): {
     title: String(title || ""),
     description: String(description || ""),
     lines,
-  };
-}
-
-// Normalize a single Protractor service-package / canned-job line into the
-// canonical shape downstream work-order construction expects
-// (`{ description, lineType, quantity, unitPrice, partNumber, manufacturer }`).
-//
-// Why this exists: canned-job / service-package-template line items don't
-// always carry their pricing on the flat `Price` field. They frequently
-// expose it under a nested `PriceSummary` (`SellPrice` / `SellTotal`) or, for
-// labor lines, a `Rate` field plus a separate `EstimatedHours` / `Hours`
-// quantity. Reading only `Price`/`UnitPrice`/`unitPrice` zeroed every line and
-// produced $0.00 package subtotals on pushed work orders even though the
-// canned job was priced in Protractor. The field set here mirrors the invoice
-// extractor in `lib/job-index.ts` (the established source of truth for what
-// Protractor lines actually look like) so a canned-job line and a historical
-// invoice line normalize identically.
-//
-// This is idempotent: feeding it an already-normalized line (lowercase
-// `lineType`, numeric `unitPrice`/`quantity`) returns the same values, so it's
-// safe to apply at both the read step (canned-jobs route) and the push step
-// (work-order creation) without double-mangling.
-export function normalizeProtractorPackageLine(l: any): {
-  description: string;
-  lineType: string;
-  quantity: number;
-  unitPrice: number;
-  partNumber: string;
-  manufacturer: string;
-  rank?: number;
-  // Task #681 — real per-unit part cost when the source line carries it
-  // (flat `Cost`/`TotalCost`). Absent on labor lines and cost-less lines.
-  cost?: number;
-  extendedCost?: number;
-} {
-  const lineType = l.Type || l.LineType || l.lineType || "Labor";
-  const isLabor = String(lineType).toLowerCase().includes("labor");
-  const priceSummary = (l.PriceSummary && typeof l.PriceSummary === "object") ? l.PriceSummary : {};
-
-  const toNum = (v: any): number => {
-    if (v === null || v === undefined || v === "") return NaN;
-    const n = parseFloat(String(v));
-    return Number.isFinite(n) ? n : NaN;
-  };
-
-  // Quantity. For labor lines, prefer an explicit hours field (the canned
-  // job's configured hours) over a raw count, mirroring lib/job-index.ts.
-  let quantity = toNum(l.Quantity ?? l.quantity);
-  if (!Number.isFinite(quantity) || quantity <= 0) quantity = 1;
-  if (isLabor) {
-    const hours = toNum(l.EstimatedHours ?? l.Hours ?? l.LaborHours);
-    if (Number.isFinite(hours) && hours > 0) quantity = hours;
-  }
-
-  // Unit price. Try the nested PriceSummary first, then flat fields, then
-  // (for labor) the per-hour Rate field.
-  const unitCandidates = [
-    priceSummary.SellPrice,
-    l.Price,
-    l.UnitPrice,
-    l.unitPrice,
-    ...(isLabor ? [l.Rate, l.LaborRate, l.laborRate] : []),
-  ];
-  let unitPrice = NaN;
-  for (const c of unitCandidates) {
-    const n = toNum(c);
-    if (Number.isFinite(n)) { unitPrice = n; break; }
-  }
-
-  // If no per-unit price surfaced but an extended/total is present, derive the
-  // unit price from it so the package subtotal still comes out right.
-  if (!Number.isFinite(unitPrice) || unitPrice === 0) {
-    const extCandidates = [
-      priceSummary.SellTotal,
-      priceSummary.SellSubtotal,
-      l.ExtendedTotal,
-      l.ExtendedPrice,
-      l.extendedPrice,
-      l.Total,
-      l.total,
-    ];
-    let ext = NaN;
-    for (const c of extCandidates) {
-      const n = toNum(c);
-      if (Number.isFinite(n)) { ext = n; break; }
-    }
-    if (Number.isFinite(ext) && ext > 0 && quantity > 0) {
-      unitPrice = ext / quantity;
-    }
-  }
-  if (!Number.isFinite(unitPrice)) unitPrice = 0;
-
-  // Task #681 — carry the real part cost through for non-labor lines. Labor
-  // lines are excluded because Protractor's labor `TotalCost` is the labor
-  // total, not a parts cost. Idempotent: an already-normalized line's `cost`/
-  // `extendedCost` round-trip unchanged via extractProtractorLineCost.
-  let cost: number | undefined;
-  let extendedCost: number | undefined;
-  if (!isLabor) {
-    const extracted = extractProtractorLineCost(l);
-    cost = extracted.cost;
-    extendedCost = extracted.extendedCost;
-  }
-
-  return {
-    description: l.Description || l.description || "",
-    lineType,
-    quantity,
-    unitPrice,
-    partNumber: l.PartNumber || l.partNumber || "",
-    manufacturer: l.Manufacturer || l.manufacturer || "",
-    rank: l.Rank ?? l.rank ?? undefined,
-    ...(cost !== undefined ? { cost } : {}),
-    ...(extendedCost !== undefined ? { extendedCost } : {}),
   };
 }
 

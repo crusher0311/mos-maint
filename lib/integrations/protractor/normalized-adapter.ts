@@ -39,6 +39,13 @@ import {
   cleanString,
 } from '@/lib/integrations/core/normalized-adapter';
 import { ObjectId } from 'mongodb';
+import {
+  extractProtractorServicePackages,
+  getProtractorPackageLines,
+  normalizeProtractorPackageLine,
+  normalizeProtractorServiceJobStatus,
+  summarizeProtractorPackage,
+} from './package-normalization';
 
 // Protractor (a .NET system) serializes "no date" as DateTime.MinValue —
 // "0001-01-01T00:00:00" — which JS happily parses into a year-1 Date. A
@@ -58,13 +65,15 @@ function parseBusinessDate(value: any): Date | undefined {
 // there are no labor lines / no hours, because 0 is treated as a "no mileage
 // math"-style sentinel by readers and the PG columns are nullable.
 export function sumLaborLineHours(sp: any): number | undefined {
-  const lines = sp?.ServicePackageLines?.ItemCollection || sp?.ServicePackageLines || [];
-  if (!Array.isArray(lines)) return undefined;
+  const lines = getProtractorPackageLines(sp);
   let total = 0;
   for (const line of lines) {
     const type = String(line?.Type || line?.LineType || '').toLowerCase();
     if (!type.includes('labor')) continue;
-    total += parseNumber(line.Hours || line.Quantity) || 0;
+    const hours = parseNumber(
+      line?.EstimatedHours ?? line?.Hours ?? line?.LaborHours ?? line?.Quantity,
+    );
+    if (hours && hours > 0) total += hours;
   }
   if (total <= 0) return undefined;
   return Math.round(total * 100) / 100;
@@ -262,6 +271,7 @@ export class ProtractorAdapter implements INormalizedAdapter {
   
   mapServiceJob(shopId: number, workOrderId: string, sourceData: any): Partial<NormalizedServiceJob> {
     const sp = sourceData;
+    const pricing = summarizeProtractorPackage(sp);
 
     // Protractor service packages almost never carry package-level hour
     // fields (EstimatedHours/ActualHours/BilledHours are absent), but their
@@ -275,9 +285,9 @@ export class ProtractorAdapter implements INormalizedAdapter {
       shopId,
       workOrderId,
       jobNumber: cleanString(sp.ID),
-      sequence: parseNumber(sp.Sequence) || 0,
+       sequence: parseNumber(sp.Sequence ?? sp._sourceSequence) || 0,
       jobType: sp.CannedJobID ? 'canned' : 'custom',
-      status: this.mapServiceJobStatus(sp.Status),
+       status: normalizeProtractorServiceJobStatus(sp.Status, sp._isDeferred === true),
       statusHistory: [],
       // Protractor service packages rarely carry their own completion date, so
       // prefer the package's nested header timestamps and fall back to the
@@ -311,12 +321,12 @@ export class ProtractorAdapter implements INormalizedAdapter {
       laborOperationCodes: [],
       technicianName: cleanString(sp.TechnicianName || sp.Technician),
       lineItems: [],
-      laborTotal: parseNumber(sp.LaborTotal || sp.Labor) || 0,
-      partsTotal: parseNumber(sp.PartsTotal || sp.Parts) || 0,
-      subletTotal: parseNumber(sp.SubletTotal) || 0,
-      feesTotal: parseNumber(sp.FeesTotal) || 0,
-      discountTotal: parseNumber(sp.DiscountTotal) || 0,
-      total: parseNumber(sp.Total) || 0,
+       laborTotal: pricing.laborTotal,
+       partsTotal: pricing.partsTotal,
+       subletTotal: pricing.subletTotal,
+       feesTotal: pricing.feesTotal,
+       discountTotal: pricing.discountTotal,
+       total: pricing.total,
       laborHoursEstimated: parseNumber(sp.EstimatedHours),
       laborHoursActual: parseNumber(sp.ActualHours),
       laborHoursBilled: parseNumber(sp.BilledHours || sp.Hours) ?? laborLineHours,
@@ -335,6 +345,7 @@ export class ProtractorAdapter implements INormalizedAdapter {
   mapLineItem(shopId: number, workOrderId: string, serviceJobId: string, sourceData: any): Partial<NormalizedLineItem> {
     const li = sourceData;
     const lineType = this.mapLineItemType(li);
+    const normalized = normalizeProtractorPackageLine(li);
     
     return {
       shopId,
@@ -343,23 +354,23 @@ export class ProtractorAdapter implements INormalizedAdapter {
       lineNumber: parseNumber(li.Sequence) || 0,
       lineType,
       partNumber: cleanString(li.PartNumber),
-      partDescription: cleanString(li.Description || li.Name) || 'Unknown Item',
-      partBrand: cleanString(li.Brand || li.Manufacturer),
-      partManufacturer: cleanString(li.Manufacturer),
+       partDescription: cleanString(normalized.description) || 'Unknown Item',
+       partBrand: cleanString(li.Brand || normalized.manufacturer),
+       partManufacturer: cleanString(normalized.manufacturer),
       partCondition: this.mapPartCondition(li),
-      quantity: parseNumber(li.Quantity) || 1,
+       quantity: normalized.quantity,
       quantityUnit: cleanString(li.Unit) || 'each',
-      unitCost: parseNumber(li.Cost || li.UnitCost) || 0,
-      unitPrice: parseNumber(li.Price || li.UnitPrice) || 0,
-      extendedPrice: parseNumber(li.ExtendedPrice || li.Total) || 0,
+       unitCost: normalized.cost ?? parseNumber(li.UnitCost) ?? 0,
+       unitPrice: normalized.unitPrice,
+       extendedPrice: normalized.extendedPrice,
       discountPercent: parseNumber(li.DiscountPercent),
       discountAmount: parseNumber(li.DiscountAmount),
       taxable: li.Taxable !== false,
       taxRate: parseNumber(li.TaxRate),
       taxAmount: parseNumber(li.TaxAmount),
       laborType: lineType === 'labor' ? 'flat_rate' : undefined,
-      laborHours: lineType === 'labor' ? parseNumber(li.Hours || li.Quantity) : undefined,
-      laborRate: lineType === 'labor' ? parseNumber(li.Rate || li.UnitPrice) : undefined,
+       laborHours: lineType === 'labor' ? normalized.quantity : undefined,
+       laborRate: lineType === 'labor' ? normalized.unitPrice : undefined,
       technicianName: cleanString(li.Technician),
       vendorName: cleanString(li.Vendor || li.Supplier),
       vendorPartNumber: cleanString(li.VendorPartNumber),
@@ -424,92 +435,21 @@ export class ProtractorAdapter implements INormalizedAdapter {
   }
   
   extractServiceJobsFromWorkOrder(sourceData: any): Partial<NormalizedServiceJob>[] {
-    const servicePackages = sourceData.ServicePackages?.ItemCollection || 
-                           sourceData.ServicePackages ||
-                           [];
-    
-    if (!Array.isArray(servicePackages)) return [];
-    
-    return servicePackages.map((sp: any, index: number) => {
-      // Extract title from ServicePackageHeader (Protractor structure)
-      const title = cleanString(
-        sp.ServicePackageHeader?.Title || 
-        sp.Name || 
-        sp.Description || 
-        sp.Title
-      ) || 'Unknown Service';
-      
-      const description = cleanString(
-        sp.ServicePackageHeader?.Description || 
-        sp.Description
-      );
-      
-      // Calculate totals from ServicePackageLines if not provided directly
-      const lines = sp.ServicePackageLines?.ItemCollection || sp.ServicePackageLines || [];
-      let laborTotal = 0;
-      let partsTotal = 0;
-      let totalAmount = 0;
-      let laborHours = 0;
-      
-      if (Array.isArray(lines)) {
-        for (const line of lines) {
-          const lineType = String(line.Type || '').toLowerCase();
-          const lineTotal = parseNumber(line.ExtendedTotal || line.Total) || 0;
-          totalAmount += lineTotal;
-          
-          if (lineType === 'labor' || lineType.includes('labor')) {
-            laborTotal += lineTotal;
-            laborHours += parseNumber(line.Quantity) || 0;
-          } else if (lineType === 'material' || lineType === 'part' || lineType.includes('part')) {
-            partsTotal += lineTotal;
-          }
-        }
-      }
-      
-      return {
-        sequence: index,
-        title,
-        description,
-        laborHoursBilled: parseNumber(sp.Hours) || parseNumber(sp.Quantity) || laborHours || undefined,
-        total: parseNumber(sp.Total) || totalAmount || undefined,
-        laborTotal: parseNumber(sp.LaborTotal || sp.Labor) || laborTotal || undefined,
-        partsTotal: parseNumber(sp.PartsTotal || sp.Parts) || partsTotal || undefined,
-      };
+    return extractProtractorServicePackages(sourceData).map((sp: any) => {
+      const mapped = this.mapServiceJob(0, '', sp);
+      const lineItems = this.extractLineItemsFromServiceJob(sp).map((line) =>
+        this.mapLineItem(0, '', '', line),
+      ) as NormalizedLineItem[];
+      return { ...mapped, lineItems };
     });
   }
   
   extractRawServiceJobsFromWorkOrder(sourceData: any): any[] {
-    const list =
-      sourceData.ServicePackages?.ItemCollection ||
-      sourceData.ServicePackages ||
-      [];
-    if (!Array.isArray(list)) return [];
-    // Stamp the parent invoice's business date onto each raw service package so
-    // mapServiceJob can use it as a completion-date fallback when the package
-    // carries no date of its own (task #640). Mirrors mapWorkOrder's date
-    // resolution order.
-    const parentClosedAt =
-      sourceData.InvoiceTime ||
-      sourceData.ClosedDate ||
-      sourceData.InvoiceDate ||
-      sourceData.Header?.LastModifiedTime ||
-      sourceData.Header?.CreationTime;
-    if (parentClosedAt) {
-      for (const sp of list) {
-        if (sp && typeof sp === 'object' && sp._parentClosedAt == null) {
-          sp._parentClosedAt = parentClosedAt;
-        }
-      }
-    }
-    return list;
+    return extractProtractorServicePackages(sourceData);
   }
 
   extractLineItemsFromServiceJob(sp: any): any[] {
-    const lines =
-      sp?.ServicePackageLines?.ItemCollection ||
-      sp?.ServicePackageLines ||
-      [];
-    if (!Array.isArray(lines)) return [];
+    const lines = getProtractorPackageLines(sp);
     return lines.map((line: any, idx: number) => ({
       ...line,
       _sourceId:
@@ -709,22 +649,13 @@ export class ProtractorAdapter implements INormalizedAdapter {
   }
   
   private mapServiceJobStatus(status: string): ServiceJobStatus {
-    const statusMap: Record<string, ServiceJobStatus> = {
-      'Pending': 'pending',
-      'Authorized': 'authorized',
-      'Declined': 'declined',
-      'Deferred': 'deferred',
-      'InProgress': 'in_progress',
-      'Completed': 'completed',
-      'Cancelled': 'cancelled',
-    };
-    return statusMap[status] || 'completed';
+    return normalizeProtractorServiceJobStatus(status);
   }
   
   private mapLineItemType(item: any): LineItemType {
     const type = String(item.Type || item.LineType || '').toLowerCase();
     if (type.includes('labor')) return 'labor';
-    if (type.includes('part')) return 'part';
+    if (type.includes('part') || type.includes('material')) return 'part';
     if (type.includes('sublet')) return 'sublet';
     if (type.includes('fee') || type.includes('shop')) return 'fee';
     if (type.includes('tire')) return 'tire';
