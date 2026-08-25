@@ -2,6 +2,11 @@ import { getDb } from "@/lib/mongo";
 import { findVehicleByVin } from "@/lib/data/repositories/vehicles";
 import { getCachedPlan, invalidateCachedPlan, type CachedPlan, type CachedPlanData } from "@/lib/plan-cache";
 import { computeScore, getScoreTier, formatVhiItem, separateComplimentary } from "@/lib/vhi-score";
+import {
+  appendPlanBuildMileageMetadata,
+  signPlanBuildMileageMetadata,
+  type PlanBuildMileageMetadata,
+} from "@/lib/plan-build-mileage-metadata";
 
 /**
  * Test seam: tests can override these to inject a fake DB / cached plan / build
@@ -120,7 +125,8 @@ export async function triggerPlanBuild(
   // Task #1184: cache-only CARFAX mode for the bounded plan pre-warm —
   // plan-build reads any existing CARFAX snapshot but never fires a live
   // (paid) fetch, blocking or background.
-  skipCarfax?: boolean
+  skipCarfax?: boolean,
+  mileageMetadata?: PlanBuildMileageMetadata,
 ): Promise<PlanBuildTriggerResult> {
   try {
     const baseUrl = process.env.REPLIT_DEV_DOMAIN
@@ -129,14 +135,41 @@ export async function triggerPlanBuild(
         ? process.env.RENDER_EXTERNAL_URL.replace(/\/$/, "")
         : `http://localhost:${process.env.PORT || 5000}`;
 
+    const params = new URLSearchParams({
+      vin,
+      mileage: String(mileage),
+    });
+    if (fast) params.set("fast", "1");
+    if (skipCarfax) params.set("skipCarfax", "1");
+    appendPlanBuildMileageMetadata(params, mileageMetadata);
+    let mileageMetadataSignature: string | undefined;
+    if (mileageMetadata?.mileageSource !== undefined &&
+        mileageMetadata.mileageSource !== "actual") {
+      const metadataSecret = process.env.CRON_SECRET;
+      if (!metadataSecret) {
+        return {
+          ok: false,
+          errorMessage: "Cannot persist estimated mileage provenance: CRON_SECRET is not configured",
+        };
+      }
+      mileageMetadataSignature = signPlanBuildMileageMetadata(
+        params,
+        { shopId, vin, mileage },
+        metadataSecret,
+      );
+    }
+
     const res = await fetch(
-      `${baseUrl}/api/plan-build?vin=${encodeURIComponent(vin)}&mileage=${mileage}${fast ? "&fast=1" : ""}${skipCarfax ? "&skipCarfax=1" : ""}`,
+      `${baseUrl}/api/plan-build?${params.toString()}`,
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "x-internal-secret": getInternalSecret(),
           "x-internal-shop-id": String(shopId),
+          ...(mileageMetadataSignature
+            ? { "x-plan-build-mileage-signature": mileageMetadataSignature }
+            : {}),
         },
       }
     );

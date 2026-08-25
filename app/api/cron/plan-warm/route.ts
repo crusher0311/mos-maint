@@ -9,6 +9,8 @@ import { getFeatureEntitlements } from "@/lib/featureResolver";
 import { triggerPlanBuild } from "@/lib/vhi-rebuild";
 import { resolvePeakPolicy } from "@/lib/plan-warm-peak";
 import { selectPlanWarmCandidates } from "@/lib/plan-warm-selection";
+import { resolvePlanWarmMileage } from "@/lib/plan-warm-mileage";
+import { estimateMileageFromCarfax } from "@/lib/integrations/carfax";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -147,15 +149,29 @@ export async function GET(req: NextRequest) {
         maxCandidates: maxVinsPerShop,
         concurrency,
         pastDeadline,
+        // Some providers rarely stamp an RO odometer. Fall back to the
+        // existing CARFAX snapshot projection, which is a cache-only DB read
+        // and never initiates a paid lookup.
+        resolveMileage: async ({ vin, mileage }) =>
+          resolvePlanWarmMileage(
+            shopId,
+            vin,
+            mileage,
+            estimateMileageFromCarfax,
+          ),
         isCached: async ({ vin, mileage }) =>
           !!(await findCachedPlanForVehicle(shopId, vin, mileage)),
+        onMileageResolutionError: ({ vin }, err) => {
+          const message = err instanceof Error ? err.message : String(err);
+          console.warn(`[PlanWarm] Shop ${shopId} VIN ${vin}: mileage estimate failed: ${message}`);
+        },
         onCacheLookupError: ({ vin }, err) => {
           const message = err instanceof Error ? err.message : String(err);
           console.warn(`[PlanWarm] Shop ${shopId} VIN ${vin}: cache lookup failed: ${message}`);
         },
       });
       const { pending, alreadyCached, skippedNoMileage } = selection;
-      let failed = selection.cacheLookupFailures;
+      let failed = selection.cacheLookupFailures + selection.mileageResolutionFailures;
       let cursor = 0;
 
       await Promise.all(
@@ -164,7 +180,12 @@ export async function GET(req: NextRequest) {
             if (pastDeadline()) return;
             const idx = cursor++;
             if (idx >= pending.length) return;
-            const { vin, mileage } = pending[idx];
+            const {
+              vin,
+              mileage,
+              mileageSource,
+              mileageEstimateDetails,
+            } = pending[idx];
             try {
               const built = await triggerPlanBuild(
                 shopId,
@@ -172,6 +193,7 @@ export async function GET(req: NextRequest) {
                 mileage,
                 /* fast */ false,
                 /* skipCarfax */ true,
+                { mileageSource, mileageEstimateDetails },
               );
               if (built.ok) warmed++;
               else failed++;

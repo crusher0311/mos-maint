@@ -58,6 +58,10 @@ import {
   shopHistoryLabelFromProvider,
 } from "@/lib/plan-build/mileage-discrepancy";
 import { resolveShopDistanceUnit, type ShopDistanceDoc } from "@/lib/shop-distance-unit";
+import {
+  readPlanBuildMileageMetadata,
+  verifyPlanBuildMileageMetadataSignature,
+} from "@/lib/plan-build-mileage-metadata";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -76,6 +80,7 @@ export async function POST(req: NextRequest) {
 
   try {
     let shopId: number;
+    let trustedInternalRequest = false;
 
     // Task #655: operator CARFAX match diagnostic. When `diag=carfax` and the
     // caller is a platform admin, the route returns a per-record breakdown of
@@ -93,6 +98,7 @@ export async function POST(req: NextRequest) {
       internalSecret === Buffer.from(process.env.DATABASE_URL).toString("base64").slice(0, 32)
     ) {
       shopId = Number(internalShopId);
+      trustedInternalRequest = true;
     } else {
       const session = await getSession();
       if (!session) {
@@ -143,6 +149,19 @@ export async function POST(req: NextRequest) {
     if (!mileage || mileage <= 0) {
       return NextResponse.json({ ok: true, vin, skipped: true, reason: "No mileage" }, { status: 200 });
     }
+
+    const trustedMileageMetadata =
+      trustedInternalRequest &&
+      verifyPlanBuildMileageMetadataSignature(
+        req.headers.get("x-plan-build-mileage-signature"),
+        req.nextUrl.searchParams,
+        { shopId, vin, mileage },
+        process.env.CRON_SECRET,
+      );
+    const mileageMetadata = readPlanBuildMileageMetadata(
+      req.nextUrl.searchParams,
+      trustedMileageMetadata,
+    );
 
     const db = await getDb();
 
@@ -1138,6 +1157,7 @@ export async function POST(req: NextRequest) {
       soonMiles,
       soonDays,
       showInspectItems,
+      ...mileageMetadata,
       deferredWork: protractorDeferredWork.length > 0 ? protractorDeferredWork.map(dw => ({
         ID: dw.ID,
         ServiceItemID: dw.ServiceItemID,

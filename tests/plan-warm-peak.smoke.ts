@@ -6,10 +6,19 @@
  *  - peak ticks default to throttle (concurrency 1, VIN cap min(offPeak, 10))
  *  - PLAN_WARM_PEAK_MODE=skip skips peak ticks, off disables the guard
  *  - midnight-wrapping windows and bad configs fail open (full budget)
+ *  - missing RO mileage falls back to a cache-only estimate
  */
 import assert from "node:assert";
+import { readFileSync } from "node:fs";
 import { parsePeakHours, isPeakHourUtc, resolvePeakPolicy } from "../lib/plan-warm-peak";
 import { selectPlanWarmCandidates } from "../lib/plan-warm-selection";
+import { resolvePlanWarmMileage } from "../lib/plan-warm-mileage";
+import {
+  appendPlanBuildMileageMetadata,
+  readPlanBuildMileageMetadata,
+  signPlanBuildMileageMetadata,
+  verifyPlanBuildMileageMetadataSignature,
+} from "../lib/plan-build-mileage-metadata";
 
 const caps = { maxVinsPerShop: 40, concurrency: 2 };
 const at = (hourUtc: number) => new Date(Date.UTC(2026, 7, 25, hourUtc, 35, 0));
@@ -120,7 +129,175 @@ async function verifyPlanWarmProgression() {
   assert.ok(maxActiveLookups <= 2, "cache selection respects the concurrency cap");
 }
 
-verifyPlanWarmProgression()
+async function verifyMileageFallback() {
+  let estimatorCalls = 0;
+  const actual = await resolvePlanWarmMileage(
+    42,
+    "1HGCM82633A004352",
+    48_210,
+    async () => {
+      estimatorCalls++;
+      return { estimated: true, mileage: 60_000 };
+    },
+  );
+  assert.deepEqual(
+    actual,
+    {
+      mileage: 48_210,
+      mileageSource: "actual",
+      mileageEstimateDetails: null,
+    },
+    "uses actual RO mileage",
+  );
+  assert.equal(estimatorCalls, 0, "does not estimate when RO mileage exists");
+
+  let estimatorArgs: [number, string] | null = null;
+  let cacheHint: number | null | undefined;
+  const selection = await selectPlanWarmCandidates({
+    vehicles: [{ vin: "1HGCM82633A004352", mileage: null }],
+    maxCandidates: 1,
+    concurrency: 1,
+    resolveMileage: async ({ vin, mileage }) =>
+      resolvePlanWarmMileage(42, vin, mileage, async (shopId, estimatedVin) => {
+          estimatorArgs = [shopId, estimatedVin];
+          return {
+            estimated: true,
+            mileage: 73_125,
+            confidence: "good",
+            dataPoints: 3,
+          };
+        }),
+    isCached: async ({ mileage }) => {
+      cacheHint = mileage;
+      return false;
+    },
+  });
+  assert.equal(cacheHint, null, "cache lookup keeps the report's null mileage hint");
+  assert.deepEqual(
+    selection.pending,
+    [{
+      vin: "1HGCM82633A004352",
+      mileage: 73_125,
+      mileageSource: "estimated_carfax",
+      mileageEstimateDetails: { confidence: "good", dataPoints: 3 },
+    }],
+    "missing RO mileage becomes a warm candidate",
+  );
+  assert.equal(selection.skippedNoMileage, 0, "estimated VIN is not skipped");
+  assert.deepEqual(
+    estimatorArgs,
+    [42, "1HGCM82633A004352"],
+    "estimates for the correct shop and VIN",
+  );
+
+  let cacheHitEstimatorCalls = 0;
+  const cachedSelection = await selectPlanWarmCandidates({
+    vehicles: [{ vin: "1HGCM82633A004352", mileage: null }],
+    maxCandidates: 1,
+    concurrency: 1,
+    isCached: async ({ mileage }) => mileage === null,
+    resolveMileage: async () => {
+      cacheHitEstimatorCalls++;
+      return {
+        mileage: 90_000,
+        mileageSource: "estimated_carfax",
+        mileageEstimateDetails: null,
+      };
+    },
+  });
+  assert.equal(cachedSelection.alreadyCached, 1, "null-hint cache hit is reused");
+  assert.equal(cachedSelection.pending.length, 0, "cached plan is not rebuilt");
+  assert.equal(cacheHitEstimatorCalls, 0, "cache hit does not run the estimator");
+
+  const params = new URLSearchParams();
+  appendPlanBuildMileageMetadata(params, selection.pending[0]);
+  const signatureContext = {
+    shopId: 42,
+    vin: "1HGCM82633A004352",
+    mileage: 73_125,
+  };
+  const signature = signPlanBuildMileageMetadata(
+    params,
+    signatureContext,
+    "unit-test-cron-secret",
+  );
+  assert.equal(
+    verifyPlanBuildMileageMetadataSignature(
+      signature,
+      params,
+      signatureContext,
+      "unit-test-cron-secret",
+    ),
+    true,
+    "valid internal metadata signature is accepted",
+  );
+  assert.equal(
+    verifyPlanBuildMileageMetadataSignature(
+      signature,
+      params,
+      { ...signatureContext, mileage: 73_126 },
+      "unit-test-cron-secret",
+    ),
+    false,
+    "signature cannot be replayed for different mileage",
+  );
+  assert.equal(
+    verifyPlanBuildMileageMetadataSignature(
+      signature,
+      params,
+      signatureContext,
+      "wrong-secret",
+    ),
+    false,
+    "forged internal metadata signature is rejected",
+  );
+
+  const metadata = readPlanBuildMileageMetadata(params, true);
+  assert.deepEqual(
+    metadata,
+    {
+      mileageSource: "estimated_carfax",
+      mileageEstimateDetails: { confidence: "good", dataPoints: 3 },
+    },
+    "estimated source and details round-trip through the internal build request",
+  );
+  assert.deepEqual(
+    readPlanBuildMileageMetadata(params, false),
+    { mileageSource: "actual", mileageEstimateDetails: null },
+    "untrusted callers cannot label mileage as estimated",
+  );
+  const planBuildRouteSource = readFileSync(
+    "app/api/plan-build/route.ts",
+    "utf8",
+  );
+  assert.match(
+    planBuildRouteSource,
+    /verifyPlanBuildMileageMetadataSignature\(/,
+    "plan-build verifies mileage provenance with a dedicated signature",
+  );
+  assert.match(
+    planBuildRouteSource,
+    /\.\.\.mileageMetadata,\s*\n\s*deferredWork:/,
+    "plan-build persists mileage provenance in the cached plan",
+  );
+
+  for (const estimate of [
+    { estimated: false, mileage: null },
+    { estimated: true, mileage: null },
+    { estimated: true, mileage: 0 },
+    { estimated: true, mileage: Number.NaN },
+  ]) {
+    const resolved = await resolvePlanWarmMileage(
+      42,
+      "1HGCM82633A004352",
+      null,
+      async () => estimate,
+    );
+    assert.equal(resolved, null, "rejects an unavailable or invalid estimate");
+  }
+}
+
+Promise.all([verifyPlanWarmProgression(), verifyMileageFallback()])
   .then(() => console.log("plan-warm-peak smoke: all assertions passed"))
   .catch((error) => {
     console.error(error);

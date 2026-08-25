@@ -1,3 +1,5 @@
+import type { PlanWarmMileageResolution } from "@/lib/plan-warm-mileage";
+
 export interface PlanWarmVehicle {
   vin: string;
   mileage: number | null;
@@ -5,12 +7,15 @@ export interface PlanWarmVehicle {
 
 export interface PlanWarmCandidate extends PlanWarmVehicle {
   mileage: number;
+  mileageSource: PlanWarmMileageResolution["mileageSource"];
+  mileageEstimateDetails: Record<string, unknown> | null;
 }
 
 export interface PlanWarmSelection {
   pending: PlanWarmCandidate[];
   alreadyCached: number;
   skippedNoMileage: number;
+  mileageResolutionFailures: number;
   cacheLookupFailures: number;
   scanned: number;
 }
@@ -20,24 +25,43 @@ interface SelectPlanWarmCandidatesOptions {
   maxCandidates: number;
   concurrency: number;
   isCached: (vehicle: PlanWarmVehicle) => Promise<boolean>;
+  resolveMileage?: (
+    vehicle: PlanWarmVehicle,
+  ) => Promise<PlanWarmMileageResolution | null>;
   pastDeadline?: () => boolean;
+  onMileageResolutionError?: (vehicle: PlanWarmVehicle, error: unknown) => void;
   onCacheLookupError?: (vehicle: PlanWarmVehicle, error: unknown) => void;
 }
+
+type CandidateResult = {
+  status:
+    | "deadline"
+    | "no_mileage"
+    | "mileage_resolution_failed"
+    | "cached"
+    | "lookup_failed"
+    | "pending";
+  candidate?: PlanWarmCandidate;
+};
 
 /**
  * Selects uncached vehicles before applying the build budget.
  *
  * Cache checks run in small ordered batches so selection stays newest-first,
  * never exceeds the existing concurrency cap, and can stop at the route's
- * deadline. Valid cache entries and vehicles without mileage do not consume
- * build slots, allowing later runs to advance through the report window.
+ * deadline. Cache validity uses the report's original mileage hint (including
+ * null); only true cache misses invoke the caller-provided cache-only mileage
+ * resolver. Valid cache entries and vehicles still lacking mileage do not
+ * consume build slots, allowing later runs to advance through the report window.
  */
 export async function selectPlanWarmCandidates({
   vehicles,
   maxCandidates,
   concurrency,
   isCached,
+  resolveMileage,
   pastDeadline = () => false,
+  onMileageResolutionError,
   onCacheLookupError,
 }: SelectPlanWarmCandidatesOptions): Promise<PlanWarmSelection> {
   const pending: PlanWarmCandidate[] = [];
@@ -49,6 +73,7 @@ export async function selectPlanWarmCandidates({
     : 1;
   let alreadyCached = 0;
   let skippedNoMileage = 0;
+  let mileageResolutionFailures = 0;
   let cacheLookupFailures = 0;
   let scanned = 0;
   let cursor = 0;
@@ -60,26 +85,49 @@ export async function selectPlanWarmCandidates({
     cursor += batch.length;
 
     const results = await Promise.all(
-      batch.map(async (vehicle) => {
-        if (pastDeadline()) return "deadline" as const;
-        if (!vehicle.mileage) return "no_mileage" as const;
+      batch.map(async (vehicle): Promise<CandidateResult> => {
+        if (pastDeadline()) return { status: "deadline" };
+
         try {
-          return (await isCached(vehicle)) ? ("cached" as const) : ("pending" as const);
+          if (await isCached(vehicle)) return { status: "cached" };
         } catch (error) {
           onCacheLookupError?.(vehicle, error);
-          return "lookup_failed" as const;
+          return { status: "lookup_failed" };
         }
+
+        let resolvedMileage: PlanWarmMileageResolution | null =
+          vehicle.mileage
+            ? {
+                mileage: vehicle.mileage,
+                mileageSource: "actual",
+                mileageEstimateDetails: null,
+              }
+            : null;
+        if (!resolvedMileage && resolveMileage) {
+          try {
+            resolvedMileage = await resolveMileage(vehicle);
+          } catch (error) {
+            onMileageResolutionError?.(vehicle, error);
+            return { status: "mileage_resolution_failed" };
+          }
+        }
+        if (!resolvedMileage) return { status: "no_mileage" };
+
+        return {
+          status: "pending",
+          candidate: { ...vehicle, ...resolvedMileage },
+        };
       }),
     );
 
-    for (let i = 0; i < results.length; i++) {
-      const result = results[i];
-      if (result === "deadline") continue;
+    for (const result of results) {
+      if (result.status === "deadline") continue;
       scanned++;
-      if (result === "cached") alreadyCached++;
-      else if (result === "no_mileage") skippedNoMileage++;
-      else if (result === "lookup_failed") cacheLookupFailures++;
-      else pending.push({ ...batch[i], mileage: batch[i].mileage! });
+      if (result.status === "cached") alreadyCached++;
+      else if (result.status === "no_mileage") skippedNoMileage++;
+      else if (result.status === "mileage_resolution_failed") mileageResolutionFailures++;
+      else if (result.status === "lookup_failed") cacheLookupFailures++;
+      else if (result.candidate) pending.push(result.candidate);
     }
   }
 
@@ -87,6 +135,7 @@ export async function selectPlanWarmCandidates({
     pending,
     alreadyCached,
     skippedNoMileage,
+    mileageResolutionFailures,
     cacheLookupFailures,
     scanned,
   };
