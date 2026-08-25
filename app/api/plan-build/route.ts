@@ -9,7 +9,7 @@ import {
 import { toKeyFromFreeText, toKeyFromName } from "@/lib/service-keys";
 import { isDeclinedJobIndexRow } from "@/lib/job-index";
 import { resolveAutoflowConfig, fetchDviWithCache } from "@/lib/integrations/autoflow";
-import { resolveCarfaxConfig, fetchCarfaxWithCache, fetchCarfaxStaleWhileRevalidate } from "@/lib/integrations/carfax";
+import { resolveCarfaxConfig, fetchCarfaxWithCache, fetchCarfaxStaleWhileRevalidate, fetchCarfaxCacheOnly } from "@/lib/integrations/carfax";
 import { getMaintenanceScheduleCached } from "@/lib/integrations/dataone-api";
 import {
   classifyEngineRisk,
@@ -129,6 +129,12 @@ export async function POST(req: NextRequest) {
     // checkboxes appear in seconds instead of 45s+. Background/partner builds
     // (no flag) keep the original, freshness-first behavior.
     const fast = req.nextUrl.searchParams.get("fast") === "1";
+    // Task #1184: cache-only CARFAX mode for the bounded plan pre-warm.
+    // `skipCarfax=1` builds the plan from shop history / OEM / any EXISTING
+    // CARFAX snapshot but never fires a live (paid) CARFAX fetch — neither
+    // blocking nor background. Warmed plans still populate cached_plans so
+    // cache-only consumers (Missed Opportunities report) can evaluate ROs.
+    const skipCarfax = req.nextUrl.searchParams.get("skipCarfax") === "1";
     
     if (!vin || vin.length !== 17) {
       return NextResponse.json({ error: "Valid 17-character VIN required" }, { status: 400 });
@@ -618,7 +624,12 @@ export async function POST(req: NextRequest) {
     // the timer once the CARFAX fetch resolves so the timeout warn only fires
     // on real timeouts.
     let carfaxRaceTimer: NodeJS.Timeout | undefined;
-    const carfaxFetch = fast
+    // Task #1184: skipCarfax wins over fast — cache-only, no live or
+    // background CARFAX call ever (the fast path's SWR still refreshes in
+    // the background, which is a paid fetch).
+    const carfaxFetch = skipCarfax
+      ? fetchCarfaxCacheOnly(shopId, vin)
+      : fast
       ? Promise.race([
           fetchCarfaxStaleWhileRevalidate(shopId, vin, CACHE_TTL_MS).finally(() => {
             if (carfaxRaceTimer) clearTimeout(carfaxRaceTimer);

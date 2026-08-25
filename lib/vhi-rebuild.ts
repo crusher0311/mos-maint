@@ -116,7 +116,11 @@ export async function triggerPlanBuild(
   shopId: number,
   vin: string,
   mileage: number,
-  fast?: boolean
+  fast?: boolean,
+  // Task #1184: cache-only CARFAX mode for the bounded plan pre-warm —
+  // plan-build reads any existing CARFAX snapshot but never fires a live
+  // (paid) fetch, blocking or background.
+  skipCarfax?: boolean
 ): Promise<PlanBuildTriggerResult> {
   try {
     const baseUrl = process.env.REPLIT_DEV_DOMAIN
@@ -126,7 +130,7 @@ export async function triggerPlanBuild(
         : `http://localhost:${process.env.PORT || 5000}`;
 
     const res = await fetch(
-      `${baseUrl}/api/plan-build?vin=${encodeURIComponent(vin)}&mileage=${mileage}${fast ? "&fast=1" : ""}`,
+      `${baseUrl}/api/plan-build?vin=${encodeURIComponent(vin)}&mileage=${mileage}${fast ? "&fast=1" : ""}${skipCarfax ? "&skipCarfax=1" : ""}`,
       {
         method: "POST",
         headers: {

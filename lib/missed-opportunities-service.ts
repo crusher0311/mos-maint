@@ -205,6 +205,52 @@ export async function computeMissedOpportunityReport(
   };
 }
 
+/**
+ * Task #1184 — list the (VIN, mileage) pairs the Missed Opportunities report
+ * will evaluate for a (shop, window): unique VINs from terminal ROs in the
+ * window, newest close first, with the newest RO's odometer as the mileage
+ * hint. Used by the plan pre-warm cron so it warms exactly the vehicles the
+ * report reads, in the same priority order the report caps at
+ * MAX_ROS_PER_RUN. PG-only; touches no upstream API.
+ */
+export async function listReportWindowVehicles(
+  shopId: number,
+  windowDays: MissedOppWindow,
+  limit: number = MAX_ROS_PER_RUN,
+): Promise<Array<{ vin: string; mileage: number | null }>> {
+  const pg = getPg();
+  const since = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
+  const closeDate = sql<Date | null>`coalesce(${normalizedWorkOrders.closedDate}, ${normalizedWorkOrders.completedDate})`;
+  const wos = await pg
+    .select({
+      vehicle: normalizedWorkOrders.vehicle,
+      odometerOut: normalizedWorkOrders.odometerOut,
+      odometerIn: normalizedWorkOrders.odometerIn,
+    })
+    .from(normalizedWorkOrders)
+    .where(
+      and(
+        eq(normalizedWorkOrders.shopId, shopId),
+        inArray(normalizedWorkOrders.status, [...TERMINAL_STATUSES]),
+        buildCloseDateSincePredicate(closeDate, since),
+        sql`(${normalizedWorkOrders.softDelete}->>'isDeleted')::boolean IS DISTINCT FROM true`,
+        sql`${normalizedWorkOrders.isInternal} = false`,
+      ),
+    )
+    .orderBy(desc(closeDate))
+    .limit(Math.max(1, limit));
+
+  const out: Array<{ vin: string; mileage: number | null }> = [];
+  const seen = new Set<string>();
+  for (const wo of wos) {
+    const vin = extractVin(wo.vehicle);
+    if (!vin || seen.has(vin)) continue;
+    seen.add(vin);
+    const odo = wo.odometerOut ?? wo.odometerIn ?? null;
+    out.push({ vin, mileage: typeof odo === "number" && odo > 0 ? odo : null });
+  }
+  return out;
+}
 function extractVin(vehicle: unknown): string | null {
   const vin = (vehicle as any)?.vin;
   if (typeof vin !== "string") return null;

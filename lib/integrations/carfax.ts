@@ -678,6 +678,27 @@ export type MileageEstimate = {
 };
 
 /**
+ * Cache-only CARFAX read for plan-build (Task #1184 warm path).
+ *
+ * Returns the stored snapshot as a full `CarfaxResult` — the same shape
+ * `fetchCarfaxWithCache` returns — but NEVER triggers a live (paid) CARFAX
+ * fetch and never schedules a background refresh, regardless of snapshot
+ * age. A missing/unhealthy snapshot returns `ok: false`, which plan-build
+ * already treats as "build without CARFAX".
+ */
+export async function fetchCarfaxCacheOnly(
+  shopId: number,
+  vin: string
+): Promise<CarfaxResult> {
+  if (!shopId || !vin) return { ok: false, error: "No snapshot" };
+  const db = await getDb();
+  const doc = await db
+    .collection("carfax_reports")
+    .findOne({ shopId, vin: vin.toUpperCase() });
+  return snapshotToResult(doc);
+}
+
+/**
  * Cache-only read of the stored CARFAX service records for a (shopId, vin).
  *
  * Returns the persisted `serviceRecords` from the cached snapshot only — it

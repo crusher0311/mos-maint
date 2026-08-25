@@ -1,0 +1,210 @@
+import { NextRequest, NextResponse } from "next/server";
+import { normalizeWindowDays } from "@/lib/missed-opportunities";
+import { listReportWindowVehicles } from "@/lib/missed-opportunities-service";
+import {
+  listMissedOppReportShops,
+  findCachedPlanForVehicle,
+} from "@/lib/data/repositories/missed-opportunities";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
+import { triggerPlanBuild } from "@/lib/vhi-rebuild";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const maxDuration = 300;
+
+const CRON_SECRET = process.env.CRON_SECRET;
+
+// Same auth contract as the other cron routes: the in-process scheduler sends
+// `Authorization: Bearer ${CRON_SECRET}`; a `?secret=` query param is accepted
+// for manual curl triggers. When CRON_SECRET is unset (dev) auth is a no-op.
+function authorized(req: NextRequest): boolean {
+  if (!CRON_SECRET) return true;
+  const header = req.headers.get("authorization");
+  const param = new URL(req.url).searchParams.get("secret");
+  return header === `Bearer ${CRON_SECRET}` || param === CRON_SECRET;
+}
+
+/**
+ * Task #1184 — VHI plan pre-warm for the Missed Opportunities report.
+ *
+ * The report is cache-only: it evaluates a closed RO only when the vehicle
+ * already has a `cached_plans` entry (~4h TTL). Shops whose vehicles aren't
+ * being viewed in the extension therefore see an empty report. This cron
+ * warms cached plans for exactly the vehicles the report will read — the
+ * newest unique VINs from terminal ROs in the shop's report window — so
+ * `evaluatedRos` rises for cold shops.
+ *
+ * Safety design (this builds plans on the WEB process — see the plan-pregen
+ * storm incident — so every dimension is capped):
+ *   - **Never a paid CARFAX fetch.** Builds go through plan-build with
+ *     `skipCarfax=1`: any EXISTING CARFAX snapshot is read, but no live or
+ *     background CARFAX call ever fires. DataOne/OEM reads are our own
+ *     cached layer (free); Tekmetric's on-demand inspection fallback inside
+ *     plan-build stays budget-bounded as on any build.
+ *   - **Self-selecting shops.** Targets only shops that have actually loaded
+ *     the report (a report-cache doc exists), each gated by the same
+ *     `estimate_assist` entitlement as the report route. `PLAN_WARM_SHOP_IDS`
+ *     (comma-separated) overrides the target list for staged rollout.
+ *   - **Idempotent.** VINs with a valid cached plan are skipped, so repeated
+ *     runs only rebuild what the 4h TTL expired.
+ *   - **Bounded.** Caps on shops/run, VINs/shop, build concurrency, and a
+ *     wall-clock deadline that exits before the scheduler timeout;
+ *     unfinished shops resume next run (cache-hit skips make that cheap).
+ *
+ * Gated behind `PLAN_WARM_ENABLED=true` (default OFF) so it stays dormant
+ * until an operator flips it on.
+ */
+export async function GET(req: NextRequest) {
+  if (!authorized(req)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (process.env.PLAN_WARM_ENABLED !== "true") {
+    return NextResponse.json({ ok: true, skipped: "disabled" });
+  }
+
+  const startedAt = Date.now();
+  const maxShops = Math.max(1, Number(process.env.PLAN_WARM_MAX_SHOPS || "20"));
+  const maxVinsPerShop = Math.max(1, Number(process.env.PLAN_WARM_MAX_VINS_PER_SHOP || "40"));
+  const concurrency = Math.max(1, Number(process.env.PLAN_WARM_CONCURRENCY || "2"));
+  const deadlineMs = Number(process.env.PLAN_WARM_DEADLINE_MS || String(4 * 60 * 1000));
+  const deadlineHitRef = { hit: false };
+  const pastDeadline = () => {
+    if (Date.now() - startedAt > deadlineMs) {
+      deadlineHitRef.hit = true;
+      return true;
+    }
+    return false;
+  };
+
+  try {
+    // 1. Warm targets: explicit operator list, else shops that have loaded
+    // the report at least once.
+    const shopIdsOverride = (process.env.PLAN_WARM_SHOP_IDS || "")
+      .split(",")
+      .map((s) => Number(s.trim()))
+      .filter((n) => Number.isFinite(n) && n > 0);
+
+    let targets: Array<{ shopId: number; windowDays: number }>;
+    if (shopIdsOverride.length > 0) {
+      const windowDays = normalizeWindowDays(process.env.PLAN_WARM_WINDOW_DAYS || null);
+      targets = shopIdsOverride.map((shopId) => ({ shopId, windowDays }));
+    } else {
+      targets = await listMissedOppReportShops();
+    }
+    targets = targets.slice(0, maxShops);
+
+    const perShop: Array<Record<string, unknown>> = [];
+    let totalWarmed = 0;
+    let totalAlreadyCached = 0;
+    let totalFailed = 0;
+    let totalSkippedNoMileage = 0;
+
+    for (const target of targets) {
+      if (pastDeadline()) break;
+      const { shopId } = target;
+      const windowDays = normalizeWindowDays(String(target.windowDays));
+
+      // Same entitlement gate as the report route — a stale report-cache doc
+      // from a downgraded shop must not spend warm budget.
+      try {
+        const entitlements = await getFeatureEntitlements(shopId);
+        if (!entitlements.canUseFeature("estimate_assist")) {
+          perShop.push({ shopId, skipped: "not_entitled" });
+          continue;
+        }
+      } catch (err: any) {
+        perShop.push({ shopId, skipped: "entitlement_check_failed", error: err?.message });
+        continue;
+      }
+
+      let vehicles: Array<{ vin: string; mileage: number | null }>;
+      try {
+        vehicles = await listReportWindowVehicles(shopId, windowDays);
+      } catch (err: any) {
+        console.warn(`[PlanWarm] Shop ${shopId}: window vehicle listing failed: ${err?.message}`);
+        perShop.push({ shopId, skipped: "vehicle_listing_failed", error: err?.message });
+        continue;
+      }
+      const pending = vehicles.slice(0, maxVinsPerShop);
+
+      let warmed = 0;
+      let alreadyCached = 0;
+      let failed = 0;
+      let skippedNoMileage = 0;
+      let cursor = 0;
+
+      await Promise.all(
+        Array.from({ length: Math.min(concurrency, pending.length) }).map(async () => {
+          while (true) {
+            if (pastDeadline()) return;
+            const idx = cursor++;
+            if (idx >= pending.length) return;
+            const { vin, mileage } = pending[idx];
+            if (!mileage) {
+              // plan-build refuses to build without mileage; don't waste a call.
+              skippedNoMileage++;
+              continue;
+            }
+            try {
+              // Idempotence: identical validity semantics to the report's
+              // read (expiry, schema version, mileage tolerance) so we skip
+              // exactly the VINs the report can already evaluate.
+              const cached = await findCachedPlanForVehicle(shopId, vin, mileage);
+              if (cached) {
+                alreadyCached++;
+                continue;
+              }
+              const built = await triggerPlanBuild(
+                shopId,
+                vin,
+                mileage,
+                /* fast */ false,
+                /* skipCarfax */ true,
+              );
+              if (built.ok) warmed++;
+              else failed++;
+            } catch (err: any) {
+              console.warn(`[PlanWarm] Shop ${shopId} VIN ${vin}: warm failed: ${err?.message}`);
+              failed++;
+            }
+          }
+        }),
+      );
+
+      totalWarmed += warmed;
+      totalAlreadyCached += alreadyCached;
+      totalFailed += failed;
+      totalSkippedNoMileage += skippedNoMileage;
+      perShop.push({
+        shopId,
+        windowDays,
+        windowVins: vehicles.length,
+        attempted: pending.length,
+        warmed,
+        alreadyCached,
+        failed,
+        skippedNoMileage,
+      });
+    }
+
+    const summary = {
+      ok: true,
+      shopsTargeted: targets.length,
+      shopsProcessed: perShop.length,
+      warmed: totalWarmed,
+      alreadyCached: totalAlreadyCached,
+      failed: totalFailed,
+      skippedNoMileage: totalSkippedNoMileage,
+      deadlineHit: deadlineHitRef.hit,
+      durationMs: Date.now() - startedAt,
+      perShop,
+    };
+    console.log(`[PlanWarm] ${JSON.stringify(summary)}`);
+    return NextResponse.json(summary);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[PlanWarm] Error:", err);
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+  }
+}

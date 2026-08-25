@@ -52,6 +52,28 @@ export async function setCachedMissedOppReport(
 }
 
 /**
+ * Task #1184 — shops (and their largest requested window) that have ever
+ * loaded the Missed Opportunities report. Viewing the report always writes a
+ * cache doc (even when the report is empty), so this is a self-selecting
+ * warm-target list: the plan pre-warm only spends work on shops that actually
+ * use the report.
+ */
+export async function listMissedOppReportShops(): Promise<
+  Array<{ shopId: number; windowDays: number }>
+> {
+  const col = await collection();
+  const rows = await col
+    .aggregate([
+      { $group: { _id: "$shopId", windowDays: { $max: "$windowDays" } } },
+      { $limit: 500 },
+    ])
+    .toArray();
+  return rows
+    .map((r) => ({ shopId: Number(r._id), windowDays: Number(r.windowDays) }))
+    .filter((r) => Number.isFinite(r.shopId) && Number.isFinite(r.windowDays));
+}
+
+/**
  * Cache-only VHI plan lookup for one vehicle. Never triggers a rebuild —
  * a miss means the RO is reported as "not evaluated". Mirrors the
  * Estimate Assist audit's read (`getCachedPlan`), including its validity
