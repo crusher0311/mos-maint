@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
 import { triggerPlanBuild } from "@/lib/vhi-rebuild";
-import { generateShareToken, verifyShareToken } from "@/lib/report-share";
+import {
+  buildReportUrl,
+  generateShareToken,
+  verifyShareToken,
+} from "@/lib/report-share";
 import { findLatestTekmetricWorkOrderByVinWithCustomerName } from "@/lib/data/repositories/tekmetric-work-orders";
 import { getFeatureEntitlements } from "@/lib/featureResolver";
 import { readInspectionResults } from "@/lib/data/repositories/auto-dvi";
@@ -215,11 +219,11 @@ export async function POST(
     }
 
     const expiresAt = Date.now() + TOKEN_MAX_AGE_MS;
-    const token = generateShareToken(vin, String(shopId), expiresAt);
-
-    const host = req.headers.get("host") || req.nextUrl.host;
-    const protocol = req.headers.get("x-forwarded-proto") || "https";
-    const shareUrl = `${protocol}://${host}/report/${vin}?token=${token}`;
+    const shareUrl = buildReportUrl(vin, String(shopId), expiresAt);
+    const token = new URL(shareUrl).searchParams.get("token");
+    if (!token) {
+      throw new Error("Generated report URL is missing its share token");
+    }
 
     return NextResponse.json({
       shareUrl,

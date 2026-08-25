@@ -7,7 +7,6 @@ import { getStatusIconSet, getServiceIconSet, getStatusIconSvg } from "@/lib/vhi
 import { resolveServiceIconKey, getServiceIconUrl } from "@/lib/service-icons";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { rebuildVhi } from "@/lib/vhi-rebuild";
-import { buildReportUrl } from "@/lib/report-share";
 import { estimateMileageFromCarfax } from "@/lib/integrations/carfax";
 import { getEnhancedVehicleData } from "@/lib/integrations/dataone-api";
 import { buildMileageDiscrepancyFlag } from "@/lib/plan-build/mileage-discrepancy";
@@ -15,6 +14,10 @@ import { resolveOpenRoMileage, pickMileageInput, reconcileStaleActualWithEstimat
 import { getDb as getPgDb } from "@/lib/db/drizzle";
 import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
 import { withSlowCallLog } from "@/lib/log-slow-call";
+import {
+  buildPartnerVhiSuccessResponse,
+  type PartnerVhiSuccessSource,
+} from "@/lib/external-api/partner-vhi-response";
 
 /**
  * Task #476: provenance label for the actual odometer reading the partner
@@ -121,7 +124,7 @@ function buildPlanResponse(
   opts: {
     vin: string;
     resolvedShopId: number | string;
-    source: string;
+    source: PartnerVhiSuccessSource;
     cachedAt: unknown;
     mileageInputSource: MileageInputSource | null;
     openRoMileageDiscrepancy: Parameters<typeof buildFlags>[0]["openRoMileageDiscrepancy"];
@@ -146,7 +149,7 @@ function buildPlanResponse(
   const planDetails = planSource === "actual"
     ? null
     : (hasOverlay ? opts.resolvedMileageEstimateDetails : null) ?? plan.mileageEstimateDetails ?? null;
-  return {
+  return buildPartnerVhiSuccessResponse({
     success: true,
     vin: opts.vin,
     vehicle: {
@@ -181,7 +184,6 @@ function buildPlanResponse(
     },
     icons: getStatusIconSet(),
     serviceIcons: getServiceIconSet(),
-    reportUrl: buildReportUrl(opts.vin, opts.resolvedShopId),
     cachedAt: opts.cachedAt,
     source: opts.source,
     mileageSource: planSource,
@@ -200,7 +202,7 @@ function buildPlanResponse(
       shopHistoryCount: 0,
       reasons: [],
     },
-  };
+  }, opts.vin, opts.resolvedShopId);
 }
 
 // Decode model year from VIN position 10 (no DB required).
@@ -503,7 +505,7 @@ export const GET = createExternalEndpoint(
           ? null
           : (hasFreshAnchor ? mileageEstimateDetails : null) ?? plan.mileageEstimateDetails ?? null;
 
-      return NextResponse.json({
+      return NextResponse.json(buildPartnerVhiSuccessResponse({
         success: true,
         vin,
         vehicle: {
@@ -542,7 +544,6 @@ export const GET = createExternalEndpoint(
         },
         icons: getStatusIconSet(),
         serviceIcons: getServiceIconSet(),
-        reportUrl: buildReportUrl(vin, resolvedShopId),
         cachedAt: cached.createdAt,
         source: "cached_plan",
         mileageSource: cachedSource,
@@ -558,7 +559,7 @@ export const GET = createExternalEndpoint(
         flags: buildFlags({ mileageDiscrepancy: plan.mileageDiscrepancy ?? null, openRoMileageDiscrepancy }),
         // Task #439: data-quality signal so partner UIs can soften 0/CRITICAL.
         dataQuality: plan.dataQuality ?? { sufficient: true, carfaxStatus: "ok", anchorCount: 0, carfaxRecordCount: 0, shopHistoryCount: 0, reasons: [] },
-      });
+      }, vin, resolvedShopId));
     }
 
     console.log(`[VHI External] No cached_plans entry for ${vin} at shop ${resolvedShopId}, checking analysis cache...`);
@@ -577,7 +578,7 @@ export const GET = createExternalEndpoint(
       // cache (handled by getVhiFromAnalysisCache for legacy entries).
       const aSource = analysisResult.mileageSource ?? "actual";
       const aDetails = aSource === "actual" ? null : analysisResult.mileageEstimateDetails ?? null;
-      return NextResponse.json({
+      return NextResponse.json(buildPartnerVhiSuccessResponse({
         success: true,
         vin,
         ...analysisResult,
@@ -591,7 +592,6 @@ export const GET = createExternalEndpoint(
         mileageInputSource: mileageInputSource ?? "vehicles_collection",
         icons: getStatusIconSet(),
         serviceIcons: getServiceIconSet(),
-        reportUrl: buildReportUrl(vin, resolvedShopId),
         source: "analysis_cache",
         // Task #391: legacy analysis-cache rows generally have no flag,
         // but the array is always present for partner-shape stability.
@@ -600,7 +600,7 @@ export const GET = createExternalEndpoint(
         // default to "sufficient" so legacy entries keep showing their
         // score unchanged.
         dataQuality: { sufficient: true, carfaxStatus: "ok", anchorCount: 0, carfaxRecordCount: 0, shopHistoryCount: 0, reasons: [] },
-      });
+      }, vin, resolvedShopId));
     }
 
     if (!mileage) {
@@ -801,7 +801,7 @@ export const GET = createExternalEndpoint(
       );
     }
 
-    return NextResponse.json({
+    return NextResponse.json(buildPartnerVhiSuccessResponse({
       success: true,
       vin,
       vehicle: result.vehicle,
@@ -823,7 +823,6 @@ export const GET = createExternalEndpoint(
       buckets: ensureItemIconSvg(result.buckets),
       icons: getStatusIconSet(),
       serviceIcons: getServiceIconSet(),
-      reportUrl: buildReportUrl(vin, resolvedShopId),
       cachedAt: result.cachedAt,
       source: "on_demand_build",
       // Task #384: prefer the rebuild result so the response matches the
@@ -847,6 +846,6 @@ export const GET = createExternalEndpoint(
       // three external response branches (cached_plan, analysis_cache,
       // on_demand_build) carry the same shape.
       dataQuality: result.dataQuality ?? { sufficient: true, carfaxStatus: "ok", anchorCount: 0, carfaxRecordCount: 0, shopHistoryCount: 0, reasons: [] },
-    });
+    }, vin, resolvedShopId));
   }
 );

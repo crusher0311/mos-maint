@@ -78,8 +78,12 @@ export function verifyShareToken(
   }
 }
 
-export function buildReportUrl(vin: string, shopId: number | string): string {
-  const token = generateShareToken(vin.toUpperCase(), String(shopId));
+export function buildReportUrl(
+  vin: string,
+  shopId: number | string,
+  expiresAt?: number,
+): string {
+  const token = generateShareToken(vin.toUpperCase(), String(shopId), expiresAt);
   const host = resolveAppHost();
   return `https://${host}/report/${vin.toUpperCase()}?token=${token}`;
 }

@@ -116,6 +116,21 @@ async function ensureCriticalIndexes() {
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
 
+  // Defense in depth for every production server entrypoint, including a
+  // direct `next start` that bypasses Render's start-with-workers wrapper.
+  // This runs before Next accepts requests and deliberately throws rather
+  // than allowing partner VHI responses to fail later while signing links.
+  if (process.env.NODE_ENV === "production") {
+    const { validateProductionEnv } = require(
+      "../scripts/validate-production-env.cjs"
+    ) as {
+      validateProductionEnv: (
+        env?: Record<string, string | undefined>,
+      ) => void;
+    };
+    validateProductionEnv();
+  }
+
   // Task #1162: slow-query caller attribution — patch http.Server so every
   // inbound request (web API routes AND the cron scheduler's internal
   // /api/cron/* invocations) runs inside an AsyncLocalStorage context tagged

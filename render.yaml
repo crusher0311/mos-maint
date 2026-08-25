@@ -25,6 +25,11 @@ services:
   # Blueprint, Render's reconciliation will treat the web service as removed
   # and may suspend/replace it. Do not do that.
   #
+  # The dashboard-managed web service starts with
+  # `node scripts/start-with-workers.js`. That entrypoint runs the production
+  # secret preflight before it binds the HTTP port, including the required
+  # REPORT_SHARE_SECRET used by partner/customer VHI report links.
+  #
   # Safe setup (manual, leaves mos-tools alone):
   #   1. In Render dashboard: New + -> Blueprint -> connect this repo on main.
   #      Render will offer to create only `backfill-drain-worker`. The

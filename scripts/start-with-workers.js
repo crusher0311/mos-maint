@@ -1,9 +1,16 @@
 #!/usr/bin/env node
 const { spawn } = require('child_process');
 const http = require('http');
+const { validateProductionEnv } = require('./validate-production-env.cjs');
 
 const PORT = process.env.PORT || 5000;
 const PRODUCTION_URL = process.env.PRODUCTION_URL || `http://localhost:${PORT}`;
+
+// Fail before binding the HTTP port if partner report signing is unavailable.
+// Render's production web service starts through this script, so a deployment
+// can never become healthy and accept AppFueled traffic without the dedicated
+// report-share secret.
+validateProductionEnv();
 
 console.log('='.repeat(60));
 console.log('MOS Maintenance MVP - Production Start');
