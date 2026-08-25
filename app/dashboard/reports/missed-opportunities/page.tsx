@@ -1,6 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  formatTicketJobAmount,
+  sumTicketJobAmounts,
+  type MissedOpportunityTicketJob,
+  type TicketJobDisplayGroup,
+} from "@/lib/missed-opportunity-ticket-details";
 
 /**
  * Task #1146 — shop-level Missed Opportunities report.
@@ -27,6 +33,8 @@ type ReportRow = {
   vehicle: string | null;
   advisorName: string | null;
   missedItems: MissedItem[];
+  /** Null identifies a legacy cached report that predates ticket details. */
+  ticketJobs: MissedOpportunityTicketJob[] | null;
 };
 
 type NotEvaluatedRow = {
@@ -385,33 +393,147 @@ function RowWithDetail({
       </tr>
       {open && (
         <tr className="bg-gray-50/60">
-          <td colSpan={5} className="px-6 py-3">
-            <ul className="space-y-1">
-              {row.missedItems.map((item, i) => (
-                <li key={i} className="flex items-center gap-2 text-sm">
-                  <span
-                    className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-                      item.status === "overdue"
-                        ? "bg-red-100 text-red-700"
-                        : "bg-amber-100 text-amber-800"
-                    }`}
-                  >
-                    {item.status === "overdue" ? "Overdue" : "Due soon"}
-                  </span>
-                  <span>{item.title}</span>
-                  <span className="text-gray-400 text-xs">
-                    {item.dueAtMiles != null && item.dueAtMiles > 0
-                      ? `due at ${Math.round(item.dueAtMiles).toLocaleString()} mi`
-                      : item.dueAtDate
-                        ? `by ${fmtDate(item.dueAtDate)}`
-                        : ""}
-                  </span>
-                </li>
-              ))}
-            </ul>
+          <td colSpan={5} className="px-4 py-4 md:px-6">
+            <div className="grid gap-4 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+              <section className="rounded-lg border border-red-100 bg-red-50/60 p-4">
+                <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-red-800">
+                  Missed VHI items
+                </h3>
+                <ul className="space-y-2">
+                  {row.missedItems.map((item, i) => (
+                    <li key={i} className="text-sm">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                            item.status === "overdue"
+                              ? "bg-red-100 text-red-700"
+                              : "bg-amber-100 text-amber-800"
+                          }`}
+                        >
+                          {item.status === "overdue" ? "Overdue" : "Due soon"}
+                        </span>
+                        <span className="font-medium text-gray-900">{item.title}</span>
+                      </div>
+                      {(item.dueAtMiles != null && item.dueAtMiles > 0) || item.dueAtDate ? (
+                        <div className="mt-0.5 pl-0 text-xs text-gray-500 sm:pl-2">
+                          {item.dueAtMiles != null && item.dueAtMiles > 0
+                            ? `Due at ${Math.round(item.dueAtMiles).toLocaleString()} mi`
+                            : item.dueAtDate
+                              ? `Due by ${fmtDate(item.dueAtDate)}`
+                              : ""}
+                        </div>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+
+              <section className="rounded-lg border border-gray-200 bg-white p-4">
+                <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-600">
+                  Ticket work
+                </h3>
+                {row.ticketJobs === null ? (
+                  <div className="rounded-md bg-gray-50 p-3 text-sm text-gray-600">
+                    Ticket details are unavailable for this saved report. Refresh to load them.
+                  </div>
+                ) : row.ticketJobs.length === 0 ? (
+                  <div className="text-sm text-gray-500">No ticket jobs were recorded.</div>
+                ) : (
+                  <div className="space-y-4">
+                    {TICKET_GROUPS.map((group) => {
+                      const jobs = row.ticketJobs!.filter(
+                        (job) => job.displayGroup === group.key,
+                      );
+                      return jobs.length > 0 ? (
+                        <TicketJobGroup key={group.key} group={group} jobs={jobs} />
+                      ) : null;
+                    })}
+                  </div>
+                )}
+              </section>
+            </div>
           </td>
         </tr>
       )}
     </>
+  );
+}
+
+const TICKET_GROUPS: Array<{
+  key: TicketJobDisplayGroup;
+  label: string;
+  helper?: string;
+  labelClass: string;
+}> = [
+  {
+    key: "approved_performed",
+    label: "Approved / performed",
+    labelClass: "text-emerald-800",
+  },
+  {
+    key: "deferred_declined",
+    label: "Deferred / declined",
+    labelClass: "text-amber-800",
+  },
+  {
+    key: "other",
+    label: "Other ticket work",
+    helper: "Status not classified",
+    labelClass: "text-gray-700",
+  },
+];
+
+function TicketJobGroup({
+  group,
+  jobs,
+}: {
+  group: (typeof TICKET_GROUPS)[number];
+  jobs: MissedOpportunityTicketJob[];
+}) {
+  const subtotal = sumTicketJobAmounts(jobs);
+  const recordedPriceCount = jobs.filter(
+    (job) => formatTicketJobAmount(job.totalPrice) !== null,
+  ).length;
+  const subtotalLabel = subtotal.hasUnavailable ? "Recorded subtotal" : "Subtotal";
+  const subtotalAmount =
+    recordedPriceCount > 0 ? formatTicketJobAmount(subtotal.total) : null;
+
+  return (
+    <div>
+      <div className="mb-1.5 flex flex-wrap items-baseline gap-x-2">
+        <h4 className={`text-sm font-semibold ${group.labelClass}`}>{group.label}</h4>
+        {group.helper && <span className="text-xs text-gray-400">{group.helper}</span>}
+      </div>
+      <ul className="divide-y divide-gray-100 border-y border-gray-100">
+        {jobs.map((job, index) => {
+          const price = formatTicketJobAmount(job.totalPrice);
+          return (
+            <li
+              key={`${job.title}-${job.recordedStatus || "unknown"}-${index}`}
+              className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 py-2 text-sm"
+            >
+              <div className="min-w-0">
+                <div className="break-words text-gray-900">{job.title}</div>
+                <div className="mt-0.5 text-xs capitalize text-gray-400">
+                  {job.recordedStatus?.replace(/_/g, " ") || "Status unavailable"}
+                </div>
+              </div>
+              <div className="self-start whitespace-nowrap text-right font-medium tabular-nums text-gray-900">
+                {price || <span className="font-normal text-gray-400">Price unavailable</span>}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+      <div className="mt-2 flex flex-wrap items-baseline justify-end gap-x-2 text-sm">
+        <span className="text-xs text-gray-500">{subtotalLabel}</span>
+        <span className="font-semibold tabular-nums text-gray-900">
+          {subtotalAmount || "Price unavailable"}
+        </span>
+        {subtotal.hasUnavailable && recordedPriceCount > 0 && (
+          <span className="text-xs text-gray-400">+ price unavailable</span>
+        )}
+      </div>
+    </div>
   );
 }

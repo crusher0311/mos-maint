@@ -20,8 +20,19 @@ import {
   type MissingVhiItem,
   type VhiComparisonItem,
 } from "@/lib/estimate-assist/vhi-audit-match";
+import type { MissedOpportunityTicketJob } from "@/lib/missed-opportunity-ticket-details";
 
 export type { MissingVhiItem, VhiComparisonItem };
+export {
+  classifyTicketJobStatus,
+  formatTicketJobAmount,
+  normalizeTicketJobAmount,
+  sumTicketJobAmounts,
+  type MissedOpportunityTicketJob,
+  type TicketJobDisplayGroup,
+} from "@/lib/missed-opportunity-ticket-details";
+
+export const MISSED_OPPORTUNITY_REPORT_VERSION = 2;
 
 /** One closed RO's evaluation result. */
 export interface MissedOpportunityRo {
@@ -38,6 +49,12 @@ export interface MissedOpportunityRo {
   advisorName: string | null;
   /** Job titles that were on the ticket (quoted OR declined). */
   lineTitleCount: number;
+  /**
+   * Ordered ticket contents. Null means a legacy cached report did not
+   * include ticket details; an empty array means a refreshed report found no
+   * displayable jobs.
+   */
+  ticketJobs: MissedOpportunityTicketJob[] | null;
   /** True when the RO was actually compared against a VHI plan. */
   evaluated: boolean;
   /** Why the RO was not evaluated ("No VIN", "No cached VHI plan", ...). */
@@ -169,6 +186,7 @@ export function normalizeWindowDays(raw: unknown): MissedOppWindow {
 
 /** The whole cached/served report payload. */
 export interface MissedOpportunityReport {
+  reportVersion: number;
   shopId: number;
   windowDays: MissedOppWindow;
   generatedAt: string; // ISO
@@ -184,4 +202,37 @@ export interface MissedOpportunityReport {
   >;
   /** True when the window held more closed ROs than the evaluation cap. */
   truncated: boolean;
+}
+
+/**
+ * Make persisted reports safe for the current client. Legacy rows get a null
+ * ticketJobs marker so the UI can explain that a refresh is needed.
+ */
+export function normalizeMissedOpportunityReportCache(
+  value: unknown,
+): MissedOpportunityReport {
+  const report = value as MissedOpportunityReport;
+  return {
+    ...report,
+    reportVersion:
+      typeof report?.reportVersion === "number" ? report.reportVersion : 1,
+    rows: Array.isArray(report?.rows)
+      ? report.rows.map((row) => ({
+          ...row,
+          ticketJobs: Array.isArray((row as any).ticketJobs)
+            ? (row as any).ticketJobs
+            : null,
+        }))
+      : [],
+    notEvaluated: Array.isArray(report?.notEvaluated) ? report.notEvaluated : [],
+  };
+}
+
+export function hasCurrentMissedOpportunityReportShape(value: unknown): boolean {
+  const report = value as Partial<MissedOpportunityReport> | null;
+  return (
+    report?.reportVersion === MISSED_OPPORTUNITY_REPORT_VERSION &&
+    Array.isArray(report.rows) &&
+    report.rows.every((row) => Array.isArray((row as MissedOpportunityRo).ticketJobs))
+  );
 }

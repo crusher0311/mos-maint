@@ -19,7 +19,7 @@
  * REPORT_TTL_MS.
  */
 
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { buildCloseDateSincePredicate } from "@/lib/missed-opportunities-query";
 import { getDb as getPg } from "@/lib/db/drizzle";
 import {
@@ -32,10 +32,16 @@ import {
   planItemsFromBuckets,
   evaluateRoLines,
   summarizeMissedOpportunities,
+  MISSED_OPPORTUNITY_REPORT_VERSION,
   type MissedOpportunityReport,
   type MissedOpportunityRo,
   type MissedOppWindow,
 } from "@/lib/missed-opportunities";
+import {
+  classifyTicketJobStatus,
+  normalizeTicketJobAmount,
+  type MissedOpportunityTicketJob,
+} from "@/lib/missed-opportunity-ticket-details";
 
 /** Hard cap on ROs evaluated per run — large shops degrade to "newest N". */
 export const MAX_ROS_PER_RUN = 300;
@@ -115,11 +121,16 @@ export async function computeMissedOpportunityReport(
   // Service jobs (ALL of them — declined included; declined counts as
   // quoted) for the scoped ROs, one batched query.
   const titlesByWo = new Map<string, string[]>();
+  const ticketJobsByWo = new Map<string, MissedOpportunityTicketJob[]>();
   if (scoped.length > 0) {
     const jobs = await pg
       .select({
+        id: normalizedServiceJobs.id,
         workOrderId: normalizedServiceJobs.workOrderId,
         title: normalizedServiceJobs.title,
+        status: normalizedServiceJobs.status,
+        total: normalizedServiceJobs.total,
+        sequence: normalizedServiceJobs.sequence,
       })
       .from(normalizedServiceJobs)
       .where(
@@ -131,11 +142,26 @@ export async function computeMissedOpportunityReport(
           ),
           sql`(${normalizedServiceJobs.softDelete}->>'isDeleted')::boolean IS DISTINCT FROM true`,
         ),
+      )
+      .orderBy(
+        asc(normalizedServiceJobs.workOrderId),
+        asc(normalizedServiceJobs.sequence),
+        asc(normalizedServiceJobs.id),
       );
     for (const j of jobs) {
       const list = titlesByWo.get(j.workOrderId) || [];
       if (j.title) list.push(j.title);
       titlesByWo.set(j.workOrderId, list);
+      const ticketJobs = ticketJobsByWo.get(j.workOrderId) || [];
+      ticketJobs.push({
+        title: j.title,
+        recordedStatus: j.status || null,
+        displayGroup: classifyTicketJobStatus(j.status),
+        // normalized_service_jobs.total is canonical dollars for every
+        // provider. Keep it decimal-safe and retain legitimate zero values.
+        totalPrice: normalizeTicketJobAmount(j.total),
+      });
+      ticketJobsByWo.set(j.workOrderId, ticketJobs);
     }
   }
 
@@ -181,6 +207,7 @@ export async function computeMissedOpportunityReport(
     const vin = extractVin(wo.vehicle);
     const vehicleLabel = vehicleLabelFrom(wo.vehicle);
     const titles = titlesByWo.get(wo.id) || [];
+    const ticketJobs = ticketJobsByWo.get(wo.id) || [];
     const base = {
       workOrderId: wo.id,
       workOrderNumber:
@@ -191,6 +218,7 @@ export async function computeMissedOpportunityReport(
       vehicle: vehicleLabel,
       advisorName: wo.serviceAdvisorName || null,
       lineTitleCount: titles.length,
+      ticketJobs,
     };
     if (!vin) {
       return { ...base, evaluated: false, skipReason: "No VIN on the repair order", missedItems: [] };
@@ -208,6 +236,7 @@ export async function computeMissedOpportunityReport(
 
   const summary = summarizeMissedOpportunities(rows);
   return {
+    reportVersion: MISSED_OPPORTUNITY_REPORT_VERSION,
     shopId,
     windowDays,
     generatedAt: new Date().toISOString(),

@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getFeatureEntitlements } from "@/lib/featureResolver";
-import { normalizeWindowDays } from "@/lib/missed-opportunities";
+import {
+  hasCurrentMissedOpportunityReportShape,
+  normalizeMissedOpportunityReportCache,
+  normalizeWindowDays,
+} from "@/lib/missed-opportunities";
 import {
   computeMissedOpportunityReport,
   REPORT_TTL_MS,
@@ -53,9 +57,14 @@ export async function GET(req: NextRequest) {
     const cached = await getCachedMissedOppReport(shopId, windowDays);
     const fresh =
       cached &&
-      Date.now() - new Date(cached.generatedAt).getTime() < REPORT_TTL_MS;
+      Date.now() - new Date(cached.generatedAt).getTime() < REPORT_TTL_MS &&
+      hasCurrentMissedOpportunityReportShape(cached.report);
     if (cached && fresh && !forceRefresh) {
-      return NextResponse.json({ ok: true, cached: true, report: cached.report });
+      return NextResponse.json({
+        ok: true,
+        cached: true,
+        report: normalizeMissedOpportunityReportCache(cached.report),
+      });
     }
 
     try {
@@ -79,7 +88,7 @@ export async function GET(req: NextRequest) {
           ok: true,
           cached: true,
           stale: true,
-          report: cached.report,
+          report: normalizeMissedOpportunityReportCache(cached.report),
         });
       }
       return NextResponse.json(

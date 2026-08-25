@@ -23,7 +23,15 @@ import {
   evaluateRoLines,
   summarizeMissedOpportunities,
   normalizeWindowDays,
+  classifyTicketJobStatus,
+  normalizeTicketJobAmount,
+  formatTicketJobAmount,
+  sumTicketJobAmounts,
+  normalizeMissedOpportunityReportCache,
+  hasCurrentMissedOpportunityReportShape,
+  MISSED_OPPORTUNITY_REPORT_VERSION,
   type MissedOpportunityRo,
+  type MissedOpportunityReport,
   type VhiComparisonItem,
 } from "../lib/missed-opportunities";
 
@@ -72,6 +80,43 @@ console.log("Quoted vs declined vs missing:");
   ok("missed carries status", missed[0].status === "due_soon");
 }
 
+console.log("Ticket-job classification and amounts:");
+{
+  ok("authorized is approved/performed", classifyTicketJobStatus("authorized") === "approved_performed");
+  ok("completed is approved/performed", classifyTicketJobStatus("Completed") === "approved_performed");
+  ok("provider spacing is normalized", classifyTicketJobStatus("in progress") === "approved_performed");
+  ok("declined is deferred/declined", classifyTicketJobStatus("declined") === "deferred_declined");
+  ok("deferred is deferred/declined", classifyTicketJobStatus("DEFERRED") === "deferred_declined");
+  ok("ambiguous status remains other", classifyTicketJobStatus("pending") === "other");
+  ok("missing status remains other", classifyTicketJobStatus(null) === "other");
+
+  ok("decimal string preserved", normalizeTicketJobAmount("1234.5") === "1234.50");
+  ok("zero preserved", normalizeTicketJobAmount("0.00") === "0.00");
+  ok("negative zero normalized", normalizeTicketJobAmount("-0") === "0.00");
+  ok("invalid amount unavailable", normalizeTicketJobAmount("not recorded") === null);
+  ok("over-precise amount not rounded", normalizeTicketJobAmount("12.345") === null);
+  ok(
+    "large decimal formats without floating-point coercion",
+    formatTicketJobAmount("90071992547409.99") === "$90,071,992,547,409.99",
+  );
+  ok("zero formats as currency", formatTicketJobAmount("0.00") === "$0.00");
+  const subtotal = sumTicketJobAmounts([
+    { totalPrice: "0.10" },
+    { totalPrice: "0.20" },
+    { totalPrice: "1000.00" },
+  ]);
+  ok("subtotal is decimal exact", subtotal.total === "1000.30", subtotal.total);
+  ok("known subtotal is complete", subtotal.hasUnavailable === false);
+  const partialSubtotal = sumTicketJobAmounts([
+    { totalPrice: "12.34" },
+    { totalPrice: null },
+  ]);
+  ok("unavailable price excluded from subtotal", partialSubtotal.total === "12.34");
+  ok("subtotal reports unavailable member", partialSubtotal.hasUnavailable === true);
+  const serialized = JSON.parse(JSON.stringify({ totalPrice: normalizeTicketJobAmount("1234567890.12") }));
+  ok("JSON serialization retains decimal string", serialized.totalPrice === "1234567890.12");
+}
+
 console.log("Inspection exclusion:");
 {
   const planItems: VhiComparisonItem[] = [
@@ -94,10 +139,40 @@ function row(partial: Partial<MissedOpportunityRo>): MissedOpportunityRo {
     vehicle: partial.vehicle ?? "2019 Honda Accord",
     advisorName: partial.advisorName ?? null,
     lineTitleCount: partial.lineTitleCount ?? 3,
+    ticketJobs: partial.ticketJobs ?? [],
     evaluated: partial.evaluated ?? true,
     skipReason: partial.skipReason ?? null,
     missedItems: partial.missedItems ?? [],
   };
+}
+
+console.log("Cached report compatibility:");
+{
+  const baseReport: Omit<MissedOpportunityReport, "reportVersion"> = {
+    shopId: 42,
+    windowDays: 30,
+    generatedAt: "2026-08-25T12:00:00.000Z",
+    summary: summarizeMissedOpportunities([row({})]),
+    rows: [row({})],
+    notEvaluated: [],
+    truncated: false,
+  };
+  const legacy: any = {
+    ...baseReport,
+    rows: baseReport.rows.map(({ ticketJobs: _ticketJobs, ...rest }) => rest),
+  };
+  const compatible = normalizeMissedOpportunityReportCache(legacy);
+  ok("legacy report is not current", !hasCurrentMissedOpportunityReportShape(legacy));
+  ok("legacy report version is explicit", compatible.reportVersion === 1);
+  ok("legacy row gets unavailable marker", compatible.rows[0]?.ticketJobs === null);
+
+  const current: MissedOpportunityReport = {
+    ...baseReport,
+    reportVersion: MISSED_OPPORTUNITY_REPORT_VERSION,
+  };
+  ok("current report shape accepted", hasCurrentMissedOpportunityReportShape(current));
+  const normalizedCurrent = normalizeMissedOpportunityReportCache(current);
+  ok("current ticket jobs retained", Array.isArray(normalizedCurrent.rows[0]?.ticketJobs));
 }
 
 console.log("Summary-stat math:");
