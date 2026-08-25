@@ -113,6 +113,17 @@ export default function MissedOpportunitiesPage() {
     load(days, false);
   }, [days, load]);
 
+  // Per-reason skip counts, derived from the notEvaluated rows so cached
+  // reports (computed before this UI existed) still break down correctly.
+  const skipCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const r of report?.notEvaluated || []) {
+      const reason = r.skipReason || "Unknown reason";
+      counts.set(reason, (counts.get(reason) || 0) + 1);
+    }
+    return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
+  }, [report]);
+
   const sortedRows = useMemo(() => {
     if (!report) return [];
     const rows = [...report.rows];
@@ -212,6 +223,34 @@ export default function MissedOpportunitiesPage() {
             {report.truncated && " · window truncated to the newest closed ROs"}
           </div>
 
+          {/* Cold plan-cache explainer — nothing could be evaluated */}
+          {report.summary.totalClosedRos > 0 && report.summary.evaluatedRos === 0 && (
+            <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900 space-y-2">
+              <div className="font-medium">
+                Why is this report empty? None of the {report.summary.totalClosedRos.toLocaleString()} closed
+                RO{report.summary.totalClosedRos === 1 ? "" : "s"} in this window could be evaluated.
+              </div>
+              <ul className="list-disc pl-5 space-y-0.5">
+                {skipCounts.map(([reason, count]) => (
+                  <li key={reason}>
+                    <span className="font-medium">{count.toLocaleString()}</span> — {reason}
+                  </li>
+                ))}
+              </ul>
+              <p>
+                This report compares closed ROs against each vehicle&apos;s cached Vehicle Health
+                Inspection (VHI) plan. To keep it free to run, it only reads plans that already
+                exist — it never rebuilds them. A vehicle&apos;s plan is built when someone views
+                that vehicle in the MOS extension side panel (and refreshed for about 4 hours after).
+              </p>
+              <p>
+                <span className="font-medium">To populate this report:</span> open repair orders in
+                your shop management system with the MOS extension side panel active. Each vehicle
+                viewed builds its plan, and its closed ROs will be evaluated on the next refresh.
+              </p>
+            </div>
+          )}
+
           {/* Summary stats */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <StatCard label="Closed ROs reviewed" value={report.summary.evaluatedRos.toLocaleString()} sub={`${report.summary.notEvaluatedRos} not evaluated`} />
@@ -274,7 +313,11 @@ export default function MissedOpportunitiesPage() {
                 className="text-sm text-gray-600 hover:text-gray-900"
               >
                 {showSkipped ? "▾" : "▸"} {report.notEvaluated.length} closed RO
-                {report.notEvaluated.length === 1 ? "" : "s"} not evaluated (no VIN or no cached VHI plan)
+                {report.notEvaluated.length === 1 ? "" : "s"} not evaluated
+                {skipCounts.length > 0 &&
+                  ` (${skipCounts
+                    .map(([reason, count]) => `${count} ${shortSkipReason(reason)}`)
+                    .join(", ")})`}
               </button>
               {showSkipped && (
                 <div className="mt-2 rounded-lg border border-gray-200 bg-white overflow-hidden">
@@ -298,6 +341,14 @@ export default function MissedOpportunitiesPage() {
       ) : null}
     </div>
   );
+}
+
+/** Compact label for a skip reason in the collapsed skipped-RO toggle. */
+function shortSkipReason(reason: string): string {
+  if (reason.startsWith("No VIN")) return "without a VIN";
+  if (reason.startsWith("No cached VHI plan")) return "without a cached VHI plan";
+  if (reason.startsWith("No service jobs")) return "without service jobs";
+  return reason.toLowerCase();
 }
 
 function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
