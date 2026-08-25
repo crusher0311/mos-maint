@@ -17,7 +17,9 @@
  *   4. Mileage sanity cap: 1,234,556 accepted (real fleet vehicle), >=2M rejected.
  *   5. v3 label[for] hint path still works (regression).
  *   6. classifyDviUrlShape v4/v3/other classification.
- *   7. Incomplete-context telemetry: fires once per URL after the settle
+ *   7. Legacy AutoFlow boards show Create RO while DVI pages do not, and no
+ *      permanent local-only dismissal can override the server preference.
+ *   8. Incomplete-context telemetry: fires once per URL after the settle
  *      timer, payload carries booleans + anonymized hint keys only, and a
  *      complete context never reports.
  */
@@ -180,6 +182,20 @@ async function run() {
   state.messages = [];
 
   const g: any = sandbox;
+
+  // Create RO visibility: legacy workflow boards are valid dashboard views,
+  // DVI pages remain excluded, and visibility cannot be permanently shadowed
+  // by the historical tenant-local dismissal key.
+  {
+    setPage("https://harrells-nc87.autotext.me/Admin/v5.php", "", []);
+    ok("legacy AutoFlow workflow board allows Create RO", g.isAutoflowDashboardView() === true);
+    setPage("https://harrells-nc87.autotext.me/Admin/dvi_v3/index.php?status_id=4242", "", []);
+    ok("legacy AutoFlow DVI excludes Create RO", g.isAutoflowDashboardView() === false);
+    ok(
+      "Create RO has no permanent local-only dismissal",
+      !src.includes("mos.createRoFloating.dismissed"),
+    );
+  }
 
   // 1. Shop id detection
   {

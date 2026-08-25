@@ -9,7 +9,7 @@ import { Storage } from "@google-cloud/storage";
 import { getStickerRedirectUrl } from "@/lib/sticker-utils";
 import { triggerAutoBookingFromSticker, StickerBookingData } from "@/lib/auto-booking/scheduler";
 import { estimateMileageFromCarfax } from "@/lib/integrations/carfax";
-import { findShopBySmsId } from "@/lib/extension-shop-lookup";
+import { findShopBySmsIdDetailed } from "@/lib/extension-shop-lookup";
 import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
 import { parseMileageInput, parseMonthsInput, isAbsurdMileage, MAX_PLAUSIBLE_MILEAGE, logStickerMileageReject } from "@/lib/sticker-mileage";
 
@@ -484,8 +484,13 @@ async function resolveMosShopId(
   db: any,
   authResult: any,
   smsShopId?: string | null,
-  _provider?: string | null // Provider hint is now ignored - we detect from shop config
-): Promise<{ mosShopId: number | null; shop: any; resolvedProvider: string | null }> {
+  requestedProvider?: string | null
+): Promise<{
+  mosShopId: number | null;
+  shop: any;
+  resolvedProvider: string | null;
+  lookupFailure?: { status: number; error: string };
+}> {
   const isPlatformAdmin = authResult.user?.role === "platform_admin";
   const userShopIds = [
     ...(authResult.user?.shopId ? [Number(authResult.user.shopId)] : []),
@@ -494,6 +499,17 @@ async function resolveMosShopId(
     // enterpriseId, attached to the user during validateExtensionToken.
     ...(authResult.user?.accessibleShopIds || []).map((id: any) => Number(id)),
   ];
+  const principalProvider =
+    authResult.principal?.isLegacy !== true
+      ? authResult.principal?.provider
+      : null;
+  // A first-class session's provider is server-issued and authoritative. For
+  // legacy tokens, normalize the request hint but do not invent "tekmetric"
+  // when it is omitted: an absent hint lets the lookup detect AutoFlow claims.
+  const effectiveProvider = String(principalProvider || requestedProvider || "")
+    .trim()
+    .toLowerCase()
+    .replace(/^shop[-_]ware$/, "shopware") || undefined;
 
   // Resolve via the SHARED extension lookup (lib/extension-shop-lookup) so the
   // sticker route matches shops exactly like every other extension endpoint:
@@ -503,14 +519,37 @@ async function resolveMosShopId(
   // knows the page's subdomain (e.g. "harrells-nc87"), so this is the only
   // identifier available to bridge back to a MOS shop.
   if (smsShopId) {
-    const result = await findShopBySmsId(String(smsShopId), {
+    const result = await findShopBySmsIdDetailed(String(smsShopId), {
       userShopIds,
       isPlatformAdmin,
-      providerHint: _provider || undefined,
+      providerHint: effectiveProvider,
+      providerHintIsAuthoritative: Boolean(principalProvider),
     });
-    if (result?.shopDoc) {
+    if (result.status === "resolved") {
       console.log(`[Extension Sticker] Found MOS shop ${result.mosShopId} for SMS shop ${smsShopId}, provider: ${result.provider}`);
       return { mosShopId: result.mosShopId, shop: result.shopDoc, resolvedProvider: result.provider };
+    }
+    if (result.status === "conflict") {
+      return {
+        mosShopId: null,
+        shop: null,
+        resolvedProvider: null,
+        lookupFailure: {
+          status: 409,
+          error: `AutoFlow shop identifier "${result.identifier}" has conflicting mappings. Printing is blocked until a platform admin repairs the mapping.`,
+        },
+      };
+    }
+    if (result.status === "access_denied") {
+      return {
+        mosShopId: null,
+        shop: null,
+        resolvedProvider: null,
+        lookupFailure: {
+          status: 403,
+          error: "This AutoFlow shop is linked in MOS, but your account does not have access to it.",
+        },
+      };
     }
     // An explicit shop context was provided but matched no shop. Do NOT fall
     // back to the user's primary shop: a platform_admin's query is
@@ -544,24 +583,27 @@ async function _GET(request: NextRequest) {
 
     const searchParams = request.nextUrl.searchParams;
     const smsShopId = searchParams.get("shopId");
-    const provider = searchParams.get("provider") || "tekmetric";
+    const provider = searchParams.get("provider");
 
     const db = await getDb();
-    const { mosShopId, shop, resolvedProvider } = await resolveMosShopId(db, authResult, smsShopId, provider);
+    const { mosShopId, shop, resolvedProvider, lookupFailure } = await resolveMosShopId(db, authResult, smsShopId, provider);
 
     console.log(`[Extension Sticker] GET: smsShopId=${smsShopId}, provider=${provider}, mosShopId=${mosShopId}, features=${JSON.stringify(shop?.features || [])}`);
 
     if (!shop) {
       return NextResponse.json(
-        { error: "This shop isn't linked in MOS yet, so the sticker was blocked to avoid printing another shop's branding." },
-        { status: 404, headers: corsHeaders }
+        { error: lookupFailure?.error || "This shop isn't linked in MOS yet, so the sticker was blocked to avoid printing another shop's branding." },
+        { status: lookupFailure?.status || 404, headers: corsHeaders }
       );
     }
 
     if (mosShopId && resolvedProvider) {
       const scopeFailure = requireExtensionPrincipalScope(authResult, {
         shopId: mosShopId,
-        provider: provider || resolvedProvider,
+        provider:
+          authResult.principal?.isLegacy !== true
+            ? authResult.principal?.provider || resolvedProvider
+            : provider || resolvedProvider,
       });
       if (scopeFailure) {
         return NextResponse.json(
@@ -647,7 +689,7 @@ async function _POST(request: NextRequest) {
       customMonths,
       unit = "mi",
       smsShopId,
-      provider = "tekmetric",
+      provider,
       tagline,
       // Customer/vehicle data for auto booking
       customerId,
@@ -709,19 +751,27 @@ async function _POST(request: NextRequest) {
     }
 
     const db = await getDb();
-    const { mosShopId, shop, resolvedProvider: stickerResolvedProvider } = await resolveMosShopId(db, authResult, smsShopId, provider);
+    const {
+      mosShopId,
+      shop,
+      resolvedProvider: stickerResolvedProvider,
+      lookupFailure,
+    } = await resolveMosShopId(db, authResult, smsShopId, provider);
 
     if (!shop) {
       return NextResponse.json(
-        { error: "This shop isn't linked in MOS yet, so the sticker was blocked to avoid printing another shop's branding." },
-        { status: 404, headers: corsHeaders }
+        { error: lookupFailure?.error || "This shop isn't linked in MOS yet, so the sticker was blocked to avoid printing another shop's branding." },
+        { status: lookupFailure?.status || 404, headers: corsHeaders }
       );
     }
 
     if (mosShopId && stickerResolvedProvider) {
       const scopeFailure = requireExtensionPrincipalScope(authResult, {
         shopId: mosShopId,
-        provider: provider || stickerResolvedProvider,
+        provider:
+          authResult.principal?.isLegacy !== true
+            ? authResult.principal?.provider || stickerResolvedProvider
+            : provider || stickerResolvedProvider,
       });
       if (scopeFailure) {
         return NextResponse.json(

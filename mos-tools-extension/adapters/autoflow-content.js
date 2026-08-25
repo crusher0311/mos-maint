@@ -1362,25 +1362,14 @@ function createCreateRoButton() {
   return button;
 }
 
-// ---------- Floating Create RO: dismiss + drag-to-corner persistence ----------
-// Per-host preferences live in localStorage so they're scoped to the
-// AutoFlow tenant. Two keys:
-//   mos.createRoFloating.dismissed = "1" when user closed the bubble
-//   mos.createRoFloating.corner    = "br" | "bl" | "tr" | "tl"
+// ---------- Floating Create RO: drag-to-corner persistence ----------
+// The corner preference lives in localStorage so it is scoped to the AutoFlow
+// tenant. Visibility is controlled only by the server-resolved per-user button
+// preference. The old floating X stored a second, permanent local dismissal
+// with no restore path, making an entitled Create RO button appear broken.
 const FLOATING_CORNERS = ["br", "bl", "tr", "tl"];
-const FLOATING_DISMISS_KEY = "mos.createRoFloating.dismissed";
 const FLOATING_CORNER_KEY = "mos.createRoFloating.corner";
 
-function isFloatingDismissed() {
-  try { return localStorage.getItem(FLOATING_DISMISS_KEY) === "1"; }
-  catch (e) { return false; }
-}
-function setFloatingDismissed(v) {
-  try {
-    if (v) localStorage.setItem(FLOATING_DISMISS_KEY, "1");
-    else localStorage.removeItem(FLOATING_DISMISS_KEY);
-  } catch (e) {}
-}
 function getFloatingCorner() {
   try {
     const v = localStorage.getItem(FLOATING_CORNER_KEY);
@@ -1454,48 +1443,8 @@ function createFloatingCreateRoWrap() {
   btn.style.padding = "10px 12px";
   btn.style.fontSize = "14px";
 
-  // Dismiss (X) button
-  const close = document.createElement("button");
-  close.type = "button";
-  close.id = "mos-create-ro-dismiss-af";
-  close.title = "Hide Create RO button on this site";
-  close.setAttribute("aria-label", "Dismiss Create RO button");
-  Object.assign(close.style, {
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    width: "24px",
-    height: "24px",
-    margin: "0 6px 0 2px",
-    padding: "0",
-    background: "transparent",
-    color: "#fff",
-    border: "none",
-    borderRadius: "4px",
-    cursor: "pointer",
-    fontSize: "16px",
-    lineHeight: "1",
-    opacity: "0.85",
-  });
-  close.textContent = "\u2715";
-  close.addEventListener("mouseenter", () => { close.style.opacity = "1"; close.style.background = "rgba(0,0,0,0.15)"; });
-  close.addEventListener("mouseleave", () => { close.style.opacity = "0.85"; close.style.background = "transparent"; });
-  close.addEventListener("click", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setFloatingDismissed(true);
-    wrap.remove();
-    createRoButtonInjected = false;
-    console.log(
-      "[MOS Telemetry]",
-      "create_ro_button_dismissed",
-      { host: window.location.host, path: window.location.pathname }
-    );
-  });
-
   wrap.appendChild(handle);
   wrap.appendChild(btn);
-  wrap.appendChild(close);
 
   // ----- Drag-to-snap behavior on the handle -----
   let dragState = null;
@@ -1656,11 +1605,11 @@ function injectCreateRoButton() {
 
   // Strategy 3: floating fallback. If no in-page anchor matched, pin the
   // button to a viewport corner so it's always reachable on customized
-  // dashboards. Users can dismiss (X) or drag it to a different corner;
-  // both choices persist per host. We log once per path so we still get
-  // the telemetry signal to add a proper anchor later.
+  // dashboards. Users can drag it to a different corner. Visibility remains
+  // governed by the normal per-user injected-button setting so there is no
+  // unobservable local override. We log once per path so we still get the
+  // telemetry signal to add a proper anchor later.
   if (!target) {
-    if (isFloatingDismissed()) return;
     const nowKey = window.location.pathname;
     if (window.__mosCreateRoNoAnchorLogged !== nowKey) {
       window.__mosCreateRoNoAnchorLogged = nowKey;

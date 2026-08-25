@@ -1,10 +1,39 @@
-import { getDb } from '@/lib/mongo';
+import { getDb, getMongoClient } from '@/lib/mongo';
+import {
+  acquireAutoflowAliasClaim,
+  AutoflowAtomicClaimConflictError,
+  buildAutoflowClaimQuery,
+  classifyAutoflowIdentifierClaims,
+  isAutoflowV4ShopNumber,
+  normalizeAutoflowIdentifier,
+  releaseAutoflowAliasClaim,
+  withAutoflowClaimTransaction,
+} from '@/lib/autoflow-identity';
 
-export type ShopLookupResult = {
+export type ResolvedShopLookup = {
+  status: 'resolved';
   mosShopId: number;
   shopDoc: any;
   provider: 'tekmetric' | 'protractor' | 'shopware' | 'autoflow' | 'shopmonkey';
-} | null;
+};
+
+export type ShopLookupOutcome =
+  | ResolvedShopLookup
+  | {
+      status: 'conflict';
+      provider: 'autoflow';
+      identifier: string;
+      conflictType: 'canonical' | 'alias';
+      shopIds: Array<string | number>;
+    }
+  | {
+      status: 'access_denied' | 'not_found';
+      provider?: 'autoflow';
+      identifier?: string;
+      ownerShopId?: string | number;
+    };
+
+export type ShopLookupResult = ResolvedShopLookup | null;
 
 /**
  * Test seam: tests can override `__deps.getDb` to swap in a fake DB and
@@ -13,11 +42,13 @@ export type ShopLookupResult = {
  */
 export const __deps: {
   getDb: typeof getDb;
+  getMongoClient: typeof getMongoClient;
   discoverShopmonkeyIds: (
     apiKey: string,
   ) => Promise<{ companyId: string | null; locationId: string | null }>;
 } = {
   getDb,
+  getMongoClient,
   discoverShopmonkeyIds: async (apiKey: string) => {
     const { discoverIdsFromKey } = await import(
       "@/lib/integrations/shopmonkey/auth"
@@ -26,16 +57,93 @@ export const __deps: {
   },
 };
 
-export async function findShopBySmsId(
+function isShopAccessible(
+  shop: any,
+  userShopIds: number[],
+  isPlatformAdmin: boolean,
+) {
+  if (isPlatformAdmin) return true;
+  if (userShopIds.length === 0) return false;
+  return userShopIds.some((id) => String(id) === String(shop?.shopId));
+}
+
+function resolvedShop(shopDoc: any): ResolvedShopLookup {
+  const provider = shopDoc.integrationProvider
+    || (shopDoc.tekmetric?.shopId ? 'tekmetric'
+      : shopDoc.protractor?.connectionId ? 'protractor'
+      : shopDoc.shopware?.tenantId ? 'shopware'
+      : shopDoc.shopmonkey?.apiKey ? 'shopmonkey'
+      : shopDoc.autoflow?.domain
+        || shopDoc.autoflow?.subdomain
+        || shopDoc.autoflow?.shopId
+        || shopDoc.autoflowDomain ? 'autoflow'
+      : 'tekmetric') as ResolvedShopLookup['provider'];
+
+  return {
+    status: 'resolved',
+    mosShopId: Number(shopDoc.shopId),
+    shopDoc,
+    provider,
+  };
+}
+
+async function recordUnresolvedAutoflowIdentifier(
+  db: any,
+  identifier: string,
+  details: {
+    reason: string;
+    candidateShopIds: Array<string | number>;
+    candidateCount: number;
+  },
+) {
+  const normalizedIdentifier =
+    normalizeAutoflowIdentifier(identifier) || identifier;
+  try {
+    await db.collection("autoflow_unresolved_numbers").updateOne(
+      { number: normalizedIdentifier },
+      {
+        $set: {
+          lastSeenAt: new Date(),
+          candidateShopIds: details.candidateShopIds.slice(0, 25),
+          candidateCount: details.candidateCount,
+          reason: details.reason,
+        },
+        $setOnInsert: {
+          number: normalizedIdentifier,
+          firstSeenAt: new Date(),
+          resolvedShopId: null,
+        },
+        $inc: { seenCount: 1 },
+      },
+      { upsert: true },
+    );
+  } catch (err: any) {
+    console.warn(
+      `[Shop Lookup] Failed to record unresolved AutoFlow identifier "${identifier}":`,
+      err?.message || err,
+    );
+  }
+}
+
+export async function findShopBySmsIdDetailed(
   smsShopId: string,
   options: {
     userShopIds?: number[];
     isPlatformAdmin?: boolean;
     providerHint?: string;
+    providerHintIsAuthoritative?: boolean;
   } = {}
-): Promise<ShopLookupResult> {
+): Promise<ShopLookupOutcome> {
   const db = await __deps.getDb();
-  const { userShopIds = [], isPlatformAdmin = false, providerHint } = options;
+  const { userShopIds = [], isPlatformAdmin = false } = options;
+  const providerHint = String(options.providerHint || "")
+    .trim()
+    .toLowerCase()
+    .replace(/^shop[-_]ware$/, "shopware") || undefined;
+  const shouldResolveAutoflow =
+    providerHint === 'autoflow'
+    || (!providerHint && options.providerHintIsAuthoritative !== true)
+    || options.providerHintIsAuthoritative !== true;
   
   const tekShopIdNum = parseInt(smsShopId);
   const tekShopIdStr = String(smsShopId);
@@ -46,18 +154,105 @@ export async function findShopBySmsId(
   // resolve it to a completely unrelated shop (wrong-shop context/data). When
   // the caller tells us this is an AutoFlow page, restrict the query to
   // AutoFlow fields only.
-  const autoflowOr = [
-    { "autoflow.shopId": smsShopId },
-    { "autoflow.shopNumbers": smsShopId },
-    { "autoflow.domain": smsShopId },
-    { "autoflow.domain": `${smsShopId}.autotext.me` },
-    { "autoflow.subdomain": smsShopId },
-    { autoflowDomain: smsShopId },
-    { autoflowDomain: `${smsShopId}.autotext.me` },
-  ];
+  // AutoFlow canonical identity must be resolved across ALL shops before user
+  // access is applied. Otherwise an inaccessible canonical owner can be hidden
+  // by the scope filter and a polluted alias on an accessible shop can win.
+  if (shouldResolveAutoflow) {
+    const claimDocs = await db.collection("shops")
+      .find(buildAutoflowClaimQuery(smsShopId), {
+        collation: { locale: "en", strength: 2 },
+      })
+      .toArray();
+    const claims = classifyAutoflowIdentifierClaims(claimDocs, smsShopId);
+    const canonicalOwners = claims.canonicalClaims;
+    const aliasOwners = claims.aliasClaims;
+
+    if (canonicalOwners.length > 1) {
+      const shopIds = canonicalOwners.map((item) => item.shopId);
+      await recordUnresolvedAutoflowIdentifier(db, smsShopId, {
+        reason: 'canonical_conflict',
+        candidateShopIds: shopIds,
+        candidateCount: shopIds.length,
+      });
+      console.warn(
+        `[Shop Lookup] AutoFlow canonical conflict for "${smsShopId}" across shops ${shopIds.join(', ')}; refusing to guess`,
+      );
+      return {
+        status: 'conflict',
+        provider: 'autoflow',
+        identifier: normalizeAutoflowIdentifier(smsShopId),
+        conflictType: 'canonical',
+        shopIds,
+      };
+    }
+
+    if (canonicalOwners.length === 1) {
+      const owner = claimDocs.find(
+        (doc: any) => String(doc.shopId) === String(canonicalOwners[0].shopId),
+      );
+      if (!isShopAccessible(owner, userShopIds, isPlatformAdmin)) {
+        console.warn(
+          `[Shop Lookup] AutoFlow canonical owner ${canonicalOwners[0].shopId} for "${smsShopId}" is outside the user's scope; refusing alias fallback`,
+        );
+        return {
+          status: 'access_denied',
+          provider: 'autoflow',
+          identifier: claims.identifier,
+          ownerShopId: canonicalOwners[0].shopId,
+        };
+      }
+      return resolvedShop(owner);
+    }
+
+    if ((providerHint === 'autoflow' || !providerHint) && aliasOwners.length > 1) {
+      const shopIds = aliasOwners.map((item) => item.shopId);
+      await recordUnresolvedAutoflowIdentifier(db, smsShopId, {
+        reason: 'duplicate_alias',
+        candidateShopIds: shopIds,
+        candidateCount: shopIds.length,
+      });
+      console.warn(
+        `[Shop Lookup] AutoFlow alias conflict for "${smsShopId}" across shops ${shopIds.join(', ')}; refusing to guess`,
+      );
+      return {
+        status: 'conflict',
+        provider: 'autoflow',
+        identifier: claims.identifier,
+        conflictType: 'alias',
+        shopIds,
+      };
+    }
+
+    if ((providerHint === 'autoflow' || !providerHint) && aliasOwners.length === 1) {
+      const owner = claimDocs.find(
+        (doc: any) => String(doc.shopId) === String(aliasOwners[0].shopId),
+      );
+      if (!isShopAccessible(owner, userShopIds, isPlatformAdmin)) {
+        return {
+          status: 'access_denied',
+          provider: 'autoflow',
+          identifier: claims.identifier,
+          ownerShopId: aliasOwners[0].shopId,
+        };
+      }
+      return resolvedShop(owner);
+    }
+
+    if (
+      (providerHint === 'autoflow' || !providerHint)
+      && !isPlatformAdmin
+      && userShopIds.length === 0
+    ) {
+      return {
+        status: 'access_denied',
+        provider: 'autoflow',
+        identifier: claims.identifier,
+      };
+    }
+  }
 
   const shopQuery: any = {
-    $or: providerHint === 'autoflow' ? autoflowOr : [
+    $or: [
       ...(isNaN(tekShopIdNum) ? [] : [{ shopId: tekShopIdNum }]),
       { "tekmetric.shopId": tekShopIdNum },
       { "tekmetric.shopId": tekShopIdStr },
@@ -65,12 +260,11 @@ export async function findShopBySmsId(
       { tekmetricShopId: tekShopIdStr },
       { "protractor.connectionId": smsShopId },
       { protractorConnectionId: smsShopId },
-      ...autoflowOr,
       { "shopware.tenantSubdomain": smsShopId },
       { "shopware.tenantId": smsShopId },
       { "shopmonkey.locationId": smsShopId },
       { "shopmonkey.companyId": smsShopId },
-    ]
+    ],
   };
   
   if (!isPlatformAdmin && userShopIds.length > 0) {
@@ -84,11 +278,13 @@ export async function findShopBySmsId(
     shopQuery.shopId = { $in: shopIdVariants };
   }
   
-  let shopDoc = await db.collection("shops").findOne(shopQuery);
+  let shopDoc = providerHint === 'autoflow'
+    ? null
+    : await db.collection("shops").findOne(shopQuery);
   
   if (!shopDoc) {
     console.log(`[Shop Lookup] No match for smsShopId=${smsShopId}, userShopIds=${JSON.stringify(userShopIds)}, isPlatformAdmin=${isPlatformAdmin}, providerHint=${providerHint || 'none'}`);
-    const anyShop = await db.collection("shops").findOne({
+    const anyShop = providerHint === 'autoflow' ? null : await db.collection("shops").findOne({
       $or: [
         { "tekmetric.shopId": tekShopIdNum },
         { "tekmetric.shopId": tekShopIdStr },
@@ -140,12 +336,11 @@ export async function findShopBySmsId(
   // a SINGLE candidate so we never link the wrong shop. Non-admins are scoped
   // to their own shops; platform admins (unscoped) won't auto-learn when many
   // AutoFlow shops exist, which is the safe outcome.
-  const looksLikeAutoflowId =
-    typeof smsShopId === 'string' &&
-    smsShopId.trim().length > 0 &&
-    smsShopId.trim().length <= 64 &&
-    !/\s/.test(smsShopId);
-  if (!shopDoc && providerHint === 'autoflow' && looksLikeAutoflowId) {
+  // Only numeric v4 shop numbers may be learned. Learning arbitrary slugs is
+  // what allowed canonical v3 identities such as "harrells-nc87" to poison
+  // unrelated shops.
+  const looksLikeAutoflowV4Number = isAutoflowV4ShopNumber(smsShopId);
+  if (!shopDoc && providerHint === 'autoflow' && looksLikeAutoflowV4Number) {
     const afFallbackQuery: any = {
       $or: [
         { "autoflow.domain": { $exists: true } },
@@ -162,12 +357,86 @@ export async function findShopBySmsId(
     const candidates = await db.collection("shops").find(afFallbackQuery).toArray();
 
     if (candidates.length === 1) {
-      shopDoc = candidates[0];
-      console.log(`[Shop Lookup] AutoFlow fallback: single shop ${shopDoc.shopId} for AutoFlow id "${smsShopId}" — learning it for future lookups`);
-      await db.collection("shops").updateOne(
-        { _id: shopDoc._id },
-        { $addToSet: { "autoflow.shopNumbers": smsShopId } }
+      // Re-check global ownership immediately before writing. This closes the
+      // normal stale-read window and ensures an out-of-scope canonical or alias
+      // can never be overwritten by learning into the user's sole candidate.
+      const latestClaimDocs = await db.collection("shops")
+        .find(buildAutoflowClaimQuery(smsShopId), {
+          collation: { locale: "en", strength: 2 },
+        })
+        .toArray();
+      const latestClaims = classifyAutoflowIdentifierClaims(
+        latestClaimDocs,
+        smsShopId,
       );
+      if (
+        latestClaims.canonicalClaims.length === 0
+        && latestClaims.aliasClaims.length === 0
+      ) {
+        shopDoc = candidates[0];
+        try {
+          const candidateShop = shopDoc;
+          await withAutoflowClaimTransaction(
+            () => __deps.getMongoClient(),
+            async (session) => {
+              const reservation = await acquireAutoflowAliasClaim(
+                db,
+                smsShopId,
+                candidateShop.shopId,
+                { source: "auto_learning" },
+                session,
+              );
+              try {
+                console.log(`[Shop Lookup] AutoFlow fallback: single shop ${candidateShop.shopId} for v4 number "${smsShopId}" — learning it for future lookups`);
+                const update = await db.collection("shops").updateOne(
+                  { _id: candidateShop._id },
+                  { $addToSet: { "autoflow.shopNumbers": smsShopId } },
+                  session ? { session } : undefined,
+                );
+                if (update.matchedCount !== 1) {
+                  throw new Error(
+                    `AutoFlow learning target ${candidateShop.shopId} disappeared`,
+                  );
+                }
+              } catch (error) {
+                if (!session && reservation.created) {
+                  await releaseAutoflowAliasClaim(
+                    db,
+                    reservation.normalizedIdentifier,
+                    candidateShop.shopId,
+                  );
+                }
+                throw error;
+              }
+            },
+          );
+        } catch (error) {
+          shopDoc = null;
+          if (error instanceof AutoflowAtomicClaimConflictError) {
+            await recordUnresolvedAutoflowIdentifier(db, smsShopId, {
+              reason: 'atomic_claim_conflict',
+              candidateShopIds:
+                error.ownerShopId == null ? [] : [error.ownerShopId],
+              candidateCount: error.ownerShopId == null ? 0 : 1,
+            });
+          } else {
+            throw error;
+          }
+        }
+      } else {
+        const owners = [
+          ...latestClaims.canonicalClaims,
+          ...latestClaims.aliasClaims,
+        ].map((item) => item.shopId);
+        await recordUnresolvedAutoflowIdentifier(db, smsShopId, {
+          reason: 'claim_appeared_during_learning',
+          candidateShopIds: owners,
+          candidateCount: owners.length,
+        });
+        console.warn(
+          `[Shop Lookup] AutoFlow id "${smsShopId}" gained an owner before learning; refusing write`,
+        );
+      }
     } else if (candidates.length > 1) {
       console.warn(`[Shop Lookup] AutoFlow fallback: ${candidates.length} candidate shops for AutoFlow id "${smsShopId}" — cannot auto-associate. Shops: ${candidates.map(s => s.shopId).join(', ')}`);
     }
@@ -178,28 +447,23 @@ export async function findShopBySmsId(
     // guess a shop — but the miss must not be invisible. Best-effort: a write
     // failure never breaks the lookup itself.
     if (!shopDoc) {
-      try {
-        const candidateShopIds = candidates
-          .map((s: any) => s?.shopId)
-          .filter((id: any) => id != null)
-          .slice(0, 25);
-        await db.collection("autoflow_unresolved_numbers").updateOne(
-          { number: smsShopId },
-          {
-            $set: {
-              lastSeenAt: new Date(),
-              candidateShopIds,
-              candidateCount: candidates.length,
-            },
-            $setOnInsert: { number: smsShopId, firstSeenAt: new Date(), resolvedShopId: null },
-            $inc: { seenCount: 1 },
-          },
-          { upsert: true }
-        );
-      } catch (err: any) {
-        console.warn(`[Shop Lookup] Failed to record unresolved AutoFlow number "${smsShopId}":`, err?.message || err);
-      }
+      const candidateShopIds = candidates
+        .map((s: any) => s?.shopId)
+        .filter((id: any) => id != null);
+      await recordUnresolvedAutoflowIdentifier(db, smsShopId, {
+        reason: candidates.length > 1 ? 'ambiguous_candidates' : 'unknown',
+        candidateShopIds,
+        candidateCount: candidates.length,
+      });
     }
+  }
+
+  if (!shopDoc && providerHint === 'autoflow' && !looksLikeAutoflowV4Number) {
+    await recordUnresolvedAutoflowIdentifier(db, smsShopId, {
+      reason: 'unknown_non_numeric_identifier',
+      candidateShopIds: [],
+      candidateCount: 0,
+    });
   }
 
   // Shopmonkey self-onboard (key present, ids missing). Shopmonkey is a
@@ -261,20 +525,29 @@ export async function findShopBySmsId(
   }
 
   if (!shopDoc) {
-    return null;
+    return {
+      status: 'not_found',
+      ...(providerHint === 'autoflow'
+        ? {
+            provider: 'autoflow' as const,
+            identifier: normalizeAutoflowIdentifier(smsShopId),
+          }
+        : {}),
+    };
   }
-  
-  const provider = shopDoc.integrationProvider 
-    || (shopDoc.tekmetric?.shopId ? 'tekmetric' 
-      : shopDoc.protractor?.connectionId ? 'protractor' 
-      : shopDoc.shopware?.tenantId ? 'shopware'
-      : shopDoc.shopmonkey?.apiKey ? 'shopmonkey'
-      : shopDoc.autoflow?.domain ? 'autoflow' 
-      : 'tekmetric') as 'tekmetric' | 'protractor' | 'shopware' | 'autoflow' | 'shopmonkey';
-  
-  return {
-    mosShopId: Number(shopDoc.shopId),
-    shopDoc,
-    provider
-  };
+
+  return resolvedShop(shopDoc);
+}
+
+export async function findShopBySmsId(
+  smsShopId: string,
+  options: {
+    userShopIds?: number[];
+    isPlatformAdmin?: boolean;
+    providerHint?: string;
+    providerHintIsAuthoritative?: boolean;
+  } = {},
+): Promise<ShopLookupResult> {
+  const outcome = await findShopBySmsIdDetailed(smsShopId, options);
+  return outcome.status === 'resolved' ? outcome : null;
 }

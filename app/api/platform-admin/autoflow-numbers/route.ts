@@ -7,11 +7,15 @@
 // (`autoflow.shopNumbers`).
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
+import { isAutoflowV4ShopNumber } from "@/lib/autoflow-identity";
 import {
   listUnresolvedAutoflowNumbers,
   listAutoflowShops,
+  listAutoflowIdentifierConflicts,
   findShopByIdBasic,
-  findShopWithAutoflowNumberConflict,
+  findAutoflowIdentifierClaimConflicts,
+  AutoflowIdentifierConflictError,
+  AutoflowAliasNotOwnedError,
   attachAutoflowNumber,
   detachAutoflowNumber,
 } from "@/lib/data/repositories/autoflow-unresolved-numbers";
@@ -26,9 +30,10 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const [unresolved, shops] = await Promise.all([
+    const [unresolved, shops, conflicts] = await Promise.all([
       listUnresolvedAutoflowNumbers(200),
       listAutoflowShops(),
+      listAutoflowIdentifierConflicts(),
     ]);
 
     return NextResponse.json({
@@ -40,8 +45,10 @@ export async function GET() {
         seenCount: u.seenCount || 0,
         candidateShopIds: u.candidateShopIds || [],
         candidateCount: u.candidateCount ?? (u.candidateShopIds || []).length,
+        reason: u.reason || null,
       })),
       shops,
+      conflicts,
     });
   } catch (err: any) {
     console.error("[AutoFlow Numbers] GET error:", err?.message || err);
@@ -58,8 +65,11 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const number = typeof body?.number === "string" ? body.number.trim() : "";
     const shopIdRaw = body?.shopId;
-    if (!number || number.length > 64 || /\s/.test(number)) {
-      return NextResponse.json({ error: "Invalid number" }, { status: 400 });
+    if (!isAutoflowV4ShopNumber(number)) {
+      return NextResponse.json(
+        { error: "AutoFlow v4 shop number must contain digits only" },
+        { status: 400 },
+      );
     }
     const shopId = isNaN(Number(shopIdRaw)) ? shopIdRaw : Number(shopIdRaw);
     if (shopId == null || shopId === "") {
@@ -72,10 +82,13 @@ export async function POST(req: NextRequest) {
     }
 
     // Guard: a number may only be attached to one shop.
-    const conflict = await findShopWithAutoflowNumberConflict(number, shopId);
-    if (conflict) {
+    const conflicts = await findAutoflowIdentifierClaimConflicts(number, shopId);
+    if (conflicts.length > 0) {
+      const owners = conflicts
+        .map((claim) => `${claim.shopId} (${claim.shopName}, ${claim.field})`)
+        .join(", ");
       return NextResponse.json(
-        { error: `Number ${number} is already attached to shop ${conflict.shopId} (${conflict.name || "unnamed"})` },
+        { error: `Identifier ${number} is already claimed by ${owners}` },
         { status: 409 },
       );
     }
@@ -85,6 +98,15 @@ export async function POST(req: NextRequest) {
     console.log(`[AutoFlow Numbers] ${session.email} attached AutoFlow number "${number}" to shop ${shopId}`);
     return NextResponse.json({ ok: true });
   } catch (err: any) {
+    if (err instanceof AutoflowIdentifierConflictError) {
+      return NextResponse.json(
+        {
+          error: err.message,
+          conflicts: err.claims,
+        },
+        { status: 409 },
+      );
+    }
     console.error("[AutoFlow Numbers] POST error:", err?.message || err);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
@@ -104,11 +126,14 @@ export async function DELETE(req: NextRequest) {
     }
     const shopId = isNaN(Number(shopIdRaw)) ? shopIdRaw : Number(shopIdRaw);
 
-    await detachAutoflowNumber(shopId, number);
+    await detachAutoflowNumber(shopId, number, session.email || null);
 
     console.log(`[AutoFlow Numbers] ${session.email} detached AutoFlow number "${number}" from shop ${shopId}`);
     return NextResponse.json({ ok: true });
   } catch (err: any) {
+    if (err instanceof AutoflowAliasNotOwnedError) {
+      return NextResponse.json({ error: err.message }, { status: 409 });
+    }
     console.error("[AutoFlow Numbers] DELETE error:", err?.message || err);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }

@@ -5,7 +5,7 @@
 // extension can't always resolve. Unresolved numbers land here for a manual,
 // fail-closed attach to the right shop's autoflow.shopNumbers.
 import { useCallback, useEffect, useState } from "react";
-import { Building2, Link2, RefreshCw, Trash2 } from "lucide-react";
+import { AlertTriangle, Building2, Link2, RefreshCw, Trash2 } from "lucide-react";
 
 interface UnresolvedNumber {
   number: string;
@@ -14,13 +14,30 @@ interface UnresolvedNumber {
   seenCount: number;
   candidateShopIds: (string | number)[];
   candidateCount: number;
+  reason: string | null;
 }
 
 interface AutoflowShop {
   shopId: string | number;
   name: string;
   autoflowDomain: string | null;
+  canonicalIdentifiers: string[];
   shopNumbers: string[];
+}
+
+interface AutoflowClaim {
+  shopId: string | number;
+  shopName: string;
+  claimType: "canonical" | "alias";
+  field: string;
+  value: string;
+}
+
+interface AutoflowConflict {
+  identifier: string;
+  reason: "multiple_canonical" | "multiple_aliases" | "canonical_alias_collision";
+  canonicalClaims: AutoflowClaim[];
+  aliasClaims: AutoflowClaim[];
 }
 
 export default function AutoflowNumbersPage() {
@@ -28,6 +45,7 @@ export default function AutoflowNumbersPage() {
   const [error, setError] = useState<string | null>(null);
   const [unresolved, setUnresolved] = useState<UnresolvedNumber[]>([]);
   const [shops, setShops] = useState<AutoflowShop[]>([]);
+  const [conflicts, setConflicts] = useState<AutoflowConflict[]>([]);
   const [selection, setSelection] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -41,6 +59,7 @@ export default function AutoflowNumbersPage() {
       if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
       setUnresolved(data.unresolved || []);
       setShops(data.shops || []);
+      setConflicts(data.conflicts || []);
     } catch (e: any) {
       setError(e?.message || "Failed to load");
     } finally {
@@ -100,6 +119,11 @@ export default function AutoflowNumbersPage() {
 
   const fmt = (d: string | null) => (d ? new Date(d).toLocaleString() : "—");
   const mapped = shops.filter((s) => (s.shopNumbers || []).length > 0);
+  const conflictLabel = (reason: AutoflowConflict["reason"]) => {
+    if (reason === "multiple_canonical") return "Multiple canonical owners";
+    if (reason === "multiple_aliases") return "Duplicate learned aliases";
+    return "Alias overrides another shop's canonical identity";
+  };
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
@@ -138,6 +162,77 @@ export default function AutoflowNumbersPage() {
         <div className="text-gray-500 text-sm py-12 text-center">Loading…</div>
       ) : (
         <>
+          <div className="bg-amber-50 rounded-xl border border-amber-200 shadow-sm mb-8">
+            <div className="px-5 py-4 border-b border-amber-200">
+              <h2 className="font-semibold text-amber-950 flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5" />
+                Identity conflicts{" "}
+                <span className="text-amber-700 font-normal">({conflicts.length})</span>
+              </h2>
+              <p className="text-sm text-amber-800 mt-1">
+                Canonical domains always win at runtime. Remove incorrect learned aliases below;
+                canonical fields must be corrected on the shop record itself.
+              </p>
+            </div>
+            {conflicts.length === 0 ? (
+              <div className="px-5 py-8 text-sm text-amber-800 text-center">
+                No conflicting AutoFlow identities found.
+              </div>
+            ) : (
+              <div className="divide-y divide-amber-200">
+                {conflicts.map((conflict) => (
+                  <div key={conflict.identifier} className="px-5 py-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <div className="font-mono font-semibold text-amber-950">
+                          {conflict.identifier}
+                        </div>
+                        <div className="text-xs text-amber-800 mt-0.5">
+                          {conflictLabel(conflict.reason)}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-3 grid gap-2">
+                      {conflict.canonicalClaims.map((claim) => (
+                        <div
+                          key={`canonical-${claim.shopId}-${claim.field}`}
+                          className="flex items-center justify-between gap-3 rounded-lg bg-white border border-amber-200 px-3 py-2 text-sm"
+                        >
+                          <span>
+                            <strong>{claim.shopName}</strong>{" "}
+                            <span className="text-gray-500">#{claim.shopId}</span>
+                          </span>
+                          <span className="text-xs text-emerald-700 font-medium">
+                            Canonical · {claim.field}
+                          </span>
+                        </div>
+                      ))}
+                      {conflict.aliasClaims.map((claim) => (
+                        <div
+                          key={`alias-${claim.shopId}-${claim.value}`}
+                          className="flex items-center justify-between gap-3 rounded-lg bg-white border border-amber-200 px-3 py-2 text-sm"
+                        >
+                          <span>
+                            <strong>{claim.shopName}</strong>{" "}
+                            <span className="text-gray-500">#{claim.shopId}</span>
+                          </span>
+                          <button
+                            onClick={() => detach(claim.value, claim.shopId)}
+                            disabled={busy === claim.value}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs text-red-700 border border-red-200 rounded-md hover:bg-red-50 disabled:opacity-40"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            Remove learned alias
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm mb-8">
             <div className="px-5 py-4 border-b border-gray-100">
               <h2 className="font-semibold text-gray-900">
@@ -156,6 +251,7 @@ export default function AutoflowNumbersPage() {
                     <th className="px-3 py-2 font-medium">Last seen</th>
                     <th className="px-3 py-2 font-medium">Hits</th>
                     <th className="px-3 py-2 font-medium">Candidates</th>
+                     <th className="px-3 py-2 font-medium">Reason</th>
                     <th className="px-3 py-2 font-medium">Attach to shop</th>
                     <th className="px-3 py-2" />
                   </tr>
@@ -169,6 +265,9 @@ export default function AutoflowNumbersPage() {
                       <td className="px-3 py-3 text-gray-600">
                         {u.candidateShopIds.length > 0 ? u.candidateShopIds.join(", ") : "—"}
                       </td>
+                       <td className="px-3 py-3 text-gray-600">
+                         {u.reason ? u.reason.replaceAll("_", " ") : "unknown"}
+                       </td>
                       <td className="px-3 py-3">
                         <select
                           value={selection[u.number] || ""}

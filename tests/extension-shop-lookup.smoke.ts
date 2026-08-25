@@ -21,7 +21,17 @@
  *   - Provider field is inferred when not stamped on the doc.
  */
 
-import { __deps, findShopBySmsId } from "../lib/extension-shop-lookup";
+import {
+  __deps,
+  findShopBySmsId,
+  findShopBySmsIdDetailed,
+} from "../lib/extension-shop-lookup";
+import {
+  acquireAutoflowAliasClaim,
+  AutoflowAtomicClaimConflictError,
+  claimsBlockingAutoflowAttachment,
+  findAutoflowIdentifierConflicts,
+} from "../lib/autoflow-identity";
 import { makeFakeDb } from "./utils/fake-mongo";
 
 let failed = 0;
@@ -39,13 +49,16 @@ function withFakeDb(
 ) {
   const fake = makeFakeDb(seed);
   const originalGetDb = __deps.getDb;
+  const originalGetMongoClient = __deps.getMongoClient;
   const originalDiscover = __deps.discoverShopmonkeyIds;
   __deps.getDb = async () => fake.db as any;
+  __deps.getMongoClient = async () => null as any;
   if (discover) __deps.discoverShopmonkeyIds = discover;
   return {
     fake,
     restore: () => {
       __deps.getDb = originalGetDb;
+      __deps.getMongoClient = originalGetMongoClient;
       __deps.discoverShopmonkeyIds = originalDiscover;
     },
   };
@@ -458,6 +471,384 @@ async function run() {
           (o as any).collection === "autoflow_unresolved_numbers",
       );
       ok("zero-candidate miss recorded as unresolved", !!recordOp);
+    } finally {
+      restore();
+    }
+  }
+
+  // 21. Production-shaped Harrell's collision: its canonical legacy domain
+  //     wins globally over polluted learned aliases on CAR Experts and Big O.
+  //     The sticker route consumes this exact shopDoc, so pin its branding and
+  //     appointment destination as well as its MOS shop id.
+  {
+    const { restore } = withFakeDb({
+      shops: [
+        {
+          shopId: 29,
+          name: "Harrell's Tire and Auto",
+          autoflowDomain: "harrells-nc87.autotext.me",
+          integrationProvider: "protractor",
+          protractor: { connectionId: "harrells-pt" },
+          stickerConfig: {
+            logo: "harrells-logo",
+            phone: "910-555-0029",
+            tagline: "Harrell's Tire and Auto",
+            appointmentUrl: "https://harrells.example/appointments",
+          },
+        },
+        {
+          shopId: 81,
+          name: "CAR Experts",
+          autoflow: { domain: "car-experts.autotext.me", shopNumbers: ["harrells-nc87"] },
+          stickerConfig: {
+            logo: "car-experts-logo",
+            appointmentUrl: "https://car-experts.example",
+          },
+        },
+        {
+          shopId: 82,
+          name: "Big O Tires",
+          autoflow: { domain: "big-o.autotext.me", shopNumbers: ["harrells-nc87"] },
+          stickerConfig: {
+            logo: "big-o-logo",
+            appointmentUrl: "https://big-o.example",
+          },
+        },
+      ],
+    });
+    try {
+      const r = await findShopBySmsId("harrells-nc87", {
+        isPlatformAdmin: true,
+        providerHint: "autoflow",
+      });
+      ok("canonical Harrell's domain wins over two polluted aliases", r?.mosShopId === 29);
+      ok(
+        "sticker lookup receives Harrell's branding",
+        r?.shopDoc?.stickerConfig?.logo === "harrells-logo"
+          && r?.shopDoc?.stickerConfig?.phone === "910-555-0029"
+          && r?.shopDoc?.stickerConfig?.tagline === "Harrell's Tire and Auto",
+      );
+      ok(
+        "sticker lookup receives Harrell's appointment destination",
+        r?.shopDoc?.stickerConfig?.appointmentUrl === "https://harrells.example/appointments",
+      );
+    } finally {
+      restore();
+    }
+  }
+
+  // 22. Access is applied after global canonical resolution. A user who can
+  //     access the polluted alias owner but not Harrell's must be denied rather
+  //     than silently falling through to the wrong shop.
+  {
+    const { fake, restore } = withFakeDb({
+      shops: [
+        {
+          shopId: 29,
+          name: "Harrell's Tire and Auto",
+          autoflowDomain: "harrells-nc87.autotext.me",
+        },
+        {
+          shopId: 81,
+          name: "CAR Experts",
+          autoflow: { domain: "car-experts.autotext.me", shopNumbers: ["harrells-nc87"] },
+        },
+      ],
+    });
+    try {
+      const outcome = await findShopBySmsIdDetailed("harrells-nc87", {
+        isPlatformAdmin: false,
+        userShopIds: [81],
+        providerHint: "autoflow",
+      });
+      ok("inaccessible canonical owner fails closed", outcome.status === "access_denied");
+      ok(
+        "inaccessible canonical owner never triggers alias learning",
+        !fake.ops.some(
+          (op) =>
+            op.op === "updateOne"
+            && (op as any).collection === "shops"
+            && JSON.stringify((op as any).update).includes("shopNumbers"),
+        ),
+      );
+    } finally {
+      restore();
+    }
+  }
+
+  // 23. Duplicate learned aliases with no canonical owner return a clear
+  //     conflict outcome and are recorded for operator repair.
+  {
+    const { fake, restore } = withFakeDb({
+      shops: [
+        { shopId: 91, name: "Alias A", autoflow: { domain: "a.autotext.me", shopNumbers: ["2468"] } },
+        { shopId: 92, name: "Alias B", autoflow: { domain: "b.autotext.me", shopNumbers: ["2468"] } },
+      ],
+      autoflow_unresolved_numbers: [],
+    });
+    try {
+      const outcome = await findShopBySmsIdDetailed("2468", {
+        isPlatformAdmin: true,
+        providerHint: "autoflow",
+      });
+      ok(
+        "duplicate learned aliases return an alias conflict",
+        outcome.status === "conflict"
+          && outcome.conflictType === "alias"
+          && outcome.shopIds.length === 2,
+      );
+      const unresolvedWrite = fake.ops.find(
+        (op) => op.op === "updateOne" && (op as any).collection === "autoflow_unresolved_numbers",
+      ) as any;
+      ok(
+        "duplicate alias conflict records a clear reason",
+        unresolvedWrite?.update?.$set?.reason === "duplicate_alias",
+      );
+    } finally {
+      restore();
+    }
+  }
+
+  // 24. Unknown v3-looking slugs are never auto-learned into the user's only
+  //     AutoFlow shop. Only numeric v4 identifiers use that fallback.
+  {
+    const { fake, restore } = withFakeDb({
+      shops: [
+        { shopId: 93, name: "Only Shop", autoflow: { domain: "only.autotext.me" } },
+      ],
+      autoflow_unresolved_numbers: [],
+    });
+    try {
+      const outcome = await findShopBySmsIdDetailed("unknown-v3-slug", {
+        isPlatformAdmin: false,
+        userShopIds: [93],
+        providerHint: "autoflow",
+      });
+      ok("unknown non-numeric AutoFlow identifier stays unresolved", outcome.status === "not_found");
+      ok(
+        "unknown non-numeric AutoFlow identifier is not learned",
+        !fake.ops.some(
+          (op) =>
+            op.op === "updateOne"
+            && (op as any).collection === "shops"
+            && JSON.stringify((op as any).update).includes("shopNumbers"),
+        ),
+      );
+    } finally {
+      restore();
+    }
+  }
+
+  // 25. Platform-admin attachment uses the same global claim model: canonical
+  //     ownership and learned aliases on another shop both block attachment.
+  {
+    const shops = [
+      { shopId: 29, name: "Harrell's", autoflowDomain: "harrells-nc87.autotext.me" },
+      { shopId: 81, name: "CAR Experts", autoflow: { shopNumbers: ["7777"] } },
+      { shopId: 99, name: "Target", autoflow: { domain: "target.autotext.me" } },
+    ];
+    const canonicalBlockers = claimsBlockingAutoflowAttachment(
+      shops,
+      "harrells-nc87",
+      99,
+    );
+    const aliasBlockers = claimsBlockingAutoflowAttachment(shops, "7777", 99);
+    ok(
+      "admin attachment rejects another shop's canonical identity",
+      canonicalBlockers.length === 1
+        && canonicalBlockers[0].shopId === 29
+        && canonicalBlockers[0].claimType === "canonical",
+    );
+    ok(
+      "admin attachment rejects another shop's learned alias",
+      aliasBlockers.length === 1
+        && aliasBlockers[0].shopId === 81
+        && aliasBlockers[0].claimType === "alias",
+    );
+
+    const conflicts = findAutoflowIdentifierConflicts([
+      ...shops,
+      { shopId: 82, name: "Big O", autoflow: { shopNumbers: ["harrells-nc87"] } },
+    ]);
+    ok(
+      "admin conflict inventory surfaces canonical-versus-alias pollution",
+      conflicts.some(
+        (item) =>
+          item.identifier === "harrells-nc87"
+          && item.reason === "canonical_alias_collision",
+      ),
+    );
+  }
+
+  // 26. A non-admin with no assigned shops is never treated as globally
+  //     authorized, for either an existing canonical owner or v4 auto-learning.
+  {
+    const { fake, restore } = withFakeDb({
+      shops: [
+        {
+          shopId: 29,
+          name: "Harrell's",
+          autoflowDomain: "harrells-nc87.autotext.me",
+        },
+      ],
+    });
+    try {
+      const canonical = await findShopBySmsIdDetailed("harrells-nc87", {
+        isPlatformAdmin: false,
+        userShopIds: [],
+        providerHint: "autoflow",
+      });
+      const unknownV4 = await findShopBySmsIdDetailed("8642", {
+        isPlatformAdmin: false,
+        userShopIds: [],
+        providerHint: "autoflow",
+      });
+      ok("empty non-admin scope denies a canonical AutoFlow owner", canonical.status === "access_denied");
+      ok("empty non-admin scope denies unknown v4 learning", unknownV4.status === "access_denied");
+      ok(
+        "empty non-admin scope performs no alias write",
+        !fake.ops.some(
+          (op) =>
+            op.op === "updateOne"
+            && (op as any).collection === "shops"
+            && JSON.stringify((op as any).update).includes("shopNumbers"),
+        ),
+      );
+    } finally {
+      restore();
+    }
+  }
+
+  // 27. Mongo retrieval uses case-insensitive collation, then normalizes the
+  //     claim, so mixed-case legacy domains cannot evade canonical precedence.
+  {
+    const { restore } = withFakeDb({
+      shops: [
+        {
+          shopId: 29,
+          autoflowDomain: "Harrells-NC87.AutoText.Me",
+          integrationProvider: "protractor",
+        },
+        {
+          shopId: 81,
+          autoflow: { shopNumbers: ["HARRELLS-NC87"] },
+        },
+      ],
+    });
+    try {
+      const result = await findShopBySmsId("harrells-nc87", {
+        isPlatformAdmin: true,
+        providerHint: "AuToFlOw",
+      });
+      ok("mixed-case canonical identity still wins", result?.mosShopId === 29);
+    } finally {
+      restore();
+    }
+  }
+
+  // 28. Canonical AutoFlow identity is checked even when an incorrect provider
+  //     hint is supplied, preventing a spoofed hint from bypassing precedence.
+  {
+    const { restore } = withFakeDb({
+      shops: [
+        { shopId: 29, autoflowDomain: "harrells-nc87.autotext.me" },
+        { shopId: 81, protractor: { connectionId: "harrells-nc87" } },
+      ],
+    });
+    try {
+      const result = await findShopBySmsId("harrells-nc87", {
+        isPlatformAdmin: true,
+        providerHint: "tekmetric",
+      });
+      ok("incorrect provider hint cannot bypass canonical AutoFlow owner", result?.mosShopId === 29);
+    } finally {
+      restore();
+    }
+  }
+
+  // 29. The normalized claim registry uses Mongo's unique _id as the atomic
+  //     serialization point, so concurrent owners cannot both reserve an id.
+  {
+    const fake = makeFakeDb({ autoflow_identifier_claims: [] });
+    await acquireAutoflowAliasClaim(fake.db, "7777", 34, {
+      source: "auto_learning",
+    });
+    let conflict: unknown = null;
+    try {
+      await acquireAutoflowAliasClaim(fake.db, "7777", 35, {
+        source: "platform_admin",
+      });
+    } catch (error) {
+      conflict = error;
+    }
+    ok(
+      "atomic claim registry rejects a concurrent different owner",
+      conflict instanceof AutoflowAtomicClaimConflictError
+        && conflict.ownerShopId === 34,
+    );
+  }
+
+  // 30. A server-issued non-AutoFlow provider is namespace-authoritative:
+  //     an unrelated AutoFlow canonical with the same numeric id cannot hijack
+  //     a Tekmetric sticker lookup.
+  {
+    const { restore } = withFakeDb({
+      shops: [
+        { shopId: 29, autoflow: { shopId: "1517" }, integrationProvider: "autoflow" },
+        { shopId: 80, tekmetric: { shopId: 1517 }, integrationProvider: "tekmetric" },
+      ],
+    });
+    try {
+      const result = await findShopBySmsId("1517", {
+        isPlatformAdmin: true,
+        providerHint: "tekmetric",
+        providerHintIsAuthoritative: true,
+      });
+      ok(
+        "authoritative Tekmetric namespace ignores unrelated AutoFlow canonical collision",
+        result?.mosShopId === 80 && result.provider === "tekmetric",
+      );
+    } finally {
+      restore();
+    }
+  }
+
+  // 31. In the no-session fallback used by tests, a thrown shop mutation
+  //     compensates by releasing the just-created atomic reservation.
+  {
+    const { fake, restore } = withFakeDb({
+      shops: [{ _id: "shop-34", shopId: 34, autoflow: { domain: "solo.autotext.me" } }],
+      autoflow_identifier_claims: [],
+    });
+    const originalCollection = fake.db.collection.bind(fake.db);
+    (fake.db as any).collection = (name: string) => {
+      const collection = originalCollection(name) as any;
+      if (name === "shops") {
+        collection.updateOne = async () => {
+          throw new Error("simulated shop write failure");
+        };
+      }
+      return collection;
+    };
+    try {
+      let thrown: unknown = null;
+      try {
+        await findShopBySmsIdDetailed("7777", {
+          isPlatformAdmin: false,
+          userShopIds: [34],
+          providerHint: "autoflow",
+        });
+      } catch (error) {
+        thrown = error;
+      }
+      ok(
+        "auto-learning propagates a thrown shop mutation",
+        thrown instanceof Error && thrown.message === "simulated shop write failure",
+      );
+      ok(
+        "failed auto-learning releases its reservation",
+        fake.collections.autoflow_identifier_claims.length === 0,
+      );
     } finally {
       restore();
     }

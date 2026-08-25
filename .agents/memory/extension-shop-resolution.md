@@ -38,3 +38,21 @@ the primary-shop fallback silently stamps the admin's own home-shop branding
 onto another shop's output (this is exactly how an MST sticker printed on a
 Harrell's page). Primary-shop fallback is only acceptable when NO shop context
 is supplied (e.g. side panel opened without a page).
+
+## Rule: canonical AutoFlow identities outrank learned aliases
+In an AutoFlow context, resolve canonical domain/subdomain claims globally before
+considering learned aliases or the user's accessible-shop scope. Multiple
+canonical owners or multiple alias owners are conflicts; an inaccessible
+canonical owner is access denied, never permission to fall back to an accessible
+alias. Learned aliases are numeric v4 shop numbers only, and ownership changes
+must reserve the normalized number atomically with the shop mutation and audit.
+
+**Why:** learned slug aliases polluted unrelated shops and caused one shop's
+sticker branding and appointment destination to appear on another shop's page.
+Read-then-write checks alone also allow concurrent attachments to recreate the
+same ambiguity.
+
+**How to apply:** any new AutoFlow lookup or mapping writer must use the shared
+identity classifier and claim transaction. Preserve authoritative namespace
+isolation for server-issued non-AutoFlow principals; only legacy/untrusted
+provider hints require global AutoFlow canonical protection.

@@ -23,6 +23,7 @@ export type Op =
   | { op: "createIndex"; collection: string; spec: any; opts?: any }
   | { op: "updateOne"; collection: string; filter: any; update: any; opts?: any }
   | { op: "insertOne"; collection: string; doc: any }
+  | { op: "deleteOne"; collection: string; filter: any }
   | { op: "deleteMany"; collection: string; filter: any }
   | { op: "bulkWrite"; collection: string; ops: any[] }
   | { op: "aggregate"; collection: string; pipeline: any[] };
@@ -53,10 +54,20 @@ function getPath(doc: any, path: string): any {
   return current;
 }
 
-export function matchesFilter(doc: Doc, filter: any): boolean {
+function valuesEqual(a: any, b: any, caseInsensitive: boolean): boolean {
+  return caseInsensitive && typeof a === "string" && typeof b === "string"
+    ? a.toLocaleLowerCase() === b.toLocaleLowerCase()
+    : a === b;
+}
+
+export function matchesFilter(
+  doc: Doc,
+  filter: any,
+  caseInsensitive = false,
+): boolean {
   for (const [k, v] of Object.entries(filter || {})) {
     if (k === "$or" && Array.isArray(v)) {
-      if (!v.some((f) => matchesFilter(doc, f))) return false;
+      if (!v.some((f) => matchesFilter(doc, f, caseInsensitive))) return false;
       continue;
     }
     const fieldVal = getPath(doc, k);
@@ -65,7 +76,22 @@ export function matchesFilter(doc: Doc, filter: any): boolean {
       const isOpExpr = opKeys.length > 0 && opKeys.every((kk) => kk.startsWith("$"));
       if (isOpExpr) {
         if ("$in" in v) {
-          if (!(v as any).$in.includes(fieldVal)) return false;
+          const candidates = (v as any).$in;
+          if (Array.isArray(fieldVal)) {
+            if (
+              !fieldVal.some((item) =>
+                candidates.some((candidate: any) =>
+                  valuesEqual(item, candidate, caseInsensitive),
+                ),
+              )
+            ) return false;
+          } else if (
+            !candidates.some((candidate: any) =>
+              valuesEqual(fieldVal, candidate, caseInsensitive),
+            )
+          ) {
+            return false;
+          }
         }
         if ("$nin" in v) {
           if ((v as any).$nin.includes(fieldVal)) return false;
@@ -79,7 +105,7 @@ export function matchesFilter(doc: Doc, filter: any): boolean {
           if (exists !== (v as any).$exists) return false;
         }
         if ("$ne" in v) {
-          if (fieldVal === (v as any).$ne) return false;
+          if (valuesEqual(fieldVal, (v as any).$ne, caseInsensitive)) return false;
         }
         if ("$gte" in v) {
           if (!(fieldVal != null && fieldVal >= (v as any).$gte)) return false;
@@ -99,10 +125,10 @@ export function matchesFilter(doc: Doc, filter: any): boolean {
     // Mongo equality against an array field matches if any element equals
     // the queried value (e.g. `report.findings.severity: "critical"`).
     if (Array.isArray(fieldVal)) {
-      if (!fieldVal.includes(v)) return false;
+      if (!fieldVal.some((item) => valuesEqual(item, v, caseInsensitive))) return false;
       continue;
     }
-    if (fieldVal !== v) return false;
+    if (!valuesEqual(fieldVal, v, caseInsensitive)) return false;
   }
   return true;
 }
@@ -196,6 +222,7 @@ export type FakeDb = {
         opts?: any,
       ): Promise<{ matchedCount: number; modifiedCount: number; upsertedCount: number }>;
       insertOne(doc: any): Promise<{ insertedId: any }>;
+      deleteOne(filter: any): Promise<{ deletedCount: number }>;
       deleteMany(filter: any): Promise<{ deletedCount: number }>;
       bulkWrite(
         bulkOps: any[],
@@ -225,7 +252,11 @@ export function makeFakeDb(seed: Record<string, Doc[]>): FakeDb {
         return {
           find(filter: any = {}, opts?: any) {
             ops.push({ op: "find", collection: name, filter, opts });
-            let matched = data.filter((d) => matchesFilter(d, filter));
+            const caseInsensitive =
+              opts?.collation?.strength != null && opts.collation.strength <= 2;
+            let matched = data.filter((d) =>
+              matchesFilter(d, filter, caseInsensitive),
+            );
             // Chainable cursor: real callers do `.find().sort().skip().limit().toArray()`.
             // `.toArray()` alone (the cron tests) keeps working unchanged.
             const cursor: any = {
@@ -266,7 +297,11 @@ export function makeFakeDb(seed: Record<string, Doc[]>): FakeDb {
           },
           async findOne(filter: any = {}, opts?: any) {
             ops.push({ op: "findOne", collection: name, filter, opts });
-            const found = data.find((d) => matchesFilter(d, filter));
+            const caseInsensitive =
+              opts?.collation?.strength != null && opts.collation.strength <= 2;
+            const found = data.find((d) =>
+              matchesFilter(d, filter, caseInsensitive),
+            );
             return found ? { ...found } : null;
           },
           async countDocuments(filter: any = {}) {
@@ -282,6 +317,16 @@ export function makeFakeDb(seed: Record<string, Doc[]>): FakeDb {
           },
           async insertOne(doc: any) {
             ops.push({ op: "insertOne", collection: name, doc });
+            if (
+              doc._id !== undefined
+              && data.some((existing) => existing._id === doc._id)
+            ) {
+              const err: any = new Error(
+                `E11000 duplicate key error on ${name} (_id)`,
+              );
+              err.code = 11000;
+              throw err;
+            }
             // Enforce any unique indexes registered on this collection so
             // routes that rely on E11000 for dedup can be exercised.
             for (const keys of uniqueIndexes[name] || []) {
@@ -298,6 +343,13 @@ export function makeFakeDb(seed: Record<string, Doc[]>): FakeDb {
             }
             data.push({ ...doc });
             return { insertedId: doc._id ?? data.length };
+          },
+          async deleteOne(filter: any) {
+            ops.push({ op: "deleteOne", collection: name, filter });
+            const idx = data.findIndex((d) => matchesFilter(d, filter));
+            if (idx === -1) return { deletedCount: 0 };
+            data.splice(idx, 1);
+            return { deletedCount: 1 };
           },
           aggregate(pipeline: any[]) {
             ops.push({ op: "aggregate", collection: name, pipeline });
@@ -321,8 +373,21 @@ export function makeFakeDb(seed: Record<string, Doc[]>): FakeDb {
             };
             const applyAddToSet = (target: Doc, addToSet: any) => {
               for (const [k, v] of Object.entries(addToSet || {})) {
-                if (!Array.isArray(target[k])) target[k] = [];
-                if (!target[k].includes(v)) target[k].push(v);
+                const existing = getPath(target, k);
+                if (Array.isArray(existing)) {
+                  if (!existing.includes(v)) existing.push(v);
+                } else {
+                  target[k] = [v];
+                }
+              }
+            };
+            const applyPull = (target: Doc, pull: any) => {
+              for (const [k, v] of Object.entries(pull || {})) {
+                const existing = getPath(target, k);
+                if (Array.isArray(existing)) {
+                  const kept = existing.filter((item) => item !== v);
+                  existing.splice(0, existing.length, ...kept);
+                }
               }
             };
             const idx = data.findIndex((d) => matchesFilter(d, filter));
@@ -331,6 +396,7 @@ export function makeFakeDb(seed: Record<string, Doc[]>): FakeDb {
               applyInc(data[idx], update.$inc);
               applyPush(data[idx], update.$push);
               applyAddToSet(data[idx], update.$addToSet);
+              applyPull(data[idx], update.$pull);
               return { matchedCount: 1, modifiedCount: 1, upsertedCount: 0 };
             }
             if (opts?.upsert) {
