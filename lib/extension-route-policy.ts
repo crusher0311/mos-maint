@@ -61,6 +61,12 @@ const POLICY_MAP: Record<string, PolicyTier[]> = {
   "/api/extension/auth|POST": ["public"],
   "/api/extension/auth|OPTIONS": ["preflight"],
 
+  // POST: public — passwordless step 1: emails a single-use sign-in code.
+  // Rate limited, never reveals account existence; the code is exchanged at
+  // /api/extension/auth which enforces attempts/TTL.
+  "/api/extension/auth/request-code|POST": ["public"],
+  "/api/extension/auth/request-code|OPTIONS": ["preflight"],
+
   // ── bootstrap ────────────────────────────────────────────────────────────
   // POST: public — exchanges a live provider-session proof for a short-lived,
   // provider/shop-bound extension session. The proof adapter establishes auth.
