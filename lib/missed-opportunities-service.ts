@@ -27,6 +27,7 @@ import {
   normalizedServiceJobs,
 } from "@/lib/db/schema/normalized";
 import { findCachedPlanForVehicle } from "@/lib/data/repositories/missed-opportunities";
+import { findDisplayRoNumbersByIds } from "@/lib/data/repositories/protractor-work-orders";
 import {
   planItemsFromBuckets,
   evaluateRoLines,
@@ -91,6 +92,25 @@ export async function computeMissedOpportunityReport(
 
   const truncated = wos.length > MAX_ROS_PER_RUN;
   const scoped = truncated ? wos.slice(0, MAX_ROS_PER_RUN) : wos;
+
+  // Older Protractor normalized rows used the invoice GUID as
+  // workOrderNumber because terminal invoice payloads often send
+  // InvoiceNumber=0. Resolve only UUID-looking values through the bounded
+  // provider cache so existing history displays the readable RO number now;
+  // fail open to the canonical value for other providers or cache trouble.
+  const opaqueRoNumbers = scoped
+    .map((wo) => String(wo.workOrderNumber || ""))
+    .filter((value) => UUID_RE.test(value));
+  let displayRoNumbers: Record<string, string> = {};
+  if (opaqueRoNumbers.length > 0) {
+    try {
+      displayRoNumbers = await findDisplayRoNumbersByIds(shopId, opaqueRoNumbers);
+    } catch (err: any) {
+      console.warn(
+        `[MissedOpps] Shop ${shopId}: display RO-number lookup failed: ${err?.message || err}`,
+      );
+    }
+  }
 
   // Service jobs (ALL of them — declined included; declined counts as
   // quoted) for the scoped ROs, one batched query.
@@ -163,7 +183,9 @@ export async function computeMissedOpportunityReport(
     const titles = titlesByWo.get(wo.id) || [];
     const base = {
       workOrderId: wo.id,
-      workOrderNumber: String(wo.workOrderNumber || ""),
+      workOrderNumber:
+        displayRoNumbers[String(wo.workOrderNumber || "")] ||
+        String(wo.workOrderNumber || ""),
       closedDate: wo.closedAt ? new Date(wo.closedAt).toISOString() : null,
       vin,
       vehicle: vehicleLabel,
@@ -204,6 +226,9 @@ export async function computeMissedOpportunityReport(
     truncated,
   };
 }
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /**
  * Task #1184 — list the (VIN, mileage) pairs the Missed Opportunities report

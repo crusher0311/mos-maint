@@ -16,7 +16,7 @@
  * site — this file has no knowledge of the kill-switch flag. See
  * docs/runbooks/db-integration-cache-cutover.md.
  */
-import { and, desc, eq, ne, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { getDb } from "@/lib/db/drizzle";
 import { protractorWorkOrders, protractorVehicles } from "@/lib/db/schema/wave3";
 
@@ -175,6 +175,38 @@ export async function findCachedWorkOrderById(
     )
     .limit(1);
   return rows.length ? reconstructWorkOrder(rows[0]) : null;
+}
+
+export async function findDisplayRoNumbersByIds(
+  shopId: number,
+  workOrderIds: string[],
+): Promise<Record<string, string>> {
+  if (workOrderIds.length === 0) return {};
+  const db = getDb();
+  const rows = await db
+    .select({
+      workOrderId: protractorWorkOrders.workOrderId,
+      workOrderNumber: protractorWorkOrders.workOrderNumber,
+      payload: protractorWorkOrders.payload,
+    })
+    .from(protractorWorkOrders)
+    .where(
+      and(
+        eq(protractorWorkOrders.shopId, shopId),
+        inArray(protractorWorkOrders.workOrderId, workOrderIds),
+      ),
+    );
+
+  const out: Record<string, string> = {};
+  for (const row of rows) {
+    const payload = (row.payload as AnyDoc) ?? {};
+    const legacyData = (payload.data as AnyDoc | undefined) ?? {};
+    const number = row.workOrderNumber ?? legacyData.WorkOrderNumber;
+    if (Number.isFinite(Number(number)) && Number(number) > 0) {
+      out[row.workOrderId] = String(number);
+    }
+  }
+  return out;
 }
 
 export async function listCachedWorkOrdersForServiceItem(

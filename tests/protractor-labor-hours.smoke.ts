@@ -83,6 +83,33 @@ ok(
 
 const adapter = new ProtractorAdapter();
 
+const mappedInvoice = adapter.mapWorkOrder(235, {
+  ID: "1f2592a3-f7cd-4aef-9e7d-43ca3f3bd997",
+  WorkOrderNumber: 709007422,
+  InvoiceNumber: 0,
+  WorkflowStage: "Invoice",
+});
+ok(
+  "mapWorkOrder prefers the human-facing WorkOrderNumber over the invoice GUID",
+  mappedInvoice.workOrderNumber === "709007422",
+  `got ${mappedInvoice.workOrderNumber}`,
+);
+ok(
+  "getSourceIds preserves the human-facing WorkOrderNumber",
+  adapter
+    .getSourceIds({
+      ID: "1f2592a3-f7cd-4aef-9e7d-43ca3f3bd997",
+      WorkOrderNumber: 709007422,
+      InvoiceNumber: 0,
+    })
+    .some(
+      (id) =>
+        id.idType === "work_order_number" &&
+        id.idValue === "709007422" &&
+        id.isPrimary === false,
+    ),
+);
+
 const derived = adapter.mapServiceJob(66, "wo-1", {
   ID: "sp-1",
   ServicePackageHeader: { Title: "Water Pump" },

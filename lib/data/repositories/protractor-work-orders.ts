@@ -189,6 +189,48 @@ export async function findCachedWorkOrderById(
   );
 }
 
+/**
+ * Resolve Protractor's opaque work-order GUIDs to the human-facing RO numbers
+ * already stored in the provider cache. The Missed Opportunities report uses
+ * this bounded batch lookup to repair display-only legacy rows normalized
+ * before WorkOrderNumber was preferred over InvoiceNumber/ID.
+ */
+export async function findDisplayRoNumbersByIds(
+  shopId: number,
+  workOrderIds: string[],
+): Promise<Record<string, string>> {
+  const ids = Array.from(new Set(workOrderIds.filter(Boolean))).slice(0, 300);
+  if (ids.length === 0) return {};
+
+  if (isProtractorCachePgCanonical()) {
+    return pg.findDisplayRoNumbersByIds(shopId, ids);
+  }
+
+  const col = await collection();
+  const docs = await col
+    .find(
+      { shopId, workOrderId: { $in: ids } } as Filter<ProtractorWorkOrderCacheDoc>,
+      {
+        projection: {
+          _id: 0,
+          workOrderId: 1,
+          workOrderNumber: 1,
+          "data.WorkOrderNumber": 1,
+        },
+      },
+    )
+    .toArray();
+
+  const out: Record<string, string> = {};
+  for (const doc of docs) {
+    const number = doc.workOrderNumber ?? doc.data?.WorkOrderNumber;
+    if (doc.workOrderId && Number.isFinite(Number(number)) && Number(number) > 0) {
+      out[doc.workOrderId] = String(number);
+    }
+  }
+  return out;
+}
+
 export async function listCachedWorkOrdersForServiceItem(
   shopId: number,
   serviceItemId: string,

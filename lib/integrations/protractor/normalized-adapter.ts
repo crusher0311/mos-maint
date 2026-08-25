@@ -97,6 +97,19 @@ export class ProtractorAdapter implements INormalizedAdapter {
         isPrimary: false,
       });
     }
+
+    // Protractor's terminal `/Invoice/` payloads commonly leave
+    // InvoiceNumber at 0 while WorkOrderNumber carries the human-facing RO
+    // number. Preserve it as a secondary identity so normalized records never
+    // have to expose the opaque invoice GUID as their display number.
+    if (sourceData.WorkOrderNumber) {
+      ids.push({
+        system: 'protractor',
+        idType: 'work_order_number',
+        idValue: String(sourceData.WorkOrderNumber),
+        isPrimary: false,
+      });
+    }
     
     if (sourceData.ServiceItemID) {
       ids.push({
@@ -203,7 +216,9 @@ export class ProtractorAdapter implements INormalizedAdapter {
     return {
       enterpriseId,
       shopId,
-      workOrderNumber: String(inv.InvoiceNumber || inv.ID),
+      // On real Protractor invoice payloads InvoiceNumber is frequently 0;
+      // WorkOrderNumber is the readable RO number shown in the SMS.
+      workOrderNumber: String(inv.WorkOrderNumber || inv.InvoiceNumber || inv.ID),
       workOrderType: 'repair',
       status,
       statusHistory: [],
