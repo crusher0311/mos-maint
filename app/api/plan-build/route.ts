@@ -1,7 +1,8 @@
 import { NextResponse, NextRequest } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
-import { getCachedPlan, setCachedPlan, type CachedPlanData, type CachedPlanVariant } from "@/lib/plan-cache";
+import { getCachedPlan, type CachedPlanData, type CachedPlanVariant } from "@/lib/plan-cache";
+import { persistPlanBuildResult } from "@/lib/plan-build-persistence";
 import {
   getEnabledChemicalProviders,
   providerIntervalsToOverrides,
@@ -141,6 +142,10 @@ export async function POST(req: NextRequest) {
     // blocking nor background. Warmed plans still populate cached_plans so
     // cache-only consumers (Missed Opportunities report) can evaluate ROs.
     const skipCarfax = req.nextUrl.searchParams.get("skipCarfax") === "1";
+    // Response-only builds (used by partner mode=fast) may consume an
+    // existing full cache, but must not persist their shortened-budget output
+    // into the shared cache used by later full requests.
+    const persist = req.nextUrl.searchParams.get("persist") !== "0";
     
     if (!vin || vin.length !== 17) {
       return NextResponse.json({ error: "Valid 17-character VIN required" }, { status: 400 });
@@ -181,7 +186,10 @@ export async function POST(req: NextRequest) {
       }, { status: 200 });
     }
     
-    console.log(`[PlanBuild] Shop ${shopId}: Building full plan for ${vin} at ${mileage} miles`);
+    console.log(
+      `[PlanBuild] Shop ${shopId}: Building ${persist ? "cached" : "ephemeral"} ` +
+      `${fast ? "fast" : "full"} plan for ${vin} at ${mileage} miles`,
+    );
 
     const shopDoc = await db.collection("shops").findOne({ shopId });
     const soonMiles = shopDoc?.maintenance?.dueSoonMiles ?? shopDoc?.settings?.planPage?.soonMiles ?? DEFAULT_SOON_MILES;
@@ -1269,16 +1277,24 @@ export async function POST(req: NextRequest) {
     }
 
     const cachedAt = new Date();
-    await setCachedPlan(db, vin, shopId, mileage, planData);
+    const persistence = await persistPlanBuildResult({
+      db,
+      vin,
+      shopId,
+      mileage,
+      plan: planData,
+      persist,
+    });
 
     const duration = Date.now() - startTime;
-    console.log(`[PlanBuild] Shop ${shopId}: Built and cached plan for ${vin} in ${duration}ms (OEM: ${oemItems.length}, Carfax: ${carfaxRecords.length}, ShopHistory: ${shopServiceHistory.length}, DVI: ${dviFindings.length}, UnresolvedHistory: ${unresolvedHistoricalFindings.length}, Deferred: ${protractorDeferredWork.length}, dataQuality=${planData.dataQuality?.sufficient ? "sufficient" : "INSUFFICIENT"}/${planData.dataQuality?.carfaxStatus})`);
+    console.log(`[PlanBuild] Shop ${shopId}: Built ${persist ? "and cached " : "ephemeral "}plan for ${vin} in ${duration}ms (OEM: ${oemItems.length}, Carfax: ${carfaxRecords.length}, ShopHistory: ${shopServiceHistory.length}, DVI: ${dviFindings.length}, UnresolvedHistory: ${unresolvedHistoricalFindings.length}, Deferred: ${protractorDeferredWork.length}, dataQuality=${planData.dataQuality?.sufficient ? "sufficient" : "INSUFFICIENT"}/${planData.dataQuality?.carfaxStatus})`);
 
     return NextResponse.json({
       ok: true,
       vin,
       built: true,
-      message: "Plan built and cached",
+      persisted: persistence.persisted,
+      message: persistence.message,
       duration,
       counts: {
         overdue: filteredBuckets.overdue.length,

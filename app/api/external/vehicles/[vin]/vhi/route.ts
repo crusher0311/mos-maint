@@ -238,6 +238,14 @@ export const GET = createExternalEndpoint(
     const pathParts = req.nextUrl.pathname.split("/");
     const vinIndex = pathParts.indexOf("vehicles") + 1;
     const vin = pathParts[vinIndex]?.toUpperCase();
+    const requestedMode = req.nextUrl.searchParams.get("mode");
+    if (requestedMode && requestedMode !== "fast" && requestedMode !== "full") {
+      return NextResponse.json(
+        { error: 'mode must be either "fast" or "full"' },
+        { status: 400 },
+      );
+    }
+    const fastMode = requestedMode === "fast";
 
     if (!vin || vin.length !== 17) {
       return NextResponse.json(
@@ -248,7 +256,7 @@ export const GET = createExternalEndpoint(
 
     console.log(
       `[PartnerVHI] request_in requestId=${requestId} partnerId=${partnerId ?? "n/a"} ` +
-      `isPartner=${isPartner} apiKeyShopId=${shopId} vin=${vin}`
+      `isPartner=${isPartner} apiKeyShopId=${shopId} vin=${vin} mode=${fastMode ? "fast" : "full"}`
     );
 
     let resolvedShopId = shopId;
@@ -714,7 +722,8 @@ export const GET = createExternalEndpoint(
 
     console.log(
       `[PartnerVHI] rebuild_start requestId=${requestId} partnerId=${partnerId ?? "n/a"} ` +
-      `shopId=${resolvedShopId} vin=${vin} mileage=${mileage} isPartner=${isPartner}`
+      `shopId=${resolvedShopId} vin=${vin} mileage=${mileage} isPartner=${isPartner} ` +
+      `mode=${fastMode ? "fast" : "full"}`
     );
     // Bound the cold build so a busy-shop stall can't hang the partner for
     // 1-2 min. The rebuild promise keeps running after the timeout fires and
@@ -730,6 +739,13 @@ export const GET = createExternalEndpoint(
         // (and therefore the next cache HIT) carries the same fields.
         mileageSource,
         mileageEstimateDetails,
+        // The plan-build route already supports fast mode; expose it to
+        // partner callers without changing the default freshness-first path.
+        fast: fastMode,
+        // A shortened-budget plan must not poison the full-quality shared
+        // cache. Fast callers get the inline result; normal requests continue
+        // to read/write only full builds.
+        persistBuiltPlan: !fastMode,
       }),
       REBUILD_TIMEOUT_MS,
       `partner rebuildVhi ${vin}`,
@@ -747,8 +763,7 @@ export const GET = createExternalEndpoint(
           `[PartnerVHI] rebuild_timeout_serving_stale requestId=${requestId} vin=${vin} ` +
           `shopId=${resolvedShopId} cachedAt=${lastPlan.createdAt}`
         );
-        return NextResponse.json(
-          buildPlanResponse(lastPlan.plan, {
+        const staleResponse = buildPlanResponse(lastPlan.plan, {
             vin,
             resolvedShopId,
             source: "stale_plan_rebuilding",
@@ -760,8 +775,13 @@ export const GET = createExternalEndpoint(
             resolvedMiles: mileage,
             resolvedMileageSource: mileageSource,
             resolvedMileageEstimateDetails: mileageEstimateDetails,
-          }),
-        );
+          });
+        return NextResponse.json({
+          ...staleResponse,
+          requestMode: fastMode ? "fast" : "full",
+          buildMode: "stale",
+          optionalDataMayBeIncomplete: true,
+        });
       }
       console.warn(
         `[PartnerVHI] rebuild_timeout_no_cache requestId=${requestId} vin=${vin} shopId=${resolvedShopId}`
@@ -771,6 +791,7 @@ export const GET = createExternalEndpoint(
           success: false,
           building: true,
           requestId,
+          buildMode: fastMode ? "fast" : "full",
           message: "Maintenance plan is being built; please retry in a few seconds.",
         },
         { status: 202 },
@@ -796,6 +817,7 @@ export const GET = createExternalEndpoint(
           upstreamStatus: result.upstreamStatus,
           upstreamError: result.upstreamError,
           requestId,
+          buildMode: fastMode ? "fast" : "full",
         },
         { status }
       );
@@ -825,6 +847,8 @@ export const GET = createExternalEndpoint(
       serviceIcons: getServiceIconSet(),
       cachedAt: result.cachedAt,
       source: "on_demand_build",
+      buildMode: fastMode ? "fast" : "full",
+      optionalDataMayBeIncomplete: fastMode,
       // Task #384: prefer the rebuild result so the response matches the
       // values that were just persisted into cached_plans.
       mileageSource: result.mileageSource ?? mileageSource,

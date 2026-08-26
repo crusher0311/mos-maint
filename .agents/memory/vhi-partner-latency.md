@@ -99,3 +99,16 @@ comes back.**
 **How to trace:** Better Stack, filter host `mos-maintenance-mvp-main`, grep the VIN — look for
 `[Extension Plan] TIMING`, `[VHI Rebuild] TIMING`, `[PlanBuild] ... in NNNNms`, and the
 `responseTimeMS` on `/api/external/vehicles/.../vhi` vs `/api/extension/plan`.
+
+**Fast partner-build cache rule:** latency-first partner builds use shortened
+optional-upstream budgets and return the computed plan inline, but MUST NOT
+persist that result into the shared VIN/shop/mileage cache. Fast requests may
+reuse an existing full-quality cache entry. This prevents a later default/full
+request from silently consuming partial fast-build data.
+
+**Why:** the shared cache has no build-quality dimension; persisting a fast
+result would make it indistinguishable from a full result for the cache TTL.
+
+**How to apply:** any new bulk/fast partner path must explicitly use ephemeral
+plan-build persistence and carry response metadata that optional data may be
+incomplete.

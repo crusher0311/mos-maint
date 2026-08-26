@@ -5,6 +5,31 @@
 Returns the Vehicle Health Indicator (VHI) plan for a VIN. The endpoint is
 authenticated with a partner API key tied to a specific shop.
 
+## Fast build mode
+
+Weekly/bulk synchronization callers may add `mode=fast`:
+
+```http
+GET /api/external/vehicles/{vin}/vhi?smsShopId=36&sms=protractor&mode=fast
+```
+
+Fast mode preserves the normal mileage, history, cache, and maintenance-plan
+logic, but applies shorter wait budgets to optional upstream OEM and live
+inspection lookups. The default remains `mode=full`. A fast build is returned
+inline but is **not written to the shared full-quality plan cache**, so it
+cannot degrade a later default/full response. Fast requests may still reuse an
+existing full-quality cache entry.
+
+When an on-demand build runs, the response includes:
+
+- `buildMode`: `"fast"` or `"full"`
+- `optionalDataMayBeIncomplete`: `true` for fast builds
+
+Cache hits return immediately regardless of the requested mode and retain
+their existing `source: "cached_plan"` contract. A first-time build that
+outlives the route deadline still returns HTTP 202 with `building: true`;
+that response also includes the requested `buildMode`.
+
 ## Mileage resolution (Task #476)
 
 The plan engine is mileage-sensitive — the same VIN with two different

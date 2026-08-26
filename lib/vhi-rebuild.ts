@@ -16,8 +16,13 @@ export const __deps = {
   getDb,
   getCachedPlan,
   invalidateCachedPlan,
-  triggerPlanBuild: (shopId: number, vin: string, mileage: number, fast?: boolean) =>
-    triggerPlanBuild(shopId, vin, mileage, fast),
+  triggerPlanBuild: (
+    shopId: number,
+    vin: string,
+    mileage: number,
+    fast?: boolean,
+    persist?: boolean,
+  ) => triggerPlanBuild(shopId, vin, mileage, fast, undefined, undefined, persist),
 };
 
 export type VhiRebuildFailedStage =
@@ -127,6 +132,9 @@ export async function triggerPlanBuild(
   // (paid) fetch, blocking or background.
   skipCarfax?: boolean,
   mileageMetadata?: PlanBuildMileageMetadata,
+  // Fast partner builds are response-only: they must not replace the shared
+  // full-quality cache consumed by normal/default requests.
+  persist: boolean = true,
 ): Promise<PlanBuildTriggerResult> {
   try {
     const baseUrl = process.env.REPLIT_DEV_DOMAIN
@@ -141,6 +149,7 @@ export async function triggerPlanBuild(
     });
     if (fast) params.set("fast", "1");
     if (skipCarfax) params.set("skipCarfax", "1");
+    if (!persist) params.set("persist", "0");
     appendPlanBuildMileageMetadata(params, mileageMetadata);
     let mileageMetadataSignature: string | undefined;
     if (mileageMetadata?.mileageSource !== undefined &&
@@ -271,6 +280,11 @@ export async function rebuildVhi(
      * fetches. Defaults off so background / partner builds stay freshness-first.
      */
     fast?: boolean;
+    /**
+     * Defaults true. Set false for a latency-first/partial result that must
+     * never become the shared full-quality cached plan.
+     */
+    persistBuiltPlan?: boolean;
   } = {}
 ): Promise<VhiRebuildResult> {
   const tStart = Date.now();
@@ -306,7 +320,13 @@ export async function rebuildVhi(
   if (!cached) {
     console.log(`[VHI Rebuild] No cached plan for ${vinUpper} at shop ${shopId}, triggering build${options.fast ? " (fast)" : ""}...`);
     const tBeforeBuild = Date.now();
-    const built = await __deps.triggerPlanBuild(shopId, vinUpper, mileage, options.fast);
+    const built = await __deps.triggerPlanBuild(
+      shopId,
+      vinUpper,
+      mileage,
+      options.fast,
+      options.persistBuiltPlan !== false,
+    );
     const tAfterBuild = Date.now();
     console.log(`[VHI Rebuild] TIMING vin=${vinUpper} shop=${shopId} mileage=${mileage} fast=${!!options.fast} invalidate=${tAfterInvalidate - tStart}ms firstRead=${tAfterFirstRead - tAfterInvalidate}ms triggerPlanBuild=${tAfterBuild - tBeforeBuild}ms buildOk=${built.ok}${built.ok ? "" : ` upstream=${built.status} err=${built.errorMessage}`}`);
 
