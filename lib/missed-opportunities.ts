@@ -41,10 +41,10 @@ export {
   type TicketJobDisplayGroup,
 } from "@/lib/missed-opportunity-ticket-details";
 
-// v4: inspection/diagnostic ticket lines no longer satisfy maintenance
-// service recommendations. Invalidate v3 reports so corrected outcomes and
-// recorded-price attribution appear immediately after deploy.
-export const MISSED_OPPORTUNITY_REPORT_VERSION = 4;
+// v5: a red/yellow VHI urgency `bump` is no longer treated as proof that a
+// recommendation came from a DVI. Invalidate v4 reports so false DVI badges
+// disappear immediately after deploy instead of surviving in report caches.
+export const MISSED_OPPORTUNITY_REPORT_VERSION = 5;
 
 export type RecommendationSource = "vhi" | "dvi" | "both";
 export type RecommendationOutcome =
@@ -168,7 +168,9 @@ function planItemSourceFlags(item: VhiComparisonItem): {
 } {
   return {
     hasVhi: item.source !== "dvi",
-    hasDvi: item.source === "dvi" || item.dviSource != null || item.bump != null,
+    // `bump` is also used for ordinary VHI urgency styling. Only explicit
+    // provenance can establish that an inspection contributed this item.
+    hasDvi: item.source === "dvi" || item.dviSource != null,
   };
 }
 
@@ -210,17 +212,20 @@ export function evaluateMissedOpportunityRecommendations(
       deduped.set(key, {
         item,
         ...flags,
-        dviSeverity: item.bump ?? null,
-        dviSource: item.dviSource ?? null,
+        dviSeverity: flags.hasDvi ? item.bump ?? null : null,
+        dviSource: flags.hasDvi ? item.dviSource ?? null : null,
       });
       continue;
     }
     existing.hasVhi ||= flags.hasVhi;
     existing.hasDvi ||= flags.hasDvi;
-    if (item.bump === "red" || (item.bump === "yellow" && !existing.dviSeverity)) {
+    if (
+      flags.hasDvi &&
+      (item.bump === "red" || (item.bump === "yellow" && !existing.dviSeverity))
+    ) {
       existing.dviSeverity = item.bump;
     }
-    existing.dviSource ||= item.dviSource ?? null;
+    if (flags.hasDvi) existing.dviSource ||= item.dviSource ?? null;
     // Prefer the VHI row's interval/due metadata when a separate DVI-only row
     // overlaps it. Keep the more urgent bucket when both are equivalent.
     if (

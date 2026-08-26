@@ -169,6 +169,62 @@ console.log("Recommendation outcomes, matching, and dedupe:");
   }])[0];
   ok("single VHI row with a DVI marker is both", overlay?.source === "both");
   ok("DVI severity survives recommendation modeling", overlay?.dviSeverity === "yellow");
+  const urgencyOnly = evaluateMissedOpportunityRecommendations([], [{
+    title: "Rear Differential Fluid",
+    serviceKey: "differential_rear",
+    status: "overdue",
+    source: "oem",
+    bump: "red",
+  }])[0];
+  ok("ordinary red VHI urgency is not labeled DVI", urgencyOnly?.source === "vhi");
+  ok("ordinary VHI urgency has no DVI severity", urgencyOnly?.dviSeverity === null);
+  ok("ordinary VHI urgency has no DVI provider", urgencyOnly?.dviSource === null);
+  for (const [label, overlayItems] of [
+    [
+      "VHI first",
+      [
+        {
+          title: "Rear Differential Fluid",
+          serviceKey: "differential_rear",
+          status: "overdue",
+          source: "oem",
+          bump: "red",
+        },
+        {
+          title: "Rear Differential Fluid Service",
+          serviceKey: "differential_rear",
+          status: "overdue",
+          source: "dvi",
+        },
+      ],
+    ],
+    [
+      "DVI first",
+      [
+        {
+          title: "Rear Differential Fluid Service",
+          serviceKey: "differential_rear",
+          status: "overdue",
+          source: "dvi",
+        },
+        {
+          title: "Rear Differential Fluid",
+          serviceKey: "differential_rear",
+          status: "overdue",
+          source: "oem",
+          bump: "red",
+        },
+      ],
+    ],
+  ] as const) {
+    const merged = evaluateMissedOpportunityRecommendations(
+      [],
+      overlayItems as unknown as VhiComparisonItem[],
+    )[0];
+    ok(`${label}: explicit DVI + VHI merges to both`, merged?.source === "both");
+    ok(`${label}: VHI urgency does not become DVI severity`, merged?.dviSeverity === null);
+    ok(`${label}: missing DVI provider remains null`, merged?.dviSource === null);
+  }
   const inspectedLeak = evaluateMissedOpportunityRecommendations(
     [{
       title: "Power Steering Fluid Leak Inspection",
