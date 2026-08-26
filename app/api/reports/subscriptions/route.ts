@@ -9,9 +9,12 @@ import {
   createDisableToken,
   hashDisableToken,
   nextReportingRun,
+  canRecipientReadSavedReport,
   validateRecipientScope,
   validateReportingSubscription,
+  resolveSubscriptionReport,
 } from "@/lib/reporting-delivery";
+import { canReadCustomReport } from "@/lib/custom-report-access";
 
 const allowed = (session: NonNullable<Awaited<ReturnType<typeof getSession>>>) =>
   Boolean(session.isPlatformAdmin || session.role === "platform_admin" || session.role === "owner" || session.role === "admin");
@@ -35,16 +38,28 @@ export async function POST(req: NextRequest) {
   if (!allowed(session)) return NextResponse.json({ error: "Owner or admin access required" }, { status: 403 });
   try {
     const input = validateReportingSubscription(await req.json());
+    const savedReport = await resolveSubscriptionReport(input);
     const request = { kind: input.scope.kind, shopId: input.scope.shopId?.toString(), enterpriseId: input.scope.enterpriseId };
     const actorScope = await resolveReportingScope(session, request);
-    const { scope: recipientScope } = await validateRecipientScope(input.recipientEmail, input.scope);
+    if (savedReport && !canReadCustomReport({
+      email: session.email,
+      isPlatformAdmin: Boolean(session.isPlatformAdmin || session.role === "platform_admin"),
+    }, savedReport.raw as any, actorScope)) {
+      return NextResponse.json({ error: "You do not have access to this saved report" }, { status: 403 });
+    }
+    const { user: recipient, scope: recipientScope } = await validateRecipientScope(input.recipientEmail, input.scope);
+    if (savedReport && !canRecipientReadSavedReport(recipient, savedReport, recipientScope)) {
+      return NextResponse.json({ error: "Recipient does not have access to this saved report" }, { status: 403 });
+    }
     if (input.filters?.locationId && (!actorScope.shopIds.includes(input.filters.locationId) || !recipientScope.shopIds.includes(input.filters.locationId))) {
       return NextResponse.json({ error: "Filtered location is outside actor or recipient access" }, { status: 403 });
     }
     const token = createDisableToken();
     const now = new Date();
     const doc = await createReportingSubscription({
-      ...input, createdBy: session.email.toLowerCase(), paused: Boolean(input.paused),
+      ...input,
+      ...(savedReport ? { reportVersion: savedReport.version } : {}),
+      createdBy: session.email.toLowerCase(), paused: Boolean(input.paused),
       disableToken: token, disableTokenHash: hashDisableToken(token),
       nextRunAt: nextReportingRun(input, now), deliveryHistory: [], createdAt: now, updatedAt: now,
     });

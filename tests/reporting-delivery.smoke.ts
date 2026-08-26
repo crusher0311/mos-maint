@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import {
   buildReportingSummaryEmail,
+  buildSavedReportEmail,
+  canRecipientReadSavedReport,
   hashDisableToken,
   nextReportingRun,
   nextReportingRetry,
@@ -79,6 +81,45 @@ assert.match(
   /"'=HYPERLINK\(\"\"https:\/\/example\.test\"\"\)"/,
   "provider-controlled CSV labels cannot execute spreadsheet formulas",
 );
+malicious.byAdvisor[0].label = " \t=1+1";
+assert.match(reportingCsv(malicious, {}), /"' \t=1\+1"/, "formula safety also covers leading whitespace");
+
+const governedCsv = reportingCsv(report, {}, {
+  selectedFields: ["label", "billedRevenue"],
+  layout: { dimension: "advisor", limit: 1 },
+  maxRows: 10_000,
+});
+assert.equal(governedCsv.split("\r\n").length, 2, "saved layout row limit is enforced");
+assert.equal(governedCsv.split("\r\n")[0], '"label","billedRevenue"', "only selected fields are exported");
+assert.match(governedCsv, /Jane/);
+assert.doesNotMatch(governedCsv, /Main, Shop|Bob|repairOrderCount/);
+
+const dateReport = { ...report, timeSeries: [group("2026-08-01", "Aug 1", 1)] };
+const dateCsv = reportingCsv(dateReport, {}, { layout: { dimension: "date" } });
+assert.match(dateCsv, /"date"/);
+assert.match(dateCsv, /"Aug 1"/);
+assert.doesNotMatch(dateCsv, /Main, Shop|Jane ""JJ""/, "saved date exports contain only date rows");
+assert.equal(
+  canRecipientReadSavedReport(
+    { email: "recipient@example.com", role: "admin" },
+    { raw: { ownerEmail: "owner@example.com", sharing: { visibility: "private" } } } as any,
+    { shopIds: [1] },
+  ),
+  false,
+  "a recipient cannot subscribe to a private report merely through scope access",
+);
+
+const scheduledSaved = validateReportingSubscription({
+  ...weekly,
+  reportId: "507f1f77bcf86cd799439011",
+  reportVersion: 3,
+});
+assert.equal(scheduledSaved.reportVersion, 3);
+assert.throws(
+  () => validateReportingSubscription({ ...weekly, reportVersion: 3 }),
+  /reportId/,
+  "a scheduled immutable version cannot omit its saved report",
+);
 
 const prior = { ...report, summary: finalizeMetrics({ repairOrderCount: 1, billedRevenue: 100 }) };
 const email = buildReportingSummaryEmail(report, prior, "https://example.com/dashboard?shopId=1", "https://example.com/unsubscribe?t=x");
@@ -87,5 +128,23 @@ assert.match(email.html, /Location outliers/);
 assert.match(email.html, /Disable this summary/);
 const emailWithoutPrior = buildReportingSummaryEmail(report, null, "https://example.com/dashboard?shopId=1", "https://example.com/unsubscribe?t=x");
 assert.match(emailWithoutPrior.subject, /prior-period comparison unavailable/);
+
+const savedEmail = buildSavedReportEmail({
+  ok: true, version: 1, definitionId: "pinned-v3", generatedAt: "2026-08-07T00:00:00Z",
+  rows: [{ key: "2026-08-01", label: "Aug 1", current: { billedRevenue: 200 }, comparison: { billedRevenue: 100 }, delta: { billedRevenue: 100 }, deltaPercent: { billedRevenue: 100 } }],
+  metadata: {
+    definitionName: "Pinned daily revenue", dimension: "date",
+    metrics: [{ key: "billedRevenue", label: "Billed revenue", definition: "", denominator: null, timestampBasis: "", moneyUnit: "USD", availability: "", valueKeys: ["billedRevenue"] }],
+    selectedFilters: [], comparison: { mode: "previousPeriod" }, presentation: { kind: "timeSeries", limit: 10, orderBy: "dimension", direction: "asc" },
+    bounds: { shops: 1, days: 7, periods: 2, estimatedQueryCost: 1, maxQueryCost: 2_000_000 },
+    coverage: { business: true, payments: true, staff: true, laborParts: true, planViews: true, recommendationEvents: true },
+    dataQuality: { unknownAdvisorRepairOrders: 0, unknownTechnicianJobs: 0, dimensionsTruncated: false, notes: [] },
+    truncated: false,
+    source: "reporting-kpi-service",
+  },
+}, "https://example.com/report", "https://example.com/unsubscribe");
+assert.match(savedEmail.subject, /Pinned daily revenue/);
+assert.match(savedEmail.html, /timeSeries report/);
+assert.match(savedEmail.html, /Billed revenue \(comparison\)/, "pinned comparison is rendered");
 
 console.log("reporting delivery smoke: ALL PASS");

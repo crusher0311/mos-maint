@@ -14,6 +14,8 @@ export interface ReportingSubscriptionDocument extends Document {
   dayOfMonth?: number;
   scope: { kind: "shop" | "enterprise" | "platform"; shopId?: number; enterpriseId?: string };
   filters?: { locationId?: number; advisorKey?: string; technicianKey?: string };
+  reportId?: string;
+  reportVersion?: number;
   paused: boolean;
   disableTokenHash: string;
   disableToken: string;
