@@ -81,6 +81,7 @@ export default function MissedOpportunitiesPage() {
   const [error, setError] = useState<string | null>(null);
   const [upgradeRequired, setUpgradeRequired] = useState(false);
   const [stale, setStale] = useState(false);
+  const [refreshPending, setRefreshPending] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [sortKey, setSortKey] = useState<SortKey>("closedDate");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
@@ -95,9 +96,18 @@ export default function MissedOpportunitiesPage() {
       const data = await response.json();
       if (response.status === 402) { setUpgradeRequired(true); setReport(null); return; }
       if (!response.ok || !data.ok) { setError(data.error || "Failed to load the report."); return; }
-      setUpgradeRequired(false); setStale(Boolean(data.stale)); setReport(data.report); setExpanded(new Set());
+      setUpgradeRequired(false); setStale(Boolean(data.stale)); setRefreshPending(Boolean(data.refreshPending)); setReport(data.report); setExpanded(new Set());
+      if (data.refreshPending && !refresh) {
+        // Separate request: saved results render as soon as this request ends,
+        // while the refresh request stays alive until recomputation finishes.
+        setTimeout(() => { void load(windowDays, true); }, 0);
+      }
     } catch { setError("Failed to load the report."); }
-    finally { setLoading(false); setRefreshing(false); }
+    finally {
+      setLoading(false);
+      setRefreshing(false);
+      if (refresh) setRefreshPending(false);
+    }
   }, []);
 
   useEffect(() => { load(days, false); }, [days, load]);
@@ -153,13 +163,13 @@ export default function MissedOpportunitiesPage() {
       </header>
 
       {error && <div className="flex items-center justify-between rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900"><span>{error}</span><button onClick={() => load(days, false)} className="font-semibold underline underline-offset-2">Retry</button></div>}
-      {loading ? <ReportSkeleton /> : report ? <ReportBody report={report} stale={stale} skipCounts={skipCounts} outcomeFilter={outcomeFilter} setOutcomeFilter={setOutcomeFilter} rows={sortedRows} expanded={expanded} toggleRow={toggleRow} arrow={arrow} toggleSort={toggleSort} showSkipped={showSkipped} setShowSkipped={setShowSkipped} /> : null}
+      {loading ? <ReportSkeleton /> : report ? <ReportBody report={report} stale={stale} refreshPending={refreshPending} skipCounts={skipCounts} outcomeFilter={outcomeFilter} setOutcomeFilter={setOutcomeFilter} rows={sortedRows} expanded={expanded} toggleRow={toggleRow} arrow={arrow} toggleSort={toggleSort} showSkipped={showSkipped} setShowSkipped={setShowSkipped} /> : null}
     </div>
   );
 }
 
-function ReportBody({ report, stale, skipCounts, outcomeFilter, setOutcomeFilter, rows, expanded, toggleRow, arrow, toggleSort, showSkipped, setShowSkipped }: {
-  report: Report; stale: boolean; skipCounts: Array<[string, number]>; outcomeFilter: RecommendationOutcome | "all"; setOutcomeFilter: (value: RecommendationOutcome | "all") => void;
+function ReportBody({ report, stale, refreshPending, skipCounts, outcomeFilter, setOutcomeFilter, rows, expanded, toggleRow, arrow, toggleSort, showSkipped, setShowSkipped }: {
+  report: Report; stale: boolean; refreshPending: boolean; skipCounts: Array<[string, number]>; outcomeFilter: RecommendationOutcome | "all"; setOutcomeFilter: (value: RecommendationOutcome | "all") => void;
   rows: ReportRow[]; expanded: Set<string>; toggleRow: (id: string) => void; arrow: (key: SortKey) => string; toggleSort: (key: SortKey) => void; showSkipped: boolean; setShowSkipped: (value: boolean | ((current: boolean) => boolean)) => void;
 }) {
   const summary = report.summary;
@@ -169,7 +179,8 @@ function ReportBody({ report, stale, skipCounts, outcomeFilter, setOutcomeFilter
   return <div className="space-y-5">
     <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
       <span>Updated {fmtDate(report.generatedAt)} {new Date(report.generatedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</span>
-      {stale && <span className="font-medium text-amber-700">Previous results shown; refresh failed.</span>}
+      {stale && !refreshPending && <span className="font-medium text-amber-700">Previous results shown; refresh failed.</span>}
+      {refreshPending && <span className="font-medium text-sky-700">Latest saved results shown; refreshing in the background.</span>}
       {report.truncated && <span>Window limited to newest closed ROs.</span>}
     </div>
     {summary.totalClosedRos > 0 && summary.evaluatedRos === 0 && <div className="rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm text-sky-950"><strong>No ROs could be evaluated in this window.</strong><div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">{skipCounts.map(([reason, count]) => <span key={reason}><b>{count.toLocaleString()}</b> {reason}</span>)}</div><p className="mt-2 text-sky-800">This report reads cached vehicle plans only. Coverage fills as plans are warmed in the background; refresh later to check again.</p></div>}

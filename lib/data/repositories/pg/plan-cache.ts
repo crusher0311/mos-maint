@@ -82,6 +82,25 @@ export async function pgFindCachedPlan(
   return rows[0] ? rowToCachedPlanDoc(rows[0]) : null;
 }
 
+/** One bounded query for the latest cached-plan rows for a VIN set. */
+export async function pgFindCachedPlans(
+  shopId: number,
+  vins: string[],
+): Promise<PgCachedPlanDoc[]> {
+  if (vins.length === 0) return [];
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(cachedPlans)
+    .where(
+      and(
+        eq(cachedPlans.shopId, shopId),
+        inArray(cachedPlans.vin, vins.map((vin) => vin.toUpperCase())),
+      ),
+    );
+  return rows.map(rowToCachedPlanDoc);
+}
+
 export async function pgUpsertCachedPlan(
   shopId: number,
   vin: string,

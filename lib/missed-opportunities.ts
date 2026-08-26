@@ -41,7 +41,10 @@ export {
   type TicketJobDisplayGroup,
 } from "@/lib/missed-opportunity-ticket-details";
 
-export const MISSED_OPPORTUNITY_REPORT_VERSION = 3;
+// v4: inspection/diagnostic ticket lines no longer satisfy maintenance
+// service recommendations. Invalidate v3 reports so corrected outcomes and
+// recorded-price attribution appear immediately after deploy.
+export const MISSED_OPPORTUNITY_REPORT_VERSION = 4;
 
 export type RecommendationSource = "vhi" | "dvi" | "both";
 export type RecommendationOutcome =

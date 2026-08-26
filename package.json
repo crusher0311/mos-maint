@@ -16,6 +16,7 @@
     "test:report-share-contract": "tsx tests/report-share-contract.smoke.ts",
     "test:reporting-kpis": "NODE_OPTIONS='--require ./scripts/_stubs/server-only-stub.cjs' tsx tests/reporting-kpi-foundation.smoke.ts",
     "verify:reporting-readiness": "tsx scripts/verify-reporting-query-readiness.ts",
+    "test:missed-opportunities-performance": "tsx tests/missed-opportunities-performance.smoke.ts",
     "test:reporting-delivery": "NODE_OPTIONS='--require ./scripts/_stubs/server-only-stub.cjs' tsx tests/reporting-delivery.smoke.ts",
     "test:custom-reports": "tsx tests/report-definition-compiler.smoke.ts && tsx tests/custom-report-access.smoke.ts && tsx tests/custom-report-ai.smoke.ts && npm run test:reporting-kpis && npm run test:reporting-delivery",
     "test:shopware-connect-errors": "npm run test:shopware-repair-order-query && tsx tests/shopware-connect-errors.smoke.ts",

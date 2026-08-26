@@ -7,7 +7,7 @@
 // scripts/check-direct-db.cjs).
 import type { Collection, Document } from "mongodb";
 import { getDb } from "@/lib/data/db";
-import { getCachedPlan, type CachedPlan } from "@/lib/plan-cache";
+import { getCachedPlan, getCachedPlans, type CachedPlan } from "@/lib/plan-cache";
 import type { MissedOpportunityReport } from "@/lib/missed-opportunities";
 
 const COLLECTION = "missed_opportunity_reports";
@@ -73,6 +73,47 @@ export async function listMissedOppReportShops(): Promise<
     .filter((r) => Number.isFinite(r.shopId) && Number.isFinite(r.windowDays));
 }
 
+/** Read-only production-readiness inspection; never creates or changes indexes. */
+export async function checkMissedOpportunityMongoIndexes(): Promise<{
+  reportCache: boolean;
+  planCache: boolean;
+  indexes: { reportCache: string[]; planCache: string[] };
+}> {
+  const db = await getDb();
+  const readIndexes = async (name: string) => {
+    try {
+      return await db.collection(name).listIndexes().toArray();
+    } catch (err: any) {
+      if (err?.codeName === "NamespaceNotFound" || err?.code === 26) return [];
+      throw err;
+    }
+  };
+  const [reportIndexes, planIndexes] = await Promise.all([
+    readIndexes(COLLECTION),
+    readIndexes("cached_plans"),
+  ]);
+  const hasPrefix = (
+    indexes: Array<{ key?: Record<string, number> }>,
+    expected: Array<[string, number]>,
+  ) => indexes.some((index) => {
+    const entries = Object.entries(index.key || {});
+    return expected.every(
+      ([field, direction], position) =>
+        entries[position]?.[0] === field && entries[position]?.[1] === direction,
+    );
+  });
+  return {
+    reportCache: hasPrefix(reportIndexes, [["shopId", 1], ["windowDays", 1]]),
+    planCache:
+      hasPrefix(planIndexes, [["shopId", 1], ["vin", 1], ["createdAt", -1]]) ||
+      hasPrefix(planIndexes, [["vin", 1], ["shopId", 1], ["createdAt", -1]]),
+    indexes: {
+      reportCache: reportIndexes.map((index) => index.name),
+      planCache: planIndexes.map((index) => index.name),
+    },
+  };
+}
+
 /**
  * Cache-only VHI plan lookup for one vehicle. Never triggers a rebuild —
  * a miss means the RO is reported as "not evaluated". Mirrors the
@@ -86,4 +127,17 @@ export async function findCachedPlanForVehicle(
 ): Promise<CachedPlan | null> {
   const db = await getDb();
   return getCachedPlan(db, vin.toUpperCase(), shopId, mileage);
+}
+
+/** Cache-only batched VHI lookup; validity semantics are shared with getCachedPlan. */
+export async function findCachedPlansForVehicles(
+  shopId: number,
+  vehicles: Array<{ vin: string; mileage: number | null }>,
+): Promise<Map<string, CachedPlan | null>> {
+  const db = await getDb();
+  return getCachedPlans(
+    db,
+    shopId,
+    vehicles.map(({ vin, mileage }) => ({ vin, currentMiles: mileage })),
+  );
 }

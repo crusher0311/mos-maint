@@ -66,6 +66,61 @@ export async function findCachedPlanCandidates(
   return findCachedPlanCandidatesMongo(shopId, vin, db);
 }
 
+/**
+ * Candidate docs for many VINs. The batch size is deliberately bounded so
+ * neither Mongo's $in nor Postgres parameter lists grow without limit.
+ */
+export async function findCachedPlanCandidatesBatch(
+  shopId: number,
+  vins: string[],
+  db?: Db,
+  batchSize = 100,
+): Promise<Map<string, AnyDoc[]>> {
+  const normalized = Array.from(new Set(vins.map((vin) => vin.toUpperCase())));
+  const out = new Map<string, AnyDoc[]>();
+  for (let offset = 0; offset < normalized.length; offset += batchSize) {
+    const batch = normalized.slice(offset, offset + batchSize);
+    let rows: AnyDoc[] = [];
+    if (isPlanCachePgCanonical()) {
+      rows = await pg.pgFindCachedPlans(Number(shopId), batch);
+      const found = new Set(rows.map((row) => String(row.vin).toUpperCase()));
+      if (shouldShadowWriteMongoPlanCache() && found.size < batch.length) {
+        const missing = batch.filter((vin) => !found.has(vin));
+        rows.push(...await findCachedPlanCandidatesBatchMongo(shopId, missing, db));
+      }
+    } else {
+      rows = await findCachedPlanCandidatesBatchMongo(shopId, batch, db);
+    }
+    for (const row of rows) {
+      const vin = String(row.vin || "").toUpperCase();
+      if (!vin) continue;
+      const existing = out.get(vin) || [];
+      existing.push(row);
+      existing.sort(
+        (a, b) =>
+          new Date(String(b.createdAt || 0)).getTime() -
+          new Date(String(a.createdAt || 0)).getTime(),
+      );
+      out.set(vin, existing);
+    }
+  }
+  return out;
+}
+
+async function findCachedPlanCandidatesBatchMongo(
+  shopId: number,
+  vins: string[],
+  db?: Db,
+): Promise<AnyDoc[]> {
+  if (vins.length === 0) return [];
+  const m = await mongo(db);
+  return m
+    .collection("cached_plans")
+    .find({ vin: { $in: vins }, shopId: shopIdIn(shopId) })
+    .sort({ createdAt: -1 })
+    .toArray();
+}
+
 async function findCachedPlanCandidatesMongo(
   shopId: number,
   vin: string,

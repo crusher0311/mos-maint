@@ -169,6 +169,21 @@ console.log("Recommendation outcomes, matching, and dedupe:");
   }])[0];
   ok("single VHI row with a DVI marker is both", overlay?.source === "both");
   ok("DVI severity survives recommendation modeling", overlay?.dviSeverity === "yellow");
+  const inspectedLeak = evaluateMissedOpportunityRecommendations(
+    [{
+      title: "Power Steering Fluid Leak Inspection",
+      recordedStatus: "completed",
+      displayGroup: "approved_performed",
+      totalPrice: "49.95",
+    }],
+    [{
+      title: "Power Steering Fluid",
+      serviceKey: "power_steering_fluid",
+      status: "overdue",
+    }],
+  )[0];
+  ok("fluid leak inspection is not counted as fluid service", inspectedLeak?.outcome === "not_quoted");
+  ok("inspection price is not attributed to service", inspectedLeak?.recordedPrice === null);
   const missed = missedItemsFromRecommendations(recommendations);
   ok("legacy missed excludes performed", !missed.some((m) => m.serviceKey === "brake_fluid"));
   ok("legacy missed includes deferred and unquoted", missed.length === 3);

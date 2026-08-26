@@ -1,4 +1,5 @@
 import postgres from "postgres";
+import { checkMissedOpportunityMongoIndexes } from "../lib/data/repositories/missed-opportunities";
 
 const REQUIRED_INDEXES = {
   work_order_range: [
@@ -11,6 +12,13 @@ const REQUIRED_INDEXES = {
   service_job_parent_join: [
     "normalized_service_jobs USING btree (shop_id, work_order_id)",
     "normalized_service_jobs USING btree (work_order_id)",
+  ],
+  line_item_parent_join: [
+    "normalized_line_items USING btree (service_job_id)",
+  ],
+  cached_plan_lookup: [
+    "cached_plans_pkey USING btree (shop_id, vin)",
+    "cached_plans USING btree (shop_id, vin)",
   ],
   recommendation_event_range: [
     "recommendation_events USING btree (shop_id, received_at)",
@@ -27,6 +35,8 @@ const REQUIRED_TABLES = [
   "normalized_work_orders",
   "normalized_payments",
   "normalized_service_jobs",
+  "normalized_line_items",
+  "cached_plans",
   "recommendation_events",
   "viewed_vins",
 ] as const;
@@ -86,6 +96,11 @@ async function main() {
       );
       console.log(`${match ? "OK" : "OPTIONAL_MISSING"} ${requirement}${match ? ` (${match.indexname})` : ""}`);
     }
+    const mongo = await checkMissedOpportunityMongoIndexes();
+    console.log(`${mongo.reportCache ? "OK" : "MISSING"} missed_opportunity_report_cache_index`);
+    console.log(`${mongo.planCache ? "OK" : "MISSING"} missed_opportunity_plan_cache_index`);
+    if (!mongo.reportCache) failures.push("missed_opportunity_report_cache_index");
+    if (!mongo.planCache) failures.push("missed_opportunity_plan_cache_index");
     if (failures.length) {
       console.error(
         "Reporting prerequisites are incomplete. Have an operator apply the relevant concurrent index migrations; this check never changes the database.",
@@ -94,12 +109,15 @@ async function main() {
     } else {
       console.log("Required reporting query indexes are ready. Optional stages remain deadline-bounded. No database changes were made.");
     }
+    console.log("Readiness check completed without changing PostgreSQL or MongoDB.");
   } finally {
     await sql.end();
   }
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : error);
-  process.exit(1);
-});
+main()
+  .then(() => process.exit(process.exitCode ?? 0))
+  .catch((error) => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exit(1);
+  });

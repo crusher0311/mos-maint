@@ -1,6 +1,7 @@
 import { Db } from "mongodb";
 import {
   findCachedPlanCandidates,
+  findCachedPlanCandidatesBatch,
   upsertCachedPlanDoc,
   deleteCachedPlans,
   deleteMaintenanceAnalysisForShop,
@@ -353,6 +354,36 @@ export async function getCachedPlan(
   const selected = selectValidCachedPlan(candidates, { vin, currentMiles, distanceUnit });
   if (!selected) {
     console.log(`[PlanCache] MISS: ${candidates.length} entries found but none valid for ${vin}`);
+  }
+  return selected;
+}
+
+/** Batch equivalent of getCachedPlan with exactly the same validity selector. */
+export async function getCachedPlans(
+  db: Db,
+  shopId: number,
+  vehicles: Array<{
+    vin: string;
+    currentMiles?: number | null;
+    distanceUnit?: "miles" | "kilometers";
+  }>,
+): Promise<Map<string, CachedPlan | null>> {
+  const candidates = await findCachedPlanCandidatesBatch(
+    shopId,
+    vehicles.map((vehicle) => vehicle.vin),
+    db,
+  ) as unknown as Map<string, CachedPlan[]>;
+  const selected = new Map<string, CachedPlan | null>();
+  for (const vehicle of vehicles) {
+    const vin = vehicle.vin.toUpperCase();
+    selected.set(
+      vin,
+      selectValidCachedPlan(candidates.get(vin) || [], {
+        vin,
+        currentMiles: vehicle.currentMiles,
+        distanceUnit: vehicle.distanceUnit,
+      }),
+    );
   }
   return selected;
 }

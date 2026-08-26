@@ -26,7 +26,7 @@ import {
   normalizedServiceJobs,
   normalizedLineItems,
 } from "@/lib/db/schema/normalized";
-import { findCachedPlanForVehicle } from "@/lib/data/repositories/missed-opportunities";
+import { findCachedPlansForVehicles } from "@/lib/data/repositories/missed-opportunities";
 import {
   findCachedWorkOrdersByIds,
   findDisplayRoNumbersByIds,
@@ -65,8 +65,6 @@ import {
 
 /** Hard cap on ROs evaluated per run — large shops degrade to "newest N". */
 export const MAX_ROS_PER_RUN = 300;
-/** Concurrent cached-plan lookups. */
-const PLAN_LOOKUP_CONCURRENCY = 4;
 /** Serve-from-cache TTL used by the API route. */
 export const REPORT_TTL_MS = 30 * 60 * 1000;
 
@@ -77,6 +75,12 @@ export async function computeMissedOpportunityReport(
   shopId: number,
   windowDays: MissedOppWindow,
 ): Promise<MissedOpportunityReport> {
+  const startedAt = Date.now();
+  const timings: Record<string, number> = {};
+  let providerCacheEnrichmentMs = 0;
+  const finishStage = (stage: string, stageStartedAt: number) => {
+    timings[stage] = Date.now() - stageStartedAt;
+  };
   const pg = getPg();
   const since = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
 
@@ -87,6 +91,7 @@ export async function computeMissedOpportunityReport(
   // in sync with that index or the query degrades to a multi-second
   // shop_id scan on large shops (Task #1183).
   const closeDate = sql<Date | null>`coalesce(${normalizedWorkOrders.closedDate}, ${normalizedWorkOrders.completedDate})`;
+  let stageStartedAt = Date.now();
   const wos = await pg
     .select({
       id: normalizedWorkOrders.id,
@@ -117,6 +122,7 @@ export async function computeMissedOpportunityReport(
     )
     .orderBy(desc(closeDate))
     .limit(MAX_ROS_PER_RUN + 1);
+  finishStage("closedRoQueryMs", stageStartedAt);
 
   const truncated = wos.length > MAX_ROS_PER_RUN;
   const scoped = truncated ? wos.slice(0, MAX_ROS_PER_RUN) : wos;
@@ -130,6 +136,7 @@ export async function computeMissedOpportunityReport(
     .map((wo) => String(wo.workOrderNumber || ""))
     .filter((value) => UUID_RE.test(value));
   let displayRoNumbers: Record<string, string> = {};
+  stageStartedAt = Date.now();
   if (opaqueRoNumbers.length > 0) {
     try {
       displayRoNumbers = await findDisplayRoNumbersByIds(shopId, opaqueRoNumbers);
@@ -139,11 +146,13 @@ export async function computeMissedOpportunityReport(
       );
     }
   }
+  providerCacheEnrichmentMs += Date.now() - stageStartedAt;
 
   // Service jobs (all dispositions, including deferred/declined) for the
   // scoped ROs, one batched query.
   const titlesByWo = new Map<string, string[]>();
   const ticketJobsByWo = new Map<string, MissedOpportunityTicketJob[]>();
+  stageStartedAt = Date.now();
   if (scoped.length > 0) {
     const jobs = await pg
       .select({
@@ -213,6 +222,7 @@ export async function computeMissedOpportunityReport(
     let cachedInvoices: ProtractorInvoiceSnapshotDoc[] = [];
     let rawInvoiceCache: ProtractorInvoiceCacheDoc[] = [];
     if (sourceIds.length > 0) {
+      const providerStartedAt = Date.now();
       [cachedWorkOrders, cachedInvoices, rawInvoiceCache] = await Promise.all([
         findCachedWorkOrdersByIds(shopId, sourceIds).catch((err: any) => {
           console.warn(
@@ -233,6 +243,7 @@ export async function computeMissedOpportunityReport(
           return [];
         }),
       ]);
+      providerCacheEnrichmentMs += Date.now() - providerStartedAt;
     }
     const cachedBySourceId = new Map(
       cachedWorkOrders.map((doc) => [String(doc.workOrderId), doc]),
@@ -320,9 +331,14 @@ export async function computeMissedOpportunityReport(
       ticketJobsByWo.set(j.workOrderId, ticketJobs);
     }
   }
+  timings.jobLineEnrichmentMs = Math.max(
+    0,
+    Date.now() - stageStartedAt - providerCacheEnrichmentMs,
+  );
+  timings.providerCacheEnrichmentMs = providerCacheEnrichmentMs;
 
-  // One cached-plan lookup per unique VIN (newest RO's odometer as the
-  // mileage hint), bounded concurrency. Cache-only; misses skip the RO.
+  // Batched cached-plan lookup for all unique VINs (newest RO's odometer as
+  // the mileage hint). Cache-only; misses skip the RO.
   const vinMileage = new Map<string, number | null>();
   for (const wo of scoped) {
     const vin = extractVin(wo.vehicle);
@@ -332,33 +348,25 @@ export async function computeMissedOpportunityReport(
   }
   const planByVin = new Map<string, ReturnType<typeof planItemsFromBuckets> | null>();
   const vins = Array.from(vinMileage.keys());
-  let cursor = 0;
-  await Promise.all(
-    Array.from({ length: Math.min(PLAN_LOOKUP_CONCURRENCY, vins.length) }).map(
-      async () => {
-        while (true) {
-          const idx = cursor++;
-          if (idx >= vins.length) return;
-          const vin = vins[idx];
-          try {
-            const plan = await findCachedPlanForVehicle(
-              shopId,
-              vin,
-              vinMileage.get(vin) ?? null,
-            );
-            const buckets = plan?.plan?.buckets;
-            planByVin.set(vin, buckets ? planItemsFromBuckets(buckets) : null);
-          } catch (err: any) {
-            console.warn(
-              `[MissedOpps] Shop ${shopId}: plan lookup failed for ${vin}: ${err?.message || err}`,
-            );
-            planByVin.set(vin, null);
-          }
-        }
-      },
-    ),
-  );
+  stageStartedAt = Date.now();
+  try {
+    const plans = await findCachedPlansForVehicles(
+      shopId,
+      vins.map((vin) => ({ vin, mileage: vinMileage.get(vin) ?? null })),
+    );
+    for (const vin of vins) {
+      const buckets = plans.get(vin)?.plan?.buckets;
+      planByVin.set(vin, buckets ? planItemsFromBuckets(buckets) : null);
+    }
+  } catch (err: any) {
+    console.warn(
+      `[MissedOpps] Shop ${shopId}: batched plan lookup failed: ${err?.message || err}`,
+    );
+    for (const vin of vins) planByVin.set(vin, null);
+  }
+  finishStage("planCacheLoadingMs", stageStartedAt);
 
+  stageStartedAt = Date.now();
   const rows: MissedOpportunityRo[] = scoped.map((wo) => {
     const vin = extractVin(wo.vehicle);
     const vehicleLabel = vehicleLabelFrom(wo.vehicle);
@@ -402,7 +410,7 @@ export async function computeMissedOpportunityReport(
   });
 
   const summary = summarizeMissedOpportunities(rows);
-  return {
+  const report = {
     reportVersion: MISSED_OPPORTUNITY_REPORT_VERSION,
     shopId,
     windowDays,
@@ -421,6 +429,16 @@ export async function computeMissedOpportunityReport(
       })),
     truncated,
   };
+  finishStage("evaluationMs", stageStartedAt);
+  console.log(`[MissedOppsTiming] ${JSON.stringify({
+    shopId,
+    windowDays,
+    scopedRos: scoped.length,
+    uniqueVins: vins.length,
+    ...timings,
+    totalComputeMs: Date.now() - startedAt,
+  })}`);
+  return report;
 }
 
 const UUID_RE =

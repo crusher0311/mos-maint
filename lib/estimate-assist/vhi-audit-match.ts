@@ -108,6 +108,14 @@ function tokensSubset(a: Set<string>, b: Set<string>): boolean {
   return true;
 }
 
+function isDiagnosticTicketTitle(title: string): boolean {
+  const action = parseServiceAction(title);
+  return (
+    isInspectionAction(action) ||
+    /\b(?:diagnos(?:e|is|tic)|troubleshoot|leak\s+(?:check|inspection))\b/i.test(title)
+  );
+}
+
 /**
  * Conservative plan-item ↔ ticket-title match shared by the recommendation
  * model. Canonical service identity wins, followed by the same normalized
@@ -120,6 +128,11 @@ export function ticketTitleMatchesVhiItem(
   const ticketTitle = String(rawTitle || "").trim();
   const itemTitle = String(item.title || "").trim();
   if (!ticketTitle || !itemTitle) return false;
+  // An inspection/diagnostic line can mention the same component and map to
+  // the same canonical service key, but it is not evidence that the
+  // maintenance service was quoted or performed. Example: "Power Steering
+  // Fluid Leak Inspection" must not satisfy "Power Steering Fluid Service".
+  if (isDiagnosticTicketTitle(ticketTitle)) return false;
   const ticketKeys = canonicalServiceKeysFromTitle(ticketTitle);
   const itemKeys = new Set(canonicalServiceKeysFromTitle(itemTitle));
   if (item.serviceKey && !item.serviceKey.startsWith("misc_")) itemKeys.add(item.serviceKey);
@@ -143,6 +156,7 @@ export function findMissingVhiItems(
   for (const raw of roLineTitles || []) {
     const title = String(raw || "").trim();
     if (!title) continue;
+    if (isDiagnosticTicketTitle(title)) continue;
     for (const k of canonicalServiceKeysFromTitle(title)) roKeys.add(k);
     const tokens = normalizeTokens(title);
     if (tokens.size > 0) roTokenSets.push(tokens);

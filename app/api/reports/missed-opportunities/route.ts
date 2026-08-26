@@ -14,6 +14,10 @@ import {
   getCachedMissedOppReport,
   setCachedMissedOppReport,
 } from "@/lib/data/repositories/missed-opportunities";
+import {
+  classifyMissedOpportunityLoad,
+  runMissedOpportunityRefresh,
+} from "@/lib/missed-opportunities-refresh";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,6 +35,8 @@ export const maxDuration = 60;
  * whose matcher this report reuses.
  */
 export async function GET(req: NextRequest) {
+  const requestStartedAt = Date.now();
+  const routeTimings: Record<string, number> = {};
   try {
     const session = await getSession();
     if (!session) {
@@ -38,7 +44,9 @@ export async function GET(req: NextRequest) {
     }
     const shopId = Number(session.shopId);
 
+    let stageStartedAt = Date.now();
     const entitlements = await getFeatureEntitlements(shopId);
+    routeTimings.entitlementLookupMs = Date.now() - stageStartedAt;
     if (!entitlements.canUseFeature("estimate_assist")) {
       return NextResponse.json(
         {
@@ -54,13 +62,21 @@ export async function GET(req: NextRequest) {
     const windowDays = normalizeWindowDays(req.nextUrl.searchParams.get("days"));
     const forceRefresh = req.nextUrl.searchParams.get("refresh") === "1";
 
+    stageStartedAt = Date.now();
     const cached = await getCachedMissedOppReport(shopId, windowDays);
+    routeTimings.reportCacheReadMs = Date.now() - stageStartedAt;
     const cacheHasCurrentShape =
       cached && hasCurrentMissedOpportunityReportShape(cached.report);
     const fresh =
       cacheHasCurrentShape &&
       Date.now() - new Date(cached.generatedAt).getTime() < REPORT_TTL_MS;
-    if (cached && fresh && !forceRefresh) {
+    const loadMode = classifyMissedOpportunityLoad({
+      hasUsableCache: Boolean(cacheHasCurrentShape),
+      cacheIsFresh: Boolean(fresh),
+      forceRefresh,
+    });
+    if (cached && loadMode === "fresh_hit") {
+      logRouteTiming("fresh_hit");
       return NextResponse.json({
         ok: true,
         cached: true,
@@ -68,11 +84,44 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    const recompute = () => runMissedOpportunityRefresh(
+      shopId,
+      windowDays,
+      async () => {
+        const report = await computeMissedOpportunityReport(shopId, windowDays);
+        const writeStartedAt = Date.now();
+        await setCachedMissedOppReport(shopId, windowDays, report).catch((err: any) => {
+          console.warn(`[MissedOpps] Shop ${shopId}: cache write failed:`, err?.message || err);
+        });
+        console.log(`[MissedOppsTiming] ${JSON.stringify({
+          shopId,
+          windowDays,
+          cacheWriteMs: Date.now() - writeStartedAt,
+        })}`);
+        return report;
+      },
+    );
+
+    // Any usable current-shape report is returned immediately on a normal
+    // navigation. The browser follows with refresh=1, whose request remains
+    // alive until the single-flight refresh completes.
+    if (cached && loadMode === "stale_hit") {
+      logRouteTiming("stale_hit", { refreshPending: true });
+      return NextResponse.json({
+        ok: true,
+        cached: true,
+        stale: false,
+        refreshPending: true,
+        report: normalizeMissedOpportunityReportCache(cached.report),
+      });
+    }
+
     try {
-      const report = await computeMissedOpportunityReport(shopId, windowDays);
-      await setCachedMissedOppReport(shopId, windowDays, report).catch((err) =>
-        console.warn(`[MissedOpps] Shop ${shopId}: cache write failed:`, err?.message || err),
-      );
+      const refresh = recompute();
+      const report = await refresh.promise;
+      logRouteTiming(forceRefresh ? "forced_refresh" : "cold_compute", {
+        refreshJoined: refresh.joined,
+      });
       return NextResponse.json({ ok: true, cached: false, report });
     } catch (computeErr: any) {
       // Degrade to the stale cache instead of a hard error when we have one.
@@ -85,6 +134,7 @@ export async function GET(req: NextRequest) {
         computeErr?.cause ? `| cause: ${computeErr.cause?.message || computeErr.cause}` : "",
       );
       if (cached && cacheHasCurrentShape) {
+        logRouteTiming("refresh_failure_fallback");
         return NextResponse.json({
           ok: true,
           cached: true,
@@ -96,6 +146,16 @@ export async function GET(req: NextRequest) {
         { ok: false, error: "Failed to build the report. Please try again." },
         { status: 500 },
       );
+    }
+    function logRouteTiming(cacheStatus: string, extra: Record<string, unknown> = {}) {
+      console.log(`[MissedOppsTiming] ${JSON.stringify({
+        shopId,
+        windowDays,
+        cacheStatus,
+        ...routeTimings,
+        routeElapsedMs: Date.now() - requestStartedAt,
+        ...extra,
+      })}`);
     }
   } catch (err: any) {
     console.error("[MissedOpps] route error:", err?.message || err);

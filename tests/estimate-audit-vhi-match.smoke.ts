@@ -17,6 +17,7 @@ import {
   findMissingVhiItems,
   buildMissingVhiFindings,
   isInspectOnlyVhiItem,
+  ticketTitleMatchesVhiItem,
   VHI_FINDING_CATEGORY,
   type VhiComparisonItem,
 } from "../lib/estimate-assist/vhi-audit-match";
@@ -62,6 +63,32 @@ console.log("Declined jobs count as quoted:");
   // A declined job is still a line on the ticket — caller includes its title.
   const missing = findMissingVhiItems(["Brake Fluid Flush (declined)"], items);
   ok("declined-but-present job suppresses the flag", missing.length === 0);
+}
+
+console.log("Diagnostic ticket lines do not count as service:");
+{
+  const powerSteering: VhiComparisonItem = {
+    title: "Power Steering Fluid",
+    serviceKey: "power_steering_fluid",
+    status: "overdue",
+  };
+  ok(
+    "leak inspection does not satisfy fluid service",
+    !ticketTitleMatchesVhiItem("Power Steering Fluid Leak Inspection", powerSteering),
+  );
+  ok(
+    "diagnosis does not satisfy fluid service",
+    !ticketTitleMatchesVhiItem("Diagnose Power Steering Leak", powerSteering),
+  );
+  ok(
+    "actual fluid service still matches",
+    ticketTitleMatchesVhiItem("Power Steering Fluid Service", powerSteering),
+  );
+  const missing = findMissingVhiItems(
+    ["Power Steering Fluid Leak Inspection"],
+    [powerSteering],
+  );
+  ok("inspection-only ticket leaves service missing", missing.length === 1);
 }
 
 console.log("Inspection-only exclusion:");
