@@ -95,7 +95,13 @@ async function runStage(
 ) {
   if (Date.now() >= deadlineAt) throw new ReportingQueryError("Reporting took too long. Please retry.", "deadline", stage);
   const startedAt = Date.now();
-  if (beforeStage) await beforeStage(remainingMs(deadlineAt));
+  if (beforeStage) {
+    await withinDeadline(
+      Promise.resolve(beforeStage(remainingMs(deadlineAt))),
+      deadlineAt,
+      stage,
+    );
+  }
   if (Date.now() >= deadlineAt) throw new ReportingQueryError("Reporting took too long. Please retry.", "deadline", stage);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), remainingMs(deadlineAt));
@@ -120,6 +126,27 @@ async function runStage(
     throw new ReportingQueryError(classified.message, classified.kind, stage, error);
   } finally {
     clearTimeout(timeout);
+  }
+}
+
+async function runOptionalStage(
+  stage: Exclude<ReportingStage, "business">,
+  query: ReportingQuery,
+  text: string,
+  params: unknown[],
+  deadlineAt: number,
+  beforeStage?: (remaining: number) => Promise<void>,
+): Promise<Row[]> {
+  try {
+    return await runStage(stage, query, text, params, deadlineAt, beforeStage);
+  } catch (error) {
+    const classified = classifyQueryError(error);
+    console.warn("[reporting-kpis] optional_stage_unavailable", {
+      stage,
+      kind: classified.kind,
+      failedStage: classified.stage,
+    });
+    return [];
   }
 }
 
@@ -235,26 +262,37 @@ export async function getReportingKpis(
   // Only Tekmetric work-order rollups retain their source cents representation.
   const jobMoney = "sj.total::numeric";
   const base = `
-    WITH refunds AS MATERIALIZED (
-      SELECT work_order_id, count(*) payment_rows,
-        sum(CASE WHEN status IN ('refunded','partially_refunded','chargeback') THEN coalesce(refunded_amount, amount, 0) ELSE coalesce(refunded_amount,0) END)::numeric refunded
-      FROM normalized_payments
-      WHERE shop_id = ANY($1::int[]) AND coalesce((soft_delete->>'isDeleted')::boolean,false)=false
-      GROUP BY work_order_id
+    WITH period_work_orders AS MATERIALIZED (
+      SELECT wo.*
+      FROM normalized_work_orders wo
+      WHERE wo.shop_id=ANY($1::int[])
+        AND coalesce((wo.soft_delete->>'isDeleted')::boolean,false)=false
+        AND wo.status <> 'voided'
+        AND coalesce(wo.closed_date,wo.completed_date) BETWEEN $2 AND $3
+    ), refunds AS MATERIALIZED (
+      SELECT p.shop_id, p.work_order_id, count(*) payment_rows,
+        sum(CASE WHEN p.status IN ('refunded','partially_refunded','chargeback') THEN coalesce(p.refunded_amount, p.amount, 0) ELSE coalesce(p.refunded_amount,0) END)::numeric refunded
+      FROM normalized_payments p
+      JOIN period_work_orders wo ON wo.id=p.work_order_id AND wo.shop_id=p.shop_id
+      WHERE coalesce((p.soft_delete->>'isDeleted')::boolean,false)=false
+      GROUP BY p.shop_id, p.work_order_id
     ), jobs AS MATERIALIZED (
-      SELECT work_order_id, count(*) staff_rows,
-        sum(CASE WHEN status IN ('declined','deferred') THEN ${jobMoney} ELSE 0 END)::numeric declined_dollars,
-        count(*) FILTER (WHERE recommendation_id IS NOT NULL AND status IN ('authorized','completed')) sold_opps,
-        count(*) FILTER (WHERE recommendation_id IS NOT NULL AND status IN ('declined','deferred')) missed_opps
-      FROM normalized_service_jobs sj WHERE shop_id = ANY($1::int[]) AND coalesce((soft_delete->>'isDeleted')::boolean,false)=false GROUP BY work_order_id
+      SELECT sj.shop_id, sj.work_order_id, count(*) staff_rows,
+        sum(CASE WHEN sj.status IN ('declined','deferred') THEN ${jobMoney} ELSE 0 END)::numeric declined_dollars,
+        count(*) FILTER (WHERE sj.recommendation_id IS NOT NULL AND sj.status IN ('authorized','completed')) sold_opps,
+        count(*) FILTER (WHERE sj.recommendation_id IS NOT NULL AND sj.status IN ('declined','deferred')) missed_opps
+      FROM normalized_service_jobs sj
+      JOIN period_work_orders wo ON wo.id=sj.work_order_id AND wo.shop_id=sj.shop_id
+      WHERE coalesce((sj.soft_delete->>'isDeleted')::boolean,false)=false
+      GROUP BY sj.shop_id, sj.work_order_id
     ), facts AS MATERIALIZED (
       SELECT wo.*, coalesce(r.refunded,0) refunded, coalesce(r.payment_rows,0) payment_rows,
         j.declined_dollars, j.sold_opps, j.missed_opps, j.staff_rows,
         ${woMoney} - coalesce(r.refunded,0) billed, ${woLabor} labor, ${woParts} parts,
         coalesce(wo.closed_date,wo.completed_date) basis_date
-      FROM normalized_work_orders wo LEFT JOIN refunds r ON r.work_order_id=wo.id LEFT JOIN jobs j ON j.work_order_id=wo.id
-      WHERE wo.shop_id=ANY($1::int[]) AND coalesce((wo.soft_delete->>'isDeleted')::boolean,false)=false
-        AND wo.status <> 'voided' AND coalesce(wo.closed_date,wo.completed_date) BETWEEN $2 AND $3
+      FROM period_work_orders wo
+      LEFT JOIN refunds r ON r.shop_id=wo.shop_id AND r.work_order_id=wo.id
+      LEFT JOIN jobs j ON j.shop_id=wo.shop_id AND j.work_order_id=wo.id
     ), coverage_by_shop AS (
       SELECT scope.shop_id,
         EXISTS(SELECT 1 FROM normalized_work_orders x WHERE x.shop_id=scope.shop_id) business_available,
@@ -328,7 +366,7 @@ export async function getReportingKpis(
       coverage_by_shop.staff_available, coverage_by_shop.mix_available, 0::bigint dimension_rank
     FROM coverage_by_shop
     ORDER BY dimension_type, dimension_key`, [ids, startParam, endParam], deadlineAt, options.beforeStage);
-  const technicianRows = await runStage("technician", query, `${base}, tech AS (
+  const technicianRows = await runOptionalStage("technician", query, `${base}, tech AS (
       SELECT f.shop_id,
         coalesce(
           nullif(sj.technician_id,''),
@@ -338,9 +376,9 @@ export async function getReportingKpis(
         sj.technician_name, f.id, f.basis_date,
         CASE
           WHEN sj.id IS NULL THEN f.billed
-          WHEN sum(abs(sj.total::numeric)) OVER (PARTITION BY f.id) > 0
-            THEN f.billed * abs(sj.total::numeric) / sum(abs(sj.total::numeric)) OVER (PARTITION BY f.id)
-          ELSE f.billed / count(*) OVER (PARTITION BY f.id)
+          WHEN sum(abs(sj.total::numeric)) OVER (PARTITION BY f.shop_id, f.id) > 0
+            THEN f.billed * abs(sj.total::numeric) / sum(abs(sj.total::numeric)) OVER (PARTITION BY f.shop_id, f.id)
+          ELSE f.billed / count(*) OVER (PARTITION BY f.shop_id, f.id)
         END billed,
         coalesce(sj.labor_total::numeric,0) labor, coalesce(sj.parts_total::numeric,0) parts,
         CASE WHEN sj.status IN ('declined','deferred') THEN sj.total::numeric ELSE 0 END declined_dollars,
@@ -349,6 +387,7 @@ export async function getReportingKpis(
         CASE WHEN sj.id IS NULL THEN 0 ELSE 1 END staff_rows,
         CASE WHEN f.payment_rows > 0 THEN 1 ELSE 0 END payment_rows
       FROM facts f LEFT JOIN normalized_service_jobs sj ON sj.work_order_id=f.id
+        AND sj.shop_id=f.shop_id
         AND coalesce((sj.soft_delete->>'isDeleted')::boolean,false)=false
     ), grouped AS (
       SELECT shop_id, shop_id::text || ':' || technician_key dimension_key,
@@ -367,7 +406,7 @@ export async function getReportingKpis(
     SELECT grouped.*, location_coverage.business_available, location_coverage.payments_available,
       location_coverage.staff_available, location_coverage.mix_available
     FROM grouped JOIN coverage_by_shop location_coverage USING (shop_id)`, [ids, startParam, endParam], deadlineAt, options.beforeStage);
-  const usageRows = await runStage("events", query, `WITH filtered_events AS MATERIALIZED (
+  const usageRows = await runOptionalStage("events", query, `WITH filtered_events AS MATERIALIZED (
       SELECT * FROM recommendation_events
       WHERE shop_id=ANY($1::int[]) AND received_at BETWEEN $2 AND $3
     ), coverage_by_shop AS (
@@ -549,7 +588,7 @@ export async function getReportingPeriods(
   const current = await getReportingKpis(scope, currentRange, { query: options?.query, deadlineAt });
   console.info("[reporting-kpis] period_complete", { period: "current", durationMs: now() - currentStartedAt });
   if (!comparisonRange) return { current, comparison: null };
-  if (Date.now() >= deadlineAt) {
+  if (now() >= deadlineAt) {
     return {
       current,
       comparison: null,
