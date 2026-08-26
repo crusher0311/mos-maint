@@ -3,6 +3,10 @@ import {
   classifyMissedOpportunityLoad,
   runMissedOpportunityRefresh,
 } from "../lib/missed-opportunities-refresh";
+import {
+  protractorSourceIdsByType,
+  withinProviderCacheBudget,
+} from "../lib/missed-opportunities-provider-cache";
 
 let failed = 0;
 function check(name: string, condition: boolean) {
@@ -108,6 +112,40 @@ console.log("Missed Opportunities batched plan loading:");
   check("aged degraded plan remains invalid", selected.get(rows[3].vin) === null);
   check("expired plan remains invalid", selected.get(rows[4].vin) === null);
   check("205 VINs use three bounded queries, not 205", queries === 3);
+}
+
+console.log("Missed Opportunities provider-cache budget:");
+{
+  const ids = protractorSourceIdsByType({
+    sourceIds: [
+      { system: "protractor", idType: "work_order_id", idValue: "wo-1" },
+      { system: "protractor", idType: "invoice_id", idValue: "inv-1" },
+      { system: "protractor", idType: "invoice_id", idValue: "inv-1" },
+      { system: "other", idType: "invoice_id", idValue: "ignored" },
+    ],
+  });
+  check("work-order queries receive only work-order IDs", ids.workOrderIds.join() === "wo-1");
+  check("invoice queries receive only invoice IDs", ids.invoiceIds.join() === "inv-1");
+  check("all IDs remain available for cache reconciliation", ids.all.length === 2);
+
+  const completed = await withinProviderCacheBudget(() => Promise.resolve(["ok"]), [], 50);
+  check("completed provider lookup retains rows", !completed.timedOut && completed.value[0] === "ok");
+  const timedOut = await withinProviderCacheBudget(
+    () => new Promise<string[]>((resolve) => setTimeout(() => resolve(["late"]), 25)),
+    [],
+    5,
+  );
+  check("slow provider lookup fails open at its budget", timedOut.timedOut && timedOut.value.length === 0);
+  let startedAfterBudget = false;
+  const exhausted = await withinProviderCacheBudget(
+    async () => {
+      startedAfterBudget = true;
+      return ["unexpected"];
+    },
+    [],
+    0,
+  );
+  check("exhausted shared budget starts no additional lookup", exhausted.timedOut && !startedAfterBudget);
 }
 
 if (failed) process.exit(1);

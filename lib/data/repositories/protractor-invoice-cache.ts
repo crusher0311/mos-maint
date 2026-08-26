@@ -45,6 +45,7 @@ export async function findFreshInvoiceCacheEntry(
 export async function findInvoiceCacheEntriesByIds(
   shopId: number,
   invoiceIds: string[],
+  options: { maxTimeMS?: number } = {},
 ): Promise<ProtractorInvoiceCacheDoc[]> {
   const ids = Array.from(
     new Set(invoiceIds.map((id) => String(id || "").trim()).filter(Boolean)),
@@ -54,6 +55,7 @@ export async function findInvoiceCacheEntriesByIds(
     const canonical = (await pg.findInvoiceCacheEntriesByIds(
       shopId,
       ids,
+      options,
     )) as unknown as ProtractorInvoiceCacheDoc[];
     const found = new Set(canonical.map((doc) => String(doc.invoiceId)));
     const missingIds = ids.filter((id) => !found.has(id));
@@ -62,22 +64,26 @@ export async function findInvoiceCacheEntriesByIds(
     // misses so a fresh cached invoice is not hidden by the read cutover.
     return [
       ...canonical,
-      ...(await findInvoiceCacheEntriesByIdsMongo(shopId, missingIds)),
+      ...(await findInvoiceCacheEntriesByIdsMongo(shopId, missingIds, options)),
     ];
   }
-  return findInvoiceCacheEntriesByIdsMongo(shopId, ids);
+  return findInvoiceCacheEntriesByIdsMongo(shopId, ids, options);
 }
 
 async function findInvoiceCacheEntriesByIdsMongo(
   shopId: number,
   ids: string[],
+  options: { maxTimeMS?: number } = {},
 ): Promise<ProtractorInvoiceCacheDoc[]> {
   const col = await collection();
   return col
-    .find({
-      shopId,
-      invoiceId: { $in: ids },
-    } as Filter<ProtractorInvoiceCacheDoc>)
+    .find(
+      {
+        shopId,
+        invoiceId: { $in: ids },
+      } as Filter<ProtractorInvoiceCacheDoc>,
+      { maxTimeMS: options.maxTimeMS },
+    )
     .sort({ cachedAt: -1 })
     .toArray();
 }

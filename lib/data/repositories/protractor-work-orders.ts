@@ -199,6 +199,7 @@ export async function findCachedWorkOrderById(
 export async function findCachedWorkOrdersByIds(
   shopId: number,
   workOrderIds: string[],
+  options: { maxTimeMS?: number } = {},
 ): Promise<ProtractorWorkOrderCacheDoc[]> {
   const ids = Array.from(
     new Set(workOrderIds.map((id) => String(id || "").trim()).filter(Boolean)),
@@ -208,12 +209,14 @@ export async function findCachedWorkOrdersByIds(
     return (await pg.findCachedWorkOrdersByIds(
       shopId,
       ids,
+      options,
     )) as ProtractorWorkOrderCacheDoc[];
   }
   const col = await collection();
   return col
     .find(
       { shopId, workOrderId: { $in: ids } } as Filter<ProtractorWorkOrderCacheDoc>,
+      { maxTimeMS: options.maxTimeMS },
     )
     .sort({ fetchedAt: -1 })
     .toArray();
@@ -228,12 +231,13 @@ export async function findCachedWorkOrdersByIds(
 export async function findDisplayRoNumbersByIds(
   shopId: number,
   workOrderIds: string[],
+  options: { maxTimeMS?: number } = {},
 ): Promise<Record<string, string>> {
   const ids = Array.from(new Set(workOrderIds.filter(Boolean))).slice(0, 300);
   if (ids.length === 0) return {};
 
   if (isProtractorCachePgCanonical()) {
-    return pg.findDisplayRoNumbersByIds(shopId, ids);
+    return pg.findDisplayRoNumbersByIds(shopId, ids, options);
   }
 
   const col = await collection();
@@ -241,6 +245,7 @@ export async function findDisplayRoNumbersByIds(
     .find(
       { shopId, workOrderId: { $in: ids } } as Filter<ProtractorWorkOrderCacheDoc>,
       {
+        maxTimeMS: options.maxTimeMS,
         projection: {
           _id: 0,
           workOrderId: 1,

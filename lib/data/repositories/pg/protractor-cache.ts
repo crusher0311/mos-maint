@@ -29,6 +29,20 @@ type AnyDoc = Record<string, unknown>;
 /** Up to two cache identities for each of the report's 300 scoped ROs. */
 const MAX_BATCH_LOOKUP_IDS = 600;
 
+async function withStatementTimeout<T>(
+  maxTimeMS: number | undefined,
+  work: (db: any) => Promise<T>,
+): Promise<T> {
+  const db = getDb();
+  if (!maxTimeMS || maxTimeMS <= 0) return work(db);
+  return db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select set_config('statement_timeout', ${String(Math.max(1, Math.floor(maxTimeMS)))}, true)`,
+    );
+    return work(tx);
+  });
+}
+
 /* -------------------------------------------------------------------------- */
 /* work orders                                                                 */
 /* -------------------------------------------------------------------------- */
@@ -187,44 +201,48 @@ export async function findCachedWorkOrderById(
 export async function findCachedWorkOrdersByIds(
   shopId: number,
   workOrderIds: string[],
+  options: { maxTimeMS?: number } = {},
 ): Promise<AnyDoc[]> {
   const ids = Array.from(
     new Set(workOrderIds.map((id) => String(id || "").trim()).filter(Boolean)),
   ).slice(0, MAX_BATCH_LOOKUP_IDS);
   if (ids.length === 0) return [];
-  const db = getDb();
-  const rows = await db
-    .select()
-    .from(protractorWorkOrders)
-    .where(
-      and(
-        eq(protractorWorkOrders.shopId, shopId),
-        inArray(protractorWorkOrders.workOrderId, ids),
-      ),
-    )
-    .orderBy(desc(protractorWorkOrders.fetchedAt));
+  const rows = await withStatementTimeout<any[]>(options.maxTimeMS, (db) =>
+    db
+      .select()
+      .from(protractorWorkOrders)
+      .where(
+        and(
+          eq(protractorWorkOrders.shopId, shopId),
+          inArray(protractorWorkOrders.workOrderId, ids),
+        ),
+      )
+      .orderBy(desc(protractorWorkOrders.fetchedAt)),
+  );
   return rows.map(reconstructWorkOrder);
 }
 
 export async function findCachedInvoiceSnapshotsByIds(
   shopId: number,
   invoiceIds: string[],
+  options: { maxTimeMS?: number } = {},
 ): Promise<AnyDoc[]> {
   const ids = Array.from(
     new Set(invoiceIds.map((id) => String(id || "").trim()).filter(Boolean)),
   ).slice(0, MAX_BATCH_LOOKUP_IDS);
   if (ids.length === 0) return [];
-  const db = getDb();
-  const rows = await db
-    .select()
-    .from(protractorInvoices)
-    .where(
-      and(
-        eq(protractorInvoices.shopId, shopId),
-        inArray(protractorInvoices.invoiceId, ids),
-      ),
-    )
-    .orderBy(desc(protractorInvoices.fetchedAt));
+  const rows = await withStatementTimeout<any[]>(options.maxTimeMS, (db) =>
+    db
+      .select()
+      .from(protractorInvoices)
+      .where(
+        and(
+          eq(protractorInvoices.shopId, shopId),
+          inArray(protractorInvoices.invoiceId, ids),
+        ),
+      )
+      .orderBy(desc(protractorInvoices.fetchedAt)),
+  );
   return rows.map((row) => ({
     ...(row.payload as AnyDoc),
     shopId: row.shopId,
@@ -235,22 +253,24 @@ export async function findCachedInvoiceSnapshotsByIds(
 export async function findInvoiceCacheEntriesByIds(
   shopId: number,
   invoiceIds: string[],
+  options: { maxTimeMS?: number } = {},
 ): Promise<AnyDoc[]> {
   const ids = Array.from(
     new Set(invoiceIds.map((id) => String(id || "").trim()).filter(Boolean)),
   ).slice(0, MAX_BATCH_LOOKUP_IDS);
   if (ids.length === 0) return [];
-  const db = getDb();
-  const rows = await db
-    .select()
-    .from(protractorInvoiceCache)
-    .where(
-      and(
-        eq(protractorInvoiceCache.shopId, shopId),
-        inArray(protractorInvoiceCache.invoiceId, ids),
-      ),
-    )
-    .orderBy(desc(protractorInvoiceCache.cachedAt));
+  const rows = await withStatementTimeout<any[]>(options.maxTimeMS, (db) =>
+    db
+      .select()
+      .from(protractorInvoiceCache)
+      .where(
+        and(
+          eq(protractorInvoiceCache.shopId, shopId),
+          inArray(protractorInvoiceCache.invoiceId, ids),
+        ),
+      )
+      .orderBy(desc(protractorInvoiceCache.cachedAt)),
+  );
   return rows.map((row) => ({
     ...(row.payload as AnyDoc),
     shopId: row.shopId,
@@ -262,22 +282,24 @@ export async function findInvoiceCacheEntriesByIds(
 export async function findDisplayRoNumbersByIds(
   shopId: number,
   workOrderIds: string[],
+  options: { maxTimeMS?: number } = {},
 ): Promise<Record<string, string>> {
   if (workOrderIds.length === 0) return {};
-  const db = getDb();
-  const rows = await db
-    .select({
-      workOrderId: protractorWorkOrders.workOrderId,
-      workOrderNumber: protractorWorkOrders.workOrderNumber,
-      payload: protractorWorkOrders.payload,
-    })
-    .from(protractorWorkOrders)
-    .where(
-      and(
-        eq(protractorWorkOrders.shopId, shopId),
-        inArray(protractorWorkOrders.workOrderId, workOrderIds),
+  const rows = await withStatementTimeout<any[]>(options.maxTimeMS, (db) =>
+    db
+      .select({
+        workOrderId: protractorWorkOrders.workOrderId,
+        workOrderNumber: protractorWorkOrders.workOrderNumber,
+        payload: protractorWorkOrders.payload,
+      })
+      .from(protractorWorkOrders)
+      .where(
+        and(
+          eq(protractorWorkOrders.shopId, shopId),
+          inArray(protractorWorkOrders.workOrderId, workOrderIds),
+        ),
       ),
-    );
+  );
 
   const out: Record<string, string> = {};
   for (const row of rows) {

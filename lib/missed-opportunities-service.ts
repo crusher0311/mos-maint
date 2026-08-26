@@ -62,6 +62,11 @@ import {
   matchNormalizedServiceJobsToCachedProtractorPackages,
   resolveCachedProtractorPackageStatus,
 } from "@/lib/integrations/protractor/package-normalization";
+import {
+  PROVIDER_CACHE_ENRICHMENT_BUDGET_MS,
+  protractorSourceIdsByType,
+  withinProviderCacheBudget,
+} from "@/lib/missed-opportunities-provider-cache";
 
 /** Hard cap on ROs evaluated per run — large shops degrade to "newest N". */
 export const MAX_ROS_PER_RUN = 300;
@@ -78,6 +83,7 @@ export async function computeMissedOpportunityReport(
   const startedAt = Date.now();
   const timings: Record<string, number> = {};
   let providerCacheEnrichmentMs = 0;
+  let providerCacheBudgetRemainingMs = PROVIDER_CACHE_ENRICHMENT_BUDGET_MS;
   const finishStage = (stage: string, stageStartedAt: number) => {
     timings[stage] = Date.now() - stageStartedAt;
   };
@@ -139,14 +145,37 @@ export async function computeMissedOpportunityReport(
   stageStartedAt = Date.now();
   if (opaqueRoNumbers.length > 0) {
     try {
-      displayRoNumbers = await findDisplayRoNumbersByIds(shopId, opaqueRoNumbers);
+      const remainingMs = providerCacheBudgetRemainingMs;
+      const lookup = await withinProviderCacheBudget(
+        () =>
+          findDisplayRoNumbersByIds(shopId, opaqueRoNumbers, {
+            maxTimeMS: remainingMs,
+          }),
+        {},
+        remainingMs,
+      );
+      displayRoNumbers = lookup.value;
+      console.log(`[MissedOppsTiming] ${JSON.stringify({
+        shopId,
+        windowDays,
+        providerCacheLookup: "display_ro_numbers",
+        ids: opaqueRoNumbers.length,
+        elapsedMs: Date.now() - stageStartedAt,
+        timedOut: lookup.timedOut,
+        rows: Object.keys(lookup.value).length,
+      })}`);
     } catch (err: any) {
       console.warn(
         `[MissedOpps] Shop ${shopId}: display RO-number lookup failed: ${err?.message || err}`,
       );
     }
   }
-  providerCacheEnrichmentMs += Date.now() - stageStartedAt;
+  const displayLookupMs = Date.now() - stageStartedAt;
+  providerCacheEnrichmentMs += displayLookupMs;
+  providerCacheBudgetRemainingMs = Math.max(
+    0,
+    providerCacheBudgetRemainingMs - displayLookupMs,
+  );
 
   // Service jobs (all dispositions, including deferred/declined) for the
   // scoped ROs, one batched query.
@@ -215,33 +244,70 @@ export async function computeMissedOpportunityReport(
       }
     }
 
-    const sourceIds = scoped
+    const sourceRefs = scoped
       .filter((wo) => provenanceSourceSystem(wo.provenance) === "protractor")
-      .flatMap((wo) => protractorWorkOrderSourceIds(wo.provenance));
+      .map((wo) => protractorSourceIdsByType(wo.provenance));
+    const sourceIds = Array.from(new Set(sourceRefs.flatMap((ids) => ids.all)));
+    const workOrderIds = Array.from(
+      new Set(sourceRefs.flatMap((ids) => ids.workOrderIds)),
+    );
+    const invoiceIds = Array.from(
+      new Set(sourceRefs.flatMap((ids) => ids.invoiceIds)),
+    );
     let cachedWorkOrders: ProtractorWorkOrderCacheDoc[] = [];
     let cachedInvoices: ProtractorInvoiceSnapshotDoc[] = [];
     let rawInvoiceCache: ProtractorInvoiceCacheDoc[] = [];
     if (sourceIds.length > 0) {
       const providerStartedAt = Date.now();
+      const lookup = async <T>(
+        name: string,
+        ids: number,
+        work: (maxTimeMS: number) => Promise<T[]>,
+      ): Promise<T[]> => {
+        const lookupStartedAt = Date.now();
+        try {
+          const remainingMs = providerCacheBudgetRemainingMs;
+          const result = await withinProviderCacheBudget(
+            () => work(remainingMs),
+            [],
+            remainingMs,
+          );
+          console.log(`[MissedOppsTiming] ${JSON.stringify({
+            shopId,
+            windowDays,
+            providerCacheLookup: name,
+            ids,
+            elapsedMs: Date.now() - lookupStartedAt,
+            timedOut: result.timedOut,
+            rows: result.value.length,
+          })}`);
+          return result.value;
+        } catch (err: any) {
+          console.warn(
+            `[MissedOpps] Shop ${shopId}: ${name} lookup failed: ${err?.message || err}`,
+          );
+          return [];
+        }
+      };
       [cachedWorkOrders, cachedInvoices, rawInvoiceCache] = await Promise.all([
-        findCachedWorkOrdersByIds(shopId, sourceIds).catch((err: any) => {
-          console.warn(
-            `[MissedOpps] Shop ${shopId}: cached Protractor work-order lookup failed: ${err?.message || err}`,
-          );
-          return [];
-        }),
-        findCachedInvoiceSnapshotsByIds(shopId, sourceIds).catch((err: any) => {
-          console.warn(
-            `[MissedOpps] Shop ${shopId}: cached Protractor invoice lookup failed: ${err?.message || err}`,
-          );
-          return [];
-        }),
-        findInvoiceCacheEntriesByIds(shopId, sourceIds).catch((err: any) => {
-          console.warn(
-            `[MissedOpps] Shop ${shopId}: raw Protractor invoice-cache lookup failed: ${err?.message || err}`,
-          );
-          return [];
-        }),
+        lookup(
+          "work_orders",
+          workOrderIds.length,
+          (maxTimeMS) =>
+            findCachedWorkOrdersByIds(shopId, workOrderIds, { maxTimeMS }),
+        ),
+        lookup(
+          "invoice_snapshots",
+          invoiceIds.length,
+          (maxTimeMS) =>
+            findCachedInvoiceSnapshotsByIds(shopId, invoiceIds, { maxTimeMS }),
+        ),
+        lookup(
+          "raw_invoice_cache",
+          invoiceIds.length,
+          (maxTimeMS) =>
+            findInvoiceCacheEntriesByIds(shopId, invoiceIds, { maxTimeMS }),
+        ),
       ]);
       providerCacheEnrichmentMs += Date.now() - providerStartedAt;
     }
@@ -510,21 +576,7 @@ function provenanceSourceSystem(value: unknown): string | null {
 }
 
 function protractorWorkOrderSourceIds(value: unknown): string[] {
-  const ids = Array.isArray((value as any)?.sourceIds)
-    ? (value as any).sourceIds
-    : [];
-  return Array.from(
-    new Set(
-      ids
-        .filter(
-          (sourceId: any) =>
-            sourceId?.system === "protractor" &&
-            ["invoice_id", "work_order_id"].includes(sourceId?.idType),
-        )
-        .map((sourceId: any) => String(sourceId.idValue || "").trim())
-        .filter(Boolean),
-    ),
-  );
+  return protractorSourceIdsByType(value).all;
 }
 
 function firstProtractorPackages(...sources: unknown[]): any[] {

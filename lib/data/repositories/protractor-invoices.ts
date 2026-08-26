@@ -56,6 +56,7 @@ export async function upsertInvoiceSnapshot(
 export async function findCachedInvoiceSnapshotsByIds(
   shopId: number,
   invoiceIds: string[],
+  options: { maxTimeMS?: number } = {},
 ): Promise<ProtractorInvoiceSnapshotDoc[]> {
   const ids = Array.from(
     new Set(invoiceIds.map((id) => String(id || "").trim()).filter(Boolean)),
@@ -65,6 +66,7 @@ export async function findCachedInvoiceSnapshotsByIds(
     const canonical = (await pg.findCachedInvoiceSnapshotsByIds(
       shopId,
       ids,
+      options,
     )) as ProtractorInvoiceSnapshotDoc[];
     const found = new Set(canonical.map((doc) => String(doc.invoiceId)));
     const missingIds = ids.filter((id) => !found.has(id));
@@ -74,22 +76,26 @@ export async function findCachedInvoiceSnapshotsByIds(
     // usable without weakening PG-first behavior for rows that exist there.
     return [
       ...canonical,
-      ...(await findInvoiceSnapshotsByIdsMongo(shopId, missingIds)),
+      ...(await findInvoiceSnapshotsByIdsMongo(shopId, missingIds, options)),
     ];
   }
-  return findInvoiceSnapshotsByIdsMongo(shopId, ids);
+  return findInvoiceSnapshotsByIdsMongo(shopId, ids, options);
 }
 
 async function findInvoiceSnapshotsByIdsMongo(
   shopId: number,
   ids: string[],
+  options: { maxTimeMS?: number } = {},
 ): Promise<ProtractorInvoiceSnapshotDoc[]> {
   const col = await collection();
   return col
-    .find({
-      shopId,
-      invoiceId: { $in: ids },
-    } as Filter<ProtractorInvoiceSnapshotDoc>)
+    .find(
+      {
+        shopId,
+        invoiceId: { $in: ids },
+      } as Filter<ProtractorInvoiceSnapshotDoc>,
+      { maxTimeMS: options.maxTimeMS },
+    )
     .sort({ fetchedAt: -1 })
     .toArray();
 }
