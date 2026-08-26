@@ -146,3 +146,4 @@
 - [Extension bootstrap auto-elevation](extension-bootstrap-elevation.md) — matched_user needs shop assignment + usable identity (Tekmetric has no emailVerified flag); orgShops quirk in tekmetric-byemployee-orgshops.md.
 - [AutoFlow bootstrap infeasible](autoflow-bootstrap-proof-findings.md) — no provider-attested current-user proof on v3 (cookie-only) or v4 (Inertia props + bearer w/ only broadcasting/auth); stays unsupported.
 - [Client-safe shared modules](client-safe-shared-modules.md) — a browser-safe export is not enough if its module also imports a server dependency; split client helpers into a pure sibling.
+- [AppFueled test traffic on QA](appfueled-qa-runtime.md) — test partner requests hit QA; keep report signing config aligned with production and verify the running process.
