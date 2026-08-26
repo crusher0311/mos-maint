@@ -4,6 +4,7 @@ import {
   REPORTING_KPI_CATALOG,
   REPORTING_KPI_VERSION,
   REPORTING_MAX_RANGE_DAYS,
+  REPORTING_QUERY_DEADLINE_MS,
   UNKNOWN_DIMENSION_KEY,
   finalizeMetrics,
   type ReportingAvailability,
@@ -11,9 +12,116 @@ import {
   type ReportingKpiResponse,
   type ReportingMetricValues,
 } from "@/lib/reporting-kpi-contract";
+import type { ReportingFailureKind, ReportingPeriodResponse } from "@/lib/reporting-kpi-contract";
 import type { ResolvedReportingScope } from "@/lib/reporting-scope";
 
 type Row = Record<string, any>;
+type ReportingStage = "business" | "technician" | "events";
+type CancelableQuery = PromiseLike<Row[]> & { cancel?: () => void };
+type ReportingQuery = (
+  text: string,
+  params: unknown[],
+  context?: { signal: AbortSignal; stage: ReportingStage },
+) => CancelableQuery;
+type ReportingTransaction = <T>(
+  work: (tools: {
+    query: ReportingQuery;
+    setStatementTimeout: (milliseconds: number) => Promise<void>;
+  }) => Promise<T>,
+) => Promise<T>;
+
+export class ReportingQueryError extends Error {
+  constructor(
+    message: string,
+    readonly kind: ReportingFailureKind,
+    readonly stage?: string,
+    readonly cause?: unknown,
+  ) {
+    super(message);
+    this.name = "ReportingQueryError";
+  }
+}
+
+function classifyQueryError(error: unknown): ReportingQueryError {
+  if (error instanceof ReportingQueryError) return error;
+  const message = error instanceof Error ? error.message : String(error);
+  const deadline = /statement timeout|canceling statement|deadline|aborted/i.test(message);
+  return new ReportingQueryError(
+    deadline ? "Reporting took too long. Please retry." : "The reporting database could not complete the request.",
+    deadline ? "deadline" : "database",
+    undefined,
+    error,
+  );
+}
+
+const remainingMs = (deadlineAt: number) => Math.max(1, deadlineAt - Date.now());
+
+async function withinDeadline<T>(
+  operation: Promise<T>,
+  deadlineAt: number,
+  stage: string,
+): Promise<T> {
+  if (Date.now() >= deadlineAt) {
+    operation.catch(() => undefined);
+    throw new ReportingQueryError("Reporting took too long. Please retry.", "deadline", stage);
+  }
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new ReportingQueryError("Reporting took too long. Please retry.", "deadline", stage)),
+          remainingMs(deadlineAt),
+        );
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+    // A queued transaction cannot be removed from postgres.js' pool queue.
+    // Keep its rejection observed; its callback checks the absolute deadline
+    // before issuing SQL, so a late acquisition performs no useful work.
+    operation.catch(() => undefined);
+  }
+}
+
+async function runStage(
+  stage: ReportingStage,
+  query: ReportingQuery,
+  text: string,
+  params: unknown[],
+  deadlineAt: number,
+  beforeStage?: (remaining: number) => Promise<void>,
+) {
+  if (Date.now() >= deadlineAt) throw new ReportingQueryError("Reporting took too long. Please retry.", "deadline", stage);
+  const startedAt = Date.now();
+  if (beforeStage) await beforeStage(remainingMs(deadlineAt));
+  if (Date.now() >= deadlineAt) throw new ReportingQueryError("Reporting took too long. Please retry.", "deadline", stage);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), remainingMs(deadlineAt));
+  console.info("[reporting-kpis] stage_start", { stage, remainingMs: remainingMs(deadlineAt) });
+  try {
+    const pending = query(text, params, { signal: controller.signal, stage });
+    const rows = await Promise.race([
+      pending,
+      new Promise<Row[]>((_, reject) => controller.signal.addEventListener("abort", () => {
+        pending.cancel?.();
+        reject(new ReportingQueryError("Reporting took too long. Please retry.", "deadline", stage));
+      }, { once: true })),
+    ]);
+    console.info("[reporting-kpis] stage_complete", { stage, durationMs: Date.now() - startedAt, rows: rows.length });
+    return rows;
+  } catch (error) {
+    const classified = classifyQueryError(error);
+    console.error("[reporting-kpis] stage_failed", {
+      stage, durationMs: Date.now() - startedAt, kind: classified.kind,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw new ReportingQueryError(classified.message, classified.kind, stage, error);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 export function normalizeReportingRange(startRaw?: string | null, endRaw?: string | null) {
   const end = endRaw ? new Date(endRaw) : new Date();
@@ -71,12 +179,50 @@ const money = (alias: string, column: string) =>
 export async function getReportingKpis(
   scope: ResolvedReportingScope,
   range: ReturnType<typeof normalizeReportingRange>,
-  options?: { query?: (text: string, params: unknown[]) => Promise<Row[]> },
+  options?: {
+    query?: ReportingQuery;
+    deadlineAt?: number;
+    statementTimeoutMs?: number;
+    beforeStage?: (remaining: number) => Promise<void>;
+    transaction?: ReportingTransaction;
+  },
 ): Promise<ReportingKpiResponse> {
+  const deadlineAt = options?.deadlineAt ?? Date.now() + REPORTING_QUERY_DEADLINE_MS;
+  if (!options?.query) {
+    const queuedAt = Date.now();
+    const transaction: ReportingTransaction = options?.transaction ?? (async (work) =>
+      getClient().begin(async (sql) => work({
+        query: (text, params) => sql.unsafe(text, params as any[]) as unknown as CancelableQuery,
+        setStatementTimeout: async (milliseconds) => {
+          await sql.unsafe(`SET LOCAL statement_timeout = ${Math.max(1, Math.floor(milliseconds))}`);
+        },
+      })) as any);
+    try {
+      const operation = transaction(async (tools) => {
+        if (Date.now() >= deadlineAt) {
+          throw new ReportingQueryError("Reporting took too long. Please retry.", "deadline", "database_queue");
+        }
+        console.info("[reporting-kpis] stage_complete", {
+          stage: "database_queue",
+          durationMs: Date.now() - queuedAt,
+        });
+        return getReportingKpis(scope, range, {
+          ...options,
+          deadlineAt,
+          beforeStage: async (remaining) => {
+            const timeout = Math.min(options?.statementTimeoutMs ?? REPORTING_QUERY_DEADLINE_MS, remaining);
+            await tools.setStatementTimeout(timeout);
+          },
+          query: tools.query,
+        });
+      });
+      return await withinDeadline(operation, deadlineAt, "database_queue");
+    } catch (error) {
+      throw classifyQueryError(error);
+    }
+  }
   const query =
-    options?.query ||
-    ((text: string, params: unknown[]) =>
-      getClient().unsafe(text, params as any[]) as Promise<Row[]>);
+    options.query;
   const ids = `{${scope.shopIds.join(",")}}`;
   // postgres.js unsafe() serializes raw parameters as text; pass explicit ISO
   // timestamps instead of Date instances at this adapter boundary.
@@ -130,8 +276,7 @@ export async function getReportingKpis(
     sum(payment_rows)::int payment_rows, sum(staff_rows)::int staff_rows,
     count(*) FILTER (WHERE labor<>0 OR parts<>0)::int mix_rows`;
 
-  const [businessRows, technicianRows, usageRows] = await Promise.all([
-    query(`${base}, dimension_facts AS (
+  const businessRows = await runStage("business", query, `${base}, dimension_facts AS (
       SELECT facts.*,
         coalesce(
           nullif(service_advisor_id,''),
@@ -182,8 +327,8 @@ export async function getReportingKpis(
       coverage_by_shop.business_available, coverage_by_shop.payments_available,
       coverage_by_shop.staff_available, coverage_by_shop.mix_available, 0::bigint dimension_rank
     FROM coverage_by_shop
-    ORDER BY dimension_type, dimension_key`, [ids, startParam, endParam]),
-    query(`${base}, tech AS (
+    ORDER BY dimension_type, dimension_key`, [ids, startParam, endParam], deadlineAt, options.beforeStage);
+  const technicianRows = await runStage("technician", query, `${base}, tech AS (
       SELECT f.shop_id,
         coalesce(
           nullif(sj.technician_id,''),
@@ -221,8 +366,8 @@ export async function getReportingKpis(
     )
     SELECT grouped.*, location_coverage.business_available, location_coverage.payments_available,
       location_coverage.staff_available, location_coverage.mix_available
-    FROM grouped JOIN coverage_by_shop location_coverage USING (shop_id)`, [ids, startParam, endParam]),
-    query(`WITH filtered_events AS MATERIALIZED (
+    FROM grouped JOIN coverage_by_shop location_coverage USING (shop_id)`, [ids, startParam, endParam], deadlineAt, options.beforeStage);
+  const usageRows = await runStage("events", query, `WITH filtered_events AS MATERIALIZED (
       SELECT * FROM recommendation_events
       WHERE shop_id=ANY($1::int[]) AND received_at BETWEEN $2 AND $3
     ), coverage_by_shop AS (
@@ -305,8 +450,8 @@ export async function getReportingKpis(
     CROSS JOIN coverage
     LEFT JOIN coverage_by_shop location_coverage ON location_coverage.shop_id=grouped.shop_id
     WHERE grouped.dimension_type<>'source' OR grouped.dimension_rank<=${REPORTING_DIMENSION_LIMIT + 1}
-    ORDER BY grouped.dimension_type, attributed_revenue DESC`, [ids, startParam, endParam]),
-  ]);
+    ORDER BY grouped.dimension_type, attributed_revenue DESC`, [ids, startParam, endParam], deadlineAt, options.beforeStage);
+  const assemblyStartedAt = Date.now();
   const summaryBusiness = businessRows.find((r) => r.dimension_type === "summary") || {};
   const usage = usageRows.find((r) => r.dimension_type === "summary") || {};
   const summaryRow = { ...summaryBusiness, ...usage };
@@ -338,7 +483,7 @@ export async function getReportingKpis(
   const advisorTruncated = advisorRows.length > REPORTING_DIMENSION_LIMIT;
   const techTruncated = technicianRows.length > REPORTING_DIMENSION_LIMIT;
   const sourceTruncated = sourceRows.length > REPORTING_DIMENSION_LIMIT;
-  return {
+  const result: ReportingKpiResponse = {
     ok: true, version: REPORTING_KPI_VERSION, generatedAt: new Date().toISOString(),
     scope: { kind: scope.kind, shopIds: scope.shopIds, ...(scope.enterpriseId ? { enterpriseId: scope.enterpriseId } : {}) },
     range: { start: range.start.toISOString(), end: range.end.toISOString(), days: range.days, timestampBasis: "closed_date, with completed_date fallback" },
@@ -381,4 +526,52 @@ export async function getReportingKpis(
       ],
     },
   };
+  console.info("[reporting-kpis] stage_complete", {
+    stage: "assembly", durationMs: Date.now() - assemblyStartedAt,
+    shops: scope.shopIds.length, days: range.days,
+  });
+  return result;
+}
+
+export async function getReportingPeriods(
+  scope: ResolvedReportingScope,
+  currentRange: ReturnType<typeof normalizeReportingRange>,
+  comparisonRange?: ReturnType<typeof normalizeReportingRange> | null,
+  options?: {
+    query?: ReportingQuery;
+    deadlineMs?: number;
+    now?: () => number;
+  },
+): Promise<ReportingPeriodResponse> {
+  const now = options?.now ?? Date.now;
+  const deadlineAt = now() + (options?.deadlineMs ?? REPORTING_QUERY_DEADLINE_MS);
+  const currentStartedAt = now();
+  const current = await getReportingKpis(scope, currentRange, { query: options?.query, deadlineAt });
+  console.info("[reporting-kpis] period_complete", { period: "current", durationMs: now() - currentStartedAt });
+  if (!comparisonRange) return { current, comparison: null };
+  if (Date.now() >= deadlineAt) {
+    return {
+      current,
+      comparison: null,
+      comparisonError: {
+        kind: "deadline",
+        message: "The current report loaded, but there was not enough time to load the prior-period comparison.",
+        retryable: true,
+      },
+    };
+  }
+  try {
+    const comparisonStartedAt = now();
+    const comparison = await getReportingKpis(scope, comparisonRange, { query: options?.query, deadlineAt });
+    console.info("[reporting-kpis] period_complete", { period: "comparison", durationMs: now() - comparisonStartedAt });
+    return { current, comparison };
+  } catch (error) {
+    const classified = classifyQueryError(error);
+    console.warn("[reporting-kpis] comparison_unavailable", { kind: classified.kind, stage: classified.stage });
+    return {
+      current,
+      comparison: null,
+      comparisonError: { kind: classified.kind, message: classified.message, retryable: true },
+    };
+  }
 }

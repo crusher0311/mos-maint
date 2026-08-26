@@ -85,5 +85,7 @@ const email = buildReportingSummaryEmail(report, prior, "https://example.com/das
 assert.match(email.subject, /Revenue \+100\.0%/);
 assert.match(email.html, /Location outliers/);
 assert.match(email.html, /Disable this summary/);
+const emailWithoutPrior = buildReportingSummaryEmail(report, null, "https://example.com/dashboard?shopId=1", "https://example.com/unsubscribe?t=x");
+assert.match(emailWithoutPrior.subject, /prior-period comparison unavailable/);
 
 console.log("reporting delivery smoke: ALL PASS");

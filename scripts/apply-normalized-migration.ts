@@ -43,6 +43,13 @@ const drizzleMigrationFiles = [
   "0033_task1188_prod_index_parity.sql",
 ];
 
+// Concurrent index migrations must be sent one statement at a time. A
+// multi-statement simple-query message is an implicit transaction block, where
+// PostgreSQL rejects CREATE INDEX CONCURRENTLY.
+const concurrentIndexMigrationFiles = [
+  "0034_reporting_query_indexes.sql",
+];
+
 async function main() {
   const connStr = process.env.DATAONE_DATABASE_URL || process.env.DATABASE_URL;
   if (!connStr) {
@@ -821,6 +828,17 @@ async function main() {
     // migration file (including DO $$ blocks) runs in one round trip.
     await sql.unsafe(content).simple();
     console.log(`  ✓ ${file}`);
+  }
+  for (const file of concurrentIndexMigrationFiles) {
+    const filePath = path.join(process.cwd(), "drizzle", file);
+    const statements = readFileSync(filePath, "utf8")
+      .split(";")
+      .map((statement) => statement.trim())
+      .filter(Boolean);
+    for (const statement of statements) {
+      await sql.unsafe(statement);
+    }
+    console.log(`  ✓ ${file} (concurrent statements)`);
   }
 
   console.log("Creating indexes...");

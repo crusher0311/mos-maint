@@ -2,6 +2,7 @@ export const REPORTING_KPI_VERSION = 1 as const;
 export const REPORTING_MAX_RANGE_DAYS = 366;
 export const REPORTING_MAX_SHOPS = 500;
 export const REPORTING_DIMENSION_LIMIT = 500;
+export const REPORTING_QUERY_DEADLINE_MS = 45_000;
 export const UNKNOWN_DIMENSION_KEY = "__unknown__";
 
 export type ReportingScopeKind = "shop" | "enterprise" | "platform";
@@ -85,6 +86,18 @@ export interface ReportingKpiResponse {
     unknownTechnicianJobs: number;
     dimensionsTruncated: boolean;
     notes: string[];
+  };
+}
+
+export type ReportingFailureKind = "deadline" | "database" | "authorization" | "validation";
+
+export interface ReportingPeriodResponse {
+  current: ReportingKpiResponse;
+  comparison: ReportingKpiResponse | null;
+  comparisonError?: {
+    kind: ReportingFailureKind;
+    message: string;
+    retryable: boolean;
   };
 }
 

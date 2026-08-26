@@ -10,6 +10,7 @@ type Metrics = { billedRevenue?: number | null; averageRepairOrder?: number | nu
 type ReportingAvailability = { business?: boolean; payments?: boolean; staff?: boolean; laborParts?: boolean; planViews?: boolean; recommendationEvents?: boolean };
 type DimensionRow = { key: string; label: string | null; shopId?: number | null; metrics: Metrics; availability?: ReportingAvailability | null };
 type KpiResponse = { summary: Metrics; timeSeries: Array<{ key: string; label?: string | null; metrics: Metrics; availability?: ReportingAvailability | null }>; byLocation: DimensionRow[]; byAdvisor: DimensionRow[]; byTechnician: DimensionRow[]; availability?: ReportingAvailability | null; dataQuality?: { unknownAdvisorRepairOrders?: number; unknownTechnicianJobs?: number; dimensionsTruncated?: boolean; notes?: string[] | string | null } | null };
+type PeriodResponse = { current: KpiResponse; comparison: KpiResponse | null; comparisonError?: { message: string; retryable: boolean } };
 type Me = { email?: string; role?: string; shopId?: number; enterpriseId?: string | null; isPlatformAdmin?: boolean; platformAdmin?: boolean };
 type Subscription = { _id: string; recipientEmail: string; cadence: "weekly" | "monthly"; timezone: string; sendHour: number; dayOfWeek?: number | null; dayOfMonth?: number | null; paused?: boolean; active?: boolean; nextRunAt?: string | null; lastRunAt?: string | null; lastStatus?: string | null; lastError?: string | null; deliveryHistory?: unknown[]; scope?: { kind: ScopeKind; shopId?: number; enterpriseId?: string }; filters?: { locationId?: number; advisorKey?: string; technicianKey?: string } };
 
@@ -96,14 +97,16 @@ export default function ReportingPage() {
         ? Math.round((new Date(`${end}T00:00:00`).getTime() - new Date(`${start}T00:00:00`).getTime()) / 86400000) + 1
         : 0;
       const previousRange = dates(period, start, end, period === "custom" ? customLength : daysFor(period));
-      const [currentResponse, priorResponse] = await Promise.all([
-        fetch(`/api/reports/kpis?${query(currentRange)}`, { credentials: "include" }),
-        previousRange ? fetch(`/api/reports/kpis?${query(previousRange)}`, { credentials: "include" }) : Promise.resolve(null),
-      ]);
+       const params = new URLSearchParams(query(currentRange));
+       params.set("comparisonStartDate", previousRange.startDate);
+       params.set("comparisonEndDate", previousRange.endDate);
+       const currentResponse = await fetch(`/api/reports/kpis?${params}`, { credentials: "include" });
       const currentJson = await currentResponse.json();
       if (!currentResponse.ok) throw new Error(currentJson.error || "Reporting data could not be loaded.");
-      setReport(currentJson);
-      if (priorResponse?.ok) setPrior(await priorResponse.json()); else setPrior(null);
+       const periods = currentJson as PeriodResponse;
+       setReport(periods.current);
+       setPrior(periods.comparison);
+       if (periods.comparisonError) setError(`Current results loaded, but the prior-period comparison timed out. ${periods.comparisonError.message}`);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Reporting data could not be loaded."); }
     finally { setLoading(false); setRefreshing(false); }
   }, [end, period, reportEnterpriseId, reportShopId, scope, start]);

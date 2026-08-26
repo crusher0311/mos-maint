@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { logAdminAction } from "@/lib/data/repositories/audit-logs";
-import { getReportingKpis, normalizeReportingRange } from "@/lib/reporting-kpi-service";
+import { getReportingKpis, normalizeReportingRange, ReportingQueryError } from "@/lib/reporting-kpi-service";
 import { ReportingScopeError, resolveReportingScope } from "@/lib/reporting-scope";
 import { reportingCsv } from "@/lib/reporting-delivery";
 
@@ -43,9 +43,20 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (error) {
-    if (error instanceof ReportingScopeError) return NextResponse.json({ error: error.message }, { status: error.status });
+    if (error instanceof ReportingScopeError) {
+      return NextResponse.json(
+        { error: error.message, kind: error.status === 401 || error.status === 403 ? "authorization" : "validation", retryable: false },
+        { status: error.status },
+      );
+    }
+    if (error instanceof ReportingQueryError) {
+      return NextResponse.json({ error: error.message, kind: error.kind, retryable: true }, { status: error.kind === "deadline" ? 504 : 503 });
+    }
     const message = error instanceof Error ? error.message : "Export failed";
     const clientError = /^(Invalid date|Date range|Choose either|Selected advisor|Selected technician)/.test(message);
-    return NextResponse.json({ error: clientError ? message : "Export failed" }, { status: clientError ? 400 : 500 });
+    return NextResponse.json(
+      { error: clientError ? message : "Export failed", kind: clientError ? "validation" : "database", retryable: !clientError },
+      { status: clientError ? 400 : 500 },
+    );
   }
 }

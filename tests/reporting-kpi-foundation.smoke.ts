@@ -7,9 +7,12 @@ import {
   safeRate,
 } from "../lib/reporting-kpi-contract";
 import {
+  getReportingPeriods,
   getReportingKpis,
   normalizeReportingRange,
+  ReportingQueryError,
 } from "../lib/reporting-kpi-service";
+import { readFileSync } from "node:fs";
 
 assert.equal(providerMoneyToDollars(12345, "tekmetric"), 123.45);
 assert.equal(providerMoneyToDollars(123.45, "tekmetric", "service_job"), 123.45);
@@ -176,7 +179,117 @@ async function testServicePipeline() {
   assert.equal(report.dataQuality.dimensionsTruncated, true);
 }
 
-testServicePipeline()
+async function testBoundedExecution() {
+  let active = 0;
+  let maxActive = 0;
+  let calls = 0;
+  const emptyQuery = async () => {
+    active++;
+    maxActive = Math.max(maxActive, active);
+    calls++;
+    await new Promise((resolve) => setTimeout(resolve, 1));
+    active--;
+    return [];
+  };
+  const largeScope = {
+    kind: "enterprise" as const,
+    enterpriseId: "large-enterprise",
+    shopIds: Array.from({ length: 500 }, (_, index) => index + 1),
+    shops: Array.from({ length: 500 }, (_, index) => ({
+      shopId: index + 1, name: `Shop ${index + 1}`, locationIdentifier: null,
+    })),
+  };
+  const periods = await getReportingPeriods(
+    largeScope,
+    normalizeReportingRange("2026-08-01", "2026-08-30"),
+    normalizeReportingRange("2026-07-02", "2026-07-31"),
+    { query: emptyQuery, deadlineMs: 1_000 },
+  );
+  assert.equal(calls, 6, "current and prior should each use three stages");
+  assert.equal(maxActive, 1, "report stages and periods must not compete for the two-connection pool");
+  assert.equal(periods.current.byLocation.length, 500, "large authorized scopes remain complete");
+  assert.ok(periods.comparison);
+
+  let periodCall = 0;
+  const partial = await getReportingPeriods(
+    largeScope,
+    normalizeReportingRange("2026-08-01", "2026-08-30"),
+    normalizeReportingRange("2026-07-02", "2026-07-31"),
+    {
+      deadlineMs: 1_000,
+      query: async () => {
+        periodCall++;
+        if (periodCall > 3) throw new Error("database unavailable");
+        return [];
+      },
+    },
+  );
+  assert.ok(partial.current, "current period must survive comparison failure");
+  assert.equal(partial.comparison, null);
+  assert.equal(partial.comparisonError?.kind, "database");
+
+  let cancelled = false;
+  const never = new Promise<any>(() => {}) as Promise<any> & { cancel?: () => void };
+  never.cancel = () => { cancelled = true; };
+  await assert.rejects(
+    getReportingKpis(largeScope, normalizeReportingRange("2026-08-01", "2026-08-30"), {
+      deadlineAt: Date.now() + 5,
+      query: () => never,
+    }),
+    (error: unknown) => error instanceof ReportingQueryError && error.kind === "deadline",
+  );
+  assert.equal(cancelled, true, "deadline must cancel the active postgres-style pending query");
+
+  const stageTimeouts: number[] = [];
+  await getReportingKpis(largeScope, normalizeReportingRange("2026-08-01", "2026-08-30"), {
+    deadlineAt: Date.now() + 1_000,
+    beforeStage: async (remaining) => { stageTimeouts.push(remaining); },
+    query: async () => {
+      await new Promise((resolve) => setTimeout(resolve, 2));
+      return [];
+    },
+  });
+  assert.equal(stageTimeouts.length, 3);
+  assert.ok(stageTimeouts[1] < stageTimeouts[0] && stageTimeouts[2] < stageTimeouts[1], "each SQL stage gets only the shrinking remaining request budget");
+
+  let lateQueries = 0;
+  const acquisitionStarted = Date.now();
+  await assert.rejects(
+    getReportingKpis(largeScope, normalizeReportingRange("2026-08-01", "2026-08-30"), {
+      deadlineAt: Date.now() + 5,
+      transaction: async (work) => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        return work({
+          query: async () => { lateQueries++; return []; },
+          setStatementTimeout: async () => undefined,
+        });
+      },
+    }),
+    (error: unknown) => error instanceof ReportingQueryError && error.kind === "deadline" && error.stage === "database_queue",
+  );
+  assert.ok(Date.now() - acquisitionStarted < 20, "pool acquisition wait is bounded by the report deadline");
+  await new Promise((resolve) => setTimeout(resolve, 25));
+  assert.equal(lateQueries, 0, "a transaction acquired after deadline must not execute report SQL");
+}
+
+function testReportingIndexShapes() {
+  const migration = readFileSync("drizzle/0034_reporting_query_indexes.sql", "utf8");
+  assert.equal((migration.match(/CREATE INDEX CONCURRENTLY/g) || []).length, 4, "production reporting indexes must never block writes");
+  assert.match(migration, /normalized_payments \(shop_id, work_order_id\)/);
+  assert.match(migration, /normalized_service_jobs \(shop_id, work_order_id\)/);
+  assert.match(migration, /recommendation_events \(shop_id, received_at\)/);
+  assert.match(migration, /viewed_vins \(shop_id, last_viewed_at\)/);
+  const closeDate = readFileSync("drizzle/0032_task1183_nwo_close_date_idx.sql", "utf8");
+  assert.match(closeDate, /normalized_work_orders \(shop_id, \(COALESCE\(closed_date, completed_date\)\)\)/);
+  const runner = readFileSync("scripts/apply-normalized-migration.ts", "utf8");
+  assert.match(runner, /concurrentIndexMigrationFiles[\s\S]*0034_reporting_query_indexes\.sql/);
+  assert.match(runner, /for \(const statement of statements\)[\s\S]*sql\.unsafe\(statement\)/);
+}
+
+Promise.resolve()
+  .then(testServicePipeline)
+  .then(testBoundedExecution)
+  .then(testReportingIndexShapes)
   .then(() => console.log("reporting KPI foundation smoke: ALL PASS"))
   .catch((error) => {
     console.error(error);

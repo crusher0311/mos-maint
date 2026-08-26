@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { SessionInfo } from "@/lib/auth";
 import { finalizeMetrics, type ReportingGroup, type ReportingKpiResponse, type ReportingMetricValues } from "@/lib/reporting-kpi-contract";
-import { getReportingKpis, normalizeReportingRange } from "@/lib/reporting-kpi-service";
+import { getReportingPeriods, normalizeReportingRange } from "@/lib/reporting-kpi-service";
 import { resolveReportingScope } from "@/lib/reporting-scope";
 import { sendEmail } from "@/lib/email";
 import { getAppBaseUrl } from "@/lib/app-host";
@@ -138,10 +138,12 @@ function pct(current: number | null, prior: number | null) {
   return `${n >= 0 ? "+" : ""}${n.toFixed(1)}%`;
 }
 const escapeHtml = (s: unknown) => String(s).replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]!));
-export function buildReportingSummaryEmail(current: ReportingKpiResponse, prior: ReportingKpiResponse, dashboardUrl: string, unsubscribeUrl: string) {
+export function buildReportingSummaryEmail(current: ReportingKpiResponse, prior: ReportingKpiResponse | null, dashboardUrl: string, unsubscribeUrl: string) {
   const locations = [...current.byLocation].sort((a,b) => (b.metrics.billedRevenue || 0) - (a.metrics.billedRevenue || 0));
   const staff = [...current.byAdvisor, ...current.byTechnician].sort((a,b) => (b.metrics.billedRevenue || 0) - (a.metrics.billedRevenue || 0)).slice(0, 5);
-  const headline = `Revenue ${pct(current.summary.billedRevenue, prior.summary.billedRevenue)} · ROs ${pct(current.summary.repairOrderCount, prior.summary.repairOrderCount)}`;
+  const headline = prior
+    ? `Revenue ${pct(current.summary.billedRevenue, prior.summary.billedRevenue)} · ROs ${pct(current.summary.repairOrderCount, prior.summary.repairOrderCount)}`
+    : "Current period results · prior-period comparison unavailable";
   const lines = (xs: ReportingGroup[]) => xs.slice(0,5).map((x) => `<li>${escapeHtml(x.label)}: $${(x.metrics.billedRevenue || 0).toLocaleString("en-US",{maximumFractionDigits:0})}</li>`).join("");
   return {
     subject: `MOS reporting summary — ${headline}`,
@@ -181,9 +183,10 @@ export function reportingDashboardUrl(base: string, doc: Pick<ReportingSubscript
 }
 
 export async function deliverDueReportingSubscriptions(now = new Date()) {
-  // Each delivery performs two KPI queries plus an email send. Keep the
-  // hourly batch within the cron route's 60-second execution ceiling.
-  const docs = await claimDueReportingSubscriptions(now, 3);
+  // A delivery can use almost all of the bounded 45-second KPI budget plus an
+  // email send. Claim one at a time so the 60-second cron route cannot multiply
+  // database work; remaining due deliveries are picked up on the next run.
+  const docs = await claimDueReportingSubscriptions(now, 1);
   let sent = 0, failed = 0;
   for (const doc of docs) {
     const next = nextReportingRun(doc, now);
@@ -202,12 +205,16 @@ export async function deliverDueReportingSubscriptions(now = new Date()) {
       const start = new Date(end.getTime() - (days - 1) * 86400000);
       const priorEnd = new Date(start.getTime() - 86400000);
       const priorStart = new Date(priorEnd.getTime() - (days - 1) * 86400000);
-      const [currentRaw, priorRaw] = await Promise.all([
-        getReportingKpis(deliveryScope, normalizeReportingRange(start.toISOString(), end.toISOString())),
-        getReportingKpis(deliveryScope, normalizeReportingRange(priorStart.toISOString(), priorEnd.toISOString())),
-      ]);
+      const periods = await getReportingPeriods(
+        deliveryScope,
+        normalizeReportingRange(start.toISOString(), end.toISOString()),
+        normalizeReportingRange(priorStart.toISOString(), priorEnd.toISOString()),
+        { deadlineMs: 45_000 },
+      );
+      const currentRaw = periods.current;
+      const priorRaw = periods.comparison;
       const current = filterReportingResult(currentRaw, doc.filters);
-      const prior = filterReportingResult(priorRaw, doc.filters, false);
+      const prior = priorRaw ? filterReportingResult(priorRaw, doc.filters, false) : null;
        const base = getAppBaseUrl();
       const email = buildReportingSummaryEmail(
         current,
