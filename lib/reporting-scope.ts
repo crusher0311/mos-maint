@@ -68,7 +68,7 @@ export async function resolveReportingScope(
         throw new ReportingScopeError("Enterprise reporting requires owner or admin access", 403);
       }
       const homeShop = await findShopByShopId(session.shopId);
-      if (String(homeShop?.enterpriseId || "") !== enterpriseId) {
+      if (String(session.enterpriseId || homeShop?.enterpriseId || "") !== enterpriseId) {
         throw new ReportingScopeError("Enterprise is outside your assigned scope", 403);
       }
       shopIds = restrictToAssignedShops(enterpriseIds, await assignedShopIds(session));

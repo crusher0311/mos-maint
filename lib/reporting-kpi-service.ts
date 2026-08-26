@@ -14,6 +14,7 @@ import {
 } from "@/lib/reporting-kpi-contract";
 import type { ReportingFailureKind, ReportingPeriodResponse } from "@/lib/reporting-kpi-contract";
 import type { ResolvedReportingScope } from "@/lib/reporting-scope";
+import type { ReportExecutionPlan } from "@/lib/report-definition-contract";
 
 type Row = Record<string, any>;
 type ReportingStage = "business" | "technician" | "events";
@@ -212,6 +213,7 @@ export async function getReportingKpis(
     statementTimeoutMs?: number;
     beforeStage?: (remaining: number) => Promise<void>;
     transaction?: ReportingTransaction;
+    executionPlan?: ReportExecutionPlan;
   },
 ): Promise<ReportingKpiResponse> {
   const deadlineAt = options?.deadlineAt ?? Date.now() + REPORTING_QUERY_DEADLINE_MS;
@@ -250,6 +252,11 @@ export async function getReportingKpis(
   }
   const query =
     options.query;
+  const executionPlan = options.executionPlan;
+  const stages = new Set<ReportingStage>(executionPlan?.stages ?? ["business", "technician", "events"]);
+  const dimensions = new Set(executionPlan?.dimensions ?? [
+    "summary", "date", "location", "advisor", "technician", "recommendationSource",
+  ]);
   const ids = `{${scope.shopIds.join(",")}}`;
   // postgres.js unsafe() serializes raw parameters as text; pass explicit ISO
   // timestamps instead of Date instances at this adapter boundary.
@@ -314,7 +321,44 @@ export async function getReportingKpis(
     sum(payment_rows)::int payment_rows, sum(staff_rows)::int staff_rows,
     count(*) FILTER (WHERE labor<>0 OR parts<>0)::int mix_rows`;
 
-  const businessRows = await runStage("business", query, `${base}, dimension_facts AS (
+  const businessDimensions = [
+    ...(dimensions.has("location") ? ["location"] : []),
+    ...(dimensions.has("advisor") ? ["advisor"] : []),
+    ...(dimensions.has("date") ? ["date"] : []),
+  ];
+  const groupingSets = [
+    "()",
+    ...(businessDimensions.includes("location") ? ["(shop_id)"] : []),
+    ...(businessDimensions.includes("advisor") ? ["(shop_id,advisor_key)"] : []),
+    ...(businessDimensions.includes("date") ? ["(basis_date)"] : []),
+  ].join(", ");
+  const dimensionTypeCases = [
+    ...(businessDimensions.includes("advisor") ? ["WHEN grouping(advisor_key)=0 THEN 'advisor'"] : []),
+    ...(businessDimensions.includes("location") ? ["WHEN grouping(shop_id)=0 THEN 'location'"] : []),
+    ...(businessDimensions.includes("date") ? ["WHEN grouping(basis_date)=0 THEN 'date'"] : []),
+  ].join("\n");
+  const dimensionKeyCases = [
+    ...(businessDimensions.includes("advisor") ? ["WHEN grouping(advisor_key)=0 THEN shop_id::text || ':' || advisor_key"] : []),
+    ...(businessDimensions.includes("location") ? ["WHEN grouping(shop_id)=0 THEN shop_id::text"] : []),
+    ...(businessDimensions.includes("date") ? ["WHEN grouping(basis_date)=0 THEN to_char(basis_date,'YYYY-MM-DD')"] : []),
+  ].join("\n");
+  const dimensionLabelCases = [
+    ...(businessDimensions.includes("advisor") ? [`WHEN grouping(advisor_key)=0 THEN coalesce(
+            (array_agg(nullif(service_advisor_name,'') ORDER BY basis_date DESC)
+              FILTER (WHERE nullif(service_advisor_name,'') IS NOT NULL))[1],
+            'Unknown / unmapped')`] : []),
+    ...(businessDimensions.includes("date") ? ["WHEN grouping(basis_date)=0 THEN to_char(basis_date,'YYYY-MM-DD')"] : []),
+  ].join("\n");
+  const dimensionTypeExpression = dimensionTypeCases
+    ? `CASE ${dimensionTypeCases} ELSE 'summary' END`
+    : "'summary'::text";
+  const dimensionKeyExpression = dimensionKeyCases
+    ? `CASE ${dimensionKeyCases} ELSE 'summary' END`
+    : "'summary'::text";
+  const dimensionLabelExpression = dimensionLabelCases
+    ? `CASE ${dimensionLabelCases} ELSE NULL END`
+    : "NULL::text";
+  const businessRows = stages.has("business") ? await runStage("business", query, `${base}, dimension_facts AS (
       SELECT facts.*,
         coalesce(
           nullif(service_advisor_id,''),
@@ -323,27 +367,13 @@ export async function getReportingKpis(
         ) advisor_key
       FROM facts
     ), grouped AS (
-      SELECT CASE
-          WHEN grouping(advisor_key)=0 THEN 'advisor'
-          WHEN grouping(shop_id)=0 THEN 'location'
-          WHEN grouping(basis_date)=0 THEN 'date'
-          ELSE 'summary' END dimension_type,
+       SELECT ${dimensionTypeExpression} dimension_type,
         shop_id,
-        CASE
-          WHEN grouping(advisor_key)=0 THEN shop_id::text || ':' || advisor_key
-          WHEN grouping(shop_id)=0 THEN shop_id::text
-          WHEN grouping(basis_date)=0 THEN to_char(basis_date,'YYYY-MM-DD')
-          ELSE 'summary' END dimension_key,
-        CASE
-          WHEN grouping(advisor_key)=0 THEN coalesce(
-            (array_agg(nullif(service_advisor_name,'') ORDER BY basis_date DESC)
-              FILTER (WHERE nullif(service_advisor_name,'') IS NOT NULL))[1],
-            'Unknown / unmapped')
-          WHEN grouping(basis_date)=0 THEN to_char(basis_date,'YYYY-MM-DD')
-          ELSE NULL END dimension_label,
+          ${dimensionKeyExpression} dimension_key,
+          ${dimensionLabelExpression} dimension_label,
         ${aggregate}
       FROM dimension_facts
-      GROUP BY GROUPING SETS ((), (shop_id), (shop_id,advisor_key), (basis_date))
+       GROUP BY GROUPING SETS (${groupingSets})
     ), ranked AS (
       SELECT grouped.*,
         CASE WHEN dimension_type IN ('location','advisor') THEN location_coverage.business_available ELSE coverage.business_available END business_available,
@@ -357,16 +387,16 @@ export async function getReportingKpis(
     SELECT * FROM ranked
     WHERE dimension_type <> 'advisor' OR dimension_rank <= ${REPORTING_DIMENSION_LIMIT + 1}
     UNION ALL
-    SELECT 'coverage' dimension_type, coverage_by_shop.shop_id,
+    ${dimensions.has("location") ? `SELECT 'coverage' dimension_type, coverage_by_shop.shop_id,
       coverage_by_shop.shop_id::text dimension_key, NULL::text dimension_label,
       0::int ro_count, NULL::float8 billed_revenue, NULL::float8 declined_dollars,
       NULL::int sold_opps, NULL::int missed_opps, NULL::float8 labor_revenue,
       NULL::float8 parts_revenue, 0::int payment_rows, 0::int staff_rows, 0::int mix_rows,
       coverage_by_shop.business_available, coverage_by_shop.payments_available,
       coverage_by_shop.staff_available, coverage_by_shop.mix_available, 0::bigint dimension_rank
-    FROM coverage_by_shop
-    ORDER BY dimension_type, dimension_key`, [ids, startParam, endParam], deadlineAt, options.beforeStage);
-  const technicianRows = await runOptionalStage("technician", query, `${base}, tech AS (
+    FROM coverage_by_shop` : "SELECT * FROM ranked WHERE false"}
+    ORDER BY dimension_type, dimension_key`, [ids, startParam, endParam], deadlineAt, options.beforeStage) : [];
+  const technicianRows = stages.has("technician") ? await runOptionalStage("technician", query, `${base}, tech AS (
       SELECT f.shop_id,
         coalesce(
           nullif(sj.technician_id,''),
@@ -405,8 +435,8 @@ export async function getReportingKpis(
     )
     SELECT grouped.*, location_coverage.business_available, location_coverage.payments_available,
       location_coverage.staff_available, location_coverage.mix_available
-    FROM grouped JOIN coverage_by_shop location_coverage USING (shop_id)`, [ids, startParam, endParam], deadlineAt, options.beforeStage);
-  const usageRows = await runOptionalStage("events", query, `WITH filtered_events AS MATERIALIZED (
+    FROM grouped JOIN coverage_by_shop location_coverage USING (shop_id)`, [ids, startParam, endParam], deadlineAt, options.beforeStage) : [];
+  const usageRows = stages.has("events") ? await runOptionalStage("events", query, `WITH filtered_events AS MATERIALIZED (
       SELECT * FROM recommendation_events
       WHERE shop_id=ANY($1::int[]) AND received_at BETWEEN $2 AND $3
     ), coverage_by_shop AS (
@@ -459,10 +489,10 @@ export async function getReportingKpis(
       FROM unnest($1::int[]) scope(shop_id)
       LEFT JOIN filtered_events e ON e.shop_id=scope.shop_id GROUP BY scope.shop_id
     ), grouped_unranked AS (
-      SELECT * FROM summary
-      UNION ALL SELECT * FROM dates
-      UNION ALL SELECT * FROM sources
-      UNION ALL SELECT * FROM locations
+       SELECT * FROM summary
+       ${dimensions.has("date") ? "UNION ALL SELECT * FROM dates" : ""}
+       ${dimensions.has("recommendationSource") ? "UNION ALL SELECT * FROM sources" : ""}
+       ${dimensions.has("location") ? "UNION ALL SELECT * FROM locations" : ""}
     ), grouped AS (
       SELECT *, row_number() OVER (
         PARTITION BY dimension_type ORDER BY attributed_revenue DESC NULLS LAST
@@ -489,7 +519,7 @@ export async function getReportingKpis(
     CROSS JOIN coverage
     LEFT JOIN coverage_by_shop location_coverage ON location_coverage.shop_id=grouped.shop_id
     WHERE grouped.dimension_type<>'source' OR grouped.dimension_rank<=${REPORTING_DIMENSION_LIMIT + 1}
-    ORDER BY grouped.dimension_type, attributed_revenue DESC`, [ids, startParam, endParam], deadlineAt, options.beforeStage);
+     ORDER BY grouped.dimension_type, attributed_revenue DESC`, [ids, startParam, endParam], deadlineAt, options.beforeStage) : [];
   const assemblyStartedAt = Date.now();
   const summaryBusiness = businessRows.find((r) => r.dimension_type === "summary") || {};
   const usage = usageRows.find((r) => r.dimension_type === "summary") || {};
@@ -580,12 +610,15 @@ export async function getReportingPeriods(
     query?: ReportingQuery;
     deadlineMs?: number;
     now?: () => number;
+    executionPlan?: ReportExecutionPlan;
   },
 ): Promise<ReportingPeriodResponse> {
   const now = options?.now ?? Date.now;
   const deadlineAt = now() + (options?.deadlineMs ?? REPORTING_QUERY_DEADLINE_MS);
   const currentStartedAt = now();
-  const current = await getReportingKpis(scope, currentRange, { query: options?.query, deadlineAt });
+  const current = await getReportingKpis(scope, currentRange, {
+    query: options?.query, deadlineAt, executionPlan: options?.executionPlan,
+  });
   console.info("[reporting-kpis] period_complete", { period: "current", durationMs: now() - currentStartedAt });
   if (!comparisonRange) return { current, comparison: null };
   if (now() >= deadlineAt) {
@@ -601,7 +634,9 @@ export async function getReportingPeriods(
   }
   try {
     const comparisonStartedAt = now();
-    const comparison = await getReportingKpis(scope, comparisonRange, { query: options?.query, deadlineAt });
+    const comparison = await getReportingKpis(scope, comparisonRange, {
+      query: options?.query, deadlineAt, executionPlan: options?.executionPlan,
+    });
     console.info("[reporting-kpis] period_complete", { period: "comparison", durationMs: now() - comparisonStartedAt });
     return { current, comparison };
   } catch (error) {

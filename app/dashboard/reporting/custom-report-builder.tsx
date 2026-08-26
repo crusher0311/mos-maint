@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bot, CalendarDays, Check, Copy, Download, Eye, Save, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Bot, CalendarDays, Check, Copy, Download, Play, RefreshCw, Save, Trash2, X } from "lucide-react";
 import {
   REPORT_DIMENSIONS,
   REPORT_METRICS,
@@ -15,6 +15,7 @@ import {
 } from "@/lib/report-definition-contract";
 import { REPORTING_KPI_CATALOG } from "@/lib/reporting-kpi-contract";
 import type { AiReportProposal } from "@/lib/custom-report-ai";
+import { buildReportRunRequest } from "@/lib/report-run-request";
 
 type Scope = { kind: "shop" | "enterprise" | "platform"; shopId?: number; enterpriseId?: string };
 type SavedReport = {
@@ -29,25 +30,41 @@ type SavedReport = {
   updatedAt?: string;
 };
 
-function initialDefinition(): ReportDefinitionV1 {
+type InitialRange = { start?: string; end?: string; locationId?: string; advisorKey?: string; technicianKey?: string };
+
+function initialDefinition(initial?: InitialRange): ReportDefinitionV1 {
   const end = new Date();
   const start = new Date(end);
   start.setDate(start.getDate() - 29);
+  const dimension: ReportDimension = initial?.advisorKey ? "advisor"
+    : initial?.technicianKey ? "technician"
+      : initial?.locationId ? "location"
+        : "none";
+  const filterValue = initial?.advisorKey || initial?.technicianKey || initial?.locationId;
   return {
     version: 1,
     id: crypto.randomUUID(),
     name: "Custom performance report",
-    dateRange: { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) },
-    metrics: ["billedRevenue", "repairOrderCount"],
-    dimensions: ["location"],
+    dateRange: { start: initial?.start || start.toISOString().slice(0, 10), end: initial?.end || end.toISOString().slice(0, 10) },
+    metrics: ["billedRevenue", "attributedRevenue", "opportunityConversionRate", "declinedDeferredDollars"],
+    dimensions: [dimension],
+    ...(filterValue && dimension !== "none"
+      ? { filters: [{ dimension, operator: "eq", value: filterValue }] }
+      : {}),
     comparison: { mode: "previousPeriod" },
-    presentation: { kind: "table", limit: 25, orderBy: "billedRevenue", direction: "desc" },
+    presentation: { kind: dimension === "none" ? "scorecard" : "table", limit: 25, orderBy: "billedRevenue", direction: "desc" },
   };
 }
 
-export function CustomReportBuilder({ scope }: { scope: Scope }) {
-  const [definition, setDefinition] = useState<ReportDefinitionV1>(() => initialDefinition());
+export function CustomReportBuilder({ scope, initialReportId, initialReportVersion, initialRange }: {
+  scope: Scope;
+  initialReportId?: string;
+  initialReportVersion?: number;
+  initialRange?: InitialRange;
+}) {
+  const [definition, setDefinition] = useState<ReportDefinitionV1>(() => initialDefinition(initialRange));
   const [appliedDefinition, setAppliedDefinition] = useState<ReportDefinitionV1>(definition);
+  const [persistedDefinition, setPersistedDefinition] = useState<ReportDefinitionV1 | null>(null);
   const [saved, setSaved] = useState<SavedReport[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [selectedVersion, setSelectedVersion] = useState<number | undefined>();
@@ -55,12 +72,25 @@ export function CustomReportBuilder({ scope }: { scope: Scope }) {
   const [aiText, setAiText] = useState("");
   const [proposal, setProposal] = useState<AiReportProposal | null>(null);
   const [result, setResult] = useState<DeclarativeReportResult | null>(null);
+  const [runId, setRunId] = useState("");
+  const [runStatus, setRunStatus] = useState<"queued" | "running" | "succeeded" | "failed" | "cancelled" | null>(null);
+  const [runStage, setRunStage] = useState("");
+  const [generatedAt, setGeneratedAt] = useState<string | null>(null);
+  const [stale, setStale] = useState(false);
   const [busy, setBusy] = useState<"ai" | "preview" | "save" | "export" | "schedule" | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [recipientEmail, setRecipientEmail] = useState("");
   const [cadence, setCadence] = useState<"weekly" | "monthly">("weekly");
   const [timezone, setTimezone] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
+  const activeRunRef = useRef("");
+  const selectionRef = useRef(0);
+
+  const resetRunState = useCallback(() => {
+    selectionRef.current += 1;
+    activeRunRef.current = "";
+    setRunId(""); setRunStatus(null); setRunStage(""); setGeneratedAt(null); setStale(false); setResult(null);
+  }, []);
 
   const loadSaved = useCallback(async () => {
     try {
@@ -73,6 +103,13 @@ export function CustomReportBuilder({ scope }: { scope: Scope }) {
     } catch { /* Builder remains usable if the saved-report list is unavailable. */ }
   }, [scope.enterpriseId, scope.kind, scope.shopId]);
   useEffect(() => { void loadSaved(); }, [loadSaved]);
+  useEffect(() => {
+    if (!initialReportId || selectedId || !saved.some((item) => item.id === initialReportId)) return;
+    void selectSaved(initialReportId, initialReportVersion);
+    // selectSaved is intentionally triggered only when the requested saved
+    // definition becomes available from the authorized list.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialReportId, initialReportVersion, saved, selectedId]);
 
   const selectedMetrics = new Set(definition.metrics);
   const metricDefinitions = useMemo(
@@ -84,10 +121,12 @@ export function CustomReportBuilder({ scope }: { scope: Scope }) {
     setResult(null);
   };
   const isApplied = JSON.stringify(definition) === JSON.stringify(appliedDefinition);
+  const savedDraftNeedsSave = Boolean(selectedId && persistedDefinition && JSON.stringify(appliedDefinition) !== JSON.stringify(persistedDefinition));
+  const savedVersionLoading = Boolean(selectedId && !persistedDefinition);
   const applyChanges = () => {
     setAppliedDefinition(structuredClone(definition));
     setResult(null);
-    setMessage("Changes applied. You can now preview this definition.");
+    setMessage(selectedId ? "Changes applied. Save them as a new version before running." : "Changes applied. You can now run this definition.");
   };
   const toggleMetric = (metric: ReportMetric) => {
     const metrics = definition.metrics.includes(metric) ? definition.metrics.filter(item => item !== metric) : [...definition.metrics, metric];
@@ -117,17 +156,58 @@ export function CustomReportBuilder({ scope }: { scope: Scope }) {
       filters: proposal.definition.filters ?? definition.filters,
     });
     setProposal(null);
-    setMessage("Proposal applied. Review it, then preview when ready.");
+    setMessage("Proposal applied. Review it, then run when ready.");
   };
-  const preview = async () => {
-    setBusy("preview"); setMessage(null); setResult(null);
+  const runReport = async (force = false) => {
+    setBusy("preview"); setMessage(null);
+    const selection = selectionRef.current;
     try {
-      const response = await fetch("/api/reports/custom/preview", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ definition: appliedDefinition, scope }) });
+      const request = buildReportRunRequest({
+        selectedId,
+        selectedVersion,
+        persistedDefinition: persistedDefinition || undefined,
+        appliedDefinition,
+        scope,
+        force,
+      });
+      const response = await fetch("/api/reports/runs", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request) });
       const json = await response.json();
-      if (!response.ok) throw new Error(json.error || "Preview could not be generated.");
-       setResult(json.result || json);
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Preview could not be generated."); }
+      if (!response.ok) throw new Error(json.error || "Report could not be queued.");
+      if (selection !== selectionRef.current) return;
+      activeRunRef.current = json.runId;
+      setRunId(json.runId);
+      setRunStatus(json.status);
+      setRunStage(json.stage || json.status);
+      if (json.result) setResult(json.result);
+      if (json.generatedAt) setGeneratedAt(json.generatedAt);
+      setMessage(json.cache === "hit" ? "Loaded the latest cached result." : json.deduplicated ? "A matching report is already running." : "Report queued. Large first builds may take a few minutes.");
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Report could not be queued."); }
     finally { setBusy(null); }
+  };
+  useEffect(() => {
+    if (!runId || (runStatus !== "queued" && runStatus !== "running")) return;
+    const poll = window.setInterval(() => {
+      void fetch(`/api/reports/runs/${runId}`, { credentials: "include" }).then(async response => {
+        const json = await response.json();
+        if (!response.ok) throw new Error(json.error || "Run status could not be loaded.");
+        if (activeRunRef.current !== runId) return;
+        setRunStatus(json.status); setRunStage(json.stage || json.status); setStale(Boolean(json.stale));
+        if (json.result) setResult(json.result);
+        if (json.generatedAt) setGeneratedAt(json.generatedAt);
+        if (json.status === "succeeded") setMessage("Report complete.");
+        if (json.status === "failed") setMessage(json.error?.message || "Report generation failed. Retry when ready.");
+      }).catch(error => {
+        if (activeRunRef.current === runId) {
+          setMessage(error instanceof Error ? error.message : "Run status could not be loaded.");
+        }
+      });
+    }, 2000);
+    return () => window.clearInterval(poll);
+  }, [runId, runStatus]);
+  const cancelRun = async () => {
+    if (!runId) return;
+    const response = await fetch(`/api/reports/runs/${runId}`, { method: "DELETE", credentials: "include" });
+    if (response.ok) { setRunStatus("cancelled"); setMessage("Queued report cancelled."); }
   };
   const save = async () => {
     setBusy("save"); setMessage(null);
@@ -136,21 +216,28 @@ export function CustomReportBuilder({ scope }: { scope: Scope }) {
       const response = await fetch(selectedId ? `/api/reports/custom/${selectedId}` : "/api/reports/custom", { method: selectedId ? "PATCH" : "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const json = await response.json();
       if (!response.ok) throw new Error(json.error || "Report could not be saved.");
-       const report = json.report || json;
-       setSelectedId(report.id || json.id || selectedId);
-       setSelectedVersion(report.currentVersion || report.version || selectedVersion);
-       setMessage(`Report saved${report.currentVersion || report.version ? ` as version ${report.currentVersion || report.version}` : ""}.`);
+      const report = json.report || json;
+      const savedDefinition = report.definition || definition;
+      resetRunState();
+      setSelectedId(report.id || json.id || selectedId);
+      setSelectedVersion(report.currentVersion || report.version || selectedVersion);
+      setDefinition(savedDefinition);
+      setAppliedDefinition(savedDefinition);
+      setPersistedDefinition(savedDefinition);
+      setMessage(`Report saved${report.currentVersion || report.version ? ` as version ${report.currentVersion || report.version}` : ""}.`);
       await loadSaved();
     } catch (error) { setMessage(error instanceof Error ? error.message : "Report could not be saved."); }
     finally { setBusy(null); }
   };
   const exportSaved = async () => {
     if (!selectedId) { setMessage("Save this report before exporting its governed version."); return; }
+    if (savedDraftNeedsSave) { setMessage("Save these changes as a new version before exporting."); return; }
     setBusy("export"); setMessage(null);
     try {
       const params = new URLSearchParams({ reportId: selectedId });
       if (selectedVersion) params.set("reportVersion", String(selectedVersion));
       const response = await fetch(`/api/reports/export?${params}`, { credentials: "include" });
+      if (response.status === 202) { const json = await response.json(); throw new Error(json.error || "This report is still being prepared."); }
       if (!response.ok) { const json = await response.json(); throw new Error(json.error || "Export could not be prepared."); }
       const blob = await response.blob(); const href = URL.createObjectURL(blob); const link = document.createElement("a");
       link.href = href; link.download = `${definition.name.replace(/[^\w]+/g, "-") || "report"}.csv`; link.click(); URL.revokeObjectURL(href);
@@ -159,6 +246,7 @@ export function CustomReportBuilder({ scope }: { scope: Scope }) {
   };
   const saveSchedule = async () => {
     if (!selectedId || !selectedVersion) { setMessage("Save the report and its version before scheduling."); return; }
+    if (savedDraftNeedsSave) { setMessage("Save these changes as a new version before scheduling."); return; }
     if (!recipientEmail.trim()) { setMessage("A recipient email is required."); return; }
     setBusy("schedule"); setMessage(null);
     try {
@@ -167,13 +255,14 @@ export function CustomReportBuilder({ scope }: { scope: Scope }) {
       const json = await response.json();
       if (!response.ok) throw new Error(json.error || "Schedule could not be saved.");
       setScheduleOpen(false); setMessage(`Scheduled version ${selectedVersion} for delivery.`);
+      window.dispatchEvent(new Event("reporting-subscriptions-changed"));
     } catch (error) { setMessage(error instanceof Error ? error.message : "Schedule could not be saved."); }
     finally { setBusy(null); }
   };
   const remove = async () => {
     if (!selectedId || !window.confirm("Delete this saved report?")) return;
     const response = await fetch(`/api/reports/custom/${selectedId}`, { method: "DELETE", credentials: "include" });
-    if (response.ok) { const next = initialDefinition(); setSelectedId(""); setSelectedVersion(undefined); setDefinition(next); setAppliedDefinition(next); setResult(null); await loadSaved(); }
+    if (response.ok) { const next = initialDefinition(initialRange); resetRunState(); setSelectedId(""); setSelectedVersion(undefined); setPersistedDefinition(null); setDefinition(next); setAppliedDefinition(next); await loadSaved(); }
     else setMessage("Report could not be deleted.");
   };
   const duplicate = async () => {
@@ -186,26 +275,70 @@ export function CustomReportBuilder({ scope }: { scope: Scope }) {
     const json = await response.json();
     if (!response.ok) { setMessage(json.error || "Report could not be duplicated."); return; }
     await loadSaved();
+    resetRunState();
     setSelectedId(json.report.id);
     setDefinition(json.report.definition);
     setAppliedDefinition(json.report.definition);
+    setPersistedDefinition(json.report.definition);
     setSelectedVersion(json.report.currentVersion || json.report.version);
     setVisibility("private");
     setResult(null);
     setMessage("Private copy created.");
   };
-  const selectSaved = (id: string) => {
+  const selectSaved = async (id: string, requestedVersion?: number) => {
+    resetRunState();
+    setMessage(null);
     setSelectedId(id);
-    if (!id) { const next = initialDefinition(); setDefinition(next); setAppliedDefinition(next); setSelectedVersion(undefined); setVisibility("private"); setResult(null); return; }
+    setPersistedDefinition(null);
+    if (!id) { const next = initialDefinition(initialRange); setDefinition(next); setAppliedDefinition(next); setSelectedVersion(undefined); setVisibility("private"); return; }
     const item = saved.find(report => report.id === id);
-    const next = item?.definition || item?.currentDefinition;
-    if (next) { setDefinition(next); setAppliedDefinition(next); setSelectedVersion(item?.currentVersion || item?.version); setVisibility(item?.sharing?.visibility || "private"); setResult(null); }
+    const selection = selectionRef.current;
+    let next = item?.definition || item?.currentDefinition;
+    let version = item?.currentVersion || item?.version;
+    if (requestedVersion && requestedVersion !== version) {
+      const response = await fetch(`/api/reports/custom/${id}`, { credentials: "include" });
+      const json = await response.json();
+      if (selection !== selectionRef.current) return;
+      if (!response.ok) {
+        setMessage(json.error || "The linked report version could not be loaded.");
+        return;
+      }
+      const pinned = json.report?.versions?.find((candidate: { version?: number }) => candidate.version === requestedVersion);
+      if (!pinned?.definition) {
+        setMessage("The linked report version is no longer available.");
+        return;
+      }
+      next = pinned.definition;
+      version = requestedVersion;
+    }
+    if (next) {
+      setDefinition(next); setAppliedDefinition(next); setPersistedDefinition(next); setSelectedVersion(version); setVisibility(item?.sharing?.visibility || "private"); setResult(null);
+      void fetch("/api/reports/runs", {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reportId: id, reportVersion: version, lookupOnly: true }),
+      }).then(async response => {
+        const json = await response.json();
+        if (!response.ok) return;
+        if (selection !== selectionRef.current) return;
+        if (json.runId) {
+          activeRunRef.current = json.runId;
+          setRunId(json.runId); setRunStatus(json.status); setRunStage(json.stage || json.status);
+          if (json.result) setResult(json.result);
+          if (json.generatedAt) setGeneratedAt(json.generatedAt);
+          setMessage(json.result
+            ? "Loaded the latest completed result. Click Refresh to rebuild it."
+            : json.status === "queued" || json.status === "running"
+              ? "This report is already building. Progress will update automatically."
+              : "No completed result is available yet. Click Run report to build it.");
+        }
+      }).catch(() => undefined);
+    }
   };
 
   return <section className="panel overflow-hidden">
     <div className="border-b border-slate-100 px-5 py-4">
-       <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-base font-bold text-slate-900">Custom report builder</h2><p className="mt-1 text-xs text-slate-500">Choose governed metrics and dimensions. Apply changes before querying a preview.</p>{selectedId && <p className="mt-1 text-xs font-semibold text-[#28679f]">Saved report · version {selectedVersion || "loading"}</p>}</div>
-         <div className="flex flex-wrap gap-2"><select aria-label="Saved reports" value={selectedId} onChange={event => selectSaved(event.target.value)} className="filter"><option value="">New report</option>{saved.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><select aria-label="Report visibility" className="filter" value={visibility} onChange={event => setVisibility(event.target.value as typeof visibility)}><option value="private">Private</option>{scope.kind === "shop" && <option value="shop">Shop</option>}{scope.kind === "enterprise" && <option value="enterprise">Enterprise</option>}</select><button className="action secondary" disabled={busy === "save"} onClick={() => void save()}><Save className="h-4 w-4" />Save</button>{selectedId && <><button className="action secondary" disabled={busy === "export"} onClick={() => void exportSaved()}><Download className="h-4 w-4" />Export</button><button className="action secondary" onClick={() => setScheduleOpen(true)}><CalendarDays className="h-4 w-4" />Schedule</button><button className="icon" title="Duplicate report" onClick={() => void duplicate()}><Copy className="h-4 w-4" /></button><button className="icon text-rose-700" title="Delete report" onClick={() => void remove()}><Trash2 className="h-4 w-4" /></button></>}</div>
+       <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-base font-bold text-slate-900">Report definition</h2><p className="mt-1 text-xs text-slate-500">Open a saved dashboard or configure the default governed definition, then explicitly run it.</p>{selectedId && <p className="mt-1 text-xs font-semibold text-[#28679f]">Saved report · version {selectedVersion || "loading"}</p>}</div>
+         <div className="flex flex-wrap gap-2"><select aria-label="Saved reports" value={selectedId} onChange={event => void selectSaved(event.target.value)} className="filter"><option value="">New report</option>{saved.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><select aria-label="Report visibility" className="filter" value={visibility} onChange={event => setVisibility(event.target.value as typeof visibility)}><option value="private">Private</option>{scope.kind === "shop" && <option value="shop">Shop</option>}{scope.kind === "enterprise" && <option value="enterprise">Enterprise</option>}</select><button className="action secondary" disabled={busy === "save"} onClick={() => void save()}><Save className="h-4 w-4" />Save</button>{selectedId && <><button className="action secondary" disabled={busy === "export"} onClick={() => void exportSaved()}><Download className="h-4 w-4" />Export</button><button className="action secondary" onClick={() => setScheduleOpen(true)}><CalendarDays className="h-4 w-4" />Schedule</button><button className="icon" title="Duplicate report" onClick={() => void duplicate()}><Copy className="h-4 w-4" /></button><button className="icon text-rose-700" title="Delete report" onClick={() => void remove()}><Trash2 className="h-4 w-4" /></button></>}</div>
       </div>
     </div>
     <div className="grid gap-5 p-5 xl:grid-cols-[1fr_1fr]">
@@ -223,10 +356,11 @@ export function CustomReportBuilder({ scope }: { scope: Scope }) {
         <FilterControls definition={definition} update={update} />
       </div>
       <div className="space-y-4">
-        <div className="rounded-lg border border-[#b7d3e8] bg-[#f0f8fd] p-4"><div className="flex items-center gap-2 text-sm font-bold text-[#174b78]"><Bot className="h-4 w-4" />Describe a report</div><p className="mt-1 text-xs text-slate-600">AI creates a proposal only. It cannot query data. You must explicitly apply the proposal before Preview.</p><textarea value={aiText} maxLength={2000} onChange={event => setAiText(event.target.value)} placeholder="Example: Compare billed revenue and average repair order by location." className="mt-3 min-h-20 w-full rounded-md border border-[#b7d3e8] bg-white p-2 text-sm" /><button disabled={busy === "ai" || !aiText.trim()} onClick={() => void compose()} className="action primary mt-2">{busy === "ai" ? "Composing…" : "Create proposal"}</button></div>
+         <div className="rounded-lg border border-[#b7d3e8] bg-[#f0f8fd] p-4"><div className="flex items-center gap-2 text-sm font-bold text-[#174b78]"><Bot className="h-4 w-4" />Describe a report</div><p className="mt-1 text-xs text-slate-600">AI creates a proposal only. It cannot query data. You must explicitly apply the proposal before Run.</p><textarea value={aiText} maxLength={2000} onChange={event => setAiText(event.target.value)} placeholder="Example: Compare billed revenue and average repair order by location." className="mt-3 min-h-20 w-full rounded-md border border-[#b7d3e8] bg-white p-2 text-sm" /><button disabled={busy === "ai" || !aiText.trim()} onClick={() => void compose()} className="action primary mt-2">{busy === "ai" ? "Composing…" : "Create proposal"}</button></div>
         {proposal && <div className="rounded-lg border border-amber-300 bg-amber-50 p-4"><p className="text-xs font-bold uppercase tracking-wide text-amber-900">Unapplied AI proposal</p><p className="mt-1 text-sm text-slate-700">{proposal.summary}</p><p className="mt-2 text-xs text-slate-600"><strong>{proposal.definition.name}</strong> · {proposal.definition.metrics.join(", ")} · grouped by {proposal.definition.dimensions.join(", ")}</p>{proposal.definition.dateRange && <p className="mt-1 text-xs text-slate-600">Dates: {proposal.definition.dateRange.start} – {proposal.definition.dateRange.end}</p>}{proposal.definition.comparison && <p className="mt-1 text-xs text-slate-600">Comparison: {proposal.definition.comparison.mode}</p>}{proposal.definition.filters !== undefined && <p className="mt-1 text-xs text-slate-600">Filters: {proposal.definition.filters.length ? `${proposal.definition.filters.length} selected` : "clear existing filters"}</p>}{proposal.warnings.map(warning => <p key={warning} className="mt-1 text-xs text-amber-800">Warning: {warning}</p>)}<div className="mt-3 flex gap-2"><button onClick={applyProposal} className="action primary"><Check className="h-4 w-4" />Apply proposal</button><button onClick={() => setProposal(null)} className="action secondary">Discard</button></div></div>}
-         <button disabled={Boolean(busy) || Boolean(proposal) || !isApplied} onClick={() => void preview()} className="action primary w-full justify-center"><Eye className="h-4 w-4" />{proposal ? "Apply or discard proposal before preview" : !isApplied ? "Apply changes before preview" : busy === "preview" ? "Loading preview…" : "Preview report"}</button>
+          <button disabled={Boolean(busy) || Boolean(proposal) || !isApplied || savedDraftNeedsSave || savedVersionLoading || runStatus === "queued" || runStatus === "running"} onClick={() => void runReport(false)} className="action primary w-full justify-center"><Play className="h-4 w-4" />{proposal ? "Apply or discard proposal before running" : !isApplied ? "Apply changes before running" : savedVersionLoading ? "Loading saved version…" : savedDraftNeedsSave ? "Save new version before running" : busy === "preview" ? "Queuing…" : "Run report"}</button>
         {!isApplied && <button disabled={Boolean(busy) || Boolean(proposal)} onClick={applyChanges} className="action secondary w-full justify-center"><Check className="h-4 w-4" />Apply changes</button>}
+         {runStatus && <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700"><div className="flex items-center justify-between gap-3"><span><strong className="capitalize">{runStatus}</strong> · {runStage.replaceAll("_", " ")}</span><div className="flex gap-2">{runStatus === "queued" && <button className="font-bold text-rose-700" onClick={() => void cancelRun()}><X className="mr-1 inline h-3.5 w-3.5" />Cancel</button>}{(runStatus === "failed" || runStatus === "succeeded") && <button className="font-bold text-[#28679f]" onClick={() => void runReport(true)}><RefreshCw className="mr-1 inline h-3.5 w-3.5" />Refresh</button>}</div></div><p className="mt-1 text-slate-500">{runStatus === "queued" || runStatus === "running" ? "This build continues in the background. You can safely return later." : generatedAt ? `Generated ${new Date(generatedAt).toLocaleString()}${stale ? " · stale result shown while refreshing" : ""}` : ""}</p></div>}
         {message && <p role="status" className="rounded-md bg-slate-100 px-3 py-2 text-xs text-slate-700">{message}</p>}
         <div className="rounded-lg border border-slate-200 bg-white p-4"><h3 className="text-xs font-bold uppercase tracking-wide text-slate-600">Metric definitions & coverage</h3>{metricDefinitions.map(metric => <div key={metric.key} className="mt-3 border-t border-slate-100 pt-3"><p className="text-sm font-semibold">{metric.label}</p><p className="text-xs leading-5 text-slate-500">{metric.definition} <strong>Coverage:</strong> {metric.availability}</p></div>)}</div>
       </div>

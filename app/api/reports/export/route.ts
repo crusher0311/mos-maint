@@ -3,9 +3,10 @@ import { getSession } from "@/lib/auth";
 import { logAdminAction } from "@/lib/data/repositories/audit-logs";
 import { getReportingKpis, normalizeReportingRange, ReportingQueryError } from "@/lib/reporting-kpi-service";
 import { ReportingScopeError, resolveReportingScope } from "@/lib/reporting-scope";
-import { reportingCsvResult } from "@/lib/reporting-delivery";
+import { declarativeReportCsv, reportingCsvResult } from "@/lib/reporting-delivery";
 import { findSavedReportingDefinition } from "@/lib/data/repositories/saved-reporting-definitions";
 import { canReadCustomReport } from "@/lib/custom-report-access";
+import { requestReportRun } from "@/lib/report-run-service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,6 +39,39 @@ export async function GET(req: NextRequest) {
     }, savedReport.raw as any, scope)) {
       return NextResponse.json({ error: "You do not have access to this saved report" }, { status: 403 });
     }
+    if (savedReport) {
+      const prepared = await requestReportRun(session as any, {
+        reportId: savedReport.reportId,
+        reportVersion: savedReport.version,
+        refreshEnabled: true,
+      });
+      if (!prepared.run.result) {
+        return NextResponse.json({
+          ok: false,
+          status: prepared.run.status,
+          runId: prepared.run._id,
+          error: "This report is still being prepared. Try the export again when the run completes.",
+        }, { status: 202 });
+      }
+      const csv = declarativeReportCsv(prepared.run.result);
+      await logAdminAction({
+        action: "data_export", adminEmail: session.email,
+        targetShopId: scope.shopIds.length === 1 ? scope.shopIds[0] : undefined,
+        details: {
+          report: savedReport.reportId, reportVersion: savedReport.version,
+          scope: scope.kind, shopIds: scope.shopIds,
+          rows: prepared.run.result.rows.length, snapshotRunId: prepared.run._id,
+          bytes: Buffer.byteLength(csv),
+        },
+      });
+      return new NextResponse(csv, {
+        headers: {
+          "Content-Type": "text/csv; charset=utf-8",
+          "Content-Disposition": `attachment; filename="reporting-${savedReport.reportId}-v${savedReport.version}.csv"`,
+          "Cache-Control": "private, no-store",
+        },
+      });
+    }
     const locationId = p.get("locationId") ? Number(p.get("locationId")) : undefined;
     if (locationId != null) {
       if (!Number.isSafeInteger(locationId) || !scope.shopIds.includes(locationId)) {
@@ -45,10 +79,9 @@ export async function GET(req: NextRequest) {
       }
       scope = { ...scope, kind: "shop", shopIds: [locationId], shops: scope.shops.filter((s) => s.shopId === locationId) };
     }
-    const definitionRange = savedReport?.definition.dateRange as { start?: unknown; end?: unknown } | undefined;
     const range = normalizeReportingRange(
-      p.get("startDate") ?? (typeof definitionRange?.start === "string" ? definitionRange.start : null),
-      p.get("endDate") ?? (typeof definitionRange?.end === "string" ? definitionRange.end : null),
+      p.get("startDate"),
+      p.get("endDate"),
     );
     const filters = {
       ...(locationId ? { locationId } : {}),
@@ -57,16 +90,16 @@ export async function GET(req: NextRequest) {
     };
     const maxRows = p.get("maxRows") == null ? undefined : Number(p.get("maxRows"));
     const result = reportingCsvResult(await getReportingKpis(scope, range), filters, {
-      selectedFields: savedReport?.selectedFields,
-      layout: savedReport?.layout,
+      selectedFields: undefined,
+      layout: undefined,
       maxRows,
     });
     const csv = result.csv;
     await logAdminAction({
       action: "data_export", adminEmail: session.email, targetShopId: scope.shopIds.length === 1 ? scope.shopIds[0] : undefined,
       details: {
-        report: savedReport?.reportId ?? "reporting_kpis",
-        reportVersion: savedReport?.version,
+        report: "reporting_kpis",
+        reportVersion: undefined,
         scope: scope.kind, shopIds: scope.shopIds, start: range.start, end: range.end, filters,
         selectedFields: result.columns, rows: result.rowCount, truncated: result.truncated,
         rowCap: Math.min(maxRows || 5_000, 5_000), bytes: Buffer.byteLength(csv),
@@ -75,7 +108,7 @@ export async function GET(req: NextRequest) {
     return new NextResponse(csv, {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="reporting-${savedReport ? `${savedReport.reportId}-v${savedReport.version}-` : ""}${range.start.toISOString().slice(0,10)}-${range.end.toISOString().slice(0,10)}.csv"`,
+        "Content-Disposition": `attachment; filename="reporting-${range.start.toISOString().slice(0,10)}-${range.end.toISOString().slice(0,10)}.csv"`,
         "Cache-Control": "private, no-store",
       },
     });

@@ -23,6 +23,7 @@ export type SessionInfo = {
   shopId: number;
   email: string;
   role: string;
+  enterpriseId?: string;
   isPlatformAdmin?: boolean;
   isTestAuth?: boolean;
   isImpersonation?: boolean;

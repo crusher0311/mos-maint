@@ -12,6 +12,7 @@ import {
   normalizeReportingRange,
   ReportingQueryError,
 } from "../lib/reporting-kpi-service";
+import { compileReportDefinition } from "../lib/report-definition-compiler";
 import { readFileSync } from "node:fs";
 
 assert.equal(providerMoneyToDollars(12345, "tekmetric"), 123.45);
@@ -332,6 +333,114 @@ async function testBoundedExecution() {
   assert.equal(lateQueries, 0, "a transaction acquired after deadline must not execute report SQL");
 }
 
+async function testSelectiveDefinitionExecution() {
+  const largeScope = {
+    kind: "enterprise" as const,
+    enterpriseId: "selective-enterprise",
+    shopIds: Array.from({ length: 500 }, (_, index) => index + 1),
+    shops: Array.from({ length: 500 }, (_, index) => ({
+      shopId: index + 1, name: `Shop ${index + 1}`, locationIdentifier: null,
+    })),
+  };
+  const businessPlan = compileReportDefinition({
+    version: 1,
+    id: "bounded-business",
+    name: "Bounded business",
+    dateRange: { start: "2026-08-01", end: "2026-08-30" },
+    metrics: ["billedRevenue"],
+    dimensions: ["location"],
+    comparison: { mode: "previousPeriod" },
+    presentation: { kind: "table", limit: 500 },
+  }, largeScope);
+  assert.deepEqual(businessPlan.execution, {
+    stages: ["business"],
+    dimensions: ["location"],
+  });
+  const businessQueries: string[] = [];
+  const periods = await getReportingPeriods(
+    largeScope,
+    businessPlan.currentRange,
+    businessPlan.comparisonRange,
+    {
+      deadlineMs: 1_000,
+      executionPlan: businessPlan.execution,
+      query: async (text) => {
+        businessQueries.push(text);
+        return [];
+      },
+    },
+  );
+  assert.equal(businessQueries.length, 2, "a selected large report runs one stage per period, not every KPI family");
+  assert.equal(periods.current.byLocation.length, 500, "selective large location reports remain bounded and complete");
+  assert.ok(businessQueries.every((text) => !text.includes("filtered_events")));
+  assert.ok(businessQueries.every((text) => !text.includes("technician_key")));
+  assert.ok(
+    businessQueries.every((text) => !text.includes("grouping(advisor_key)=0") && !text.includes("grouping(basis_date)=0")),
+    "the business query must not aggregate unselected advisor or date dimensions",
+  );
+
+  const eventsPlan = compileReportDefinition({
+    version: 1,
+    id: "selected-events",
+    name: "Selected events",
+    dateRange: { start: "2026-08-01", end: "2026-08-30" },
+    metrics: ["recommendationsSold", "attributedRevenue"],
+    dimensions: ["recommendationSource"],
+    comparison: { mode: "none" },
+    presentation: { kind: "table", limit: 500 },
+  }, largeScope);
+  assert.deepEqual(eventsPlan.execution, {
+    stages: ["events"],
+    dimensions: ["recommendationSource"],
+  });
+  let eventCalls = 0;
+  const eventReport = await getReportingKpis(
+    largeScope,
+    eventsPlan.currentRange,
+    {
+      executionPlan: eventsPlan.execution,
+      query: async (text) => {
+        eventCalls++;
+        assert.match(text, /UNION ALL SELECT \* FROM sources/);
+        assert.doesNotMatch(text, /UNION ALL SELECT \* FROM dates/);
+        assert.doesNotMatch(text, /UNION ALL SELECT \* FROM locations/);
+        return Array.from({ length: 501 }, (_, index) => ({
+          dimension_type: "source",
+          dimension_key: `source-${index}`,
+          dimension_label: `Source ${index}`,
+          rec_added: 1,
+          rec_sold: 1,
+          attributed_revenue: index,
+          rec_events_available: true,
+        }));
+      },
+    },
+  );
+  assert.equal(eventCalls, 1, "event-only definitions skip business and technician stages");
+  assert.equal(eventReport.byRecommendationSource.length, 500, "selected high-cardinality dimensions retain the row bound");
+  assert.equal(eventReport.dataQuality.dimensionsTruncated, true);
+
+  const summaryPlan = compileReportDefinition({
+    version: 1,
+    id: "default-scorecard",
+    name: "Default scorecard",
+    dateRange: { start: "2026-08-01", end: "2026-08-30" },
+    metrics: ["billedRevenue", "declinedDeferredDollars"],
+    dimensions: ["none"],
+    comparison: { mode: "none" },
+    presentation: { kind: "scorecard", limit: 25 },
+  }, largeScope);
+  let summarySql = "";
+  await getReportingKpis(largeScope, summaryPlan.currentRange, {
+    executionPlan: summaryPlan.execution,
+    query: async (text) => { summarySql = text; return []; },
+  });
+  assert.match(summarySql, /SELECT 'summary'::text dimension_type/);
+  assert.match(summarySql, /'summary'::text dimension_key/);
+  assert.match(summarySql, /NULL::text dimension_label/);
+  assert.doesNotMatch(summarySql, /CASE\s+ELSE/, "summary-only business SQL must never emit an empty CASE expression");
+}
+
 function testReportingIndexShapes() {
   const migration = readFileSync("drizzle/0034_reporting_query_indexes.sql", "utf8");
   assert.equal((migration.match(/CREATE INDEX CONCURRENTLY/g) || []).length, 4, "production reporting indexes must never block writes");
@@ -361,6 +470,7 @@ function testReportingIndexShapes() {
 Promise.resolve()
   .then(testServicePipeline)
   .then(testBoundedExecution)
+  .then(testSelectiveDefinitionExecution)
   .then(testReportingIndexShapes)
   .then(() => console.log("reporting KPI foundation smoke: ALL PASS"))
   .catch((error) => {

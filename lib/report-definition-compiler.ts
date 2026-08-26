@@ -15,6 +15,7 @@ import {
   type ReportDefinitionV1,
   type ReportDimension,
   type ReportFilterOperator,
+  type ReportExecutionPlan,
   type ReportMetric,
 } from "@/lib/report-definition-contract";
 import {
@@ -216,6 +217,31 @@ export function compileReportDefinition(
     );
   }
   const catalog = new Map(REPORTING_KPI_CATALOG.map((metric) => [metric.key, metric]));
+  const businessMetrics = new Set<ReportMetric>([
+    "repairOrderCount", "billedRevenue", "averageRepairOrder", "declinedDeferredDollars",
+    "opportunityConversionRate", "laborPartsMix",
+  ]);
+  const hasBusinessMetric = metrics.some((metric) => businessMetrics.has(metric));
+  const hasEventMetric = metrics.some((metric) => !businessMetrics.has(metric));
+  const execution: ReportExecutionPlan = (() => {
+    switch (dimension) {
+      case "technician":
+        return { stages: ["technician"], dimensions: ["technician"] };
+      case "recommendationSource":
+        return { stages: ["events"], dimensions: ["recommendationSource"] };
+      case "advisor":
+        return { stages: ["business"], dimensions: ["advisor"] };
+      default: {
+        const stages: ReportExecutionPlan["stages"] = [];
+        if (hasBusinessMetric) stages.push("business");
+        if (hasEventMetric) stages.push("events");
+        return {
+          stages,
+          dimensions: [dimension === "none" ? "summary" : dimension],
+        };
+      }
+    }
+  })();
   return {
     definition: {
       version: REPORT_DEFINITION_VERSION,
@@ -236,6 +262,7 @@ export function compileReportDefinition(
       metrics: metrics.map((metric) => ({ ...catalog.get(metric)!, valueKeys: [...REPORT_METRIC_VALUE_KEYS[metric]] })),
       maxRows: limit,
     },
+    execution,
     bounds: {
       shops: scope.shopIds.length,
       days: current.normalized.days,
@@ -275,6 +302,7 @@ export async function executeCompiledReport(
   options?: {
     getPeriods?: typeof getReportingPeriods;
     serviceOptions?: Parameters<typeof getReportingPeriods>[3];
+    maxDeadlineMs?: number;
   },
 ): Promise<DeclarativeReportResult> {
   if (scope.shopIds.length !== plan.authorizedShopIds.length ||
@@ -287,9 +315,10 @@ export async function executeCompiledReport(
     plan.comparisonRange,
     {
       ...options?.serviceOptions,
+      executionPlan: plan.execution,
       deadlineMs: Math.max(1, Math.min(
         options?.serviceOptions?.deadlineMs ?? REPORTING_QUERY_DEADLINE_MS,
-        REPORTING_QUERY_DEADLINE_MS,
+        options?.maxDeadlineMs ?? REPORTING_QUERY_DEADLINE_MS,
       )),
     },
   );

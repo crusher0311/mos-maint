@@ -1,15 +1,14 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { SessionInfo } from "@/lib/auth";
 import { finalizeMetrics, type ReportingGroup, type ReportingKpiResponse, type ReportingMetricValues } from "@/lib/reporting-kpi-contract";
-import { getReportingPeriods, normalizeReportingRange } from "@/lib/reporting-kpi-service";
 import { resolveReportingScope } from "@/lib/reporting-scope";
 import { sendEmail } from "@/lib/email";
 import { getAppBaseUrl } from "@/lib/app-host";
 import { logAdminAction } from "@/lib/data/repositories/audit-logs";
 import { findSavedReportingDefinition, type SavedReportingDefinition } from "@/lib/data/repositories/saved-reporting-definitions";
 import { canReadCustomReport } from "@/lib/custom-report-access";
-import { executeReportDefinition } from "@/lib/report-definition-compiler";
 import type { DeclarativeReportResult } from "@/lib/report-definition-contract";
+import { requestReportRun } from "@/lib/report-run-service";
 import {
   claimDueReportingSubscriptions,
   completeReportingDelivery,
@@ -18,6 +17,17 @@ import {
 } from "@/lib/data/repositories/reporting-subscriptions";
 
 export const REPORTING_EXPORT_MAX_ROWS = 5_000;
+
+export function declarativeReportCsv(result: DeclarativeReportResult) {
+  const metricKeys = result.metadata.metrics.flatMap((metric) => metric.valueKeys.map(String));
+  const columns = ["key", "label", "shopId", ...metricKeys, ...metricKeys.map((key) => `${key}_comparison`)];
+  const rows = result.rows.map((row) => [
+    row.key, row.label, row.shopId ?? "",
+    ...metricKeys.map((key) => row.current[key]),
+    ...metricKeys.map((key) => row.comparison?.[key]),
+  ]);
+  return [columns, ...rows].map((row) => row.map(csvCell).join(",")).join("\r\n");
+}
 
 export type ReportingSubscriptionInput = {
   recipientEmail: string;
@@ -286,7 +296,9 @@ export function buildSavedReportEmail(result: DeclarativeReportResult, dashboard
 export function recipientSession(user: any): SessionInfo {
   return {
     token: "reporting-delivery", email: String(user.emailLower || user.email).toLowerCase(),
-    shopId: Number(user.shopId), role: String(user.role || ""), isPlatformAdmin: Boolean(user.isPlatformAdmin || user.role === "platform_admin"),
+    shopId: Number(user.shopId), role: String(user.role || ""),
+    ...(user.enterpriseId ? { enterpriseId: String(user.enterpriseId) } : {}),
+    isPlatformAdmin: Boolean(user.isPlatformAdmin || user.role === "platform_admin"),
   };
 }
 
@@ -328,6 +340,47 @@ export function reportingDashboardUrl(
   return `${base.replace(/\/+$/, "")}/dashboard/reporting?${q}`;
 }
 
+export function legacySubscriptionReportDefinition(
+  doc: Pick<ReportingSubscriptionDocument, "_id" | "cadence" | "filters">,
+  now: Date,
+) {
+  const days = doc.cadence === "weekly" ? 7 : 30;
+  const end = new Date(now.getTime() - 86400000);
+  const start = new Date(end.getTime() - (days - 1) * 86400000);
+  const priorEnd = new Date(start.getTime() - 86400000);
+  const priorStart = new Date(priorEnd.getTime() - (days - 1) * 86400000);
+  const dimension = doc.filters?.advisorKey ? "advisor" as const
+    : doc.filters?.technicianKey ? "technician" as const
+      : "location" as const;
+  const filter = doc.filters?.advisorKey
+    ? { dimension: "advisor" as const, operator: "eq" as const, value: doc.filters.advisorKey }
+    : doc.filters?.technicianKey
+      ? { dimension: "technician" as const, operator: "eq" as const, value: doc.filters.technicianKey }
+      : null;
+  return {
+    start,
+    end,
+    definition: {
+      version: 1 as const,
+      id: `scheduled-${doc._id}`,
+      name: doc.cadence === "weekly" ? "Weekly performance summary" : "Monthly performance summary",
+      dateRange: { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) },
+      metrics: [
+        "repairOrderCount", "billedRevenue", "averageRepairOrder", "declinedDeferredDollars",
+        "opportunityConversionRate", "laborPartsMix", "plansViewed",
+        "recommendationsAdded", "recommendationsSold", "attributedRevenue",
+      ],
+      dimensions: [dimension],
+      ...(filter ? { filters: [filter] } : {}),
+      comparison: {
+        mode: "custom" as const,
+        range: { start: priorStart.toISOString().slice(0, 10), end: priorEnd.toISOString().slice(0, 10) },
+      },
+      presentation: { kind: "table" as const, limit: 500, orderBy: "billedRevenue" as const, direction: "desc" as const },
+    },
+  };
+}
+
 export async function deliverDueReportingSubscriptions(now = new Date()) {
   // A delivery can use almost all of the bounded 45-second KPI budget plus an
   // email send. Claim one at a time so the 60-second cron route cannot multiply
@@ -339,8 +392,8 @@ export async function deliverDueReportingSubscriptions(now = new Date()) {
     const key = doc.processingKey!;
     try {
       const savedReport = await resolveSubscriptionReport(doc);
+      const { user: creator, scope: creatorScope } = await validateRecipientScope(doc.createdBy, doc.scope);
       if (savedReport) {
-        const { user: creator, scope: creatorScope } = await validateRecipientScope(doc.createdBy, doc.scope);
         if (!canReadCustomReport({
           email: doc.createdBy,
           isPlatformAdmin: Boolean(creator.isPlatformAdmin || creator.role === "platform_admin"),
@@ -359,15 +412,29 @@ export async function deliverDueReportingSubscriptions(now = new Date()) {
         shopIds: [doc.filters.locationId],
         shops: scope.shops.filter((shop) => shop.shopId === doc.filters!.locationId),
       } : scope;
+      if (doc.filters?.locationId && !creatorScope.shopIds.includes(doc.filters.locationId)) {
+        throw new Error("Creator access to filtered location was revoked");
+      }
       const base = getAppBaseUrl();
       const unsubscribeUrl = `${base}/api/reports/unsubscribe?token=${encodeURIComponent(doc.disableToken)}`;
       let email: ReturnType<typeof buildReportingSummaryEmail>;
       if (savedReport) {
-        // Saved subscriptions execute the exact pinned definition (rather than
-        // the cadence-based KPI summary retained for legacy subscriptions).
-        const result = await executeReportDefinition(savedReport.definition, deliveryScope, {
-          serviceOptions: { deadlineMs: 45_000 },
+        // Scheduled delivery consumes the same durable snapshot as the UI and
+        // export path. A cache miss queues work and this delivery retries after
+        // the background runner has persisted it.
+        const prepared = await requestReportRun({
+          email: doc.createdBy,
+          shopId: creator.shopId,
+          role: creator.role,
+          isPlatformAdmin: Boolean(creator.isPlatformAdmin || creator.role === "platform_admin"),
+          enterpriseId: creator.enterpriseId,
+        }, {
+          reportId: savedReport.reportId,
+          reportVersion: savedReport.version,
+          refreshEnabled: true,
         });
+        const result = prepared.run.result;
+        if (!result) throw new Error("Saved report is being prepared; delivery will retry");
         const range = savedReport.definition.dateRange as { start: string; end: string };
         email = buildSavedReportEmail(
           result,
@@ -375,20 +442,26 @@ export async function deliverDueReportingSubscriptions(now = new Date()) {
           unsubscribeUrl,
         );
       } else {
-        const days = doc.cadence === "weekly" ? 7 : 30;
-        const end = new Date(now.getTime() - 86400000);
-        const start = new Date(end.getTime() - (days - 1) * 86400000);
-        const priorEnd = new Date(start.getTime() - 86400000);
-        const priorStart = new Date(priorEnd.getTime() - (days - 1) * 86400000);
-        const periods = await getReportingPeriods(
-          deliveryScope,
-          normalizeReportingRange(start.toISOString(), end.toISOString()),
-          normalizeReportingRange(priorStart.toISOString(), priorEnd.toISOString()),
-          { deadlineMs: 45_000 },
+        const { definition, start, end } = legacySubscriptionReportDefinition(doc, now);
+        const prepared = await requestReportRun({
+          email: doc.createdBy,
+          shopId: creator.shopId,
+          role: creator.role,
+          isPlatformAdmin: Boolean(creator.isPlatformAdmin || creator.role === "platform_admin"),
+          enterpriseId: creator.enterpriseId,
+        }, {
+          definition,
+          scope: doc.filters?.locationId
+            ? { kind: "shop", shopId: doc.filters.locationId }
+            : doc.scope,
+          refreshEnabled: true,
+        });
+        if (!prepared.run.result) throw new Error("Scheduled report is being prepared; delivery will retry");
+        email = buildSavedReportEmail(
+          prepared.run.result,
+          reportingDashboardUrl(base, doc, start, end),
+          unsubscribeUrl,
         );
-        const current = filterReportingResult(periods.current, doc.filters);
-        const prior = periods.comparison ? filterReportingResult(periods.comparison, doc.filters, false) : null;
-        email = buildReportingSummaryEmail(current, prior, reportingDashboardUrl(base, doc, start, end), unsubscribeUrl);
       }
       const result = await sendEmail({ to: doc.recipientEmail, ...email });
       if (!result.ok) throw new Error(`Email suppressed: ${result.reason}`);

@@ -32,6 +32,19 @@ export type ReportMetric = (typeof REPORTING_KPI_CATALOG)[number]["key"];
 export type ReportDimension = (typeof REPORT_DIMENSIONS)[number];
 export type ReportFilterOperator = (typeof REPORT_FILTER_OPERATORS)[number];
 export type ReportPresentationKind = (typeof REPORT_PRESENTATIONS)[number];
+export type ReportExecutionStage = "business" | "technician" | "events";
+export type ReportExecutionDimension =
+  | "summary"
+  | "date"
+  | "location"
+  | "advisor"
+  | "technician"
+  | "recommendationSource";
+
+export interface ReportExecutionPlan {
+  stages: ReportExecutionStage[];
+  dimensions: ReportExecutionDimension[];
+}
 
 export interface ReportDateRange {
   start: string;
@@ -72,6 +85,7 @@ export interface CompiledReportDefinition {
     metrics: Array<MetricDefinition & { valueKeys: Array<keyof ReportingMetricValues> }>;
     maxRows: number;
   };
+  execution: ReportExecutionPlan;
   bounds: {
     shops: number;
     days: number;

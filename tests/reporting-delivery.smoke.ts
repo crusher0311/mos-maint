@@ -3,9 +3,12 @@ import {
   buildReportingSummaryEmail,
   buildSavedReportEmail,
   canRecipientReadSavedReport,
+  declarativeReportCsv,
   hashDisableToken,
+  legacySubscriptionReportDefinition,
   nextReportingRun,
   nextReportingRetry,
+  recipientSession,
   reportingDashboardUrl,
   reportingCsv,
   validateReportingSubscription,
@@ -30,6 +33,36 @@ assert.equal(
   nextReportingRun({ cadence: "monthly", timezone: "UTC", sendHour: 9, dayOfMonth: 15 }, new Date("2026-08-14T12:00:00Z")).toISOString(),
   "2026-08-15T09:00:00.000Z",
 );
+assert.deepEqual(recipientSession({
+  emailLower: "enterprise@example.com",
+  shopId: 42,
+  role: "owner",
+  enterpriseId: "enterprise-a",
+}), {
+  token: "reporting-delivery",
+  email: "enterprise@example.com",
+  shopId: 42,
+  role: "owner",
+  enterpriseId: "enterprise-a",
+  isPlatformAdmin: false,
+}, "enterprise delivery scope identity survives recipient lookup → synthetic session handoff");
+const advisorScheduled = legacySubscriptionReportDefinition({
+  _id: "advisor-summary",
+  cadence: "weekly",
+  filters: { advisorKey: "42:advisor-a" },
+} as any, new Date("2026-08-26T12:00:00Z"));
+assert.deepEqual(advisorScheduled.definition.dimensions, ["advisor"]);
+assert.deepEqual(advisorScheduled.definition.filters, [{ dimension: "advisor", operator: "eq", value: "42:advisor-a" }]);
+assert.equal(advisorScheduled.definition.comparison.range.start, "2026-08-12");
+assert.equal(advisorScheduled.definition.comparison.range.end, "2026-08-18");
+const technicianScheduled = legacySubscriptionReportDefinition({
+  _id: "technician-summary",
+  cadence: "monthly",
+  filters: { technicianKey: "42:tech-a" },
+} as any, new Date("2026-08-26T12:00:00Z"));
+assert.deepEqual(technicianScheduled.definition.dimensions, ["technician"]);
+assert.deepEqual(technicianScheduled.definition.filters, [{ dimension: "technician", operator: "eq", value: "42:tech-a" }]);
+assert.equal(technicianScheduled.definition.comparison.mode, "custom");
 
 const dashboardUrl = reportingDashboardUrl(
   "https://mos.tools/",
@@ -146,5 +179,22 @@ const savedEmail = buildSavedReportEmail({
 assert.match(savedEmail.subject, /Pinned daily revenue/);
 assert.match(savedEmail.html, /timeSeries report/);
 assert.match(savedEmail.html, /Billed revenue \(comparison\)/, "pinned comparison is rendered");
+const snapshotCsv = declarativeReportCsv({
+  ...({
+    ok: true, version: 1, definitionId: "snapshot", generatedAt: "2026-08-07T00:00:00Z",
+    rows: [{ key: "one", label: "=unsafe", current: { billedRevenue: 200 }, comparison: { billedRevenue: 100 }, delta: null, deltaPercent: null }],
+    metadata: {
+      definitionName: "Snapshot", dimension: "none",
+      metrics: [{ key: "billedRevenue", label: "Billed revenue", definition: "", denominator: null, timestampBasis: "", moneyUnit: "USD", availability: "", valueKeys: ["billedRevenue"] }],
+      selectedFilters: [], comparison: { mode: "previousPeriod" }, presentation: { kind: "scorecard" },
+      bounds: { shops: 1, days: 7, periods: 2, estimatedQueryCost: 1, maxQueryCost: 2_000_000 },
+      coverage: { business: true, payments: true, staff: true, laborParts: true, planViews: true, recommendationEvents: true },
+      dataQuality: { unknownAdvisorRepairOrders: 0, unknownTechnicianJobs: 0, dimensionsTruncated: false, notes: [] },
+      truncated: false, source: "reporting-kpi-service",
+    },
+  } as any),
+});
+assert.match(snapshotCsv, /billedRevenue_comparison/);
+assert.match(snapshotCsv, /"'=unsafe"/, "snapshot exports retain spreadsheet formula hardening");
 
 console.log("reporting delivery smoke: ALL PASS");

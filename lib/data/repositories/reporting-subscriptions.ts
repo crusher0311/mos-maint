@@ -80,7 +80,7 @@ export async function findReportingRecipient(email: string) {
   const emailLower = email.trim().toLowerCase();
   return (await getDb()).collection("users").findOne(
     { $or: [{ emailLower }, { email: emailLower }] },
-    { projection: { email: 1, emailLower: 1, shopId: 1, role: 1, isPlatformAdmin: 1, status: 1, active: 1 } },
+    { projection: { email: 1, emailLower: 1, shopId: 1, enterpriseId: 1, role: 1, isPlatformAdmin: 1, status: 1, active: 1 } },
   );
 }
 
