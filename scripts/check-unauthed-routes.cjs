@@ -268,6 +268,11 @@ const PUBLIC_ALLOWLIST = new Set([
   "app/api/billing/config/route.ts",
   "app/api/stripe/prices/route.ts",
 
+  // Reporting email disable link — possession of the long random, hashed
+  // token is the authority; the endpoint only pauses that schedule and
+  // returns a fixed confirmation, never report or recipient data.
+  "app/api/reports/unsubscribe/route.ts",
+
   // Tombstoned endpoints — always return 410 Gone with no data
   "app/api/enterprise/billing/purchase-vins/route.ts",
   "app/api/settings/addons/route.ts",

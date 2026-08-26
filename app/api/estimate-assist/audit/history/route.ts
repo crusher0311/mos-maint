@@ -2,19 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { ESTIMATE_COLLECTIONS } from "@/lib/estimate-assist/job-knowledge-base";
+import { configureHistoryDeps, historyDeps } from "./deps";
 
 export const dynamic = "force-dynamic";
 
-// Test seam: route-level smoke tests swap these to run the handler without
-// a live session store or Mongo (same pattern as the cron routes).
-export const __deps = {
+configureHistoryDeps({
   getSession,
   getDb,
-};
+});
 
 export async function GET(req: NextRequest) {
   try {
-    const session = await __deps.getSession();
+    const session = await historyDeps.getSession();
     if (!session) {
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
@@ -44,7 +43,7 @@ export async function GET(req: NextRequest) {
       filter[`report.findings.severity`] = severityFilter;
     }
 
-    const db = await __deps.getDb();
+    const db = await historyDeps.getDb();
     const collection = db.collection(ESTIMATE_COLLECTIONS.estimateAudits);
 
     const [audits, totalCount] = await Promise.all([
@@ -69,7 +68,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      audits: audits.map(a => ({
+      audits: audits.map((a: Record<string, unknown>) => ({
         ...a,
         _id: String(a._id),
       })),

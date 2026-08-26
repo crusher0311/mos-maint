@@ -23,7 +23,8 @@ import { NORMALIZED_COLLECTIONS } from "../lib/normalized-schema";
 import { POST as auditPOST, __deps as auditDeps } from "../app/api/estimate-assist/audit/route";
 import { POST as builderPOST, __deps as builderDeps } from "../app/api/estimate-assist/job-builder/route";
 import { POST as languagePOST, __deps as languageDeps } from "../app/api/estimate-assist/language/route";
-import { GET as historyGET, __deps as historyDeps } from "../app/api/estimate-assist/audit/history/route";
+import { GET as historyGET } from "../app/api/estimate-assist/audit/history/route";
+import { historyDeps } from "../app/api/estimate-assist/audit/history/deps";
 
 let failed = 0;
 function ok(name: string, cond: boolean, detail?: string) {

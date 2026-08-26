@@ -78,6 +78,10 @@ export async function getReportingKpis(
     ((text: string, params: unknown[]) =>
       getClient().unsafe(text, params as any[]) as Promise<Row[]>);
   const ids = `{${scope.shopIds.join(",")}}`;
+  // postgres.js unsafe() serializes raw parameters as text; pass explicit ISO
+  // timestamps instead of Date instances at this adapter boundary.
+  const startParam = range.start.toISOString();
+  const endParam = range.end.toISOString();
   const woMoney = money("wo", "grand_total");
   const woLabor = money("wo", "labor_total");
   const woParts = money("wo", "parts_total");
@@ -178,7 +182,7 @@ export async function getReportingKpis(
       coverage_by_shop.business_available, coverage_by_shop.payments_available,
       coverage_by_shop.staff_available, coverage_by_shop.mix_available, 0::bigint dimension_rank
     FROM coverage_by_shop
-    ORDER BY dimension_type, dimension_key`, [ids, range.start, range.end]),
+    ORDER BY dimension_type, dimension_key`, [ids, startParam, endParam]),
     query(`${base}, tech AS (
       SELECT f.shop_id,
         coalesce(
@@ -217,7 +221,7 @@ export async function getReportingKpis(
     )
     SELECT grouped.*, location_coverage.business_available, location_coverage.payments_available,
       location_coverage.staff_available, location_coverage.mix_available
-    FROM grouped JOIN coverage_by_shop location_coverage USING (shop_id)`, [ids, range.start, range.end]),
+    FROM grouped JOIN coverage_by_shop location_coverage USING (shop_id)`, [ids, startParam, endParam]),
     query(`WITH filtered_events AS MATERIALIZED (
       SELECT * FROM recommendation_events
       WHERE shop_id=ANY($1::int[]) AND received_at BETWEEN $2 AND $3
@@ -238,6 +242,17 @@ export async function getReportingKpis(
         AND coalesce(payload->>'totalPrice','') ~ '^-?[0-9]+([.][0-9]+)?$'
         THEN (payload->>'totalPrice')::numeric ELSE 0 END),0)::float8 attributed_revenue
       FROM filtered_events
+    ), dates AS (
+      SELECT 'date'::text dimension_type, NULL::integer shop_id,
+        to_char(received_at AT TIME ZONE 'UTC','YYYY-MM-DD') dimension_key,
+        to_char(received_at AT TIME ZONE 'UTC','YYYY-MM-DD') dimension_label,
+        count(*)::int rec_events,
+        count(*) FILTER (WHERE event_type='recommendation_added')::int rec_added,
+        count(*) FILTER (WHERE event_type='recommendation_sold')::int rec_sold,
+        coalesce(sum(CASE WHEN event_type='recommendation_sold'
+          AND coalesce(payload->>'totalPrice','') ~ '^-?[0-9]+([.][0-9]+)?$'
+          THEN (payload->>'totalPrice')::numeric ELSE 0 END),0)::float8 attributed_revenue
+      FROM filtered_events GROUP BY 3,4
     ), sources AS (
       SELECT 'source'::text dimension_type, NULL::integer shop_id,
         coalesce(nullif(payload->>'recommendationType',''),'unknown') dimension_key,
@@ -260,7 +275,10 @@ export async function getReportingKpis(
       FROM unnest($1::int[]) scope(shop_id)
       LEFT JOIN filtered_events e ON e.shop_id=scope.shop_id GROUP BY scope.shop_id
     ), grouped_unranked AS (
-      SELECT * FROM summary UNION ALL SELECT * FROM sources UNION ALL SELECT * FROM locations
+      SELECT * FROM summary
+      UNION ALL SELECT * FROM dates
+      UNION ALL SELECT * FROM sources
+      UNION ALL SELECT * FROM locations
     ), grouped AS (
       SELECT *, row_number() OVER (
         PARTITION BY dimension_type ORDER BY attributed_revenue DESC NULLS LAST
@@ -287,7 +305,7 @@ export async function getReportingKpis(
     CROSS JOIN coverage
     LEFT JOIN coverage_by_shop location_coverage ON location_coverage.shop_id=grouped.shop_id
     WHERE grouped.dimension_type<>'source' OR grouped.dimension_rank<=${REPORTING_DIMENSION_LIMIT + 1}
-    ORDER BY grouped.dimension_type, attributed_revenue DESC`, [ids, range.start, range.end]),
+    ORDER BY grouped.dimension_type, attributed_revenue DESC`, [ids, startParam, endParam]),
   ]);
   const summaryBusiness = businessRows.find((r) => r.dimension_type === "summary") || {};
   const usage = usageRows.find((r) => r.dimension_type === "summary") || {};
@@ -304,6 +322,13 @@ export async function getReportingKpis(
     .filter((r) => r.dimension_type === "date")
     .sort((a, b) => String(a.dimension_key).localeCompare(String(b.dimension_key)));
   const sourceRows = usageRows.filter((r) => r.dimension_type === "source");
+  const usageDaily = new Map(
+    usageRows
+      .filter((r) => r.dimension_type === "date")
+      .map((r) => [String(r.dimension_key), r]),
+  );
+  const businessDaily = new Map(dailyRows.map((r) => [String(r.dimension_key), r]));
+  const timeSeriesKeys = [...new Set([...businessDaily.keys(), ...usageDaily.keys()])].sort();
   const locationUsage = new Map(
     usageRows
       .filter((r) => r.dimension_type === "location")
@@ -319,7 +344,13 @@ export async function getReportingKpis(
     range: { start: range.start.toISOString(), end: range.end.toISOString(), days: range.days, timestampBasis: "closed_date, with completed_date fallback" },
     catalog: REPORTING_KPI_CATALOG,
     summary: metrics(summaryRow), availability: availability(summaryRow),
-    timeSeries: dailyRows.map((r) => group(r)),
+    timeSeries: timeSeriesKeys.map((key) => group({
+      ...(businessDaily.get(key) || {}),
+      ...(usageDaily.get(key) || {}),
+      dimension_type: "date",
+      dimension_key: key,
+      dimension_label: key,
+    })),
     byLocation: scope.shops.map((shop) => group(
       {
         shop_id: shop.shopId,

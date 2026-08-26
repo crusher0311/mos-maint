@@ -281,12 +281,11 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
       featureId: "oil_sticker",
       isModal: true
     },
-    // Reporting page hidden until we have enough data to verify with live users
-    // {
-    //   name: "Reporting",
-    //   href: "/dashboard/reporting",
-    //   icon: <BarChart3 className="w-5 h-5" />
-    // },
+    {
+      name: "Reporting",
+      href: "/dashboard/reporting",
+      icon: <BarChart3 className="w-5 h-5" />
+    },
     {
       name: "Sales Coach",
       href: "/dashboard/sales-coach",

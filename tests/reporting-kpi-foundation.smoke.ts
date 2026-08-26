@@ -129,6 +129,11 @@ async function testServicePipeline() {
         rec_events: 0, rec_added: 0, rec_sold: 0, attributed_revenue: 0, plans_viewed: null,
         plan_views_available: false, rec_events_available: false,
       },
+      {
+        dimension_type: "date", dimension_key: "2026-08-15", dimension_label: "2026-08-15",
+        rec_events: 1, rec_added: 1, rec_sold: 1, attributed_revenue: 42,
+        plan_views_available: true, rec_events_available: true,
+      },
       ...sources,
     ];
   };
@@ -166,6 +171,8 @@ async function testServicePipeline() {
     "technician allocation must reconcile to net billed revenue",
   );
   assert.equal(report.byRecommendationSource.length, 500);
+  assert.equal(report.timeSeries[0].key, "2026-08-15", "telemetry-only dates remain visible in the MOS trend");
+  assert.equal(report.timeSeries[0].metrics.attributedRevenue, 42);
   assert.equal(report.dataQuality.dimensionsTruncated, true);
 }
 
