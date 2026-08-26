@@ -740,13 +740,19 @@ export function triage({
   type DviSourceId = "autoflow" | "autovitals" | "tekmetric" | "autoserve1" | "mastertech";
   const KNOWN_DVI_SOURCES: readonly DviSourceId[] = ["autoflow", "autovitals", "tekmetric", "autoserve1", "mastertech"];
   const dviMap = new Map<string, { status: "red" | "yellow"; name: string; dviSource?: DviSourceId; notes?: string | null }>();
-  const unmappedDviFindings: Array<{ status: "red" | "yellow"; name: string; dviSource: DviSourceId; notes?: string | null }> = [];
+  const unmappedDviFindings = new Map<string, { status: "red" | "yellow"; name: string; dviSource: DviSourceId; notes?: string | null }>();
+  const toUnmappedDviKey = (name: string) =>
+    `dvi_unmapped_${name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40)}`;
   const pickNote = (a?: string | null, b?: string | null): string | null => {
     const aT = (a || "").trim();
     const bT = (b || "").trim();
     if (!aT) return bT || null;
     if (!bT) return aT || null;
     return bT.length > aT.length ? bT : aT;
+  };
+  const combineNotes = (a?: string | null, b?: string | null): string | null => {
+    const notes = Array.from(new Set([a, b].map((note) => (note || "").trim()).filter(Boolean))).sort();
+    return notes.length > 0 ? notes.join(" • ") : null;
   };
   for (const it of dviFindings || []) {
     const rawName = String(it.name || "");
@@ -769,7 +775,20 @@ export function triage({
         dviMap.set(key, { status: "yellow", name: rawName, dviSource, notes: mergedNotes });
       }
     } else {
-      unmappedDviFindings.push({ status: mappedStatus, name: rawName, dviSource, notes });
+      const generatedKey = toUnmappedDviKey(rawName);
+      const existing = unmappedDviFindings.get(generatedKey);
+      if (!existing) {
+        unmappedDviFindings.set(generatedKey, { status: mappedStatus, name: rawName, dviSource, notes });
+      } else {
+        const redWins = mappedStatus === "red" && existing.status !== "red";
+        const sameStatusEarlierSource = mappedStatus === existing.status && dviSource.localeCompare(existing.dviSource) < 0;
+        unmappedDviFindings.set(generatedKey, {
+          status: existing.status === "red" || mappedStatus === "red" ? "red" : "yellow",
+          name: redWins || sameStatusEarlierSource ? rawName : existing.name,
+          dviSource: redWins || sameStatusEarlierSource ? dviSource : existing.dviSource,
+          notes: combineNotes(existing.notes, notes),
+        });
+      }
     }
   }
 
@@ -1187,8 +1206,7 @@ export function triage({
     });
   }
 
-  for (const unmapped of unmappedDviFindings) {
-    const safeKey = `dvi_unmapped_${unmapped.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 40)}`;
+  for (const [safeKey, unmapped] of unmappedDviFindings) {
     triaged.push({
       key: safeKey,
       serviceKey: safeKey,

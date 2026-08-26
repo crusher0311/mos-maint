@@ -24,6 +24,10 @@
  */
 
 import { triage, type OEMItem } from "../lib/plan-build/triage";
+import {
+  buildPartnerVhiSuccessResponse,
+  dedupePartnerVhiBuckets,
+} from "../lib/external-api/partner-vhi-response";
 
 let failed = 0;
 
@@ -85,6 +89,10 @@ const dviFindings = [
   { name: "Cabin Air Filter", status: "0", source: "tekmetric" },
   // Free-form Tekmetric finding that does NOT map to a known service key.
   { name: "Cracked windshield (driver side)", status: "0", source: "tekmetric" },
+  { name: "Warning Lights", status: "1", source: "tekmetric", notes: "ABS lamp" },
+  { name: "Warning Lights", status: "0", source: "autoflow", notes: "Brake lamp" },
+  { name: "Diagnostic Comments", status: "1", source: "tekmetric", notes: "Code P0123" },
+  { name: "Diagnostic Comments", status: "1", source: "autovitals", notes: "Further diagnosis" },
   // Status "2" (Pass / informational) must NOT bump anything.
   { name: "Tire Tread Depth", status: "2", source: "autoflow" },
 ];
@@ -167,6 +175,61 @@ ok(
 ok(
   "Unmapped RED DVI finding lands in OVERDUE",
   buckets.overdue.some((t) => t.title === "Cracked windshield (driver side)"),
+);
+
+const warningLights = all.filter((t) => t.serviceKey === "dvi_unmapped_warning_lights");
+ok("Duplicate unmapped warning-light findings merge to one item", warningLights.length === 1);
+ok(
+  "Red warning-light finding wins and combines notes deterministically",
+  warningLights[0]?.bump === "red" &&
+    warningLights[0]?.dviSource === "autoflow" &&
+    warningLights[0]?.notes === "ABS lamp • Brake lamp",
+  JSON.stringify(warningLights[0]),
+);
+const diagnosticComments = all.filter((t) => t.serviceKey === "dvi_unmapped_diagnostic_comments");
+ok("Duplicate diagnostic-comment findings merge to one item", diagnosticComments.length === 1);
+ok(
+  "Same-severity diagnostic notes and source merge deterministically",
+  diagnosticComments[0]?.dviSource === "autovitals" &&
+    diagnosticComments[0]?.notes === "Code P0123 • Further diagnosis",
+  JSON.stringify(diagnosticComments[0]),
+);
+
+const legacyBuckets = dedupePartnerVhiBuckets({
+  overdue: [{ key: "legacy-red", serviceKey: "duplicate_key", bump: "red", notes: "urgent" }] as any,
+  dueSoon: [{ key: "legacy-yellow", serviceKey: "duplicate_key", bump: "yellow", notes: "inspect" }] as any,
+  upcoming: [{ key: "legacy-upcoming", serviceKey: "duplicate_key" }] as any,
+  complimentary: [],
+});
+const legacyAll = [
+  ...legacyBuckets.overdue,
+  ...legacyBuckets.dueSoon,
+  ...legacyBuckets.upcoming,
+  ...legacyBuckets.complimentary,
+];
+ok("Partner response collapse enforces cross-bucket service-key uniqueness", legacyAll.length === 1);
+ok(
+  "Partner response collapse keeps the most severe bucket and combines notes",
+  legacyBuckets.overdue.length === 1 &&
+    legacyBuckets.overdue[0].bump === "red" &&
+    legacyBuckets.overdue[0].notes === "inspect • urgent",
+  JSON.stringify(legacyBuckets),
+);
+const legacyResponse = buildPartnerVhiSuccessResponse({
+  success: true,
+  source: "cached_plan",
+  buckets: {
+    overdue: [{ serviceKey: "duplicate_key" }],
+    dueSoon: [{ serviceKey: "duplicate_key" }],
+    upcoming: [],
+    complimentary: [],
+  },
+  summary: { overdue: 1, dueSoon: 1, upcoming: 0, complimentary: 0 },
+}, "TESTVIN", 1);
+ok(
+  "Legacy cached response summary is recomputed after duplicate collapse",
+  legacyResponse.summary.overdue === 1 && legacyResponse.summary.dueSoon === 0,
+  JSON.stringify(legacyResponse.summary),
 );
 
 // ---- Status "2" (info / pass) must not bump anything ----
