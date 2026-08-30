@@ -173,6 +173,26 @@ export async function listShopsByMosShopIds(ids: number[]) {
   return rows.map((r) => shopRowToDoc(r)!);
 }
 
+export async function replaceLaborRateRulesForShopIds(
+  ids: number[],
+  laborRateRules: unknown[],
+): Promise<{ matchedCount: number; modifiedCount: number }> {
+  if (!ids.length) return { matchedCount: 0, modifiedCount: 0 };
+  const db = getDb();
+  const updated = await db
+    .update(shops)
+    .set({
+      settings: sql`jsonb_set(COALESCE(${shops.settings}, '{}'::jsonb), '{laborRateRules}', ${JSON.stringify(laborRateRules)}::jsonb, true)`,
+      updatedAt: new Date(),
+    })
+    .where(inArray(shops.mosShopId, ids))
+    .returning({ shopId: shops.mosShopId });
+  return {
+    matchedCount: updated.length,
+    modifiedCount: updated.length,
+  };
+}
+
 /**
  * List shops by their legacy numeric `id` (Mongo `shops.id`, PG
  * `shops.legacy_id`). Mirrors the Mongo `{ id: { $in: ids } }` lookup

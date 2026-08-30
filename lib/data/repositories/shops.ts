@@ -48,6 +48,14 @@ async function collection(): Promise<Collection<Document>> {
   return db.collection<Document>(COLLECTION);
 }
 
+export const __laborRateRuleDeps = {
+  isIdentityPgCanonical,
+  findPgShop: pg.findShopByMosShopId,
+  listPgShops: pg.listShopsByMosShopIds,
+  replacePgLaborRateRules: pg.replaceLaborRateRulesForShopIds,
+  getCollection: collection,
+};
+
 export async function findShopByShopId<T extends ShopDoc = ShopDoc>(
   shopId: number | string,
   projection?: ShopProjection,
@@ -118,11 +126,16 @@ export async function listShopsByShopIds(
   shopIds: number[],
   projection?: ShopProjection,
 ): Promise<ShopDoc[]> {
-  if (isIdentityPgCanonical()) {
+  if (__laborRateRuleDeps.isIdentityPgCanonical()) {
     // Projection ignored (full doc is a safe superset).
-    return (await pg.listShopsByMosShopIds(shopIds)) as unknown as ShopDoc[];
+    return (await __laborRateRuleDeps.listPgShops(shopIds)) as unknown as ShopDoc[];
   }
-  return listShopsByQuery({ shopId: { $in: shopIds } }, projection);
+  const col = await __laborRateRuleDeps.getCollection();
+  const cursor = col.find({
+    shopId: { $in: [...shopIds, ...shopIds.map(String)] },
+  });
+  if (projection) cursor.project(projection);
+  return (await cursor.toArray()) as unknown as ShopDoc[];
 }
 
 export async function listAllShops(): Promise<ShopDoc[]> {
@@ -143,4 +156,99 @@ export async function updateShopById(
   const col = await collection();
   const res = await col.updateOne(shopIdFilter(shopId), update);
   return { matchedCount: res.matchedCount, modifiedCount: res.modifiedCount };
+}
+
+export async function listShopLaborRateRulesByIds(
+  shopIds: number[],
+): Promise<Array<{
+  shopId: number | string;
+  name?: string;
+  locationIdentifier?: string;
+  laborRateRules?: unknown[];
+}>> {
+  if (__laborRateRuleDeps.isIdentityPgCanonical()) {
+    return (await __laborRateRuleDeps.listPgShops(shopIds)) as unknown as Array<{
+      shopId: number | string;
+      name?: string;
+      locationIdentifier?: string;
+      laborRateRules?: unknown[];
+    }>;
+  }
+  const col = await __laborRateRuleDeps.getCollection();
+  const stringShopIds = shopIds.map(String);
+  const docs = await col.find(
+    {
+      $or: [
+        { shopId: { $in: shopIds } },
+        { shopId: { $in: stringShopIds } },
+      ],
+    },
+    {
+      projection: {
+        shopId: 1,
+        name: 1,
+        locationIdentifier: 1,
+        laborRateRules: 1,
+      },
+    },
+  ).toArray();
+  return docs as unknown as Array<{
+    shopId: number | string;
+    name?: string;
+    locationIdentifier?: string;
+    laborRateRules?: unknown[];
+  }>;
+}
+
+export async function findShopLaborRateRulesById(
+  shopId: number,
+): Promise<{
+  shopId: number | string;
+  name?: string;
+  shopName?: string;
+  laborRateRules?: unknown[];
+} | null> {
+  if (__laborRateRuleDeps.isIdentityPgCanonical()) {
+    return await __laborRateRuleDeps.findPgShop(shopId) as {
+      shopId: number | string;
+      name?: string;
+      shopName?: string;
+      laborRateRules?: unknown[];
+    } | null;
+  }
+  const col = await __laborRateRuleDeps.getCollection();
+  return await col.findOne(
+    { $or: [{ shopId }, { shopId: String(shopId) }] },
+    { projection: { shopId: 1, name: 1, shopName: 1, laborRateRules: 1 } },
+  ) as {
+    shopId: number | string;
+    name?: string;
+    shopName?: string;
+    laborRateRules?: unknown[];
+  } | null;
+}
+
+export async function replaceLaborRateRulesForShopIds(
+  shopIds: number[],
+  laborRateRules: unknown[],
+): Promise<{ matchedCount: number; modifiedCount: number }> {
+  if (shopIds.length === 0) return { matchedCount: 0, modifiedCount: 0 };
+  if (__laborRateRuleDeps.isIdentityPgCanonical()) {
+    return __laborRateRuleDeps.replacePgLaborRateRules(shopIds, laborRateRules);
+  }
+  const col = await __laborRateRuleDeps.getCollection();
+  const stringShopIds = shopIds.map(String);
+  const result = await col.updateMany(
+    {
+      $or: [
+        { shopId: { $in: shopIds } },
+        { shopId: { $in: stringShopIds } },
+      ],
+    },
+    { $set: { laborRateRules, updatedAt: new Date() } },
+  );
+  return {
+    matchedCount: result.matchedCount,
+    modifiedCount: result.modifiedCount,
+  };
 }

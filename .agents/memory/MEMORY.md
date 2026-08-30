@@ -149,3 +149,4 @@
 - [AppFueled test traffic on QA](appfueled-qa-runtime.md) — test partner requests hit QA; keep report signing config aligned with production and verify the running process.
 - [Demand-driven reporting compatibility](reporting-demand-driven-compatibility.md) — async/cached migrations must preserve pinned links, saved-version boundaries, schedule management, and recipient scope identity.
 - [Missed Opportunities provider-cache deadline](missed-opps-provider-cache-deadline.md) — optional Protractor cache recovery can consume ~54s; bound the whole stage and fail open separately from VHI-plan coverage.
+- [Enterprise settings storage](enterprise-settings-storage.md) — cross-location settings must honor canonical PG mode and mixed numeric/string Mongo shop IDs.

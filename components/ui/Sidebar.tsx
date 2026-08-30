@@ -685,6 +685,18 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
                     Billing
                   </Link>
                 </li>
+                <li>
+                  <Link
+                    href="/dashboard/enterprise/settings"
+                    className={`block px-3 py-2 rounded-lg text-sm transition-colors ${
+                      pathname === "/dashboard/enterprise/settings"
+                        ? "bg-white/20 text-white font-medium"
+                        : "text-white/70 hover:bg-white/10 hover:text-white"
+                    }`}
+                  >
+                    Settings
+                  </Link>
+                </li>
               </ul>
             )}
           </div>

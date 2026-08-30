@@ -21,6 +21,7 @@ import {
   User,
   Database,
 } from "lucide-react";
+import CopyFromLocationDropdown, { CopyLaborRatesToAllButton } from "@/components/ui/CopyFromLocationDropdown";
 
 type ConditionType = "make" | "fuelType" | "jobCategory" | "customer" | "customerType" | "tag" | "roField";
 
@@ -243,7 +244,7 @@ export default function LaborRatesPage() {
 
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
             <DollarSign className="w-6 h-6 text-blue-600" />
@@ -254,13 +255,21 @@ export default function LaborRatesPage() {
             Higher priority rules are evaluated first.
           </p>
         </div>
-        <button
-          onClick={startNewRule}
-          className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-        >
-          <Plus className="w-4 h-4" />
-          New Rule
-        </button>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <CopyFromLocationDropdown
+            settingType="laborRates"
+            onCopyComplete={fetchRules}
+            disabled={saving}
+          />
+          <CopyLaborRatesToAllButton onCopyComplete={fetchRules} disabled={saving} />
+          <button
+            onClick={startNewRule}
+            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+          >
+            <Plus className="w-4 h-4" />
+            New Rule
+          </button>
+        </div>
       </div>
 
       {error && (

@@ -3,7 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { validateExtensionToken, getAuthErrorStatus, getUserShopIds, buildAuthErrorBody, requireExtensionPrincipalScope } from "@/lib/extension-auth";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { checkShopFeatureGate } from "@/lib/extension-route-guard";
-import { getDb } from "@/lib/mongo";
+import {
+  findShopLaborRateRulesById,
+  replaceLaborRateRulesForShopIds,
+} from "@/lib/data/repositories/shops";
 import { ObjectId } from "mongodb";
 
 export const runtime = "nodejs";
@@ -25,7 +28,6 @@ async function _GET(req: NextRequest) {
     return NextResponse.json(buildAuthErrorBody(auth, { ok: false }), { status: getAuthErrorStatus(auth), headers: CORS_HEADERS });
   }
 
-  const db = await getDb();
   const { searchParams } = new URL(req.url);
   const smsShopId = searchParams.get("smsShopId") || searchParams.get("shopId");
 
@@ -66,10 +68,7 @@ async function _GET(req: NextRequest) {
   });
   if (denied) return denied;
 
-  const shop = await db.collection("shops").findOne(
-    { shopId: resolvedShopId },
-    { projection: { laborRateRules: 1, shopId: 1 } }
-  );
+  const shop = await findShopLaborRateRulesById(resolvedShopId);
 
   return NextResponse.json({ ok: true, rules: shop?.laborRateRules || [], shopId: shop?.shopId }, { headers: CORS_HEADERS });
 }
@@ -107,7 +106,6 @@ async function _PUT(req: NextRequest) {
     updatedAt: new Date(),
   }));
 
-  const db = await getDb();
   const { searchParams } = new URL(req.url);
   const smsShopId = searchParams.get("smsShopId") || searchParams.get("shopId");
 
@@ -149,18 +147,15 @@ async function _PUT(req: NextRequest) {
   });
   if (denied) return denied;
 
-  const existingShop = await db.collection("shops").findOne(
-    { shopId: targetShopId },
-    { projection: { shopId: 1, name: 1, shopName: 1 } }
-  );
+  const existingShop = await findShopLaborRateRulesById(targetShopId);
   if (!existingShop) {
     return NextResponse.json({ ok: false, error: "Target shop not found" }, { status: 404, headers: CORS_HEADERS });
   }
 
-  await db.collection("shops").updateOne(
-    { shopId: targetShopId },
-    { $set: { laborRateRules: sanitized } }
-  );
+  const result = await replaceLaborRateRulesForShopIds([targetShopId], sanitized);
+  if (result.matchedCount !== 1) {
+    return NextResponse.json({ ok: false, error: "Target shop not found" }, { status: 404, headers: CORS_HEADERS });
+  }
 
   console.log(`[Extension Labor Rates] Saved ${sanitized.length} rules to shop ${targetShopId} (${existingShop.name || existingShop.shopName}) by ${auth.user.email}`);
 

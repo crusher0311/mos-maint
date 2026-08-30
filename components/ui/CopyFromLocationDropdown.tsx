@@ -9,7 +9,7 @@ type EnterpriseLocation = {
 };
 
 type Props = {
-  settingType: "branding" | "maintenance" | "intervals" | "cannedJobs";
+  settingType: "branding" | "maintenance" | "intervals" | "cannedJobs" | "laborRates";
   onCopyComplete: () => void;
   disabled?: boolean;
 };
@@ -18,6 +18,8 @@ export default function CopyFromLocationDropdown({ settingType, onCopyComplete, 
   const [loading, setLoading] = useState(true);
   const [copying, setCopying] = useState(false);
   const [locations, setLocations] = useState<EnterpriseLocation[]>([]);
+  const [canManageLaborRates, setCanManageLaborRates] = useState(true);
+  const [destinationName, setDestinationName] = useState("the current location");
   const [isOpen, setIsOpen] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
@@ -27,10 +29,21 @@ export default function CopyFromLocationDropdown({ settingType, onCopyComplete, 
 
   async function fetchEnterpriseLocations() {
     try {
-      const res = await fetch("/api/enterprise/locations");
+      const [res, shopsRes] = await Promise.all([
+        fetch("/api/enterprise/locations"),
+        settingType === "laborRates" ? fetch("/api/user/shops") : Promise.resolve(null),
+      ]);
       if (res.ok) {
         const data = await res.json();
         setLocations(data.locations || []);
+        setCanManageLaborRates(data.canManageLaborRates !== false);
+      }
+      if (shopsRes?.ok) {
+        const shopsData = await shopsRes.json();
+        const current = (shopsData.shops || []).find(
+          (shop: EnterpriseLocation) => Number(shop.shopId) === Number(shopsData.currentShopId)
+        );
+        if (current?.name) setDestinationName(current.name);
       }
     } catch (err) {
       console.error("Failed to fetch enterprise locations:", err);
@@ -40,6 +53,15 @@ export default function CopyFromLocationDropdown({ settingType, onCopyComplete, 
   }
 
   async function copyFromLocation(sourceShopId: number) {
+    const source = locations.find((location) => location.shopId === sourceShopId);
+    if (
+      settingType === "laborRates" &&
+      !confirm(
+        `Copy labor rate rules from ${source?.name || "this location"} to ${destinationName}? Existing destination rules will be replaced.`
+      )
+    ) {
+      return;
+    }
     setCopying(true);
     setMessage(null);
     setIsOpen(false);
@@ -57,7 +79,12 @@ export default function CopyFromLocationDropdown({ settingType, onCopyComplete, 
       const data = await res.json();
 
       if (res.ok) {
-        setMessage({ type: "success", text: `Settings copied successfully!` });
+        setMessage({
+          type: "success",
+          text: settingType === "laborRates"
+            ? `Labor rate rules copied from ${source?.name || "source location"} to ${destinationName}.`
+            : "Settings copied successfully!",
+        });
         onCopyComplete();
       } else {
         setMessage({ type: "error", text: data.error || "Failed to copy settings" });
@@ -73,7 +100,10 @@ export default function CopyFromLocationDropdown({ settingType, onCopyComplete, 
     return null;
   }
 
-  if (locations.length === 0) {
+  if (
+    locations.length === 0 ||
+    (settingType === "laborRates" && !canManageLaborRates)
+  ) {
     return null;
   }
 
@@ -130,6 +160,105 @@ export default function CopyFromLocationDropdown({ settingType, onCopyComplete, 
             ))}
           </div>
         </>
+      )}
+    </div>
+  );
+}
+
+export function CopyLaborRatesToAllButton({
+  onCopyComplete,
+  disabled,
+}: {
+  onCopyComplete: () => void;
+  disabled?: boolean;
+}) {
+  const [source, setSource] = useState<EnterpriseLocation | null>(null);
+  const [siblingCount, setSiblingCount] = useState(0);
+  const [canManage, setCanManage] = useState(false);
+  const [copying, setCopying] = useState(false);
+  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  useEffect(() => {
+    Promise.all([
+      fetch("/api/user/shops").then((res) => res.ok ? res.json() : Promise.reject()),
+      fetch("/api/enterprise/locations").then((res) => res.ok ? res.json() : Promise.reject()),
+    ])
+      .then(([shopsData, enterpriseData]) => {
+        const currentShopId = Number(shopsData.currentShopId);
+        const current = (shopsData.shops || []).find(
+          (shop: EnterpriseLocation) => Number(shop.shopId) === currentShopId
+        );
+        if (currentShopId) {
+          setSource({ shopId: currentShopId, name: current?.name || `Location ${currentShopId}` });
+        }
+        setSiblingCount((enterpriseData.locations || []).length);
+        setCanManage(enterpriseData.canManageLaborRates === true);
+      })
+      .catch(() => {
+        setSource(null);
+        setSiblingCount(0);
+        setCanManage(false);
+      });
+  }, []);
+
+  async function copyToAll() {
+    if (!source) return;
+    if (
+      !confirm(
+        `Copy labor rate rules from ${source.name} to all ${siblingCount} other enterprise location${siblingCount === 1 ? "" : "s"}? Existing destination rules will be replaced.`
+      )
+    ) {
+      return;
+    }
+    setCopying(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/enterprise/copy-settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sourceShopId: source.shopId,
+          current: source.shopId,
+          settingTypes: ["laborRates"],
+          destination: "allOther",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to copy labor rate rules");
+      const appliedCount = data.matchedCount ?? siblingCount;
+      setMessage({
+        type: "success",
+        text: `Copied rules from ${source.name} to ${appliedCount} other location${appliedCount === 1 ? "" : "s"}.`,
+      });
+      onCopyComplete();
+    } catch (error) {
+      setMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Failed to copy labor rate rules",
+      });
+    } finally {
+      setCopying(false);
+    }
+  }
+
+  if (!source || siblingCount === 0 || !canManage) return null;
+
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        onClick={copyToAll}
+        disabled={disabled || copying}
+        className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+      >
+        {copying ? <Loader2 className="w-4 h-4 animate-spin" /> : <Building2 className="w-4 h-4" />}
+        Copy to all other locations
+      </button>
+      {message && (
+        <span className={`text-sm ${message.type === "success" ? "text-green-600" : "text-red-600"}`}>
+          {message.type === "success" && <Check className="w-4 h-4 inline mr-1" />}
+          {message.text}
+        </span>
       )}
     </div>
   );
