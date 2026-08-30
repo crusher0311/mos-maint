@@ -720,6 +720,12 @@ export class NormalizedIngestionService {
         (shouldShadowWriteMongo() ? await collection.findOne(existingQuery) : null);
       
       const contentHash = generateContentHash(mapped);
+      const sourceIds = [{
+        system: this.adapter.sourceSystem,
+        idType: 'service_job_id',
+        idValue: String(sourceId),
+        isPrimary: true,
+      }];
       
       if (existing) {
         if (!this.options.forceUpdate && existing.provenance.contentHash === contentHash) {
@@ -749,15 +755,25 @@ export class NormalizedIngestionService {
           };
         }
         
+        const updatedProvenance: Provenance = {
+          ...existing.provenance,
+          lastSeenAt: new Date(),
+          lastSyncedAt: new Date(),
+          syncRunId: this.options.syncRunId,
+          contentHash,
+          sourceIds: this.mergeSourceIds(existing.provenance.sourceIds, sourceIds),
+        };
+
         // task #344 (W3a): PG canonical first; Mongo shadow after.
         await this.dualWriteToSupabase('service_job', existing._id, 'update', () =>
-          this.supabaseDualWriter!.upsertServiceJob({ ...mapped, _id: existing._id, shopId: this.shopId, enterpriseId: this.enterpriseId, workOrderId, provenance: existing.provenance, softDelete: existing.softDelete, version: existing.version + 1, createdAt: existing.createdAt, updatedAt: new Date() })
+          this.supabaseDualWriter!.upsertServiceJob({ ...mapped, _id: existing._id, shopId: this.shopId, enterpriseId: this.enterpriseId, workOrderId, provenance: updatedProvenance, softDelete: existing.softDelete, version: existing.version + 1, createdAt: existing.createdAt, updatedAt: new Date() })
         );
         await this.shadowWriteMongo('service_job', () => collection.updateOne(
           { _id: existing._id },
           {
             $set: {
               ...mapped,
+              provenance: updatedProvenance,
               updatedAt: new Date(),
               version: existing.version + 1,
             },
@@ -775,13 +791,6 @@ export class NormalizedIngestionService {
       
       const newId = generateEntityId();
       const now = new Date();
-      const sourceIds = [{
-        system: this.adapter.sourceSystem,
-        idType: 'service_job_id',
-        idValue: String(sourceId),
-        isPrimary: true,
-      }];
-      
       const newServiceJob: NormalizedServiceJob = {
         _id: newId,
         ...mapped,
@@ -810,7 +819,7 @@ export class NormalizedIngestionService {
         isSublet: false,
         componentsCodes: [],
         tags: [],
-        customFields: {},
+        customFields: mapped.customFields || {},
       } as NormalizedServiceJob;
       
       // task #344 (W3a): PG canonical first; Mongo shadow after.

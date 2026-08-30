@@ -191,6 +191,7 @@ export async function computeMissedOpportunityReport(
         title: normalizedServiceJobs.title,
         status: normalizedServiceJobs.status,
         total: normalizedServiceJobs.total,
+        customFields: normalizedServiceJobs.customFields,
         sequence: normalizedServiceJobs.sequence,
         provenance: normalizedServiceJobs.provenance,
       })
@@ -375,6 +376,11 @@ export async function computeMissedOpportunityReport(
           : null;
       const normalizedTotal = normalizeTicketJobAmount(j.total);
       const normalizedLinePrices = linePricesByJob.get(j.id) || [];
+      const tekmetricRecordedPrice =
+        sourceSystem === "tekmetric" &&
+        (j.customFields as any)?.recordedPriceAvailable !== true
+          ? null
+          : normalizedTotal;
       const totalPrice =
         sourceSystem === "protractor"
           ? resolveProtractorRecordedAmount({
@@ -382,7 +388,7 @@ export async function computeMissedOpportunityReport(
               normalizedLinePrices,
               normalizedJobTotal: normalizedTotal,
             })
-          : normalizedTotal;
+          : tekmetricRecordedPrice;
       const recordedStatus =
         cachedPackage != null
           ? resolveCachedProtractorPackageStatus(cachedPackage, j.status || null)

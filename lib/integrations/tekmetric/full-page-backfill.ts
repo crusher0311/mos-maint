@@ -43,6 +43,7 @@ import {
   cacheJobs,
 } from "@/lib/integrations/tekmetric/incremental-sync";
 import { bumpInFlightHeartbeat } from "@/lib/integrations/tekmetric/inflight-lock";
+import { buildTekmetricNormalizedWorkOrder } from "@/lib/integrations/tekmetric/normalized-payload";
 
 // Each cron tick processes up to this many pages of 100 ROs each. Empirically
 // each page costs ~20-30s of wall-clock at 8 RPS once vehicle/customer/jobs
@@ -697,6 +698,20 @@ type TekmetricJob = {
   laborTotal?: number;
   partsTotal?: number;
   subtotal?: number;
+  total?: number;
+  totalAmount?: number;
+  laborAmount?: number;
+  laborPrice?: number;
+  partsAmount?: number;
+  partsPrice?: number;
+  subletTotal?: number;
+  subletAmount?: number;
+  subletPrice?: number;
+  discountTotal?: number;
+  discountAmount?: number;
+  status?: string;
+  jobStatus?: string;
+  authorizationStatus?: string;
   laborHours?: number;
   labor?: any[];
   parts?: Array<{
@@ -726,6 +741,11 @@ type TekmetricRepairOrder = {
   completedDate?: string;
   createdDate?: string;
   updatedDate?: string;
+  serviceWriterId?: number;
+  serviceWriter?: { id?: number; name?: string; fullName?: string };
+  serviceWriterName?: string;
+  serviceWriterAccountFirstName?: string;
+  serviceWriterAccountLastName?: string;
 };
 
 async function tekmetricRequest<T>(
@@ -1365,49 +1385,12 @@ export async function runFullPageBackfillChunk(
             }
           }
 
-          rosForNormalized.push({
-            id: ro.id,
-            repairOrderNumber: ro.repairOrderNumber,
-            repairOrderStatus:
-              ro.repairOrderStatus?.code || ro.repairOrderStatus,
-            postedDate: ro.postedDate,
-            completedDate: ro.completedDate,
-            createdDate: ro.createdDate,
-            updatedDate: ro.updatedDate,
-            milesIn: ro.milesIn,
-            milesOut: ro.milesOut,
-            laborSubtotal: jobs.reduce(
-              (sum, j) => sum + (j.laborTotal || 0),
-              0,
-            ),
-            partsSubtotal: jobs.reduce(
-              (sum, j) => sum + (j.partsTotal || 0),
-              0,
-            ),
-            total: jobs.reduce((sum, j) => sum + (j.subtotal || 0), 0),
-            vehicle: vehicle,
-            customer: customer,
-            jobs: jobs.map((j) => ({
-              id: j.id,
-              name: j.name,
-              laborTotal: (j.laborTotal || 0) / 100,
-              partsTotal: (j.partsTotal || 0) / 100,
-              total: (j.subtotal || 0) / 100,
-              laborHours: j.laborHours || 0,
-              labor: j.labor,
-              parts: j.parts,
-            })),
-            inspections: [],
-            inspectionUrl: (ro as any).inspectionUrl || null,
-            inspectionShareDate:
-              (ro as any).inspectionShareDate || null,
-            rawPayload: {
-              repairOrder: ro,
-              vehicle,
-              customer,
-              jobs,
-            },
-          });
+          rosForNormalized.push(buildTekmetricNormalizedWorkOrder({
+            repairOrder: ro,
+            vehicle,
+            customer,
+            jobs,
+          }));
         } catch (roErr: any) {
           // Per-RO safety net mirrors the chunker: never let one bad RO
           // crash the whole page.

@@ -41,10 +41,9 @@ export {
   type TicketJobDisplayGroup,
 } from "@/lib/missed-opportunity-ticket-details";
 
-// v5: a red/yellow VHI urgency `bump` is no longer treated as proof that a
-// recommendation came from a DVI. Invalidate v4 reports so false DVI badges
-// disappear immediately after deploy instead of surviving in report caches.
-export const MISSED_OPPORTUNITY_REPORT_VERSION = 5;
+// v6 records Tekmetric advisor/disposition/price evidence. Invalidate older
+// saved reports so corrected reingestion is visible immediately.
+export const MISSED_OPPORTUNITY_REPORT_VERSION = 6;
 
 export type RecommendationSource = "vhi" | "dvi" | "both";
 export type RecommendationOutcome =

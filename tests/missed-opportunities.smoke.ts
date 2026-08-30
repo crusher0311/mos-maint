@@ -19,6 +19,11 @@ import { sql } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { buildCloseDateSincePredicate } from "../lib/missed-opportunities-query";
 import {
+  buildTekmetricNormalizedWorkOrder,
+  normalizeTekmetricJobMoney,
+  resolveTekmetricJobStatus,
+} from "../lib/integrations/tekmetric/normalized-payload";
+import {
   planItemsFromBuckets,
   evaluateRoLines,
   summarizeMissedOpportunities,
@@ -314,6 +319,130 @@ console.log("Ticket-job classification and amounts:");
   ok("subtotal reports unavailable member", partialSubtotal.hasUnavailable === true);
   const serialized = JSON.parse(JSON.stringify({ totalPrice: normalizeTicketJobAmount("1234567890.12") }));
   ok("JSON serialization retains decimal string", serialized.totalPrice === "1234567890.12");
+}
+
+console.log("Tekmetric normalized report evidence:");
+{
+  const incremental = buildTekmetricNormalizedWorkOrder({
+    repairOrder: {
+      id: 701,
+      repairOrderNumber: 4401,
+      repairOrderStatus: { code: "COMPLETE" },
+      serviceWriter: { id: 91, name: "Alex Advisor" },
+    },
+    vehicle: { vin: "1HGCM82633A004352" },
+    customer: {},
+    jobs: [
+      {
+        id: 1,
+        name: "Brake Fluid Flush",
+        authorized: true,
+        laborAmount: 8000,
+        partsAmount: 1995,
+      },
+      {
+        id: 2,
+        name: "Cabin Air Filter",
+        authorized: false,
+        status: "pending",
+        totalAmount: 4995,
+      },
+    ],
+  });
+  const fullPage = buildTekmetricNormalizedWorkOrder({
+    repairOrder: {
+      id: 702,
+      repairOrderNumber: 4402,
+      repairOrderStatus: "COMPLETE",
+      serviceWriterAccountFirstName: "Alex",
+      serviceWriterAccountLastName: "Advisor",
+    },
+    vehicle: { vin: "1HGCM82633A004352" },
+    customer: {},
+    jobs: [
+      {
+        id: 1,
+        name: "Brake Fluid Flush",
+        authorizationStatus: "AUTHORIZED",
+        laborTotal: 8000,
+        partsTotal: 1995,
+      },
+      {
+        id: 2,
+        name: "Cabin Air Filter",
+        authorized: false,
+        subtotal: 4995,
+      },
+    ],
+  });
+  ok("incremental advisor object is preserved", incremental.serviceWriterName === "Alex Advisor");
+  ok("full-page advisor aliases are preserved", fullPage.serviceWriterName === "Alex Advisor");
+
+  const incApproved = incremental.jobs[0];
+  const pageApproved = fullPage.jobs[0];
+  const incDeclined = incremental.jobs[1];
+  const pageDeclined = fullPage.jobs[1];
+  ok("incremental authorization maps performed", resolveTekmetricJobStatus(incApproved) === "authorized");
+  ok("full-page authorization status maps performed", resolveTekmetricJobStatus(pageApproved) === "authorized");
+  ok("explicit decline overrides pending alias", resolveTekmetricJobStatus(incDeclined) === "declined");
+  ok(
+    "declined authorization alias overrides pending status",
+    resolveTekmetricJobStatus({
+      status: "pending",
+      authorizationStatus: "DECLINED",
+    }) === "declined",
+  );
+  ok("full-page decline maps declined", resolveTekmetricJobStatus(pageDeclined) === "declined");
+  ok("incremental component total is dollars", incApproved.total === 99.95);
+  ok("full-page component total is dollars", pageApproved.total === 99.95);
+  ok("incremental and full-page totals agree", incApproved.total === pageApproved.total);
+
+  const explicitZero = normalizeTekmetricJobMoney({ subtotal: 0 });
+  const missing = normalizeTekmetricJobMoney({});
+  const discounted = normalizeTekmetricJobMoney({
+    laborPrice: 10000,
+    partsPrice: 2500,
+    subletAmount: 1000,
+    discountAmount: 500,
+  });
+  ok("explicit zero remains recorded", explicitZero.recordedPriceAvailable && explicitZero.total === 0);
+  ok("missing price remains unavailable", !missing.recordedPriceAvailable && missing.total === undefined);
+  ok("components derive a discounted total once", discounted.total === 130);
+
+  const recommendations = evaluateMissedOpportunityRecommendations(
+    [
+      {
+        title: String(incApproved.name),
+        recordedStatus: resolveTekmetricJobStatus(incApproved),
+        displayGroup: classifyTicketJobStatus(resolveTekmetricJobStatus(incApproved)),
+        totalPrice: normalizeTicketJobAmount(incApproved.total),
+      },
+      {
+        title: String(incDeclined.name),
+        recordedStatus: resolveTekmetricJobStatus(incDeclined),
+        displayGroup: classifyTicketJobStatus(resolveTekmetricJobStatus(incDeclined)),
+        totalPrice: normalizeTicketJobAmount(incDeclined.total),
+      },
+    ],
+    [
+      { title: "Brake Fluid Exchange", serviceKey: "brake_fluid", status: "overdue" },
+      { title: "Cabin Air Filter Replace", serviceKey: "cabin_air_filter", status: "overdue" },
+    ],
+  );
+  const summary = summarizeMissedOpportunities([
+    row({
+      recommendations,
+      missedItems: missedItemsFromRecommendations(recommendations),
+    }),
+  ]);
+  ok(
+    "Tekmetric performed price reaches report rollup",
+    summary.recommendationsByOutcome.invoiced_performed.recordedDollarSubtotal === "99.95",
+  );
+  ok(
+    "Tekmetric declined price reaches report rollup",
+    summary.recommendationsByOutcome.deferred_declined.recordedDollarSubtotal === "49.95",
+  );
 }
 
 console.log("Inspection exclusion:");

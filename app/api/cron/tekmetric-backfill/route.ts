@@ -24,6 +24,7 @@ import { syncTekmetricRoster } from "@/lib/integrations/tekmetric/sync-roster";
 import { syncProtractorRoster } from "@/lib/integrations/protractor/sync-roster";
 import { decideChunkAdvance } from "@/lib/integrations/tekmetric/backfill-chunk-advance";
 import { DEFAULT_STALE_HEARTBEAT_MS } from "@/lib/integrations/tekmetric/inflight-lock";
+import { buildTekmetricNormalizedWorkOrder } from "@/lib/integrations/tekmetric/normalized-payload";
 
 // Coverage probe: shops with this many Tekmetric ROs available but a low
 // indexed-ratio (see COVERAGE_MIN_RATIO) get auto-flagged for full-page
@@ -188,6 +189,11 @@ type TekmetricRepairOrder = {
   updatedDate?: string;
   milesIn?: number;
   milesOut?: number;
+  serviceWriterId?: number;
+  serviceWriter?: { id?: number; name?: string; fullName?: string };
+  serviceWriterName?: string;
+  serviceWriterAccountFirstName?: string;
+  serviceWriterAccountLastName?: string;
 };
 
 type TekmetricJob = {
@@ -198,6 +204,20 @@ type TekmetricJob = {
   laborTotal?: number;
   partsTotal?: number;
   subtotal?: number;
+  total?: number;
+  totalAmount?: number;
+  laborAmount?: number;
+  laborPrice?: number;
+  partsAmount?: number;
+  partsPrice?: number;
+  subletTotal?: number;
+  subletAmount?: number;
+  subletPrice?: number;
+  discountTotal?: number;
+  discountAmount?: number;
+  status?: string;
+  jobStatus?: string;
+  authorizationStatus?: string;
   laborHours?: number;
   labor?: { name: string; hours: number; rate: number }[];
   parts?: { partNumber: string; name: string; brand?: string; quantity: number; retailCost: number }[];
@@ -1151,36 +1171,13 @@ async function backfillShopChunkInner(
         indexed++;
       }
 
-      const roDataForNormalized = {
-        id: ro.id,
-        repairOrderNumber: ro.repairOrderNumber,
-        repairOrderStatus: ro.repairOrderStatus?.code || ro.repairOrderStatus,
-        postedDate: ro.postedDate,
-        completedDate: ro.completedDate,
-        createdDate: ro.createdDate,
-        updatedDate: ro.updatedDate,
-        milesIn: ro.milesIn,
-        milesOut: ro.milesOut,
-        laborSubtotal: jobs.reduce((sum, j) => sum + (j.laborTotal || 0), 0),
-        partsSubtotal: jobs.reduce((sum, j) => sum + (j.partsTotal || 0), 0),
-        total: jobs.reduce((sum, j) => sum + (j.subtotal || 0), 0),
-        vehicle: vehicle,
-        customer: customer,
-        jobs: jobs.map(j => ({
-          id: j.id,
-          name: j.name,
-          laborTotal: (j.laborTotal || 0) / 100,
-          partsTotal: (j.partsTotal || 0) / 100,
-          total: (j.subtotal || 0) / 100,
-          laborHours: j.laborHours || 0,
-          labor: j.labor,
-          parts: j.parts,
-        })),
-        inspections: inspections.length > 0 ? inspections : [],
-        inspectionUrl: (ro as any).inspectionUrl || null,
-        inspectionShareDate: (ro as any).inspectionShareDate || null,
-        rawPayload: { repairOrder: ro, vehicle, customer, jobs, inspections: inspections.length > 0 ? inspections : undefined },
-      };
+      const roDataForNormalized = buildTekmetricNormalizedWorkOrder({
+        repairOrder: ro,
+        vehicle,
+        customer,
+        jobs,
+        inspections,
+      });
       
       reFetchedRoIds.add(ro.id);
       return { indexed, skipped, roData: roDataForNormalized };

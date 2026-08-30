@@ -104,16 +104,34 @@ export interface TekmetricRepairOrder {
   totalAmount?: number;
   laborAmount?: number;
   partsAmount?: number;
+  serviceWriterId?: number;
+  serviceWriter?: { id?: number; name?: string; fullName?: string };
+  serviceWriterName?: string;
+  serviceWriterAccountFirstName?: string;
+  serviceWriterAccountLastName?: string;
 }
 
 export interface TekmetricJob {
   id: number;
   repairOrderId: number;
   name: string;
-  authorized: boolean;
+  authorized?: boolean;
+  status?: string;
+  jobStatus?: string;
+  authorizationStatus?: string;
+  laborTotal?: number;
   laborAmount?: number;
+  laborPrice?: number;
+  partsTotal?: number;
   partsAmount?: number;
+  partsPrice?: number;
+  subletTotal?: number;
+  subletAmount?: number;
+  subletPrice?: number;
+  discountTotal?: number;
   discountAmount?: number;
+  subtotal?: number;
+  total?: number;
   totalAmount?: number;
   createdDate?: string;
   updatedDate?: string;

@@ -241,6 +241,7 @@ export class SupabaseDualWriter {
       startedDate: doc.startedDate || null,
       completedDate: doc.completedDate || null,
       closedDate: doc.closedDate || null,
+      serviceAdvisorId: doc.serviceAdvisorId || null,
       serviceAdvisorName: doc.serviceAdvisorName || null,
       subtotal: String(doc.subtotal || 0),
       taxTotal: String(doc.taxTotal || 0),

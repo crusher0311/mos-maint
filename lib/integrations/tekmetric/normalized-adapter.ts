@@ -39,6 +39,7 @@ import {
   cleanString,
 } from '@/lib/integrations/core/normalized-adapter';
 import { ObjectId } from 'mongodb';
+import { resolveTekmetricJobStatus } from '@/lib/integrations/tekmetric/normalized-payload';
 
 // =============================================================================
 // TEKMETRIC ADAPTER
@@ -155,7 +156,16 @@ export class TekmetricAdapter implements INormalizedAdapter {
       checkInDate: parseDate(ro.createdDate),
       completedDate: parseDate(ro.completedDate),
       closedDate: parseDate(ro.postedDate),
-      serviceAdvisorName: cleanString(ro.serviceWriter?.name || ro.serviceWriterName),
+      serviceAdvisorId: cleanString(ro.serviceWriterId || ro.serviceWriter?.id),
+      serviceAdvisorName: cleanString(
+        ro.serviceWriter?.name ||
+        ro.serviceWriter?.fullName ||
+        ro.serviceWriterName ||
+        ro.serviceAdvisorName ||
+        [ro.serviceWriterAccountFirstName, ro.serviceWriterAccountLastName]
+          .filter(Boolean)
+          .join(' ')
+      ),
       technicians: [],
       customerConcern: cleanString(ro.customerConcern),
       technicianNotes: cleanString(ro.technicianNotes),
@@ -192,7 +202,7 @@ export class TekmetricAdapter implements INormalizedAdapter {
       jobNumber: cleanString(job.id),
       sequence: parseNumber(job.sortOrder) || 0,
       jobType: job.cannedJobId ? 'canned' : 'custom',
-      status: this.mapServiceJobStatus(job.status || job.authorized),
+      status: resolveTekmetricJobStatus(job),
       statusHistory: [],
       title: cleanString(job.name || job.description) || 'Unknown Service',
       description: cleanString(job.description || job.note),
@@ -202,12 +212,12 @@ export class TekmetricAdapter implements INormalizedAdapter {
       laborOperationCodes: [],
       technicianName: cleanString(job.technicianName),
       lineItems: [],
-      laborTotal: parseNumber(job.laborTotal) || 0,
-      partsTotal: parseNumber(job.partsTotal) || 0,
-      subletTotal: parseNumber(job.subletTotal) || 0,
+      laborTotal: parseNumber(job.laborTotal) ?? 0,
+      partsTotal: parseNumber(job.partsTotal) ?? 0,
+      subletTotal: parseNumber(job.subletTotal) ?? 0,
       feesTotal: 0,
-      discountTotal: parseNumber(job.discountTotal) || 0,
-      total: parseNumber(job.total) || 0,
+      discountTotal: parseNumber(job.discountTotal) ?? 0,
+      total: parseNumber(job.total) ?? 0,
       laborHoursEstimated: parseNumber(job.estimatedHours),
       laborHoursActual: parseNumber(job.actualHours),
       laborHoursBilled: parseNumber(job.billedHours),
@@ -220,7 +230,11 @@ export class TekmetricAdapter implements INormalizedAdapter {
       declineReason: cleanString(job.declineReason),
       componentsCodes: [],
       tags: [],
-      customFields: {},
+      customFields: {
+        recordedPriceAvailable: job.recordedPriceAvailable === true,
+        ...(job.status != null ? { providerStatus: String(job.status) } : {}),
+        ...(typeof job.authorized === 'boolean' ? { authorized: job.authorized } : {}),
+      },
     };
   }
   
@@ -597,7 +611,7 @@ export class TekmetricAdapter implements INormalizedAdapter {
       'declined': 'declined',
       'completed': 'completed',
     };
-    return statusMap[String(statusOrAuth).toLowerCase()] || 'completed';
+    return statusMap[String(statusOrAuth).toLowerCase()] || 'pending';
   }
   
   private mapLineItemType(item: any): LineItemType {
