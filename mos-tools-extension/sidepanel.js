@@ -3880,6 +3880,8 @@ async function handleAddCannedJob(job) {
 
 // ==================== LABOR RATES ====================
 let currentLaborRateRules = [];
+let currentLaborRateRulesRevision = 0;
+let currentLaborRateRulesSmsShopId = null;
 
 async function loadLaborRates() {
   elements.ratesLoading.classList.remove('hidden');
@@ -3895,6 +3897,8 @@ async function loadLaborRates() {
 
     if (result.success) {
       currentLaborRateRules = result.rules || [];
+      currentLaborRateRulesRevision = Number(result.revision ?? 0);
+      currentLaborRateRulesSmsShopId = result.smsShopId ?? null;
       renderLaborRateRules();
       elements.ratesMain.classList.remove('hidden');
     } else {
@@ -4159,13 +4163,26 @@ async function handleSaveRateGroup() {
   elements.rateFormSaveText.textContent = 'Saving...';
 
   try {
-    const result = await sendMessage({ action: 'SAVE_LABOR_RATE_RULES', rules: updatedRules });
+    const result = await sendMessage({
+      action: 'SAVE_LABOR_RATE_RULES',
+      rules: updatedRules,
+      expectedRevision: currentLaborRateRulesRevision,
+      smsShopId: currentLaborRateRulesSmsShopId,
+    });
     if (result.success) {
       currentLaborRateRules = updatedRules;
+      currentLaborRateRulesRevision = Number(result.revision ?? currentLaborRateRulesRevision + 1);
       renderLaborRateRules();
       hideRateForm();
       showNotification(editId ? 'Group updated' : 'Group added', 'success');
     } else {
+      if (result.stale && Array.isArray(result.rules)) {
+        currentLaborRateRules = result.rules;
+        currentLaborRateRulesRevision = Number(result.revision ?? currentLaborRateRulesRevision);
+        currentLaborRateRulesSmsShopId = result.smsShopId ?? currentLaborRateRulesSmsShopId;
+        renderLaborRateRules();
+        hideRateForm();
+      }
       showNotification(result.error || 'Failed to save', 'error');
     }
   } catch (err) {
@@ -4192,12 +4209,24 @@ async function handleDeleteRateGroup(ruleId) {
   const updatedRules = currentLaborRateRules.filter(r => r.id !== ruleId);
 
   try {
-    const result = await sendMessage({ action: 'SAVE_LABOR_RATE_RULES', rules: updatedRules });
+    const result = await sendMessage({
+      action: 'SAVE_LABOR_RATE_RULES',
+      rules: updatedRules,
+      expectedRevision: currentLaborRateRulesRevision,
+      smsShopId: currentLaborRateRulesSmsShopId,
+    });
     if (result.success) {
       currentLaborRateRules = result.rules || updatedRules;
+      currentLaborRateRulesRevision = Number(result.revision ?? currentLaborRateRulesRevision + 1);
       renderLaborRateRules();
       showNotification(`"${rule.name}" deleted`, 'info');
     } else {
+      if (result.stale && Array.isArray(result.rules)) {
+        currentLaborRateRules = result.rules;
+        currentLaborRateRulesRevision = Number(result.revision ?? currentLaborRateRulesRevision);
+        currentLaborRateRulesSmsShopId = result.smsShopId ?? currentLaborRateRulesSmsShopId;
+        renderLaborRateRules();
+      }
       showNotification(result.error || 'Failed to delete', 'error');
     }
   } catch (err) {

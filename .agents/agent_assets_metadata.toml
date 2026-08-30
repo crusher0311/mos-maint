@@ -48,3 +48,10 @@ id = "IPwOsg4q6oAvVRLgwigzV"
 uri = "file://public/icons/service/icon_sheet.svg"
 type = "image"
 title = "The full imported icon sheet (not yet wired up)"
+
+[[outputs]]
+id = "QzrHRBBUwBHy_8uJDdKrS"
+uri = "file://dist/mos-tools-extension.zip"
+type = "unspecified"
+title = "Detect Dog Chrome Extension v1.35.0"
+description = "Packaged extension with authoritative labor-rate refresh, revision conflict protection, and shop-bound synchronization."

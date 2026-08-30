@@ -129,6 +129,11 @@ async function run() {
       canonicalWrite = { shopId, fields };
       return { matchedCount: 1, modifiedCount: 1 };
     };
+    __sharedSettingsDeps.replacePgLaborRateRules = async (shopIds, rules) => {
+      assert.equal(shopIds.length, 1);
+      assert.deepEqual(rules, []);
+      return { matchedCount: 1, modifiedCount: 1 };
+    };
     __sharedSettingsDeps.getCollection = async () =>
       ({
         async updateOne(query: any, update: any) {

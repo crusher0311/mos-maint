@@ -60,6 +60,9 @@ let tekmetricBaseUrl = null;
 // Labor rate rules cache
 let laborRateRules = [];
 let laborRateRulesLastFetch = 0;
+let laborRateRulesRevision = 0;
+let laborRateRulesShopId = null;
+let laborRateRulesSmsShopId = null;
 const LABOR_RULES_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 let laborRateAutoApply = true; // Default on
 let lastAppliedRoId = null; // Prevent duplicate applications
@@ -195,6 +198,9 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
         console.log("[Tekmetric] Shop ID captured:", tekmetricShopId);
         laborRateRulesLastFetch = 0;
         laborRateRules = [];
+        laborRateRulesRevision = 0;
+        laborRateRulesShopId = null;
+        laborRateRulesSmsShopId = null;
       } else {
         tekmetricShopId = newShopId;
       }
@@ -1516,8 +1522,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   // -------------------- Labor Rate Rules --------------------
   if (message.action === "GET_LABOR_RATE_RULES") {
-    fetchLaborRateRules()
-      .then(rules => sendResponse({ success: true, rules }))
+    const requestedSmsShopId = tekmetricShopId || currentSmsContext?.shopId || null;
+    fetchLaborRateRules(true, true, requestedSmsShopId)
+      .then(rules => sendResponse({
+        success: true,
+        rules,
+        revision: laborRateRulesRevision,
+        shopId: laborRateRulesShopId,
+        smsShopId: laborRateRulesSmsShopId,
+      }))
       .catch(err => sendResponse({ success: false, error: err.message, rules: [] }));
     return true;
   }
@@ -1536,35 +1549,61 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === "SAVE_LABOR_RATE_RULES") {
-    const saveShopParam = tekmetricShopId ? `?smsShopId=${tekmetricShopId}` : '';
-    // Persist overrideCategoryRates/applyToAllLabor locally — server may not return them
-    const newOverrides = {};
-    (message.rules || []).forEach(r => {
-      newOverrides[r.id] = {
-        overrideCategoryRates: !!r.overrideCategoryRates,
-        applyToAllLabor: !!r.applyToAllLabor,
-      };
-    });
-    chrome.storage.local.get(['laborRateRuleOverrides'], (stored) => {
-      const merged = Object.assign({}, stored.laborRateRuleOverrides || {}, newOverrides);
-      chrome.storage.local.set({ laborRateRuleOverrides: merged });
-    });
+    const activeSmsShopId = tekmetricShopId || currentSmsContext?.shopId || null;
+    const targetSmsShopId = message.smsShopId || activeSmsShopId;
+    if (
+      message.smsShopId &&
+      activeSmsShopId &&
+      String(message.smsShopId) !== String(activeSmsShopId)
+    ) {
+      sendResponse({
+        success: false,
+        contextChanged: true,
+        error: 'The active location changed. Reload Labor Rates before saving.',
+      });
+      return false;
+    }
+    const saveShopParam = targetSmsShopId ? `?smsShopId=${encodeURIComponent(targetSmsShopId)}` : '';
     handleMosApiRequest(`/api/extension/labor-rates${saveShopParam}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rules: message.rules })
+      body: JSON.stringify({
+        rules: message.rules,
+        expectedRevision: Number(message.expectedRevision ?? laborRateRulesRevision),
+      }),
     }).then(result => {
       if (result.ok === false) {
         sendResponse({ success: false, error: result.error || 'Failed to save rules' });
         return;
       }
-      // Merge local overrides into in-memory rules so apply logic sees them immediately
-      laborRateRules = (result.rules || []).map(r =>
-        newOverrides[r.id] ? Object.assign({}, r, newOverrides[r.id]) : r
-      );
+      laborRateRules = result.rules || [];
       laborRateRulesLastFetch = Date.now();
-      sendResponse({ success: true, rules: laborRateRules });
-    }).catch(err => {
+      laborRateRulesRevision = Number(result.revision ?? laborRateRulesRevision + 1);
+      laborRateRulesShopId = result.shopId ?? laborRateRulesShopId;
+      laborRateRulesSmsShopId = targetSmsShopId;
+      sendResponse({
+        success: true,
+        rules: laborRateRules,
+        revision: laborRateRulesRevision,
+      });
+    }).catch(async err => {
+      if (err.serverCode === 'LABOR_RATE_RULES_STALE' || err._mosStatus === 409) {
+        try {
+          const latestRules = await fetchLaborRateRules(true, true, targetSmsShopId);
+          sendResponse({
+            success: false,
+            stale: true,
+            error: 'Labor-rate rules changed elsewhere. The latest rules have been reloaded; review your change and try again.',
+            rules: latestRules,
+            revision: laborRateRulesRevision,
+            shopId: laborRateRulesShopId,
+            smsShopId: laborRateRulesSmsShopId,
+          });
+          return;
+        } catch (_) {
+          // Fall through to the original conflict if the refresh also fails.
+        }
+      }
       sendResponse({ success: false, error: err.message });
     });
     return true;
@@ -3913,33 +3952,42 @@ async function handleImmediateStickerPrint(context, tabId, overrideInterval = nu
 }
 
 // ==================== LABOR RATE RULES ====================
-async function fetchLaborRateRules(forceRefresh = false) {
+async function fetchLaborRateRules(forceRefresh = false, requireFresh = false, requestedSmsShopId = null) {
   if (!mosApiToken) return [];
 
+  const effectiveShopId = requestedSmsShopId || tekmetricShopId || currentSmsContext?.shopId || null;
   const now = Date.now();
-  if (!forceRefresh && laborRateRules.length > 0 && (now - laborRateRulesLastFetch) < LABOR_RULES_CACHE_TTL) {
+  if (
+    !forceRefresh &&
+    laborRateRules.length > 0 &&
+    String(laborRateRulesSmsShopId || '') === String(effectiveShopId || '') &&
+    (now - laborRateRulesLastFetch) < LABOR_RULES_CACHE_TTL
+  ) {
     return laborRateRules;
   }
 
   try {
-    const effectiveShopId = tekmetricShopId || currentSmsContext?.shopId;
+    if (laborRateRulesSmsShopId != null && String(laborRateRulesSmsShopId) !== String(effectiveShopId || '')) {
+      laborRateRules = [];
+      laborRateRulesLastFetch = 0;
+      laborRateRulesRevision = 0;
+    }
     const shopParam = effectiveShopId ? `?smsShopId=${effectiveShopId}` : '';
     const data = await handleMosApiRequest(`/api/extension/labor-rates${shopParam}`);
     const serverRules = data.rules || [];
-    // Merge locally-stored overrides (e.g. overrideCategoryRates, applyToAllLabor)
-    // that the production server may not yet preserve
-    const stored = await new Promise(resolve =>
-      chrome.storage.local.get(['laborRateRuleOverrides'], resolve)
-    );
-    const overrides = stored.laborRateRuleOverrides || {};
-    laborRateRules = serverRules.map(r =>
-      overrides[r.id] ? Object.assign({}, r, overrides[r.id]) : r
-    );
+    // The server is authoritative for all rule fields. Older versions kept
+    // two flags in local storage as a temporary compatibility bridge; merging
+    // those here would allow stale device state to override enterprise saves.
+    laborRateRules = serverRules;
+    laborRateRulesRevision = Number(data.revision ?? 0);
+    laborRateRulesShopId = data.shopId ?? effectiveShopId ?? null;
+    laborRateRulesSmsShopId = effectiveShopId;
     laborRateRulesLastFetch = now;
     console.log(`[LaborRate] Fetched ${laborRateRules.length} rules for shop ${tekmetricShopId || 'default'}`);
     return laborRateRules;
   } catch (err) {
     console.error("[LaborRate] Failed to fetch rules:", err);
+    if (requireFresh) throw err;
     return laborRateRules; // Return cached if available
   }
 }
@@ -5465,7 +5513,16 @@ async function autoApplyLaborRate(context, options = {}) {
     return;
   }
 
-  const rules = await fetchLaborRateRules();
+  let rules;
+  try {
+    // A dashboard or enterprise save is authoritative immediately. Always
+    // confirm the current revision before changing an RO; never apply stale
+    // cached rates when the server cannot be reached.
+    rules = await fetchLaborRateRules(true, true, context.shopId || null);
+  } catch (err) {
+    console.warn("[LaborRate] Could not confirm current rules; skipping apply:", err.message);
+    return;
+  }
   if (rules.length === 0) {
     console.log("[LaborRate] No rules configured, skipping");
     return;

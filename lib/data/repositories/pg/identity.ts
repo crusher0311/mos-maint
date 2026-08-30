@@ -176,20 +176,62 @@ export async function listShopsByMosShopIds(ids: number[]) {
 export async function replaceLaborRateRulesForShopIds(
   ids: number[],
   laborRateRules: unknown[],
-): Promise<{ matchedCount: number; modifiedCount: number }> {
+): Promise<{
+  matchedCount: number;
+  modifiedCount: number;
+  revisions?: Record<number, number>;
+}> {
   if (!ids.length) return { matchedCount: 0, modifiedCount: 0 };
   const db = getDb();
   const updated = await db
     .update(shops)
     .set({
-      settings: sql`jsonb_set(COALESCE(${shops.settings}, '{}'::jsonb), '{laborRateRules}', ${JSON.stringify(laborRateRules)}::jsonb, true)`,
+      settings: sql`jsonb_set(
+        jsonb_set(COALESCE(${shops.settings}, '{}'::jsonb), '{laborRateRules}', ${JSON.stringify(laborRateRules)}::jsonb, true),
+        '{laborRateRulesRevision}',
+        to_jsonb(COALESCE(NULLIF(${shops.settings}->>'laborRateRulesRevision', '')::integer, 0) + 1),
+        true
+      )`,
       updatedAt: new Date(),
     })
     .where(inArray(shops.mosShopId, ids))
+    .returning({ shopId: shops.mosShopId, settings: shops.settings });
+  return {
+    matchedCount: updated.length,
+    modifiedCount: updated.length,
+    revisions: Object.fromEntries(updated.map((row) => [
+      row.shopId,
+      Number((row.settings as Record<string, unknown> | null)?.laborRateRulesRevision ?? 0),
+    ])),
+  };
+}
+
+export async function replaceLaborRateRulesForShopIdIfRevision(
+  id: number,
+  laborRateRules: unknown[],
+  expectedRevision: number,
+): Promise<{ matchedCount: number; modifiedCount: number; revision?: number }> {
+  const db = getDb();
+  const updated = await db
+    .update(shops)
+    .set({
+      settings: sql`jsonb_set(
+        jsonb_set(COALESCE(${shops.settings}, '{}'::jsonb), '{laborRateRules}', ${JSON.stringify(laborRateRules)}::jsonb, true),
+        '{laborRateRulesRevision}',
+        to_jsonb(${expectedRevision + 1}),
+        true
+      )`,
+      updatedAt: new Date(),
+    })
+    .where(and(
+      eq(shops.mosShopId, id),
+      sql`COALESCE(NULLIF(${shops.settings}->>'laborRateRulesRevision', '')::integer, 0) = ${expectedRevision}`,
+    ))
     .returning({ shopId: shops.mosShopId });
   return {
     matchedCount: updated.length,
     modifiedCount: updated.length,
+    ...(updated.length === 1 ? { revision: expectedRevision + 1 } : {}),
   };
 }
 

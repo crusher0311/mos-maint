@@ -5,6 +5,7 @@ import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { checkShopFeatureGate } from "@/lib/extension-route-guard";
 import {
   findShopLaborRateRulesById,
+  replaceLaborRateRulesForShopIdIfRevision,
   replaceLaborRateRulesForShopIds,
 } from "@/lib/data/repositories/shops";
 import { ObjectId } from "mongodb";
@@ -70,7 +71,12 @@ async function _GET(req: NextRequest) {
 
   const shop = await findShopLaborRateRulesById(resolvedShopId);
 
-  return NextResponse.json({ ok: true, rules: shop?.laborRateRules || [], shopId: shop?.shopId }, { headers: CORS_HEADERS });
+  return NextResponse.json({
+    ok: true,
+    rules: shop?.laborRateRules || [],
+    shopId: shop?.shopId,
+    revision: Number(shop?.laborRateRulesRevision ?? 0),
+  }, { headers: CORS_HEADERS });
 }
 
 async function _PUT(req: NextRequest) {
@@ -81,9 +87,14 @@ async function _PUT(req: NextRequest) {
 
   const body = await req.json();
   const { rules } = body;
+  const hasExpectedRevision = Object.prototype.hasOwnProperty.call(body, "expectedRevision");
+  const expectedRevision = hasExpectedRevision ? Number(body.expectedRevision) : null;
 
   if (!Array.isArray(rules)) {
     return NextResponse.json({ ok: false, error: "Rules array required" }, { status: 400, headers: CORS_HEADERS });
+  }
+  if (hasExpectedRevision && (!Number.isInteger(expectedRevision) || Number(expectedRevision) < 0)) {
+    return NextResponse.json({ ok: false, error: "Valid expectedRevision required" }, { status: 400, headers: CORS_HEADERS });
   }
 
   const validColors = ['#3B82F6','#10B981','#F59E0B','#EF4444','#8B5CF6','#EC4899','#6B7280'];
@@ -152,14 +163,34 @@ async function _PUT(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Target shop not found" }, { status: 404, headers: CORS_HEADERS });
   }
 
-  const result = await replaceLaborRateRulesForShopIds([targetShopId], sanitized);
+  const result: { matchedCount: number; modifiedCount: number; revision?: number } = hasExpectedRevision
+    ? await replaceLaborRateRulesForShopIdIfRevision(
+        targetShopId,
+        sanitized,
+        Number(expectedRevision),
+      )
+    : await replaceLaborRateRulesForShopIds([targetShopId], sanitized);
   if (result.matchedCount !== 1) {
+    if (hasExpectedRevision) {
+      const current = await findShopLaborRateRulesById(targetShopId);
+      return NextResponse.json({
+        ok: false,
+        code: "LABOR_RATE_RULES_STALE",
+        error: "Labor-rate rules changed since this extension loaded them. Reload the latest rules before saving.",
+        revision: Number(current?.laborRateRulesRevision ?? 0),
+      }, { status: 409, headers: CORS_HEADERS });
+    }
     return NextResponse.json({ ok: false, error: "Target shop not found" }, { status: 404, headers: CORS_HEADERS });
   }
 
   console.log(`[Extension Labor Rates] Saved ${sanitized.length} rules to shop ${targetShopId} (${existingShop.name || existingShop.shopName}) by ${auth.user.email}`);
 
-  return NextResponse.json({ ok: true, rules: sanitized, shopId: targetShopId }, { headers: CORS_HEADERS });
+  return NextResponse.json({
+    ok: true,
+    rules: sanitized,
+    shopId: targetShopId,
+    revision: result.revision ?? Number(existingShop.laborRateRulesRevision ?? 0) + 1,
+  }, { headers: CORS_HEADERS });
 }
 
 // Task #510: per-shop error-rate alerting — wrap all extension handlers

@@ -1,3 +1,13 @@
+# 1.35.0
+
+- Labor-rate rules now refresh from the server whenever the Rates tab opens and
+  before any automatic or manual application to a repair order.
+- Labor-rate saves carry the revision the extension loaded. If dashboard or
+  enterprise settings changed first, the stale save is rejected and the newest
+  rules are reloaded instead of overwriting them.
+- Labor-rate caches are pinned to the active shop so switching locations cannot
+  reuse another location's rules.
+
 # Detect Dog by MOS Tools — Changelog
 
 ## 1.33.3

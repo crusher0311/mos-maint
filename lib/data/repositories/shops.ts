@@ -53,12 +53,14 @@ export const __laborRateRuleDeps = {
   findPgShop: pg.findShopByMosShopId,
   listPgShops: pg.listShopsByMosShopIds,
   replacePgLaborRateRules: pg.replaceLaborRateRulesForShopIds,
+  replacePgLaborRateRulesIfRevision: pg.replaceLaborRateRulesForShopIdIfRevision,
   getCollection: collection,
 };
 
 export const __sharedSettingsDeps = {
   isIdentityPgCanonical,
   updatePgShopFields: pg.updateShopFields,
+  replacePgLaborRateRules: pg.replaceLaborRateRulesForShopIds,
   getCollection: collection,
 };
 
@@ -67,8 +69,33 @@ export async function replaceSharedSettingsForShop(
   shopId: number,
   fields: Record<string, unknown>,
 ): Promise<{ matchedCount: number; modifiedCount: number }> {
+  const replacesLaborRates = Object.prototype.hasOwnProperty.call(fields, "laborRateRules");
   if (__sharedSettingsDeps.isIdentityPgCanonical()) {
-    const result = await __sharedSettingsDeps.updatePgShopFields(shopId, fields);
+    let result: {
+      matchedCount: number;
+      modifiedCount: number;
+      revisions?: Record<number, number>;
+    };
+    if (replacesLaborRates) {
+      const laborResult = await __sharedSettingsDeps.replacePgLaborRateRules(
+        [shopId],
+        Array.isArray(fields.laborRateRules) ? fields.laborRateRules : [],
+      );
+      if (laborResult.matchedCount !== 1) return laborResult;
+      const remainingFields = { ...fields };
+      delete remainingFields.laborRateRules;
+      if (Object.keys(remainingFields).length > 0) {
+        const settingsResult = await __sharedSettingsDeps.updatePgShopFields(
+          shopId,
+          remainingFields,
+        );
+        result = { ...settingsResult, revisions: laborResult.revisions };
+      } else {
+        result = laborResult;
+      }
+    } else {
+      result = await __sharedSettingsDeps.updatePgShopFields(shopId, fields);
+    }
     if (result.matchedCount !== 1) return result;
 
     // These settings still have live Mongo-backed readers (including sticker
@@ -77,7 +104,18 @@ export async function replaceSharedSettingsForShop(
     const col = await __sharedSettingsDeps.getCollection();
     const mongoResult = await col.updateOne(
       { $or: [{ shopId }, { shopId: String(shopId) }] },
-      { $set: { ...fields, updatedAt: new Date() } },
+      {
+        $set: {
+          ...fields,
+          updatedAt: new Date(),
+          ...(replacesLaborRates && result.revisions?.[shopId] !== undefined
+            ? { laborRateRulesRevision: result.revisions[shopId] }
+            : {}),
+        },
+        ...(replacesLaborRates && result.revisions?.[shopId] === undefined
+          ? { $inc: { laborRateRulesRevision: 1 } }
+          : {}),
+      },
     );
     if (mongoResult.matchedCount !== 1) {
       throw new Error(`Mongo settings shadow not found for shop ${shopId}`);
@@ -87,7 +125,10 @@ export async function replaceSharedSettingsForShop(
   const col = await __sharedSettingsDeps.getCollection();
   const result = await col.updateOne(
     { $or: [{ shopId }, { shopId: String(shopId) }] },
-    { $set: { ...fields, updatedAt: new Date() } },
+    {
+      $set: { ...fields, updatedAt: new Date() },
+      ...(replacesLaborRates ? { $inc: { laborRateRulesRevision: 1 } } : {}),
+    },
   );
   return {
     matchedCount: result.matchedCount,
@@ -243,6 +284,7 @@ export async function listShopLaborRateRulesByIds(
   name?: string;
   locationIdentifier?: string;
   laborRateRules?: unknown[];
+  laborRateRulesRevision?: number;
 }>> {
   if (__laborRateRuleDeps.isIdentityPgCanonical()) {
     return (await __laborRateRuleDeps.listPgShops(shopIds)) as unknown as Array<{
@@ -250,6 +292,7 @@ export async function listShopLaborRateRulesByIds(
       name?: string;
       locationIdentifier?: string;
       laborRateRules?: unknown[];
+      laborRateRulesRevision?: number;
     }>;
   }
   const col = await __laborRateRuleDeps.getCollection();
@@ -267,6 +310,7 @@ export async function listShopLaborRateRulesByIds(
         name: 1,
         locationIdentifier: 1,
         laborRateRules: 1,
+        laborRateRulesRevision: 1,
       },
     },
   ).toArray();
@@ -275,6 +319,7 @@ export async function listShopLaborRateRulesByIds(
     name?: string;
     locationIdentifier?: string;
     laborRateRules?: unknown[];
+    laborRateRulesRevision?: number;
   }>;
 }
 
@@ -285,6 +330,7 @@ export async function findShopLaborRateRulesById(
   name?: string;
   shopName?: string;
   laborRateRules?: unknown[];
+  laborRateRulesRevision?: number;
 } | null> {
   if (__laborRateRuleDeps.isIdentityPgCanonical()) {
     return await __laborRateRuleDeps.findPgShop(shopId) as {
@@ -292,24 +338,30 @@ export async function findShopLaborRateRulesById(
       name?: string;
       shopName?: string;
       laborRateRules?: unknown[];
+      laborRateRulesRevision?: number;
     } | null;
   }
   const col = await __laborRateRuleDeps.getCollection();
   return await col.findOne(
     { $or: [{ shopId }, { shopId: String(shopId) }] },
-    { projection: { shopId: 1, name: 1, shopName: 1, laborRateRules: 1 } },
+    { projection: { shopId: 1, name: 1, shopName: 1, laborRateRules: 1, laborRateRulesRevision: 1 } },
   ) as {
     shopId: number | string;
     name?: string;
     shopName?: string;
     laborRateRules?: unknown[];
+    laborRateRulesRevision?: number;
   } | null;
 }
 
 export async function replaceLaborRateRulesForShopIds(
   shopIds: number[],
   laborRateRules: unknown[],
-): Promise<{ matchedCount: number; modifiedCount: number }> {
+): Promise<{
+  matchedCount: number;
+  modifiedCount: number;
+  revisions?: Record<number, number>;
+}> {
   if (shopIds.length === 0) return { matchedCount: 0, modifiedCount: 0 };
   if (__laborRateRuleDeps.isIdentityPgCanonical()) {
     return __laborRateRuleDeps.replacePgLaborRateRules(shopIds, laborRateRules);
@@ -323,10 +375,54 @@ export async function replaceLaborRateRulesForShopIds(
         { shopId: { $in: stringShopIds } },
       ],
     },
-    { $set: { laborRateRules, updatedAt: new Date() } },
+    {
+      $set: { laborRateRules, updatedAt: new Date() },
+      $inc: { laborRateRulesRevision: 1 },
+    },
   );
   return {
     matchedCount: result.matchedCount,
     modifiedCount: result.modifiedCount,
+  };
+}
+
+export async function replaceLaborRateRulesForShopIdIfRevision(
+  shopId: number,
+  laborRateRules: unknown[],
+  expectedRevision: number,
+): Promise<{ matchedCount: number; modifiedCount: number; revision?: number }> {
+  if (__laborRateRuleDeps.isIdentityPgCanonical()) {
+    return __laborRateRuleDeps.replacePgLaborRateRulesIfRevision(
+      shopId,
+      laborRateRules,
+      expectedRevision,
+    );
+  }
+  const col = await __laborRateRuleDeps.getCollection();
+  const revisionFilter = expectedRevision === 0
+    ? {
+        $or: [
+          { laborRateRulesRevision: 0 },
+          { laborRateRulesRevision: { $exists: false } },
+          { laborRateRulesRevision: null },
+        ],
+      }
+    : { laborRateRulesRevision: expectedRevision };
+  const result = await col.updateOne(
+    {
+      $and: [
+        { $or: [{ shopId }, { shopId: String(shopId) }] },
+        revisionFilter,
+      ],
+    },
+    {
+      $set: { laborRateRules, updatedAt: new Date() },
+      $inc: { laborRateRulesRevision: 1 },
+    },
+  );
+  return {
+    matchedCount: result.matchedCount,
+    modifiedCount: result.modifiedCount,
+    ...(result.matchedCount === 1 ? { revision: expectedRevision + 1 } : {}),
   };
 }

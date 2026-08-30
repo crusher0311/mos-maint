@@ -15,6 +15,7 @@ import {
   findShopLaborRateRulesById,
   listShopsByShopIds,
   listShopLaborRateRulesByIds,
+  replaceLaborRateRulesForShopIdIfRevision,
   replaceLaborRateRulesForShopIds,
 } from "../lib/data/repositories/shops";
 
@@ -39,11 +40,22 @@ const newRule = {
 };
 
 function matches(doc: any, query: any) {
+  if (Array.isArray(query.$and)) {
+    return query.$and.every((branch: any) => matches(doc, branch));
+  }
   if (Array.isArray(query.$or)) {
     return query.$or.some((branch: any) => matches(doc, branch));
   }
-  const expected = query.shopId;
-  return expected?.$in ? expected.$in.includes(doc.shopId) : doc.shopId === expected;
+  return Object.entries(query).every(([field, expected]: [string, any]) => {
+    const actual = doc[field];
+    if (expected?.$in) return expected.$in.includes(actual);
+    if (Object.prototype.hasOwnProperty.call(expected || {}, "$exists")) {
+      return expected.$exists
+        ? Object.prototype.hasOwnProperty.call(doc, field)
+        : !Object.prototype.hasOwnProperty.call(doc, field);
+    }
+    return actual === expected;
+  });
 }
 
 function fakeCollection(seed: any[]) {
@@ -60,11 +72,19 @@ function fakeCollection(seed: any[]) {
       const doc = docs.find((item) => matches(item, query));
       if (!doc) return { matchedCount: 0, modifiedCount: 0 };
       Object.assign(doc, update.$set);
+      for (const [field, amount] of Object.entries(update.$inc || {})) {
+        doc[field] = Number(doc[field] || 0) + Number(amount);
+      }
       return { matchedCount: 1, modifiedCount: 1 };
     },
     async updateMany(query: any, update: any) {
       const matched = docs.filter((item) => matches(item, query));
-      matched.forEach((doc) => Object.assign(doc, update.$set));
+      matched.forEach((doc) => {
+        Object.assign(doc, update.$set);
+        for (const [field, amount] of Object.entries(update.$inc || {})) {
+          doc[field] = Number(doc[field] || 0) + Number(amount);
+        }
+      });
       return { matchedCount: matched.length, modifiedCount: matched.length };
     },
   };
@@ -213,6 +233,39 @@ async function run() {
     Object.assign(__laborRateRuleDeps, originalRepositoryDeps);
   }
 
+  // Every repository replacement advances the revision, while a conditional
+  // extension save succeeds only against the revision it originally loaded.
+  const versionedCollection = fakeCollection([
+    { shopId: 30, laborRateRules: [oldRule] },
+  ]);
+  try {
+    __laborRateRuleDeps.isIdentityPgCanonical = () => false;
+    __laborRateRuleDeps.getCollection = async () => versionedCollection as any;
+
+    await replaceLaborRateRulesForShopIds([30], normalizedNew);
+    assert.equal(versionedCollection.docs[0].laborRateRulesRevision, 1);
+
+    const currentSave = await replaceLaborRateRulesForShopIdIfRevision(
+      30,
+      [oldRule],
+      1,
+    );
+    assert.equal(currentSave.matchedCount, 1);
+    assert.equal(currentSave.revision, 2);
+    assert.equal(versionedCollection.docs[0].laborRateRulesRevision, 2);
+
+    const staleSave = await replaceLaborRateRulesForShopIdIfRevision(
+      30,
+      normalizedNew,
+      1,
+    );
+    assert.equal(staleSave.matchedCount, 0);
+    assert.equal(versionedCollection.docs[0].laborRateRulesRevision, 2);
+    assert.deepEqual(versionedCollection.docs[0].laborRateRules.map((rule: any) => rule.id), ["old"]);
+  } finally {
+    Object.assign(__laborRateRuleDeps, originalRepositoryDeps);
+  }
+
   // The enterprise location picker must include legacy shops whose Mongo
   // shopId was stored as a string.
   let locationQuery: any;
@@ -241,6 +294,21 @@ async function run() {
   );
   assert.equal(copyRouteSource.includes("getDb"), false);
   assert.equal(copyRouteSource.includes("replaceSharedSettingsForShop"), true);
+
+  const extensionRouteSource = readFileSync(
+    new URL("../app/api/extension/labor-rates/route.ts", import.meta.url),
+    "utf8",
+  );
+  assert.equal(extensionRouteSource.includes("LABOR_RATE_RULES_STALE"), true);
+  assert.equal(extensionRouteSource.includes("expectedRevision"), true);
+
+  const extensionBackgroundSource = readFileSync(
+    new URL("../mos-tools-extension/background.js", import.meta.url),
+    "utf8",
+  );
+  assert.equal(extensionBackgroundSource.includes("message.expectedRevision ?? laborRateRulesRevision"), true);
+  assert.equal(extensionBackgroundSource.includes("fetchLaborRateRules(true, true,"), true);
+  assert.equal(extensionBackgroundSource.includes("laborRateRuleOverrides'], resolve"), false);
 
   console.log("labor-rate task 1232 smoke checks passed");
 }
