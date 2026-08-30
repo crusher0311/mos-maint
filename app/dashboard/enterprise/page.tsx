@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Building2, Users, Check, X, Plus, Loader2, Search, ArrowLeft } from "lucide-react";
+import { Building2, Users, Check, X, Plus, Loader2, Search, ArrowLeft, Settings2 } from "lucide-react";
 
 interface ShopAccess {
   shopId: number;
@@ -244,13 +244,22 @@ export default function EnterpriseUserAccessPage() {
                 <p className="text-gray-600">{enterprise.name} - Manage your locations and team</p>
               </div>
             </div>
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-            >
-              <Plus className="w-4 h-4" />
-              Create New Location
-            </button>
+            <div className="flex items-center gap-2">
+              <Link
+                href="/dashboard/enterprise/settings"
+                className="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
+              >
+                <Settings2 className="w-4 h-4" />
+                Settings
+              </Link>
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+              >
+                <Plus className="w-4 h-4" />
+                Create New Location
+              </button>
+            </div>
           </div>
         </div>
 

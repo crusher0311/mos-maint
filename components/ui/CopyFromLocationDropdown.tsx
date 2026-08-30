@@ -2,6 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { Copy, ChevronDown, Loader2, Check, Building2 } from "lucide-react";
+import {
+  ENTERPRISE_SETTING_CATEGORY_DETAILS,
+  type EnterpriseSettingCategory,
+} from "@/lib/enterprise-settings-catalog";
 
 type EnterpriseLocation = {
   shopId: number;
@@ -9,10 +13,12 @@ type EnterpriseLocation = {
 };
 
 type Props = {
-  settingType: "branding" | "maintenance" | "intervals" | "cannedJobs" | "laborRates";
+  settingType: SettingType;
   onCopyComplete: () => void;
   disabled?: boolean;
 };
+
+export type SettingType = EnterpriseSettingCategory;
 
 export default function CopyFromLocationDropdown({ settingType, onCopyComplete, disabled }: Props) {
   const [loading, setLoading] = useState(true);
@@ -31,7 +37,7 @@ export default function CopyFromLocationDropdown({ settingType, onCopyComplete, 
     try {
       const [res, shopsRes] = await Promise.all([
         fetch("/api/enterprise/locations"),
-        settingType === "laborRates" ? fetch("/api/user/shops") : Promise.resolve(null),
+        fetch("/api/user/shops"),
       ]);
       if (res.ok) {
         const data = await res.json();
@@ -54,12 +60,9 @@ export default function CopyFromLocationDropdown({ settingType, onCopyComplete, 
 
   async function copyFromLocation(sourceShopId: number) {
     const source = locations.find((location) => location.shopId === sourceShopId);
-    if (
-      settingType === "laborRates" &&
-      !confirm(
-        `Copy labor rate rules from ${source?.name || "this location"} to ${destinationName}? Existing destination rules will be replaced.`
-      )
-    ) {
+    if (!confirm(
+      `Copy ${ENTERPRISE_SETTING_CATEGORY_DETAILS[settingType].label} from ${source?.name || "this location"} to ${destinationName}?\n\nThe destination category will be replaced. Empty source values will clear existing destination values.`
+    )) {
       return;
     }
     setCopying(true);
@@ -78,12 +81,10 @@ export default function CopyFromLocationDropdown({ settingType, onCopyComplete, 
 
       const data = await res.json();
 
-      if (res.ok) {
+      if (res.ok && data.ok !== false) {
         setMessage({
           type: "success",
-          text: settingType === "laborRates"
-            ? `Labor rate rules copied from ${source?.name || "source location"} to ${destinationName}.`
-            : "Settings copied successfully!",
+          text: `${ENTERPRISE_SETTING_CATEGORY_DETAILS[settingType].label} copied from ${source?.name || "source location"} to ${destinationName}.`,
         });
         onCopyComplete();
       } else {
@@ -165,10 +166,12 @@ export default function CopyFromLocationDropdown({ settingType, onCopyComplete, 
   );
 }
 
-export function CopyLaborRatesToAllButton({
+export function CopySettingsToAllButton({
+  settingType,
   onCopyComplete,
   disabled,
 }: {
+  settingType: SettingType;
   onCopyComplete: () => void;
   disabled?: boolean;
 }) {
@@ -192,20 +195,23 @@ export function CopyLaborRatesToAllButton({
           setSource({ shopId: currentShopId, name: current?.name || `Location ${currentShopId}` });
         }
         setSiblingCount((enterpriseData.locations || []).length);
-        setCanManage(enterpriseData.canManageLaborRates === true);
+        setCanManage(
+          enterpriseData.canManageSettings === true &&
+          (settingType !== "laborRates" || enterpriseData.canManageLaborRates === true)
+        );
       })
       .catch(() => {
         setSource(null);
         setSiblingCount(0);
         setCanManage(false);
       });
-  }, []);
+  }, [settingType]);
 
   async function copyToAll() {
     if (!source) return;
     if (
       !confirm(
-        `Copy labor rate rules from ${source.name} to all ${siblingCount} other enterprise location${siblingCount === 1 ? "" : "s"}? Existing destination rules will be replaced.`
+        `Copy ${ENTERPRISE_SETTING_CATEGORY_DETAILS[settingType].label} from ${source.name} to all ${siblingCount} other enterprise location${siblingCount === 1 ? "" : "s"}?\n\nThis replaces the selected category at every destination. Empty source values intentionally clear stale destination values.`
       )
     ) {
       return;
@@ -219,22 +225,24 @@ export function CopyLaborRatesToAllButton({
         body: JSON.stringify({
           sourceShopId: source.shopId,
           current: source.shopId,
-          settingTypes: ["laborRates"],
+          settingTypes: [settingType],
           destination: "allOther",
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to copy labor rate rules");
+      if (!res.ok || data.ok === false) {
+        throw new Error(data.error || data.message || `Failed to copy ${ENTERPRISE_SETTING_CATEGORY_DETAILS[settingType].label}`);
+      }
       const appliedCount = data.matchedCount ?? siblingCount;
       setMessage({
         type: "success",
-        text: `Copied rules from ${source.name} to ${appliedCount} other location${appliedCount === 1 ? "" : "s"}.`,
+        text: `Copied ${ENTERPRISE_SETTING_CATEGORY_DETAILS[settingType].label} from ${source.name} to ${appliedCount} other location${appliedCount === 1 ? "" : "s"}${data.failCount ? `; ${data.failCount} failed` : ""}.`,
       });
       onCopyComplete();
     } catch (error) {
       setMessage({
         type: "error",
-        text: error instanceof Error ? error.message : "Failed to copy labor rate rules",
+        text: error instanceof Error ? error.message : `Failed to copy ${ENTERPRISE_SETTING_CATEGORY_DETAILS[settingType].label}`,
       });
     } finally {
       setCopying(false);
@@ -262,4 +270,11 @@ export function CopyLaborRatesToAllButton({
       )}
     </div>
   );
+}
+
+export function CopyLaborRatesToAllButton(props: {
+  onCopyComplete: () => void;
+  disabled?: boolean;
+}) {
+  return <CopySettingsToAllButton settingType="laborRates" {...props} />;
 }

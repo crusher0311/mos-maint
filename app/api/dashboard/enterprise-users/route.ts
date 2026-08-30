@@ -5,10 +5,12 @@ import {
   loadEnterpriseUsers,
   grantShopAccess,
   revokeShopAccess,
+  updateEnterpriseUserRole,
   type ShopInfo,
 } from "@/lib/enterprise-access";
 import { FEATURE_METADATA } from "@/lib/featureResolver";
 import { FEATURE_KEYS, isFounderPlan } from "@/lib/plan-feature-tiers";
+import { canManageEnterpriseSettings } from "@/lib/enterprise-settings-catalog";
 
 export const runtime = "nodejs";
 
@@ -18,10 +20,16 @@ export async function GET() {
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    if (!canManageEnterpriseSettings(session)) {
+      return NextResponse.json({ error: "Permission denied" }, { status: 403 });
+    }
 
     const db = await getDb();
 
-    const shop = await db.collection("shops").findOne({ shopId: session.shopId });
+    const sessionShopId = Number(session.shopId);
+    const shop = await db.collection("shops").findOne({
+      shopId: { $in: [sessionShopId, String(sessionShopId)] },
+    });
 
     if (!shop?.enterpriseId) {
       return NextResponse.json({ error: "Shop not part of an enterprise" }, { status: 404 });
@@ -41,7 +49,11 @@ export async function GET() {
 
     const shops = await db
       .collection("shops")
-      .find({ shopId: { $in: enterprise.shopIds || [] } })
+      .find({
+        shopId: {
+          $in: [...enterpriseShopIds, ...enterpriseShopIds.map(String)],
+        },
+      })
       .project({ shopId: 1, name: 1, locationIdentifier: 1 })
       .toArray();
 
@@ -69,7 +81,7 @@ export async function GET() {
     const initialShopId = Number((enterprise.shopIds || [])[0]);
     if (Number.isFinite(initialShopId)) {
       const sourceShop = await db.collection("shops").findOne(
-        { shopId: initialShopId },
+        { shopId: { $in: [initialShopId, String(initialShopId)] } },
         { projection: { name: 1, locationIdentifier: 1, "billing.plan": 1, "billing.status": 1, enabledFeatures: 1 } }
       );
       if (sourceShop) {
@@ -110,6 +122,8 @@ export async function GET() {
       })),
       users: userList,
       newLocationDefaults,
+      currentUserRole: session.role,
+      canManageRoles: session.role === "owner",
     });
   } catch (err) {
     console.error("Error fetching enterprise users:", err);
@@ -128,15 +142,24 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Permission denied" }, { status: 403 });
     }
 
-    const { email, shopId, action } = await req.json();
+    const { email, shopId, action, role } = await req.json();
 
-    if (!email || !shopId || !action) {
+    if (
+      typeof email !== "string" ||
+      !email.trim() ||
+      typeof action !== "string" ||
+      !action ||
+      (action !== "role" && !shopId)
+    ) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
     const db = await getDb();
 
-    const shop = await db.collection("shops").findOne({ shopId: session.shopId });
+    const sessionShopId = Number(session.shopId);
+    const shop = await db.collection("shops").findOne({
+      shopId: { $in: [sessionShopId, String(sessionShopId)] },
+    });
 
     if (!shop?.enterpriseId) {
       return NextResponse.json({ error: "Shop not part of an enterprise" }, { status: 403 });
@@ -150,11 +173,39 @@ export async function POST(req: Request) {
       .map(Number)
       .filter((n: number) => Number.isFinite(n));
 
-    if (!enterprise || !enterpriseShopIds.includes(Number(shopId))) {
+    if (!enterprise) {
+      return NextResponse.json({ error: "Enterprise not found" }, { status: 404 });
+    }
+
+    if (action === "role") {
+      if (session.role !== "owner") {
+        return NextResponse.json({ error: "Only an owner can change user roles" }, { status: 403 });
+      }
+      const result = await updateEnterpriseUserRole(db, {
+        enterpriseShopIds,
+        email,
+        role: String(role || ""),
+        updatedBy: session.email,
+      });
+      if (!result.ok) {
+        return NextResponse.json({ error: result.error }, { status: result.status || 400 });
+      }
+      return NextResponse.json({
+        ok: true,
+        message: `Role changed to ${role}`,
+        matchedCount: result.matchedCount,
+        updatedCount: result.updatedCount,
+      });
+    }
+
+    if (!enterpriseShopIds.includes(Number(shopId))) {
       return NextResponse.json({ error: "Shop not in your enterprise" }, { status: 400 });
     }
 
-    const targetShop = await db.collection("shops").findOne({ shopId });
+    const targetShopId = Number(shopId);
+    const targetShop = await db.collection("shops").findOne({
+      shopId: { $in: [targetShopId, String(targetShopId)] },
+    });
     const shopName = targetShop?.name || `Shop ${shopId}`;
 
     if (action === "grant") {

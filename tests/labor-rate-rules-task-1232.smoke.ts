@@ -233,17 +233,14 @@ async function run() {
     Object.assign(__laborRateRuleDeps, originalRepositoryDeps);
   }
 
-  // Labor-only copy handlers may import Mongo for legacy setting types, but
-  // must acquire it only in the non-labor fallthrough branch.
+  // Every category now goes through the canonical-aware shared shop
+  // repository; the copy handler must not acquire Mongo directly.
   const copyRouteSource = readFileSync(
     new URL("../app/api/enterprise/copy-settings/route.ts", import.meta.url),
     "utf8",
   );
-  assert.equal((copyRouteSource.match(/await getDb\(\)/g) || []).length, 1);
-  assert.ok(
-    copyRouteSource.indexOf("await getDb()") >
-      copyRouteSource.indexOf("if (includesLaborRates && types.length === 1)"),
-  );
+  assert.equal(copyRouteSource.includes("getDb"), false);
+  assert.equal(copyRouteSource.includes("replaceSharedSettingsForShop"), true);
 
   console.log("labor-rate task 1232 smoke checks passed");
 }

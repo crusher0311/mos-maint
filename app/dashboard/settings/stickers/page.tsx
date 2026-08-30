@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Loader2, Check, Download, Calendar, Settings2, Upload, ChevronDown, ChevronRight, RefreshCw, Save, Copy, Building2 } from "lucide-react";
 import { StickerDesigner } from "@/components/sticker-designer";
 import { StickerLayout, createDefaultLayout, getStickerSize, DEFAULT_STICKER_SIZE } from "@/lib/sticker-designer-types";
+import CopyFromLocationDropdown, { CopySettingsToAllButton } from "@/components/ui/CopyFromLocationDropdown";
 
 interface IntervalConfig {
   mileage: number;
@@ -538,11 +539,17 @@ export default function StickerSettingsPage() {
 
   return (
     <main className="p-6 max-w-7xl">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Oil Change Sticker Designer</h1>
-        <p className="text-gray-600 mt-1">
-          Design your custom oil change stickers with drag-and-drop positioning.
-        </p>
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Oil Change Sticker Designer</h1>
+          <p className="text-gray-600 mt-1">
+            Design your custom oil change stickers with drag-and-drop positioning.
+          </p>
+        </div>
+        <div className="flex flex-wrap justify-end gap-2">
+          <CopyFromLocationDropdown settingType="stickers" onCopyComplete={fetchSettings} disabled={saving} />
+          <CopySettingsToAllButton settingType="stickers" onCopyComplete={fetchSettings} disabled={saving} />
+        </div>
       </div>
 
       {message && (

@@ -20,7 +20,7 @@ import {
   EyeOff,
   Eye,
 } from "lucide-react";
-import CopyFromLocationDropdown from "@/components/ui/CopyFromLocationDropdown";
+import CopyFromLocationDropdown, { CopySettingsToAllButton } from "@/components/ui/CopyFromLocationDropdown";
 
 // Service keys aligned with CARFAX categories
 const SERVICE_KEYS = [
@@ -504,11 +504,10 @@ export default function CannedJobsSettingsPage() {
               {integrationName}
             </span>
           </h1>
-          <CopyFromLocationDropdown
-            settingType="cannedJobs"
-            onCopyComplete={fetchMappings}
-            disabled={saving}
-          />
+          <div className="flex flex-wrap justify-end gap-2">
+            <CopyFromLocationDropdown settingType="cannedJobs" onCopyComplete={fetchMappings} disabled={saving} />
+            <CopySettingsToAllButton settingType="cannedJobs" onCopyComplete={fetchMappings} disabled={saving} />
+          </div>
         </div>
         <p className="mt-2 text-gray-600">
           Map maintenance recommendations to {integrationName} canned jobs. You can assign multiple canned jobs

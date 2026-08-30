@@ -56,6 +56,84 @@ export const __laborRateRuleDeps = {
   getCollection: collection,
 };
 
+export const __sharedSettingsDeps = {
+  isIdentityPgCanonical,
+  updatePgShopFields: pg.updateShopFields,
+  getCollection: collection,
+};
+
+/** Complete-path replacement used by the shared enterprise settings catalog. */
+export async function replaceSharedSettingsForShop(
+  shopId: number,
+  fields: Record<string, unknown>,
+): Promise<{ matchedCount: number; modifiedCount: number }> {
+  if (__sharedSettingsDeps.isIdentityPgCanonical()) {
+    const result = await __sharedSettingsDeps.updatePgShopFields(shopId, fields);
+    if (result.matchedCount !== 1) return result;
+
+    // These settings still have live Mongo-backed readers (including sticker
+    // rendering and location-level forms). Keep their observable store in sync
+    // and surface a failure rather than reporting a copy that users cannot see.
+    const col = await __sharedSettingsDeps.getCollection();
+    const mongoResult = await col.updateOne(
+      { $or: [{ shopId }, { shopId: String(shopId) }] },
+      { $set: { ...fields, updatedAt: new Date() } },
+    );
+    if (mongoResult.matchedCount !== 1) {
+      throw new Error(`Mongo settings shadow not found for shop ${shopId}`);
+    }
+    return result;
+  }
+  const col = await __sharedSettingsDeps.getCollection();
+  const result = await col.updateOne(
+    { $or: [{ shopId }, { shopId: String(shopId) }] },
+    { $set: { ...fields, updatedAt: new Date() } },
+  );
+  return {
+    matchedCount: result.matchedCount,
+    modifiedCount: result.modifiedCount,
+  };
+}
+
+/**
+ * Sticker rendering checks this Mongo-backed binary cache before config URLs.
+ * Replace (or clear) it with the sticker category so an old destination logo
+ * cannot shadow the newly copied settings. There is no canonical PG table for
+ * shop media.
+ */
+export async function replaceShopLogoMedia(
+  sourceShopId: number,
+  destinationShopId: number,
+): Promise<void> {
+  const db = await getDb();
+  const media = db.collection("shop_media");
+  const source = await media.findOne({
+    shopId: { $in: [sourceShopId, String(sourceShopId)] },
+    type: "logo",
+  });
+  const destinationFilter = {
+    shopId: { $in: [destinationShopId, String(destinationShopId)] },
+    type: "logo",
+  };
+  if (!source?.dataUri) {
+    await media.deleteMany(destinationFilter);
+    return;
+  }
+  await media.updateOne(
+    destinationFilter,
+    {
+      $set: {
+        shopId: destinationShopId,
+        type: "logo",
+        dataUri: source.dataUri,
+        contentType: source.contentType || "image/png",
+        updatedAt: new Date(),
+      },
+    },
+    { upsert: true },
+  );
+}
+
 export async function findShopByShopId<T extends ShopDoc = ShopDoc>(
   shopId: number | string,
   projection?: ShopProjection,

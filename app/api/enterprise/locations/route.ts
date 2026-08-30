@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { getEnterpriseByShopId } from "@/lib/enterprise";
 import { canManageEnterpriseLaborRates } from "@/lib/labor-rate-rules";
 import { listShopsByShopIds } from "@/lib/data/repositories/shops";
+import { canManageEnterpriseSettings } from "@/lib/enterprise-settings-catalog";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,6 +12,9 @@ export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!canManageEnterpriseSettings(session)) {
+    return NextResponse.json({ error: "Permission denied" }, { status: 403 });
   }
 
   const currentShopId = Number(session.shopId);
@@ -45,6 +49,7 @@ export async function GET(req: NextRequest) {
     enterpriseId: enterprise._id,
     enterpriseName: enterprise.name,
     canManageLaborRates: canManageEnterpriseLaborRates(session),
+    canManageSettings: true,
     locations,
   });
 }

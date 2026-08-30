@@ -6,6 +6,13 @@ import {
   deleteSessionsByShopId as pgDeleteSessionsByShopId,
 } from "@/lib/data/repositories/pg/identity";
 
+export const __enterpriseAccessDeps = {
+  dualWritePgIdentity,
+  updateUserFields,
+  deleteUserById,
+  pgDeleteSessionsByShopId,
+};
+
 /**
  * Unified multi-location ("shop") access for enterprise users.
  *
@@ -47,6 +54,8 @@ export interface AccessResult {
   status?: number;
   error?: string;
   message?: string;
+  matchedCount?: number;
+  updatedCount?: number;
 }
 
 function toNum(v: unknown): number | null {
@@ -162,15 +171,76 @@ export async function loadEnterpriseUsers(
 
 async function loadUserDocs(db: Db, emailLower: string, enterpriseShopIds: number[]) {
   const matchIds = matchIdsFor(enterpriseShopIds);
+  const escapedEmail = emailLower.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return db
     .collection("users")
     .find({
       $and: [
-        { $or: [{ email: emailLower }, { emailLower }] },
+        {
+          $or: [
+            { email: { $regex: `^${escapedEmail}$`, $options: "i" } },
+            { emailLower },
+          ],
+        },
         { $or: [{ shopId: { $in: matchIds } }, { shopIds: { $in: matchIds } }] },
       ],
     })
     .toArray();
+}
+
+/**
+ * Change an enterprise member's role without leaving duplicate per-location
+ * documents out of sync. Authorization belongs in the calling route; this
+ * helper only enforces safe target roles and enterprise-scoped documents.
+ */
+export async function updateEnterpriseUserRole(
+  db: Db,
+  opts: {
+    enterpriseShopIds: number[];
+    email: string;
+    role: string;
+    updatedBy: string;
+  },
+): Promise<AccessResult> {
+  const emailLower = opts.email.trim().toLowerCase();
+  const role = opts.role.trim().toLowerCase();
+
+  if (!["admin", "user"].includes(role)) {
+    return { ok: false, status: 400, error: "Role must be admin or user" };
+  }
+
+  const docs = await loadUserDocs(db, emailLower, opts.enterpriseShopIds);
+  if (docs.length === 0) {
+    return { ok: false, status: 404, error: "User not found in enterprise" };
+  }
+  if (docs.some((doc) => String(doc.role || "").toLowerCase() === "owner")) {
+    return { ok: false, status: 400, error: "The enterprise owner role cannot be changed here" };
+  }
+
+  const docIds = docs.map((doc) => doc._id);
+  const result = await db.collection("users").updateMany(
+    { _id: { $in: docIds } },
+    {
+      $set: {
+        role,
+        emailLower,
+        updatedAt: new Date(),
+        updatedBy: opts.updatedBy,
+      },
+    },
+  );
+
+  for (const doc of docs) {
+    await __enterpriseAccessDeps.dualWritePgIdentity(`users.update(enterprise role ${role})`, () =>
+      __enterpriseAccessDeps.updateUserFields(String(doc._id), { role, emailLower }),
+    );
+  }
+
+  return {
+    ok: true,
+    matchedCount: result.matchedCount ?? docs.length,
+    updatedCount: result.modifiedCount ?? 0,
+  };
 }
 
 function accessibleSet(docs: any[], enterpriseShopIds: number[]): Set<number> {
@@ -234,8 +304,8 @@ export async function grantShopAccess(
     },
   );
   for (const d of docs) {
-    await dualWritePgIdentity(`users.update(grant shop ${targetNum})`, () =>
-      updateUserFields(String(d._id), { shopIds: newShopIds, emailLower }),
+    await __enterpriseAccessDeps.dualWritePgIdentity(`users.update(grant shop ${targetNum})`, () =>
+      __enterpriseAccessDeps.updateUserFields(String(d._id), { shopIds: newShopIds, emailLower }),
     );
   }
 
@@ -296,8 +366,8 @@ export async function revokeShopAccess(
 
   for (const d of docsToDelete) {
     await db.collection("users").deleteOne({ _id: d._id });
-    await dualWritePgIdentity(`users.delete(revoke shop ${targetNum})`, () =>
-      deleteUserById(String(d._id)),
+    await __enterpriseAccessDeps.dualWritePgIdentity(`users.delete(revoke shop ${targetNum})`, () =>
+      __enterpriseAccessDeps.deleteUserById(String(d._id)),
     );
   }
 
@@ -306,8 +376,8 @@ export async function revokeShopAccess(
       { _id: docToRepoint._id },
       { $set: { shopId: remaining[0], shopIds: remainingStr, updatedAt: new Date() } },
     );
-    await dualWritePgIdentity(`users.update(repoint shop ${targetNum})`, () =>
-      updateUserFields(String(docToRepoint._id), {
+    await __enterpriseAccessDeps.dualWritePgIdentity(`users.update(repoint shop ${targetNum})`, () =>
+      __enterpriseAccessDeps.updateUserFields(String(docToRepoint._id), {
         shopId: remaining[0],
         shopIds: remainingStr,
       }),
@@ -321,16 +391,16 @@ export async function revokeShopAccess(
       { $set: { shopIds: remainingStr, emailLower, updatedAt: new Date() } },
     );
     for (const id of survivingIds) {
-      await dualWritePgIdentity(`users.update(revoke shop ${targetNum})`, () =>
-        updateUserFields(String(id), { shopIds: remainingStr, emailLower }),
+      await __enterpriseAccessDeps.dualWritePgIdentity(`users.update(revoke shop ${targetNum})`, () =>
+        __enterpriseAccessDeps.updateUserFields(String(id), { shopIds: remainingStr, emailLower }),
       );
     }
   }
 
   // Tear down sessions bound to the revoked shop (parity with prior behavior).
   await db.collection("sessions").deleteMany({ shopId: targetNum });
-  await dualWritePgIdentity("sessions.delete(enterprise revoke)", () =>
-    pgDeleteSessionsByShopId(targetNum),
+  await __enterpriseAccessDeps.dualWritePgIdentity("sessions.delete(enterprise revoke)", () =>
+    __enterpriseAccessDeps.pgDeleteSessionsByShopId(targetNum),
   );
 
   return { ok: true };
