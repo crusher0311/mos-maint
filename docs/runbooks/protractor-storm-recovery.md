@@ -16,6 +16,11 @@ egress IP may be tested.
   connection IDs.
 - Stop immediately if request volume exceeds the agreed canary ceiling, any
   unrelated provider is affected, or the provider-wide breaker opens.
+- A closed-to-open connection or provider breaker transition emits one critical
+  `Protractor traffic automatically blocked` ops alert. It includes the scope,
+  response class, cooldown, and a one-way connection fingerprint only. Repeated
+  failures during the same open period do not page again; a successful recovery
+  clears the incident so a later open transition pages again.
 
 ## 1. Deploy while outbound remains blocked
 
@@ -48,9 +53,12 @@ Do not proceed if any REST or SOAP call is recorded while the switch is on.
 3. Confirm exactly one upstream request and a successful response.
 4. Wait through the observation window before allowing another request.
 5. If the response is 401/403, stop. Confirm the per-connection breaker opens
-   and that subsequent requests produce zero upstream calls.
+   and that subsequent requests produce zero upstream calls. Confirm exactly one
+   connection-scope ops alert with response class `authentication`.
 6. If responses are 429 or 5xx, stop. Confirm bounded Retry-After-aware backoff
-   and that the provider breaker prevents continued amplification.
+   and that the provider breaker prevents continued amplification. Confirm
+   exactly one provider-scope ops alert with the matching response class and
+   cooldown.
 7. Restore `PROTRACTOR_OUTBOUND_DISABLED=true` before investigating any anomaly.
 
 ## 4. Expand gradually

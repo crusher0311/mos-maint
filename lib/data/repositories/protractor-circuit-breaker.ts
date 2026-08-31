@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { getDb } from "@/lib/mongo";
+import { sendOpsAlert } from "@/lib/alerts/notify";
 
 const COLLECTION = "protractor_circuit_breakers";
 const AUTH_COOLDOWN_MS = 5 * 60_000;
@@ -91,10 +92,41 @@ async function releaseClaimedProbe(key: string): Promise<void> {
 export const __protractorCircuitBreakerTestHooks: {
   claimScope: (key: string, now: Date) => Promise<ProtractorGateDecision>;
   releaseClaimedProbe: (key: string) => Promise<void>;
+  getDb: typeof getDb;
+  alert: typeof sendOpsAlert;
 } = {
   claimScope,
   releaseClaimedProbe,
+  getDb,
+  alert: sendOpsAlert,
 };
+
+type BreakerScope = "provider" | "connection";
+type ResponseClass = "authentication" | "throttled" | "server" | "transport";
+
+async function pageBreakerOpen(input: {
+  scope: BreakerScope;
+  responseClass: ResponseClass;
+  cooldownMs: number;
+  connectionFingerprint: string;
+}): Promise<void> {
+  await __protractorCircuitBreakerTestHooks.alert({
+    title: "Protractor traffic automatically blocked",
+    severity: "critical",
+    summary: `The ${input.scope} circuit breaker opened and Protractor traffic is being contained automatically.`,
+    fields: {
+      scope: input.scope,
+      responseClass: input.responseClass,
+      cooldownMs: input.cooldownMs,
+      connectionFingerprint: input.connectionFingerprint,
+    },
+    source: "protractor-circuit-breaker",
+    dedupKey:
+      input.scope === "connection"
+        ? `protractor-breaker:connection:${input.connectionFingerprint}`
+        : "protractor-breaker:provider",
+  });
+}
 
 /**
  * Distributed gate used immediately before every live Protractor transport.
@@ -130,7 +162,7 @@ export async function recordProtractorResponse(
   retryAfterMs = 0,
   now = new Date(),
 ): Promise<void> {
-  const db = await getDb();
+  const db = await __protractorCircuitBreakerTestHooks.getDb();
   const collection = db.collection<BreakerDocument>(COLLECTION);
   const connHash = connectionHash(connectionId);
   const connKey = `connection:${connHash}`;
@@ -184,8 +216,8 @@ export async function recordProtractorResponse(
   }
 
   if (statusCode === 401 || statusCode === 403) {
-    await collection.updateOne(
-      { _id: connKey },
+    const openedConnection = await collection.findOneAndUpdate(
+      { _id: connKey, openUntil: { $exists: false } },
       {
         $set: {
           scope: "connection",
@@ -196,16 +228,40 @@ export async function recordProtractorResponse(
         },
         $unset: { probeUntil: "" },
       },
-      { upsert: true },
+      { returnDocument: "after" },
     );
+    if (openedConnection) {
+      await pageBreakerOpen({
+        scope: "connection",
+        responseClass: "authentication",
+        cooldownMs: AUTH_COOLDOWN_MS,
+        connectionFingerprint: connHash,
+      }).catch((error) => {
+        console.error("[ProtractorCircuitBreaker] Failed to deliver connection-open alert:", error);
+      });
+    }
 
     const recentConnections = await collection.countDocuments({
       scope: "connection",
       authFailureAt: { $gte: new Date(now.getTime() - AUTH_CORRELATION_WINDOW_MS) },
     });
     if (recentConnections >= PROVIDER_AUTH_CONNECTIONS) {
+      // Ensure the provider document exists before the transition claim. Using
+      // an upsert on the conditional claim itself can race: after one replica
+      // opens the existing document, another replica's filter no longer
+      // matches and Mongo may attempt a duplicate _id insert.
       await collection.updateOne(
         { _id: "provider" },
+        {
+          $setOnInsert: {
+            scope: "provider",
+            updatedAt: now,
+          },
+        },
+        { upsert: true },
+      );
+      const openedProvider = await collection.findOneAndUpdate(
+        { _id: "provider", openUntil: { $exists: false } },
         {
           $set: {
             scope: "provider",
@@ -214,8 +270,18 @@ export async function recordProtractorResponse(
           },
           $unset: { probeUntil: "" },
         },
-        { upsert: true },
+        { returnDocument: "after" },
       );
+      if (openedProvider) {
+        await pageBreakerOpen({
+          scope: "provider",
+          responseClass: "authentication",
+          cooldownMs: AUTH_COOLDOWN_MS,
+          connectionFingerprint: connHash,
+        }).catch((error) => {
+          console.error("[ProtractorCircuitBreaker] Failed to deliver provider-open alert:", error);
+        });
+      }
     }
     return;
   }
@@ -232,10 +298,27 @@ export async function recordProtractorResponse(
     );
     if ((result?.transientFailures ?? 0) >= PROVIDER_TRANSIENT_FAILURES) {
       const cooldown = Math.max(TRANSIENT_COOLDOWN_MS, retryAfterMs);
-      await collection.updateOne(
-        { _id: "provider" },
+      const openedProvider = await collection.findOneAndUpdate(
+        { _id: "provider", openUntil: { $exists: false } },
         { $set: { openUntil: new Date(now.getTime() + cooldown), updatedAt: now } },
+        { returnDocument: "after" },
       );
+      if (openedProvider) {
+        const responseClass: ResponseClass =
+          statusCode === 429
+            ? "throttled"
+            : statusCode === PROTRACTOR_TRANSPORT_FAILURE_STATUS
+              ? "transport"
+              : "server";
+        await pageBreakerOpen({
+          scope: "provider",
+          responseClass,
+          cooldownMs: cooldown,
+          connectionFingerprint: connHash,
+        }).catch((error) => {
+          console.error("[ProtractorCircuitBreaker] Failed to deliver provider-open alert:", error);
+        });
+      }
     }
   }
 }

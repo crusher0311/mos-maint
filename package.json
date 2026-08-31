@@ -42,7 +42,7 @@
     "test:plan-build-task-479": "tsx tests/plan-build-task-479.smoke.ts",
     "test:tekmig-api-auth": "tsx tests/tekmetric-migration-api-auth.smoke.ts",
     "test:protractor-retry-deadlock": "tsx tests/protractor-retry-limiter-deadlock.smoke.ts",
-    "test:protractor-circuit-breaker": "tsx tests/protractor-circuit-breaker-task-1244.smoke.ts",
+    "test:protractor-circuit-breaker": "tsx tests/protractor-circuit-breaker-task-1244.smoke.ts && tsx tests/protractor-circuit-breaker-alerts.smoke.ts",
     "test:protractor-resilience": "npm run test:protractor-callback-admission && npm run test:protractor-circuit-breaker && npm run test:protractor-retry-deadlock",
     "test:protractor-resolve-wo-guid": "tsx tests/protractor-resolve-wo-guid.smoke.ts",
     "test:protractor-new-shop-fastpath": "tsx tests/protractor-new-shop-fastpath.smoke.ts",
