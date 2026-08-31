@@ -65,6 +65,7 @@ interface ShopFeatures {
   concern_assistant?: boolean;
   dvi_prefill?: boolean;
   enhance_notes?: boolean;
+  sales_coach?: boolean;
 }
 
 interface IntegrationDetails {
@@ -1334,6 +1335,7 @@ export default function PlatformShopsPage() {
                     { key: "dvi_prefill", label: "DVI Pre-fill (VHI)", desc: "Auto-fill DVI inspection ratings using VHI maintenance data" },
                     { key: "enhance_notes", label: "Enhance Notes (AI)", desc: "AI-powered rewriting of technician notes into customer-facing language" },
                     { key: "estimate_assist", label: "Estimate Assist", desc: "AI-powered estimate audits and smart job building" },
+                    { key: "sales_coach", label: "Sales Coach", desc: "Review open estimates and generate customer-ready sales scripts" },
                   ].map(feature => {
                     const isFounder = billingEdits.plan === "detect_dog_founder";
                     const checked = isFounder
@@ -1531,6 +1533,7 @@ export default function PlatformShopsPage() {
                     { key: "dvi_prefill", label: "DVI Pre-fill (VHI)" },
                     { key: "enhance_notes", label: "Enhance Notes (AI)" },
                     { key: "estimate_assist", label: "Estimate Assist" },
+                    { key: "sales_coach", label: "Sales Coach" },
                   ].map(feature => (
                     <label key={feature.key} className="flex items-center gap-2 p-2 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
                       <input

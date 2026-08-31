@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { resolveCarfaxConfig, fetchCarfaxWithCache } from "@/lib/integrations/carfax";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
+import { canAccessShopFeature } from "@/lib/shop-feature-access";
 
 function parseCarfaxDate(val: string | null): Date | null {
   if (!val) return null;
@@ -27,6 +29,10 @@ export async function GET(req: NextRequest) {
   const shopId = Number(session.shopId);
   if (!shopId) {
     return NextResponse.json({ error: "No shop associated" }, { status: 400 });
+  }
+  const entitlements = await getFeatureEntitlements(shopId);
+  if (!canAccessShopFeature(session, entitlements, "maintenance")) {
+    return NextResponse.json({ error: "Feature not enabled" }, { status: 403 });
   }
 
   try {

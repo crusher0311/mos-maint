@@ -12,6 +12,7 @@ import {
   type DataOneCallers,
 } from "./unit-resolver";
 import { readSpecsCache, writeSpecsCache } from "./specs-cache";
+import { checkShopFeatureGate } from "@/lib/extension-route-guard";
 
 // Re-export so other code paths can import from the route module if needed.
 export { resolveSpecsUnitDisplayFromShop, callDataOneWithRetry } from "./unit-resolver";
@@ -74,6 +75,11 @@ async function _GET(req: NextRequest) {
   const hasSmsHint = Object.values(smsHint).some((v) => v && String(v).trim().length > 0);
   const upperVin = vin.toUpperCase();
   const shopId = Number(auth.user?.shopId ?? 0);
+  const featureFailure = await checkShopFeatureGate(shopId, ["maintenance"], {
+    featureLabel: "Maintenance",
+    corsHeaders,
+  });
+  if (featureFailure) return featureFailure;
 
   const requestStarted = Date.now();
   try {

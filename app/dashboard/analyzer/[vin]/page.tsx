@@ -3,6 +3,10 @@ import { analyzeMaintenance } from "@/lib/analyzer";
 import { buildEvidenceForVIN } from "@/lib/evidence";
 import AnalyzerResults from "@/components/AnalyzerResults";
 import EvidencePanel from "@/components/EvidencePanel";
+import { redirect } from "next/navigation";
+import { requireSession } from "@/lib/auth";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
+import { canAccessShopFeature } from "@/lib/shop-feature-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,6 +14,13 @@ export const dynamic = "force-dynamic";
 type Props = { params: { vin: string } };
 
 export default async function AnalyzerPage({ params }: Props) {
+  const session = await requireSession();
+  try {
+    const entitlements = await getFeatureEntitlements(Number(session.shopId));
+    if (!canAccessShopFeature(session, entitlements, "maintenance")) redirect("/dashboard");
+  } catch {
+    redirect("/dashboard");
+  }
   const vin = params.vin.toUpperCase();
 
   // 1) Gather grounding (DVI + CARFAX + OE) from Mongo

@@ -18,6 +18,7 @@ import {
   classifyMissedOpportunityLoad,
   runMissedOpportunityRefresh,
 } from "@/lib/missed-opportunities-refresh";
+import { canAccessShopFeature } from "@/lib/shop-feature-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -56,6 +57,16 @@ export async function GET(req: NextRequest) {
           upgradeRequired: true,
         },
         { status: 402 },
+      );
+    }
+    if (!canAccessShopFeature(session, entitlements, "maintenance")) {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "FEATURE_NOT_AVAILABLE",
+          error: "Maintenance is not enabled for this shop.",
+        },
+        { status: 403 },
       );
     }
 

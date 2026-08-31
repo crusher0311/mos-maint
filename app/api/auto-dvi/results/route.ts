@@ -20,8 +20,8 @@ const MAX_TEXT = 1000;
 async function gate() {
   const session = await getSession();
   if (!session) return { session: null as any, denied: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
-  const denied = await checkShopFeatureGate(Number(session.shopId), ["auto_dvi"], {
-    isPlatformAdmin: session.role === "platform_admin",
+  const denied = await checkShopFeatureGate(Number(session.shopId), ["maintenance", "auto_dvi"], {
+    isPlatformAdmin: session.role === "platform_admin" && !session.isImpersonation,
     featureLabel: "Auto DVI",
   });
   return { session, denied };

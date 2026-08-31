@@ -5,6 +5,8 @@ import {
   getAiAnalysisDoc,
   upsertAiAnalysisDoc,
 } from "@/lib/data/repositories/plan-cache-store";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
+import { canAccessShopFeature } from "@/lib/shop-feature-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,6 +17,10 @@ export async function GET(request: NextRequest) {
     const session = await requireSession();
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const entitlements = await getFeatureEntitlements(Number(session.shopId));
+    if (!canAccessShopFeature(session, entitlements, "maintenance")) {
+      return NextResponse.json({ error: "Feature not enabled" }, { status: 403 });
     }
 
     const searchParams = request.nextUrl.searchParams;
@@ -60,6 +66,10 @@ export async function POST(request: NextRequest) {
     const session = await requireSession();
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const entitlements = await getFeatureEntitlements(Number(session.shopId));
+    if (!canAccessShopFeature(session, entitlements, "maintenance")) {
+      return NextResponse.json({ error: "Feature not enabled" }, { status: 403 });
     }
 
     const { vin, result } = await request.json();

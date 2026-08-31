@@ -104,6 +104,29 @@ export async function insertPlatformFeatures(
   return res.insertedCount;
 }
 
+/**
+ * Add newly introduced canonical features without changing any existing
+ * administrator-managed catalog row.
+ */
+export async function insertMissingPlatformFeatures(
+  docs: PlatformFeatureDoc[],
+): Promise<number> {
+  if (docs.length === 0) return 0;
+  const col = await collection();
+  const res = await col.bulkWrite(
+    docs
+      .filter((doc): doc is PlatformFeatureDoc & { slug: string } => Boolean(doc.slug))
+      .map((doc) => ({
+        updateOne: {
+          filter: { slug: doc.slug },
+          update: { $setOnInsert: doc },
+          upsert: true,
+        },
+      })),
+  );
+  return res.upsertedCount ?? 0;
+}
+
 export async function updatePlatformFeatureById(
   id: string | ObjectId,
   update: UpdateFilter<PlatformFeatureDoc>,

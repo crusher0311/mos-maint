@@ -1,11 +1,23 @@
 import { NextResponse } from "next/server";
 import { requirePlatformAdmin } from "@/lib/auth";
 import {
-  countPlatformFeatures,
-  insertPlatformFeatures,
+  insertMissingPlatformFeatures,
 } from "@/lib/data/repositories/platform-features";
+import { getDb as getPgDb } from "@/lib/db/drizzle";
+import { platformFeatures } from "@/lib/db/schema/platform-features";
 
 const DEFAULT_FEATURES = [
+  {
+    order: -1,
+    name: "Sales Coach",
+    slug: "sales_coach",
+    description: "Review open estimates and generate customer-ready sales scripts.",
+    category: "core",
+    status: "active",
+    icon: "Megaphone",
+    compatibleSMS: ["protractor", "tekmetric", "autoflow", "shopware", "shopmonkey"],
+    includedInTiers: [],
+  },
   // Task #991 — Auto DVI ships dark: no tiers include it until an admin
   // enables it per shop or adds a tier here. Seeding the row (rather than
   // leaving it unseeded) makes the OFF state explicit and admin-editable.
@@ -168,14 +180,6 @@ export async function POST() {
   try {
     await requirePlatformAdmin();
 
-    const existingCount = await countPlatformFeatures();
-    if (existingCount > 0) {
-      return NextResponse.json({
-        ok: false,
-        error: "Features already exist. Delete all features first to reseed.",
-      }, { status: 400 });
-    }
-
     const now = new Date();
     const featuresWithTimestamps = DEFAULT_FEATURES.map(f => ({
       ...f,
@@ -183,11 +187,28 @@ export async function POST() {
       updatedAt: now,
     }));
 
-    await insertPlatformFeatures(featuresWithTimestamps);
+    const inserted = await insertMissingPlatformFeatures(featuresWithTimestamps);
+    const pg = getPgDb();
+    await pg
+      .insert(platformFeatures)
+      .values(
+        featuresWithTimestamps.map((feature) => ({
+          order: feature.order,
+          name: feature.name,
+          slug: feature.slug,
+          description: feature.description,
+          status: feature.status,
+          includedInTiers: feature.includedInTiers,
+          createdAt: feature.createdAt,
+          updatedAt: feature.updatedAt,
+        })),
+      )
+      .onConflictDoNothing({ target: platformFeatures.slug });
 
     return NextResponse.json({
       ok: true,
-      message: `Seeded ${DEFAULT_FEATURES.length} features`,
+      message: `Added ${inserted} missing feature${inserted === 1 ? "" : "s"}`,
+      inserted,
     });
   } catch (error: any) {
     console.error("Error seeding features:", error);

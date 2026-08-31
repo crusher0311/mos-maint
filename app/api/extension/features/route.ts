@@ -7,6 +7,7 @@ import { validateExtensionToken, getUserShopIds, getAuthErrorStatus, buildAuthEr
 import { getFeatureEntitlements, ShopEntitlementsUnavailableError } from "@/lib/featureResolver";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { resolveInjectedButtonVisibility, INJECTED_BUTTON_PROVIDERS } from "@/lib/extension-button-visibility";
+import { resolveFloatingDetectDog } from "@/lib/floating-detect-dog";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -134,22 +135,17 @@ async function _GET(request: NextRequest) {
     //     defaults ON. A user may turn it off for themselves, but the owner's
     //     OFF is a hard gate the user cannot override.
     const effFeatures = (entitlements.effectiveFeatures || {}) as Record<string, boolean>;
-    const enabledFeatureKeys = Object.keys(effFeatures).filter((k) => effFeatures[k]);
-    const STICKER_KEYTAG_ONLY = new Set(["oil_sticker", "keytags"]);
-    const onlyStickerKeytag =
-      enabledFeatureKeys.length > 0 &&
-      enabledFeatureKeys.every((k) => STICKER_KEYTAG_ONLY.has(k));
-
     const ownerPref = shopDoc?.preferences?.floatingDetectDogEnabled;
-    const floatingButtonOwnerEnabled =
-      typeof ownerPref === "boolean" ? ownerPref : !onlyStickerKeytag;
-
     const userPref = (auth.user as any)?.floatingDetectDogEnabled;
-    const floatingButtonUserPreference =
-      typeof userPref === "boolean" ? userPref : null;
-    const userResolved = floatingButtonUserPreference === null ? true : floatingButtonUserPreference;
-
-    const floatingButtonEnabled = floatingButtonOwnerEnabled && userResolved;
+    const {
+      ownerEnabled: floatingButtonOwnerEnabled,
+      userPreference: floatingButtonUserPreference,
+      enabled: floatingButtonEnabled,
+    } = resolveFloatingDetectDog({
+      effectiveFeatures: effFeatures,
+      ownerPreference: ownerPref,
+      userPreference: userPref,
+    });
 
     // Task #1086: per-user injected-button visibility, intersected with the
     // shop's feature entitlements (hiding allowed, un-gating not). Resolved

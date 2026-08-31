@@ -5,6 +5,11 @@ import { trackOpenAiCall } from "@/lib/ai";
 import { enforceAiBudget } from "@/lib/ai-budget";
 import { getSession } from "@/lib/auth";
 import { userHasShopAccess } from "@/lib/data/repositories/shop-access";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
+import {
+  canAccessShopFeature,
+  canPlatformAdminBypassShopFeatures,
+} from "@/lib/shop-feature-access";
 
 // How long we'll wait on OpenAI before failing fast instead of hanging.
 const OPENAI_TIMEOUT_MS = 60_000;
@@ -16,10 +21,19 @@ const OPENAI_TIMEOUT_MS = 60_000;
  * any shop in the same enterprise as the user's home shop, or platform admin.
  */
 async function requesterHasShopAccess(
-  session: { shopId: number; email: string; role: string; isPlatformAdmin?: boolean },
+  session: {
+    shopId: number;
+    email: string;
+    role: string;
+    isPlatformAdmin?: boolean;
+    isImpersonation?: boolean;
+  },
   targetShopId: number,
 ): Promise<boolean> {
-  if (session.isPlatformAdmin || session.role === "platform_admin") return true;
+  if (canPlatformAdminBypassShopFeatures({
+    isPlatformAdmin: session.isPlatformAdmin || session.role === "platform_admin",
+    isImpersonation: session.isImpersonation,
+  })) return true;
   return userHasShopAccess(session.email, Number(session.shopId), targetShopId);
 }
 
@@ -147,6 +161,13 @@ export async function POST(req: NextRequest) {
     return Response.json(
       { ok: false, error: "Access denied to this shop" },
       { status: 403 }
+    );
+  }
+  const entitlements = await getFeatureEntitlements(shopIdNum);
+  if (!canAccessShopFeature(session, entitlements, "maintenance")) {
+    return Response.json(
+      { ok: false, error: "Feature not enabled" },
+      { status: 403 },
     );
   }
 

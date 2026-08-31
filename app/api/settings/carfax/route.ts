@@ -3,12 +3,23 @@ import { getDb } from "@/lib/mongo";
 import { requireSession } from "@/lib/auth";
 import { setShopCarfaxLocationId } from "@/lib/integrations/carfax";
 import { invalidateShopPlanCache } from "@/lib/plan-cache";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
+import { canAccessShopFeature } from "@/lib/shop-feature-access";
 
 export const runtime = "nodejs";
 
+async function requireMaintenanceSession() {
+  const session = await requireSession();
+  const entitlements = await getFeatureEntitlements(Number(session.shopId));
+  if (!canAccessShopFeature(session, entitlements, "maintenance")) {
+    throw new Response("Feature not enabled", { status: 403 });
+  }
+  return session;
+}
+
 export async function GET() {
   try {
-    const session = await requireSession();
+    const session = await requireMaintenanceSession();
     const shopId = Number(session.shopId);
 
     const db = await getDb();
@@ -25,13 +36,14 @@ export async function GET() {
       envConfigured: hasUrl && hasPdi,
     });
   } catch (e: any) {
+    if (e instanceof Response) return e;
     return NextResponse.json({ error: e?.message || "Unexpected error" }, { status: 500 });
   }
 }
 
 export async function POST(req: Request) {
   try {
-    const session = await requireSession();
+    const session = await requireMaintenanceSession();
     const shopId = Number(session.shopId);
     const body = await req.json();
     const { locationId } = body || {};
@@ -41,13 +53,14 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true, cacheCleared: cleared });
   } catch (e: any) {
+    if (e instanceof Response) return e;
     return NextResponse.json({ error: e?.message || "Unexpected error" }, { status: 500 });
   }
 }
 
 export async function DELETE() {
   try {
-    const session = await requireSession();
+    const session = await requireMaintenanceSession();
     const shopId = Number(session.shopId);
 
     const db = await getDb();
@@ -79,6 +92,7 @@ export async function DELETE() {
 
     return NextResponse.json({ ok: true, cacheCleared: cleared });
   } catch (e: any) {
+    if (e instanceof Response) return e;
     return NextResponse.json({ error: e?.message || "Unexpected error" }, { status: 500 });
   }
 }

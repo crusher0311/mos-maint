@@ -5,6 +5,7 @@ import {
   getRecommendationsCacheDoc,
   upsertRecommendationsCacheDoc,
 } from "@/lib/data/repositories/plan-cache-store";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,6 +24,10 @@ export const GET = createExternalEndpoint(
     
     const mileage = Number(req.nextUrl.searchParams.get("mileage")) || undefined;
     const includeAI = req.nextUrl.searchParams.get("includeAI") === "true";
+    const entitlements = await getFeatureEntitlements(Number(shopId));
+    if (!entitlements.canUseFeature("maintenance")) {
+      return NextResponse.json({ error: "Feature not enabled" }, { status: 403 });
+    }
     
     const db = await getDb();
     

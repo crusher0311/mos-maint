@@ -28,6 +28,11 @@ import {
   type VhiComparison,
   type VhiComparisonItem,
 } from "@/lib/estimate-assist/vhi-audit-match";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
+import {
+  canAccessShopFeature,
+  type ShopFeatureSession,
+} from "@/lib/shop-feature-access";
 
 // Static rule logic (missing parts/labor, labor-hour ranges, companion
 // suggestions, dedupe/sort, score math) lives in
@@ -56,6 +61,7 @@ export const __deps = {
   getOpenAI,
   trackOpenAiCall,
   getDb,
+  getFeatureEntitlements,
 };
 
 const corsHeaders = {
@@ -168,6 +174,7 @@ export async function POST(req: NextRequest) {
     // the only auth gate — it must validate the ext token itself.
     let sessionEmail: string | null = null;
     let shopId: number;
+    let shopFeatureSession: ShopFeatureSession = {};
 
     if (isExtensionBearerRequest(req)) {
       const extAuth = await __deps.validateExtensionToken(req);
@@ -186,7 +193,14 @@ export async function POST(req: NextRequest) {
       }
       sessionEmail = session.email;
       shopId = Number(session.shopId);
+      shopFeatureSession = session;
     }
+    const maintenanceEntitlements = await __deps.getFeatureEntitlements(shopId);
+    const canUseMaintenance = canAccessShopFeature(
+      shopFeatureSession,
+      maintenanceEntitlements,
+      "maintenance",
+    );
 
     const body: AuditRequest = await req.json();
 
@@ -378,7 +392,7 @@ export async function POST(req: NextRequest) {
     // and flag due/due-soon items that aren't quoted. Cache read only — a
     // miss/timeout degrades to a "skipped" note, never a rebuild or an error.
     let vhiComparison: VhiComparison = { status: "skipped", reason: "No VIN available for this repair order" };
-    if (vehicleVin) {
+    if (vehicleVin && canUseMaintenance) {
       try {
         const db = await __deps.getDb();
         const cachedPlan = await withUpstreamTimeout(

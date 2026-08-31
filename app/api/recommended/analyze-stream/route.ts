@@ -4,6 +4,8 @@ import { requireSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { resolveAutoflowConfig, fetchDviWithCache } from "@/lib/integrations/autoflow";
 import { resolveCarfaxConfig, fetchCarfaxWithCache } from "@/lib/integrations/carfax";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
+import { canAccessShopFeature } from "@/lib/shop-feature-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -48,6 +50,10 @@ export async function POST(request: NextRequest) {
     const session = await requireSession();
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const entitlements = await getFeatureEntitlements(Number(session.shopId));
+    if (!canAccessShopFeature(session, entitlements, "maintenance")) {
+      return NextResponse.json({ error: "Feature not enabled" }, { status: 403 });
     }
 
     const { vin, model } = await request.json();

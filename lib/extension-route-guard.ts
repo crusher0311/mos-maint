@@ -14,6 +14,11 @@ import type {
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { getFeatureEntitlements, type FeatureKey } from "@/lib/featureResolver";
 
+/** Test seam for entitlement behavior without a live database. */
+export const __deps = {
+  getFeatureEntitlements,
+};
+
 /**
  * Extension route guard.
  *
@@ -194,9 +199,8 @@ export async function guardExtensionShopRequest(
   const required = options.requiredFeatures ?? [];
   if (required.length > 0 && !isPlatformAdmin) {
     try {
-      const entitlements = await getFeatureEntitlements(Number(shopResult.mosShopId));
-      const eff = entitlements.effectiveFeatures;
-      const missing = required.filter((f) => !eff[f]);
+      const entitlements = await __deps.getFeatureEntitlements(Number(shopResult.mosShopId));
+      const missing = required.filter((f) => !entitlements.canUseFeature(f));
       if (missing.length > 0) {
         const label = options.featureLabel || missing[0];
         return {
@@ -258,9 +262,8 @@ export async function checkShopFeatureGate(
   const corsHeaders = options.corsHeaders ?? DEFAULT_CORS_HEADERS;
 
   try {
-    const entitlements = await getFeatureEntitlements(Number(mosShopId));
-    const eff = entitlements.effectiveFeatures;
-    const missing = requiredFeatures.filter((f) => !eff[f]);
+    const entitlements = await __deps.getFeatureEntitlements(Number(mosShopId));
+    const missing = requiredFeatures.filter((f) => !entitlements.canUseFeature(f));
     if (missing.length === 0) return null;
     const label = options.featureLabel || missing[0];
     return NextResponse.json(

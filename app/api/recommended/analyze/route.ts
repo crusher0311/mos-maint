@@ -7,12 +7,15 @@ import { resolveCarfaxConfig, fetchCarfaxWithCache } from "@/lib/integrations/ca
 import { logUsage, estimateCost, estimateTokens } from "@/lib/usage";
 import { trackApiRequest } from "@/lib/api-usage-tracker";
 import { enforceAiBudget } from "@/lib/ai-budget";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
+import { canAccessShopFeature } from "@/lib/shop-feature-access";
 
 export const runtime = "nodejs";
 
 /** Test seam — swap these in unit tests to avoid real DB / auth / AI calls. */
 export const __deps = {
   getSession,
+  getFeatureEntitlements,
   enforceAiBudget,
   callOpenAIFn: null as
     | null
@@ -226,6 +229,10 @@ export async function POST(req: Request) {
         { ok: false, error: "Session shopId is required" },
         { status: 400 }
       );
+    }
+    const entitlements = await __deps.getFeatureEntitlements(logShopIdNum);
+    if (!canAccessShopFeature(session, entitlements, "maintenance")) {
+      return NextResponse.json({ ok: false, error: "Feature not enabled" }, { status: 403 });
     }
 
     // Prefer pre-fetched inputs from the UI, fallback to fetching by VIN if provided.

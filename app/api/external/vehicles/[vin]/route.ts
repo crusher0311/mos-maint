@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createExternalEndpoint } from "@/lib/external-api/middleware";
 import { getDb } from "@/lib/mongo";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,15 +17,16 @@ export const GET = createExternalEndpoint(
         { status: 400 }
       );
     }
+    const entitlements = await getFeatureEntitlements(Number(shopId));
+    if (!entitlements.canUseFeature("maintenance")) {
+      return NextResponse.json({ error: "Feature not enabled" }, { status: 403 });
+    }
     
     const db = await getDb();
     
     const vehicle = await db.collection("vehicles").findOne({
-      $or: [
-        { vin: vin.toUpperCase() },
-        { vin: vin.toLowerCase() },
-        { vin }
-      ]
+      shopId: { $in: [Number(shopId), String(shopId)] },
+      vin: { $in: [vin.toUpperCase(), vin.toLowerCase(), vin] },
     });
     
     if (!vehicle) {

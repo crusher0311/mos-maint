@@ -127,6 +127,9 @@ export async function GET(request: NextRequest) {
 
     const db = await getDb();
     const user = { shopId: session.shopId, email: session.email, role: session.role };
+    const shopIdNum = Number(user.shopId);
+    const entitlements = await getFeatureEntitlements(shopIdNum);
+    const maintenanceEnabled = entitlements.canUseFeature("maintenance");
 
     // Check shop SMS configuration to skip unnecessary queries
     const shopConfig = await db.collection("shops").findOne({ shopId: { $in: [String(user.shopId), Number(user.shopId)] } });
@@ -1009,9 +1012,9 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    await batchEstimateMileage(
+    if (maintenanceEnabled) await batchEstimateMileage(
       db,
-      Number(user.shopId),
+      shopIdNum,
       allRows,
       // Wider CARFAX batch rides the same gate as the history-mileage lookup:
       // 25 parallel CARFAX fetches per dashboard load amplified the
@@ -1083,8 +1086,6 @@ export async function GET(request: NextRequest) {
     const distanceUnit = shop?.preferences?.distanceUnit || "miles";
     
     // Get enabled features for this shop from featureResolver
-    const shopIdNum = typeof user.shopId === 'string' ? parseInt(user.shopId, 10) : user.shopId;
-    const entitlements = await getFeatureEntitlements(shopIdNum);
     const enabledFeatures: FeatureKey[] = (Object.keys(entitlements.effectiveFeatures) as FeatureKey[])
       .filter(key => entitlements.effectiveFeatures[key]);
 

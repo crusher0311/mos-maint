@@ -7,6 +7,9 @@ import { resolveAutoflowConfig, fetchDviWithCache } from "@/lib/integrations/aut
 import { resolveCarfaxConfig, fetchCarfaxWithCache } from "@/lib/integrations/carfax";
 import { logUsage, estimateCost } from "@/lib/usage";
 import { trackApiRequest } from "@/lib/api-usage-tracker";
+import { getSession } from "@/lib/auth";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
+import { canAccessShopFeature } from "@/lib/shop-feature-access";
 
 // small utils
 function parseCarfaxDate(d?: string | null): Date | null {
@@ -148,9 +151,18 @@ async function getLocalOeFromMongo(vin: string) {
 
 export async function POST(req: NextRequest) {
   try {
-    const { vin, shopId, model } = await req.json();
-    if (!vin || !shopId) {
-      return NextResponse.json({ ok: false, error: "vin and shopId are required" }, { status: 400 });
+    const session = await getSession();
+    if (!session?.shopId) {
+      return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+    }
+    const shopId = Number(session.shopId);
+    const entitlements = await getFeatureEntitlements(shopId);
+    if (!canAccessShopFeature(session, entitlements, "maintenance")) {
+      return NextResponse.json({ ok: false, error: "Feature not enabled" }, { status: 403 });
+    }
+    const { vin, model } = await req.json();
+    if (!vin) {
+      return NextResponse.json({ ok: false, error: "vin is required" }, { status: 400 });
     }
 
     const blocked = await enforceAiBudget({ shopId: Number(shopId), route: "/api/vehicle-analyzer" });

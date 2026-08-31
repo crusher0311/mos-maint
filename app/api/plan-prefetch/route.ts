@@ -2,6 +2,8 @@ import { NextResponse, NextRequest } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
 import { prefetchPlanData, isPlanPrefetched } from "@/lib/plan-builder";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
+import { canAccessShopFeature } from "@/lib/shop-feature-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,6 +18,10 @@ export async function POST(req: NextRequest) {
     }
 
     const shopId = Number(session.shopId);
+    const entitlements = await getFeatureEntitlements(shopId);
+    if (!canAccessShopFeature(session, entitlements, "maintenance")) {
+      return NextResponse.json({ error: "Feature not enabled" }, { status: 403 });
+    }
     const vin = req.nextUrl.searchParams.get("vin")?.toUpperCase();
     const mileageParam = req.nextUrl.searchParams.get("mileage");
     const mileage = mileageParam ? parseInt(mileageParam, 10) : null;

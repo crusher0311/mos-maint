@@ -10,6 +10,7 @@ import { rebuildVhi } from "@/lib/vhi-rebuild";
 import { estimateMileageFromCarfax } from "@/lib/integrations/carfax";
 import { getEnhancedVehicleData } from "@/lib/integrations/dataone-api";
 import { buildMileageDiscrepancyFlag } from "@/lib/plan-build/mileage-discrepancy";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
 import { resolveOpenRoMileage, pickMileageInput, reconcileStaleActualWithEstimate, type MileageInputSource } from "@/lib/plan-build/open-ro-mileage";
 import { getDb as getPgDb } from "@/lib/db/drizzle";
 import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
@@ -305,6 +306,10 @@ export const GET = createExternalEndpoint(
           { status: 400 }
         );
       }
+    }
+    const entitlements = await getFeatureEntitlements(Number(resolvedShopId));
+    if (!entitlements.canUseFeature("maintenance")) {
+      return NextResponse.json({ error: "Feature not enabled" }, { status: 403 });
     }
 
     const db = await getDb();

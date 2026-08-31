@@ -10,6 +10,7 @@ import {
 import { findLatestTekmetricWorkOrderByVinWithCustomerName } from "@/lib/data/repositories/tekmetric-work-orders";
 import { getFeatureEntitlements } from "@/lib/featureResolver";
 import { readInspectionResults } from "@/lib/data/repositories/auto-dvi";
+import { canAccessShopFeature } from "@/lib/shop-feature-access";
 
 const TOKEN_MAX_AGE_MS = 15 * 24 * 60 * 60 * 1000;
 
@@ -35,6 +36,10 @@ export async function GET(
       shopId = verified.shopId;
     } else {
       return NextResponse.json({ error: "A valid share link is required to view this report" }, { status: 403 });
+    }
+    const entitlements = await getFeatureEntitlements(Number(shopId));
+    if (!entitlements.canUseFeature("maintenance")) {
+      return NextResponse.json({ error: "Feature not enabled" }, { status: 403 });
     }
 
     const db = await getDb();
@@ -145,7 +150,6 @@ export async function GET(
     // here just omits the tab, never breaks the report.
     let dvi: any = undefined;
     try {
-      const entitlements = await getFeatureEntitlements(Number(shopId));
       if (entitlements.effectiveFeatures?.auto_dvi) {
         const results = await readInspectionResults(Number(shopId), vin);
         const withFindings = (results?.items || []).filter(
@@ -216,6 +220,10 @@ export async function POST(
 
     if (!vin || !shopId) {
       return NextResponse.json({ error: "Missing vin or shopId" }, { status: 400 });
+    }
+    const entitlements = await getFeatureEntitlements(Number(shopId));
+    if (!canAccessShopFeature(session, entitlements, "maintenance")) {
+      return NextResponse.json({ error: "Feature not enabled" }, { status: 403 });
     }
 
     const expiresAt = Date.now() + TOKEN_MAX_AGE_MS;

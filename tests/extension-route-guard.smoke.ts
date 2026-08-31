@@ -21,6 +21,7 @@
 
 import { NextRequest } from "next/server";
 import {
+  __deps,
   checkShopFeatureGate,
   guardExtensionShopRequest,
 } from "../lib/extension-route-guard";
@@ -59,6 +60,37 @@ async function run() {
   {
     const res = await checkShopFeatureGate(123, [], {});
     ok("empty requiredFeatures short-circuits", res === null);
+  }
+
+  // Billing status is part of entitlement: enabled flags alone cannot pass.
+  {
+    const original = __deps.getFeatureEntitlements;
+    __deps.getFeatureEntitlements = async () => ({
+      effectiveFeatures: { maintenance: true },
+      canUseFeature: () => false,
+    } as any);
+    try {
+      const res = await checkShopFeatureGate(123, ["maintenance"]);
+      ok("inactive billing denies an enabled feature", res?.status === 403);
+      const body = await res?.json();
+      ok("  → reports the blocked feature", body?.missing?.includes("maintenance") === true);
+    } finally {
+      __deps.getFeatureEntitlements = original;
+    }
+  }
+
+  {
+    const original = __deps.getFeatureEntitlements;
+    __deps.getFeatureEntitlements = async () => ({
+      effectiveFeatures: { maintenance: true, auto_dvi: true },
+      canUseFeature: () => true,
+    } as any);
+    try {
+      const res = await checkShopFeatureGate(123, ["maintenance", "auto_dvi"]);
+      ok("active billing allows all required features", res === null);
+    } finally {
+      __deps.getFeatureEntitlements = original;
+    }
   }
 
   // (3) missing auth header → 401 from guardExtensionShopRequest

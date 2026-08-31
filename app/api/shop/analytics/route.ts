@@ -5,6 +5,8 @@ import {
   summarizeRecommendationEvents,
   dailyRecommendationEvents,
 } from "@/lib/data/repositories/plan-cache-store";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
+import { canAccessShopFeature } from "@/lib/shop-feature-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,6 +20,10 @@ export async function GET(req: NextRequest) {
   const shopId = Number(session.shopId);
   if (!shopId) {
     return NextResponse.json({ error: "No shop associated" }, { status: 400 });
+  }
+  const entitlements = await getFeatureEntitlements(shopId);
+  if (!canAccessShopFeature(session, entitlements, "maintenance")) {
+    return NextResponse.json({ error: "Feature not enabled" }, { status: 403 });
   }
 
   try {

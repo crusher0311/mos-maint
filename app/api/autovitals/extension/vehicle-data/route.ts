@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { findLatestAppointmentForVehicle } from "@/lib/data/repositories/autovitals-appointments";
 import { findLatestInspectionForAppointment } from "@/lib/data/repositories/autovitals-inspections";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
 
 export const runtime = "nodejs";
 
@@ -43,6 +44,13 @@ export async function GET(req: NextRequest) {
     }
 
     const shopId = shop.shopId;
+    const entitlements = await getFeatureEntitlements(Number(shopId));
+    if (!entitlements.canUseFeature("maintenance")) {
+      return NextResponse.json(
+        { error: "Feature not enabled" },
+        { status: 403, headers: corsHeaders },
+      );
+    }
     const vin = req.nextUrl.searchParams.get("vin")?.toUpperCase();
 
     if (!vin) {

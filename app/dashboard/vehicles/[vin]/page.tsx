@@ -13,6 +13,9 @@ import { resolveShopDistanceUnit } from "@/lib/shop-distance-unit";
 import type { ShopDistanceDoc } from "@/lib/shop-distance-unit";
 import { getLatestRepairOrderMilesForVin } from "@/lib/miles";
 import type { ObjectId } from "mongodb";
+import { redirect } from "next/navigation";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
+import { canAccessShopFeature } from "@/lib/shop-feature-access";
 
 interface VehicleDeclinedService {
   serviceKey: string;
@@ -152,8 +155,14 @@ type PageProps = { params: Promise<{ vin: string }> };
 
 export default async function VehicleDetailPage({ params }: PageProps) {
   const session = await requireSession();
-  const db = await getDb();
   const shopId = Number(session.shopId);
+  try {
+    const entitlements = await getFeatureEntitlements(shopId);
+    if (!canAccessShopFeature(session, entitlements, "maintenance")) redirect("/dashboard");
+  } catch {
+    redirect("/dashboard");
+  }
+  const db = await getDb();
 
   const { vin: vinParam } = await params;
   const vin = String(vinParam || "").toUpperCase();

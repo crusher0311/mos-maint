@@ -28,8 +28,8 @@ export async function DELETE(req: NextRequest, { params }: { params: { mediaId: 
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const shopId = Number(session.shopId);
-  const denied = await checkShopFeatureGate(shopId, ["auto_dvi"], {
-    isPlatformAdmin: session.role === "platform_admin",
+  const denied = await checkShopFeatureGate(shopId, ["maintenance", "auto_dvi"], {
+    isPlatformAdmin: session.role === "platform_admin" && !session.isImpersonation,
     featureLabel: "Auto DVI",
   });
   if (denied) return denied;

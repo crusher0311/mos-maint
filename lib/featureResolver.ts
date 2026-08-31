@@ -105,6 +105,7 @@ export const FEATURE_METADATA: Record<FeatureKey, { name: string; description: s
   dvi_prefill:        { name: "DVI Pre-fill",                description: "Auto-fill Tekmetric DVI ratings from VHI maintenance data" },
   auto_dvi:           { name: "Auto DVI",                     description: "Auto-build a vehicle-specific inspection from VHI data plus the shop's custom items, and write it to the work order" },
   enhance_notes:      { name: "Enhance Notes",               description: "Rewrite technician findings into customer-facing language with AI" },
+  sales_coach:        { name: "Sales Coach",                 description: "Review open estimates and generate customer-ready sales scripts" },
 };
 
 const DEFAULT_FEATURES: FeatureSettings = buildFeatures(["maintenance"]);
@@ -136,6 +137,8 @@ const FEATURE_SLUG_TO_KEY: Record<string, FeatureKey> = {
   "enhance_notes": "enhance_notes",
   "auto-dvi": "auto_dvi",
   "auto_dvi": "auto_dvi",
+  "sales-coach": "sales_coach",
+  "sales_coach": "sales_coach",
 };
 
 /**

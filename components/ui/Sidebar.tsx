@@ -289,7 +289,8 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
     {
       name: "Sales Coach",
       href: "/dashboard/sales-coach",
-      icon: <Megaphone className="w-5 h-5" />
+      icon: <Megaphone className="w-5 h-5" />,
+      featureId: "sales_coach",
     },
     {
       name: "Part Cross-Ref",

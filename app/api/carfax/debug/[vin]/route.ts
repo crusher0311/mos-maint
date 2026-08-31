@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
+import { canAccessShopFeature } from "@/lib/shop-feature-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,6 +17,10 @@ export async function GET(
   }
 
   const shopId = Number(session.shopId);
+  const entitlements = await getFeatureEntitlements(shopId);
+  if (!canAccessShopFeature(session, entitlements, "maintenance")) {
+    return NextResponse.json({ error: "Feature not enabled" }, { status: 403 });
+  }
   const vin = params.vin?.toUpperCase();
 
   if (!vin) {

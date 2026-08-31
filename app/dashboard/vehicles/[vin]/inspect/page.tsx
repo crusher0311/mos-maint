@@ -5,6 +5,7 @@
 import { redirect, notFound } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { getFeatureEntitlements } from "@/lib/featureResolver";
+import { canAccessShopFeature } from "@/lib/shop-feature-access";
 import MobileInspectClient from "./MobileInspectClient";
 
 export const dynamic = "force-dynamic";
@@ -19,14 +20,14 @@ export default async function MobileInspectPage({
   const { vin: rawVin } = await params;
   const vin = decodeURIComponent(rawVin || "").toUpperCase().trim();
   if (!vin) notFound();
-  const isPlatformAdmin = session.role === "platform_admin";
-  if (!isPlatformAdmin) {
-    try {
-      const ent = await getFeatureEntitlements(Number(session.shopId));
-      if (!ent.features?.auto_dvi) redirect("/dashboard");
-    } catch {
-      redirect("/dashboard");
-    }
+  try {
+    const ent = await getFeatureEntitlements(Number(session.shopId));
+    if (
+      !canAccessShopFeature(session, ent, "maintenance") ||
+      !canAccessShopFeature(session, ent, "auto_dvi")
+    ) redirect("/dashboard");
+  } catch {
+    redirect("/dashboard");
   }
   return <MobileInspectClient vin={vin} />;
 }

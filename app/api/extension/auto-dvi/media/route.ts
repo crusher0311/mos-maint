@@ -6,6 +6,7 @@
 import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 import { NextRequest, NextResponse } from "next/server";
 import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
+import { AUTO_DVI_REQUIRED_FEATURES } from "@/lib/shop-feature-access";
 import { storeInspectionMedia, readInspectionResults } from "@/lib/data/repositories/auto-dvi";
 
 export const runtime = "nodejs";
@@ -56,7 +57,7 @@ async function _POST(req: NextRequest) {
     const guard = await guardExtensionShopRequest(req, {
       smsShopId: body.shopId,
       provider: body.provider || "tekmetric",
-      requiredFeatures: ["auto_dvi"],
+      requiredFeatures: AUTO_DVI_REQUIRED_FEATURES,
       featureLabel: "Auto DVI",
       corsHeaders,
     });

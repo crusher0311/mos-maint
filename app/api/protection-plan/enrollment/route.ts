@@ -17,11 +17,19 @@ import {
   listEnrollmentsForVehicle,
   unenrollVehicle,
 } from "@/lib/data/repositories/protection-plan-enrollments";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
+import { canAccessShopFeature } from "@/lib/shop-feature-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const VIN_RE = /^[A-HJ-NPR-Z0-9]{11,17}$/i;
+
+async function canUseMaintenance(session: Awaited<ReturnType<typeof getSession>>) {
+  if (!session) return false;
+  const entitlements = await getFeatureEntitlements(Number(session.shopId));
+  return canAccessShopFeature(session, entitlements, "maintenance");
+}
 
 function badRequest(message: string) {
   return NextResponse.json({ ok: false, error: message }, { status: 400 });
@@ -30,6 +38,9 @@ function badRequest(message: string) {
 export async function GET(req: NextRequest) {
   const sess = await getSession();
   if (!sess) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await canUseMaintenance(sess))) {
+    return NextResponse.json({ error: "Feature not enabled" }, { status: 403 });
+  }
 
   const vin = (req.nextUrl.searchParams.get("vin") || "").trim();
   if (!VIN_RE.test(vin)) return badRequest("Invalid VIN");
@@ -50,6 +61,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const sess = await getSession();
   if (!sess) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await canUseMaintenance(sess))) {
+    return NextResponse.json({ error: "Feature not enabled" }, { status: 403 });
+  }
 
   const body = await req.json().catch(() => null);
   const vin = typeof body?.vin === "string" ? body.vin.trim() : "";
@@ -90,6 +104,9 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const sess = await getSession();
   if (!sess) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await canUseMaintenance(sess))) {
+    return NextResponse.json({ error: "Feature not enabled" }, { status: 403 });
+  }
 
   const body = await req.json().catch(() => null);
   const vin = typeof body?.vin === "string" ? body.vin.trim() : "";

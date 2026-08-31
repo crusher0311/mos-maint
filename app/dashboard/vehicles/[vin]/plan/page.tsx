@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import OilDutyToggle from "@/components/plan/OilDutyToggle";
 import { getDb } from "@/lib/mongo";
 import { findLatestEventByVin as findLatestAutoflowEventByVin } from "@/lib/data/repositories/autoflow-cache";
@@ -64,6 +65,7 @@ import { listEnrollmentsForVehicle } from "@/lib/data/repositories/protection-pl
 import { listJobNamesForVehicle } from "@/lib/data/repositories/job-index";
 import { gatherDviLinkFindings } from "@/lib/dvi-links/plan-findings";
 import { getFeatureEntitlements } from "@/lib/featureResolver";
+import { canAccessShopFeature } from "@/lib/shop-feature-access";
 import AutoDviPanel from "./AutoDviPanel";
 import { ShareReportButton } from "@/components/ui/ShareReportButton";
 import { IntervalProgressRow } from "@/components/ui/IntervalProgressRow";
@@ -1507,10 +1509,19 @@ async function PlanContent({ params, searchParams }: PageProps) {
     });
 
   const session = await requireSession();
-  const db = await getDb();
   const resolvedSearchParams = await searchParams;
   const forceRefresh = resolvedSearchParams?.refresh === "1";
   const shopId = Number(session.shopId);
+  let featureEntitlements: Awaited<ReturnType<typeof getFeatureEntitlements>>;
+  try {
+    featureEntitlements = await getFeatureEntitlements(shopId);
+    if (!canAccessShopFeature(session, featureEntitlements, "maintenance")) {
+      redirect("/dashboard");
+    }
+  } catch {
+    redirect("/dashboard");
+  }
+  const db = await getDb();
 
   const { vin: vinParam } = await params;
   const vin = String(vinParam || "").toUpperCase();
@@ -1521,7 +1532,6 @@ async function PlanContent({ params, searchParams }: PageProps) {
   );
   const distanceUnit: DistanceUnit = shop?.preferences?.distanceUnit || "miles";
   const distLabel = getDistanceLabel(distanceUnit);
-  const featureEntitlements = await getFeatureEntitlements(shopId);
   const hasJobLookupFeature = featureEntitlements.effectiveFeatures.job_lookup;
   const showInspectItems = shop?.preferences?.showInspectItems !== false; // default true
   const showRecalls = shop?.preferences?.showRecalls !== false; // default true

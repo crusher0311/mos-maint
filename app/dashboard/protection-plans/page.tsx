@@ -23,6 +23,9 @@ import { listEnrollmentsForShop } from "@/lib/data/repositories/protection-plan-
 import { findCachedPlanVariantsForVins } from "@/lib/data/repositories/cached-plans";
 import { listBrandedJobRowsForShop } from "@/lib/data/repositories/job-index";
 import { findVehicles } from "@/lib/data/repositories/vehicles";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
+import { canAccessShopFeature } from "@/lib/shop-feature-access";
+import { redirect } from "next/navigation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -93,6 +96,8 @@ function VehicleRow({
 export default async function ProtectionPlansPage() {
   const session = await requireSession();
   const shopId = Number(session.shopId);
+  const entitlements = await getFeatureEntitlements(shopId);
+  if (!canAccessShopFeature(session, entitlements, "maintenance")) redirect("/dashboard");
 
   const shop = await findShopByShopId(shopId, {
     "maintenance.chemicalProviders": 1,

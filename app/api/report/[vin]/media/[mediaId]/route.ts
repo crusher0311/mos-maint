@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyShareToken } from "@/lib/report-share";
 import { readInspectionMedia } from "@/lib/data/repositories/auto-dvi";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,6 +20,10 @@ export async function GET(
   const verified = token ? verifyShareToken(token) : null;
   if (!verified || verified.vin !== vin) {
     return NextResponse.json({ error: "Invalid or expired report link" }, { status: 403 });
+  }
+  const entitlements = await getFeatureEntitlements(Number(verified.shopId));
+  if (!entitlements.canUseFeature("maintenance")) {
+    return NextResponse.json({ error: "Feature not enabled" }, { status: 403 });
   }
   const media = await readInspectionMedia(Number(verified.shopId), params.mediaId);
   if (!media) return NextResponse.json({ error: "Not found" }, { status: 404 });

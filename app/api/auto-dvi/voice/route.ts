@@ -18,8 +18,8 @@ const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const denied = await checkShopFeatureGate(Number(session.shopId), ["auto_dvi"], {
-    isPlatformAdmin: session.role === "platform_admin",
+  const denied = await checkShopFeatureGate(Number(session.shopId), ["maintenance", "auto_dvi"], {
+    isPlatformAdmin: session.role === "platform_admin" && !session.isImpersonation,
     featureLabel: "Auto DVI",
   });
   if (denied) return denied;

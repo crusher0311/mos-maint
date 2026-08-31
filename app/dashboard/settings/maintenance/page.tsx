@@ -4,6 +4,9 @@ import MaintenanceForm from "./MaintenanceForm";
 import MaintenanceHeader from "./MaintenanceHeader";
 import { revalidatePath } from "next/cache";
 import { Settings, Clock, Car } from "lucide-react";
+import { redirect } from "next/navigation";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
+import { canAccessShopFeature } from "@/lib/shop-feature-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,16 +30,24 @@ async function getMaintenanceSettings(shopId: number) {
 export default async function MaintenanceSettingsPage() {
   const sess = await requireSession();
   const shopId = Number(sess.shopId);
+  const entitlements = await getFeatureEntitlements(shopId);
+  if (!canAccessShopFeature(sess, entitlements, "maintenance")) redirect("/dashboard");
   const current = await getMaintenanceSettings(shopId);
 
   async function save(formData: FormData) {
     "use server";
+    const actionSession = await requireSession();
+    const actionShopId = Number(actionSession.shopId);
+    const actionEntitlements = await getFeatureEntitlements(actionShopId);
+    if (!canAccessShopFeature(actionSession, actionEntitlements, "maintenance")) {
+      redirect("/dashboard");
+    }
     const dueSoonMiles = Math.max(0, parseInt(String(formData.get("dueSoonMiles") || "1000"), 10) || DEFAULT_SOON_MILES);
     const dueSoonDays = Math.max(0, parseInt(String(formData.get("dueSoonDays") || "30"), 10) || DEFAULT_SOON_DAYS);
 
     const db = await getDb();
     await db.collection("shops").updateOne(
-      { shopId },
+      { shopId: actionShopId },
       {
         $set: {
           "maintenance.dueSoonMiles": dueSoonMiles,
@@ -60,9 +71,9 @@ export default async function MaintenanceSettingsPage() {
         <div className="flex items-start gap-3">
           <Settings className="w-5 h-5 text-blue-600 mt-0.5" />
           <div>
-            <p className="font-medium text-blue-800">Customize "Due Soon" alerts</p>
+            <p className="font-medium text-blue-800">Customize &quot;Due Soon&quot; alerts</p>
             <p className="text-sm text-blue-700 mt-1">
-              These settings control when maintenance items appear in the "Due Soon" category on vehicle maintenance plans.
+              These settings control when maintenance items appear in the &quot;Due Soon&quot; category on vehicle maintenance plans.
               Items within these thresholds will be highlighted for proactive service recommendations.
             </p>
           </div>
@@ -103,7 +114,7 @@ export default async function MaintenanceSettingsPage() {
         <div className="px-6 py-4 border-b border-gray-200">
           <h2 className="font-semibold text-gray-900">Update Thresholds</h2>
           <p className="text-sm text-gray-500 mt-1">
-            Set when maintenance items should appear as "Due Soon" for your shop.
+            Set when maintenance items should appear as &quot;Due Soon&quot; for your shop.
           </p>
         </div>
         <div className="px-6 py-4">

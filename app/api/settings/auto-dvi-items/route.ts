@@ -1,7 +1,8 @@
 // Task #991 — Auto DVI: per-shop custom inspection line items (name +
 // optional group + optional notes). Stored alongside the other shop
 // preferences (shops.preferences.autoDviItems) and edited from
-// /dashboard/settings/auto-dvi. Gated on the auto_dvi feature.
+// /dashboard/settings/auto-dvi. Auto DVI consumes VHI maintenance data, so
+// both product entitlements are required.
 
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
@@ -10,6 +11,10 @@ import {
   writeShopAutoDviItems,
 } from "@/lib/data/repositories/auto-dvi";
 import { checkShopFeatureGate } from "@/lib/extension-route-guard";
+import {
+  AUTO_DVI_REQUIRED_FEATURES,
+  canPlatformAdminBypassShopFeatures,
+} from "@/lib/shop-feature-access";
 import { randomUUID } from "crypto";
 
 export const runtime = "nodejs";
@@ -27,8 +32,8 @@ export async function GET() {
   }
   const shopId = Number(session.shopId);
   const isPlatformAdmin = session.role === "platform_admin";
-  const denied = await checkShopFeatureGate(shopId, ["auto_dvi"], {
-    isPlatformAdmin,
+  const denied = await checkShopFeatureGate(shopId, AUTO_DVI_REQUIRED_FEATURES, {
+    isPlatformAdmin: canPlatformAdminBypassShopFeatures(session),
     featureLabel: "Auto DVI",
   });
   if (denied) return denied;
@@ -44,8 +49,8 @@ export async function PUT(req: NextRequest) {
   }
   const shopId = Number(session.shopId);
   const isPlatformAdmin = session.role === "platform_admin";
-  const denied = await checkShopFeatureGate(shopId, ["auto_dvi"], {
-    isPlatformAdmin,
+  const denied = await checkShopFeatureGate(shopId, AUTO_DVI_REQUIRED_FEATURES, {
+    isPlatformAdmin: canPlatformAdminBypassShopFeatures(session),
     featureLabel: "Auto DVI",
   });
   if (denied) return denied;

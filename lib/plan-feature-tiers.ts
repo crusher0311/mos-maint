@@ -23,6 +23,7 @@ export const FEATURE_KEYS = [
   "dvi_prefill",
   "enhance_notes",
   "auto_dvi",
+  "sales_coach",
 ] as const;
 
 // Task #991: `auto_dvi` ships dark — OFF everywhere (every tier, every plan
@@ -30,7 +31,7 @@ export const FEATURE_KEYS = [
 // founder wildcard (buildAllFeaturesEnabled) still turns it on for founder
 // shops, which is the intended dev/test path. Keep any newly-dark features
 // in this list so the `[...FEATURE_KEYS]` tier fallbacks don't leak them on.
-export const DARK_LAUNCH_KEYS: readonly string[] = ["auto_dvi"];
+export const DARK_LAUNCH_KEYS: readonly string[] = ["auto_dvi", "sales_coach"];
 const LAUNCHED_KEYS = FEATURE_KEYS.filter((k) => !DARK_LAUNCH_KEYS.includes(k));
 
 export type FeatureKey = typeof FEATURE_KEYS[number];

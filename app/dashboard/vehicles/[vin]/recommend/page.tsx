@@ -4,6 +4,9 @@ import { getDb } from "@/lib/mongo";
 import Link from "next/link";
 import { MODELS, DEFAULT_MODEL } from "@/lib/ai";
 import React from "react";
+import { redirect } from "next/navigation";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
+import { canAccessShopFeature } from "@/lib/shop-feature-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,8 +15,14 @@ type PageProps = { params: Promise<{ vin: string }> };
 
 export default async function VehicleRecommendPage({ params }: PageProps) {
   const session = await requireSession();
-  const db = await getDb();
   const shopId = Number(session.shopId);
+  try {
+    const entitlements = await getFeatureEntitlements(shopId);
+    if (!canAccessShopFeature(session, entitlements, "maintenance")) redirect("/dashboard");
+  } catch {
+    redirect("/dashboard");
+  }
+  const db = await getDb();
 
   const { vin: v } = await params;
   const vin = String(v || "").toUpperCase();

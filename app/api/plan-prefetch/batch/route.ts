@@ -3,6 +3,8 @@ import { getDb } from "@/lib/mongo";
 import { getMaintenanceScheduleCached } from "@/lib/integrations/dataone-api";
 import { resolveCarfaxConfig, fetchCarfaxWithCache } from "@/lib/integrations/carfax";
 import { getSession } from "@/lib/auth";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
+import { canAccessShopFeature } from "@/lib/shop-feature-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,6 +24,10 @@ export async function POST(req: NextRequest) {
     }
 
     const shopId = Number(session.shopId);
+    const entitlements = await getFeatureEntitlements(shopId);
+    if (!canAccessShopFeature(session, entitlements, "maintenance")) {
+      return NextResponse.json({ error: "Feature not enabled" }, { status: 403 });
+    }
     const body = await req.json();
     const vins: string[] = body.vins || [];
     

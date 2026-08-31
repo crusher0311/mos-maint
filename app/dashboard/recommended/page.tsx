@@ -2,6 +2,8 @@
 import { requireSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import RecommendedClient from "./RecommendedClient";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
+import { canAccessShopFeature } from "@/lib/shop-feature-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,6 +16,12 @@ export default async function RecommendedPage({
   const session = await requireSession();
   if (!session) {
     redirect("/login");
+  }
+  try {
+    const entitlements = await getFeatureEntitlements(Number(session.shopId));
+    if (!canAccessShopFeature(session, entitlements, "maintenance")) redirect("/dashboard");
+  } catch {
+    redirect("/dashboard");
   }
 
   const vin = searchParams.vin || "";

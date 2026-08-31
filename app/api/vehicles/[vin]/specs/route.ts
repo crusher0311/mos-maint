@@ -3,6 +3,8 @@ import { getSession } from "@/lib/auth";
 import { getVehicleSpecsLocal, decodeVinLocal, pingDataOne, type DecodeHint } from "@/lib/integrations/dataone-local";
 import { deriveFuelTypeLabel } from "@/lib/fuel-type-label";
 import { getCarfaxDecodeHint } from "@/lib/integrations/carfax";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
+import { canAccessShopFeature } from "@/lib/shop-feature-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,6 +45,10 @@ export async function GET(
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const entitlements = await getFeatureEntitlements(Number(session.shopId));
+  if (!canAccessShopFeature(session, entitlements, "maintenance")) {
+    return NextResponse.json({ error: "Feature not enabled" }, { status: 403 });
   }
 
   const { vin } = await params;

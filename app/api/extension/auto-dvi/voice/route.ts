@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
+import { AUTO_DVI_REQUIRED_FEATURES } from "@/lib/shop-feature-access";
 import { extractVoiceFindings } from "@/lib/auto-dvi/voice";
 import { parseChecklistParam } from "@/lib/auto-dvi/voice-parse";
 
@@ -42,7 +43,7 @@ export const POST = withExtensionErrorMarker(async (req: NextRequest) => {
   const guard = await guardExtensionShopRequest(req, {
     smsShopId: body.shopId,
     provider: body.provider,
-    requiredFeatures: ["auto_dvi"],
+    requiredFeatures: AUTO_DVI_REQUIRED_FEATURES,
     corsHeaders,
   });
   if (!guard.ok) return guard.response;

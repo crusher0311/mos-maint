@@ -5,6 +5,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { listOpenEstimates, getOrGenerateScript } from "@/lib/sales-coach/script";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
+import { canAccessShopFeature } from "@/lib/shop-feature-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,6 +19,10 @@ export async function GET(req: NextRequest) {
   const shopId = Number(session.shopId);
   if (!Number.isFinite(shopId)) {
     return NextResponse.json({ ok: false, error: "No shop context" }, { status: 400 });
+  }
+  const entitlements = await getFeatureEntitlements(shopId);
+  if (!canAccessShopFeature(session, entitlements, "sales_coach")) {
+    return NextResponse.json({ ok: false, error: "Feature not enabled" }, { status: 403 });
   }
 
   const workOrderId = req.nextUrl.searchParams.get("workOrderId");

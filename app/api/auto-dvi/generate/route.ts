@@ -19,8 +19,8 @@ export async function POST(req: NextRequest) {
   }
   const shopId = Number(session.shopId);
   const isPlatformAdmin = session.role === "platform_admin";
-  const denied = await checkShopFeatureGate(shopId, ["auto_dvi"], {
-    isPlatformAdmin,
+  const denied = await checkShopFeatureGate(shopId, ["maintenance", "auto_dvi"], {
+    isPlatformAdmin: isPlatformAdmin && !session.isImpersonation,
     featureLabel: "Auto DVI",
   });
   if (denied) return denied;

@@ -11,6 +11,9 @@ import {
 } from "@/lib/plan-build/chemical-providers";
 import { revalidatePath } from "next/cache";
 import { Settings, Wrench, RotateCcw, FlaskConical } from "lucide-react";
+import { redirect } from "next/navigation";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
+import { canAccessShopFeature } from "@/lib/shop-feature-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,6 +29,13 @@ export type ShopInterval = {
   defaultMiles: number | null;
   defaultMonths: number | null;
 };
+
+async function requireMaintenanceSession() {
+  const session = await requireSession();
+  const entitlements = await getFeatureEntitlements(Number(session.shopId));
+  if (!canAccessShopFeature(session, entitlements, "maintenance")) redirect("/dashboard");
+  return session;
+}
 
 async function getShopIntervals(shopId: number): Promise<{ intervals: ShopInterval[]; applyMode: "always" | "shop_only"; chemicalProviders: ChemicalProvider[] }> {
   const db = await getDb();
@@ -63,7 +73,7 @@ async function getShopDistanceUnit(shopId: number): Promise<"miles" | "kilometer
 }
 
 export default async function IntervalsPage() {
-  const sess = await requireSession();
+  const sess = await requireMaintenanceSession();
   const shopId = Number(sess.shopId);
   const [{ intervals, applyMode, chemicalProviders }, distanceUnit] = await Promise.all([
     getShopIntervals(shopId),
@@ -72,6 +82,8 @@ export default async function IntervalsPage() {
 
   async function saveIntervals(formData: FormData) {
     "use server";
+    const actionSession = await requireMaintenanceSession();
+    const actionShopId = Number(actionSession.shopId);
     const unit = formData.get("distanceUnit") as string || "miles";
     const rawApplyMode = formData.get("intervalApplyMode") as string;
     const intervalApplyMode = rawApplyMode === "always" ? "always" : "shop_only";
@@ -102,7 +114,7 @@ export default async function IntervalsPage() {
 
     const db = await getDb();
     await db.collection("shops").updateOne(
-      { shopId },
+      { shopId: actionShopId },
       {
         $set: {
           "maintenance.intervals": updates,
@@ -120,8 +132,8 @@ export default async function IntervalsPage() {
         "@/lib/data/repositories/plan-cache-store"
       );
       await Promise.all([
-        deleteCachedPlans(shopId, undefined, db),
-        deleteMaintenanceAnalysisForShop(shopId, db),
+        deleteCachedPlans(actionShopId, undefined, db),
+        deleteMaintenanceAnalysisForShop(actionShopId, db),
       ]);
     }
 
@@ -135,6 +147,8 @@ export default async function IntervalsPage() {
   // caches exactly like saveIntervals so provider tabs rebuild fresh.
   async function saveChemicalProviders(formData: FormData) {
     "use server";
+    const actionSession = await requireMaintenanceSession();
+    const actionShopId = Number(actionSession.shopId);
     const unit = (formData.get("distanceUnit") as string) || "miles";
     let parsed: unknown = [];
     try {
@@ -166,7 +180,7 @@ export default async function IntervalsPage() {
 
     const db = await getDb();
     await db.collection("shops").updateOne(
-      { shopId },
+      { shopId: actionShopId },
       {
         $set: {
           "maintenance.chemicalProviders": providers,
@@ -183,8 +197,8 @@ export default async function IntervalsPage() {
         "@/lib/data/repositories/plan-cache-store"
       );
       await Promise.all([
-        deleteCachedPlans(shopId, undefined, db),
-        deleteMaintenanceAnalysisForShop(shopId, db),
+        deleteCachedPlans(actionShopId, undefined, db),
+        deleteMaintenanceAnalysisForShop(actionShopId, db),
       ]);
     }
 
@@ -203,7 +217,7 @@ export default async function IntervalsPage() {
             <p className="font-medium text-blue-800">Override OEM Schedules</p>
             <p className="text-sm text-blue-700 mt-1">
               Set custom maintenance intervals for your shop. When enabled, these will override 
-              the manufacturer's recommended schedules on vehicle maintenance plans.
+              the manufacturer&apos;s recommended schedules on vehicle maintenance plans.
             </p>
           </div>
         </div>
@@ -230,7 +244,7 @@ export default async function IntervalsPage() {
             <p className="font-medium text-purple-800">Chemical Provider Plans</p>
             <p className="text-sm text-purple-700 mt-1">
               Add maintenance schedules from chemical providers (like BG). Enabled providers
-              appear as extra plan tabs on each vehicle's maintenance plan, alongside the
+              appear as extra plan tabs on each vehicle&apos;s maintenance plan, alongside the
               OE and Shop plans.
             </p>
           </div>

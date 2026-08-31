@@ -226,6 +226,9 @@ function wireDashboardDeps(
 ) {
   const orig = { ...dashboardRoute.__deps };
   dashboardRoute.__deps.getDb = async () => fake.db as any;
+  dashboardRoute.__deps.getFeatureEntitlements = async () => ({
+    canUseFeature: () => true,
+  } as any);
   dashboardRoute.__deps.cookies = fakeCookies(
     opts.sid === undefined ? SID : opts.sid,
   ) as any;

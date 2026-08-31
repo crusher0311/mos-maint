@@ -56,6 +56,7 @@ const AI_RESPONSE_JSON = JSON.stringify({
 
 const ORIG = {
   getSession: __deps.getSession,
+  getFeatureEntitlements: __deps.getFeatureEntitlements,
   enforceAiBudget: __deps.enforceAiBudget,
   callOpenAIFn: __deps.callOpenAIFn,
   logUsage: __deps.logUsage,
@@ -68,6 +69,9 @@ function restore() {
 
 function stubOk(loggedShopIds: number[], budgetShopIds: number[]) {
   __deps.getSession = async () => ({ shopId: SHOP_A, role: "admin" } as any);
+  __deps.getFeatureEntitlements = async () => ({
+    canUseFeature: (feature: string) => feature === "maintenance",
+  } as any);
   __deps.enforceAiBudget = async ({ shopId }: any) => {
     budgetShopIds.push(Number(shopId));
     return null; // not blocked
@@ -94,6 +98,20 @@ async function run() {
     __deps.enforceAiBudget = ORIG.enforceAiBudget;
     const res = await POST(makeReq({ dviData: null, carfaxData: null, oemData: [] }));
     ok("no session → 401", res.status === 401, `got ${res.status}`);
+  }
+
+  // Maintenance-disabled shops must be denied before any recommendation work.
+  {
+    const logged: number[] = [];
+    const budget: number[] = [];
+    stubOk(logged, budget);
+    __deps.getFeatureEntitlements = async () => ({
+      canUseFeature: () => false,
+    } as any);
+    const res = await POST(makeReq({ vin: "1HGCM82633A004352" }));
+    ok("Maintenance disabled → 403", res.status === 403, `got ${res.status}`);
+    ok("  → no AI usage", logged.length === 0);
+    restore();
   }
 
   // 2. Successful AI call returns parsed recommendations

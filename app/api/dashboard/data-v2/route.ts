@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { getDb } from "@/lib/mongo";
 import { Db } from "mongodb";
 import { prefixRegex, vinPrefix } from "@/lib/dashboard-search";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
 
 /**
  * Test seam (Task #520): tests override these to drive the dashboard read
@@ -18,6 +19,7 @@ import { prefixRegex, vinPrefix } from "@/lib/dashboard-search";
 export const __deps = {
   getDb,
   cookies,
+  getFeatureEntitlements,
 };
 
 async function batchEstimateMileage(db: Db, shopId: number, rows: any[]) {
@@ -118,6 +120,8 @@ export async function GET(request: NextRequest) {
     }
 
     const shopId = Number(sess.shopId);
+    const entitlements = await __deps.getFeatureEntitlements(shopId);
+    const maintenanceEnabled = entitlements.canUseFeature("maintenance");
     const shop = await db.collection("shops").findOne({ 
       shopId: { $in: [String(shopId), shopId] } 
     });
@@ -174,7 +178,7 @@ export async function GET(request: NextRequest) {
         },
       }));
 
-      await batchEstimateMileage(db, Number(sess.shopId), rows);
+      if (maintenanceEnabled) await batchEstimateMileage(db, shopId, rows);
 
       return NextResponse.json({
         rows,
@@ -278,7 +282,7 @@ export async function GET(request: NextRequest) {
       }
     }));
 
-    await batchEstimateMileage(db, Number(sess.shopId), rows);
+    if (maintenanceEnabled) await batchEstimateMileage(db, shopId, rows);
 
     rows.sort((a: any, b: any) => {
       const nameA = a.displayName || "";

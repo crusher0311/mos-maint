@@ -63,6 +63,8 @@ import {
   readPlanBuildMileageMetadata,
   verifyPlanBuildMileageMetadataSignature,
 } from "@/lib/plan-build-mileage-metadata";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
+import { canAccessShopFeature } from "@/lib/shop-feature-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -106,7 +108,11 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       }
       shopId = Number(session.shopId);
-      isPlatformAdmin = !!session.isPlatformAdmin;
+      isPlatformAdmin = !!session.isPlatformAdmin && !session.isImpersonation;
+      const entitlements = await getFeatureEntitlements(shopId);
+      if (!canAccessShopFeature(session, entitlements, "maintenance")) {
+        return NextResponse.json({ error: "Feature not enabled" }, { status: 403 });
+      }
       // Platform admins running the CARFAX diagnostic may target any shop's
       // vehicle via ?shopId=, since their own session shop is rarely the one
       // a support ticket is about.

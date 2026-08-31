@@ -5,6 +5,8 @@ import { getCachedPlan } from "@/lib/plan-cache";
 import { computeScore, getScoreTier, formatVhiItem, getVhiFromAnalysisCache, separateComplimentary, buildApiScore } from "@/lib/vhi-score";
 import { getStatusIconSet } from "@/lib/vhi-icons";
 import { triggerPlanBuild } from "@/lib/vhi-rebuild";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
+import { canAccessShopFeature } from "@/lib/shop-feature-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,6 +22,10 @@ export async function GET(
     }
 
     const shopId = Number(session.shopId);
+    const entitlements = await getFeatureEntitlements(shopId);
+    if (!canAccessShopFeature(session, entitlements, "maintenance")) {
+      return NextResponse.json({ error: "Feature not enabled" }, { status: 403 });
+    }
     const vin = params.vin?.toUpperCase();
 
     if (!vin || vin.length !== 17) {

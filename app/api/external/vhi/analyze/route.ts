@@ -16,6 +16,7 @@ import { estimateMileageFromCarfax } from "@/lib/integrations/carfax";
 import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
 import { withSlowCallLog } from "@/lib/log-slow-call";
 import { getDb as getPgDb } from "@/lib/db/drizzle";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
 
 /**
  * Task #478: provenance label for the mileage this endpoint fed into the
@@ -85,6 +86,13 @@ export const POST = createExternalEndpoint(
       return NextResponse.json(
         { success: false, error: "API key is not authorized for this shop. Shop keys can only access their own shop. Use a partner key for cross-shop access." },
         { status: 403 }
+      );
+    }
+    const entitlements = await getFeatureEntitlements(Number(resolvedShopId));
+    if (!entitlements.canUseFeature("maintenance")) {
+      return NextResponse.json(
+        { success: false, error: "Feature not enabled" },
+        { status: 403 },
       );
     }
 

@@ -6,6 +6,8 @@ import { isPlatformAdmin as isPlatformAdminEmail } from "@/lib/super-admins";
 import { sanitizeExtraction, buildIntervalProposals } from "@/lib/interval-import";
 import { recordUnmatchedIntervalImportName } from "@/lib/interval-import-log";
 import { getIntervalImportOverridesMap } from "@/lib/data/repositories/interval-import-overrides";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
+import { canAccessShopFeature } from "@/lib/shop-feature-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -95,6 +97,10 @@ export async function POST(req: NextRequest) {
   try {
     const sess = await getSession();
     if (!sess) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const entitlements = await getFeatureEntitlements(Number(sess.shopId));
+    if (!canAccessShopFeature(sess, entitlements, "maintenance")) {
+      return NextResponse.json({ error: "Feature not enabled" }, { status: 403 });
+    }
 
     const isAdmin = await isPlatformAdminEmail(sess.email);
     const blocked = await enforceAiBudget({
