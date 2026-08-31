@@ -38,6 +38,152 @@ export interface InsertGetEventFields {
   shopId: number;
 }
 
+export interface CallbackAdmissionIdentity {
+  shopId: number;
+  method: "GET" | "POST";
+  objectType: string;
+  objectId: string;
+  operation: string | null;
+}
+
+function identityWhere(identity: CallbackAdmissionIdentity) {
+  if (identity.method === "POST") {
+    return and(
+      sql`${t.method} IS NULL`,
+      eq(t.shopId, identity.shopId),
+      eq(t.workOrderId, identity.objectId),
+      sql`upper(coalesce(${t.status}, '')) = ${identity.operation ?? ""}`,
+    );
+  }
+  return and(
+    eq(t.method, "GET"),
+    eq(t.shopId, identity.shopId),
+    eq(t.objectType, identity.objectType),
+    eq(t.objectId, identity.objectId),
+    identity.operation == null
+      ? sql`${t.operation} IS NULL`
+      : eq(t.operation, identity.operation),
+  );
+}
+
+function identityLockKey(identity: CallbackAdmissionIdentity): string {
+  return JSON.stringify([
+    identity.shopId,
+    identity.method,
+    identity.objectType,
+    identity.objectId,
+    identity.operation,
+  ]);
+}
+
+export async function admitCallbackEvent(
+  eventKey: string,
+  identity: CallbackAdmissionIdentity,
+  leaseMs: number,
+): Promise<boolean> {
+  const now = new Date();
+  const staleBefore = new Date(now.getTime() - leaseMs);
+  return getDb().transaction(async (tx) => {
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtextextended(${identityLockKey(identity)}, 0))`,
+    );
+    const active = await tx
+      .select({ eventKey: t.eventKey })
+      .from(t)
+      .where(
+        and(
+          identityWhere(identity),
+          isNotNull(t.processingStartedAt),
+          gte(t.processingStartedAt, staleBefore),
+        ),
+      )
+      .limit(1);
+    if (active.length > 0) {
+      await tx
+        .update(t)
+        .set({ processed: true, processedAt: now, noAction: true })
+        .where(
+          and(
+            identityWhere(identity),
+            eq(t.processed, false),
+            sql`${t.eventKey} <> ${eventKey}`,
+            sql`${t.eventKey} <> ${active[0].eventKey}`,
+          ),
+        );
+      return false;
+    }
+
+    const claimed = await tx
+      .update(t)
+      .set({ processingStartedAt: now })
+      .where(and(eq(t.eventKey, eventKey), eq(t.processed, false)))
+      .returning({ eventKey: t.eventKey });
+    if (claimed.length === 0) return false;
+    await tx
+      .update(t)
+      .set({ processed: true, processedAt: now, noAction: true, processingStartedAt: null })
+      .where(
+        and(
+          identityWhere(identity),
+          eq(t.processed, false),
+          sql`${t.eventKey} <> ${eventKey}`,
+        ),
+      );
+    return true;
+  });
+}
+
+export async function finishCallbackEventAdmission(
+  eventKey: string,
+  identity: CallbackAdmissionIdentity,
+  claimFollowUp: boolean,
+): Promise<(CallbackAdmissionIdentity & { key: string }) | null> {
+  const now = new Date();
+  return getDb().transaction(async (tx) => {
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtextextended(${identityLockKey(identity)}, 0))`,
+    );
+    await tx
+      .update(t)
+      .set({ processingStartedAt: null })
+      .where(and(eq(t.eventKey, eventKey), isNotNull(t.processingStartedAt)));
+
+    const pending = claimFollowUp
+      ? await tx
+          .select({ eventKey: t.eventKey })
+          .from(t)
+          .where(
+            and(
+              identityWhere(identity),
+              eq(t.processed, false),
+              sql`${t.eventKey} <> ${eventKey}`,
+            ),
+          )
+          .orderBy(desc(t.receivedAt), desc(t.id))
+          .limit(1)
+      : [];
+    const pendingKey = pending[0]?.eventKey;
+
+    await tx
+      .update(t)
+      .set({ processed: true, processedAt: now, noAction: true, processingStartedAt: null })
+      .where(
+        and(
+          identityWhere(identity),
+          eq(t.processed, false),
+          sql`${t.eventKey} <> ${eventKey}`,
+          ...(pendingKey ? [sql`${t.eventKey} <> ${pendingKey}`] : []),
+        ),
+      );
+    if (!pendingKey) return null;
+    await tx
+      .update(t)
+      .set({ processingStartedAt: now })
+      .where(eq(t.eventKey, pendingKey));
+    return { ...identity, key: pendingKey };
+  });
+}
+
 export async function insertPostEvent(f: InsertPostEventFields): Promise<void> {
   await getDb().insert(t).values({
     eventKey: f.eventKey,

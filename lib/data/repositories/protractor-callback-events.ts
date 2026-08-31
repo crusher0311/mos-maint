@@ -30,9 +30,34 @@ import {
 import * as pg from "./pg/protractor-callback-events";
 
 const COLLECTION = "protractor_callback_events";
+const ADMISSION_COLLECTION = "protractor_callback_admissions";
+const ADMISSION_LEASE_MS = 10 * 60 * 1000;
 
 /** Opaque per-event key: ObjectId hex (Mongo mode) or UUID (PG mode). */
 export type CallbackEventKey = string;
+
+export interface GetEventIdentity {
+  shopId: number;
+  objectType: string;
+  objectId: string;
+  operation: string | null;
+}
+
+export interface AdmittedGetEvent extends GetEventIdentity {
+  key: CallbackEventKey;
+}
+
+export interface CallbackAdmissionIdentity {
+  shopId: number;
+  method: "GET" | "POST";
+  objectType: string;
+  objectId: string;
+  operation: string | null;
+}
+
+export interface AdmittedCallbackEvent extends CallbackAdmissionIdentity {
+  key: CallbackEventKey;
+}
 
 async function collection(): Promise<Collection<Document>> {
   const db = await getDb();
@@ -49,6 +74,196 @@ function mongoKeyFilter(key: CallbackEventKey): Document {
   return ObjectId.isValid(key) && String(new ObjectId(key)) === key
     ? { _id: new ObjectId(key) }
     : { eventKey: key };
+}
+
+function admissionId(identity: CallbackAdmissionIdentity): string {
+  return JSON.stringify([
+    identity.shopId,
+    identity.method,
+    identity.objectType,
+    identity.objectId,
+    identity.operation,
+  ]);
+}
+
+async function coalesceMongoEvent(key: unknown): Promise<void> {
+  if (typeof key !== "string") return;
+  await markProcessedMongo(key, { noAction: true });
+}
+
+/**
+ * Atomically admits one GET callback per (shop, object, operation).  Mongo
+ * uses a tiny coordinator document in a separate collection, so the legacy
+ * event documents and all event scans retain their canonical shape.  PG uses
+ * an advisory-lock transaction over the existing event rows (no migration).
+ */
+export async function admitCallbackEvent(
+  key: CallbackEventKey,
+  identity: CallbackAdmissionIdentity,
+): Promise<boolean> {
+  if (isProtractorOpsPgCanonical()) {
+    return pg.admitCallbackEvent(key, identity, ADMISSION_LEASE_MS);
+  }
+
+  const db = await getDb();
+  const col = db.collection<Document>(ADMISSION_COLLECTION);
+  const now = new Date();
+  const staleBefore = new Date(now.getTime() - ADMISSION_LEASE_MS);
+  const prior = await col.findOneAndUpdate(
+    { _id: admissionId(identity) } as Document,
+    [
+      {
+        $set: {
+          activeEventKey: {
+            $cond: [
+              {
+                $or: [
+                  { $eq: [{ $ifNull: ["$activeEventKey", null] }, null] },
+                  { $eq: [{ $ifNull: ["$activeStartedAt", null] }, null] },
+                  { $lt: ["$activeStartedAt", staleBefore] },
+                ],
+              },
+              key,
+              "$activeEventKey",
+            ],
+          },
+          activeStartedAt: {
+            $cond: [
+              {
+                $or: [
+                  { $eq: [{ $ifNull: ["$activeEventKey", null] }, null] },
+                  { $eq: [{ $ifNull: ["$activeStartedAt", null] }, null] },
+                  { $lt: ["$activeStartedAt", staleBefore] },
+                ],
+              },
+              now,
+              "$activeStartedAt",
+            ],
+          },
+          pendingEventKey: {
+            $cond: [
+              {
+                $or: [
+                  { $eq: [{ $ifNull: ["$activeEventKey", null] }, null] },
+                  { $eq: [{ $ifNull: ["$activeStartedAt", null] }, null] },
+                  { $lt: ["$activeStartedAt", staleBefore] },
+                ],
+              },
+              "$$REMOVE",
+              key,
+            ],
+          },
+          updatedAt: now,
+        },
+      },
+    ],
+    { upsert: true, returnDocument: "before" },
+  );
+
+  const previous = prior as Document | null;
+  const hadFreshWorker =
+    typeof previous?.activeEventKey === "string" &&
+    previous.activeStartedAt instanceof Date &&
+    previous.activeStartedAt >= staleBefore;
+  if (hadFreshWorker) {
+    await coalesceMongoEvent(previous?.pendingEventKey);
+    return false;
+  }
+  await coalesceMongoEvent(previous?.pendingEventKey);
+  return true;
+}
+
+export async function admitGetEvent(
+  key: CallbackEventKey,
+  identity: GetEventIdentity,
+): Promise<boolean> {
+  return admitCallbackEvent(key, { ...identity, method: "GET" });
+}
+
+/**
+ * Releases an admitted event.  The initial worker may atomically promote the
+ * single latest pending event; the promoted worker releases with
+ * claimFollowUp=false, coalescing arrivals during that fetch.  Consequently a
+ * burst performs at most the initial fetch plus one latest-state follow-up.
+ */
+export async function finishCallbackEventAdmission(
+  key: CallbackEventKey,
+  identity: CallbackAdmissionIdentity,
+  claimFollowUp: boolean,
+): Promise<AdmittedCallbackEvent | null> {
+  if (isProtractorOpsPgCanonical()) {
+    return pg.finishCallbackEventAdmission(key, identity, claimFollowUp);
+  }
+
+  const db = await getDb();
+  const col = db.collection<Document>(ADMISSION_COLLECTION);
+  const now = new Date();
+  const prior = await col.findOneAndUpdate(
+    { _id: admissionId(identity), activeEventKey: key } as Document,
+    claimFollowUp
+      ? [
+          {
+            $set: {
+              activeEventKey: { $ifNull: ["$pendingEventKey", "$$REMOVE"] },
+              activeStartedAt: {
+                $cond: [
+                  { $ne: [{ $ifNull: ["$pendingEventKey", null] }, null] },
+                  now,
+                  "$$REMOVE",
+                ],
+              },
+              pendingEventKey: "$$REMOVE",
+              updatedAt: now,
+            },
+          },
+        ]
+      : {
+          $unset: {
+            activeEventKey: "",
+            activeStartedAt: "",
+            pendingEventKey: "",
+          },
+          $set: { updatedAt: now },
+        },
+    { returnDocument: "before" },
+  );
+
+  const pendingKey = (prior as Document | null)?.pendingEventKey;
+  if (!claimFollowUp) {
+    await coalesceMongoEvent(pendingKey);
+    await col.deleteOne({
+      _id: admissionId(identity),
+      activeEventKey: { $exists: false },
+      activeStartedAt: { $exists: false },
+      pendingEventKey: { $exists: false },
+    } as Document);
+    return null;
+  }
+  if (typeof pendingKey === "string") {
+    return { ...identity, key: pendingKey };
+  }
+  await col.deleteOne({
+    _id: admissionId(identity),
+    activeEventKey: { $exists: false },
+    activeStartedAt: { $exists: false },
+    pendingEventKey: { $exists: false },
+  } as Document);
+  return null;
+}
+
+export async function finishGetEventAdmission(
+  key: CallbackEventKey,
+  identity: GetEventIdentity,
+  claimFollowUp: boolean,
+): Promise<AdmittedGetEvent | null> {
+  const result = await finishCallbackEventAdmission(
+    key,
+    { ...identity, method: "GET" },
+    claimFollowUp,
+  );
+  if (!result) return null;
+  const { method: _method, ...event } = result;
+  return event;
 }
 
 /* ------------------------------------------------------------------ */

@@ -73,7 +73,21 @@ async function processWebhookQueue(db: Db): Promise<{ processed: number; failed:
       );
       break;
     }
+    const admissionIdentity =
+      item.objectType && item.objectId
+        ? {
+            shopId: item.shopId,
+            objectType: item.objectType,
+            objectId: item.objectId,
+            operation: item.operation,
+          }
+        : null;
+    let admitted = false;
     try {
+      if (admissionIdentity) {
+        admitted = await callbackEvents.admitGetEvent(item.key, admissionIdentity);
+        if (!admitted) continue;
+      }
       await callbackEvents.recordProcessingStarted(item.key);
 
       const { shopId, objectType, objectId, operation } = item;
@@ -186,6 +200,16 @@ async function processWebhookQueue(db: Db): Promise<{ processed: number; failed:
       await callbackEvents.recordError(item.key, error.message);
 
       failed++;
+    } finally {
+      if (admitted && admissionIdentity) {
+        // Queue replay is itself the bounded/latest-state fetch.  Do not
+        // create an unbounded chain when callbacks arrive during the fetch.
+        await callbackEvents.finishGetEventAdmission(
+          item.key,
+          admissionIdentity,
+          false,
+        );
+      }
     }
   }
 

@@ -48,6 +48,8 @@ __protractorClientTestHooks.acquireDistributedRateLimitSlot = async () => ({
   currentCount: 0,
 });
 __protractorClientTestHooks.trackApiRequest = async () => {};
+__protractorClientTestHooks.acquireOutboundGate = async () => ({ allowed: true, probe: false });
+__protractorClientTestHooks.recordResponse = async () => {};
 __protractorClientTestHooks.retryBaseDelayMs = 5;
 
 function withHardTimeout<T>(p: Promise<T>, label: string): Promise<T> {
@@ -81,11 +83,9 @@ async function main() {
       calls += 1;
       return { statusCode: 200, body: "{}" };
     };
-    __protractorClientTestHooks.forceOutboundDisabled = true;
     process.env.PROTRACTOR_OUTBOUND_DISABLED = "true";
     const result = await protractorFetch("/WorkOrder/blocked", config, {}, 0, 1);
     delete process.env.PROTRACTOR_OUTBOUND_DISABLED;
-    __protractorClientTestHooks.forceOutboundDisabled = false;
 
     ok("disabled request resolves ok:false", result.ok === false);
     ok("disabled request never reaches Protractor", calls === 0, `calls=${calls}`);

@@ -13,6 +13,12 @@ import {
   upsertTemplateCacheEntry,
 } from "@/lib/data/repositories/protractor-template-cache";
 import { findCachedWorkOrderByRoNumber } from "@/lib/data/repositories/protractor-work-orders";
+import {
+  acquireProtractorOutboundGate,
+  recordProtractorResponse,
+  PROTRACTOR_TRANSPORT_FAILURE_STATUS,
+  type ProtractorGateDecision,
+} from "@/lib/data/repositories/protractor-circuit-breaker";
 import { trackApiRequest, acquireDistributedRateLimitSlot } from "@/lib/api-usage-tracker";
 import {
   getShopPartCostRatio,
@@ -58,7 +64,10 @@ export const __protractorClientTestHooks: {
   getDb: typeof getDb;
   getShopPartCostRatio: typeof getShopPartCostRatio;
   onFetchStart: ((endpoint: string, opts?: { priority?: boolean; maxRetries?: number }) => void) | null;
-  forceOutboundDisabled: boolean;
+  acquireOutboundGate: (connectionId: string) => Promise<ProtractorGateDecision>;
+  recordResponse: (connectionId: string, statusCode: number, retryAfterMs?: number) => Promise<void>;
+  sleep: (ms: number) => Promise<void>;
+  random: () => number;
 } = {
   httpsRequest: productionHttpsRequest,
   acquireDistributedRateLimitSlot: (...args) => acquireDistributedRateLimitSlot(...args),
@@ -69,7 +78,11 @@ export const __protractorClientTestHooks: {
   getDb: (...args) => getDb(...args),
   getShopPartCostRatio: (...args) => getShopPartCostRatio(...args),
   onFetchStart: null,
-  forceOutboundDisabled: false,
+  acquireOutboundGate: (connectionId) => acquireProtractorOutboundGate(connectionId),
+  recordResponse: (connectionId, statusCode, retryAfterMs) =>
+    recordProtractorResponse(connectionId, statusCode, retryAfterMs),
+  sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  random: () => Math.random(),
 };
 
 /**
@@ -429,7 +442,7 @@ export async function soapAddServicePackage(
   workOrderGuid: string,
   workOrderPayload: Record<string, any>
 ): Promise<{ ok: boolean; error?: string }> {
-  const config = await resolveProtractorConfig(Number(shopId));
+  const config = await __protractorClientTestHooks.resolveProtractorConfig(Number(shopId));
   if (!config.configured) {
     return { ok: false, error: "Protractor not configured" };
   }
@@ -488,8 +501,9 @@ function httpsRequest(
   urlString: string,
   method: string,
   headers: Record<string, string>,
-  body?: string
-): Promise<{ statusCode: number; body: string }> {
+  body?: string,
+  timeoutMs = 30000,
+): Promise<{ statusCode: number; body: string; headers?: Record<string, string | string[] | undefined> }> {
   return new Promise((resolve, reject) => {
     const url = new URL(urlString);
     
@@ -505,7 +519,7 @@ function httpsRequest(
       let data = "";
       res.on("data", (chunk) => { data += chunk; });
       res.on("end", () => {
-        resolve({ statusCode: res.statusCode || 0, body: data });
+        resolve({ statusCode: res.statusCode || 0, body: data, headers: res.headers });
       });
     });
     
@@ -513,7 +527,7 @@ function httpsRequest(
       reject(err);
     });
     
-    req.setTimeout(30000, () => {
+    req.setTimeout(timeoutMs, () => {
       req.destroy();
       reject(new Error("Request timeout"));
     });
@@ -526,6 +540,82 @@ function httpsRequest(
   });
 }
 
+const MAX_RETRY_AFTER_MS = 60_000;
+const MAX_TRANSIENT_BACKOFF_MS = 10_000;
+
+export function parseProtractorRetryAfter(
+  value: string | string[] | undefined,
+  nowMs = Date.now(),
+): number {
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (!raw) return 0;
+  const seconds = Number(raw);
+  const parsed = Number.isFinite(seconds)
+    ? seconds * 1000
+    : Date.parse(raw) - nowMs;
+  return Math.max(0, Math.min(MAX_RETRY_AFTER_MS, Number.isFinite(parsed) ? parsed : 0));
+}
+
+export function isProtractorOutboundDisabled(): boolean {
+  // This is an emergency stop, not merely a production-network guard. Tests
+  // that need a stubbed transport must explicitly clear the environment.
+  return process.env.PROTRACTOR_OUTBOUND_DISABLED === "true";
+}
+
+async function acquireOutboundGate(config: { connectionId: string }): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (isProtractorOutboundDisabled()) {
+    return { ok: false, error: "Protractor outbound API calls are temporarily disabled" };
+  }
+  try {
+    const decision = await __protractorClientTestHooks.acquireOutboundGate(config.connectionId);
+    if (decision.allowed) return { ok: true };
+    return {
+      ok: false,
+      error: `${decision.reason}; retry after ${decision.retryAfterMs}ms`,
+    };
+  } catch (err: any) {
+    return { ok: false, error: `Protractor outbound gate unavailable: ${err?.message || "unknown error"}` };
+  }
+}
+
+async function recordBreakerResponse(
+  config: { connectionId: string },
+  statusCode: number,
+  retryAfterMs = 0,
+): Promise<void> {
+  try {
+    await __protractorClientTestHooks.recordResponse(config.connectionId, statusCode, retryAfterMs);
+  } catch (error: any) {
+    // Persistence/telemetry never changes the completed upstream outcome.
+    // Do not include endpoint, body, credentials, or connection ID here.
+    console.warn(JSON.stringify({
+      event: "protractor_breaker_record_failed",
+      statusCode,
+      message: String(error?.message || "unknown").slice(0, 160),
+    }));
+  }
+}
+
+async function runGuardedTransportAttempt<T>(
+  config: { connectionId: string },
+  transport: () => Promise<T>,
+  priority = false,
+): Promise<{ ok: true; response: T } | { ok: false; error: string }> {
+  const concurrencyLimiter = priority ? priorityConcurrencyLimit : protractorConcurrencyLimit;
+  return concurrencyLimiter(async () => {
+    const gate = await acquireOutboundGate(config);
+    if (!gate.ok) return gate;
+
+    // Every physical transport attempt, including SOAP retries, consumes the
+    // same distributed provider budget as REST.
+    const rateSlot = await acquireRateLimitSlot(priority);
+    if (!rateSlot.acquired) {
+      return { ok: false, error: "Rate limit exceeded or circuit breaker open" };
+    }
+    return { ok: true, response: await transport() };
+  });
+}
+
 export async function protractorFetch<T>(
   endpoint: string,
   config: ProtractorConfig,
@@ -534,13 +624,7 @@ export async function protractorFetch<T>(
   shopId?: number,
   opts?: { priority?: boolean; maxRetries?: number }
 ): Promise<{ ok: boolean; data?: T; error?: string }> {
-  if (
-    process.env.PROTRACTOR_OUTBOUND_DISABLED === "true" &&
-    (
-      __protractorClientTestHooks.httpsRequest === productionHttpsRequest ||
-      __protractorClientTestHooks.forceOutboundDisabled
-    )
-  ) {
+  if (isProtractorOutboundDisabled()) {
     return {
       ok: false,
       error: "Protractor outbound API calls are temporarily disabled",
@@ -573,6 +657,8 @@ export async function protractorFetch<T>(
     let attempt = retryCount;
     // eslint-disable-next-line no-constant-condition
     while (true) {
+    const gate = await acquireOutboundGate(config);
+    if (!gate.ok) return gate;
     const rateSlot = await acquireRateLimitSlot(isPriority);
     if (!rateSlot.acquired) {
       return { ok: false, error: "Rate limit exceeded or circuit breaker open" };
@@ -633,6 +719,8 @@ export async function protractorFetch<T>(
       const latencyMs = Date.now() - startTime;
       const isServerError = res.statusCode >= 500;
       const isRateLimited = res.statusCode === 429;
+      const retryAfterMs = parseProtractorRetryAfter(res.headers?.["retry-after"]);
+      await recordBreakerResponse(config, res.statusCode, retryAfterMs);
       
       __protractorClientTestHooks.trackApiRequest('protractor', endpoint, method, res.statusCode, latencyMs, shopId, {
         retryCount: attempt > 0 ? attempt : undefined,
@@ -653,14 +741,17 @@ export async function protractorFetch<T>(
       if ((isRateLimited || isServerError) && attempt < maxRetries && !isDeterministicError) {
         const retryBase = __protractorClientTestHooks.retryBaseDelayMs ?? 1000;
         const baseWaitMs = Math.min(Math.pow(2, attempt + 1) * retryBase, 10000);
-        const jitter = Math.random() * 500;
-        const waitMs = baseWaitMs + jitter;
+        const jitter = __protractorClientTestHooks.random() * 500;
+        const waitMs = Math.min(
+          MAX_RETRY_AFTER_MS,
+          Math.max(isRateLimited ? retryAfterMs : 0, Math.min(baseWaitMs + jitter, MAX_TRANSIENT_BACKOFF_MS)),
+        );
         
         console.log(`[Protractor] ${isRateLimited ? 'Rate limited' : `Server error ${res.statusCode}`}, retrying in ${Math.round(waitMs)}ms (attempt ${attempt + 1}/${maxRetries}) | Body: ${(res.body || '').substring(0, 500)}`);
 
         const backoffCounter = backoffStorage.getStore();
         if (backoffCounter) backoffCounter.ms += waitMs;
-        await new Promise(r => setTimeout(r, waitMs));
+        await __protractorClientTestHooks.sleep(waitMs);
         attempt += 1;
         continue;
       }
@@ -682,6 +773,7 @@ export async function protractorFetch<T>(
       const data = res.body ? JSON.parse(res.body) : null;
       return { ok: true, data: data as T };
     } catch (err: any) {
+      await recordBreakerResponse(config, PROTRACTOR_TRANSPORT_FAILURE_STATUS);
       return { ok: false, error: err.message || "Network error" };
     }
     }
@@ -937,9 +1029,10 @@ async function protractorSoapServiceItemUpdate(
   serviceItemXml: string,
   // Task #936: per-request socket timeout (there was none — a hung SOAP
   // socket blocked the wizard's create-vehicle step indefinitely).
-  opts?: { timeoutMs?: number }
+  opts?: { timeoutMs?: number; maxRetries?: number }
 ): Promise<{ ok: boolean; error?: string }> {
   const timeoutMs = opts?.timeoutMs ?? 120_000;
+  const maxRetries = opts?.maxRetries ?? 3;
   const soapEnvelope = [
     '<?xml version="1.0" encoding="utf-8"?>',
     '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"',
@@ -955,43 +1048,50 @@ async function protractorSoapServiceItemUpdate(
     '</soap:Envelope>',
   ].join("\n");
 
-  try {
-    const res = await new Promise<{ statusCode: number; body: string }>((resolve, reject) => {
-      const url = new URL(PROTRACTOR_SOAP_URL);
-      const req = https.request(
-        {
-          hostname: url.hostname,
-          port: 443,
-          path: url.pathname,
-          method: "POST",
-          headers: {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const transport = await runGuardedTransportAttempt(config, () =>
+        __protractorClientTestHooks.httpsRequest(
+          PROTRACTOR_SOAP_URL,
+          "POST",
+          {
             "Content-Type": "text/xml; charset=utf-8",
             "SOAPAction": `${PROTRACTOR_SOAP_NS}ServiceItemUpdate`,
           },
-        },
-        (response) => {
-          let data = "";
-          response.on("data", (chunk: string) => (data += chunk));
-          response.on("end", () => resolve({ statusCode: response.statusCode || 0, body: data }));
-        }
+          soapEnvelope,
+          timeoutMs,
+        ),
       );
-      req.on("error", reject);
-      req.setTimeout(timeoutMs, () => {
-        req.destroy(new Error(`SOAP ServiceItemUpdate timed out after ${timeoutMs}ms`));
-      });
-      req.write(soapEnvelope);
-      req.end();
-    });
+      if (!transport.ok) return transport;
+      const res = transport.response;
+      const retryAfterMs = parseProtractorRetryAfter(res.headers?.["retry-after"]);
+      await recordBreakerResponse(config, res.statusCode, retryAfterMs);
+      if (res.statusCode === 200 && !res.body.includes("<soap:Fault>")) {
+        return { ok: true };
+      }
 
-    if (res.statusCode === 200 && !res.body.includes("<soap:Fault>")) {
-      return { ok: true };
+      if ((res.statusCode === 429 || res.statusCode >= 500) && attempt < maxRetries) {
+        const delay = Math.min(
+          MAX_RETRY_AFTER_MS,
+          Math.max(retryAfterMs, Math.min(2000 * Math.pow(1.5, attempt), MAX_TRANSIENT_BACKOFF_MS)),
+        );
+        await __protractorClientTestHooks.sleep(delay);
+        continue;
+      }
+      const faultMatch = res.body.match(/faultstring>([^<]+)/);
+      return { ok: false, error: faultMatch ? faultMatch[1] : `HTTP ${res.statusCode}` };
+    } catch (err: any) {
+      await recordBreakerResponse(config, PROTRACTOR_TRANSPORT_FAILURE_STATUS);
+      if (attempt < maxRetries) {
+        await __protractorClientTestHooks.sleep(
+          Math.min(2000 * Math.pow(1.5, attempt), MAX_TRANSIENT_BACKOFF_MS),
+        );
+        continue;
+      }
+      return { ok: false, error: err.message || "SOAP request failed" };
     }
-
-    const faultMatch = res.body.match(/faultstring>([^<]+)/);
-    return { ok: false, error: faultMatch ? faultMatch[1] : `HTTP ${res.statusCode}` };
-  } catch (err: any) {
-    return { ok: false, error: err.message || "SOAP request failed" };
   }
+  return { ok: false, error: "Max retries exceeded" };
 }
 
 function buildWorkOrderXml(wo: Record<string, any>): string {
@@ -1111,32 +1211,22 @@ async function protractorSoapWorkOrderUpdate(
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const startTime = Date.now();
-      const res = await new Promise<{ statusCode: number; body: string }>((resolve, reject) => {
-        const url = new URL(PROTRACTOR_SOAP_WO_URL);
-        const req = https.request(
+      const transport = await runGuardedTransportAttempt(config, () =>
+        __protractorClientTestHooks.httpsRequest(
+          PROTRACTOR_SOAP_WO_URL,
+          "POST",
           {
-            hostname: url.hostname,
-            port: 443,
-            path: url.pathname,
-            method: 'POST',
-            headers: {
-              'Content-Type': 'text/xml; charset=utf-8',
-              'SOAPAction': `${PROTRACTOR_SOAP_NS}WorkOrderUpdate`,
-            },
+            "Content-Type": "text/xml; charset=utf-8",
+            "SOAPAction": `${PROTRACTOR_SOAP_NS}WorkOrderUpdate`,
           },
-          (response) => {
-            let data = '';
-            response.on('data', (chunk: string) => (data += chunk));
-            response.on('end', () => resolve({ statusCode: response.statusCode || 0, body: data }));
-          }
-        );
-        req.on('error', reject);
-        req.setTimeout(timeoutMs, () => {
-          req.destroy(new Error(`SOAP WorkOrderUpdate timed out after ${timeoutMs}ms`));
-        });
-        req.write(soapEnvelope);
-        req.end();
-      });
+          soapEnvelope,
+          timeoutMs,
+        ),
+      );
+      if (!transport.ok) return transport;
+      const res = transport.response;
+      const retryAfterMs = parseProtractorRetryAfter(res.headers?.["retry-after"]);
+      await recordBreakerResponse(config, res.statusCode, retryAfterMs);
 
       const latencyMs = Date.now() - startTime;
       trackApiRequest(
@@ -1166,18 +1256,22 @@ async function protractorSoapWorkOrderUpdate(
       const errorMsg = faultMatch ? faultMatch[1] : `HTTP ${res.statusCode}`;
       console.log(`[Protractor:SOAP] WorkOrderUpdate error (attempt ${attempt + 1}/${maxRetries + 1}): ${errorMsg}`);
 
-      if (res.statusCode >= 500 && attempt < maxRetries) {
-        const delay = Math.min(2000 * Math.pow(1.5, attempt), 10000);
-        await new Promise(r => setTimeout(r, delay));
+      if ((res.statusCode === 429 || res.statusCode >= 500) && attempt < maxRetries) {
+        const delay = Math.min(
+          MAX_RETRY_AFTER_MS,
+          Math.max(retryAfterMs, Math.min(2000 * Math.pow(1.5, attempt), MAX_TRANSIENT_BACKOFF_MS)),
+        );
+        await __protractorClientTestHooks.sleep(delay);
         continue;
       }
 
       return { ok: false, error: errorMsg };
     } catch (err: any) {
+      await recordBreakerResponse(config, PROTRACTOR_TRANSPORT_FAILURE_STATUS);
       console.log(`[Protractor:SOAP] WorkOrderUpdate exception (attempt ${attempt + 1}/${maxRetries + 1}): ${err.message}`);
       if (attempt < maxRetries) {
         const delay = Math.min(2000 * Math.pow(1.5, attempt), 10000);
-        await new Promise(r => setTimeout(r, delay));
+        await __protractorClientTestHooks.sleep(delay);
         continue;
       }
       return { ok: false, error: err.message || 'SOAP request failed' };

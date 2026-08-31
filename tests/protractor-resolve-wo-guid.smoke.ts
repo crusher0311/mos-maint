@@ -53,6 +53,8 @@ __protractorClientTestHooks.acquireDistributedRateLimitSlot = async () => ({
   currentCount: 0,
 });
 __protractorClientTestHooks.trackApiRequest = async () => {};
+__protractorClientTestHooks.acquireOutboundGate = async () => ({ allowed: true, probe: false });
+__protractorClientTestHooks.recordResponse = async () => {};
 __protractorClientTestHooks.retryBaseDelayMs = 1;
 
 type Calls = { byId: number; scan: number };

@@ -14,8 +14,8 @@
 import crypto from "node:crypto";
 import { getDb } from "../lib/mongo";
 import { extractJobIndexFromWorkOrder, updatePartCrossReferences } from "../lib/job-index";
+import { protractorFetch } from "../lib/integrations/protractor/client";
 
-const BASE_URL = "https://integration.protractor.com/IntegrationServices/2.0";
 const DEFAULT_MONTHS_PER_RUN = 3;
 const MAX_SHOPS_PER_RUN = 3; // Process up to 3 shops per run
 
@@ -57,39 +57,6 @@ async function resolveProtractorConfig(shopId: number): Promise<ProtractorConfig
   const authentication = configured ? computeAuthentication(connectionId, apiKey) : "";
 
   return { connectionId, apiKey, authentication, configured };
-}
-
-async function protractorFetch<T>(
-  endpoint: string,
-  config: ProtractorConfig
-): Promise<{ ok: boolean; data?: T; error?: string }> {
-  const url = `${BASE_URL}${endpoint}`;
-
-  try {
-    const res = await fetch(url, {
-      headers: {
-        connectionId: config.connectionId,
-        apiKey: config.apiKey,
-        authentication: config.authentication,
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
-      cache: "no-store",
-    });
-
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      if (text.startsWith("<!DOCTYPE") || text.startsWith("<html")) {
-        return { ok: false, error: "API returned HTML (rate limit or error page)" };
-      }
-      return { ok: false, error: `HTTP ${res.status}: ${text || res.statusText}` };
-    }
-
-    const data = await res.json().catch(() => null);
-    return { ok: true, data: data as T };
-  } catch (err: any) {
-    return { ok: false, error: err.message || "Network error" };
-  }
 }
 
 async function fetchInvoicesForDateRange(

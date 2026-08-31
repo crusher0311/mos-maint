@@ -9,10 +9,36 @@ import {
 import { attributeRevenueFromWorkOrder } from "@/lib/enterprise";
 import { Db } from "mongodb";
 import * as callbackEvents from "@/lib/data/repositories/protractor-callback-events";
-import type { CallbackEventKey } from "@/lib/data/repositories/protractor-callback-events";
+import type {
+  AdmittedGetEvent,
+  CallbackAdmissionIdentity,
+  CallbackEventKey,
+  GetEventIdentity,
+} from "@/lib/data/repositories/protractor-callback-events";
+import {
+  fingerprintProtractorConnection,
+  recordUnknownCallback,
+} from "@/lib/data/repositories/protractor-callback-quarantine";
 
 const VALID_TERMINAL_STATUSES = ["INVOICED", "INVOICE", "CLOSED", "VOID"];
 const MAX_IMMEDIATE_RETRIES = 3;
+
+function logCallbackOutcome(fields: {
+  sourceRoute: string;
+  method: "GET" | "POST";
+  outcome: "admitted" | "coalesced" | "duplicate" | "rate_limited";
+  shopId?: number;
+  connectionId: string;
+}): void {
+  console.info(JSON.stringify({
+    event: "protractor_callback_outcome",
+    sourceRoute: fields.sourceRoute,
+    method: fields.method,
+    outcome: fields.outcome,
+    ...(fields.shopId === undefined ? {} : { shopId: fields.shopId }),
+    connectionFingerprint: fingerprintProtractorConnection(fields.connectionId),
+  }));
+}
 const RETRY_DELAY_MS = 2000; // 2 seconds between retries
 
 async function sleep(ms: number) {
@@ -377,6 +403,48 @@ async function enrichOpenWorkOrderInBackground(
   }
 }
 
+async function processAdmittedOpenPost(
+  db: Db,
+  shopId: number,
+  workOrderId: string,
+  status: string | null,
+  eventId: CallbackEventKey,
+  identity: CallbackAdmissionIdentity,
+  claimFollowUp: boolean,
+): Promise<void> {
+  try {
+    await enrichOpenWorkOrderInBackground(
+      db,
+      shopId,
+      workOrderId,
+      status,
+      eventId,
+    );
+  } finally {
+    const followUp = await callbackEvents.finishCallbackEventAdmission(
+      eventId,
+      identity,
+      claimFollowUp,
+    );
+    if (followUp) {
+      processAdmittedOpenPost(
+        db,
+        shopId,
+        workOrderId,
+        status,
+        followUp.key,
+        followUp,
+        false,
+      ).catch((err: any) =>
+        console.error(
+          "[Protractor Callback] POST coalesced follow-up error:",
+          err?.message || err,
+        ),
+      );
+    }
+  }
+}
+
 async function processWithRetries(
   db: Db,
   eventId: CallbackEventKey,
@@ -385,7 +453,7 @@ async function processWithRetries(
   objectId: string,
   operation: string,
   remainingAttempts: number = MAX_IMMEDIATE_RETRIES
-): Promise<void> {
+): Promise<boolean> {
   for (let attempt = 1; attempt <= remainingAttempts; attempt++) {
     await sleep(RETRY_DELAY_MS);
     
@@ -393,7 +461,7 @@ async function processWithRetries(
     
     if (success) {
       console.log(`[Protractor Callback] Background retry succeeded on attempt ${attempt}`);
-      return;
+      return true;
     }
     
     await callbackEvents.recordAttempt(eventId);
@@ -403,6 +471,75 @@ async function processWithRetries(
     } else {
       console.log(`[Protractor Callback] All retries exhausted, leaving for daily cron`);
     }
+  }
+  return false;
+}
+
+async function processAdmittedFollowUp(
+  db: Db,
+  event: AdmittedGetEvent,
+): Promise<void> {
+  try {
+    const success = await processCallbackEvent(
+      db,
+      event.key,
+      event.shopId,
+      event.objectType,
+      event.objectId,
+      event.operation || "Unknown",
+    );
+    if (!success) {
+      await callbackEvents.recordAttempt(event.key);
+      await processWithRetries(
+        db,
+        event.key,
+        event.shopId,
+        event.objectType,
+        event.objectId,
+        event.operation || "Unknown",
+        2,
+      );
+    }
+  } finally {
+    // A promoted callback is the one bounded follow-up for this burst.
+    // Events that arrived during its latest-state fetch are coalesced on
+    // release rather than extending the worker indefinitely.
+    await callbackEvents.finishGetEventAdmission(event.key, event, false);
+  }
+}
+
+function launchFollowUp(db: Db, event: AdmittedGetEvent | null): void {
+  if (!event) return;
+  processAdmittedFollowUp(db, event).catch((err: any) =>
+    console.error(
+      `[Protractor Callback] Coalesced follow-up error:`,
+      err?.message || err,
+    ),
+  );
+}
+
+async function continueAdmittedInitialWorker(
+  db: Db,
+  eventId: CallbackEventKey,
+  identity: GetEventIdentity,
+): Promise<void> {
+  try {
+    await processWithRetries(
+      db,
+      eventId,
+      identity.shopId,
+      identity.objectType,
+      identity.objectId,
+      identity.operation || "Unknown",
+      2,
+    );
+  } finally {
+    const followUp = await callbackEvents.finishGetEventAdmission(
+      eventId,
+      identity,
+      true,
+    );
+    launchFollowUp(db, followUp);
   }
 }
 const RATE_LIMIT_WINDOW_MS = 60000;
@@ -438,7 +575,6 @@ export async function POST(request: NextRequest) {
       });
     } else if (contentType.includes("text/")) {
       const text = await request.text();
-      console.log("[Protractor Callback] Raw text:", text.slice(0, 500));
       try {
         payload = JSON.parse(text);
       } catch {
@@ -447,7 +583,6 @@ export async function POST(request: NextRequest) {
     } else {
       // Try to read as text and parse
       const text = await request.text();
-      console.log("[Protractor Callback] Raw body:", text.slice(0, 500));
       try {
         payload = JSON.parse(text);
       } catch {
@@ -461,14 +596,13 @@ export async function POST(request: NextRequest) {
     
     // Also capture query params
     const url = new URL(request.url);
+    const sourceRoute = url.pathname;
     url.searchParams.forEach((value, key) => {
       if (!payload[key]) {
         payload[key] = value;
       }
     });
     
-    console.log("[Protractor Callback] Received:", JSON.stringify(payload).slice(0, 500));
-
     const db = await getDb();
 
     const workOrderId = payload.WorkOrderGuid || payload.workOrderGuid || payload.ID || payload.id;
@@ -482,7 +616,12 @@ export async function POST(request: NextRequest) {
 
     const rateCheck = await checkRateLimit(connectionId);
     if (!rateCheck.allowed) {
-      console.warn(`[Protractor Callback] Rate limited: connectionId ${connectionId}`);
+      logCallbackOutcome({
+        sourceRoute,
+        method: "POST",
+        outcome: "rate_limited",
+        connectionId,
+      });
       return NextResponse.json({ ok: false, error: "Rate limit exceeded" }, { status: 429 });
     }
 
@@ -500,7 +639,18 @@ export async function POST(request: NextRequest) {
       // ALL our shops sharing this URL. We log + drop instead. See 2026-05-14
       // incident: 509 403s in 20min for a not-yet-provisioned Total True
       // Automotive connectionId, then 6+ days of system-wide silence.
-      console.log(`[Protractor Callback] Ignored: Unknown connectionId ${connectionId}`);
+      await recordUnknownCallback({
+        method: "POST",
+        sourceRoute,
+        connectionId,
+      }).catch((error: any) =>
+        console.error(JSON.stringify({
+          event: "protractor_unknown_callback_quarantine_error",
+          sourceRoute,
+          method: "POST",
+          error: String(error?.message || error).slice(0, 200),
+        })),
+      );
       return NextResponse.json({ ok: true, ignored: true, reason: "Unknown connectionId" });
     }
 
@@ -509,16 +659,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, message: "No work order ID" });
     }
 
-    const isDuplicate = await callbackEvents.hasRecentProcessedPost(
-      workOrderId,
-      status ?? null,
-      new Date(Date.now() - 300000),
-    );
-
-    if (isDuplicate) {
-      console.log(`[Protractor Callback] Duplicate event for ${workOrderId}, skipping`);
-      return NextResponse.json({ ok: true, duplicate: true });
-    }
+    const normalizedStatus = String(status || "").trim().toUpperCase();
+    const isClosed = VALID_TERMINAL_STATUSES.includes(normalizedStatus);
 
     const eventId = await callbackEvents.insertPostEvent({
       payload,
@@ -527,9 +669,24 @@ export async function POST(request: NextRequest) {
       connectionId,
       shopId: shop.shopId,
     });
-
-    const normalizedStatus = (status || "").toUpperCase();
-    const isClosed = VALID_TERMINAL_STATUSES.includes(normalizedStatus);
+    const postIdentity: CallbackAdmissionIdentity = {
+      shopId: Number(shop.shopId),
+      method: "POST",
+      objectType: "WorkOrder",
+      objectId: String(workOrderId),
+      operation: normalizedStatus,
+    };
+    const postAdmitted = await callbackEvents.admitCallbackEvent(
+      eventId,
+      postIdentity,
+    );
+    logCallbackOutcome({
+      sourceRoute,
+      method: "POST",
+      outcome: postAdmitted ? "admitted" : "coalesced",
+      shopId: Number(shop.shopId),
+      connectionId,
+    });
 
     // For NEW/OPEN work orders, fire enrichment in the background and ack
     // the webhook immediately. Doing the Protractor API round-trip inline
@@ -541,16 +698,33 @@ export async function POST(request: NextRequest) {
     if (!isClosed && workOrderId) {
       const shopId = Number(shop.shopId);
       console.log(`[Protractor Callback] New/open work order ${workOrderId} with status: ${status} (shop: ${shopId}) - enriching in background`);
-
-      // Fire-and-forget — DO NOT await.
-      enrichOpenWorkOrderInBackground(db, shopId, workOrderId, status, eventId)
-        .catch((err: any) => console.error(`[Protractor Callback] Background enrich top-level error:`, err?.message || err));
+      if (postAdmitted) {
+        // Fire-and-forget — DO NOT await.
+        processAdmittedOpenPost(
+          db,
+          shopId,
+          String(workOrderId),
+          status ?? null,
+          eventId,
+          postIdentity,
+          true,
+        ).catch((err: any) =>
+          console.error(
+            "[Protractor Callback] Background enrich top-level error:",
+            err?.message || err,
+          ),
+        );
+      }
     }
 
     // (Legacy synchronous enrichment block removed 2026-05-13 —
     // enrichOpenWorkOrderInBackground above is now the single source
     // of truth so the webhook can ack in <50ms.)
     if (isClosed) {
+      if (!postAdmitted) {
+        return NextResponse.json({ ok: true, duplicate: true, coalesced: true });
+      }
+      try {
       console.log(`[Protractor Callback] Work order ${workOrderId} closed with status: ${status} (shop: ${shop.shopId})`);
 
       const existingWorkOrder = await db.collection("protractor_work_orders").findOne({
@@ -612,11 +786,19 @@ export async function POST(request: NextRequest) {
       await callbackEvents.markOneProcessedByWorkOrderStatus(workOrderId, status ?? null);
 
       await signalDashboardUpdate(db, { workOrderId });
+      } finally {
+        await callbackEvents.finishCallbackEventAdmission(
+          eventId,
+          postIdentity,
+          false,
+        );
+      }
     }
 
     return NextResponse.json({ 
       received: true, 
       status: "acknowledged",
+      callbackOutcome: postAdmitted ? "admitted" : "coalesced",
       workOrderId,
       workOrderStatus: status,
       isClosed 
@@ -631,6 +813,7 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const url = new URL(request.url);
+    const sourceRoute = url.pathname;
     const connectionId = url.searchParams.get("connectionId");
     const objectType = url.searchParams.get("type");
     const objectId = url.searchParams.get("id");
@@ -657,7 +840,18 @@ export async function GET(request: NextRequest) {
       // Return 200 (not 403) — see POST handler for full rationale.
       // 4xx flood from a stale/pre-provisioned connectionId can trip
       // Protractor's per-URL circuit breaker and mute all shops.
-      console.log(`[Protractor Callback GET] Ignored: Unknown connectionId: ${connectionId}`);
+      await recordUnknownCallback({
+        method: "GET",
+        sourceRoute,
+        connectionId,
+      }).catch((error: any) =>
+        console.error(JSON.stringify({
+          event: "protractor_unknown_callback_quarantine_error",
+          sourceRoute,
+          method: "GET",
+          error: String(error?.message || error).slice(0, 200),
+        })),
+      );
       return NextResponse.json({ ok: true, ignored: true, reason: "Unknown connectionId" });
     }
 
@@ -676,6 +870,13 @@ export async function GET(request: NextRequest) {
       );
 
       if (recentDuplicate) {
+        logCallbackOutcome({
+          sourceRoute,
+          method: "GET",
+          outcome: "duplicate",
+          shopId,
+          connectionId,
+        });
         console.log(`[Protractor Callback GET] Skipping duplicate ${operation} ${objectType} ${objectId} for shop ${shopId} (processed ${Math.round((Date.now() - recentDuplicate.processedAt.getTime()) / 1000)}s ago)`);
         return NextResponse.json({ 
           ok: true, 
@@ -698,9 +899,38 @@ export async function GET(request: NextRequest) {
 
     // Try to process immediately — if it works, return real success
     if (objectId) {
+      const identity: GetEventIdentity = {
+        shopId,
+        objectType,
+        objectId,
+        operation: operation ?? null,
+      };
+      const admitted = await callbackEvents.admitGetEvent(eventId, identity);
+      logCallbackOutcome({
+        sourceRoute,
+        method: "GET",
+        outcome: admitted ? "admitted" : "coalesced",
+        shopId,
+        connectionId,
+      });
+      if (!admitted) {
+        return NextResponse.json({
+          ok: true,
+          status: "coalesced",
+          type: objectType,
+          operation,
+        });
+      }
+
       const success = await processCallbackEvent(db, eventId, shopId, objectType, objectId, operation || "Unknown");
       
       if (success) {
+        const followUp = await callbackEvents.finishGetEventAdmission(
+          eventId,
+          identity,
+          true,
+        );
+        launchFollowUp(db, followUp);
         return NextResponse.json({ 
           ok: true, 
           status: "processed",
@@ -712,7 +942,7 @@ export async function GET(request: NextRequest) {
       // First attempt failed — queue remaining retries in background, respond as queued
       await callbackEvents.recordAttempt(eventId);
 
-      processWithRetries(db, eventId, shopId, objectType, objectId, operation || "Unknown", 2)
+      continueAdmittedInitialWorker(db, eventId, identity)
         .catch(err => console.error(`[Protractor Callback] Background retry error:`, err.message));
 
       return NextResponse.json({ 

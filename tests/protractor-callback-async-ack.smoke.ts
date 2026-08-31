@@ -79,13 +79,13 @@ const getIdx = src.indexOf("export async function GET(", postIdx + 1);
 ok("GET handler exists (used as POST end-marker)", getIdx > postIdx);
 const postBody = src.slice(postIdx, getIdx);
 
-// ---- 4. POST must call the background helper WITHOUT await ----
+// ---- 4. POST must launch the admitted background helper WITHOUT await ----
 ok(
-  "POST invokes enrichOpenWorkOrderInBackground",
-  /enrichOpenWorkOrderInBackground\s*\(/.test(postBody),
+  "POST invokes admitted open-WO enrichment",
+  /processAdmittedOpenPost\s*\(/.test(postBody),
 );
 
-const awaitedCallRe = /await\s+enrichOpenWorkOrderInBackground\s*\(/;
+const awaitedCallRe = /await\s+processAdmittedOpenPost\s*\(/;
 ok(
   "POST does NOT await enrichOpenWorkOrderInBackground (fire-and-forget)",
   !awaitedCallRe.test(postBody),
@@ -95,7 +95,7 @@ ok(
 // The fire-and-forget call must attach a .catch so unhandled rejections
 // can't crash the Node process.
 const fireAndForgetRe =
-  /enrichOpenWorkOrderInBackground\s*\([\s\S]*?\)\s*\.catch\s*\(/;
+  /processAdmittedOpenPost\s*\([\s\S]*?\)\s*\.catch\s*\(/;
 ok(
   "fire-and-forget call has a .catch handler",
   fireAndForgetRe.test(postBody),
@@ -110,8 +110,8 @@ ok(
   /const\s+eventId\s*=\s*await\s+callbackEvents\.insertPostEvent\s*\(/.test(postBody),
 );
 ok(
-  "POST passes eventId into enrichOpenWorkOrderInBackground",
-  /enrichOpenWorkOrderInBackground\s*\(\s*db\s*,\s*shopId\s*,\s*workOrderId\s*,\s*status\s*,\s*eventId\s*\)/.test(
+  "POST passes eventId into admitted enrichment",
+  /processAdmittedOpenPost\s*\([\s\S]*?\beventId\s*,\s*postIdentity\s*,\s*true\s*,?\s*\)/.test(
     postBody,
   ),
 );

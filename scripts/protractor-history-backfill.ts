@@ -4,8 +4,8 @@
 import crypto from "node:crypto";
 import { getDb } from "../lib/mongo";
 import { extractJobIndexFromWorkOrder, updatePartCrossReferences } from "../lib/job-index";
+import { protractorFetch } from "../lib/integrations/protractor/client";
 
-const BASE_URL = "https://integration.protractor.com/IntegrationServices/2.0";
 const SHOP_ID = 28; // C.A.R. Experts - backfill target
 
 type ProtractorConfig = {
@@ -39,36 +39,6 @@ function computeAuthentication(connectionId: string, apiKey: string): string {
   hmac.update(dataBytes);
   
   return hmac.digest("base64");
-}
-
-async function protractorFetch<T>(
-  endpoint: string,
-  config: ProtractorConfig
-): Promise<{ ok: boolean; data?: T; error?: string }> {
-  const url = `${BASE_URL}${endpoint}`;
-  
-  try {
-    const res = await fetch(url, {
-      headers: {
-        connectionId: config.connectionId,
-        apiKey: config.apiKey,
-        authentication: config.authentication,
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
-      cache: "no-store",
-    });
-
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      return { ok: false, error: `HTTP ${res.status}: ${text || res.statusText}` };
-    }
-
-    const data = await res.json().catch(() => null);
-    return { ok: true, data: data as T };
-  } catch (err: any) {
-    return { ok: false, error: err.message || "Network error" };
-  }
 }
 
 async function fetchClosedWorkOrders(
