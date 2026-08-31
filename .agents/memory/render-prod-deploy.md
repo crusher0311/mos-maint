@@ -67,3 +67,11 @@ service "restart" spun up an instance still missing the var, live-verified
 2026-07-21). After any API env change, trigger `POST /services/:id/deploys`
 (builds current GitHub main, ~7-10 min) and then verify behavior in logs; never
 assume a runtime kill switch is active just because the var reads back.
+
+## Never suspend the web service to stop one provider
+
+Suspending `mos-tools` cancels an in-progress deploy. Resuming may leave the service returning 502 until a new image finishes building; queued resume, rollback, and deploy-only operations can also cancel each other. For a provider incident, keep the last good image serving and build the provider-disabled image in parallel. If recovery is needed, cancel every competing deploy first, disable autodeploy temporarily, then use `deployMode: "deploy_only"` to activate the last successful image without rebuilding.
+
+**Why:** During a Protractor call-storm response on 2026-08-31, suspending the web service stopped provider traffic but caused a full MOS outage and canceled the emergency build.
+
+**How to apply:** Prefer provider-side blocking plus an application kill switch. Never suspend the shared web service unless total MOS downtime is explicitly acceptable. Restore autodeploy only after the protected release is confirmed live.
