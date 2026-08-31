@@ -10,7 +10,19 @@ import {
   isTrialBillingStatus,
 } from "@/lib/featureResolver";
 import { FEATURES } from "@/lib/features";
-import { getDb } from "@/lib/mongo";
+import {
+  findShopByShopId,
+  type ShopDoc,
+} from "@/lib/data/repositories/shops";
+
+type FeatureShopDoc = ShopDoc & {
+  trial?: { endsAt?: Date | string; startedAt?: Date | string; days?: number };
+  trialEndsAt?: Date | string;
+  trialStartedAt?: Date | string;
+  trialDays?: number;
+  cardOnFile?: boolean;
+  billing?: { cardOnFile?: boolean };
+};
 
 export const dynamic = "force-dynamic";
 
@@ -22,11 +34,14 @@ export async function GET() {
 
   const shopId = Number(session.shopId);
   const entitlements = await getFeatureEntitlements(shopId);
-  const db = await getDb();
-  const shopDoc = await db.collection("shops").findOne(
-    { shopId },
-    { projection: { trial: 1, trialEndsAt: 1, trialDays: 1, trialStartedAt: 1, cardOnFile: 1, "billing.cardOnFile": 1 } }
-  );
+  const shopDoc = await findShopByShopId<FeatureShopDoc>(shopId, {
+    trial: 1,
+    trialEndsAt: 1,
+    trialDays: 1,
+    trialStartedAt: 1,
+    cardOnFile: 1,
+    "billing.cardOnFile": 1,
+  });
 
   const trialEndsAt = shopDoc?.trial?.endsAt
     ? new Date(shopDoc.trial.endsAt)

@@ -129,6 +129,38 @@ async function main() {
       Object.keys(normalizeShopFeatureOverrides(undefined)).length === 0);
   }
 
+  section("billing status controls entitlement access");
+  {
+    shops.set(10, {
+      shopId: 10,
+      billing: { plan: "professional", paymentType: "invoice", status: "canceled" },
+      enabledFeatures: { maintenance: true },
+    });
+    const invoice = await getFeatureEntitlements(10);
+    ok("invoice + stale canceled resolves active", invoice.billing.status === "active");
+    ok("invoice + stale canceled retains feature access", invoice.canUseFeature("maintenance"));
+
+    shops.set(11, {
+      shopId: 11,
+      billing: { plan: "professional", paymentType: "stripe", status: "canceled" },
+      enabledFeatures: { maintenance: true },
+    });
+    const canceledStripe = await getFeatureEntitlements(11);
+    ok("genuine Stripe cancellation remains canceled", canceledStripe.billing.status === "canceled");
+    ok("genuine Stripe cancellation blocks feature access", !canceledStripe.canUseFeature("maintenance"));
+
+    for (const status of ["paused", "unpaid", "incomplete", "incomplete_expired"] as const) {
+      shops.set(12, {
+        shopId: 12,
+        billing: { plan: "professional", paymentType: "stripe", status },
+        enabledFeatures: { maintenance: true },
+      });
+      const terminalStripe = await getFeatureEntitlements(12);
+      ok(`${status} Stripe state is preserved`, terminalStripe.billing.status === status);
+      ok(`${status} Stripe state blocks feature access`, !terminalStripe.canUseFeature("maintenance"));
+    }
+  }
+
   section("enableFeature → entitlements flip on");
   {
     shops.set(1, {

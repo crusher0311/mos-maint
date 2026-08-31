@@ -1,8 +1,21 @@
 "use client";
 
 import { AlertTriangle, XCircle } from "lucide-react";
+import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/support-contact";
 
-export type BillingStatus = "active" | "trial" | "past_due" | "suspended" | "canceled" | "enterprise" | "demo";
+export type BillingStatus =
+  | "active"
+  | "trial"
+  | "trialing"
+  | "past_due"
+  | "suspended"
+  | "canceled"
+  | "paused"
+  | "unpaid"
+  | "incomplete"
+  | "incomplete_expired"
+  | "enterprise"
+  | "demo";
 
 interface BillingStatusBannerProps {
   status: BillingStatus;
@@ -11,7 +24,7 @@ interface BillingStatusBannerProps {
 }
 
 export function BillingStatusBanner({ status, gracePeriodEndsAt, shopName }: BillingStatusBannerProps) {
-  if (status === "active" || status === "trial" || status === "enterprise" || status === "demo") {
+  if (status === "active" || status === "trial" || status === "trialing" || status === "enterprise" || status === "demo") {
     return null;
   }
 
@@ -45,8 +58,8 @@ export function BillingStatusBanner({ status, gracePeriodEndsAt, shopName }: Bil
             </p>
             <p className="text-sm text-amber-700 mt-2">
               Please contact support at{" "}
-              <a href="mailto:support@mosmaintenance.com" className="font-medium underline">
-                support@mosmaintenance.com
+              <a href={SUPPORT_MAILTO} className="font-medium underline">
+                {SUPPORT_EMAIL}
               </a>{" "}
               to update your payment method.
             </p>
@@ -71,8 +84,8 @@ export function BillingStatusBanner({ status, gracePeriodEndsAt, shopName }: Bil
             </p>
             <p className="text-sm text-red-700 mt-2">
               Please contact support at{" "}
-              <a href="mailto:support@mosmaintenance.com" className="font-medium underline">
-                support@mosmaintenance.com
+              <a href={SUPPORT_MAILTO} className="font-medium underline">
+                {SUPPORT_EMAIL}
               </a>{" "}
               to restore your account.
             </p>
@@ -93,8 +106,8 @@ export function BillingStatusBanner({ status, gracePeriodEndsAt, shopName }: Bil
             </h3>
             <p className="text-sm text-gray-700 mt-1">
               Your subscription has been canceled. Contact support at{" "}
-              <a href="mailto:support@mosmaintenance.com" className="font-medium underline">
-                support@mosmaintenance.com
+              <a href={SUPPORT_MAILTO} className="font-medium underline">
+                {SUPPORT_EMAIL}
               </a>{" "}
               to resubscribe and regain access to all features.
             </p>

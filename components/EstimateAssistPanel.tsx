@@ -520,8 +520,8 @@ export default function EstimateAssistPanel({
           </p>
           <p className="text-gray-500 text-sm mt-6">
             Contact support at{" "}
-            <a href="mailto:support@mosmaintenance.com" className="text-blue-600 underline hover:text-blue-700">
-              support@mosmaintenance.com
+            <a href="mailto:support@myoilsticker.com" className="text-blue-600 underline hover:text-blue-700">
+              support@myoilsticker.com
             </a>{" "}
             to change your plan.
           </p>

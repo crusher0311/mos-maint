@@ -288,8 +288,8 @@ export default function JobLookup({ currentVehicle, workOrderGuid, onJobAdded }:
               </p>
               <p className="text-sm text-gray-500">
                 Contact support at{" "}
-                <a href="mailto:support@mosmaintenance.com" className="text-purple-600 underline hover:text-purple-700">
-                  support@mosmaintenance.com
+                <a href="mailto:support@myoilsticker.com" className="text-purple-600 underline hover:text-purple-700">
+                  support@myoilsticker.com
                 </a>{" "}
                 to upgrade your plan.
               </p>

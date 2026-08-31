@@ -6,6 +6,7 @@ import {
   getReviewStateForShopId,
   type GatedEmailKind,
 } from "./shop-review";
+import { SUPPORT_EMAIL } from "./support-contact";
 
 type SendArgs = {
   to: string;
@@ -185,7 +186,7 @@ export function makeProtractorApiRequestEmail(shopName: string, shopLocation: st
       
       <p>Thank you,<br/>
       MOS Tools Team<br/>
-      <a href="mailto:support@mos.tools">support@mos.tools</a><br/>
+      <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a><br/>
       <a href="https://mos.tools">mos.tools</a></p>
     </div>`;
   const text = `Support,
@@ -196,7 +197,7 @@ Also, in the actions please ensure UpdateWorkOrderLine and UpdateWorkOrderPackag
 
 Thank you,
 MOS Tools Team
-support@mos.tools
+${SUPPORT_EMAIL}
 mos.tools`;
   return { subject, html, text, to: "support@protractor.com", cc: ownerEmail };
 }
@@ -242,7 +243,7 @@ export function makeTekmetricSetupEmail(shopName: string, ownerEmail: string) {
       <hr style="border:none;border-top:1px solid #e5e7eb;margin:30px 0" />
       
       <p style="color:#4b5563;font-size:16px">
-        Need help? Reply to this email or reach out to <a href="mailto:support@mos.tools" style="color:#2563eb">support@mos.tools</a>.
+        Need help? Reply to this email or reach out to <a href="mailto:${SUPPORT_EMAIL}" style="color:#2563eb">${SUPPORT_EMAIL}</a>.
       </p>
       
       <p style="color:#9ca3af;font-size:14px;text-align:center;margin-top:30px">
@@ -263,7 +264,7 @@ The MOS Tools Chrome extension adds maintenance plans and job history search dir
 
 Install here: ${chromeExtensionUrl}
 
-Need help? Contact support@mos.tools`;
+Need help? Contact ${SUPPORT_EMAIL}`;
   return { subject, html, text, to: ownerEmail };
 }
 
@@ -422,7 +423,7 @@ export function makeWelcomeEmail(shopName: string, loginUrl: string) {
       </div>
       
       <p style="color:#4b5563;font-size:16px">
-        Need help getting started? Reply to this email or reach out to <a href="mailto:support@mos.tools" style="color:#2563eb">support@mos.tools</a>.
+        Need help getting started? Reply to this email or reach out to <a href="mailto:${SUPPORT_EMAIL}" style="color:#2563eb">${SUPPORT_EMAIL}</a>.
       </p>
       
       <hr style="border:none;border-top:1px solid #e5e7eb;margin:30px 0" />
@@ -432,7 +433,7 @@ export function makeWelcomeEmail(shopName: string, loginUrl: string) {
         <a href="https://mos.tools" style="color:#2563eb">mos.tools</a>
       </p>
     </div>`;
-  const text = `Welcome to MOS Tools!\n\nThank you for signing up ${shopName}. Your account is ready.\n\nLog in: ${loginUrl}\n\nNeed help? Contact support@mos.tools`;
+  const text = `Welcome to MOS Tools!\n\nThank you for signing up ${shopName}. Your account is ready.\n\nLog in: ${loginUrl}\n\nNeed help? Contact ${SUPPORT_EMAIL}`;
   return { subject, html, text };
 }
 
@@ -507,7 +508,7 @@ export function makeCredentialsWelcomeEmail(
       </div>
       
       <p style="color:#4b5563;font-size:16px">
-        Need help getting started? Reply to this email or reach out to <a href="mailto:support@mos.tools" style="color:#2563eb">support@mos.tools</a>.
+        Need help getting started? Reply to this email or reach out to <a href="mailto:${SUPPORT_EMAIL}" style="color:#2563eb">${SUPPORT_EMAIL}</a>.
       </p>
       
       <hr style="border:none;border-top:1px solid #e5e7eb;margin:30px 0" />
@@ -517,7 +518,7 @@ export function makeCredentialsWelcomeEmail(
         <a href="https://mos.tools" style="color:#2563eb">mos.tools</a>
       </p>
     </div>`;
-  const text = `Welcome to MOS Tools!\n\nYour account for ${shopName} has been created.\n\nLogin Credentials:\nEmail: ${email}\nTemporary Password: ${tempPassword}\n\nThese work for both the web dashboard and the Detect Dog Chrome extension.\n\nLog in: ${loginUrl}\nInstall Chrome Extension: ${chromeExtensionUrl}\n\nPlease change your password after your first login.${trialBlockText}\n\nNeed help? Contact support@mos.tools`;
+  const text = `Welcome to MOS Tools!\n\nYour account for ${shopName} has been created.\n\nLogin Credentials:\nEmail: ${email}\nTemporary Password: ${tempPassword}\n\nThese work for both the web dashboard and the Detect Dog Chrome extension.\n\nLog in: ${loginUrl}\nInstall Chrome Extension: ${chromeExtensionUrl}\n\nPlease change your password after your first login.${trialBlockText}\n\nNeed help? Contact ${SUPPORT_EMAIL}`;
   return { subject, html, text };
 }
 
@@ -618,13 +619,13 @@ export function makePaymentFailedEmail(shopName: string, updatePaymentUrl: strin
       </div>
       
       <p style="color:#4b5563;font-size:14px">
-        If you believe this is an error or need assistance, please contact <a href="mailto:support@mos.tools" style="color:#2563eb">support@mos.tools</a>.
+         If you believe this is an error or need assistance, please contact <a href="mailto:${SUPPORT_EMAIL}" style="color:#2563eb">${SUPPORT_EMAIL}</a>.
       </p>
       
       <hr style="border:none;border-top:1px solid #e5e7eb;margin:30px 0" />
       <p style="color:#9ca3af;font-size:14px;text-align:center">MOS Tools<br /><a href="https://mos.tools" style="color:#2563eb">mos.tools</a></p>
     </div>`;
-  const text = `Payment Failed for ${shopName}\n\nWe couldn't process your payment. Your account will work for ${daysRemaining} more days (until ${endDateStr}).\n\nUpdate payment: ${updatePaymentUrl}\n\nContact support@mos.tools if you need help.`;
+  const text = `Payment Failed for ${shopName}\n\nWe couldn't process your payment. Your account will work for ${daysRemaining} more days (until ${endDateStr}).\n\nUpdate payment: ${updatePaymentUrl}\n\nContact ${SUPPORT_EMAIL} if you need help.`;
   return { subject, html, text };
 }
 
@@ -689,13 +690,13 @@ export function makeAccountSuspendedEmail(shopName: string, updatePaymentUrl: st
       </div>
       
       <p style="color:#4b5563;font-size:14px">
-        Need help? Contact <a href="mailto:support@mos.tools" style="color:#2563eb">support@mos.tools</a>.
+        Need help? Contact <a href="mailto:${SUPPORT_EMAIL}" style="color:#2563eb">${SUPPORT_EMAIL}</a>.
       </p>
       
       <hr style="border:none;border-top:1px solid #e5e7eb;margin:30px 0" />
       <p style="color:#9ca3af;font-size:14px;text-align:center">MOS Tools<br /><a href="https://mos.tools" style="color:#2563eb">mos.tools</a></p>
     </div>`;
-  const text = `Account Suspended - ${shopName}\n\nYour account has been suspended due to an unpaid balance. Your data is safe.\n\nUpdate payment: ${updatePaymentUrl}\n\nContact support@mos.tools for help.`;
+  const text = `Account Suspended - ${shopName}\n\nYour account has been suspended due to an unpaid balance. Your data is safe.\n\nUpdate payment: ${updatePaymentUrl}\n\nContact ${SUPPORT_EMAIL} for help.`;
   return { subject, html, text };
 }
 
@@ -765,12 +766,12 @@ export function makeTrialConversionPaymentFailedEmail(
         <a href="${updatePaymentUrl}" style="background:#f59e0b;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;font-size:16px">Update Payment Method</a>
       </div>
       <p style="color:#4b5563;font-size:14px">
-        Need a hand? Reply to this email or contact <a href="mailto:support@mos.tools" style="color:#2563eb">support@mos.tools</a>.
+        Need a hand? Reply to this email or contact <a href="mailto:${SUPPORT_EMAIL}" style="color:#2563eb">${SUPPORT_EMAIL}</a>.
       </p>
       <hr style="border:none;border-top:1px solid #e5e7eb;margin:30px 0" />
       <p style="color:#9ca3af;font-size:14px;text-align:center">MOS Tools<br /><a href="https://mos.tools" style="color:#2563eb">mos.tools</a></p>
     </div>`;
-  const text = `Trial conversion payment failed for ${shopName}.\n\nWe tried to charge your card on file to start your subscription, but the payment was declined. ${remainingLabel}\n\nUpdate payment: ${updatePaymentUrl}\n\nContact support@mos.tools if you need help.`;
+  const text = `Trial conversion payment failed for ${shopName}.\n\nWe tried to charge your card on file to start your subscription, but the payment was declined. ${remainingLabel}\n\nUpdate payment: ${updatePaymentUrl}\n\nContact ${SUPPORT_EMAIL} if you need help.`;
   return { subject, html, text };
 }
 
@@ -804,7 +805,7 @@ export function makeTrialConversionSuspendedEmail(
         <a href="${updatePaymentUrl}" style="background:#dc2626;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;font-size:16px">Update Payment Now</a>
       </div>
       <p style="color:#4b5563;font-size:14px">
-        Need help? Contact <a href="mailto:support@mos.tools" style="color:#2563eb">support@mos.tools</a>.
+        Need help? Contact <a href="mailto:${SUPPORT_EMAIL}" style="color:#2563eb">${SUPPORT_EMAIL}</a>.
       </p>
       <hr style="border:none;border-top:1px solid #e5e7eb;margin:30px 0" />
       <p style="color:#9ca3af;font-size:14px;text-align:center">MOS Tools<br /><a href="https://mos.tools" style="color:#2563eb">mos.tools</a></p>
@@ -816,7 +817,7 @@ export function makeTrialConversionSuspendedEmail(
       <p><a href="${updatePaymentUrl}" style="color:#2563eb">Open shop in platform admin</a></p>
     </div>`;
   const text = ownerFacing
-    ? `Subscription suspended for ${shopName}\n\nWe couldn't collect payment after several automatic retries. Your data is safe — update your payment method to restore access: ${updatePaymentUrl}\n\nContact support@mos.tools for help.`
+    ? `Subscription suspended for ${shopName}\n\nWe couldn't collect payment after several automatic retries. Your data is safe — update your payment method to restore access: ${updatePaymentUrl}\n\nContact ${SUPPORT_EMAIL} for help.`
     : `[Platform] Trial conversion for ${shopName} burned through its retry budget. Shop locked. Owner notified. Admin: ${updatePaymentUrl}`;
   return { subject, html, text };
 }

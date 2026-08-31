@@ -178,7 +178,7 @@ export default function OnboardingPage() {
             Our support team is here to help you get set up. Contact us if you have any questions.
           </p>
           <a
-            href="mailto:support@mosmaintenance.com"
+            href="mailto:support@myoilsticker.com"
             className="inline-flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700"
           >
             Contact Support

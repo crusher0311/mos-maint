@@ -155,8 +155,8 @@ export default function PrivacyPolicyPage() {
               </ul>
               <p className="text-gray-700 leading-relaxed">
                 Requests can be submitted by contacting us at:{" "}
-                <a href="mailto:support@mos.tools" className="text-blue-600 hover:underline">
-                  support@mos.tools
+                <a href="mailto:support@myoilsticker.com" className="text-blue-600 hover:underline">
+                  support@myoilsticker.com
                 </a>
               </p>
             </section>
@@ -197,8 +197,8 @@ export default function PrivacyPolicyPage() {
                 </p>
                 <p className="text-gray-700">
                   Email:{" "}
-                  <a href="mailto:support@mos.tools" className="text-blue-600 hover:underline">
-                    support@mos.tools
+                  <a href="mailto:support@myoilsticker.com" className="text-blue-600 hover:underline">
+                    support@myoilsticker.com
                   </a>
                 </p>
               </div>

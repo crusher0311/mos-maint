@@ -160,8 +160,8 @@ export default function AutoBookingSettingsPage() {
                 <p className="text-sm text-amber-800 mt-1">{unavailableReason}</p>
                 <p className="mt-3 text-sm font-medium text-amber-700">
                   Contact support at{" "}
-                  <a href="mailto:support@mosmaintenance.com" className="underline hover:text-amber-800">
-                    support@mosmaintenance.com
+                  <a href="mailto:support@myoilsticker.com" className="underline hover:text-amber-800">
+                    support@myoilsticker.com
                   </a>{" "}
                   to change your plan.
                 </p>

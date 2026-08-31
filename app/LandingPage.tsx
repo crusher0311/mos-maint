@@ -517,7 +517,7 @@ export default function LandingPage() {
               <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
             </Link>
             <a 
-              href="mailto:support@mos.tools?subject=Demo Request"
+              href="mailto:support@myoilsticker.com?subject=Demo Request"
               className="inline-flex items-center justify-center gap-2 px-6 py-3 sm:px-8 sm:py-4 border-2 border-gray-200 text-gray-700 rounded-xl text-base sm:text-lg font-semibold hover:border-gray-300 hover:bg-gray-50 transition-colors"
             >
               <Calendar className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -547,7 +547,7 @@ export default function LandingPage() {
             </div>
             <div className="flex items-center gap-4 sm:gap-6 text-sm text-gray-600">
               <Link href="/privacy" className="hover:text-gray-900 transition-colors">Privacy Policy</Link>
-              <a href="mailto:support@mos.tools" className="hover:text-gray-900 transition-colors">Support</a>
+              <a href="mailto:support@myoilsticker.com" className="hover:text-gray-900 transition-colors">Support</a>
             </div>
             <p className="text-xs sm:text-sm text-gray-500">
               &copy; {new Date().getFullYear()} MOS.Tools. All rights reserved.

@@ -2,6 +2,39 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
 import { getViewedVinCount } from "@/lib/plan-cache";
+import {
+  isInvoiceBilled,
+  resolveEffectiveBillingStatus,
+  resolvePaymentType,
+} from "@/lib/billing-helpers";
+import {
+  findShopByShopId,
+  type ShopDoc,
+} from "@/lib/data/repositories/shops";
+
+type BillingRecord = Record<string, unknown> & {
+  plan?: string;
+  paymentType?: string;
+  status?: string;
+  pendingPlanChange?: { planId?: string; effectiveDate?: Date | string };
+  periodEnd?: Date | string;
+  periodStart?: Date | string;
+  nextBillingDate?: Date | string;
+  cardOnFile?: boolean;
+  invoiceMonthlyAmount?: number;
+  stripeSubscriptionAmount?: number;
+};
+
+type BillingShopDoc = ShopDoc & {
+  billing?: BillingRecord;
+  pendingPlanChange?: BillingRecord["pendingPlanChange"];
+  trial?: { endsAt?: Date | string; startedAt?: Date | string; days?: number };
+  trialEndsAt?: Date | string;
+  trialStartedAt?: Date | string;
+  trialDays?: number;
+  cardOnFile?: boolean;
+  stripeSubscriptionAmount?: number;
+};
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,9 +46,13 @@ export async function GET() {
   const db = await getDb();
   const shopId = Number(sess.shopId);
 
-  const shop = await db.collection("shops").findOne({ shopId });
-  const billing = shop?.billing || {};
-  const isInvoicePlan = billing.paymentType === "invoice";
+  // getSession() is the authority for the currently viewed shop, including
+  // Ghost Mode. The repository keeps that lookup consistent in PG-canonical
+  // and mixed numeric/string Mongo environments.
+  const shop = await findShopByShopId<BillingShopDoc>(shopId);
+  const billing: BillingRecord = shop?.billing || {};
+  const isInvoicePlan = isInvoiceBilled(billing);
+  const effectiveStatus = resolveEffectiveBillingStatus(billing, "trial");
   const isPaid = billing.plan === "professional" || billing.plan === "enterprise" || isInvoicePlan;
 
   const rawPendingPlanChange = billing.pendingPlanChange ?? shop?.pendingPlanChange;
@@ -66,8 +103,8 @@ export async function GET() {
     return NextResponse.json({
       plan: planLabel,
       planSlug: billing.plan,
-      paymentType: isInvoicePlan ? "invoice" : "stripe",
-      status: billing.status || "active",
+      paymentType: resolvePaymentType(billing),
+      status: effectiveStatus,
       vehicleCount,
       vehicleLimit: null,
       nextBillingDate: billing.nextBillingDate,
@@ -85,8 +122,8 @@ export async function GET() {
   return NextResponse.json({
     plan: trialBlock ? "Trial" : "Free Trial",
     planSlug: billing.plan,
-    paymentType: isInvoicePlan ? "invoice" : "stripe",
-    status: "trial",
+    paymentType: resolvePaymentType(billing),
+    status: effectiveStatus,
     vehicleCount: viewedVinCount,
     vehicleLimit: null,
     nextBillingDate: trialEndsAt ? trialEndsAt.toISOString() : null,

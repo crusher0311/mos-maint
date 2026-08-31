@@ -48,6 +48,11 @@ import {
   type FeatureSettings,
   type BillingPlan,
 } from "./plan-feature-tiers";
+import {
+  isBillingStatusActive,
+  resolveEffectiveBillingStatus,
+  type EffectiveBillingStatus,
+} from "./billing-helpers";
 
 export {
   FEATURE_KEYS,
@@ -61,7 +66,7 @@ export {
 };
 export type { FeatureKey, FeatureSettings, BillingPlan };
 
-export type BillingStatus = "trial" | "trialing" | "active" | "past_due" | "suspended" | "canceled" | "enterprise" | "demo";
+export type BillingStatus = EffectiveBillingStatus;
 
 export interface ShopBilling {
   plan: BillingPlan;
@@ -279,7 +284,7 @@ export async function getFeatureEntitlements(
   }
 
   const plan: BillingPlan = (shop.billing?.plan as BillingPlan) || "trial";
-  const status: BillingStatus = (shop.billing?.status as BillingStatus) || "trial";
+  const status: BillingStatus = resolveEffectiveBillingStatus(shop.billing, "trial");
 
   const shopFeatures: Partial<FeatureSettings> = normalizeShopFeatureOverrides(
     shop.enabledFeatures,
@@ -307,9 +312,7 @@ export async function getFeatureEntitlements(
     vinViewCount: 0,
   };
 
-  const isBillingActive = () => {
-    return status === "active" || isTrialBillingStatus(status) || status === "enterprise" || status === "demo" || status === "past_due";
-  };
+  const isBillingActive = () => isBillingStatusActive(status);
 
   const isFeatureEnabled = (feature: FeatureKey) => {
     return effectiveFeatures[feature] === true;
