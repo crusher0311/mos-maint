@@ -41,6 +41,8 @@ const backoffStorage = new AsyncLocalStorage<{ ms: number }>();
 // simulate upstream 500/429 bursts without touching the network or Mongo.
 // Production code paths always go through this indirection so the retry /
 // concurrency-limiter interaction under test is the REAL one.
+const productionHttpsRequest: typeof httpsRequest = (...args) => httpsRequest(...args);
+
 export const __protractorClientTestHooks: {
   httpsRequest: typeof httpsRequest;
   acquireDistributedRateLimitSlot: typeof acquireDistributedRateLimitSlot;
@@ -56,8 +58,9 @@ export const __protractorClientTestHooks: {
   getDb: typeof getDb;
   getShopPartCostRatio: typeof getShopPartCostRatio;
   onFetchStart: ((endpoint: string, opts?: { priority?: boolean; maxRetries?: number }) => void) | null;
+  forceOutboundDisabled: boolean;
 } = {
-  httpsRequest: (...args) => httpsRequest(...args),
+  httpsRequest: productionHttpsRequest,
   acquireDistributedRateLimitSlot: (...args) => acquireDistributedRateLimitSlot(...args),
   trackApiRequest: (...args) => trackApiRequest(...args),
   retryBaseDelayMs: null,
@@ -66,6 +69,7 @@ export const __protractorClientTestHooks: {
   getDb: (...args) => getDb(...args),
   getShopPartCostRatio: (...args) => getShopPartCostRatio(...args),
   onFetchStart: null,
+  forceOutboundDisabled: false,
 };
 
 /**
@@ -530,7 +534,13 @@ export async function protractorFetch<T>(
   shopId?: number,
   opts?: { priority?: boolean; maxRetries?: number }
 ): Promise<{ ok: boolean; data?: T; error?: string }> {
-  if (process.env.PROTRACTOR_OUTBOUND_DISABLED === "true") {
+  if (
+    process.env.PROTRACTOR_OUTBOUND_DISABLED === "true" &&
+    (
+      __protractorClientTestHooks.httpsRequest === productionHttpsRequest ||
+      __protractorClientTestHooks.forceOutboundDisabled
+    )
+  ) {
     return {
       ok: false,
       error: "Protractor outbound API calls are temporarily disabled",
