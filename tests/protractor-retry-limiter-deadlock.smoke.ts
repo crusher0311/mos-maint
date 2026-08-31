@@ -74,6 +74,21 @@ function withHardTimeout<T>(p: Promise<T>, label: string): Promise<T> {
 }
 
 async function main() {
+  console.log("Scenario 0: emergency outbound kill switch prevents network calls");
+  {
+    let calls = 0;
+    __protractorClientTestHooks.httpsRequest = async () => {
+      calls += 1;
+      return { statusCode: 200, body: "{}" };
+    };
+    process.env.PROTRACTOR_OUTBOUND_DISABLED = "true";
+    const result = await protractorFetch("/WorkOrder/blocked", config, {}, 0, 1);
+    delete process.env.PROTRACTOR_OUTBOUND_DISABLED;
+
+    ok("disabled request resolves ok:false", result.ok === false);
+    ok("disabled request never reaches Protractor", calls === 0, `calls=${calls}`);
+  }
+
   console.log("Scenario 1: simultaneous always-500 burst (> pool size) all complete");
   {
     let calls = 0;

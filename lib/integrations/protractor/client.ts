@@ -530,6 +530,13 @@ export async function protractorFetch<T>(
   shopId?: number,
   opts?: { priority?: boolean; maxRetries?: number }
 ): Promise<{ ok: boolean; data?: T; error?: string }> {
+  if (process.env.PROTRACTOR_OUTBOUND_DISABLED === "true") {
+    return {
+      ok: false,
+      error: "Protractor outbound API calls are temporarily disabled",
+    };
+  }
+
   if (!config.configured) {
     return { ok: false, error: "Protractor not configured" };
   }
