@@ -1,0 +1,748 @@
+{
+  "window": {
+    "startUtc": "2026-08-31T05:00:00.000Z",
+    "endUtc": "2026-08-31T17:10:00.000Z",
+    "startCentral": "2026-08-31 00:00 CDT",
+    "endCentral": "2026-08-31 12:10 CDT"
+  },
+  "totalEvents": 7289,
+  "allMethodGet": true,
+  "processed": 7289,
+  "withLastError": 0,
+  "uniqueEventKeys": 3294,
+  "repeatedEventKeys": 1649,
+  "repeatDeliveries": 3995,
+  "topConnections": [
+    {
+      "connectionId": "129d8a59da5c4d45adab33b92729410c",
+      "count": 290
+    },
+    {
+      "connectionId": "61b8eb099ab54bd49bd1d64d0b7ff585",
+      "count": 275
+    },
+    {
+      "connectionId": "4adad46374c6404eb15c0ef6ec54161c",
+      "count": 246
+    },
+    {
+      "connectionId": "8f223ccd57e24eb8ad975422855f6860",
+      "count": 228
+    },
+    {
+      "connectionId": "2e3064a5d7a24a62897e4a31ff2f4f5e",
+      "count": 221
+    },
+    {
+      "connectionId": "19cacd8df5594ca2afdc3b2d143c7e4c",
+      "count": 206
+    },
+    {
+      "connectionId": "722ebdfc3b6e43b89c27b1f9f7535b03",
+      "count": 204
+    },
+    {
+      "connectionId": "f2eac4916a264afd8839eb44593dad17",
+      "count": 193
+    },
+    {
+      "connectionId": "85ae7900fdb94d80a7aee336bcc64a46",
+      "count": 188
+    },
+    {
+      "connectionId": "a46b0173b22b45f6a38c99fccb2933b1",
+      "count": 187
+    },
+    {
+      "connectionId": "cee60f96e254453697b7674de9aa2aea",
+      "count": 175
+    },
+    {
+      "connectionId": "9b1ca7a3f0d449bab64dd28f5081df1d",
+      "count": 172
+    },
+    {
+      "connectionId": "88a67fa113da422aa9f5d02e0c76b8b1",
+      "count": 153
+    },
+    {
+      "connectionId": "423b185ff95644a9800a7138436998f6",
+      "count": 145
+    },
+    {
+      "connectionId": "7b12d1d0edc0458cbc59769ae22b1e56",
+      "count": 141
+    },
+    {
+      "connectionId": "789a2f318a764d2ca065ac6a392da90b",
+      "count": 139
+    },
+    {
+      "connectionId": "8560fcdc186148bcb9a113f4f1cd425a",
+      "count": 130
+    },
+    {
+      "connectionId": "c5424712e32945039813d6c37451a6f6",
+      "count": 129
+    },
+    {
+      "connectionId": "2cf72bc376ca4877b9180df3f11dc516",
+      "count": 127
+    },
+    {
+      "connectionId": "f01c80fa27454aa082c7b5fd3f7b484d",
+      "count": 125
+    },
+    {
+      "connectionId": "4bbd4b7ee08e4f90b3c4af31cf1f3651",
+      "count": 122
+    },
+    {
+      "connectionId": "dd8134bf2ddf4eb89d32710e64c48190",
+      "count": 120
+    },
+    {
+      "connectionId": "d383a58e35cc4a5ca54432c3486baffd",
+      "count": 117
+    },
+    {
+      "connectionId": "e20993e8a49f4078a5399f5375319d25",
+      "count": 114
+    },
+    {
+      "connectionId": "e9e7e6a9d44a48dc9d8b91fb93556581",
+      "count": 114
+    }
+  ],
+  "byObjectType": [
+    {
+      "objectType": "WorkOrder",
+      "count": 6109
+    },
+    {
+      "objectType": "ServiceItem",
+      "count": 875
+    },
+    {
+      "objectType": "Contact",
+      "count": 305
+    }
+  ],
+  "byOperation": [
+    {
+      "operation": "Update",
+      "count": 6640
+    },
+    {
+      "operation": "Invoiced",
+      "count": 547
+    },
+    {
+      "operation": "Delete",
+      "count": 102
+    }
+  ],
+  "topRepeatedObjects": [
+    {
+      "connectionId": "a46b0173b22b45f6a38c99fccb2933b1",
+      "objectType": "WorkOrder",
+      "objectId": "eecfc16e-e4b8-4561-a3df-e7987a72f26a",
+      "operation": "Update",
+      "count": 19
+    },
+    {
+      "connectionId": "2e3064a5d7a24a62897e4a31ff2f4f5e",
+      "objectType": "WorkOrder",
+      "objectId": "1c4e7dd6-34da-437f-94de-8a8c19aaee0c",
+      "operation": "Update",
+      "count": 18
+    },
+    {
+      "connectionId": "423b185ff95644a9800a7138436998f6",
+      "objectType": "WorkOrder",
+      "objectId": "a20f2d51-9cd4-4b6a-bf15-f780e2f1b14b",
+      "operation": "Update",
+      "count": 17
+    },
+    {
+      "connectionId": "129d8a59da5c4d45adab33b92729410c",
+      "objectType": "WorkOrder",
+      "objectId": "4608e5bf-dc0f-4f0e-93e4-fe2c9ebccbaf",
+      "operation": "Update",
+      "count": 16
+    },
+    {
+      "connectionId": "8f223ccd57e24eb8ad975422855f6860",
+      "objectType": "WorkOrder",
+      "objectId": "05a1be95-c1ac-4bca-a95b-af4778056af6",
+      "operation": "Update",
+      "count": 15
+    },
+    {
+      "connectionId": "c5424712e32945039813d6c37451a6f6",
+      "objectType": "WorkOrder",
+      "objectId": "feaccdba-50b8-4cd6-bcb0-75bb7d8a3667",
+      "operation": "Update",
+      "count": 15
+    },
+    {
+      "connectionId": "85ae7900fdb94d80a7aee336bcc64a46",
+      "objectType": "WorkOrder",
+      "objectId": "02c30d12-9a00-47cd-ad63-6ff242dac769",
+      "operation": "Update",
+      "count": 15
+    },
+    {
+      "connectionId": "41cbf9ec5e1b40018ccbd6ab10137eb1",
+      "objectType": "WorkOrder",
+      "objectId": "24a4c1b4-cb47-4ee4-b20f-cf95fdf77e54",
+      "operation": "Invoiced",
+      "count": 14
+    },
+    {
+      "connectionId": "129d8a59da5c4d45adab33b92729410c",
+      "objectType": "WorkOrder",
+      "objectId": "7f3255d8-4bc1-4518-b215-757b99c49439",
+      "operation": "Update",
+      "count": 12
+    },
+    {
+      "connectionId": "129d8a59da5c4d45adab33b92729410c",
+      "objectType": "WorkOrder",
+      "objectId": "2ee896a9-8234-424c-84be-537680137209",
+      "operation": "Update",
+      "count": 12
+    },
+    {
+      "connectionId": "cee60f96e254453697b7674de9aa2aea",
+      "objectType": "WorkOrder",
+      "objectId": "7a404dd3-1c51-4eba-94ba-6861337886ad",
+      "operation": "Update",
+      "count": 12
+    },
+    {
+      "connectionId": "19cacd8df5594ca2afdc3b2d143c7e4c",
+      "objectType": "WorkOrder",
+      "objectId": "a4922e0f-8bb7-493c-8b60-8ed4a8063072",
+      "operation": "Update",
+      "count": 12
+    },
+    {
+      "connectionId": "4adad46374c6404eb15c0ef6ec54161c",
+      "objectType": "WorkOrder",
+      "objectId": "7cf25e67-947f-46df-b98e-d9726dcd3ff9",
+      "operation": "Update",
+      "count": 12
+    },
+    {
+      "connectionId": "a46b0173b22b45f6a38c99fccb2933b1",
+      "objectType": "WorkOrder",
+      "objectId": "a2e41ef6-61f0-4f44-8b59-a768b6c35784",
+      "operation": "Update",
+      "count": 12
+    },
+    {
+      "connectionId": "8f223ccd57e24eb8ad975422855f6860",
+      "objectType": "WorkOrder",
+      "objectId": "53b49e2e-b647-40a1-8b6e-e5f0ad3a9725",
+      "operation": "Update",
+      "count": 12
+    },
+    {
+      "connectionId": "4adad46374c6404eb15c0ef6ec54161c",
+      "objectType": "WorkOrder",
+      "objectId": "24a9b59b-d84a-436e-8109-972a21b4e56d",
+      "operation": "Update",
+      "count": 11
+    },
+    {
+      "connectionId": "423b185ff95644a9800a7138436998f6",
+      "objectType": "WorkOrder",
+      "objectId": "ee6eec7a-d06e-416d-b508-ac95fa161ef3",
+      "operation": "Update",
+      "count": 11
+    },
+    {
+      "connectionId": "61b8eb099ab54bd49bd1d64d0b7ff585",
+      "objectType": "WorkOrder",
+      "objectId": "0a43df9b-c972-45a5-ae93-46f954e92e34",
+      "operation": "Update",
+      "count": 11
+    },
+    {
+      "connectionId": "7987876b40be46cc9b3dfbfa19f04ea0",
+      "objectType": "WorkOrder",
+      "objectId": "fba507e6-912b-436a-afac-0259254f9a66",
+      "operation": "Update",
+      "count": 11
+    },
+    {
+      "connectionId": "129d8a59da5c4d45adab33b92729410c",
+      "objectType": "WorkOrder",
+      "objectId": "2c97b480-7a4e-455d-a16c-b974ee6d5882",
+      "operation": "Update",
+      "count": 11
+    },
+    {
+      "connectionId": "85ae7900fdb94d80a7aee336bcc64a46",
+      "objectType": "WorkOrder",
+      "objectId": "c81768e5-95b1-4808-9eb7-14c1288f9e91",
+      "operation": "Update",
+      "count": 11
+    },
+    {
+      "connectionId": "4bbd4b7ee08e4f90b3c4af31cf1f3651",
+      "objectType": "WorkOrder",
+      "objectId": "fe27a525-3845-4d70-b68a-5736facf19cb",
+      "operation": "Update",
+      "count": 11
+    },
+    {
+      "connectionId": "2e3064a5d7a24a62897e4a31ff2f4f5e",
+      "objectType": "WorkOrder",
+      "objectId": "8b6d33a4-3695-40f4-84f3-54413cd76850",
+      "operation": "Update",
+      "count": 11
+    },
+    {
+      "connectionId": "cee60f96e254453697b7674de9aa2aea",
+      "objectType": "WorkOrder",
+      "objectId": "8b63091a-30e1-471c-96ed-4ecf59d35806",
+      "operation": "Update",
+      "count": 10
+    },
+    {
+      "connectionId": "c1f2dce97d464022862581b2e3ed49f4",
+      "objectType": "WorkOrder",
+      "objectId": "6b31f0c5-451d-4a73-819e-372d4905c263",
+      "operation": "Update",
+      "count": 10
+    },
+    {
+      "connectionId": "722ebdfc3b6e43b89c27b1f9f7535b03",
+      "objectType": "WorkOrder",
+      "objectId": "2ee5335e-f1bc-448c-a02f-91e71ef6de33",
+      "operation": "Update",
+      "count": 10
+    },
+    {
+      "connectionId": "61fb617b58774c5e91098c9850b0176c",
+      "objectType": "WorkOrder",
+      "objectId": "e2c007a0-438e-4fa5-874c-2a587806c9b6",
+      "operation": "Update",
+      "count": 10
+    },
+    {
+      "connectionId": "cee60f96e254453697b7674de9aa2aea",
+      "objectType": "WorkOrder",
+      "objectId": "2d02d948-2a6c-4aa0-be98-9ee105cee9fc",
+      "operation": "Update",
+      "count": 10
+    },
+    {
+      "connectionId": "423b185ff95644a9800a7138436998f6",
+      "objectType": "WorkOrder",
+      "objectId": "61f78410-f8a5-4e8f-bf89-f60c59a5cae2",
+      "operation": "Update",
+      "count": 10
+    },
+    {
+      "connectionId": "ada0ebfe89184783accf5101f22ecf18",
+      "objectType": "WorkOrder",
+      "objectId": "f88ccc77-55c5-4abd-819b-7e57bbcd22fe",
+      "operation": "Update",
+      "count": 10
+    },
+    {
+      "connectionId": "4adad46374c6404eb15c0ef6ec54161c",
+      "objectType": "WorkOrder",
+      "objectId": "288525cd-48dd-459a-99b6-767445835ee9",
+      "operation": "Update",
+      "count": 10
+    },
+    {
+      "connectionId": "2e3064a5d7a24a62897e4a31ff2f4f5e",
+      "objectType": "WorkOrder",
+      "objectId": "8c84fae3-aad7-475b-96e6-4886dc1d98b0",
+      "operation": "Update",
+      "count": 10
+    },
+    {
+      "connectionId": "a46b0173b22b45f6a38c99fccb2933b1",
+      "objectType": "WorkOrder",
+      "objectId": "7b8d6d0c-a418-462e-b5de-ccd0d31f4a69",
+      "operation": "Update",
+      "count": 10
+    },
+    {
+      "connectionId": "8f223ccd57e24eb8ad975422855f6860",
+      "objectType": "WorkOrder",
+      "objectId": "2bc71d5d-f542-4db4-ac89-691601ceaccb",
+      "operation": "Update",
+      "count": 10
+    },
+    {
+      "connectionId": "cee60f96e254453697b7674de9aa2aea",
+      "objectType": "WorkOrder",
+      "objectId": "2ad7cd95-83a2-47b0-ab4e-52d2b37d35d0",
+      "operation": "Update",
+      "count": 10
+    },
+    {
+      "connectionId": "9b0bc66a2ace49cc89c4a898c276152a",
+      "objectType": "WorkOrder",
+      "objectId": "25e3b09a-0ecb-4f21-8f99-7df21dc59721",
+      "operation": "Update",
+      "count": 10
+    },
+    {
+      "connectionId": "88a67fa113da422aa9f5d02e0c76b8b1",
+      "objectType": "WorkOrder",
+      "objectId": "c628d9ba-a16c-412d-a081-1d31b954a8f6",
+      "operation": "Update",
+      "count": 9
+    },
+    {
+      "connectionId": "88a67fa113da422aa9f5d02e0c76b8b1",
+      "objectType": "WorkOrder",
+      "objectId": "206609e1-5ce0-405a-89ee-9f6e70f517ab",
+      "operation": "Update",
+      "count": 9
+    },
+    {
+      "connectionId": "85ae7900fdb94d80a7aee336bcc64a46",
+      "objectType": "WorkOrder",
+      "objectId": "c324109d-2779-4f7f-906f-a94f179f42f2",
+      "operation": "Update",
+      "count": 9
+    },
+    {
+      "connectionId": "19cacd8df5594ca2afdc3b2d143c7e4c",
+      "objectType": "WorkOrder",
+      "objectId": "e2efea6a-4f10-4938-9243-b3fef7b8eb33",
+      "operation": "Update",
+      "count": 9
+    },
+    {
+      "connectionId": "7b12d1d0edc0458cbc59769ae22b1e56",
+      "objectType": "WorkOrder",
+      "objectId": "4ec6cd70-7888-4f5e-b7f4-345a4fc9f650",
+      "operation": "Update",
+      "count": 9
+    },
+    {
+      "connectionId": "19cacd8df5594ca2afdc3b2d143c7e4c",
+      "objectType": "WorkOrder",
+      "objectId": "130dc5af-f0e5-4d0c-b323-96a2b6048fec",
+      "operation": "Update",
+      "count": 9
+    },
+    {
+      "connectionId": "129d8a59da5c4d45adab33b92729410c",
+      "objectType": "WorkOrder",
+      "objectId": "20e9f88b-f4cd-4b11-b8fe-ab837aa218bd",
+      "operation": "Update",
+      "count": 9
+    },
+    {
+      "connectionId": "c1f2dce97d464022862581b2e3ed49f4",
+      "objectType": "WorkOrder",
+      "objectId": "165ef77e-b189-472f-8358-262126c1de43",
+      "operation": "Update",
+      "count": 9
+    },
+    {
+      "connectionId": "61fb617b58774c5e91098c9850b0176c",
+      "objectType": "WorkOrder",
+      "objectId": "8682c6a5-2cb0-4a84-a9e1-6412e936a760",
+      "operation": "Update",
+      "count": 9
+    },
+    {
+      "connectionId": "cee60f96e254453697b7674de9aa2aea",
+      "objectType": "WorkOrder",
+      "objectId": "89d034fa-ac76-45af-b9b4-f896177023ac",
+      "operation": "Update",
+      "count": 9
+    },
+    {
+      "connectionId": "fb49d72e624a43b0885a57ab406bd089",
+      "objectType": "WorkOrder",
+      "objectId": "c5546f46-719a-4593-8d72-56dd90af3158",
+      "operation": "Update",
+      "count": 9
+    },
+    {
+      "connectionId": "85ae7900fdb94d80a7aee336bcc64a46",
+      "objectType": "WorkOrder",
+      "objectId": "d0d74eda-e797-47fd-98c3-e50e91f59f00",
+      "operation": "Update",
+      "count": 9
+    },
+    {
+      "connectionId": "789a2f318a764d2ca065ac6a392da90b",
+      "objectType": "WorkOrder",
+      "objectId": "b5f5ab2f-5e51-4737-95e7-10d656eb1aa5",
+      "operation": "Update",
+      "count": 9
+    },
+    {
+      "connectionId": "f2ceb51cd664430897ecfee4bfac76b4",
+      "objectType": "WorkOrder",
+      "objectId": "9de7eade-19b3-486b-b6bf-d90be5a93bdd",
+      "operation": "Update",
+      "count": 9
+    }
+  ],
+  "repeatIntervals": {
+    "le1s": 292,
+    "le10s": 506,
+    "le60s": 765,
+    "le5m": 2415,
+    "le1h": 3411,
+    "gt1h": 588
+  },
+  "keysWithRepeatWithin60s": 645,
+  "topRapidRepeatedObjects": [
+    {
+      "connectionId": "a46b0173b22b45f6a38c99fccb2933b1",
+      "objectType": "WorkOrder",
+      "objectId": "eecfc16e-e4b8-4561-a3df-e7987a72f26a",
+      "operation": "Update",
+      "rapidRepeats": 8
+    },
+    {
+      "connectionId": "2e3064a5d7a24a62897e4a31ff2f4f5e",
+      "objectType": "WorkOrder",
+      "objectId": "1c4e7dd6-34da-437f-94de-8a8c19aaee0c",
+      "operation": "Update",
+      "rapidRepeats": 7
+    },
+    {
+      "connectionId": "85ae7900fdb94d80a7aee336bcc64a46",
+      "objectType": "WorkOrder",
+      "objectId": "02c30d12-9a00-47cd-ad63-6ff242dac769",
+      "operation": "Update",
+      "rapidRepeats": 7
+    },
+    {
+      "connectionId": "129d8a59da5c4d45adab33b92729410c",
+      "objectType": "WorkOrder",
+      "objectId": "4608e5bf-dc0f-4f0e-93e4-fe2c9ebccbaf",
+      "operation": "Update",
+      "rapidRepeats": 5
+    },
+    {
+      "connectionId": "61b8eb099ab54bd49bd1d64d0b7ff585",
+      "objectType": "WorkOrder",
+      "objectId": "0a43df9b-c972-45a5-ae93-46f954e92e34",
+      "operation": "Update",
+      "rapidRepeats": 4
+    },
+    {
+      "connectionId": "19cacd8df5594ca2afdc3b2d143c7e4c",
+      "objectType": "WorkOrder",
+      "objectId": "a4922e0f-8bb7-493c-8b60-8ed4a8063072",
+      "operation": "Update",
+      "rapidRepeats": 4
+    },
+    {
+      "connectionId": "9b1ca7a3f0d449bab64dd28f5081df1d",
+      "objectType": "WorkOrder",
+      "objectId": "3d02f18d-9cbc-4fd9-bf35-d10aabdd6c3d",
+      "operation": "Update",
+      "rapidRepeats": 4
+    },
+    {
+      "connectionId": "85ae7900fdb94d80a7aee336bcc64a46",
+      "objectType": "WorkOrder",
+      "objectId": "c324109d-2779-4f7f-906f-a94f179f42f2",
+      "operation": "Update",
+      "rapidRepeats": 3
+    },
+    {
+      "connectionId": "cee60f96e254453697b7674de9aa2aea",
+      "objectType": "WorkOrder",
+      "objectId": "1cd4ba92-1f58-4179-a6b2-69201ca95c5f",
+      "operation": "Update",
+      "rapidRepeats": 3
+    },
+    {
+      "connectionId": "19cacd8df5594ca2afdc3b2d143c7e4c",
+      "objectType": "WorkOrder",
+      "objectId": "e2efea6a-4f10-4938-9243-b3fef7b8eb33",
+      "operation": "Update",
+      "rapidRepeats": 3
+    },
+    {
+      "connectionId": "bde307158c84433585965b9ed7c0f609",
+      "objectType": "WorkOrder",
+      "objectId": "507bc02a-112e-4ca3-bb28-819900e0395e",
+      "operation": "Update",
+      "rapidRepeats": 3
+    },
+    {
+      "connectionId": "9b1ca7a3f0d449bab64dd28f5081df1d",
+      "objectType": "ServiceItem",
+      "objectId": "9f2f7bf9-f0e4-4f10-a0c7-128fb01c210f",
+      "operation": "Update",
+      "rapidRepeats": 3
+    },
+    {
+      "connectionId": "9101f837d3f447358b69344428675f3d",
+      "objectType": "ServiceItem",
+      "objectId": "6a19520d-a86e-4d77-be32-b77a879322ba",
+      "operation": "Update",
+      "rapidRepeats": 3
+    },
+    {
+      "connectionId": "2c12c6b2cb8e45238726aa55c6f91a9d",
+      "objectType": "ServiceItem",
+      "objectId": "a4ec423a-e7df-428d-8910-f58414600b97",
+      "operation": "Update",
+      "rapidRepeats": 3
+    },
+    {
+      "connectionId": "85ae7900fdb94d80a7aee336bcc64a46",
+      "objectType": "WorkOrder",
+      "objectId": "3921bec4-47a9-4a0c-913a-9433fdb57068",
+      "operation": "Update",
+      "rapidRepeats": 3
+    },
+    {
+      "connectionId": "789a2f318a764d2ca065ac6a392da90b",
+      "objectType": "WorkOrder",
+      "objectId": "4e437618-85f5-44e6-ac88-a479a2fffbcf",
+      "operation": "Update",
+      "rapidRepeats": 3
+    },
+    {
+      "connectionId": "722ebdfc3b6e43b89c27b1f9f7535b03",
+      "objectType": "WorkOrder",
+      "objectId": "7a61d79b-70a7-4c64-ac18-395ffbe83ded",
+      "operation": "Update",
+      "rapidRepeats": 3
+    },
+    {
+      "connectionId": "a46b0173b22b45f6a38c99fccb2933b1",
+      "objectType": "WorkOrder",
+      "objectId": "9e149b1f-581a-4a1d-a3a0-0d596b0aacb5",
+      "operation": "Update",
+      "rapidRepeats": 3
+    },
+    {
+      "connectionId": "8560fcdc186148bcb9a113f4f1cd425a",
+      "objectType": "WorkOrder",
+      "objectId": "12120851-d804-4314-9c97-ccec97eb591d",
+      "operation": "Update",
+      "rapidRepeats": 3
+    },
+    {
+      "connectionId": "423b185ff95644a9800a7138436998f6",
+      "objectType": "WorkOrder",
+      "objectId": "a20f2d51-9cd4-4b6a-bf15-f780e2f1b14b",
+      "operation": "Update",
+      "rapidRepeats": 3
+    },
+    {
+      "connectionId": "dd8134bf2ddf4eb89d32710e64c48190",
+      "objectType": "WorkOrder",
+      "objectId": "13c1824c-64ef-4473-9046-bc9b26d0e7b8",
+      "operation": "Update",
+      "rapidRepeats": 2
+    },
+    {
+      "connectionId": "19cacd8df5594ca2afdc3b2d143c7e4c",
+      "objectType": "WorkOrder",
+      "objectId": "c31f9cd6-d664-4077-a16c-c956319e935d",
+      "operation": "Update",
+      "rapidRepeats": 2
+    },
+    {
+      "connectionId": "cee60f96e254453697b7674de9aa2aea",
+      "objectType": "WorkOrder",
+      "objectId": "57859031-91f9-4558-9d34-6831f62cffa5",
+      "operation": "Update",
+      "rapidRepeats": 2
+    },
+    {
+      "connectionId": "722ebdfc3b6e43b89c27b1f9f7535b03",
+      "objectType": "WorkOrder",
+      "objectId": "d59f0d4f-4885-408f-b090-6ffbb5efb453",
+      "operation": "Update",
+      "rapidRepeats": 2
+    },
+    {
+      "connectionId": "789a2f318a764d2ca065ac6a392da90b",
+      "objectType": "WorkOrder",
+      "objectId": "360a5a07-d7da-4053-8139-9d4c84607005",
+      "operation": "Update",
+      "rapidRepeats": 2
+    },
+    {
+      "connectionId": "789a2f318a764d2ca065ac6a392da90b",
+      "objectType": "WorkOrder",
+      "objectId": "98517dfa-6b8f-43d1-adad-e7ac2c881783",
+      "operation": "Update",
+      "rapidRepeats": 2
+    },
+    {
+      "connectionId": "129d8a59da5c4d45adab33b92729410c",
+      "objectType": "WorkOrder",
+      "objectId": "0a289f84-6649-4449-b628-db1739f505c5",
+      "operation": "Update",
+      "rapidRepeats": 2
+    },
+    {
+      "connectionId": "23167dc94fd3400392e8fe0736ff8ea8",
+      "objectType": "WorkOrder",
+      "objectId": "97248fe1-3746-496e-a08e-0315aff14b31",
+      "operation": "Update",
+      "rapidRepeats": 2
+    },
+    {
+      "connectionId": "61b8eb099ab54bd49bd1d64d0b7ff585",
+      "objectType": "WorkOrder",
+      "objectId": "4ab2b82e-70c0-4e68-8118-0843b4d3377b",
+      "operation": "Update",
+      "rapidRepeats": 2
+    },
+    {
+      "connectionId": "c5424712e32945039813d6c37451a6f6",
+      "objectType": "WorkOrder",
+      "objectId": "ac9c7275-d90d-4234-8bd5-3b062a2bded4",
+      "operation": "Update",
+      "rapidRepeats": 2
+    }
+  ],
+  "rawLogReconciliation": {
+    "availableWindowUtc": {
+      "start": "2026-08-31T16:34:37.462713Z",
+      "end": "2026-08-31T17:06:21.547420Z"
+    },
+    "note": "Raw Better Stack logs were available only for this post-recovery window, not the full morning incident window.",
+    "ingress": {
+      "update": 1239,
+      "invoiced": 140,
+      "delete": 24,
+      "total": 1403
+    },
+    "unknownConnection": 545,
+    "duplicateSkippedBeforeLedgerInsert": 332,
+    "ledgerInsertedLogLines": 1071
+  },
+  "limitations": [
+    "The structured ledger excludes unknown-connection callbacks, rate-limited callbacks, and duplicates skipped before insertion.",
+    "Raw Better Stack callback logs were unavailable for the earlier morning window, so the CSV is the best complete structured record currently retained.",
+    "Raw callback payloads and callback tokens are intentionally excluded from the export."
+  ],
+  "sourceAttribution": {
+    "assessment": "Events are overwhelmingly likely to be direct Protractor callbacks.",
+    "caveat": "The ledger does not store request source or user-agent. Internal AF log-tail and stage-refresh routes can call the same endpoint.",
+    "evidence": [
+      "Both fallback jobs were removed from the production scheduler on 2026-07-20.",
+      "No fallback execution message was found in the available incident log window.",
+      "All persisted events used the GET callback format expected from Protractor."
+    ]
+  }
+}

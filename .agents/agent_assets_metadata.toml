@@ -55,3 +55,17 @@ uri = "file://dist/mos-tools-extension.zip"
 type = "unspecified"
 title = "Detect Dog Chrome Extension v1.35.0"
 description = "Packaged extension with authoritative labor-rate refresh, revision conflict protection, and shop-bound synchronization."
+
+[[outputs]]
+id = "uFocsQ_xmazBVg9B0svbk"
+uri = "file://exports/protractor-callback-events-2026-08-31.csv"
+type = "table"
+title = "Protractor callback event log — August 31, 2026"
+description = "7,289 persisted callback events from 12:00 AM through 12:10 PM Central. Includes timestamps, connection/shop IDs, object IDs, operations, processing status, attempts, and errors. Raw payloads and callback tokens are excluded."
+
+[[outputs]]
+id = "67mlA4uGGMoscndSpipZP"
+uri = "file://exports/protractor-callback-summary-2026-08-31.json"
+type = "unspecified"
+title = "Protractor callback analysis summary"
+description = "Counts by connection, object type, operation, repeated object, and repeat interval for the incident window."
