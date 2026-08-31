@@ -1,0 +1,50 @@
+2026-08-31T15:44:09.560897721Z   ✓ follow-up request succeeds (all slots freed)
+2026-08-31T15:44:09.560951832Z 
+2026-08-31T15:44:09.56095448Z All protractor retry/limiter deadlock checks passed
+2026-08-31T15:44:09.674808749Z 
+2026-08-31T15:44:09.674823821Z > mos-maintenance-mvp@1.8.0 test:protractor-resolve-wo-guid
+2026-08-31T15:44:09.674826543Z > tsx tests/protractor-resolve-wo-guid.smoke.ts
+2026-08-31T15:44:09.674827885Z 
+2026-08-31T15:44:10.364321893Z Scenario 1: cache hit (current shape) resolves in ONE upstream call, no scan
+2026-08-31T15:44:10.364665822Z [Protractor] Looking up GUID for RO number: 9876
+2026-08-31T15:44:10.364786622Z [Protractor] Found cached GUID 11111111-2222-3333-4444-555555555555 for RO 9876, verifying via fetch-by-ID
+2026-08-31T15:44:10.36511387Z [Protractor] Cached GUID 11111111-2222-3333-4444-555555555555 fetch failed (Protractor outbound API calls are temporarily disabled) — falling back to active work-order scan
+2026-08-31T15:44:10.365414815Z   ✗ resolved ok — Could not find work order with RO# 9876. Make sure it's an active work order.
+2026-08-31T15:44:10.365416849Z   ✗ returns cached GUID
+2026-08-31T15:44:10.365438007Z   ✓ NO active-WO scan
+2026-08-31T15:44:10.365443619Z Scenario 2: legacy cache shape (data.ID only) also hits the fast path
+2026-08-31T15:44:10.365451988Z   ✗ exactly one fetch-by-ID — byId=0
+2026-08-31T15:44:10.365480237Z [Protractor] Looking up GUID for RO number: 9876
+2026-08-31T15:44:10.36554554Z [Protractor] Found cached GUID 11111111-2222-3333-4444-555555555555 for RO 9876, verifying via fetch-by-ID
+2026-08-31T15:44:10.365595719Z [Protractor] Cached GUID 11111111-2222-3333-4444-555555555555 fetch failed (Protractor outbound API calls are temporarily disabled) — falling back to active work-order scan
+2026-08-31T15:44:10.365608651Z   ✗ resolved ok — Could not find work order with RO# 9876. Make sure it's an active work order.
+2026-08-31T15:44:10.365611113Z   ✗ returns cached GUID
+2026-08-31T15:44:10.365691953Z   ✓ NO active-WO scan
+2026-08-31T15:44:10.365697222Z Scenario 3: cached GUID resolves to DIFFERENT RO# → falls back to scan
+2026-08-31T15:44:10.365742847Z [Protractor] Looking up GUID for RO number: 9876
+2026-08-31T15:44:10.365805244Z [Protractor] Found cached GUID 11111111-2222-3333-4444-555555555555 for RO 9876, verifying via fetch-by-ID
+2026-08-31T15:44:10.365825043Z [Protractor] Cached GUID 11111111-2222-3333-4444-555555555555 fetch failed (Protractor outbound API calls are temporarily disabled) — falling back to active work-order scan
+2026-08-31T15:44:10.365929565Z   ✗ resolved ok via scan — Could not find work order with RO# 9876. Make sure it's an active work order.
+2026-08-31T15:44:10.365933105Z   ✗ returns scan GUID, not stale cached GUID
+2026-08-31T15:44:10.365957115Z   ✗ scan performed — scan=0
+2026-08-31T15:44:10.365961235Z Scenario 4: cache miss → falls back to scan
+2026-08-31T15:44:10.365970469Z [Protractor] Looking up GUID for RO number: 9876
+2026-08-31T15:44:10.366026548Z   ✗ resolved ok via scan — Could not find work order with RO# 9876. Make sure it's an active work order.
+2026-08-31T15:44:10.366028466Z   ✗ returns scan GUID
+2026-08-31T15:44:10.366029223Z   ✓ no fetch-by-ID attempted
+2026-08-31T15:44:10.366033351Z Scenario 5: cached GUID 404s upstream → falls back to scan
+2026-08-31T15:44:10.366054Z [Protractor] Looking up GUID for RO number: 9876
+2026-08-31T15:44:10.366091921Z [Protractor] Found cached GUID 11111111-2222-3333-4444-555555555555 for RO 9876, verifying via fetch-by-ID
+2026-08-31T15:44:10.366108768Z [Protractor] Cached GUID 11111111-2222-3333-4444-555555555555 fetch failed (Protractor outbound API calls are temporarily disabled) — falling back to active work-order scan
+2026-08-31T15:44:10.36612736Z   ✗ resolved ok via scan — Could not find work order with RO# 9876. Make sure it's an active work order.
+2026-08-31T15:44:10.36619001Z   ✗ returns scan GUID
+2026-08-31T15:44:10.366191665Z   ✗ scan performed — scan=0
+2026-08-31T15:44:10.366202412Z Scenario 6: non-GUID junk in cache doc is ignored (falls back to scan)
+2026-08-31T15:44:10.366213038Z [Protractor] Looking up GUID for RO number: 9876
+2026-08-31T15:44:10.366267526Z   ✗ resolved ok via scan — Could not find work order with RO# 9876. Make sure it's an active work order.
+2026-08-31T15:44:10.366269508Z   ✗ returns scan GUID
+2026-08-31T15:44:10.366289944Z 
+2026-08-31T15:44:10.366291577Z 15 assertion(s) FAILED
+2026-08-31T15:44:10.366292033Z   ✓ no fetch-by-ID attempted
+2026-08-31T15:44:10.423576777Z ==> Build failed 😞
+2026-08-31T15:44:10.423590971Z ==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys
