@@ -16,6 +16,9 @@ function ok(name: string, condition: boolean) {
 
 const background = fs.readFileSync("mos-tools-extension/background.js", "utf8");
 const panel = fs.readFileSync("mos-tools-extension/sidepanel.js", "utf8");
+const interceptor = fs.readFileSync("mos-tools-extension/adapters/interceptor.js", "utf8");
+const tekmetricContent = fs.readFileSync("mos-tools-extension/adapters/tekmetric-content.js", "utf8");
+const recoveryCore = fs.readFileSync("mos-tools-extension/tekmetric-session-recovery-core.js", "utf8");
 const html = fs.readFileSync("mos-tools-extension/sidepanel.html", "utf8");
 const manifest = JSON.parse(fs.readFileSync("mos-tools-extension/manifest.json", "utf8"));
 
@@ -36,6 +39,51 @@ ok("context updates trigger automatic bootstrap", /SET_SMS_CONTEXT[\s\S]+handleM
 ok("provider token capture retries bootstrap", /tabTokenChanged[\s\S]+handleMosBootstrap/.test(background));
 ok("bootstrap auth is session-scoped", /chrome\.storage\.session\.set\(\{\s*mosBootstrapAuth/.test(background));
 ok("provider proof is not persisted", !/storage\.(?:local|session)\.set\(\{\s*tekmetricToken/.test(background));
+ok(
+  "same-tab Tekmetric proof recovery remains non-persistent",
+  !/storage\.(?:local|session)\.set[\s\S]{0,120}latestTekmetricProof/.test(background + interceptor + tekmetricContent),
+);
+ok(
+  "worker proof loss requests recovery from the originating tab",
+  /recoverTekmetricSessionForTab[\s\S]+chrome\.tabs\.sendMessage\(tabId,[\s\S]+REQUEST_SAME_TAB_TEKMETRIC_ACTIVITY/.test(background) &&
+    /REQUEST_SAME_TAB_TEKMETRIC_ACTIVITY[\s\S]+MOS_REQUEST_TEKMETRIC_ACTIVITY/.test(tekmetricContent),
+);
+ok(
+  "MAIN-world recovery emits an authenticated read without exposing the proof",
+  /var latestTekmetricProof = null[\s\S]+MOS_REQUEST_TEKMETRIC_ACTIVITY[\s\S]+origFetch\.call/.test(interceptor) &&
+    !/postMessage\([\s\S]{0,150}(?:latestTekmetricProof|proof:)/.test(interceptor),
+);
+ok(
+  "recovery is bound to active tab and current shop/RO context",
+  /tabId === getActiveTabId\(\)[\s\S]+contextsMatch\(expectedContext, getCurrentContext\(tabId\)\)/.test(recoveryCore) &&
+    /requireCurrentContext[\s\S]+smsContextsByTab\.get\(opts\.tabId\)/.test(background) &&
+    /bindTekmetricActionToLiveContext[\s\S]+GET_PAGE_CONTEXT[\s\S]+contextsMatch\(context, liveContext\)/.test(background),
+);
+ok(
+  "Enhanced Notes revalidates context after grants and before retries",
+  /providerActionGrant = await requestProviderActionGrant[\s\S]+if \(validateContext\) await validateContext\(\)/.test(background) &&
+    /tekmetricFetchWithBackoff[\s\S]+if \(validateContext\) await validateContext\(\)[\s\S]+await fetch\(url, init\)/.test(background) &&
+    /assertCurrentTekmetricRequestContext[\s\S]+GET_PAGE_CONTEXT/.test(background),
+);
+ok(
+  "live request validation rechecks active tab and exact page URL after awaits",
+  /const liveContext = await getLiveContext[\s\S]+tabId !== getActiveTabId\(\)[\s\S]+const tabState = await getTabState[\s\S]+tabId !== getActiveTabId\(\)[\s\S]+liveContext\._pageUrl === tabState\.url/.test(recoveryCore),
+);
+ok(
+  "Tekmetric proof origin stays bound to the current tab origin",
+  /tekmetricProof\.origin !== nextOrigin[\s\S]+tekmetricProofsByTab\.delete\(tabId\)/.test(background) &&
+    /tabState\.origin === session\?\.origin/.test(recoveryCore),
+);
+ok(
+  "Enhanced Notes analysis and apply use bounded session recovery",
+  /fetchEnhancedFindings[\s\S]+await recoverTekmetricSessionForTab\(context, tabId\)/.test(background) &&
+    /applyEnhancedFindings[\s\S]+await recoverTekmetricSessionForTab\(context, tabId\)/.test(background),
+);
+ok(
+  "terminal apply failure restores modal controls without deleting edits",
+  /ENHANCE_FINDINGS_FAILED[\s\S]+applyBtn\.textContent = 'Apply Selected'/.test(tekmetricContent) &&
+    !/ENHANCE_FINDINGS_FAILED[\s\S]{0,500}mos-enhance-review-modal['"]\)\?\.remove/.test(tekmetricContent),
+);
 ok("old persisted provider proof is removed", /storage\.session\.remove\(\['tekmetricToken'\]\)/.test(background));
 ok("bootstrap results are tab/context checked", /bootstrapContextKey\(tabId,\s*latest\)\s*!==\s*key/.test(background));
 ok("stale issued sessions are revoked", /revokeExtensionBearer\(data\.token,\s*apiUrl\)/.test(background));

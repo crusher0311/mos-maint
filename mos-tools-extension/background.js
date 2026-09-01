@@ -19,6 +19,8 @@ const MosSessionTierCore = globalThis.MosSessionTierCore;
 // sink so authorization cannot be detached from the operation it approved.
 import './provider-action-grant-core.js';
 const MosProviderActionGrantCore = globalThis.MosProviderActionGrantCore;
+import './tekmetric-session-recovery-core.js';
+const MosTekmetricSessionRecoveryCore = globalThis.MosTekmetricSessionRecoveryCore;
 
 // ==================== STATE MANAGEMENT ====================
 let mosApiToken = null;
@@ -419,8 +421,11 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (!changeInfo.url) return;
   let supportedProviderPage = false;
+  let nextOrigin = null;
   try {
-    const hostname = new URL(changeInfo.url).hostname.toLowerCase();
+    const parsedUrl = new URL(changeInfo.url);
+    const hostname = parsedUrl.hostname.toLowerCase();
+    nextOrigin = parsedUrl.origin;
     supportedProviderPage =
       hostname.endsWith('tekmetric.com') ||
       hostname.endsWith('shop-ware.com') ||
@@ -429,6 +434,15 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
       hostname.endsWith('autoflow.com') ||
       hostname.endsWith('autotext.me');
   } catch (_) {}
+  const tekmetricProof = tekmetricProofsByTab.get(tabId);
+  if (tekmetricProof && tekmetricProof.origin !== nextOrigin) {
+    tekmetricProofsByTab.delete(tabId);
+    smsContextsByTab.delete(tabId);
+    const boundKey = mosBootstrapContextKey || pendingBootstrapAuth?.contextKey || "";
+    if (boundKey.startsWith(`${tabId}:`)) {
+      clearBootstrapAuth(true).catch(() => {});
+    }
+  }
   if (supportedProviderPage) return;
   smsContextsByTab.delete(tabId);
   tekmetricProofsByTab.delete(tabId);
@@ -2971,13 +2985,14 @@ function compute429BackoffMs(attempt, retryAfterHeader) {
   return Math.min(exponential + jitter, TEK_MAX_BACKOFF_MS);
 }
 
-async function tekmetricFetchWithBackoff(url, init, label, tekmetricSession = null) {
+async function tekmetricFetchWithBackoff(url, init, label, tekmetricSession = null, validateContext = null) {
   for (let attempt = 1; attempt <= TEK_MAX_429_RETRIES + 1; attempt++) {
     if (tekmetricSession && !isCurrentTekmetricSession(tekmetricSession)) {
       const error = new Error('Tekmetric account or active tab changed during this operation');
       error.code = 'STALE_PROVIDER_CONTEXT';
       throw error;
     }
+    if (validateContext) await validateContext();
     const response = await fetch(url, init);
     if (response.status !== 429 || attempt > TEK_MAX_429_RETRIES) {
       return response;
@@ -3140,6 +3155,64 @@ function isCurrentTekmetricSession(session) {
   return latest?.token === session.token && latest?.origin === session.origin;
 }
 
+async function assertCurrentTekmetricRequestContext(context, tabId, session) {
+  let liveContext = null;
+  const isCurrent = await MosTekmetricSessionRecoveryCore.requestStillCurrent({
+    tabId,
+    expectedContext: context,
+    session,
+    getActiveTabId: () => activeTabId,
+    getLiveContext: async (id) => {
+      liveContext = await chrome.tabs.sendMessage(id, { action: 'GET_PAGE_CONTEXT' });
+      return liveContext;
+    },
+    getTabState: async (id) => {
+      const tab = await chrome.tabs.get(id);
+      return { origin: new URL(tab.url).origin, url: tab.url };
+    },
+  }).catch(() => false);
+  if (!isCurrent) {
+    const error = new Error('This Tekmetric tab moved to a different repair order. Return to the original RO and try Apply Selected again.');
+    error.code = 'TEKMETRIC_CONTEXT_CHANGED';
+    throw error;
+  }
+  smsContextsByTab.set(tabId, { ...liveContext, _tabId: tabId });
+}
+
+async function bindTekmetricActionToLiveContext(context, tabId) {
+  if (tabId == null || tabId !== activeTabId || context?.provider !== 'tekmetric') {
+    return false;
+  }
+  let liveContext = null;
+  try {
+    liveContext = await chrome.tabs.sendMessage(tabId, { action: 'GET_PAGE_CONTEXT' });
+  } catch (_) {
+    return false;
+  }
+  if (!MosTekmetricSessionRecoveryCore.contextsMatch(context, liveContext)) {
+    return false;
+  }
+  const boundContext = { ...liveContext, _tabId: tabId };
+  smsContextsByTab.set(tabId, boundContext);
+  currentSmsContext = boundContext;
+  return true;
+}
+
+async function recoverTekmetricSessionForTab(context, tabId, timeoutMs = 1800) {
+  return MosTekmetricSessionRecoveryCore.recover({
+    tabId,
+    expectedContext: context,
+    getActiveTabId: () => activeTabId,
+    getCurrentContext: (id) => smsContextsByTab.get(id),
+    getSession: () => tekmetricSessionForContext(context, tabId),
+    trigger: () => chrome.tabs.sendMessage(tabId, {
+      action: 'REQUEST_SAME_TAB_TEKMETRIC_ACTIVITY',
+    }),
+    wait: (ms) => new Promise(resolve => setTimeout(resolve, ms)),
+    timeoutMs,
+  });
+}
+
 function tekBuildRequest(endpoint, init = {}, session) {
   if (!endpoint || typeof endpoint !== 'string') {
     throw new Error('tekmetricFetch: endpoint must be a non-empty string');
@@ -3196,6 +3269,7 @@ async function tekSingleAttempt(endpointForReport, url, init, opts) {
       init,
       opts.label || endpointForReport,
       opts.session,
+      opts.validateContext,
     );
   } catch (err) {
     networkErr = err;
@@ -3256,11 +3330,30 @@ const DEFAULT_FALLBACK_STATUSES = [404];
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 async function tekmetricFetch(endpoint, init = {}, opts = {}) {
-  const session =
+  if (
+    opts.requireCurrentContext &&
+    !MosTekmetricSessionRecoveryCore.contextsMatch(
+      opts.context,
+      smsContextsByTab.get(opts.tabId),
+    )
+  ) {
+    const error = new Error('This Tekmetric tab moved to a different repair order. Return to the original RO and try Apply Selected again.');
+    error.code = 'TEKMETRIC_CONTEXT_CHANGED';
+    throw error;
+  }
+  let session =
     opts.session ||
     tekmetricSessionForContext(opts.context || currentSmsContext, opts.tabId);
+  if (!isCurrentTekmetricSession(session) && opts.recoverSession) {
+    session = await recoverTekmetricSessionForTab(
+      opts.context || currentSmsContext,
+      opts.tabId ?? opts.context?._tabId ?? activeTabId,
+    );
+  }
   if (!isCurrentTekmetricSession(session)) {
-    throw new Error('No Tekmetric session token. Open a Tekmetric tab first.');
+    const error = new Error('Tekmetric session could not be refreshed. Refresh this Tekmetric tab, sign in if prompted, then try Apply Selected again.');
+    error.code = 'TEKMETRIC_SESSION_UNAVAILABLE';
+    throw error;
   }
   const method = ((init.method || 'GET') + '').toUpperCase();
   const isMutating = MUTATING_METHODS.has(method);
@@ -3277,6 +3370,10 @@ async function tekmetricFetch(endpoint, init = {}, opts = {}) {
       opts.shopId || tekmetricShopId || currentSmsContext?.shopId,
     );
   }
+  const validateContext = opts.requireCurrentContext
+    ? () => assertCurrentTekmetricRequestContext(opts.context, opts.tabId, session)
+    : null;
+  if (validateContext) await validateContext();
   const fallbackStatuses = Array.isArray(opts.fallbackOnStatuses)
     ? opts.fallbackOnStatuses
     : DEFAULT_FALLBACK_STATUSES;
@@ -3288,6 +3385,7 @@ async function tekmetricFetch(endpoint, init = {}, opts = {}) {
     providerAction,
     providerActionGrant,
     session,
+    validateContext,
   });
 
   const shouldFallback = (status) =>
@@ -3309,6 +3407,7 @@ async function tekmetricFetch(endpoint, init = {}, opts = {}) {
           providerAction,
           providerActionGrant,
           session,
+          validateContext,
         });
         if (fbResponse.ok) {
           response = fbResponse;
@@ -5058,10 +5157,13 @@ async function applyBuildRoFromVhi(context, selected, markerPrefix, tabId) {
 
 async function fetchEnhancedFindings(context, inspId, tabId) {
   await _stateReady;
+  if (!await bindTekmetricActionToLiveContext(context, tabId)) {
+    return { success: false, error: "This Tekmetric tab is no longer on the original repair order. Return to that RO and try again." };
+  }
+  const tekmetricSession = await recoverTekmetricSessionForTab(context, tabId);
+  if (!tekmetricSession) return { success: false, error: "Tekmetric session could not be refreshed. Refresh this Tekmetric tab, sign in if prompted, then try again." };
   await ensureBootstrapBoundToActiveTab();
   if (!mosApiToken || !mosApiUrl) return { success: false, error: "Not connected to MOS" };
-  const tekmetricSession = tekmetricSessionForContext(context, tabId);
-  if (!tekmetricSession) return { success: false, error: "No Tekmetric session token" };
 
   const shopId = context.shopId || tekmetricShopId;
   if (!shopId) return { success: false, error: "No shop ID" };
@@ -5087,6 +5189,9 @@ async function fetchEnhancedFindings(context, inspId, tabId) {
         signalUserOnError: true,
         fallbacks,
         session: tekmetricSession,
+        requireCurrentContext: true,
+        context,
+        tabId,
       }
     );
     if (!res.ok) return { success: false, error: `Failed to fetch inspections (${res.status})` };
@@ -5211,9 +5316,12 @@ async function fetchEnhancedFindings(context, inspId, tabId) {
 
 async function applyEnhancedFindings(context, inspectionId, approved, tabId) {
   await _stateReady;
+  if (!await bindTekmetricActionToLiveContext(context, tabId)) {
+    return { success: false, error: "This Tekmetric tab is no longer on the original repair order. Return to that RO and try Apply Selected again." };
+  }
+  let tekmetricSession = await recoverTekmetricSessionForTab(context, tabId);
+  if (!tekmetricSession) return { success: false, error: "Tekmetric session could not be refreshed. Refresh this Tekmetric tab, sign in if prompted, then try Apply Selected again." };
   await ensureBootstrapBoundToActiveTab();
-  const tekmetricSession = tekmetricSessionForContext(context, tabId);
-  if (!tekmetricSession) return { success: false, error: "No Tekmetric session token" };
 
   const shopId = context.shopId || tekmetricShopId;
   if (!shopId) return { success: false, error: "No shop ID" };
@@ -5234,6 +5342,10 @@ async function applyEnhancedFindings(context, inspectionId, approved, tabId) {
         label: 'apply-enhanced.list-inspections',
         fallbacks,
         session: tekmetricSession,
+        recoverSession: true,
+        requireCurrentContext: true,
+        context,
+        tabId,
       }
     );
     if (!res.ok) return { success: false, error: `Failed to fetch inspections (${res.status})` };
@@ -5264,6 +5376,7 @@ async function applyEnhancedFindings(context, inspectionId, approved, tabId) {
 
   let applied = 0;
   let failed = 0;
+  let terminalError = null;
   const undoItems = []; // Task #1086: originals of every task we overwrite
 
   for (const item of approved) {
@@ -5282,14 +5395,26 @@ async function applyEnhancedFindings(context, inspectionId, approved, tabId) {
           method: "PUT",
           body: JSON.stringify(putBody),
         },
-        { shopId, label: 'enhance-notes.put-task', session: tekmetricSession }
+        { shopId, label: 'enhance-notes.put-task', session: tekmetricSession, recoverSession: true, requireCurrentContext: true, context, tabId }
       );
       if (res.ok) {
         applied++;
         // `task` is the untouched pre-write object (putBody is a copy).
         undoItems.push({ inspectionId: itemInspId, task });
       } else { failed++; }
-    } catch { failed++; }
+    } catch (err) {
+      failed++;
+      if (
+        err?.code === 'TEKMETRIC_CONTEXT_CHANGED' ||
+        err?.code === 'TEKMETRIC_SESSION_UNAVAILABLE' ||
+        err?.code === 'STALE_PROVIDER_CONTEXT'
+      ) {
+        terminalError = err?.code === 'STALE_PROVIDER_CONTEXT'
+          ? 'The active Tekmetric tab or account changed. Return to the original RO and try Apply Selected again.'
+          : err.message;
+        break;
+      }
+    }
 
     if (applied % 5 === 0 && applied > 0) {
       await new Promise(r => setTimeout(r, 100));
@@ -5339,7 +5464,7 @@ async function applyEnhancedFindings(context, inspectionId, approved, tabId) {
     }
   }
 
-  return { success: applied > 0, applied, failed };
+  return { success: !terminalError && applied > 0, applied, failed, error: terminalError };
 }
 
 // ==================== UNDO SNAPSHOT STORE (Task #1086) ====================

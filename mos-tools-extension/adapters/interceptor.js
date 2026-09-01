@@ -1,10 +1,47 @@
 (function() {
   var snifferActive = false;
+  // The service worker deliberately keeps Tekmetric credentials in memory
+  // only. Keep the last credential observed by this page in MAIN-world memory
+  // as well, so the same tab can hand it back after a worker restart.
+  var latestTekmetricProof = null;
+
+  function rememberTekmetricProof(url, headers) {
+    try {
+      var origin = new URL(url, window.location.origin).origin;
+      if (
+        origin !== 'https://shop.tekmetric.com' &&
+        origin !== 'https://sandbox.tekmetric.com' &&
+        origin !== 'https://cba.tekmetric.com'
+      ) return;
+      var entries = headers instanceof Headers
+        ? Array.from(headers.entries())
+        : Object.entries(headers || {});
+      var tokenEntry = entries.find(function(entry) {
+        return String(entry[0]).toLowerCase() === 'x-auth-token';
+      });
+      if (!tokenEntry || !tokenEntry[1]) return;
+      latestTekmetricProof = {
+        token: String(tokenEntry[1]),
+        origin: origin
+      };
+    } catch (_) {}
+  }
 
   window.addEventListener('message', function(event) {
     if (event.data && event.data.type === 'MOS_SNIFFER_STATE') {
       snifferActive = !!event.data.active;
       console.log('[MOS Intercept] Sniffer ' + (snifferActive ? 'enabled' : 'disabled'));
+    }
+    if (event.source === window && event.data && event.data.type === 'MOS_REQUEST_TEKMETRIC_ACTIVITY') {
+      if (!latestTekmetricProof) return;
+      // Generate one harmless authenticated request. Chrome's webRequest
+      // observer re-captures the header for this same tab; the credential is
+      // never placed on the page message bus.
+      origFetch.call(window, latestTekmetricProof.origin + '/api/profile', {
+        method: 'GET',
+        headers: { 'x-auth-token': latestTekmetricProof.token },
+        credentials: 'include',
+      }).catch(function() {});
     }
   });
 
@@ -13,6 +50,8 @@
     var url = typeof arguments[0] === 'string' ? arguments[0] : (arguments[0] && arguments[0].url) || '';
     var opts = arguments[1] || {};
     var method = opts.method || 'GET';
+    var requestHeaders = opts.headers || (arguments[0] && arguments[0].headers);
+    rememberTekmetricProof(url, requestHeaders);
     if (method !== 'GET') {
       console.log('[MOS Intercept] ' + method + ' ' + url);
       if (opts.body) {
@@ -125,12 +164,19 @@
 
   var origOpen = XMLHttpRequest.prototype.open;
   var origSend = XMLHttpRequest.prototype.send;
+  var origSetRequestHeader = XMLHttpRequest.prototype.setRequestHeader;
   XMLHttpRequest.prototype.open = function(method, url) {
     this._mosUrl = url;
     this._mosMethod = method;
+    this._mosHeaders = {};
     return origOpen.apply(this, arguments);
   };
+  XMLHttpRequest.prototype.setRequestHeader = function(name, value) {
+    this._mosHeaders[name] = value;
+    return origSetRequestHeader.apply(this, arguments);
+  };
   XMLHttpRequest.prototype.send = function(body) {
+    rememberTekmetricProof(this._mosUrl, this._mosHeaders);
     if (this._mosMethod && this._mosMethod !== 'GET') {
       console.log('[MOS Intercept XHR] ' + this._mosMethod + ' ' + this._mosUrl);
       if (body) {

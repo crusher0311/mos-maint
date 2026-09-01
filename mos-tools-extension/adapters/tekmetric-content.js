@@ -562,7 +562,7 @@ let jobCreatedReloadTimer = null;
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "GET_PAGE_CONTEXT") {
     const context = detectContext();
-    sendResponse(context);
+    sendResponse({ ...context, _pageUrl: window.location.href });
     return false;
   }
 
@@ -654,6 +654,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "ENHANCE_FINDINGS_FAILED") {
     clearPendingApply(); // Task #1101
     resetEnhanceButton();
+    const modal = document.getElementById('mos-enhance-review-modal');
+    if (modal) {
+      const buttons = modal.querySelectorAll('button');
+      const cancelBtn = buttons[0];
+      const applyBtn = buttons[1];
+      if (cancelBtn) cancelBtn.disabled = false;
+      if (applyBtn) {
+        applyBtn.disabled = false;
+        applyBtn.textContent = 'Apply Selected';
+        applyBtn.style.opacity = '1';
+      }
+    }
     reportActionDropped("enhance_findings", "background_failed");
     sendResponse({ success: true });
     return false;
@@ -3025,6 +3037,9 @@ function startCategoryChangeObserver() {
   chrome.runtime.onMessage.addListener((message) => {
     if (message.action === 'MOS_SNIFFER_STATE_UPDATE') {
       window.postMessage({ type: 'MOS_SNIFFER_STATE', active: message.active }, '*');
+    }
+    if (message.action === 'REQUEST_SAME_TAB_TEKMETRIC_ACTIVITY') {
+      window.postMessage({ type: 'MOS_REQUEST_TEKMETRIC_ACTIVITY' }, '*');
     }
   });
 
