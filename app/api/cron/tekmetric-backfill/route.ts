@@ -22,6 +22,8 @@ import { bulkCacheJobs, bulkFetchJobsByShopWindow, isBulkJobsPrewarmEnabledForSh
 import { probeTekmetricRoCount, getPrePassVehicle, getPrePassCustomer } from "@/lib/integrations/tekmetric/full-page-backfill";
 import { syncTekmetricRoster } from "@/lib/integrations/tekmetric/sync-roster";
 import { syncProtractorRoster } from "@/lib/integrations/protractor/sync-roster";
+import { getProtractorOutboundPolicy } from "@/lib/integrations/protractor/client";
+import { logProtractorPolicyDenial } from "@/lib/integrations/protractor/outbound-policy.cjs";
 import { decideChunkAdvance } from "@/lib/integrations/tekmetric/backfill-chunk-advance";
 import { DEFAULT_STALE_HEARTBEAT_MS } from "@/lib/integrations/tekmetric/inflight-lock";
 import { buildTekmetricNormalizedWorkOrder } from "@/lib/integrations/tekmetric/normalized-payload";
@@ -2061,12 +2063,17 @@ async function _GETImpl(req: NextRequest) {
       synced: number;
       errors: number;
     } = { attempted: 0, synced: 0, errors: 0 };
-    try {
-      protractorRosterSync = await runProtractorRosterSyncPass(db);
-    } catch (rosterErr: any) {
-      console.warn(
-        `[Tekmetric Backfill] Protractor roster sync pass threw; continuing with backfill: ${rosterErr?.message || rosterErr}`,
-      );
+    const protractorPolicy = getProtractorOutboundPolicy();
+    if (protractorPolicy.allowed) {
+      try {
+        protractorRosterSync = await runProtractorRosterSyncPass(db);
+      } catch (rosterErr: any) {
+        console.warn(
+          `[Tekmetric Backfill] Protractor roster sync pass threw; continuing with backfill: ${rosterErr?.message || rosterErr}`,
+        );
+      }
+    } else {
+      logProtractorPolicyDenial(protractorPolicy, "tekmetric_backfill_protractor_roster");
     }
 
     // Fastpath mode: when invoked as `?fastpath=newShops` (the

@@ -26,6 +26,15 @@ import { extractJobIndexFromWorkOrder, computeJobHash } from "@/lib/job-index";
 import pLimit from "p-limit";
 import { Db } from "mongodb";
 import * as callbackEvents from "@/lib/data/repositories/protractor-callback-events";
+import {
+  getProtractorOutboundPolicy,
+} from "@/lib/integrations/protractor/client";
+import { logProtractorPolicyDenial } from "@/lib/integrations/protractor/outbound-policy.cjs";
+import {
+  replayDeferredTerminalPost,
+  TERMINAL_CALLBACK_STATUSES,
+} from "@/lib/integrations/protractor/callback-replay";
+import { processProtractorCallbackQueue } from "@/lib/integrations/protractor/callback-queue";
 
 const QUEUE_BATCH_SIZE = 50;
 const MAX_ATTEMPTS = 3;
@@ -50,47 +59,23 @@ const SOFT_BUDGET_MS = 18 * 60 * 1000; // stop STARTING new shops after 18 min
 const PREGEN_HARD_MS = 23 * 60 * 1000; // stop pre-generation after 23 min
 
 async function processWebhookQueue(db: Db): Promise<{ processed: number; failed: number }> {
-  // Process unprocessed GET callback events (webhooks)
-  // These are logged immediately when received, processed here with priority
-  const pendingItems = await callbackEvents.findPendingGetEvents(
-    QUEUE_BATCH_SIZE,
-    MAX_ATTEMPTS,
-  );
-
-  if (pendingItems.length === 0) {
-    return { processed: 0, failed: 0 };
-  }
-
-  let processed = 0;
-  let failed = 0;
-  const queueStart = Date.now();
-
-  for (const item of pendingItems) {
-    // Never let the pre-sweep drain run away and starve the shop sweep.
-    if (Date.now() - queueStart > QUEUE_BUDGET_MS) {
-      console.warn(
-        `[Cron] Protractor webhook queue: time cap (${QUEUE_BUDGET_MS}ms) hit after ${processed} processed — deferring the rest to the next run`
-      );
-      break;
-    }
-    const admissionIdentity =
-      item.objectType && item.objectId
-        ? {
-            shopId: item.shopId,
-            objectType: item.objectType,
-            objectId: item.objectId,
-            operation: item.operation,
-          }
-        : null;
-    let admitted = false;
-    try {
-      if (admissionIdentity) {
-        admitted = await callbackEvents.admitGetEvent(item.key, admissionIdentity);
-        if (!admitted) continue;
-      }
-      await callbackEvents.recordProcessingStarted(item.key);
-
+  return processProtractorCallbackQueue(db, async (item) => {
       const { shopId, objectType, objectId, operation } = item;
+
+      if (
+        item.method === "POST" &&
+        objectId &&
+        TERMINAL_CALLBACK_STATUSES.has(String(operation || "").toUpperCase())
+      ) {
+        const replayed = await replayDeferredTerminalPost(db, {
+          key: item.key,
+          shopId,
+          objectId,
+          operation,
+        });
+        if (!replayed) throw new Error("Deferred terminal POST replay failed");
+        return;
+      }
 
       if (objectType === "ServiceItem" && objectId) {
         const result = await fetchVehicleById(shopId, objectId);
@@ -192,28 +177,7 @@ async function processWebhookQueue(db: Db): Promise<{ processed: number; failed:
 
       // Mark as processed on success
       await callbackEvents.markProcessed(item.key);
-
-      processed++;
-
-    } catch (error: any) {
-      // Mark with error - will retry on next cron run if under MAX_ATTEMPTS
-      await callbackEvents.recordError(item.key, error.message);
-
-      failed++;
-    } finally {
-      if (admitted && admissionIdentity) {
-        // Queue replay is itself the bounded/latest-state fetch.  Do not
-        // create an unbounded chain when callbacks arrive during the fetch.
-        await callbackEvents.finishGetEventAdmission(
-          item.key,
-          admissionIdentity,
-          false,
-        );
-      }
-    }
-  }
-
-  return { processed, failed };
+  }, { limit: QUEUE_BATCH_SIZE, maxAttempts: MAX_ATTEMPTS, budgetMs: QUEUE_BUDGET_MS });
 }
 
 export const runtime = "nodejs";
@@ -225,6 +189,11 @@ export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
   if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const outboundPolicy = getProtractorOutboundPolicy();
+  if (!outboundPolicy.allowed) {
+    logProtractorPolicyDenial(outboundPolicy, "cron_protractor_sync");
+    return NextResponse.json({ ok: true, skipped: "local_instance_policy" });
   }
 
   const db = await getDb();

@@ -57,6 +57,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { parseAfLog, type AfLogEvent } from "@/lib/integrations/protractor/af-log-parser";
 import * as callbackEvents from "@/lib/data/repositories/protractor-callback-events";
+import { getProtractorOutboundPolicy } from "@/lib/integrations/protractor/client";
+import { logProtractorPolicyDenial } from "@/lib/integrations/protractor/outbound-policy.cjs";
 
 const CRON_SECRET = process.env.CRON_SECRET;
 const AF_LOG_URL =
@@ -81,6 +83,11 @@ export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
   if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const outboundPolicy = getProtractorOutboundPolicy();
+  if (!outboundPolicy.allowed) {
+    logProtractorPolicyDenial(outboundPolicy, "cron_protractor_af_log_tail");
+    return NextResponse.json({ ok: true, skipped: "local_instance_policy" });
   }
 
   if (process.env.PROTRACTOR_AF_LOG_TAIL_ENABLED === "false") {

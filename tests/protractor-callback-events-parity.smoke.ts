@@ -191,6 +191,26 @@ async function main() {
   }
   ok("PG never touched with flag OFF (all ops)", pgCalls.length === 0);
 
+  reset();
+  await repo.insertPostEvent({
+    payload: { deferred: true },
+    workOrderId: "WO-DEFERRED",
+    status: "Open",
+    connectionId: "conn-deferred",
+    shopId: 42,
+    deferredForReplay: true,
+  });
+  {
+    const doc = (mongoOps[0] as any)?.doc ?? {};
+    ok(
+      "denied Mongo POST is atomically inserted in replayable queue shape",
+      doc.method === "POST" && doc.objectType === "WorkOrder" &&
+        doc.objectId === "WO-DEFERRED" && doc.operation === "Open" &&
+        doc.processed === false && doc.attempts === 0 && doc.priority === 1,
+    );
+    ok("denied Mongo POST initial insert has no attempt increment", doc.attempts === 0);
+  }
+
   /* ================= 2/3. Flag ON — PG canonical + Mongo shadow ========= */
   console.log("\nflag ON (PG canonical, shadow on)");
   process.env.PROTRACTOR_OPS_PG_CANONICAL = "1";
@@ -218,6 +238,29 @@ async function main() {
         shadow.connectionId === "conn-2" && shadow.processed === false,
     );
     ok("shadow receivedAt equals PG receivedAt", shadow.receivedAt === f.receivedAt);
+  }
+
+  reset();
+  const deferredPgKey = await repo.insertPostEvent({
+    payload: { deferred: true },
+    workOrderId: "WO-PG-DEFERRED",
+    status: "Open",
+    connectionId: "conn-pg-deferred",
+    shopId: 77,
+    deferredForReplay: true,
+  });
+  {
+    const f = (pgCalls[0]?.args?.[0] ?? {}) as any;
+    const shadow = (mongoOps[0] as any)?.doc ?? {};
+    ok(
+      "denied PG POST receives atomic deferred replay option",
+      f.eventKey === deferredPgKey && f.deferredForReplay === true,
+    );
+    ok(
+      "denied PG shadow record is immediately replay-eligible",
+      shadow.method === "POST" && shadow.objectType === "WorkOrder" &&
+        shadow.objectId === "WO-PG-DEFERRED" && shadow.attempts === 0,
+    );
   }
 
   await repo.markProcessed(key2, { workOrderNumber: 555 });

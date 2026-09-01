@@ -81,6 +81,8 @@
  *   `lib/integrations/protractor/client.ts`.
  */
 import { NextRequest, NextResponse } from "next/server";
+import { getProtractorOutboundPolicy } from "@/lib/integrations/protractor/client";
+import { logProtractorPolicyDenial } from "@/lib/integrations/protractor/outbound-policy.cjs";
 import { getDb } from "@/lib/mongo";
 import { fetchActiveWorkOrders, resolveProtractorConfig } from "@/lib/integrations/protractor";
 import pLimit from "p-limit";
@@ -153,6 +155,11 @@ export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
   if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const outboundPolicy = getProtractorOutboundPolicy();
+  if (!outboundPolicy.allowed) {
+    logProtractorPolicyDenial(outboundPolicy, "cron_protractor_stage_refresh");
+    return NextResponse.json({ ok: true, skipped: "local_instance_policy" });
   }
 
   if (process.env.PROTRACTOR_STAGE_REFRESH_DISABLED === "true") {

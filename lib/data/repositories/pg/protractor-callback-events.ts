@@ -26,6 +26,7 @@ export interface InsertPostEventFields {
   status: string | null;
   connectionId: string;
   shopId: number | null;
+  deferredForReplay?: boolean;
 }
 
 export interface InsertGetEventFields {
@@ -46,10 +47,22 @@ export interface CallbackAdmissionIdentity {
   operation: string | null;
 }
 
+/** Pure counterpart to the SQL POST admission predicate (regression-testable). */
+export function isPostAdmissionMatch(
+  row: { method: string | null; shopId: number | null; workOrderId: string | null; status: string | null },
+  identity: CallbackAdmissionIdentity,
+): boolean {
+  return identity.method === "POST" &&
+    (row.method === null || row.method === "POST") &&
+    row.shopId === identity.shopId &&
+    row.workOrderId === identity.objectId &&
+    (row.status || "").toUpperCase() === (identity.operation || "");
+}
+
 function identityWhere(identity: CallbackAdmissionIdentity) {
   if (identity.method === "POST") {
     return and(
-      sql`${t.method} IS NULL`,
+      or(sql`${t.method} IS NULL`, eq(t.method, "POST")),
       eq(t.shopId, identity.shopId),
       eq(t.workOrderId, identity.objectId),
       sql`upper(coalesce(${t.status}, '')) = ${identity.operation ?? ""}`,
@@ -188,6 +201,14 @@ export async function insertPostEvent(f: InsertPostEventFields): Promise<void> {
   await getDb().insert(t).values({
     eventKey: f.eventKey,
     receivedAt: f.receivedAt,
+    ...(f.deferredForReplay ? {
+      method: "POST" as const,
+      objectType: "WorkOrder",
+      objectId: f.workOrderId,
+      operation: f.status ?? null,
+      attempts: 0,
+      priority: 1,
+    } : {}),
     payload: f.payload,
     workOrderId: f.workOrderId,
     status: f.status ?? null,
@@ -391,13 +412,14 @@ export async function recordError(eventKey: string, message: string): Promise<vo
 
 export interface PendingGetEvent {
   eventKey: string;
+  method: "GET" | "POST";
   shopId: number | null;
   objectType: string | null;
   objectId: string | null;
   operation: string | null;
 }
 
-/** protractor-sync pre-sweep queue: unprocessed GET events under the attempt cap. */
+/** protractor-sync pre-sweep queue: unprocessed callback events under the attempt cap. */
 export async function findPendingGetEvents(
   limit: number,
   maxAttempts: number,
@@ -405,6 +427,7 @@ export async function findPendingGetEvents(
   const rows = await getDb()
     .select({
       eventKey: t.eventKey,
+      method: t.method,
       shopId: t.shopId,
       objectType: t.objectType,
       objectId: t.objectId,
@@ -413,7 +436,7 @@ export async function findPendingGetEvents(
     .from(t)
     .where(
       and(
-        eq(t.method, "GET"),
+        or(eq(t.method, "GET"), eq(t.method, "POST")),
         eq(t.processed, false),
         isNotNull(t.eventKey),
         or(sql`${t.attempts} IS NULL`, lt(t.attempts, maxAttempts)),
@@ -421,7 +444,11 @@ export async function findPendingGetEvents(
     )
     .orderBy(asc(t.priority), asc(t.receivedAt))
     .limit(limit);
-  return rows.map((r) => ({ ...r, eventKey: r.eventKey as string }));
+  return rows.map((r) => ({
+    ...r,
+    eventKey: r.eventKey as string,
+    method: r.method as "GET" | "POST",
+  }));
 }
 
 /** Webhook-health: per-shop received counts since `since`, shopId ∈ shopIds. */

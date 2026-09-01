@@ -26,6 +26,10 @@ import {
   logPartCostResolution,
 } from "./part-cost";
 import { normalizeProtractorPackageLine } from "./package-normalization";
+import {
+  evaluateProtractorOutboundPolicy,
+  logProtractorPolicyDenial,
+} from "./outbound-policy.cjs";
 export { normalizeProtractorPackageLine } from "./package-normalization";
 
 const BASE_URL_V1 = "https://integration.protractor.com/IntegrationServices/1.0";
@@ -562,10 +566,31 @@ export function isProtractorOutboundDisabled(): boolean {
   return process.env.PROTRACTOR_OUTBOUND_DISABLED === "true";
 }
 
+export function getProtractorOutboundPolicy() {
+  return evaluateProtractorOutboundPolicy(process.env);
+}
+
+export function isProtractorOutboundAllowed(context = "unknown"): boolean {
+  const decision = getProtractorOutboundPolicy();
+  if (!decision.allowed) logProtractorPolicyDenial(decision, context);
+  return decision.allowed;
+}
+
+function localPolicyError(context: string): { ok: false; error: string } | null {
+  const decision = getProtractorOutboundPolicy();
+  if (decision.allowed) return null;
+  logProtractorPolicyDenial(decision, context);
+  return {
+    ok: false,
+    error: decision.reason === "service_disabled"
+      ? "Protractor outbound API calls are temporarily disabled"
+      : "Protractor outbound denied by local instance policy",
+  };
+}
+
 async function acquireOutboundGate(config: { connectionId: string }): Promise<{ ok: true } | { ok: false; error: string }> {
-  if (isProtractorOutboundDisabled()) {
-    return { ok: false, error: "Protractor outbound API calls are temporarily disabled" };
-  }
+  const local = localPolicyError("transport_attempt");
+  if (local) return local;
   try {
     const decision = await __protractorClientTestHooks.acquireOutboundGate(config.connectionId);
     if (decision.allowed) return { ok: true };
@@ -601,6 +626,8 @@ async function runGuardedTransportAttempt<T>(
   transport: () => Promise<T>,
   priority = false,
 ): Promise<{ ok: true; response: T } | { ok: false; error: string }> {
+  const local = localPolicyError("soap");
+  if (local) return local;
   const concurrencyLimiter = priority ? priorityConcurrencyLimit : protractorConcurrencyLimit;
   return concurrencyLimiter(async () => {
     const gate = await acquireOutboundGate(config);
@@ -624,12 +651,8 @@ export async function protractorFetch<T>(
   shopId?: number,
   opts?: { priority?: boolean; maxRetries?: number }
 ): Promise<{ ok: boolean; data?: T; error?: string }> {
-  if (isProtractorOutboundDisabled()) {
-    return {
-      ok: false,
-      error: "Protractor outbound API calls are temporarily disabled",
-    };
-  }
+  const local = localPolicyError("rest");
+  if (local) return local;
 
   if (!config.configured) {
     return { ok: false, error: "Protractor not configured" };

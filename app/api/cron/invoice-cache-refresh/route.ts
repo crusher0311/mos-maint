@@ -38,6 +38,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { prewarmProtractorJobsCacheForOnboarding } from "@/lib/integrations/protractor/jobs-prewarm";
 import { prewarmShopWareJobsCacheForOnboarding } from "@/lib/shopware-jobs-prewarm";
+import { getProtractorOutboundPolicy } from "@/lib/integrations/protractor/client";
+import { logProtractorPolicyDenial } from "@/lib/integrations/protractor/outbound-policy.cjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -103,7 +105,8 @@ export async function GET(req: NextRequest) {
   const protractorResults: ProtractorShopResult[] = [];
   const shopwareResults: ShopWareShopResult[] = [];
 
-  if (!providerFilter || providerFilter === "protractor") {
+  const protractorPolicy = getProtractorOutboundPolicy();
+  if ((!providerFilter || providerFilter === "protractor") && protractorPolicy.allowed) {
     // Mirror the connected-shop predicate used by /api/cron/protractor-sync
     // so this cron stays in lockstep with the rest of the Protractor
     // pipeline if onboarding ever moves to a different field.
@@ -154,6 +157,9 @@ export async function GET(req: NextRequest) {
         protractorResults.push({ shopId, ok: false, error: message });
       }
     }
+  }
+  if ((!providerFilter || providerFilter === "protractor") && !protractorPolicy.allowed) {
+    logProtractorPolicyDenial(protractorPolicy, "cron_invoice_cache_refresh");
   }
 
   if (!providerFilter || providerFilter === "shopware") {

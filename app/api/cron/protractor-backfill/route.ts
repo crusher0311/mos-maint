@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { findAndResumeStaleBackfills, findAndRunNewShopFastpath, runProtractorBackfill } from "@/lib/integrations/protractor/sync";
 import { upsertMerge as upsertBackfillProgress } from "@/lib/data/repositories/protractor-backfill-progress";
+import { getProtractorOutboundPolicy } from "@/lib/integrations/protractor/client";
+import { logProtractorPolicyDenial } from "@/lib/integrations/protractor/outbound-policy.cjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,6 +17,11 @@ export async function GET(req: NextRequest) {
   
   if (CRON_SECRET && !isLocalhost && authHeader !== `Bearer ${CRON_SECRET}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const outboundPolicy = getProtractorOutboundPolicy();
+  if (!outboundPolicy.allowed) {
+    logProtractorPolicyDenial(outboundPolicy, "cron_protractor_backfill");
+    return NextResponse.json({ ok: true, skipped: "local_instance_policy" });
   }
 
   try {

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { reconcileProtractorDrift, reconcileTekmetricDrift } from "@/lib/dashboard/drift-reconcile";
+import { getProtractorOutboundPolicy } from "@/lib/integrations/protractor/client";
+import { logProtractorPolicyDenial } from "@/lib/integrations/protractor/outbound-policy.cjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -51,7 +53,8 @@ export async function GET(req: NextRequest) {
   const errors: any[] = [];
 
   try {
-    if (!provider || provider === "protractor") {
+    const protractorPolicy = getProtractorOutboundPolicy();
+    if ((!provider || provider === "protractor") && protractorPolicy.allowed) {
       const filter: any = { "protractor.configured": true };
       if (targetShopId != null) filter.shopId = { $in: [targetShopId, String(targetShopId)] };
       const shops = await db.collection("shops").find(filter, { projection: { shopId: 1 } }).toArray();
@@ -65,6 +68,9 @@ export async function GET(req: NextRequest) {
           errors.push({ provider: "protractor", shopId, error: err?.message || String(err) });
         }
       }
+    }
+    if ((!provider || provider === "protractor") && !protractorPolicy.allowed) {
+      logProtractorPolicyDenial(protractorPolicy, "cron_drift_reconcile");
     }
 
     if (!provider || provider === "tekmetric") {

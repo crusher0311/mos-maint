@@ -17,6 +17,10 @@
 
 import type { Job } from "bullmq";
 import type { DrainJobData } from "@/lib/queue/producer";
+import {
+  evaluateProtractorOutboundPolicy,
+  logProtractorPolicyDenial,
+} from "@/lib/integrations/protractor/outbound-policy.cjs";
 
 // Per-attempt cap. The legacy drain script ran indefinitely; under
 // BullMQ we cap each job and let the queue's retry/re-enqueue handle
@@ -28,6 +32,11 @@ const DRAIN_ATTEMPT_MAX_MS = 20 * 60 * 1000;
 export async function processDrainProtractor(
   job: Job<DrainJobData>,
 ): Promise<{ shopsProcessed: number; complete: boolean }> {
+  const outboundPolicy = evaluateProtractorOutboundPolicy(process.env);
+  if (!outboundPolicy.allowed) {
+    logProtractorPolicyDenial(outboundPolicy, "worker_drain_protractor");
+    throw new Error("Protractor drain deferred by local instance policy");
+  }
   const { shopIds } = job.data;
   console.log(
     `[Worker drain-protractor] starting attempt=${job.attemptsMade + 1} scope=${

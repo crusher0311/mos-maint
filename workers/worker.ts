@@ -27,6 +27,11 @@ import { processTekmetricPrePass } from "./processors/tekmetric-prepass";
 import { processDrainTekmetric } from "./processors/drain-tekmetric";
 import { processDrainProtractor } from "./processors/drain-protractor";
 import {
+  evaluateProtractorOutboundPolicy,
+  logProtractorPolicyDenial,
+} from "@/lib/integrations/protractor/outbound-policy.cjs";
+import { selectBackfillWorkerKinds } from "./worker-registration";
+import {
   startTekmetricIncrementalLoop,
   stopTekmetricIncrementalLoop,
 } from "./tekmetric-incremental-loop";
@@ -114,6 +119,11 @@ export async function startWorkers(): Promise<void> {
     return;
   }
   console.log("[Worker] Starting backfill worker service…");
+  const protractorPolicy = evaluateProtractorOutboundPolicy(process.env);
+  const selectedWorkerKinds = new Set(selectBackfillWorkerKinds(protractorPolicy.allowed));
+  if (!protractorPolicy.allowed) {
+    logProtractorPolicyDenial(protractorPolicy, "worker_registration");
+  }
 
   const built = [
     buildWorker(
@@ -131,11 +141,13 @@ export async function startWorkers(): Promise<void> {
       processDrainTekmetric,
       CONCURRENCY[QUEUE_NAMES.DRAIN_TEKMETRIC],
     ),
-    buildWorker(
-      QUEUE_NAMES.DRAIN_PROTRACTOR,
-      processDrainProtractor,
-      CONCURRENCY[QUEUE_NAMES.DRAIN_PROTRACTOR],
-    ),
+    ...(selectedWorkerKinds.has("drain-protractor")
+      ? [buildWorker(
+          QUEUE_NAMES.DRAIN_PROTRACTOR,
+          processDrainProtractor,
+          CONCURRENCY[QUEUE_NAMES.DRAIN_PROTRACTOR],
+        )]
+      : []),
   ].filter((w): w is BullWorker => w !== null);
 
   workers.push(...built);

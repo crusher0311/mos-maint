@@ -37,6 +37,49 @@ egress IP may be tested.
 
 Do not proceed if any REST or SOAP call is recorded while the switch is on.
 
+## Isolate one Render replica
+
+`PROTRACTOR_OUTBOUND_DENIED_INSTANCE_IDS` accepts either a comma-separated list
+or a JSON string array of exact replica identities. Use `RENDER_INSTANCE_ID`
+from the structured runtime telemetry; do not use an IP address, connection ID,
+or credential. Identity values are emitted only as one-way 12-character
+fingerprints in policy-denial telemetry.
+
+1. Keep `PROTRACTOR_OUTBOUND_DISABLED=true` while preparing the rollout.
+2. From Render's instance metadata, copy the exact `RENDER_INSTANCE_ID` of the
+   blocked replica and set, for example,
+   `PROTRACTOR_OUTBOUND_DENIED_INSTANCE_IDS=instance-a,instance-b`.
+3. Deploy without suspending the web service. A denied replica continues to
+   serve MOS and non-Protractor traffic. Its Protractor cron jobs and drain
+   worker are not registered; route-level and transport-level checks remain as
+   defense in depth.
+4. Remove `PROTRACTOR_OUTBOUND_DISABLED` (or set it to `false`) only after all
+   replicas have the deny policy. Verify allowed replica canaries first.
+5. Filter structured logs for `protractor_outbound_policy_denied`. Confirm the
+   expected instance fingerprint and contexts, and confirm upstream Protractor
+   request telemetry is zero for that fingerprint. These local denials must not
+   appear as upstream 403s or circuit-breaker responses.
+6. Send GET and POST callbacks to the denied replica. Verify HTTP 200 with
+   `status=deferred`, durable unprocessed callback rows, no attempt increment,
+   and no enrichment request. Then run queue recovery on an allowed replica and
+   confirm the event is claimed and processed there.
+7. Verify an unrelated MOS endpoint and a non-Protractor background job on the
+   denied replica. Both must remain available.
+
+The deny policy fails closed if non-empty but malformed, duplicated, or if no
+stable instance identity is available. Fix the value rather than bypassing this
+protection. `PROTRACTOR_OUTBOUND_DISABLED=true` remains the highest-priority
+control and blocks every replica regardless of the deny list.
+
+### Identity rotation and verification
+
+Render may replace `RENDER_INSTANCE_ID` during any deploy or restart. Before
+and after each deploy, compare current instance metadata with the deny list.
+If the blocked egress moved to a replacement instance, add the new identity
+before removing the old one, deploy, repeat the zero-outbound canary, and only
+then prune identities that no longer exist. Treat an unexpected
+`missing_identity` or `malformed_policy` denial as a rollout failure.
+
 ## 2. Prepare a one-connection canary
 
 1. Agree with Protractor on one test connection and a short observation window.
@@ -80,3 +123,9 @@ incident is closed.
 Set `PROTRACTOR_OUTBOUND_DISABLED=true`. Do not suspend MOS. Confirm API usage
 returns to zero, then preserve privacy-safe callback and breaker telemetry for
 incident review.
+
+After traffic is stopped, remove or correct
+`PROTRACTOR_OUTBOUND_DENIED_INSTANCE_IDS`, deploy to every replica, and verify
+identity metadata plus an allowed canary. Only then clear the service-wide
+switch. If isolation itself must be abandoned, leave the service-wide switch
+on; never roll back by allowing a known-blocked replica to call Protractor.

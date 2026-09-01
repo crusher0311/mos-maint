@@ -3,6 +3,8 @@ import { runWithTekmetricPriority } from "@/lib/integrations/tekmetric/client";
 import { getDb } from "@/lib/mongo";
 import { tekmetricRequest } from "@/lib/integrations/tekmetric/client";
 import { resolveProtractorConfig, protractorFetch } from "@/lib/integrations/protractor";
+import { getProtractorOutboundPolicy } from "@/lib/integrations/protractor/client";
+import { logProtractorPolicyDenial } from "@/lib/integrations/protractor/outbound-policy.cjs";
 import { getRepairOrders } from "@/lib/integrations/shopware/client";
 import { updateProgressFields as updateTekmetricProgressFields } from "@/lib/data/repositories/tekmetric-ops";
 import { updateShopwareBackfillProgress } from "@/lib/data/repositories/shopware-ops";
@@ -340,7 +342,8 @@ async function _GETImpl(req: NextRequest) {
       }
     }
 
-    if (!provider || provider === "protractor") {
+    const protractorPolicy = getProtractorOutboundPolicy();
+    if ((!provider || provider === "protractor") && protractorPolicy.allowed) {
       const shopFilter: any = { protractorBackfillComplete: true };
       if (targetShopId) shopFilter.shopId = targetShopId;
       const shops = await db.collection("shops").find(shopFilter).limit(targetShopId ? 1 : 5).toArray();
@@ -351,6 +354,9 @@ async function _GETImpl(req: NextRequest) {
           results.push({ provider: "protractor", shopId: shop.shopId, error: err.message });
         }
       }
+    }
+    if ((!provider || provider === "protractor") && !protractorPolicy.allowed) {
+      logProtractorPolicyDenial(protractorPolicy, "cron_backfill_reconcile");
     }
 
     if (!provider || provider === "shopware") {

@@ -276,6 +276,8 @@ export async function insertPostEvent(fields: {
   status: string | null;
   connectionId: string;
   shopId: number | string | null | undefined;
+  /** Used only for a locally-denied callback; makes the initial write replayable. */
+  deferredForReplay?: boolean;
 }): Promise<CallbackEventKey> {
   const receivedAt = new Date();
   if (isProtractorOpsPgCanonical()) {
@@ -289,6 +291,7 @@ export async function insertPostEvent(fields: {
       status: fields.status,
       connectionId: fields.connectionId,
       shopId: Number.isFinite(shopIdNum as number) ? (shopIdNum as number) : null,
+      deferredForReplay: fields.deferredForReplay,
     });
     await shadowWriteMongoIntegrationOps(
       shouldShadowWriteMongoProtractorOps,
@@ -298,6 +301,15 @@ export async function insertPostEvent(fields: {
         await col.insertOne({
           eventKey,
           receivedAt,
+          ...(fields.deferredForReplay ? {
+            method: "POST",
+            objectType: "WorkOrder",
+            objectId: fields.workOrderId,
+            operation: fields.status,
+            attempts: 0,
+            priority: 1,
+            deferredByInstancePolicy: true,
+          } : {}),
           payload: fields.payload,
           workOrderId: fields.workOrderId,
           status: fields.status,
@@ -312,6 +324,15 @@ export async function insertPostEvent(fields: {
   const col = await collection();
   const res = await col.insertOne({
     receivedAt,
+    ...(fields.deferredForReplay ? {
+      method: "POST",
+      objectType: "WorkOrder",
+      objectId: fields.workOrderId,
+      operation: fields.status,
+      attempts: 0,
+      priority: 1,
+      deferredByInstancePolicy: true,
+    } : {}),
     payload: fields.payload,
     workOrderId: fields.workOrderId,
     status: fields.status,
@@ -566,6 +587,7 @@ export async function recordAttempt(
   await doMongo();
 }
 
+/** Make a denied POST callback visible to the ordinary allowed-replica drain. */
 /** `$set processingStartedAt` + `$inc attempts` (queue-drain start stamp). */
 export async function recordProcessingStarted(key: CallbackEventKey): Promise<void> {
   const doMongo = async () => {
@@ -613,6 +635,7 @@ export async function recordError(key: CallbackEventKey, message: string): Promi
 
 export interface PendingGetEvent {
   key: CallbackEventKey;
+  method: "GET" | "POST";
   shopId: number;
   objectType: string | null;
   objectId: string | null;
@@ -627,16 +650,19 @@ export async function findPendingGetEvents(
     const rows = await pg.findPendingGetEvents(limit, maxAttempts);
     return rows.map((r) => ({
       key: r.eventKey,
+      method: r.method,
       shopId: Number(r.shopId),
       objectType: r.objectType,
       objectId: r.objectId,
-      operation: r.operation,
+      operation: r.method === "POST"
+        ? String(r.operation || "").trim().toUpperCase()
+        : r.operation,
     }));
   }
   const col = await collection();
   const docs = await col
     .find({
-      method: "GET",
+      method: { $in: ["GET", "POST"] },
       processed: false,
       $or: [{ attempts: { $exists: false } }, { attempts: { $lt: maxAttempts } }],
     })
@@ -645,10 +671,13 @@ export async function findPendingGetEvents(
     .toArray();
   return docs.map((d) => ({
     key: (d._id as ObjectId).toHexString(),
+    method: d.method as "GET" | "POST",
     shopId: d.shopId as number,
     objectType: (d.objectType as string) ?? null,
     objectId: (d.objectId as string) ?? null,
-    operation: (d.operation as string) ?? null,
+    operation: d.method === "POST"
+      ? String(d.operation || "").trim().toUpperCase()
+      : ((d.operation as string) ?? null),
   }));
 }
 

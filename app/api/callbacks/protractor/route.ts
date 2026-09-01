@@ -19,6 +19,11 @@ import {
   fingerprintProtractorConnection,
   recordUnknownCallback,
 } from "@/lib/data/repositories/protractor-callback-quarantine";
+import {
+  getProtractorOutboundPolicy,
+} from "@/lib/integrations/protractor/client";
+import { logProtractorPolicyDenial } from "@/lib/integrations/protractor/outbound-policy.cjs";
+import { applyProtractorTerminalCallback } from "@/lib/integrations/protractor/callback-terminal";
 
 const VALID_TERMINAL_STATUSES = ["INVOICED", "INVOICE", "CLOSED", "VOID"];
 const MAX_IMMEDIATE_RETRIES = 3;
@@ -26,7 +31,7 @@ const MAX_IMMEDIATE_RETRIES = 3;
 function logCallbackOutcome(fields: {
   sourceRoute: string;
   method: "GET" | "POST";
-  outcome: "admitted" | "coalesced" | "duplicate" | "rate_limited";
+  outcome: "admitted" | "coalesced" | "duplicate" | "rate_limited" | "deferred_instance_policy";
   shopId?: number;
   connectionId: string;
 }): void {
@@ -614,17 +619,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "Missing connectionId" }, { status: 400 });
     }
 
-    const rateCheck = await checkRateLimit(connectionId);
-    if (!rateCheck.allowed) {
-      logCallbackOutcome({
-        sourceRoute,
-        method: "POST",
-        outcome: "rate_limited",
-        connectionId,
-      });
-      return NextResponse.json({ ok: false, error: "Rate limit exceeded" }, { status: 429 });
-    }
-
     const shop = await db.collection("shops").findOne({
       $or: [
         { "protractor.connectionId": connectionId },
@@ -659,6 +653,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, message: "No work order ID" });
     }
 
+    // A denied replica must durably accept callbacks even during a burst. The
+    // callback limiter applies only when this process could start enrichment.
+    const requestOutboundPolicy = getProtractorOutboundPolicy();
+    if (requestOutboundPolicy.allowed) {
+      const rateCheck = await checkRateLimit(connectionId);
+      if (!rateCheck.allowed) {
+        logCallbackOutcome({
+          sourceRoute,
+          method: "POST",
+          outcome: "rate_limited",
+          connectionId,
+        });
+        return NextResponse.json({ ok: false, error: "Rate limit exceeded" }, { status: 429 });
+      }
+    }
+
     const normalizedStatus = String(status || "").trim().toUpperCase();
     const isClosed = VALID_TERMINAL_STATUSES.includes(normalizedStatus);
 
@@ -668,6 +678,7 @@ export async function POST(request: NextRequest) {
       status: status ?? null,
       connectionId,
       shopId: shop.shopId,
+      deferredForReplay: !requestOutboundPolicy.allowed,
     });
     const postIdentity: CallbackAdmissionIdentity = {
       shopId: Number(shop.shopId),
@@ -680,6 +691,32 @@ export async function POST(request: NextRequest) {
       eventId,
       postIdentity,
     );
+    const outboundPolicy = requestOutboundPolicy;
+    if (postAdmitted && !outboundPolicy.allowed) {
+      // The replay shape was atomically persisted with insertPostEvent before
+      // admission. Only release the local claim here.
+      await callbackEvents
+        .finishCallbackEventAdmission(eventId, postIdentity, false)
+        .catch((error: any) => console.error(JSON.stringify({
+          event: "protractor_callback_admission_release_failed",
+          method: "POST",
+          message: String(error?.message || "unknown").slice(0, 160),
+        })));
+      logCallbackOutcome({
+        sourceRoute,
+        method: "POST",
+        outcome: "deferred_instance_policy",
+        shopId: Number(shop.shopId),
+        connectionId,
+      });
+      logProtractorPolicyDenial(outboundPolicy, "callback_post_deferred");
+      return NextResponse.json({
+        ok: true,
+        received: true,
+        status: "deferred",
+        callbackOutcome: "admitted",
+      });
+    }
     logCallbackOutcome({
       sourceRoute,
       method: "POST",
@@ -725,67 +762,14 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ ok: true, duplicate: true, coalesced: true });
       }
       try {
-      console.log(`[Protractor Callback] Work order ${workOrderId} closed with status: ${status} (shop: ${shop.shopId})`);
-
-      const existingWorkOrder = await db.collection("protractor_work_orders").findOne({
-        $or: [{ shopId: String(shop.shopId) }, { shopId: Number(shop.shopId) }],
-        workOrderGuid: workOrderId
+      const applied = await applyProtractorTerminalCallback(db, {
+        shopId: shop.shopId,
+        workOrderId: String(workOrderId),
+        status: status ?? null,
       });
-
-      if (!existingWorkOrder) {
-        console.log(`[Protractor Callback] Work order ${workOrderId} not found in our records, skipping`);
+      if (!applied) {
         return NextResponse.json({ ok: true, skipped: true, reason: "Unknown work order" });
       }
-
-      const vehicle = await db.collection("vehicles").findOne({
-        $or: [{ shopId: String(shop.shopId) }, { shopId: Number(shop.shopId) }],
-        "status.active": true,
-        "status.sources": {
-          $elemMatch: {
-            provider: "protractor",
-            workOrderId: workOrderId
-          }
-        }
-      });
-
-      if (vehicle) {
-        const existingSources = vehicle.status?.sources || [];
-        const updatedSources = existingSources.filter(
-          (s: any) => !(s.provider === "protractor" && String(s.workOrderId) === String(workOrderId))
-        );
-        const hasActiveSources = updatedSources.length > 0;
-
-        await db.collection("vehicles").updateOne(
-          { _id: vehicle._id },
-          {
-            $set: {
-              "status.active": hasActiveSources,
-              "status.sources": updatedSources,
-              ...(hasActiveSources ? {} : { "status.lastClosedAt": new Date() }),
-              updatedAt: new Date()
-            }
-          }
-        );
-
-        console.log(`[Protractor Callback] Vehicle ${vehicle.vin} updated - active: ${hasActiveSources}`);
-      }
-
-      await db.collection("protractor_work_orders").updateMany(
-        { workOrderGuid: workOrderId },
-        {
-          $set: {
-            workflowStage: status,
-            status: status,
-            closedAt: new Date(),
-            closedViaCallback: true,
-            updatedAt: new Date()
-          }
-        }
-      );
-
-      await callbackEvents.markOneProcessedByWorkOrderStatus(workOrderId, status ?? null);
-
-      await signalDashboardUpdate(db, { workOrderId });
       } finally {
         await callbackEvents.finishCallbackEventAdmission(
           eventId,
@@ -917,6 +901,32 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({
           ok: true,
           status: "coalesced",
+          type: objectType,
+          operation,
+        });
+      }
+
+      const outboundPolicy = getProtractorOutboundPolicy();
+      if (!outboundPolicy.allowed) {
+        await callbackEvents
+          .finishGetEventAdmission(eventId, identity, false)
+          .catch((error: any) => console.error(JSON.stringify({
+            event: "protractor_callback_admission_release_failed",
+            method: "GET",
+            message: String(error?.message || "unknown").slice(0, 160),
+          })));
+        logCallbackOutcome({
+          sourceRoute,
+          method: "GET",
+          outcome: "deferred_instance_policy",
+          shopId,
+          connectionId,
+        });
+        logProtractorPolicyDenial(outboundPolicy, "callback_get_deferred");
+        return NextResponse.json({
+          ok: true,
+          received: true,
+          status: "deferred",
           type: objectType,
           operation,
         });
