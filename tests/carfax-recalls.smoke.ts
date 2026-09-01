@@ -62,6 +62,10 @@ type Doc = Record<string, any>;
 
 function matchesQuery(doc: Doc, query: any): boolean {
   for (const [k, v] of Object.entries(query)) {
+    if (v && typeof v === "object" && "$exists" in (v as any)) {
+      if ((v as any).$exists ? !(k in doc) : k in doc) return false;
+      continue;
+    }
     if (doc[k] !== v) return false;
   }
   return true;

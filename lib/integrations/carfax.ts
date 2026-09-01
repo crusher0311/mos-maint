@@ -1,6 +1,6 @@
 // lib/integrations/carfax.ts
 import "server-only";
-import type { Db } from "mongodb";
+import type { ClientSession, Db } from "mongodb";
 import { getDb } from "@/lib/mongo";
 import { trackApiRequest } from "@/lib/api-usage-tracker";
 import { invalidateShopPlanCache } from "@/lib/plan-cache";
@@ -51,6 +51,18 @@ export type CarfaxResult = {
   numberOfRecallRecords?: number | null;
   raw?: any;
   error?: string;
+};
+
+export type CarfaxSnapshotWriteOptions = {
+  source?: "carfax" | "partner";
+  sourceRetrievedAt?: Date;
+  provenance?: {
+    partnerId: string;
+    deliveryId: string;
+  };
+  /** Internal transaction seam used by partner ingestion. */
+  db?: Db;
+  session?: ClientSession;
 };
 
 /**
@@ -200,6 +212,19 @@ export async function fetchCarfaxLive(
 
   const json = await res.json().catch(() => null);
   if (!json || typeof json !== "object") {
+    return { ok: false, error: "Invalid JSON from CARFAX." };
+  }
+
+  return parseCarfaxPayload(json, vin);
+}
+
+/**
+ * Normalize a CARFAX Service History Check response. Both paid live responses
+ * and partner-supplied originals must pass through this function so every
+ * cache reader sees the same shape.
+ */
+export function parseCarfaxPayload(json: any, vin: string): CarfaxResult {
+  if (!json || typeof json !== "object" || Array.isArray(json)) {
     return { ok: false, error: "Invalid JSON from CARFAX." };
   }
 
@@ -455,146 +480,114 @@ export async function getCarfaxDecodeHint(
 export async function upsertCarfaxSnapshot(
   shopId: number,
   vin: string,
-  report: CarfaxResult
+  report: CarfaxResult,
+  options: CarfaxSnapshotWriteOptions = {},
 ) {
-  const db = await getDb();
+  const db = options.db ?? await getDb();
   const now = new Date();
+  const fetchedAt = options.sourceRetrievedAt ?? now;
   const coll = db.collection("carfax_reports");
 
   const newHasContent =
     report.ok &&
     Array.isArray(report.serviceRecords) &&
     report.serviceRecords.length > 0;
+  const newHasRecallContent =
+    report.ok &&
+    Array.isArray(report.recallRecords) &&
+    report.recallRecords.length > 0;
 
-  // Failure / empty paths: read the existing doc to decide whether to
-  // preserve. We can skip this read on the happy path because we'll
-  // overwrite everything anyway.
-  let existing: any = null;
-  if (!newHasContent) {
-    existing = await coll.findOne(
+  // Optimistic compare-and-swap makes fetchedAt ordering safe across partner
+  // and live writers. First writes use a deterministic _id so concurrent
+  // upserts cannot create duplicate snapshots.
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const existing: any = await coll.findOne(
       { shopId, vin },
-      {
-        projection: {
-          serviceRecords: 1,
-          serviceCategories: 1,
-          lastReportedMileage: 1,
-          recallRecords: 1,
-          numberOfRecallRecords: 1,
-          ok: 1,
-        },
-      }
+      options.session ? { session: options.session } : undefined,
     );
-  }
-
-  const existingHasContent =
-    existing &&
-    existing.ok &&
-    Array.isArray(existing.serviceRecords) &&
-    existing.serviceRecords.length > 0;
-
-  // Recall data is preserved independently of service history: a snapshot can
-  // legitimately have recall records but zero service records (e.g. a vehicle
-  // with an open recall and no reported service). A failed or empty refetch
-  // must never wipe stored recall data either.
-  const existingHasRecallContent =
-    existing &&
-    existing.ok &&
-    Array.isArray(existing.recallRecords) &&
-    existing.recallRecords.length > 0;
-
-  const existingHasAnyContent = existingHasContent || existingHasRecallContent;
-
-  // Common lifecycle fields that always update on a fetch attempt.
-  const lifecycle: Record<string, any> = {
-    shopId,
-    vin,
-    source: "carfax",
-    lastFetchAttemptAt: now,
-  };
-
-  if (!report.ok) {
-    // Case 1: new fetch failed.
-    const setFields: Record<string, any> = {
-      ...lifecycle,
-      lastErrorAt: now,
-      lastErrorMessage: report.error ?? null,
-      rawError: report.raw ?? null,
-    };
-    if (!existingHasAnyContent) {
-      // Nothing to preserve — write the failure as the canonical state.
-      setFields.fetchedAt = now;
-      setFields.ok = false;
-      setFields.error = report.error ?? null;
-      setFields.raw = report.raw ?? null;
-      setFields.serviceRecords = null;
-      setFields.serviceCategories = null;
-      setFields.lastReportedMileage = null;
-      setFields.reportDate = null;
-      setFields.numberOfOwners = null;
-      setFields.accidents = null;
-      setFields.damageReports = null;
-      setFields.titleIssues = null;
-      setFields.recalls = null;
-      setFields.recallRecords = null;
-      setFields.numberOfRecallRecords = null;
+    const existingFetchedAtRaw = existing?.fetchedAt;
+    const existingFetchedAt = existingFetchedAtRaw
+      ? new Date(existing.fetchedAt)
+      : null;
+    if (
+      report.ok &&
+      existingFetchedAt &&
+      existingFetchedAt.getTime() > fetchedAt.getTime()
+    ) {
+      return { written: false, preserved: true, reason: "newer_snapshot_exists" as const };
     }
-    // else: leave ok / serviceRecords / recallRecords / etc. as the
-    // previously-good values (service history OR recall data alone is
-    // enough to protect the snapshot).
-    await coll.updateOne(
-      { shopId, vin },
-      { $set: setFields, $setOnInsert: { createdAt: now } },
-      { upsert: true }
-    );
-    return;
-  }
 
-  if (!newHasContent && existingHasAnyContent) {
-    // Case 2: ok:true but empty, and we have good prior data (service
-    // history and/or recall records) — preserve it.
-    // Recall data follows the same never-overwrite-good-with-empty rule:
-    // we only write recallRecords here when the new fetch actually carries
-    // some (fresh recall info is safe to take even when service records
-    // came back empty); an empty/missing recall list never wipes a stored one.
-    const setFields: Record<string, any> = {
-      ...lifecycle,
-      lastEmptyFetchAt: now,
+    const existingHasContent =
+      existing?.ok &&
+      Array.isArray(existing.serviceRecords) &&
+      existing.serviceRecords.length > 0;
+    const existingHasRecallContent =
+      existing?.ok &&
+      Array.isArray(existing.recallRecords) &&
+      existing.recallRecords.length > 0;
+    const existingHasAnyContent = existingHasContent || existingHasRecallContent;
+    const lifecycle: Record<string, any> = {
+      shopId,
+      vin,
+      source: options.source ?? "carfax",
+      ...(options.provenance ? { provenance: options.provenance } : {}),
+      lastFetchAttemptAt: now,
     };
-    if (Array.isArray(report.recallRecords) && report.recallRecords.length > 0) {
-      setFields.recallRecords = report.recallRecords;
-      setFields.numberOfRecallRecords = report.numberOfRecallRecords ?? report.recallRecords.length;
-    }
-    await coll.updateOne(
-      { shopId, vin },
-      {
-        $set: setFields,
-        $setOnInsert: { createdAt: now },
-      },
-      { upsert: true }
-    );
-    return;
-  }
 
-  // Case 3: happy path — first snapshot, or new content overwrites old.
-  // NOTE: this branch is also reached when the fetch was ok:true but EMPTY
-  // and there was no prior good content to preserve (first-ever fetch during
-  // a CARFAX degradation, or a partial payload with no
-  // serviceHistory.displayRecords). We still persist it (so cache-only
-  // readers have *something* and we don't refire on every view), but we
-  // stamp lastEmptyFetchAt so fetchCarfaxWithCache can apply a short TTL to
-  // the empty snapshot instead of the full 7-day freshness window — see
-  // carfaxEmptySnapshotTtlMs. This mirrors the plan-cache oemMissing
-  // pattern: one degraded moment must not poison the VIN for days.
-  const emptyStamp: Record<string, any> = newHasContent
-    ? {}
-    : { lastEmptyFetchAt: now };
-  await coll.updateOne(
-    { shopId, vin },
-    {
-      $set: {
+    let setFields: Record<string, any>;
+    let outcome:
+      | "stored"
+      | "failed"
+      | "empty_preserved"
+      | "recalls_stored";
+    let written: boolean;
+    let preserved: boolean;
+
+    if (!report.ok) {
+      setFields = {
         ...lifecycle,
-        ...emptyStamp,
-        fetchedAt: now,
+        lastErrorAt: now,
+        lastErrorMessage: report.error ?? null,
+        rawError: report.raw ?? null,
+      };
+      if (!existingHasAnyContent) {
+        Object.assign(setFields, {
+          fetchedAt,
+          ok: false,
+          error: report.error ?? null,
+          raw: report.raw ?? null,
+          serviceRecords: null,
+          serviceCategories: null,
+          lastReportedMileage: null,
+          reportDate: null,
+          numberOfOwners: null,
+          accidents: null,
+          damageReports: null,
+          titleIssues: null,
+          recalls: null,
+          recallRecords: null,
+          numberOfRecallRecords: null,
+        });
+      }
+      outcome = "failed";
+      written = !existingHasAnyContent;
+      preserved = existingHasAnyContent;
+    } else if (!newHasContent && existingHasAnyContent) {
+      setFields = { ...lifecycle, lastEmptyFetchAt: now };
+      if (newHasRecallContent) {
+        setFields.recallRecords = report.recallRecords;
+        setFields.numberOfRecallRecords =
+          report.numberOfRecallRecords ?? report.recallRecords!.length;
+        setFields.fetchedAt = fetchedAt;
+      }
+      outcome = newHasRecallContent ? "recalls_stored" : "empty_preserved";
+      written = newHasRecallContent;
+      preserved = true;
+    } else {
+      setFields = {
+        ...lifecycle,
+        ...(!newHasContent && !newHasRecallContent ? { lastEmptyFetchAt: now } : {}),
+        fetchedAt,
         reportDate: report.reportDate ?? null,
         numberOfOwners: report.numberOfOwners ?? null,
         accidents: report.accidents ?? null,
@@ -609,11 +602,39 @@ export async function upsertCarfaxSnapshot(
         ok: report.ok,
         error: report.error ?? null,
         raw: report.raw ?? null,
-      },
-      $setOnInsert: { createdAt: now },
-    },
-    { upsert: true }
-  );
+      };
+      outcome = "stored";
+      written = true;
+      preserved = false;
+    }
+
+    const filter: any = existing
+      ? {
+          shopId,
+          vin,
+          ...(existingFetchedAtRaw
+            ? { fetchedAt: existingFetchedAtRaw }
+            : { fetchedAt: { $exists: false } }),
+        }
+      : { _id: `carfax:${shopId}:${vin}` };
+    try {
+      const result = await coll.updateOne(
+        filter,
+        {
+          $set: setFields,
+          $setOnInsert: { createdAt: now },
+        },
+        { upsert: !existing, ...(options.session ? { session: options.session } : {}) },
+      );
+      if (result.matchedCount === 1 || result.upsertedCount === 1) {
+        return { written, preserved, reason: outcome };
+      }
+    } catch (error: any) {
+      // Another first writer won the deterministic _id. Re-read and compare.
+      if (error?.code !== 11000) throw error;
+    }
+  }
+  throw new Error(`CARFAX snapshot changed repeatedly for shop=${shopId} vin=${vin}`);
 }
 
 /**
@@ -848,11 +869,12 @@ function carfaxEmptySnapshotTtlMs(): number {
   return Number(process.env.CARFAX_EMPTY_TTL_MS) || 6 * 60 * 60 * 1000;
 }
 
-/** True when a stored snapshot doc is ok:true but has no service records. */
+/** True when a stored snapshot doc is ok:true but has no service or recall records. */
 function snapshotIsEmptyOk(doc: any): boolean {
   return Boolean(
     doc?.ok &&
-      (!Array.isArray(doc.serviceRecords) || doc.serviceRecords.length === 0)
+      (!Array.isArray(doc.serviceRecords) || doc.serviceRecords.length === 0) &&
+      (!Array.isArray(doc.recallRecords) || doc.recallRecords.length === 0)
   );
 }
 

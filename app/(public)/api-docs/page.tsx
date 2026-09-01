@@ -206,6 +206,7 @@ const permissions = [
   { name: "stickers:generate", description: "Generate oil change stickers" },
   { name: "keytags:generate", description: "Generate vehicle keytags" },
   { name: "vehicles:read", description: "Access vehicle information" },
+  { name: "carfax:write", description: "Submit partner-retrieved CARFAX Service History Check reports" },
   { name: "maintenance:read", description: "View maintenance schedules" },
   { name: "recommendations:read", description: "Get maintenance recommendations" },
   { name: "*", description: "Full access to all endpoints" }

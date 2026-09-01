@@ -1,5 +1,110 @@
 # Partner VHI API
 
+## Submit an AppFueled CARFAX report
+
+`POST /api/external/v1/carfax/reports`
+
+This endpoint lets AppFueled submit the original CARFAX Service History Check
+JSON it has already retrieved. MOS normalizes it into the same snapshot used by
+VHI, mileage estimates, recalls, and cache-only readers. It never performs or
+triggers a paid CARFAX lookup.
+
+The API key must be the **AppFueled partner key** with the dedicated `carfax:write`
+permission. Shop API keys and keys with only `vehicles:read` are rejected.
+
+### Headers and limits
+
+```http
+Authorization: Bearer mos_partner_REDACTED
+Content-Type: application/json
+X-Request-Id: appfueled-optional-correlation-id
+```
+
+- Maximum JSON body: **524,288 bytes (512 KiB)**; larger bodies return `413`.
+- `deliveryId`: 1-128 characters and stable for the same delivery/report.
+- `retrievedAt`: ISO-8601 timestamp from the actual CARFAX retrieval, no more
+  than 7 days old and no more than 5 minutes in the future.
+- Nested report data: at most 16 levels, 2,000 items per array, and 20,000
+  characters per string.
+- Supported payload: the original Service History Check object, optionally
+  wrapped in `report` or `data`, with a service-history array. The VIN inside
+  the report must match the top-level VIN. At least one service or recall
+  record is required; error or empty reports are rejected and cannot replace a
+  healthy cached snapshot.
+
+### Copy-ready request
+
+```bash
+curl -X POST "https://mos.tools/api/external/v1/carfax/reports" \
+  -H "Authorization: Bearer $APPFUELED_MOS_PARTNER_KEY" \
+  -H "Content-Type: application/json" \
+  -H "X-Request-Id: af-carfax-20260901-001" \
+  --data '{
+    "vin": "1GYS4MKJ4GR434503",
+    "sms": "protractor",
+    "smsShopId": "36",
+    "deliveryId": "carfax-report-987654",
+    "retrievedAt": "2026-09-01T15:04:05.000Z",
+    "report": {
+      "vin": "1GYS4MKJ4GR434503",
+      "reportDate": "2026-09-01",
+      "serviceHistory": {
+        "numberOfRecallRecords": 1,
+        "displayRecords": [
+          {
+            "type": "service",
+            "displayDate": "08/12/2026",
+            "odometer": "87,234",
+            "text": ["Oil and filter changed", "Tires rotated"]
+          },
+          {
+            "type": "recall",
+            "displayDate": "07/09/2026",
+            "text": [
+              "Manufacturer Safety recall issued",
+              "NHTSA #26V-216",
+              "Recall #D22 WIPER MODULE",
+              "Status: Remedy Available"
+            ]
+          }
+        ],
+        "serviceCategories": [
+          {
+            "serviceName": "Oil change",
+            "dateOfLastService": "08/12/2026",
+            "odometerOfLastService": "87,234"
+          }
+        ]
+      }
+    }
+  }'
+```
+
+Success and an identical retry both return HTTP `200`:
+
+```json
+{
+  "success": true,
+  "requestId": "af-carfax-20260901-001",
+  "deliveryId": "carfax-report-987654",
+  "vin": "1GYS4MKJ4GR434503",
+  "shopId": 36,
+  "duplicate": false,
+  "stored": true,
+  "retrievedAt": "2026-09-01T15:04:05.000Z"
+}
+```
+
+On retry, `duplicate` is `true`; the delivery is not normalized or written
+again. Deduplication is scoped by partner + resolved MOS shop + `deliveryId`.
+If MOS already has a newer healthy snapshot, the request succeeds with
+`stored: false` and preserves that newer data. Snapshot freshness is based on
+`retrievedAt`, not delivery time.
+
+Retry `409`, `429`, and `5xx` responses with exponential backoff, preserving the same
+`deliveryId`. Fix the request rather than retrying `400`, `403`, `404`, `413`,
+or `422`. Every response includes `X-Request-Id`; include it in support reports.
+
 `GET /api/external/vehicles/{vin}/vhi`
 
 Returns the Vehicle Health Indicator (VHI) plan for a VIN. The endpoint is

@@ -120,6 +120,7 @@
     "test:carfax-timeout-negative-cache": "tsx tests/carfax-timeout-negative-cache.smoke.ts",
     "test:carfax-empty-snapshot-ttl": "tsx tests/carfax-empty-snapshot-ttl.smoke.ts",
     "test:carfax-recalls": "tsx tests/carfax-recalls.smoke.ts",
+    "test:partner-carfax-ingestion": "NODE_OPTIONS='--require ./scripts/_stubs/server-only-stub.cjs' tsx tests/partner-carfax-ingestion.smoke.ts",
     "queue:readiness": "tsx scripts/queue-readiness-check.ts",
     "lint:lockfile": "node scripts/check-lockfile-sync.cjs",
     "lint": "eslint",

@@ -65,6 +65,7 @@ const AVAILABLE_PERMISSIONS = [
   "stickers:generate",
   "keytags:generate",
   "vehicles:read",
+  "carfax:write",
   "recommendations:read",
   "customers:read",
   "maintenance:read",
