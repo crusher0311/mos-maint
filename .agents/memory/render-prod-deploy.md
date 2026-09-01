@@ -75,3 +75,11 @@ Suspending `mos-tools` cancels an in-progress deploy. Resuming may leave the ser
 **Why:** During a Protractor call-storm response on 2026-08-31, suspending the web service stopped provider traffic but caused a full MOS outage and canceled the emergency build.
 
 **How to apply:** Prefer provider-side blocking plus an application kill switch. Never suspend the shared web service unless total MOS downtime is explicitly acceptable. Restore autodeploy only after the protected release is confirmed live.
+
+## Runtime policy variables contaminate Render builds
+
+Render exposes service environment variables during `npm run build`, including emergency provider kill switches and replica deny policies. Build-time smoke tests that import guarded routes or clients can therefore fail before their mocks run, even though no real provider transport is possible.
+
+**Why:** A Protractor isolation release failed its prebuild because the live `PROTRACTOR_OUTBOUND_DISABLED=true` setting blocked an “allowed replica” mocked-transport assertion and unrelated cron smoke tests.
+
+**How to apply:** Sanitize runtime-only provider policy variables at the outer prebuild boundary. Policy-specific tests must set the values they exercise explicitly and opt mocked transports back into policy enforcement; production runtime evaluation must remain fail-closed.

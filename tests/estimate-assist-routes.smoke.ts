@@ -770,6 +770,7 @@ async function run() {
     process.exit(1);
   }
   console.log("\nAll assertions passed");
+  process.exit(0);
 }
 
 run().catch((err) => {

@@ -42,6 +42,7 @@ async function main() {
     let gates = 0;
     let requests = 0;
     process.env.PROTRACTOR_OUTBOUND_DISABLED = "true";
+    __protractorClientTestHooks.enforceLocalPolicyWithMockTransport = true;
     __protractorClientTestHooks.acquireOutboundGate = async () => {
       gates++;
       return { allowed: true, probe: false };
@@ -58,6 +59,7 @@ async function main() {
     ok("kill switch prevents REST and both SOAP transports", requests === 0, `requests=${requests}`);
     ok("kill switch is evaluated before distributed gate", gates === 0, `gates=${gates}`);
     delete process.env.PROTRACTOR_OUTBOUND_DISABLED;
+    __protractorClientTestHooks.enforceLocalPolicyWithMockTransport = false;
   }
 
   console.log("Scenario 1b: manual Protractor scripts use the guarded shared transport");

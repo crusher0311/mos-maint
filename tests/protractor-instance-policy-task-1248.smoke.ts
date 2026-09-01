@@ -27,6 +27,7 @@ const config: ProtractorConfig = {
 };
 
 async function main() {
+  const originalOutboundDisabled = process.env.PROTRACTOR_OUTBOUND_DISABLED;
   const base = { RENDER_INSTANCE_ID: "srv-a" };
   ok("empty deny policy allows", evaluateProtractorOutboundPolicy(base).allowed);
   ok(
@@ -95,6 +96,7 @@ async function main() {
     return { acquired: true, waitedMs: 0, currentCount: 0 };
   };
   __protractorClientTestHooks.resolveProtractorConfig = async () => config;
+  __protractorClientTestHooks.enforceLocalPolicyWithMockTransport = true;
   process.env.RENDER_INSTANCE_ID = "srv-denied";
   process.env.PROTRACTOR_OUTBOUND_DENIED_INSTANCE_IDS = "srv-denied";
   await Promise.all([
@@ -106,6 +108,7 @@ async function main() {
   ok("denial precedes distributed breaker and rate budget", breakerClaims === 0 && rateClaims === 0);
 
   process.env.RENDER_INSTANCE_ID = "srv-allowed";
+  delete process.env.PROTRACTOR_OUTBOUND_DISABLED;
   await protractorFetch("/Invoice/allowed", config, {}, 0, 1, { maxRetries: 0 });
   ok("allowed replica reaches Protractor transport", requests === 1);
   ok(
@@ -118,6 +121,12 @@ async function main() {
 
   delete process.env.RENDER_INSTANCE_ID;
   delete process.env.PROTRACTOR_OUTBOUND_DENIED_INSTANCE_IDS;
+  __protractorClientTestHooks.enforceLocalPolicyWithMockTransport = false;
+  if (originalOutboundDisabled === undefined) {
+    delete process.env.PROTRACTOR_OUTBOUND_DISABLED;
+  } else {
+    process.env.PROTRACTOR_OUTBOUND_DISABLED = originalOutboundDisabled;
+  }
   if (failures) throw new Error(`${failures} task 1248 checks failed`);
   console.log("\nAll task 1248 instance-policy checks passed");
   process.exit(0);

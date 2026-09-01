@@ -55,6 +55,7 @@ const productionHttpsRequest: typeof httpsRequest = (...args) => httpsRequest(..
 
 export const __protractorClientTestHooks: {
   httpsRequest: typeof httpsRequest;
+  enforceLocalPolicyWithMockTransport: boolean;
   acquireDistributedRateLimitSlot: typeof acquireDistributedRateLimitSlot;
   trackApiRequest: typeof trackApiRequest;
   retryBaseDelayMs: number | null;
@@ -74,6 +75,7 @@ export const __protractorClientTestHooks: {
   random: () => number;
 } = {
   httpsRequest: productionHttpsRequest,
+  enforceLocalPolicyWithMockTransport: false,
   acquireDistributedRateLimitSlot: (...args) => acquireDistributedRateLimitSlot(...args),
   trackApiRequest: (...args) => trackApiRequest(...args),
   retryBaseDelayMs: null,
@@ -577,6 +579,16 @@ export function isProtractorOutboundAllowed(context = "unknown"): boolean {
 }
 
 function localPolicyError(context: string): { ok: false; error: string } | null {
+  // Render exposes production environment variables while running build-time
+  // smoke tests. An explicitly mocked transport cannot reach Protractor, so
+  // let ordinary transport tests exercise their intended path. Policy tests
+  // opt back in through the dedicated hook below.
+  if (
+    __protractorClientTestHooks.httpsRequest !== productionHttpsRequest &&
+    !__protractorClientTestHooks.enforceLocalPolicyWithMockTransport
+  ) {
+    return null;
+  }
   const decision = getProtractorOutboundPolicy();
   if (decision.allowed) return null;
   logProtractorPolicyDenial(decision, context);
