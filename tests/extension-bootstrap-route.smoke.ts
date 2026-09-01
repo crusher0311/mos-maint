@@ -63,8 +63,8 @@ function issued(assurance: "basic" | "verified", userId?: string) {
       provider: "tekmetric",
       capabilities:
         assurance === "basic"
-          ? ["read"]
-          : ["read", "write", "provider_action"],
+          ? ["read", "shop_tool"]
+          : ["read", "shop_tool", "write", "provider_action"],
       expiresAt: new Date("2026-08-21T20:00:00.000Z"),
     },
   };
@@ -100,7 +100,10 @@ async function run() {
   let response = await POST(request());
   let body: any = await response.json();
   ok("issues Basic for valid shop proof without a unique user", response.status === 200 && body.outcome === "basic");
-  ok("Basic is read-only", body.capabilities.length === 1 && body.capabilities[0] === "read");
+  ok(
+    "Tekmetric Basic receives only read and safe shop tools",
+    JSON.stringify(body.capabilities) === '["read","shop_tool"]',
+  );
   ok("returns only the proof-bound shop", body.shops.length === 1 && body.shops[0].shopId === 85);
   ok("does not echo provider proof", !JSON.stringify(body).includes("provider-token-never-returned"));
   ok(

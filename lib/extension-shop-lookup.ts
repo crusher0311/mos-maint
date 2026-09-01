@@ -67,8 +67,11 @@ function isShopAccessible(
   return userShopIds.some((id) => String(id) === String(shop?.shopId));
 }
 
-function resolvedShop(shopDoc: any): ResolvedShopLookup {
-  const provider = shopDoc.integrationProvider
+function resolvedShop(
+  shopDoc: any,
+  providerOverride?: ResolvedShopLookup["provider"],
+): ResolvedShopLookup {
+  const provider = providerOverride || shopDoc.integrationProvider
     || (shopDoc.tekmetric?.shopId ? 'tekmetric'
       : shopDoc.protractor?.connectionId ? 'protractor'
       : shopDoc.shopware?.tenantId ? 'shopware'
@@ -251,8 +254,7 @@ export async function findShopBySmsIdDetailed(
     }
   }
 
-  const shopQuery: any = {
-    $or: [
+  const allProviderClauses = [
       ...(isNaN(tekShopIdNum) ? [] : [{ shopId: tekShopIdNum }]),
       { "tekmetric.shopId": tekShopIdNum },
       { "tekmetric.shopId": tekShopIdStr },
@@ -264,7 +266,32 @@ export async function findShopBySmsIdDetailed(
       { "shopware.tenantId": smsShopId },
       { "shopmonkey.locationId": smsShopId },
       { "shopmonkey.companyId": smsShopId },
+  ];
+  const authoritativeClauses: Record<string, any[]> = {
+    tekmetric: [
+      { "tekmetric.shopId": tekShopIdNum },
+      { "tekmetric.shopId": tekShopIdStr },
+      { tekmetricShopId: tekShopIdNum },
+      { tekmetricShopId: tekShopIdStr },
     ],
+    protractor: [
+      { "protractor.connectionId": smsShopId },
+      { protractorConnectionId: smsShopId },
+    ],
+    shopware: [
+      { "shopware.tenantSubdomain": smsShopId },
+      { "shopware.tenantId": smsShopId },
+    ],
+    shopmonkey: [
+      { "shopmonkey.locationId": smsShopId },
+      { "shopmonkey.companyId": smsShopId },
+    ],
+  };
+  const shopQuery: any = {
+    $or:
+      options.providerHintIsAuthoritative === true && providerHint
+        ? authoritativeClauses[providerHint] || []
+        : allProviderClauses,
   };
   
   if (!isPlatformAdmin && userShopIds.length > 0) {
@@ -536,7 +563,12 @@ export async function findShopBySmsIdDetailed(
     };
   }
 
-  return resolvedShop(shopDoc);
+  return resolvedShop(
+    shopDoc,
+    options.providerHintIsAuthoritative === true
+      ? providerHint as ResolvedShopLookup["provider"]
+      : undefined,
+  );
 }
 
 export async function findShopBySmsId(

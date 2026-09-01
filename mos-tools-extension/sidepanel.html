@@ -64,13 +64,27 @@
 
     <!-- Main app state -->
     <div id="main-state" class="hidden">
-      <!-- Session-tier banner: labels a Basic (read-only) vs Verified session
-           and, when basic, prompts the advisor to verify to unlock writes. -->
-      <div id="session-tier-banner" class="session-tier-banner hidden" role="status">
+      <!-- Session-tier banner explains Basic safe tools and verified-only actions. -->
+      <div id="session-tier-banner" class="session-tier-banner hidden" role="status" aria-live="polite">
         <span id="session-tier-icon" class="session-tier-icon" aria-hidden="true"></span>
         <div class="session-tier-text">
           <span id="session-tier-label" class="session-tier-label"></span>
           <span id="session-tier-prompt" class="session-tier-prompt"></span>
+          <details id="session-tier-details" class="session-tier-details hidden">
+            <summary>What can I use?</summary>
+            <div class="session-tier-capability-group">
+              <strong>Available for this shop</strong>
+              <ul id="session-tier-available"></ul>
+            </div>
+            <div class="session-tier-capability-group">
+              <strong>Requires MOS.Tools sign-in</strong>
+              <ul id="session-tier-verified-only">
+                <li>Add, apply, or remove jobs</li>
+                <li>Change labor rates, repair orders, customers, vehicles, or inspections</li>
+                <li>Push DVI/VHI recommendations or access administration</li>
+              </ul>
+            </div>
+          </details>
           <button id="session-step-up-btn" type="button" class="session-step-up-btn hidden">Sign in to MOS.Tools</button>
         </div>
       </div>

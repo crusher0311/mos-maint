@@ -247,6 +247,22 @@ async function run() {
     ok("print/config PUT → write", printConfigPut !== null && printConfigPut.includes("write"),
       JSON.stringify(printConfigPut));
 
+    for (const path of [
+      "/api/extension/sticker",
+      "/api/extension/keytag",
+      "/api/extension/print",
+    ]) {
+      const safeToolPost = lookupPolicy(path, "POST");
+      ok(
+        `${path} POST → shop_tool only`,
+        safeToolPost !== null &&
+          safeToolPost.includes("shop_tool") &&
+          !safeToolPost.includes("write") &&
+          !safeToolPost.includes("provider_action"),
+        JSON.stringify(safeToolPost),
+      );
+    }
+
     const supportPost = lookupPolicy("/api/extension/support", "POST");
     ok("support POST → write", supportPost !== null && supportPost.includes("write"),
       JSON.stringify(supportPost));

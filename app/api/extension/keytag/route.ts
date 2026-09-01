@@ -68,7 +68,7 @@ async function _GET(req: NextRequest) {
     );
   }
 
-  const denied = await checkShopFeatureGate(Number(shopId), ["oil_sticker"], {
+  const denied = await checkShopFeatureGate(Number(shopId), ["keytags"], {
     isPlatformAdmin: authResult.user?.role === "platform_admin",
     featureLabel: "Keytag",
     corsHeaders,
@@ -130,7 +130,7 @@ async function _POST(req: NextRequest) {
     );
   }
 
-  const denied = await checkShopFeatureGate(Number(shopId), ["oil_sticker"], {
+  const denied = await checkShopFeatureGate(Number(shopId), ["keytags"], {
     isPlatformAdmin: authResult.user?.role === "platform_admin",
     featureLabel: "Keytag",
     corsHeaders,

@@ -10,6 +10,9 @@
  *  - "read"             Requires validateExtensionToken (or guard) but only
  *                       reads data. GET routes for plan, features, specs,
  *                       canned-jobs, search, etc.
+ *  - "shop_tool"        Shop-scoped rendering/processing and print enqueue.
+ *                       Tekmetric Basic sessions receive only this narrow
+ *                       non-provider capability in addition to read.
  *  - "write"            Mutations that don't cross into a provider's live system.
  *                       e.g. storing a preference, printing a label, posting a
  *                       support ticket, pushing telemetry.
@@ -35,6 +38,7 @@
 export type PolicyTier =
   | "public"
   | "read"
+  | "shop_tool"
   | "write"
   | "provider_action"
   | "admin"
@@ -172,7 +176,7 @@ const POLICY_MAP: Record<string, PolicyTier[]> = {
 
   // ── keytag ───────────────────────────────────────────────────────────────
   "/api/extension/keytag|GET": ["read"],
-  "/api/extension/keytag|POST": ["write"],
+  "/api/extension/keytag|POST": ["shop_tool"],
   "/api/extension/keytag|OPTIONS": ["preflight"],
 
   // ── labor-rates ──────────────────────────────────────────────────────────
@@ -194,7 +198,7 @@ const POLICY_MAP: Record<string, PolicyTier[]> = {
   "/api/extension/prefill-dvi|OPTIONS": ["preflight"],
 
   // ── print ────────────────────────────────────────────────────────────────
-  "/api/extension/print|POST": ["write"],
+  "/api/extension/print|POST": ["shop_tool"],
   "/api/extension/print|OPTIONS": ["preflight"],
 
   // ── print/config ─────────────────────────────────────────────────────────
@@ -265,7 +269,7 @@ const POLICY_MAP: Record<string, PolicyTier[]> = {
 
   // ── sticker ──────────────────────────────────────────────────────────────
   "/api/extension/sticker|GET": ["read"],
-  "/api/extension/sticker|POST": ["write"],
+  "/api/extension/sticker|POST": ["shop_tool"],
   "/api/extension/sticker|OPTIONS": ["preflight"],
 
   // ── support ──────────────────────────────────────────────────────────────

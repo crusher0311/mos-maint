@@ -8,7 +8,12 @@ import {
 } from "@/lib/data/repositories/pg/identity";
 
 export type ExtensionAssurance = "basic" | "verified";
-export type ExtensionCapability = "read" | "write" | "admin" | "provider_action";
+export type ExtensionCapability =
+  | "read"
+  | "shop_tool"
+  | "write"
+  | "admin"
+  | "provider_action";
 export type ExtensionProvider =
   | "tekmetric"
   | "protractor"
@@ -53,13 +58,17 @@ function newToken(): string {
 
 function capabilitiesFor(
   assurance: ExtensionAssurance,
+  provider: ExtensionProvider,
   isAdmin = false,
   canWrite = true,
 ): ExtensionCapability[] {
   return assurance === "basic"
-    ? ["read"]
+    ? provider === "tekmetric"
+      ? ["read", "shop_tool"]
+      : ["read"]
     : [
         "read",
+        "shop_tool",
         ...(canWrite ? (["write", "provider_action"] as const) : []),
         ...(isAdmin ? ["admin" as const] : []),
       ];
@@ -93,6 +102,7 @@ export async function issueExtensionSession(input: {
     new Date(now.getTime() + (input.assurance === "basic" ? BASIC_TTL_MS : VERIFIED_TTL_MS));
   const capabilities = capabilitiesFor(
     input.assurance,
+    input.provider,
     input.isAdmin,
     input.canWrite !== false,
   );

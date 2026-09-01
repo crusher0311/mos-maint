@@ -13,6 +13,7 @@ import type {
 } from "@/lib/extension-session";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { getFeatureEntitlements, type FeatureKey } from "@/lib/featureResolver";
+import { resolveGuardProvider } from "@/lib/extension-basic-tools";
 
 /** Test seam for entitlement behavior without a live database. */
 export const __deps = {
@@ -108,6 +109,20 @@ export async function guardExtensionShopRequest(
   const isPlatformAdmin =
     auth.user.role === "platform_admin" || auth.user.isPlatformAdmin === true;
   const userShopIds = getUserShopIds(auth.user);
+  const principal = auth.principal ?? auth.user.extensionPrincipal;
+  const providerResolution = resolveGuardProvider(
+    principal,
+    options.provider,
+  );
+  if (!providerResolution.ok) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: "Provider scope mismatch", code: "PROVIDER_FORBIDDEN" },
+        { status: 403, headers: corsHeaders },
+      ),
+    };
+  }
 
   if (options.smsShopId === undefined || options.smsShopId === null || options.smsShopId === "") {
     return {
@@ -122,7 +137,8 @@ export async function guardExtensionShopRequest(
   const shopResult = await findShopBySmsId(String(options.smsShopId), {
     isPlatformAdmin,
     userShopIds: userShopIds as any,
-    providerHint: options.provider || "tekmetric",
+    providerHint: providerResolution.provider || "tekmetric",
+    providerHintIsAuthoritative: providerResolution.authoritative,
   });
 
   if (!shopResult) {
@@ -135,7 +151,7 @@ export async function guardExtensionShopRequest(
     };
   }
 
-  const scopedProvider = String(options.provider || shopResult.provider)
+  const scopedProvider = String(providerResolution.provider || shopResult.provider)
     .toLowerCase()
     .replace(/^shop[-_]ware$/, "shopware") as
       | "tekmetric"
@@ -194,8 +210,6 @@ export async function guardExtensionShopRequest(
       ),
     };
   }
-  const principal = auth.principal ?? auth.user.extensionPrincipal;
-
   const required = options.requiredFeatures ?? [];
   if (required.length > 0 && !isPlatformAdmin) {
     try {

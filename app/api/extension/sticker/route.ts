@@ -12,6 +12,7 @@ import { estimateMileageFromCarfax } from "@/lib/integrations/carfax";
 import { findShopBySmsIdDetailed } from "@/lib/extension-shop-lookup";
 import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
 import { parseMileageInput, parseMonthsInput, isAbsurdMileage, MAX_PLAUSIBLE_MILEAGE, logStickerMileageReject } from "@/lib/sticker-mileage";
+import { shouldRunStickerSideEffects } from "@/lib/extension-basic-tools";
 
 // Hard deadlines for external lookups during sticker generation. Each of
 // these is decorative/optional (predictive date, logo, Hovercode QR) — a
@@ -978,21 +979,24 @@ async function _POST(request: NextRequest) {
     }
     _lap("render");
 
-    await db.collection("sticker_generations").insertOne({
-      shopId: mosShopId,
-      generatedAt: new Date(),
-      generatedBy: authResult.user.email,
-      source: "extension",
-      size,
-      unit,
-    });
-    _lap("insertGen");
+    const runStickerSideEffects = shouldRunStickerSideEffects(authResult.principal);
+    if (runStickerSideEffects) {
+      await db.collection("sticker_generations").insertOne({
+        shopId: mosShopId,
+        generatedAt: new Date(),
+        generatedBy: authResult.user.email,
+        source: "extension",
+        size,
+        unit,
+      });
+    }
+    _lap(runStickerSideEffects ? "insertGen" : "skipGen");
 
     // Trigger auto booking — fire-and-forget so the sticker response is never
     // blocked by Tekmetric/MongoDB latency. Previously this awaited the
     // booking lookup synchronously, which could exceed the extension's 30s
     // client timeout when Tekmetric was 429-throttling.
-    if (mosShopId && vin) {
+    if (runStickerSideEffects && mosShopId && vin) {
       void (async () => {
         try {
           const bookingData = await resolveBookingDataServerSide(

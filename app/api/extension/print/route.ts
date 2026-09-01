@@ -36,6 +36,7 @@ import {
   type ZinkPrintOptions,
 } from "@/lib/print-queue/types";
 import { readPrintJsonBody } from "@/lib/print-queue/request-body";
+import { printRequestRequiresWrite } from "@/lib/extension-basic-tools";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -79,20 +80,31 @@ async function _POST(req: NextRequest) {
   }
 
   const smsShopId = body?.smsShopId ?? body?.shopId;
+  const type: "sticker" | "keytag" | "raw" =
+    body?.type === "keytag"
+      ? "keytag"
+      : body?.type === "sticker"
+        ? "sticker"
+        : "raw";
 
   const guard = await guardExtensionShopRequest(req, {
     smsShopId,
     provider: body?.provider ?? null,
-    requiredFeatures: ["oil_sticker"],
+    requiredFeatures:
+      type === "keytag"
+        ? ["keytags"]
+        : type === "sticker"
+          ? ["oil_sticker"]
+          : [],
     featureLabel: "ZINK Print",
     corsHeaders,
+    // Client-supplied image bytes are arbitrary, regardless of their claimed
+    // type. Basic may enqueue only the constrained server-rendered keytag form.
+    requiredCapabilities: printRequestRequiresWrite(body) ? ["write"] : [],
   });
   if (!guard.ok) return guard.response;
 
   const shopId = guard.mosShopId;
-  const type: "sticker" | "keytag" | "raw" =
-    body?.type === "keytag" ? "keytag" : body?.type === "sticker" ? "sticker" : "raw";
-
   // Resolve the image payload: pre-rendered image preferred, else render a
   // keytag server-side from the shop's keytag config.
   let imageBase64: string;
@@ -120,7 +132,7 @@ async function _POST(req: NextRequest) {
       return NextResponse.json(
         {
           error:
-            "Provide imageBase64 (from /api/extension/sticker or /keytag) or type='keytag' with keytag data",
+            "Verified sessions may provide imageBase64; Basic sessions may use type='keytag' with keytag data",
         },
         { status: 400, headers: corsHeaders },
       );

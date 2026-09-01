@@ -67,7 +67,18 @@ async function run() {
       inserted.tokenHash === sessions.hashExtensionSessionToken(issued.token) &&
         inserted.tokenHash.length === 64,
     );
-    ok("Basic session has read-only capabilities", JSON.stringify(inserted.capabilities) === '["read"]');
+    ok(
+      "Tekmetric Basic session has read and narrow shop-tool capabilities",
+      JSON.stringify(inserted.capabilities) === '["read","shop_tool"]',
+    );
+    await sessions.issueBasicExtensionSession({
+      shopId: 7,
+      provider: "protractor",
+    });
+    ok(
+      "Basic access is not broadened for other providers",
+      JSON.stringify(inserted.capabilities) === '["read"]',
+    );
     ok("Basic session has no user identity", inserted.userId === null);
     ok(
       "Basic expiry is short and predictable",
@@ -87,6 +98,10 @@ async function run() {
       request("/api/extension/features"),
     );
     ok("Basic principal can access classified reads", readResult.authorized);
+    const shopToolResult = await auth.validateExtensionToken(
+      request("/api/extension/sticker", "POST"),
+    );
+    ok("Basic principal can use safe shop tools", shopToolResult.authorized);
     ok("Basic principal is presented as role user", readResult.user?.role === "user");
     ok("Basic principal does not create/use a real user id", String(readResult.user?._id).startsWith("basic:"));
 
@@ -193,7 +208,7 @@ async function run() {
       ...inserted,
       id: "lookup-1",
       assurance: "basic",
-      capabilities: ["read"],
+      capabilities: ["read", "shop_tool"],
       revokedAt: null,
       expiresAt: new Date(Date.now() + 60_000),
     })) as any;

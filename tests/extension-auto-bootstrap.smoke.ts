@@ -103,6 +103,8 @@ ok(
 ok("explicit password login remains available", /action:\s*'MOS_LOGIN'/.test(panel));
 ok("side panel asks for bootstrap before showing login", /action:\s*'MOS_BOOTSTRAP'/.test(panel));
 ok("Basic access has a normal sign-in step-up", html.includes('id="session-step-up-btn"'));
+ok("Basic banner has an accessible capability details view", html.includes('id="session-tier-details"') && html.includes('Requires MOS.Tools sign-in'));
+ok("Basic capability summary is entitlement-aware", panel.includes("shopFeatures.oil_sticker") && panel.includes("shopFeatures.keytags"));
 ok("unsupported and verification-needed outcomes are visible", panel.includes("unsupported:") && panel.includes("verification_needed:"));
 ok("matched MOS users are named in the panel", panel.includes("Signed in as"));
 

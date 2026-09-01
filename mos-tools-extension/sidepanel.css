@@ -286,7 +286,7 @@ body {
 
 /* ==================== Session-tier banner ==================== */
 /* Labels the current session's trust level. Verified => subtle green;
-   Basic (read-only) => amber warning with a verify prompt. */
+   Basic => amber summary of safe tools and the verify boundary. */
 .session-tier-banner {
   display: flex;
   align-items: flex-start;
@@ -327,6 +327,26 @@ body {
 }
 .session-tier-prompt:empty {
   display: none;
+}
+.session-tier-details {
+  margin-top: 3px;
+}
+.session-tier-details summary {
+  width: fit-content;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.session-tier-capability-group {
+  margin-top: 6px;
+}
+.session-tier-capability-group ul {
+  margin: 2px 0 0;
+  padding-left: 18px;
+}
+.session-tier-capability-group li + li {
+  margin-top: 2px;
 }
 .session-step-up-btn {
   align-self: flex-start;

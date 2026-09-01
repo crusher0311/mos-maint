@@ -43,11 +43,12 @@ ok("legacy response (no fields) defaults to verified — no regression", () => {
 });
 
 ok("explicit basic assurance => read-only, no mutate/admin", () => {
-  const t = deriveSessionTier({ assurance: "basic" });
+  const t = deriveSessionTier({ assurance: "basic", capabilities: ["read", "shop_tool"] });
   assert.strictEqual(t.tier, TIER_BASIC);
   assert.strictEqual(t.isVerified, false);
   assert.strictEqual(t.canMutate, false);
   assert.strictEqual(t.canAdmin, false);
+  assert.strictEqual(t.canUseShopTools, true);
   assert.strictEqual(t.source, "assurance");
 });
 
@@ -71,6 +72,7 @@ ok("read-only capabilities => basic, cannot mutate or admin", () => {
   assert.strictEqual(t.tier, TIER_BASIC);
   assert.strictEqual(t.canMutate, false);
   assert.strictEqual(t.canAdmin, false);
+  assert.strictEqual(t.canUseShopTools, false);
 });
 
 ok("write-only capabilities: verified + mutate but NOT admin", () => {
@@ -94,10 +96,17 @@ ok("capabilities as object map is honored", () => {
 });
 
 ok("describeSessionTier labels basic with a verify prompt", () => {
-  const basic = describeSessionTier(deriveSessionTier({ assurance: "basic" }));
+  const basic = describeSessionTier(deriveSessionTier({ assurance: "basic", capabilities: ["read", "shop_tool"] }));
   assert.strictEqual(basic.variant, "basic");
-  assert.match(basic.label, /read-only/i);
+  assert.match(basic.label, /basic/i);
+  assert.match(basic.prompt, /printing/i);
   assert.ok(basic.prompt && basic.prompt.length > 0, "basic tier must carry a verify prompt");
+
+  const nonTekmetricBasic = describeSessionTier(
+    deriveSessionTier({ assurance: "basic", capabilities: ["read"] }),
+  );
+  assert.strictEqual(nonTekmetricBasic.label, "Basic access");
+  assert.doesNotMatch(nonTekmetricBasic.prompt, /printing/i);
 
   const verified = describeSessionTier(deriveSessionTier({ assurance: "verified" }));
   assert.strictEqual(verified.variant, "verified");

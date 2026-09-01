@@ -88,7 +88,7 @@ const MAX_TOKEN_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const EXTENSION_READ_ONLY_ROLES = new Set(["viewer", "read_only", "readonly"]);
 
 export function capabilitiesForVerifiedUser(user: any): ExtensionCapability[] {
-  const capabilities: ExtensionCapability[] = ["read"];
+  const capabilities: ExtensionCapability[] = ["read", "shop_tool"];
   const role = String(user?.role || "").toLowerCase();
   const isAdmin =
     role === "platform_admin" ||
@@ -253,7 +253,10 @@ export async function validateExtensionToken(
       let sessionUser: any;
       if (principal.assurance === "basic") {
         // Never trust persisted capability drift to elevate a Basic row.
-        principal.capabilities = ["read"];
+        principal.capabilities =
+          principal.provider === "tekmetric"
+            ? ["read", "shop_tool"]
+            : ["read"];
         // A Basic principal is deliberately not backed by a users row. It is
         // presented to the UI as a normal user while capability checks remain
         // authoritative for every mutation/admin decision.
@@ -585,6 +588,7 @@ export function enforceExtensionRoutePolicy(
   if (tiers.includes("public") || tiers.includes("preflight")) return auth;
   const required: ExtensionCapability[] = [];
   if (tiers.includes("read")) required.push("read");
+  if (tiers.includes("shop_tool")) required.push("shop_tool");
   if (tiers.includes("write")) required.push("write");
   if (tiers.includes("provider_action")) required.push("provider_action");
   if (tiers.includes("admin")) required.push("admin");

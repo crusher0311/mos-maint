@@ -79,7 +79,7 @@
     "test:extension-button-visibility": "tsx tests/extension-button-visibility.smoke.ts",
     "test:shop-product-entitlements": "tsx tests/shop-product-entitlements-task-1240.smoke.ts",
     "test:extension-undo-core": "tsx tests/extension-undo-core.smoke.ts",
-    "test:extension-session-tier": "tsx tests/extension-session-tier.smoke.ts",
+    "test:extension-session-tier": "tsx tests/extension-session-tier.smoke.ts && tsx tests/extension-basic-tools.smoke.ts",
     "test:extension-secure-sessions": "tsx tests/extension-secure-sessions.smoke.ts",
     "test:extension-auth-context-advisory": "tsx tests/extension-auth-context-advisory.smoke.ts",
     "test:extension-bootstrap-unavailable": "tsx tests/extension-bootstrap-unavailable.smoke.ts",

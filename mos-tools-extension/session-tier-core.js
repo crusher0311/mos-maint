@@ -2,9 +2,8 @@
 //
 // The MOS extension-auth response may now describe the SESSION's trust level
 // in addition to the user's ROLE. A session can be issued as "basic"
-// (read-only, un-stepped-up) even for a user whose role would normally permit
-// writes — e.g. a login that hasn't completed an extra verification step, or a
-// server that intentionally returns a limited session. Only a "verified"
+// (safe shop tools, un-stepped-up) even for a user whose role would normally
+// permit writes. Only a "verified"
 // session may perform mutations (adding jobs, applying labor rates) and admin
 // actions.
 //
@@ -14,7 +13,8 @@
 // The server may express this two ways (both optional / forward-compatible):
 //   * `assurance`: a string tier — "basic" | "verified" (aliases tolerated).
 //   * `capabilities`: an array/object listing granted capabilities, e.g.
-//     ["read"] for basic, ["read","write","admin"] for verified.
+//     ["read","shop_tool"] for Tekmetric basic, or
+//     ["read","shop_tool","write","admin"] for verified.
 //
 // When the server sends NEITHER (older backends), we fall back to treating the
 // session as verified so existing shops are never regressed into read-only.
@@ -74,7 +74,7 @@
   //   3. otherwise default to verified (backward compatibility).
   //
   // Returns a plain, storage-friendly object:
-  //   { tier, isVerified, canMutate, canAdmin, source }
+  //   { tier, isVerified, canUseShopTools, canMutate, canAdmin, source }
   function deriveSessionTier(resp) {
     const src = resp || {};
     const assurance = normalizeAssurance(src.assurance ?? src.sessionAssurance ?? src.tier);
@@ -98,6 +98,9 @@
     }
 
     const isVerified = tier === TIER_VERIFIED;
+    const canUseShopTools = caps
+      ? caps.has("shop_tool")
+      : isVerified;
     // If a capabilities list is present it further constrains what a verified
     // session may do; a basic session can never mutate/admin regardless.
     const canMutate = isVerified && (caps ? caps.has("write") || caps.has("mutate") : true);
@@ -106,6 +109,7 @@
     return {
       tier,
       isVerified,
+      canUseShopTools,
       canMutate,
       canAdmin,
       capabilities: caps ? Array.from(caps) : null,
@@ -128,9 +132,11 @@
       };
     }
     return {
-      label: "User / Basic (read-only)",
+      label: t.canUseShopTools ? "Tekmetric Basic access" : "Basic access",
       variant: "basic",
-      prompt: "Verify this session to add jobs, apply labor rates, and use admin tools.",
+      prompt: t.canUseShopTools
+        ? "Rendering, analysis, lookups, and entitled printing are available. Sign in to change Tekmetric data or settings."
+        : "Sign in to MOS.Tools to use shop tools or make changes.",
     };
   }
 

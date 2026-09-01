@@ -904,7 +904,7 @@ async function applyPlatformAdminVisibility() {
 }
 
 // Derive session-tier flags from the stored login response and paint the
-// session-tier banner (Basic read-only vs Verified session).
+// session-tier banner (Basic safe tools vs Verified session).
 function applySessionTier(rawTier) {
   const core = globalThis.MosSessionTierCore;
   // `rawTier` is the object the background already derived at login. If it's
@@ -1023,6 +1023,8 @@ function renderSessionTierBanner() {
   const iconEl = document.getElementById('session-tier-icon');
   const labelEl = document.getElementById('session-tier-label');
   const promptEl = document.getElementById('session-tier-prompt');
+  const detailsEl = document.getElementById('session-tier-details');
+  const availableEl = document.getElementById('session-tier-available');
   if (iconEl) {
     iconEl.innerHTML = isBasic
       ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>'
@@ -1030,7 +1032,7 @@ function renderSessionTierBanner() {
   }
   if (labelEl) {
     labelEl.textContent = isBasic
-      ? 'Basic access (read-only)'
+      ? (desc?.label || 'Basic access')
       : `Signed in as ${sessionTier.displayName || 'MOS.Tools user'}`;
   }
   if (promptEl) {
@@ -1040,6 +1042,28 @@ function renderSessionTierBanner() {
   }
   if (elements.sessionStepUpBtn) {
     elements.sessionStepUpBtn.classList.toggle('hidden', !isBasic);
+  }
+  const canUseShopTools = isBasic && sessionTier?.canUseShopTools === true;
+  if (detailsEl) detailsEl.classList.toggle('hidden', !canUseShopTools);
+  if (canUseShopTools && availableEl) {
+    const available = [];
+    if (shopFeatures.maintenance !== false) available.push('VHI analysis');
+    if (shopFeatures.job_lookup === true) available.push('Job and canned-job lookup');
+    if (shopFeatures.enhance_notes === true || shopFeatures.concern_assistant === true) {
+      available.push('Note-enhancement previews');
+    }
+    if (shopFeatures.oil_sticker === true) available.push('Oil-sticker rendering and printing');
+    if (shopFeatures.keytags === true) available.push('Key-tag rendering and printing');
+    availableEl.replaceChildren(...available.map((text) => {
+      const item = document.createElement('li');
+      item.textContent = text;
+      return item;
+    }));
+    if (available.length === 0) {
+      const item = document.createElement('li');
+      item.textContent = 'No entitled safe tools are available for this shop.';
+      availableEl.appendChild(item);
+    }
   }
 }
 
@@ -1315,6 +1339,7 @@ let featuresFetchSeq = 0;
 
 function applyShopFeatures(result) {
   shopFeatures = result.features;
+  renderSessionTierBanner();
   // Task #340: pick up shop distance preference early so the mileage
   // chip and any tooltips that fire before the plan response use the
   // right unit.
