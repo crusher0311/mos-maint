@@ -1,0 +1,78 @@
+Darren and team,
+
+Here's what our initial review of the elevated Protractor API traffic on August 31 turned up. In short, a sharp spike in inbound callback traffic, including a large share of unknown connections and rapid repeat events, kicked things off, and gaps in our own safeguards amplified part of that into more outbound API calls than should have occurred.
+
+Callback volume
+
+From midnight through roughly 12:10 PM Central, our persisted callback ledger recorded 7,289 accepted callback events:
+
+- 6,109 WorkOrder
+- 875 ServiceItem
+- 305 Contact
+- 6,640 of those were Update operations
+
+Volume climbed sharply around 6:00 AM Central and then held at roughly 1,000–1,600 accepted callbacks per hour.
+
+Those 7,289 accepted callbacks represent only 3,294 unique connection, object, and operation combinations. The rest breaks down as:
+
+- 3,995 repeat deliveries
+- 765 repeats arriving within 60 seconds of an identical preceding event
+- 292 repeats arriving within one second
+
+**A closer 32-minute sample**
+
+For a roughly 32-minute post-recovery window we have raw logs covering 1,948 inbound callback attempts:
+
+- 545 carried connection IDs that match no active Protractor connection on our side
+- 332 were recognized-connection duplicates, skipped before ledger insertion
+- 1,071 were accepted and inserted into the ledger
+
+Those three figures reconcile exactly to the 1,948 total.
+
+The 545 unknown-connection callbacks were acknowledged and discarded, and they did not trigger detail requests back to Protractor. Their volume does suggest that stale, unrecognized, or misrouted connection IDs were being delivered to our shared callback endpoint.
+
+The 332 duplicates were caught by our existing deduplication guard. The full ledger shows that other rapid repeats got past it, either because they arrived concurrently, arrived before the preceding event finished processing, or fell outside the guard's short time window.
+
+One caveat worth flagging: unknown callbacks and skipped duplicates never reach our ledger at all, so the true number delivered across the full morning was higher than 7,289.
+
+How that turned into API volume
+
+Accepted WorkOrder and ServiceItem callbacks can prompt our integration to request current object details from Protractor. Our integration did not coalesce concurrent repeat events well enough, and it did not automatically halt outbound requests once Protractor began returning sustained 403 responses. That let the callback activity generate more traffic than necessary and allowed unsuccessful requests to keep going.
+
+So our current assessment is that the callback spike initiated the elevated activity and our safeguard gaps amplified it. That said, 7,289 persisted callback records do not reconcile with the roughly 250,000 API calls you reported, so we need to compare records before reaching a final conclusion about the complete traffic source.
+
+What we're asking for
+
+If you can pull your records for the affected period, the fields most useful to us are:
+
+- API request timestamps, endpoint paths, HTTP methods, and response codes
+- Callback delivery timestamps and the callback URL used
+- Connection IDs, object types, and object IDs
+- Callback retry or delivery-attempt numbers
+- Source IP addresses, if available
+
+We'd especially like your read on the 545 unknown-connection callbacks. We can send you that connection ID list with timestamps so you can determine whether they trace back to deactivated accounts, pre-provisioned connections, stale callback registrations, another integrator, or some other routing condition. We're also happy to share our complete callback-event CSV for correlation.
+
+Containment and next steps
+
+The incident is contained. We're hardening the integration with atomic callback deduplication, event coalescing, per-connection and provider-wide limits, circuit breakers for sustained authorization and upstream failures, a central outbound kill switch, and improved callback and API-volume monitoring.
+
+Please keep our IP blocked until we've reconciled the traffic together and can coordinate a controlled test. Once those protections are live, we'd like to enable a single connection at a low rate, validate the resulting traffic, and restore the remaining connections gradually.
+
+Thank You
+Brandon Crusha
+(405) 565-9551
+brandon@myoilsticker.com
+myoilsticker.com
+Scan Here for a Demo
+
+
+Darren Williams
+7:21 AM (11 minutes ago)
+to Cavan, Natalie, me, support@myoilsticker.com
+
+Hey Brandon,
+
+Thank you for sending over these details. Looking forward to resolution.
+
+I am adding Cavan and Natalie here to continue the conversation. Cavan is the VP of Aftermarket and Natalie is Director of Partner Programs for Vehlo.

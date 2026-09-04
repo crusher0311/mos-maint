@@ -1,0 +1,298 @@
+Request — POST
+
+                                                                    https://www.qa.mos.tools/api/external/vehicles/3TMCZ5AN1MM409623/vhi?shopId=83&sms=live_api&mode=fastAccept: application/json
+Content-Type: application/json
+X-API-Key: ***MASKED***
+{
+    "vin": "3TMCZ5AN1MM409623",
+    "reportId": "712263f621f953e0f31c1756",
+    "retrievedAt": "2026-09-02T11:14:02Z",
+    "carfaxData": {
+        "carfaxRequest": {
+            "requestTime": 1788347642617,
+            "vin": "3TMCZ5AN1MM409623",
+            "productDataId": "207625C61DD1C38E",
+            "locationId": "59YZ6HIAQM"
+        },
+        "errorMessages": [],
+        "serviceHistory": {
+            "vin": "3TMCZ5AN1MM409623",
+            "make": "TOYOTA",
+            "model": "TACOMA SR V6",
+            "year": "2021",
+            "bodyTypeDescription": "Crew Pickup",
+            "engineInformation": "3.5L V6    F DOHC 24V",
+            "driveline": "Rear wheel drive w/ 4X4",
+            "recallDisclaimer": "Portions of this report have been included under license from Toyota Motor North America, Inc. (\"TOYOTA\"), License Agreement TMS1013 . This data applies only to vehicle marketed or originally sold in Mexico and the United States of America, including Guam, Saipan, American Samoa, Puerto Rico, the U.S. Virgin Islands and the other United States territories and protectorates with currently open safety or emissions recalls, or service campaigns. While TOYOTA provides data to Carfax Inc. on a regular basis, this report may not include very recent activity.  For the manufacturer's most current information on recall/campaign activity for any Toyota, Lexus or Scion brand vehicle, you must go to <a href=\"http://toyota.com/recall\" target=\"_blank\">http://toyota.com/recall</a> or <a href=\"http://lexus.com/recall\" target=\"_blank\">http://lexus.com/recall</a>.",
+            "numberOfServiceRecords": 22,
+            "numberOfRecallRecords": 0,
+            "serviceCategories": [
+                {
+                    "serviceName": "Tire rotation",
+                    "dateOfLastService": "08/31/2026",
+                    "odometerOfLastService": 74635
+                },
+                {
+                    "serviceName": "Air filter replacement",
+                    "dateOfLastService": "11/14/2023",
+                    "odometerOfLastService": 40083
+                },
+                {
+                    "serviceName": "Cabin air filter replacement",
+                    "dateOfLastService": "11/14/2023",
+                    "odometerOfLastService": 40083
+                },
+                {
+                    "serviceName": "Oil change/Engine oil filter",
+                    "dateOfLastService": "08/31/2026",
+                    "odometerOfLastService": 74635
+                },
+                {
+                    "serviceName": "Brake linings/pads replacement",
+                    "dateOfLastService": "02/23/2026",
+                    "odometerOfLastService": 69648
+                }
+            ],
+            "displayRecords": [
+                {
+                    "displayDate": "03/22/2021",
+                    "odometer": "6",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Pre-delivery inspection completed"
+                    ]
+                },
+                {
+                    "displayDate": "08/16/2021",
+                    "odometer": "3,168",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Oil and filter changed"
+                    ]
+                },
+                {
+                    "displayDate": "10/27/2021",
+                    "odometer": "5,237",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed",
+                        "5,000 mile service performed",
+                        "Brakes checked",
+                        "Fluids checked",
+                        "Oil and filter changed",
+                        "Tires rotated"
+                    ]
+                },
+                {
+                    "displayDate": "03/04/2022",
+                    "odometer": "10,272",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Front wiper blades/refills replaced",
+                        "Oil and filter changed"
+                    ]
+                },
+                {
+                    "displayDate": "05/03/2022",
+                    "odometer": "13,410",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Air filter replaced",
+                        "Oil and filter changed"
+                    ]
+                },
+                {
+                    "displayDate": "06/23/2022",
+                    "odometer": "15,824",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed",
+                        "10,000 mile service performed",
+                        "Brakes checked",
+                        "Fluids checked",
+                        "Oil and filter changed",
+                        "Tire repaired",
+                        "Tires rotated"
+                    ]
+                },
+                {
+                    "displayDate": "07/12/2022",
+                    "odometer": "16,979",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Oil and filter changed"
+                    ]
+                },
+                {
+                    "displayDate": "11/21/2022",
+                    "odometer": "20,837",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Cabin air filter replaced/cleaned",
+                        "Front wiper blades/refills replaced",
+                        "Oil and filter changed"
+                    ]
+                },
+                {
+                    "displayDate": "01/20/2023",
+                    "odometer": "23,936",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed",
+                        "Brakes checked",
+                        "Fluids checked",
+                        "Oil and filter changed",
+                        "Tires rotated"
+                    ]
+                },
+                {
+                    "displayDate": "02/23/2023",
+                    "odometer": "26,031",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed"
+                    ]
+                },
+                {
+                    "displayDate": "03/13/2023",
+                    "odometer": "28,408",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Front wiper blades/refills replaced",
+                        "Oil and filter changed"
+                    ]
+                },
+                {
+                    "displayDate": "04/10/2023",
+                    "odometer": "29,356",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed",
+                        "Oil and filter changed",
+                        "Tires rotated"
+                    ]
+                },
+                {
+                    "displayDate": "08/11/2023",
+                    "odometer": "34,663",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed",
+                        "Oil and filter changed",
+                        "Tires rotated"
+                    ]
+                },
+                {
+                    "displayDate": "11/14/2023",
+                    "odometer": "40,083",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed",
+                        "Air filter replaced",
+                        "Cabin air filter replaced/cleaned",
+                        "Oil and filter changed",
+                        "Tires rotated"
+                    ]
+                },
+                {
+                    "displayDate": "03/05/2024",
+                    "odometer": "46,263",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed",
+                        "Oil and filter changed",
+                        "Tires rotated"
+                    ]
+                },
+                {
+                    "displayDate": "05/05/2024",
+                    "odometer": "47,262",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed",
+                        "Engine checked"
+                    ]
+                },
+                {
+                    "displayDate": "11/06/2024",
+                    "odometer": "51,376",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Oil and filter changed",
+                        "Tires rotated"
+                    ]
+                },
+                {
+                    "displayDate": "03/13/2025",
+                    "odometer": "56,364",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Oil and filter changed"
+                    ]
+                },
+                {
+                    "displayDate": "08/22/2025",
+                    "odometer": "60,275",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Oil and filter changed"
+                    ]
+                },
+                {
+                    "displayDate": "11/24/2025",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Four tires balanced",
+                        "Oil and filter changed",
+                        "Tires rotated"
+                    ]
+                },
+                {
+                    "displayDate": "02/23/2026",
+                    "odometer": "69,648",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Brake pads replaced",
+                        "Brake shoes replaced",
+                        "Front brake pads replaced",
+                        "Oil and filter changed"
+                    ]
+                },
+                {
+                    "displayDate": "08/31/2026",
+                    "odometer": "74,635",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Oil and filter changed",
+                        "Tires rotated"
+                    ]
+                }
+            ]
+        }
+    }
+}
+                                                                    
+Response — HTTP 405
+null
