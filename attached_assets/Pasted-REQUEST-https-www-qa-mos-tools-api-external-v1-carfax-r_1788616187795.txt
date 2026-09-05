@@ -1,0 +1,187 @@
+REQUEST:
+https://www.qa.mos.tools/api/external/v1/carfax/reports
+Accept: application/json
+Content-Type: application/json
+X-API-Key: ***MASKED***
+
+{
+    "vin": "1V2KR2CA4NC546416",
+    "sms": "live_api",
+    "smsShopId": "29",
+    "deliveryId": "46dc7e3e3d3ccbb7c8b4e660",
+    "retrievedAt": "2026-09-05T13:47:31Z",
+    "report": {
+        "carfaxRequest": {
+            "requestTime": 1788616051851,
+            "vin": "1V2KR2CA4NC546416",
+            "productDataId": "207625C61DD1C38E",
+            "locationId": "BVZF4VOUKO"
+        },
+        "errorMessages": [],
+        "serviceHistory": {
+            "vin": "1V2KR2CA4NC546416",
+            "make": "VOLKSWAGEN",
+            "model": "ATLAS V6 SE 4MOTION",
+            "year": "2022",
+            "bodyTypeDescription": "4 Door Wagon/Sport Utility",
+            "engineInformation": "3.6L V6    F DOHC 24V",
+            "driveline": "All wheel drive",
+            "numberOfServiceRecords": 10,
+            "numberOfRecallRecords": 0,
+            "serviceCategories": [
+                {
+                    "serviceName": "Tire rotation",
+                    "dateOfLastService": "10/16/2025",
+                    "odometerOfLastService": 61779
+                },
+                {
+                    "serviceName": "Oil change/Engine oil filter",
+                    "dateOfLastService": "04/10/2026",
+                    "odometerOfLastService": 67773
+                },
+                {
+                    "serviceName": "Cabin air filter replacement",
+                    "dateOfLastService": "08/22/2023",
+                    "odometerOfLastService": 23079
+                },
+                {
+                    "serviceName": "Safety test",
+                    "dateOfLastService": "10/16/2025",
+                    "odometerOfLastService": 61779
+                }
+            ],
+            "displayRecords": [
+                {
+                    "displayDate": "07/13/2022",
+                    "odometer": "10",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Pre-delivery inspection completed",
+                        "Mud flaps/splash guards installed",
+                        "Safety inspection performed"
+                    ]
+                },
+                {
+                    "displayDate": "01/24/2023",
+                    "odometer": "9,060",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed",
+                        "Recommended maintenance performed",
+                        "Oil and filter changed",
+                        "Tires rotated"
+                    ]
+                },
+                {
+                    "displayDate": "04/26/2023",
+                    "odometer": "15,097",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed"
+                    ]
+                },
+                {
+                    "displayDate": "08/22/2023",
+                    "odometer": "23,079",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed",
+                        "Recommended maintenance performed",
+                        "Cabin air filter replaced/cleaned",
+                        "Oil and filter changed"
+                    ]
+                },
+                {
+                    "displayDate": "12/13/2023",
+                    "odometer": "30,009",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed",
+                        "Recommended maintenance performed",
+                        "Brake fluid flushed/changed",
+                        "Oil and filter changed"
+                    ]
+                },
+                {
+                    "displayDate": "02/06/2024",
+                    "odometer": "32,549",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "One tire balanced",
+                        "One tire mounted"
+                    ]
+                },
+                {
+                    "displayDate": "02/21/2024",
+                    "odometer": "32,635",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced"
+                    ]
+                },
+                {
+                    "displayDate": "08/26/2024",
+                    "odometer": "42,949",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Brakes checked",
+                        "Safety inspection performed",
+                        "Tire repaired"
+                    ]
+                },
+                {
+                    "displayDate": "10/16/2025",
+                    "odometer": "61,779",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed",
+                        "Four tires balanced",
+                        "Four tires mounted",
+                        "Four tires replaced",
+                        "Safety inspection performed"
+                    ]
+                },
+                {
+                    "displayDate": "04/10/2026",
+                    "odometer": "67,773",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed",
+                        "Oil and filter changed"
+                    ]
+                }
+            ]
+        }
+    }
+}
+
+RESPONSE:
+HTTP/2 403 
+date: Sat, 05 Sep 2026 13:47:32 GMT
+content-type: application/json
+cf-cache-status: DYNAMIC
+rndr-id: 2bbce013-5a9a-49f6
+server: cloudflare
+vary: RSC, Next-Router-State-Tree, Next-Router-Prefetch
+vary: Accept-Encoding
+x-ratelimit-limit: 1000
+x-ratelimit-remaining: 997
+x-ratelimit-reset: 2026-09-05T13:48:32.039Z
+x-render-origin-server: Render
+x-request-id: df3c4dbc-584f-4328-8d66-570ebbaef45b
+cf-ray: a365afb4ce4ee6b0-CMH
+alt-svc: h3=":443"; ma=86400
+
+{
+    "error": "AppFueled partner API key required",
+    "requestId": "df3c4dbc-584f-4328-8d66-570ebbaef45b"
+}
