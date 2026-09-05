@@ -1,0 +1,564 @@
+REQUEST:
+https://qa.mos.tools/api/external/v1/carfax/reports
+Accept: application/json
+Content-Type: application/json
+X-API-Key: ***MASKED***
+X-Request-Id: af-carfax-20260905_110617_1affea-5NPEC4AB8CH458882
+
+{
+    "vin": "5NPEC4AB8CH458882",
+    "sms": "live_api",
+    "smsShopId": "37",
+    "deliveryId": "5f725033c19703916c92c498",
+    "retrievedAt": "2026-09-05T15:06:17Z",
+    "report": {
+        "carfaxRequest": {
+            "requestTime": 1788620777312,
+            "vin": "5NPEC4AB8CH458882",
+            "productDataId": "207625C61DD1C38E",
+            "locationId": "IJUOALB001"
+        },
+        "errorMessages": [],
+        "serviceHistory": {
+            "vin": "5NPEC4AB8CH458882",
+            "make": "HYUNDAI",
+            "model": "SONATA SE 2.0T",
+            "year": "2012",
+            "bodyTypeDescription": "Sedan 4 DR",
+            "engineInformation": "2.0L I4    F DOHC 16V",
+            "driveline": "Front wheel drive",
+            "numberOfServiceRecords": 32,
+            "numberOfRecallRecords": 0,
+            "serviceCategories": [
+                {
+                    "serviceName": "Cabin air filter replacement",
+                    "dateOfLastService": "07/20/2026",
+                    "odometerOfLastService": 106953
+                },
+                {
+                    "serviceName": "Air filter replacement",
+                    "dateOfLastService": "05/03/2022",
+                    "odometerOfLastService": 68424
+                },
+                {
+                    "serviceName": "Fuel system cleaning",
+                    "dateOfLastService": "03/04/2025",
+                    "odometerOfLastService": 95568
+                },
+                {
+                    "serviceName": "Brake linings/pads replacement",
+                    "dateOfLastService": "07/20/2026",
+                    "odometerOfLastService": 106953
+                },
+                {
+                    "serviceName": "Battery Replacement",
+                    "dateOfLastService": "07/24/2018",
+                    "odometerOfLastService": 39148
+                },
+                {
+                    "serviceName": "Emissions test",
+                    "dateOfLastService": "10/18/2024",
+                    "odometerOfLastService": 92000
+                },
+                {
+                    "serviceName": "Transmission fluid exchange",
+                    "dateOfLastService": "03/04/2025",
+                    "odometerOfLastService": 95568
+                },
+                {
+                    "serviceName": "Radiator antifreeze flush",
+                    "dateOfLastService": "07/20/2026",
+                    "odometerOfLastService": 106953
+                },
+                {
+                    "serviceName": "Tire rotation",
+                    "dateOfLastService": "07/20/2026",
+                    "odometerOfLastService": 106953
+                },
+                {
+                    "serviceName": "Oil change/Engine oil filter",
+                    "dateOfLastService": "01/30/2026",
+                    "odometerOfLastService": 105188
+                }
+            ],
+            "displayRecords": [
+                {
+                    "displayDate": "01/30/2012",
+                    "odometer": "6",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Pre-delivery inspection completed",
+                        "Drivability/performance  checked",
+                        "Paint protection applied",
+                        "Vehicle washed/detailed"
+                    ]
+                },
+                {
+                    "displayDate": "04/04/2012",
+                    "odometer": "439",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced"
+                    ]
+                },
+                {
+                    "displayDate": "12/07/2012",
+                    "odometer": "4,636",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed",
+                        "Electrical system checked",
+                        "Fluids checked",
+                        "Oil and filter changed",
+                        "Tire condition and pressure checked"
+                    ]
+                },
+                {
+                    "displayDate": "12/09/2013",
+                    "odometer": "9,261",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Battery/charging system checked"
+                    ]
+                },
+                {
+                    "displayDate": "09/10/2014",
+                    "odometer": "11,266",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed",
+                        "Electrical system checked",
+                        "Fluids checked",
+                        "Oil and filter changed",
+                        "Tire condition and pressure checked"
+                    ]
+                },
+                {
+                    "displayDate": "07/27/2015",
+                    "odometer": "13,369",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed",
+                        "Power steering checked"
+                    ]
+                },
+                {
+                    "displayDate": "01/22/2016",
+                    "odometer": "15,224",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed",
+                        "15,000 mile service performed",
+                        "Air filter replaced",
+                        "Cabin air filter replaced/cleaned",
+                        "Computer(s) checked",
+                        "Engine/powertrain computer/module checked",
+                        "Oil and filter changed",
+                        "Transmission fluid temperature sensor replaced"
+                    ]
+                },
+                {
+                    "displayDate": "02/01/2016",
+                    "odometer": "15,335",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed"
+                    ]
+                },
+                {
+                    "displayDate": "12/14/2016",
+                    "odometer": "18,034",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Automatic transmission serviced",
+                        "Brake fluid flushed/changed",
+                        "Cooling system serviced",
+                        "Fuel injection system flushed/serviced"
+                    ]
+                },
+                {
+                    "displayDate": "07/01/2017",
+                    "odometer": "25,906",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Tire condition and pressure checked",
+                        "Tire repaired",
+                        "Tire(s) balanced"
+                    ]
+                },
+                {
+                    "displayDate": "07/10/2017",
+                    "odometer": "26,085",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed",
+                        "Air filter replaced",
+                        "Cabin air filter replaced/cleaned",
+                        "Exterior trim checked",
+                        "Fuel system cleaned/serviced",
+                        "Oil and filter changed"
+                    ]
+                },
+                {
+                    "displayDate": "08/18/2017",
+                    "odometer": "27,000",
+                    "type": "service",
+                    "text": [
+                        "Passed emissions inspection"
+                    ]
+                },
+                {
+                    "displayDate": "07/24/2018",
+                    "odometer": "39,148",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed",
+                        "Air filter replaced",
+                        "Battery/charging system checked",
+                        "Battery replaced",
+                        "Cabin air filter replaced/cleaned",
+                        "Four tires mounted",
+                        "Four tires replaced",
+                        "Four wheel alignment performed",
+                        "Oil and filter changed",
+                        "Wiper(s) replaced"
+                    ]
+                },
+                {
+                    "displayDate": "08/22/2018",
+                    "odometer": "40,000",
+                    "type": "service",
+                    "text": [
+                        "Passed emissions inspection"
+                    ]
+                },
+                {
+                    "displayDate": "10/23/2018",
+                    "odometer": "41,503",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed",
+                        "Battery/charging system checked",
+                        "Emission system checked",
+                        "Fuel injection system flushed/serviced",
+                        "Fuel system cleaned/serviced"
+                    ]
+                },
+                {
+                    "displayDate": "11/14/2019",
+                    "odometer": "51,075",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed",
+                        "Battery/charging system checked",
+                        "Cooling system serviced",
+                        "Exterior trim checked",
+                        "Fuel injection system flushed/serviced",
+                        "Fuel system cleaned/serviced",
+                        "Oil and filter changed",
+                        "Spark plug(s) replaced"
+                    ]
+                },
+                {
+                    "displayDate": "11/29/2019",
+                    "odometer": "51,158",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed",
+                        "Exterior trim checked"
+                    ]
+                },
+                {
+                    "displayDate": "03/27/2020",
+                    "odometer": "54,081",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed",
+                        "Battery/charging system checked",
+                        "Tire repaired",
+                        "Tire(s) balanced"
+                    ]
+                },
+                {
+                    "displayDate": "08/20/2020",
+                    "odometer": "55,916",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed",
+                        "Battery/charging system checked",
+                        "Brakes checked",
+                        "Four wheel alignment performed",
+                        "Oil and filter changed",
+                        "Tires rotated"
+                    ]
+                },
+                {
+                    "displayDate": "09/22/2020",
+                    "odometer": "56,000",
+                    "type": "service",
+                    "text": [
+                        "Passed emissions inspection"
+                    ]
+                },
+                {
+                    "displayDate": "08/16/2021",
+                    "odometer": "62,303",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed",
+                        "Battery/charging system checked",
+                        "Body electrical system  checked",
+                        "Brake light bulb(s) replaced",
+                        "Exterior trim checked"
+                    ]
+                },
+                {
+                    "displayDate": "01/07/2022",
+                    "odometer": "64,570",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Brake light bulb(s) replaced",
+                        "Oil and filter changed"
+                    ]
+                },
+                {
+                    "displayDate": "05/03/2022",
+                    "odometer": "68,424",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed",
+                        "Air filter replaced",
+                        "Antifreeze/coolant flushed/changed",
+                        "Cabin air filter replaced/cleaned",
+                        "Engine checked",
+                        "Four wheel alignment performed",
+                        "Fuel injection system flushed/serviced",
+                        "Rear brake pads replaced",
+                        "Rear brake rotor(s) replaced",
+                        "Right tie rod end replaced"
+                    ]
+                },
+                {
+                    "displayDate": "10/18/2022",
+                    "odometer": "71,000",
+                    "type": "service",
+                    "text": [
+                        "Passed emissions inspection"
+                    ]
+                },
+                {
+                    "displayDate": "11/30/2022",
+                    "odometer": "72,450",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed",
+                        "Oil and filter changed",
+                        "Three tires mounted"
+                    ]
+                },
+                {
+                    "displayDate": "08/16/2023",
+                    "odometer": "80,710",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed",
+                        "Brakes checked",
+                        "Brake fluid flushed/changed",
+                        "Cabin air filter replaced/cleaned",
+                        "Fuel injection system flushed/serviced",
+                        "Oil and filter changed",
+                        "Tires rotated"
+                    ]
+                },
+                {
+                    "displayDate": "02/23/2024",
+                    "odometer": "85,896",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed",
+                        "Antifreeze/coolant flushed/changed",
+                        "Brakes checked",
+                        "Front brake pads replaced",
+                        "Front brake rotor(s) replaced",
+                        "Oil and filter changed",
+                        "Tires rotated"
+                    ]
+                },
+                {
+                    "displayDate": "05/14/2024",
+                    "odometer": "88,801",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed",
+                        "Exterior trim checked",
+                        "Oil and filter changed",
+                        "Starter replaced"
+                    ]
+                },
+                {
+                    "displayDate": "10/18/2024",
+                    "odometer": "92,000",
+                    "type": "service",
+                    "text": [
+                        "Passed emissions inspection"
+                    ]
+                },
+                {
+                    "displayDate": "03/04/2025",
+                    "odometer": "95,568",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Cabin air filter replaced/cleaned",
+                        "Fluids checked",
+                        "Four wheel alignment performed",
+                        "Fuel injection system flushed/serviced",
+                        "Fuel system cleaned/serviced",
+                        "Induction system serviced",
+                        "Lower control arm(s) replaced",
+                        "Oil and filter changed",
+                        "Rear shock absorber(s) replaced",
+                        "Spark plug(s) replaced",
+                        "Transmission fluid changed",
+                        "Transmission serviced"
+                    ]
+                },
+                {
+                    "displayDate": "08/13/2025",
+                    "odometer": "101,564",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Fluids checked",
+                        "Oil and filter changed",
+                        "Rear brake pads replaced",
+                        "Rear brake rotor(s) replaced",
+                        "Tires rotated",
+                        "Wiper(s) replaced"
+                    ]
+                },
+                {
+                    "displayDate": "11/14/2025",
+                    "odometer": "102,455",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Drivability/performance  checked",
+                        "Four tires replaced",
+                        "Four wheel alignment performed",
+                        "Steering wheel centered",
+                        "Steering/suspension checked",
+                        "Tire(s) balanced",
+                        "Tire(s) mounted",
+                        "Tire(s) replaced"
+                    ]
+                },
+                {
+                    "displayDate": "01/30/2026",
+                    "odometer": "105,188",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Battery serviced",
+                        "Brakes checked",
+                        "Exhaust system checked",
+                        "Fluids checked",
+                        "Oil and filter changed",
+                        "Steering/suspension checked",
+                        "Steering/suspension lubricated",
+                        "Tire condition and pressure checked"
+                    ]
+                },
+                {
+                    "displayDate": "02/13/2026",
+                    "odometer": "105,343",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Drivability/performance  checked"
+                    ]
+                },
+                {
+                    "displayDate": "03/10/2026",
+                    "odometer": "105,533",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Drivability/performance  checked",
+                        "Wastegate actuator replaced"
+                    ]
+                },
+                {
+                    "displayDate": "06/08/2026",
+                    "odometer": "106,263",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "License plate light bulb(s) replaced"
+                    ]
+                },
+                {
+                    "displayDate": "07/20/2026",
+                    "odometer": "106,953",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Airbag system checked",
+                        "Airbag clockspring/reel replaced",
+                        "Antifreeze/coolant checked",
+                        "Antifreeze/coolant flushed/changed",
+                        "Brakes checked",
+                        "Brake fluid checked",
+                        "Brake fluid flushed/changed",
+                        "Brake master cylinder cap replaced",
+                        "Cabin air filter replaced/cleaned",
+                        "Cooling system checked",
+                        "Drivability/performance  checked",
+                        "Fluids checked",
+                        "Radiator checked",
+                        "Radiator fan operation checked",
+                        "Rear brake caliper(s) replaced",
+                        "Rear brake pads replaced",
+                        "Rear brake rotor(s) replaced",
+                        "Wheel(s) replaced"
+                    ]
+                }
+            ]
+        }
+    }
+}
+
+RESPONSE:
+HTTP/2 307 
+date: Sat, 05 Sep 2026 15:06:17 GMT
+content-length: 0
+location: https://www.qa.mos.tools/api/external/v1/carfax/reports
+cf-cache-status: DYNAMIC
+server: cloudflare
+cf-ray: a3662312f8b07fd8-CMH
+alt-svc: h3=":443"; ma=86400
+
+null
