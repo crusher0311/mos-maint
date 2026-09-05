@@ -2,6 +2,7 @@ import { getDb, getMongoClient } from '@/lib/mongo';
 import {
   acquireAutoflowAliasClaim,
   AutoflowAtomicClaimConflictError,
+  autoflowIdentifierVariants,
   buildAutoflowClaimQuery,
   classifyAutoflowIdentifierClaims,
   isAutoflowV4ShopNumber,
@@ -21,7 +22,7 @@ export type ShopLookupOutcome =
   | ResolvedShopLookup
   | {
       status: 'conflict';
-      provider: 'autoflow';
+      provider: ResolvedShopLookup["provider"];
       identifier: string;
       conflictType: 'canonical' | 'alias';
       shopIds: Array<string | number>;
@@ -143,10 +144,106 @@ export async function findShopBySmsIdDetailed(
     .trim()
     .toLowerCase()
     .replace(/^shop[-_]ware$/, "shopware") || undefined;
+  const authoritativeProvider =
+    options.providerHintIsAuthoritative === true
+      ? providerHint as ResolvedShopLookup["provider"] | undefined
+      : undefined;
+
+  // Server-managed mappings must resolve against exact canonical provider
+  // fields only. Keep this path before the extension compatibility resolver so
+  // it cannot discover, learn, record, or fall through to any alternate ID.
+  if (authoritativeProvider) {
+    let clauses: any[] = [];
+    if (authoritativeProvider === "autoflow") {
+      const variants = autoflowIdentifierVariants(smsShopId);
+      clauses = [
+        { "autoflow.domain": { $in: variants } },
+        { "autoflow.subdomain": { $in: variants } },
+        { "autoflow.shopId": { $in: variants } },
+        { autoflowDomain: { $in: variants } },
+      ];
+    } else if (authoritativeProvider === "tekmetric") {
+      const raw = String(smsShopId).trim();
+      if (/^(0|[1-9]\d*)$/.test(raw)) {
+        const numeric = Number(raw);
+        const variants: Array<string | number> = [raw];
+        if (Number.isSafeInteger(numeric) && String(numeric) === raw) {
+          variants.push(numeric);
+        }
+        clauses = [
+          { "tekmetric.shopId": { $in: variants } },
+          { tekmetricShopId: { $in: variants } },
+        ];
+      }
+    } else if (authoritativeProvider === "protractor") {
+      clauses = [
+        { "protractor.connectionId": smsShopId },
+        { protractorConnectionId: smsShopId },
+      ];
+    } else if (authoritativeProvider === "shopware") {
+      clauses = [
+        { "shopware.tenantSubdomain": smsShopId },
+        { "shopware.tenantId": smsShopId },
+      ];
+    } else if (authoritativeProvider === "shopmonkey") {
+      clauses = [
+        { "shopmonkey.locationId": smsShopId },
+        { "shopmonkey.companyId": smsShopId },
+      ];
+    }
+
+    const matches = clauses.length === 0
+      ? []
+      : await db.collection("shops")
+          .find(
+            { $or: clauses },
+            authoritativeProvider === "autoflow"
+              ? { collation: { locale: "en", strength: 2 } }
+              : undefined,
+          )
+          .limit(2)
+          .toArray();
+    if (matches.length > 1) {
+      return {
+        status: "conflict",
+        provider: authoritativeProvider,
+        identifier: authoritativeProvider === "autoflow"
+          ? normalizeAutoflowIdentifier(smsShopId)
+          : String(smsShopId),
+        conflictType: "canonical",
+        shopIds: matches.map((candidate: any) => candidate.shopId),
+      };
+    }
+    const owner = matches[0];
+    if (!owner) {
+      return {
+        status: "not_found",
+        ...(authoritativeProvider === "autoflow"
+          ? {
+              provider: "autoflow" as const,
+              identifier: normalizeAutoflowIdentifier(smsShopId),
+            }
+          : {}),
+      };
+    }
+    if (!isShopAccessible(owner, userShopIds, isPlatformAdmin)) {
+      return {
+        status: "access_denied",
+        ...(authoritativeProvider === "autoflow"
+          ? {
+              provider: "autoflow" as const,
+              identifier: normalizeAutoflowIdentifier(smsShopId),
+              ownerShopId: owner.shopId,
+            }
+          : {}),
+      };
+    }
+    return resolvedShop(owner, authoritativeProvider);
+  }
+
   const shouldResolveAutoflow =
     providerHint === 'autoflow'
-    || (!providerHint && options.providerHintIsAuthoritative !== true)
-    || options.providerHintIsAuthoritative !== true;
+    || !authoritativeProvider;
   
   const tekShopIdNum = parseInt(smsShopId);
   const tekShopIdStr = String(smsShopId);
@@ -267,31 +364,8 @@ export async function findShopBySmsIdDetailed(
       { "shopmonkey.locationId": smsShopId },
       { "shopmonkey.companyId": smsShopId },
   ];
-  const authoritativeClauses: Record<string, any[]> = {
-    tekmetric: [
-      { "tekmetric.shopId": tekShopIdNum },
-      { "tekmetric.shopId": tekShopIdStr },
-      { tekmetricShopId: tekShopIdNum },
-      { tekmetricShopId: tekShopIdStr },
-    ],
-    protractor: [
-      { "protractor.connectionId": smsShopId },
-      { protractorConnectionId: smsShopId },
-    ],
-    shopware: [
-      { "shopware.tenantSubdomain": smsShopId },
-      { "shopware.tenantId": smsShopId },
-    ],
-    shopmonkey: [
-      { "shopmonkey.locationId": smsShopId },
-      { "shopmonkey.companyId": smsShopId },
-    ],
-  };
   const shopQuery: any = {
-    $or:
-      options.providerHintIsAuthoritative === true && providerHint
-        ? authoritativeClauses[providerHint] || []
-        : allProviderClauses,
+    $or: allProviderClauses,
   };
   
   if (!isPlatformAdmin && userShopIds.length > 0) {
@@ -305,7 +379,7 @@ export async function findShopBySmsIdDetailed(
     shopQuery.shopId = { $in: shopIdVariants };
   }
   
-  let shopDoc = providerHint === 'autoflow'
+  let shopDoc = providerHint === "autoflow"
     ? null
     : await db.collection("shops").findOne(shopQuery);
   

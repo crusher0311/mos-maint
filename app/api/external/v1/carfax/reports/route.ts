@@ -1,14 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createExternalEndpoint } from "@/lib/external-api/middleware";
-import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import {
   CARFAX_INGEST_MAX_BYTES,
   ingestPartnerCarfaxReport,
   validateCarfaxIngestionBody,
 } from "@/lib/external-api/carfax-ingestion";
+import {
+  AppFueledMappingValidationError,
+  resolveActiveAppFueledMapping,
+} from "@/lib/data/repositories/appfueled-shop-mappings";
+import { buildPartnerVhiResponse } from "@/lib/external-api/partner-vhi-service";
+import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+const PARTNER_VHI_RESPONSE_TIMEOUT_MS = 30_000;
 
 async function readBoundedBody(req: NextRequest): Promise<
   | { ok: true; text: string }
@@ -35,7 +41,7 @@ async function readBoundedBody(req: NextRequest): Promise<
 
 export const POST = createExternalEndpoint(
   "carfax:write",
-  async (req: NextRequest, { isPartner, partnerId, requestId }) => {
+  async (req: NextRequest, { apiKey, isPartner, partnerId, requestId }) => {
     if (!isPartner || partnerId?.toLowerCase() !== "appfueled") {
       return NextResponse.json({ error: "AppFueled partner API key required", requestId }, { status: 403 });
     }
@@ -59,22 +65,30 @@ export const POST = createExternalEndpoint(
       return NextResponse.json({ error: validation.error, requestId }, { status: 400 });
     }
     const { body, retrievedAt } = validation;
-    const shop = await findShopBySmsId(String(body.smsShopId), {
-      isPlatformAdmin: true,
-      providerHint: body.sms,
-    });
-    if (!shop) {
-      return NextResponse.json({ error: `No shop found for ${body.sms} ID: ${body.smsShopId}`, requestId }, { status: 404 });
-    }
-    if (shop.provider !== body.sms) {
+    if (body.sms !== "live_api") {
       return NextResponse.json(
-        { error: `Shop identifier resolved to ${shop.provider}, not ${body.sms}`, requestId },
+        { error: 'AppFueled CARFAX requests must use sms: "live_api"', requestId },
+        { status: 400 },
+      );
+    }
+    let shop;
+    try {
+      shop = await resolveActiveAppFueledMapping(String(body.smsShopId));
+    } catch (error) {
+      if (error instanceof AppFueledMappingValidationError) {
+        return NextResponse.json({ error: error.message, requestId }, { status: 409 });
+      }
+      throw error;
+    }
+    if (!shop) {
+      return NextResponse.json(
+        { error: `No active AppFueled live_api mapping for external shop ID: ${body.smsShopId}`, requestId },
         { status: 404 },
       );
     }
     const result = await ingestPartnerCarfaxReport({
       partnerId,
-      shopId: Number(shop.mosShopId),
+      shopId: shop.mosShopId,
       body,
       retrievedAt,
     });
@@ -85,19 +99,116 @@ export const POST = createExternalEndpoint(
         { status: retryable ? 409 : 422, headers: retryable ? { "Retry-After": "2" } : undefined },
       );
     }
+    const ingestion = {
+      success: true as const,
+      deliveryId: body.deliveryId,
+      vin: body.vin,
+      shopId: shop.mosShopId,
+      duplicate: result.duplicate,
+      stored: result.stored,
+      outcome: result.outcome ?? (result.stored ? "stored" : "newer_snapshot_exists"),
+      retrievedAt: retrievedAt.toISOString(),
+    };
     console.log(
       `[PartnerCarfaxIngest] requestId=${requestId} partnerId=${partnerId} shopId=${shop.mosShopId} ` +
       `vin=${body.vin} deliveryId=${body.deliveryId} duplicate=${result.duplicate} stored=${result.stored}`,
     );
+    let vhiResponse: NextResponse;
+    let vhi: any;
+    try {
+      vhiResponse = await withUpstreamTimeout(
+        buildPartnerVhiResponse(req, {
+          apiKey,
+          shopId: shop.mosShopId,
+          isPartner: true,
+          partnerId,
+          requestId,
+        }, {
+          vin: body.vin,
+          shopId: shop.mosShopId,
+          mode: "full",
+        }).catch((error) => {
+          console.error(`[PartnerCarfaxIngest] VHI service error requestId=${requestId}:`, error);
+          return NextResponse.json({
+            success: false,
+            error: "VHI service temporarily unavailable",
+          }, { status: 503 });
+        }),
+        PARTNER_VHI_RESPONSE_TIMEOUT_MS,
+        `AppFueled VHI ${body.vin}`,
+        null as unknown as NextResponse,
+      );
+      if (!vhiResponse) {
+        return NextResponse.json({
+          ...ingestion,
+          success: true,
+          requestId,
+          ingestion,
+          vhi: {
+            success: false,
+            retryable: true,
+            status: "deadline_exceeded",
+            requestId,
+            message: "CARFAX ingestion succeeded, but VHI exceeded its response deadline",
+          },
+          retryAfter: 5,
+        }, { status: 202, headers: { "Retry-After": "5" } });
+      }
+      vhi = await vhiResponse.json();
+    } catch (error) {
+      console.error(`[PartnerCarfaxIngest] VHI failed after committed ingestion requestId=${requestId}:`, error);
+      return NextResponse.json({
+        ...ingestion,
+        success: true,
+        requestId,
+        ingestion,
+        vhi: {
+          success: false,
+          retryable: true,
+          status: "temporarily_unavailable",
+          requestId,
+          message: "CARFAX ingestion succeeded, but VHI is temporarily unavailable",
+        },
+        retryAfter: 5,
+      }, { status: 202, headers: { "Retry-After": "5" } });
+    }
+    if (vhiResponse.status >= 200 && vhiResponse.status < 300 && vhi?.success) {
+      return NextResponse.json({ ...ingestion, requestId, ingestion, vhi });
+    }
+    const retryable = vhiResponse.status === 202 ||
+      vhiResponse.status === 408 ||
+      vhiResponse.status === 429 ||
+      vhiResponse.status >= 500;
+    if (!retryable) {
+      return NextResponse.json({
+        ...ingestion,
+        success: true,
+        requestId,
+        ingestion,
+        vhi: {
+          success: false,
+          retryable: false,
+          status: "permanently_unavailable",
+          httpStatus: vhiResponse.status,
+          requestId,
+          message: vhi?.message || vhi?.error || "VHI cannot be built for this vehicle",
+        },
+      });
+    }
+    const retryAfter = Number(vhiResponse.headers.get("retry-after") || 5);
     return NextResponse.json({
+      ...ingestion,
       success: true,
       requestId,
-      deliveryId: body.deliveryId,
-      vin: body.vin,
-      shopId: Number(shop.mosShopId),
-      duplicate: result.duplicate,
-      stored: result.stored,
-      retrievedAt: retrievedAt.toISOString(),
-    });
+      ingestion,
+      vhi: {
+        success: false,
+        retryable: true,
+        status: vhi?.building ? "building" : "temporarily_unavailable",
+        requestId,
+        message: vhi?.message || vhi?.error || "VHI is not ready; retry this delivery",
+      },
+      retryAfter,
+    }, { status: 202, headers: { "Retry-After": String(retryAfter) } });
   },
 );

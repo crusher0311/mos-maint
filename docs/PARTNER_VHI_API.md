@@ -11,11 +11,15 @@ triggers a paid CARFAX lookup.
 
 The API key must be the **AppFueled partner key** with the dedicated `carfax:write`
 permission. Shop API keys and keys with only `vehicles:read` are rejected.
+MOS operators may bind AppFueled's existing QA credential with
+`APPFUELED_QA_API_KEY_SHA256` (preferred) or `APPFUELED_QA_API_KEY`; this
+server-side compatibility identity is fixed to AppFueled and `carfax:write`
+only, so no credential rotation or request change is required.
 
 ### Headers and limits
 
 ```http
-Authorization: Bearer mos_partner_REDACTED
+X-API-Key: mos_partner_REDACTED
 Content-Type: application/json
 X-Request-Id: appfueled-optional-correlation-id
 ```
@@ -36,13 +40,13 @@ X-Request-Id: appfueled-optional-correlation-id
 
 ```bash
 curl -X POST "https://mos.tools/api/external/v1/carfax/reports" \
-  -H "Authorization: Bearer $APPFUELED_MOS_PARTNER_KEY" \
+  -H "X-API-Key: $APPFUELED_MOS_PARTNER_KEY" \
   -H "Content-Type: application/json" \
   -H "X-Request-Id: af-carfax-20260901-001" \
   --data '{
     "vin": "1GYS4MKJ4GR434503",
-    "sms": "protractor",
-    "smsShopId": "36",
+    "sms": "live_api",
+    "smsShopId": "provider-issued-shop-id",
     "deliveryId": "carfax-report-987654",
     "retrievedAt": "2026-09-01T15:04:05.000Z",
     "report": {
@@ -91,7 +95,23 @@ Success and an identical retry both return HTTP `200`:
   "shopId": 36,
   "duplicate": false,
   "stored": true,
-  "retrievedAt": "2026-09-01T15:04:05.000Z"
+  "retrievedAt": "2026-09-01T15:04:05.000Z",
+  "ingestion": {
+    "success": true,
+    "deliveryId": "carfax-report-987654",
+    "vin": "1GYS4MKJ4GR434503",
+    "shopId": 36,
+    "duplicate": false,
+    "stored": true,
+    "outcome": "stored",
+    "retrievedAt": "2026-09-01T15:04:05.000Z"
+  },
+  "vhi": {
+    "success": true,
+    "vin": "1GYS4MKJ4GR434503",
+    "source": "on_demand_build",
+    "reportUrl": "https://mos.tools/report/1GYS4MKJ4GR434503?shopId=36"
+  }
 }
 ```
 
@@ -100,6 +120,43 @@ again. Deduplication is scoped by partner + resolved MOS shop + `deliveryId`.
 If MOS already has a newer healthy snapshot, the request succeeds with
 `stored: false` and preserves that newer data. Snapshot freshness is based on
 `retrievedAt`, not delivery time.
+
+`sms` is AppFueled's transport namespace and must be exactly `live_api`; it is
+not a provider name. Before traffic is accepted, a platform administrator must
+create an active mapping from that external `smsShopId` to one MOS shop and its
+canonical provider. MOS validates the identifier against the provider identity
+on the shop both when the mapping is changed and every time it is used. Missing
+or disabled mappings return `404`; ambiguous, conflicting, or subsequently
+changed provider identities return `409`. No identifier is guessed, learned,
+or treated as an MOS shop ID. Operators manage these records through
+`/api/platform-admin/appfueled-shop-mappings` (`GET`, `POST`, and `PATCH`);
+disabling is `PATCH` with `isActive: false`, preserving audit metadata.
+
+Ingestion commits before VHI orchestration starts. The `vhi` field has exactly
+the successful GET VHI contract. This is also true for duplicate deliveries and
+when `stored` is false because a newer healthy snapshot won. If a cold VHI is
+still building or bounded upstream work is unavailable, HTTP `202` preserves
+the successful top-level and nested `ingestion` metadata and returns:
+
+```json
+{
+  "success": true,
+  "requestId": "af-carfax-20260901-001",
+  "ingestion": { "success": true, "duplicate": true, "stored": true },
+  "vhi": {
+    "success": false,
+    "retryable": true,
+    "status": "building",
+    "requestId": "af-carfax-20260901-001",
+    "message": "Maintenance plan is being built; please retry in a few seconds."
+  },
+  "retryAfter": 5
+}
+```
+
+Retry after the indicated seconds with the same `deliveryId`. The retry reuses
+the committed delivery and current winning snapshot; it does not normalize or
+write CARFAX again and does not trigger a paid CARFAX request.
 
 Retry `409`, `429`, and `5xx` responses with exponential backoff, preserving the same
 `deliveryId`. Fix the request rather than retrying `400`, `403`, `404`, `413`,

@@ -813,7 +813,142 @@ async function run() {
     }
   }
 
-  // 31. In the no-session fallback used by tests, a thrown shop mutation
+  // 31. Authoritative validation is exact and read-only: an unknown provider
+  // identity must not trigger Shop-Ware fallback or Shopmonkey discovery.
+  {
+    let discoveries = 0;
+    const { fake, restore } = withFakeDb({
+      shops: [{ shopId: 81, shopware: { tenantId: "configured" }, integrationProvider: "shopware" }],
+    }, async () => {
+      discoveries += 1;
+      return { companyId: null, locationId: null };
+    });
+    try {
+      const result = await findShopBySmsIdDetailed("unknown-provider-id", {
+        isPlatformAdmin: true,
+        providerHint: "shopware",
+        providerHintIsAuthoritative: true,
+      });
+      ok("authoritative unknown provider identity returns not_found", result.status === "not_found");
+      ok(
+        "authoritative unknown provider identity performs no writes or discovery",
+        discoveries === 0 && !fake.ops.some((op) => op.op === "updateOne"),
+      );
+    } finally {
+      restore();
+    }
+  }
+
+  // 32. Multiple exact provider owners are an explicit conflict, never a
+  // first-match resolution.
+  {
+    const { restore } = withFakeDb({
+      shops: [
+        { shopId: 82, tekmetric: { shopId: 9001 }, integrationProvider: "tekmetric" },
+        { shopId: 83, tekmetric: { shopId: 9001 }, integrationProvider: "tekmetric" },
+      ],
+    });
+    try {
+      const result = await findShopBySmsIdDetailed("9001", {
+        isPlatformAdmin: true,
+        providerHint: "tekmetric",
+        providerHintIsAuthoritative: true,
+      });
+      ok(
+        "authoritative duplicate provider identity is rejected as ambiguous",
+        result.status === "conflict" && result.shopIds.length === 2,
+      );
+    } finally {
+      restore();
+    }
+  }
+
+  // 33. Authoritative AutoFlow validation accepts canonical fields only. A
+  // learned shopNumbers alias must not become a server-managed mapping.
+  {
+    const { fake, restore } = withFakeDb({
+      shops: [
+        {
+          shopId: 84,
+          autoflow: {
+            domain: "canonical-shop.autotext.me",
+            shopNumbers: ["2468"],
+          },
+          integrationProvider: "autoflow",
+        },
+      ],
+      autoflow_unresolved_numbers: [],
+    });
+    try {
+      const result = await findShopBySmsIdDetailed("2468", {
+        isPlatformAdmin: true,
+        providerHint: "autoflow",
+        providerHintIsAuthoritative: true,
+      });
+      ok("authoritative AutoFlow lookup rejects learned aliases", result.status === "not_found");
+      ok(
+        "authoritative AutoFlow alias rejection performs no writes",
+        !fake.ops.some((op) => op.op === "updateOne"),
+      );
+    } finally {
+      restore();
+    }
+  }
+
+  // 34. Even an authoritative AutoFlow canonical conflict is a read-only
+  // rejection; it must not write unresolved-ID telemetry.
+  {
+    const { fake, restore } = withFakeDb({
+      shops: [
+        { shopId: 85, autoflow: { domain: "duplicate.autotext.me" }, integrationProvider: "autoflow" },
+        { shopId: 86, autoflowDomain: "duplicate.autotext.me", integrationProvider: "autoflow" },
+      ],
+      autoflow_unresolved_numbers: [],
+    });
+    try {
+      const result = await findShopBySmsIdDetailed("duplicate", {
+        isPlatformAdmin: true,
+        providerHint: "autoflow",
+        providerHintIsAuthoritative: true,
+      });
+      ok(
+        "authoritative AutoFlow canonical conflict is rejected",
+        result.status === "conflict" && result.shopIds.length === 2,
+      );
+      ok(
+        "authoritative AutoFlow conflict performs no writes",
+        !fake.ops.some((op) => op.op === "updateOne"),
+      );
+    } finally {
+      restore();
+    }
+  }
+
+  // 35. Tekmetric IDs are numeric and exact. Prefix parsing must never turn a
+  // malformed partner value into another shop's valid provider ID.
+  {
+    const { fake, restore } = withFakeDb({
+      shops: [
+        { shopId: 87, tekmetric: { shopId: 9001 }, integrationProvider: "tekmetric" },
+      ],
+    });
+    try {
+      const result = await findShopBySmsIdDetailed("9001junk", {
+        isPlatformAdmin: true,
+        providerHint: "tekmetric",
+        providerHintIsAuthoritative: true,
+      });
+      ok("authoritative Tekmetric lookup rejects prefix-numeric IDs", result.status === "not_found");
+      ok(
+        "malformed authoritative Tekmetric lookup performs no writes",
+        !fake.ops.some((op) => op.op === "updateOne"),
+      );
+    } finally {
+      restore();
+    }
+  }
+
+  // 36. In the no-session fallback used by tests, a thrown shop mutation
   //     compensates by releasing the just-created atomic reservation.
   {
     const { fake, restore } = withFakeDb({

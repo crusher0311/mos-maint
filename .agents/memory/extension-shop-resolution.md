@@ -56,3 +56,19 @@ same ambiguity.
 identity classifier and claim transaction. Preserve authoritative namespace
 isolation for server-issued non-AutoFlow principals; only legacy/untrusted
 provider hints require global AutoFlow canonical protection.
+
+## Rule: server-managed partner mappings require a read-only exact resolver
+Do not validate a server-managed external-shop mapping through the extension's
+compatibility resolver. Mapping validation must query only the declared
+provider's canonical identity fields, reject malformed or ambiguous IDs, and
+perform no alias learning, provider discovery, fallback association, or
+unresolved-ID telemetry writes.
+
+**Why:** compatibility behavior that is safe for an interactive extension can
+turn an untrusted partner identifier into a new identity association. That
+makes a later explicit mapping appear authoritative even though the validation
+itself created or inferred the identity.
+
+**How to apply:** split authoritative mapping validation from convenience
+lookup behavior at the resolver boundary. Test unknown IDs, aliases, duplicate
+canonical owners, and malformed numeric IDs for both rejection and zero writes.

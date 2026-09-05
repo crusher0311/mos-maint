@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import { NextRequest } from "next/server";
+import { withUpstreamTimeout } from "../lib/with-upstream-timeout";
 
 type Doc = Record<string, any>;
 let beforeReportCasUpdate: ((docs: Doc[]) => void) | null = null;
@@ -101,6 +103,36 @@ require.cache[mongoPath] = {
 } as any;
 
 async function main() {
+  const vhiServiceSource = fs.readFileSync(
+    require.resolve("../lib/external-api/partner-vhi-service"),
+    "utf8",
+  );
+  assert.equal(
+    vhiServiceSource.includes("app/api/external/vehicles"),
+    false,
+    "POST VHI service never imports the GET route",
+  );
+  assert.equal(
+    vhiServiceSource.includes("registerPartnerVhiOrchestrator"),
+    false,
+    "VHI service has no mutable route registry",
+  );
+  const carfaxRouteSource = fs.readFileSync(
+    require.resolve("../app/api/external/v1/carfax/reports/route"),
+    "utf8",
+  );
+  assert.equal(
+    carfaxRouteSource.includes("PARTNER_VHI_RESPONSE_TIMEOUT_MS"),
+    true,
+    "one-call VHI orchestration has a hard response deadline",
+  );
+  const deadline = await withUpstreamTimeout(
+    new Promise<never>(() => {}),
+    1,
+    "partner-carfax-smoke",
+    "deadline",
+  );
+  assert.equal(deadline, "deadline");
   const {
     CARFAX_INGEST_MAX_BYTES,
     ingestPartnerCarfaxReport,
@@ -116,7 +148,12 @@ async function main() {
       endSession: async () => {},
     }),
   } as any);
-  const { getAvailablePermissions, checkPermission } = await import("../lib/external-api/api-keys");
+  const {
+    getAvailablePermissions,
+    checkPermission,
+    validateApiKey,
+    validateCarfaxPermissionIdentity,
+  } = await import("../lib/external-api/api-keys");
 
   assert(getAvailablePermissions().includes("carfax:write"), "dedicated write permission is registered");
   assert.equal(
@@ -124,11 +161,28 @@ async function main() {
     false,
     "read-only key cannot ingest",
   );
+  assert.throws(
+    () => validateCarfaxPermissionIdentity(["carfax:write"], { isPartner: false }),
+    /reserved for the AppFueled/,
+  );
+  assert.throws(
+    () => validateCarfaxPermissionIdentity(["carfax:write"], { isPartner: true, partnerId: "other" }),
+    /reserved for the AppFueled/,
+  );
+  validateCarfaxPermissionIdentity(
+    ["carfax:write"],
+    { isPartner: true, partnerId: "appfueled" },
+  );
+  process.env.APPFUELED_QA_API_KEY = "existing-appfueled-qa-key";
+  const qaIdentity = await validateApiKey("existing-appfueled-qa-key");
+  delete process.env.APPFUELED_QA_API_KEY;
+  assert.equal(qaIdentity.apiKey?.partnerId, "appfueled");
+  assert.deepEqual(qaIdentity.apiKey?.permissions, ["carfax:write"]);
 
   const now = new Date("2026-09-01T16:00:00.000Z");
   const valid = {
     vin: "1GYS4MKJ4GR434503",
-    sms: "protractor",
+    sms: "live_api",
     smsShopId: "36",
     deliveryId: "report-1",
     retrievedAt: "2026-09-01T15:00:00.000Z",
@@ -327,16 +381,40 @@ async function main() {
   // Exercise the real route wrapper for auth, partner-only scoping, malformed
   // and oversized bodies, unknown shops, and cross-shop resolution.
   let shopExists = true;
-  const lookupPath = require.resolve("../lib/extension-shop-lookup");
-  require.cache[lookupPath] = {
-    id: lookupPath,
-    filename: lookupPath,
+  const mappingPath = require.resolve("../lib/data/repositories/appfueled-shop-mappings");
+  class MappingConflict extends Error {}
+  require.cache[mappingPath] = {
+    id: mappingPath,
+    filename: mappingPath,
     loaded: true,
     children: [],
     paths: [],
     exports: {
-      findShopBySmsId: async () =>
-        shopExists ? { mosShopId: 36, provider: "protractor" } : null,
+      AppFueledMappingValidationError: MappingConflict,
+      resolveActiveAppFueledMapping: async () =>
+        shopExists ? { mosShopId: 36, provider: "protractor", externalShopId: "36" } : null,
+    },
+  } as any;
+  let vhiOutcome: "success" | "building" | "permanent" = "success";
+  const vhiServicePath = require.resolve("../lib/external-api/partner-vhi-service");
+  require.cache[vhiServicePath] = {
+    id: vhiServicePath,
+    filename: vhiServicePath,
+    loaded: true,
+    children: [],
+    paths: [],
+    exports: {
+      buildPartnerVhiResponse: async (_req: any, _context: any, overrides: any) =>
+        vhiOutcome === "building"
+          ? Response.json({ success: false, building: true, message: "building" }, { status: 202 })
+          : vhiOutcome === "permanent"
+            ? Response.json({ success: false, error: "Feature not enabled" }, { status: 403 })
+          : Response.json({
+              success: true,
+              vin: overrides.vin,
+              source: "cached_plan",
+              reportUrl: `https://mos.tools/report/${overrides.vin}?shopId=${overrides.shopId}`,
+            }),
     },
   } as any;
   const { __deps: authDeps } = await import("../lib/external-api/middleware");
@@ -372,7 +450,7 @@ async function main() {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        ...(key ? { authorization: `Bearer ${key}` } : {}),
+        ...(key ? { "x-api-key": key } : {}),
       },
       body,
     });
@@ -454,6 +532,22 @@ async function main() {
   assert.equal(routeResponse.status, 200);
   assert.equal(routeJson.shopId, 36, "partner request resolves the target shop instead of key shopId=0");
   assert.equal(routeJson.success, true);
+  assert.equal(routeJson.ingestion.deliveryId, routeFresh.deliveryId);
+  assert.equal(routeJson.vhi.source, "cached_plan");
+  vhiOutcome = "building";
+  const partialResponse = await POST(request(JSON.stringify(routeFresh), "mos_partner_valid"));
+  const partialJson = await partialResponse.json();
+  assert.equal(partialResponse.status, 202);
+  assert.equal(partialJson.ingestion.success, true, "VHI timeout preserves committed ingestion");
+  assert.equal(partialJson.ingestion.duplicate, true, "VHI retry does not write CARFAX twice");
+  assert.equal(partialJson.vhi.retryable, true);
+  vhiOutcome = "permanent";
+  const permanentResponse = await POST(request(JSON.stringify(routeFresh), "mos_partner_valid"));
+  const permanentJson = await permanentResponse.json();
+  assert.equal(permanentResponse.status, 200, "permanent VHI failure does not misreport committed ingestion");
+  assert.equal(permanentJson.ingestion.duplicate, true);
+  assert.equal(permanentJson.vhi.retryable, false);
+  assert.equal(permanentJson.vhi.httpStatus, 403);
 
   console.log("partner CARFAX ingestion: PASS");
 }

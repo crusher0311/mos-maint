@@ -86,6 +86,18 @@ export function validatePermissions(permissions: string[]): { valid: boolean; in
   return { valid: invalid.length === 0, invalid };
 }
 
+export function validateCarfaxPermissionIdentity(
+  permissions: string[],
+  identity: { isPartner?: boolean; partnerId?: string },
+): void {
+  if (
+    permissions.includes("carfax:write") &&
+    (!identity.isPartner || identity.partnerId?.toLowerCase() !== "appfueled")
+  ) {
+    throw new Error("carfax:write is reserved for the AppFueled partner identity");
+  }
+}
+
 export function getRateLimitFromTier(tier: RateLimitTier): number {
   return RATE_LIMIT_TIERS[tier].requestsPerMinute;
 }
@@ -116,6 +128,7 @@ export async function generateApiKey(
     expiresAt?: Date;
   }
 ): Promise<{ key: string; keyPrefix: string; keyId: string }> {
+  validateCarfaxPermissionIdentity(permissions, { isPartner: false });
   const permValidation = validatePermissions(permissions);
   if (!permValidation.valid) {
     throw new Error(`Invalid permissions: ${permValidation.invalid.join(", ")}`);
@@ -159,6 +172,7 @@ export async function generatePartnerApiKey(
     expiresAt?: Date;
   }
 ): Promise<{ key: string; keyPrefix: string; keyId: string }> {
+  validateCarfaxPermissionIdentity(permissions, { isPartner: true, partnerId });
   const permValidation = validatePermissions(permissions);
   if (!permValidation.valid) {
     throw new Error(`Invalid permissions: ${permValidation.invalid.join(", ")}`);
@@ -197,11 +211,46 @@ export async function generatePartnerApiKey(
 export async function validateApiKey(
   rawKey: string
 ): Promise<{ valid: boolean; apiKey?: ApiKey; error?: string }> {
-  if (!rawKey || !rawKey.startsWith("mos_")) {
+  if (!rawKey) {
     return { valid: false, error: "Invalid API key format" };
   }
 
   const keyHash = createHash("sha256").update(rawKey).digest("hex");
+  // Operator-controlled compatibility binding for AppFueled's already-issued
+  // QA credential. Comparing hashes means the credential is never logged or
+  // persisted by this compatibility path. It is deliberately a carfax-only
+  // partner identity and therefore cannot acquire ordinary shop privileges.
+  const configuredRaw =
+    process.env.APPFUELED_QA_API_KEY || process.env.APPFUELED_API_KEY;
+  const configuredHash =
+    process.env.APPFUELED_QA_API_KEY_SHA256?.trim().toLowerCase() ||
+    (configuredRaw
+      ? createHash("sha256").update(configuredRaw).digest("hex")
+      : "");
+  if (configuredHash && keyHash === configuredHash) {
+    return {
+      valid: true,
+      apiKey: {
+        shopId: 0,
+        keyHash,
+        keyPrefix: "appfueled_qa",
+        name: "Partner: AppFueled (QA compatibility)",
+        permissions: ["carfax:write"],
+        rateLimit: RATE_LIMIT_TIERS.enterprise.requestsPerMinute,
+        rateLimitTier: "enterprise",
+        isActive: true,
+        usageCount: 0,
+        createdAt: new Date(0),
+        createdBy: "server_configuration",
+        isPartner: true,
+        partnerId: "appfueled",
+        partnerName: "AppFueled",
+      },
+    };
+  }
+  if (!rawKey.startsWith("mos_")) {
+    return { valid: false, error: "Invalid API key format" };
+  }
   const apiKey = (await repo.findApiKeyByHash(keyHash)) as ApiKey | null;
 
   if (!apiKey) {
@@ -278,6 +327,11 @@ export async function updateApiKey(
   keyId: string,
   updates: Partial<Pick<ApiKey, "name" | "permissions" | "rateLimit" | "rateLimitTier" | "isActive" | "expiresAt">>
 ): Promise<boolean> {
+  if (updates.permissions) {
+    const existing = await getApiKeyById(keyId);
+    if (!existing) return false;
+    validateCarfaxPermissionIdentity(updates.permissions, existing);
+  }
   if (updates.rateLimitTier && !updates.rateLimit) {
     updates.rateLimit = getRateLimitFromTier(updates.rateLimitTier);
   }
