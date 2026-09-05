@@ -204,7 +204,10 @@ const ALLOWLIST = new Set([
   "app/api/external/recommendations/[vin]/route.ts",
   "app/api/external/shops/route.ts",
   "app/api/external/vehicles/[vin]/route.ts",
-  "app/api/external/vehicles/[vin]/vhi/route.ts",
+  // Task #1251 moved the existing partner VHI orchestration unchanged from
+  // its route into a shared service used by GET and AppFueled CARFAX POST.
+  // This replaces (rather than expands) the legacy allowlist entry above.
+  "lib/external-api/partner-vhi-service.ts",
   "app/api/external/vhi/analyze/route.ts",
   "app/api/ghost-mode/status/route.ts",
   "app/api/internal/backfill-labor-rates/route.ts",

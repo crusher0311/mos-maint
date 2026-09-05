@@ -423,6 +423,28 @@ export const shopMedia = pgTable(
   }),
 );
 
+/** Explicit, operator-managed AppFueled external SMS identity bindings. */
+export const appfueledShopMappings = pgTable(
+  "appfueled_shop_mappings",
+  {
+    namespace: text("namespace").notNull().default("live_api"),
+    externalShopId: text("external_shop_id").notNull(),
+    mosShopId: integer("mos_shop_id").notNull(),
+    provider: text("provider").notNull(),
+    isActive: boolean("is_active").notNull().default(true),
+    createdBy: text("created_by").notNull(),
+    updatedBy: text("updated_by").notNull(),
+    disabledBy: text("disabled_by"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    disabledAt: timestamp("disabled_at", { withTimezone: true }),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.namespace, t.externalShopId] }),
+    shopProviderIdx: index("appfueled_shop_mappings_shop_provider_idx").on(t.mosShopId, t.provider),
+  }),
+);
+
 /* ========================================================================== */
 /* Audit / notifications  (sub-group: audit-notif)                            */
 /* Append-only logs and per-user notifications. Notifications need a stable   */

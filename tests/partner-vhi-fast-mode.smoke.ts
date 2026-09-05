@@ -8,8 +8,8 @@ import path from "node:path";
 import { triggerPlanBuild } from "../lib/vhi-rebuild";
 import { persistPlanBuildResult } from "../lib/plan-build-persistence";
 
-const route = fs.readFileSync(
-  path.join(process.cwd(), "app/api/external/vehicles/[vin]/vhi/route.ts"),
+const service = fs.readFileSync(
+  path.join(process.cwd(), "lib/external-api/partner-vhi-service.ts"),
   "utf8",
 );
 
@@ -26,27 +26,27 @@ console.log("partner VHI fast mode");
 
 ok(
   "accepts only explicit fast/full modes",
-  route.includes('requestedMode !== "fast" && requestedMode !== "full"'),
+  service.includes('requestedMode !== "fast" && requestedMode !== "full"'),
 );
 ok(
   "forwards fast mode into rebuildVhi",
-  route.includes("fast: fastMode"),
+  service.includes("fast: fastMode"),
 );
 ok(
   "keeps full mode as the default",
-  route.includes('const fastMode = requestedMode === "fast"'),
+  service.includes('const fastMode = requestedMode === "fast"'),
 );
 ok(
   "labels successful on-demand responses with their build mode",
-  route.includes('buildMode: fastMode ? "fast" : "full"'),
+  service.includes('buildMode: fastMode ? "fast" : "full"'),
 );
 ok(
   "warns consumers that fast builds may omit optional data",
-  route.includes("optionalDataMayBeIncomplete: fastMode"),
+  service.includes("optionalDataMayBeIncomplete: fastMode"),
 );
 ok(
   "keeps fast builds out of the shared full-quality cache",
-  route.includes("persistBuiltPlan: !fastMode"),
+  service.includes("persistBuiltPlan: !fastMode"),
 );
 
 async function runBehavioralChecks() {

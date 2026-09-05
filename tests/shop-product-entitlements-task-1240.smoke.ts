@@ -207,7 +207,7 @@ ok("signed VHI reports stop at issuance, viewing, and media when Maintenance is 
 ok("external VHI and maintenance APIs enforce the target shop's Maintenance product", () => {
   for (const file of [
     "app/api/external/vehicles/[vin]/route.ts",
-    "app/api/external/vehicles/[vin]/vhi/route.ts",
+    "lib/external-api/partner-vhi-service.ts",
     "app/api/external/vhi/analyze/route.ts",
     "app/api/external/vehicles/[vin]/maintenance/route.ts",
     "app/api/external/recommendations/[vin]/route.ts",

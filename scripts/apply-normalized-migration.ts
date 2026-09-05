@@ -41,6 +41,7 @@ const drizzleMigrationFiles = [
   "0031_task1161_slow_queries.sql",
   "0032_task1183_nwo_close_date_idx.sql",
   "0033_task1188_prod_index_parity.sql",
+    "0035_task1251_appfueled_shop_mappings.sql",
 ];
 
 // Concurrent index migrations must be sent one statement at a time. A
@@ -820,7 +821,7 @@ async function main() {
   // Run the full drizzle wave-migration series before the index block: some
   // of the index statements below (e.g. knowledge_articles trgm indexes)
   // target tables that only these files create on a fresh environment.
-  console.log("Applying drizzle wave migrations (0011–0027)...");
+  console.log("Applying drizzle wave migrations (0011–0035)...");
   for (const file of drizzleMigrationFiles) {
     const filePath = path.join(process.cwd(), "drizzle", file);
     const content = readFileSync(filePath, "utf8");
@@ -877,6 +878,7 @@ async function main() {
     'sms_messages',                // 0027 baseline (communications)
     'production_logs',             // 0027 baseline
     'platform_features',           // 0027 baseline
+    'appfueled_shop_mappings',     // 0035 AppFueled explicit mappings
   ];
   const tables = await sql`
     SELECT table_name FROM information_schema.tables 

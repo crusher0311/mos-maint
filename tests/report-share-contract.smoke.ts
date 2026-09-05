@@ -240,16 +240,16 @@ withEnv(
   },
 );
 
-const routeSource = fs.readFileSync(
+const vhiServiceSource = fs.readFileSync(
   path.join(
     process.cwd(),
-    "app/api/external/vehicles/[vin]/vhi/route.ts",
+    "lib/external-api/partner-vhi-service.ts",
   ),
   "utf8",
 );
 
 const responseBuilderCallCount = (
-  routeSource.match(/buildPartnerVhiSuccessResponse\(\{/g) || []
+  vhiServiceSource.match(/buildPartnerVhiSuccessResponse\(\{/g) || []
 ).length;
 assert.equal(
   responseBuilderCallCount,
@@ -264,14 +264,14 @@ for (const source of [
   "on_demand_build",
 ]) {
   assert.match(
-    routeSource,
+    vhiServiceSource,
     new RegExp(`source:\\s*["']${source}["']`),
     `${source} response path must remain covered by the partner contract`,
   );
 }
 
 assert.match(
-  routeSource,
+  vhiServiceSource,
   /buildPlanResponse\(lastPlan\.plan,[\s\S]*?source:\s*"stale_plan_rebuilding"/,
   "the rebuild-timeout success path must use the report-link response builder",
 );

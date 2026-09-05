@@ -37,8 +37,8 @@ export function validateCarfaxIngestionBody(
     return { ok: false, error: "vin must be a valid 17-character VIN" };
   }
   const sms = typeof body.sms === "string" ? body.sms.trim().toLowerCase() : "";
-  if (!["tekmetric", "shopware", "protractor", "autoflow", "shopmonkey"].includes(sms)) {
-    return { ok: false, error: "sms must be one of: tekmetric, shopware, protractor, autoflow, shopmonkey" };
+  if (!["live_api", "tekmetric", "shopware", "protractor", "autoflow", "shopmonkey"].includes(sms)) {
+    return { ok: false, error: "sms must be one of: live_api, tekmetric, shopware, protractor, autoflow, shopmonkey" };
   }
   if (
     (typeof body.smsShopId !== "string" && typeof body.smsShopId !== "number") ||
