@@ -173,9 +173,21 @@ async function main() {
     ["carfax:write"],
     { isPartner: true, partnerId: "appfueled" },
   );
+  const previousQaRawKey = process.env.APPFUELED_QA_API_KEY;
+  const previousQaKeyHash = process.env.APPFUELED_QA_API_KEY_SHA256;
   process.env.APPFUELED_QA_API_KEY = "existing-appfueled-qa-key";
+  delete process.env.APPFUELED_QA_API_KEY_SHA256;
   const qaIdentity = await validateApiKey("existing-appfueled-qa-key");
-  delete process.env.APPFUELED_QA_API_KEY;
+  if (previousQaRawKey === undefined) {
+    delete process.env.APPFUELED_QA_API_KEY;
+  } else {
+    process.env.APPFUELED_QA_API_KEY = previousQaRawKey;
+  }
+  if (previousQaKeyHash === undefined) {
+    delete process.env.APPFUELED_QA_API_KEY_SHA256;
+  } else {
+    process.env.APPFUELED_QA_API_KEY_SHA256 = previousQaKeyHash;
+  }
   assert.equal(qaIdentity.apiKey?.partnerId, "appfueled");
   assert.deepEqual(qaIdentity.apiKey?.permissions, ["carfax:write"]);
 
