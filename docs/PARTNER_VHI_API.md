@@ -46,7 +46,7 @@ curl -X POST "https://mos.tools/api/external/v1/carfax/reports" \
   --data '{
     "vin": "1GYS4MKJ4GR434503",
     "sms": "live_api",
-    "smsShopId": "provider-issued-shop-id",
+    "smsShopId": "50",
     "deliveryId": "carfax-report-987654",
     "retrievedAt": "2026-09-01T15:04:05.000Z",
     "report": {
@@ -122,12 +122,14 @@ If MOS already has a newer healthy snapshot, the request succeeds with
 `retrievedAt`, not delivery time.
 
 `sms` is AppFueled's transport namespace and must be exactly `live_api`; it is
-not a provider name. Before traffic is accepted, a platform administrator must
-create an active mapping from that external `smsShopId` to one MOS shop and its
-canonical provider. MOS validates the identifier against the provider identity
-on the shop both when the mapping is changed and every time it is used. Missing
-or disabled mappings return `404`; ambiguous, conflicting, or subsequently
-changed provider identities return `409`. No identifier is guessed, learned,
+not a provider name. `smsShopId` may be the exact decimal MOS shop ID used by
+AppFueled. Before traffic is accepted, a platform administrator must create an
+active mapping from that identifier to the same MOS shop and its canonical
+provider. MOS validates the shop and provider both when the mapping is changed
+and every time it is used. Legacy mappings that use a provider-issued shop
+identifier continue to require an exact canonical provider match. Missing or
+disabled mappings return `404`; ambiguous, conflicting, or subsequently
+changed shop/provider identities return `409`. No identifier is guessed, learned,
 or treated as an MOS shop ID. Operators manage these records through
 `/api/platform-admin/appfueled-shop-mappings` (`GET`, `POST`, and `PATCH`);
 disabling is `PATCH` with `isActive: false`, preserving audit metadata.

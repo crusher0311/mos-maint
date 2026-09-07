@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { getDb as getPgDb } from "@/lib/db/drizzle";
 import { appfueledShopMappings } from "@/lib/db/schema/wave2";
 import { findShopBySmsIdDetailed } from "@/lib/extension-shop-lookup";
+import { getShopById } from "@/lib/shops";
 
 export const APPFUELED_NAMESPACE = "live_api" as const;
 export const APPFUELED_PROVIDERS = [
@@ -21,8 +22,48 @@ export type AppFueledMappingInput = {
 
 export class AppFueledMappingValidationError extends Error {}
 
+export const __deps = {
+  findShopBySmsIdDetailed,
+  getShopById,
+};
+
+function normalizeProvider(value: unknown): string {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/^shop[-_]ware$/, "shopware");
+}
+
 export async function validateAuthoritativeMapping(input: AppFueledMappingInput) {
-  const resolved = await findShopBySmsIdDetailed(input.externalShopId, {
+  const externalShopId = input.externalShopId.trim();
+
+  // AppFueled's live_api shop identifier may be the MOS shop ID itself.
+  // Accept that form only when the decimal string is an exact match, then
+  // validate the shop and provider directly. This avoids sending a trusted MOS
+  // identity through the extension's compatibility resolver while preserving
+  // the provider-issued-ID path for every other mapping.
+  if (externalShopId === String(input.mosShopId)) {
+    const shop = await __deps.getShopById(input.mosShopId);
+    if (!shop) {
+      throw new AppFueledMappingValidationError(
+        `MOS shop ${input.mosShopId} was not found`,
+      );
+    }
+    const configuredProvider = normalizeProvider(shop.integrationProvider);
+    if (!configuredProvider) {
+      throw new AppFueledMappingValidationError(
+        `MOS shop ${input.mosShopId} does not have a canonical provider configured`,
+      );
+    }
+    if (configuredProvider !== input.provider) {
+      throw new AppFueledMappingValidationError(
+        `MOS shop ${input.mosShopId} is canonically configured for ${configuredProvider}, not ${input.provider}`,
+      );
+    }
+    return;
+  }
+
+  const resolved = await __deps.findShopBySmsIdDetailed(externalShopId, {
     isPlatformAdmin: true,
     providerHint: input.provider,
     providerHintIsAuthoritative: true,
@@ -39,10 +80,7 @@ export async function validateAuthoritativeMapping(input: AppFueledMappingInput)
       `Canonical ${input.provider} identity belongs to MOS shop ${resolved.mosShopId}, not ${input.mosShopId}`,
     );
   }
-  const configuredProvider = String(resolved.shopDoc?.integrationProvider || "")
-    .trim()
-    .toLowerCase()
-    .replace(/^shop[-_]ware$/, "shopware");
+  const configuredProvider = normalizeProvider(resolved.shopDoc?.integrationProvider);
   if (configuredProvider && configuredProvider !== input.provider) {
     throw new AppFueledMappingValidationError(
       `MOS shop ${input.mosShopId} is canonically configured for ${configuredProvider}, not ${input.provider}`,
