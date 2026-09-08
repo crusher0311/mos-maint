@@ -7,7 +7,7 @@ import {
 } from "@/lib/external-api/carfax-ingestion";
 import {
   AppFueledMappingValidationError,
-  resolveActiveAppFueledMapping,
+  resolveAppFueledShop,
 } from "@/lib/data/repositories/appfueled-shop-mappings";
 import { buildPartnerVhiResponse } from "@/lib/external-api/partner-vhi-service";
 import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
@@ -73,7 +73,7 @@ export const POST = createExternalEndpoint(
     }
     let shop;
     try {
-      shop = await resolveActiveAppFueledMapping(String(body.smsShopId));
+      shop = await resolveAppFueledShop(String(body.smsShopId));
     } catch (error) {
       if (error instanceof AppFueledMappingValidationError) {
         return NextResponse.json({ error: error.message, requestId }, { status: 409 });
@@ -82,7 +82,7 @@ export const POST = createExternalEndpoint(
     }
     if (!shop) {
       return NextResponse.json(
-        { error: `No active AppFueled live_api mapping for external shop ID: ${body.smsShopId}`, requestId },
+        { error: `No MOS shop or active legacy AppFueled mapping found for shop ID: ${body.smsShopId}`, requestId },
         { status: 404 },
       );
     }

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import { NextRequest } from "next/server";
 import { withUpstreamTimeout } from "../lib/with-upstream-timeout";
@@ -148,6 +149,18 @@ async function main() {
       endSession: async () => {},
     }),
   } as any);
+  const apiKeyRecords = new Map<string, Doc>();
+  const apiKeyRepoPath = require.resolve("../lib/data/repositories/api-keys");
+  require.cache[apiKeyRepoPath] = {
+    id: apiKeyRepoPath,
+    filename: apiKeyRepoPath,
+    loaded: true,
+    children: [],
+    paths: [],
+    exports: {
+      findApiKeyByHash: async (keyHash: string) => apiKeyRecords.get(keyHash) ?? null,
+    },
+  } as any;
   const {
     getAvailablePermissions,
     checkPermission,
@@ -173,23 +186,105 @@ async function main() {
     ["carfax:write"],
     { isPartner: true, partnerId: "appfueled" },
   );
-  const previousQaRawKey = process.env.APPFUELED_QA_API_KEY;
-  const previousQaKeyHash = process.env.APPFUELED_QA_API_KEY_SHA256;
-  process.env.APPFUELED_QA_API_KEY = "existing-appfueled-qa-key";
-  delete process.env.APPFUELED_QA_API_KEY_SHA256;
-  const qaIdentity = await validateApiKey("existing-appfueled-qa-key");
-  if (previousQaRawKey === undefined) {
-    delete process.env.APPFUELED_QA_API_KEY;
-  } else {
-    process.env.APPFUELED_QA_API_KEY = previousQaRawKey;
+  const envNames = [
+    "APPFUELED_QA_API_KEY",
+    "APPFUELED_API_KEY",
+    "APPFUELED_QA_API_KEY_SHA256",
+  ] as const;
+  const previousAppFueledEnv = Object.fromEntries(
+    envNames.map((name) => [name, process.env[name]]),
+  );
+  const hashKey = (rawKey: string) =>
+    createHash("sha256").update(rawKey).digest("hex");
+  const canonicalKey = (rawKey: string, overrides: Doc = {}) => ({
+    shopId: 0,
+    keyHash: hashKey(rawKey),
+    keyPrefix: rawKey.slice(0, 16),
+    name: "AppFueled",
+    permissions: ["*"],
+    rateLimit: 1000,
+    rateLimitTier: "enterprise",
+    isActive: true,
+    usageCount: 0,
+    createdAt: new Date(),
+    createdBy: "smoke",
+    isPartner: true,
+    partnerId: "appfueled",
+    partnerName: "AppFueled",
+    ...overrides,
+  });
+  const validateWithMatchingAppFueledEnv = async (rawKey: string) => {
+    process.env.APPFUELED_QA_API_KEY = rawKey;
+    process.env.APPFUELED_API_KEY = rawKey;
+    process.env.APPFUELED_QA_API_KEY_SHA256 = hashKey(rawKey);
+    return validateApiKey(rawKey);
+  };
+  try {
+    const wildcardRaw = "mos_partner_appfueled_wildcard";
+    apiKeyRecords.set(hashKey(wildcardRaw), canonicalKey(wildcardRaw));
+    const wildcardResult = await validateWithMatchingAppFueledEnv(wildcardRaw);
+    assert.equal(wildcardResult.valid, true);
+    assert.equal(wildcardResult.apiKey?.partnerId, "appfueled");
+    for (const permission of ["carfax:write", "vehicles:read", "shops:read"]) {
+      assert.equal(
+        await checkPermission(wildcardResult.apiKey!, permission),
+        true,
+        `canonical wildcard key preserves ${permission}`,
+      );
+    }
+
+    const narrowedRaw = "mos_partner_appfueled_narrowed";
+    apiKeyRecords.set(
+      hashKey(narrowedRaw),
+      canonicalKey(narrowedRaw, { permissions: ["carfax:write"] }),
+    );
+    const narrowedResult = await validateWithMatchingAppFueledEnv(narrowedRaw);
+    assert.equal(narrowedResult.valid, true);
+    assert.equal(await checkPermission(narrowedResult.apiKey!, "carfax:write"), true);
+    assert.equal(await checkPermission(narrowedResult.apiKey!, "vehicles:read"), false);
+    assert.equal(await checkPermission(narrowedResult.apiKey!, "shops:read"), false);
+
+    const inactiveRaw = "mos_partner_appfueled_inactive";
+    apiKeyRecords.set(
+      hashKey(inactiveRaw),
+      canonicalKey(inactiveRaw, { isActive: false }),
+    );
+    assert.deepEqual(await validateWithMatchingAppFueledEnv(inactiveRaw), {
+      valid: false,
+      error: "API key is disabled",
+    });
+
+    const revokedRaw = "mos_partner_appfueled_revoked";
+    apiKeyRecords.set(
+      hashKey(revokedRaw),
+      canonicalKey(revokedRaw, { revoked: true }),
+    );
+    assert.deepEqual(await validateWithMatchingAppFueledEnv(revokedRaw), {
+      valid: false,
+      error: "API key has been revoked",
+    });
+
+    const expiredRaw = "mos_partner_appfueled_expired";
+    apiKeyRecords.set(
+      hashKey(expiredRaw),
+      canonicalKey(expiredRaw, { expiresAt: new Date(0) }),
+    );
+    assert.deepEqual(await validateWithMatchingAppFueledEnv(expiredRaw), {
+      valid: false,
+      error: "API key has expired",
+    });
+
+    assert.deepEqual(
+      await validateWithMatchingAppFueledEnv("mos_partner_appfueled_unknown"),
+      { valid: false, error: "API key not found" },
+    );
+  } finally {
+    for (const name of envNames) {
+      const previous = previousAppFueledEnv[name];
+      if (previous === undefined) delete process.env[name];
+      else process.env[name] = previous;
+    }
   }
-  if (previousQaKeyHash === undefined) {
-    delete process.env.APPFUELED_QA_API_KEY_SHA256;
-  } else {
-    process.env.APPFUELED_QA_API_KEY_SHA256 = previousQaKeyHash;
-  }
-  assert.equal(qaIdentity.apiKey?.partnerId, "appfueled");
-  assert.deepEqual(qaIdentity.apiKey?.permissions, ["carfax:write"]);
 
   const now = new Date("2026-09-01T16:00:00.000Z");
   const valid = {
@@ -403,8 +498,20 @@ async function main() {
     paths: [],
     exports: {
       AppFueledMappingValidationError: MappingConflict,
-      resolveActiveAppFueledMapping: async () =>
-        shopExists ? { mosShopId: 36, provider: "protractor", externalShopId: "36" } : null,
+      resolveAppFueledShop: async (shopIdentifier: string) => {
+        if (shopIdentifier === "69") {
+          return { mosShopId: 69, provider: "tekmetric" };
+        }
+        if (shopIdentifier === "36") {
+          return shopExists
+            ? { mosShopId: 36, provider: "protractor", externalShopId: "legacy-36" }
+            : null;
+        }
+        if (!/^[1-9]\d*$/.test(shopIdentifier)) {
+          throw new MappingConflict("MOS shop ID must use its exact positive decimal form");
+        }
+        return null;
+      },
     },
   } as any;
   let vhiOutcome: "success" | "building" | "permanent" = "success";
@@ -515,6 +622,31 @@ async function main() {
     deliveryId: "route-report",
     retrievedAt: new Date().toISOString(),
   };
+  const missingShopId = { ...routeFresh, deliveryId: "route-missing-shop-id" };
+  delete (missingShopId as Partial<typeof missingShopId>).smsShopId;
+  assert.equal(
+    (await POST(request(JSON.stringify(missingShopId), "mos_partner_valid"))).status,
+    400,
+    "missing MOS shop ID is rejected",
+  );
+  assert.equal(
+    (await POST(request(JSON.stringify({
+      ...routeFresh,
+      smsShopId: "069",
+      deliveryId: "route-invalid-shop-id",
+    }), "mos_partner_valid"))).status,
+    409,
+    "invalid MOS shop ID is rejected",
+  );
+  const directMosShop = {
+    ...routeFresh,
+    smsShopId: "69",
+    deliveryId: "route-direct-mos-shop",
+  };
+  const directMosResponse = await POST(request(JSON.stringify(directMosShop), "mos_partner_valid"));
+  const directMosJson = await directMosResponse.json();
+  assert.equal(directMosResponse.status, 200, "canonical MOS shop resolves without a legacy mapping");
+  assert.equal(directMosJson.shopId, 69);
   assert.equal((await POST(request(JSON.stringify(routeFresh), "mos_partner_valid"))).status, 404, "unknown shop is rejected");
   shopExists = true;
   deliveries.push({

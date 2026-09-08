@@ -216,38 +216,6 @@ export async function validateApiKey(
   }
 
   const keyHash = createHash("sha256").update(rawKey).digest("hex");
-  // Operator-controlled compatibility binding for AppFueled's already-issued
-  // QA credential. Comparing hashes means the credential is never logged or
-  // persisted by this compatibility path. It is deliberately a carfax-only
-  // partner identity and therefore cannot acquire ordinary shop privileges.
-  const configuredRaw =
-    process.env.APPFUELED_QA_API_KEY || process.env.APPFUELED_API_KEY;
-  const configuredHash =
-    process.env.APPFUELED_QA_API_KEY_SHA256?.trim().toLowerCase() ||
-    (configuredRaw
-      ? createHash("sha256").update(configuredRaw).digest("hex")
-      : "");
-  if (configuredHash && keyHash === configuredHash) {
-    return {
-      valid: true,
-      apiKey: {
-        shopId: 0,
-        keyHash,
-        keyPrefix: "appfueled_qa",
-        name: "Partner: AppFueled (QA compatibility)",
-        permissions: ["carfax:write"],
-        rateLimit: RATE_LIMIT_TIERS.enterprise.requestsPerMinute,
-        rateLimitTier: "enterprise",
-        isActive: true,
-        usageCount: 0,
-        createdAt: new Date(0),
-        createdBy: "server_configuration",
-        isPartner: true,
-        partnerId: "appfueled",
-        partnerName: "AppFueled",
-      },
-    };
-  }
   if (!rawKey.startsWith("mos_")) {
     return { valid: false, error: "Invalid API key format" };
   }

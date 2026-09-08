@@ -9,12 +9,13 @@ JSON it has already retrieved. MOS normalizes it into the same snapshot used by
 VHI, mileage estimates, recalls, and cache-only readers. It never performs or
 triggers a paid CARFAX lookup.
 
-The API key must be the **AppFueled partner key** with the dedicated `carfax:write`
-permission. Shop API keys and keys with only `vehicles:read` are rejected.
-MOS operators may bind AppFueled's existing QA credential with
-`APPFUELED_QA_API_KEY_SHA256` (preferred) or `APPFUELED_QA_API_KEY`; this
-server-side compatibility identity is fixed to AppFueled and `carfax:write`
-only, so no credential rotation or request change is required.
+The API key must be an active, non-revoked, unexpired **AppFueled partner key**
+with `carfax:write` or the existing wildcard `*` permission. Shop API keys and
+keys with only `vehicles:read` are rejected. Permissions and partner identity
+come exclusively from the canonical API-key record. The same partner key
+retains its authorized `vehicles:read` and `shops:read` access for existing GET
+integrations; it is not replaced with a CARFAX-only identity. Legacy QA
+environment-variable key bindings no longer authenticate or override keys.
 
 ### Headers and limits
 
@@ -122,15 +123,18 @@ If MOS already has a newer healthy snapshot, the request succeeds with
 `retrievedAt`, not delivery time.
 
 `sms` is AppFueled's transport namespace and must be exactly `live_api`; it is
-not a provider name. `smsShopId` may be the exact decimal MOS shop ID used by
-AppFueled. Before traffic is accepted, a platform administrator must create an
-active mapping from that identifier to the same MOS shop and its canonical
-provider. MOS validates the shop and provider both when the mapping is changed
-and every time it is used. Legacy mappings that use a provider-issued shop
-identifier continue to require an exact canonical provider match. Missing or
-disabled mappings return `404`; ambiguous, conflicting, or subsequently
-changed shop/provider identities return `409`. No identifier is guessed, learned,
-or treated as an MOS shop ID. Operators manage these records through
+not a provider name. `smsShopId` is the exact positive decimal **MOS shop ID**
+(for example `"50"` or `"69"`). An authenticated AppFueled partner can target
+existing MOS shops directly, with no per-shop mapping or key assignment.
+MOS validates the shop's existence and supported canonical provider on each
+request; product entitlement checks still apply. Numeric IDs are never
+redirected by legacy mappings. Missing MOS shops return `404`; malformed numeric
+IDs or unsupported canonical providers return `409`.
+
+Only legacy non-numeric external/provider identifiers require an explicit active
+mapping and exact canonical provider validation. Missing or disabled legacy
+mappings return `404`; ambiguous or conflicting identities return `409`.
+Operators manage these legacy translation records through
 `/api/platform-admin/appfueled-shop-mappings` (`GET`, `POST`, and `PATCH`);
 disabling is `PATCH` with `isActive: false`, preserving audit metadata.
 

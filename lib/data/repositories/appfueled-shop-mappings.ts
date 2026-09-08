@@ -25,6 +25,7 @@ export class AppFueledMappingValidationError extends Error {}
 export const __deps = {
   findShopBySmsIdDetailed,
   getShopById,
+  resolveActiveAppFueledMapping,
 };
 
 function normalizeProvider(value: unknown): string {
@@ -107,6 +108,35 @@ export async function resolveActiveAppFueledMapping(externalShopId: string) {
     provider: row.provider as AppFueledProvider,
   });
   return row;
+}
+
+/**
+ * live_api uses MOS shop IDs, not a per-partner shop allowlist. Numeric IDs
+ * always identify MOS shops directly; only legacy external IDs need mapping.
+ * Authentication and partner permissions are enforced by the calling route.
+ */
+export async function resolveAppFueledShop(shopIdentifier: string) {
+  const id = shopIdentifier.trim();
+  if (/^[1-9]\d*$/.test(id)) {
+    const mosShopId = Number(id);
+    if (!Number.isSafeInteger(mosShopId)) {
+      throw new AppFueledMappingValidationError("MOS shop ID must be a positive safe integer");
+    }
+    const shop = await __deps.getShopById(mosShopId);
+    if (!shop) return null;
+    const provider = normalizeProvider(shop.integrationProvider);
+    if (!APPFUELED_PROVIDERS.includes(provider as AppFueledProvider)) {
+      throw new AppFueledMappingValidationError(
+        `MOS shop ${mosShopId} does not have a supported canonical provider configured`,
+      );
+    }
+    return { mosShopId, provider: provider as AppFueledProvider };
+  }
+  // Do not coerce malformed numeric IDs or reinterpret them as provider IDs.
+  if (!id || Number.isFinite(Number(id))) {
+    throw new AppFueledMappingValidationError("MOS shop ID must use its exact positive decimal form");
+  }
+  return __deps.resolveActiveAppFueledMapping(id);
 }
 
 export async function listAppFueledMappings() {
