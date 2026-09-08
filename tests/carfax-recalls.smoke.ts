@@ -285,6 +285,10 @@ async function main() {
   // ---------- 4 & 5 need the (mongo-stubbed) carfax module ----------
   installMongoStub(makeFakeCollection());
   const carfaxMod = await import("../lib/integrations/carfax");
+  carfaxMod.__carfaxDeps.invalidateCarfaxDependentCaches = async () => ({
+    cachedPlans: 0,
+    analysisCache: 0,
+  });
   const { getCachedCarfaxRecalls, upsertCarfaxSnapshot } = carfaxMod;
 
   // ---------- 4. getCachedCarfaxRecalls: cache-only read ----------

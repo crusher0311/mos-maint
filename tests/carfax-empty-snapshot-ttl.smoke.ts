@@ -147,6 +147,10 @@ async function main() {
   const initialColl = makeFakeCollection();
   installMongoStub(initialColl);
   const carfaxMod = await import("../lib/integrations/carfax");
+  carfaxMod.__carfaxDeps.invalidateCarfaxDependentCaches = async () => ({
+    cachedPlans: 0,
+    analysisCache: 0,
+  });
   fetchCarfaxWithCache = carfaxMod.fetchCarfaxWithCache;
   fetchCarfaxStaleWhileRevalidate = carfaxMod.fetchCarfaxStaleWhileRevalidate;
 

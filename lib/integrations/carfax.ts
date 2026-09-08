@@ -15,6 +15,11 @@ import {
 
 export type { CarfaxRecallRecord } from "@/lib/carfax-recalls";
 
+/** Mutable only for no-socket integration smoke tests. */
+export const __carfaxDeps = {
+  invalidateCarfaxDependentCaches,
+};
+
 type Fetcher = typeof fetch;
 
 /** -------- Public types returned to the UI -------- */
@@ -708,7 +713,7 @@ export async function upsertCarfaxSnapshot(
         // this until its delivery transaction commits, avoiding an invalidation
         // for a transaction that later rolls back.
         if (changed && options.invalidateCaches !== false) {
-          await invalidateCarfaxDependentCaches(db, vin, shopId);
+          await __carfaxDeps.invalidateCarfaxDependentCaches(db, vin, shopId);
         }
         return { written, preserved, reason: outcome, changed };
       }
@@ -791,7 +796,7 @@ export async function invalidateCarfaxSnapshotCaches(
   vin: string,
   db?: Db,
 ): Promise<{ cachedPlans: number; analysisCache: number }> {
-  return invalidateCarfaxDependentCaches(db ?? await getDb(), vin, shopId);
+  return __carfaxDeps.invalidateCarfaxDependentCaches(db ?? await getDb(), vin, shopId);
 }
 
 /** -------- Mileage estimation from CARFAX history -------- */
