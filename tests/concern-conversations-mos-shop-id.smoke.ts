@@ -150,6 +150,36 @@ mocks.set("@/lib/extension-auth", {
   getUserShopIds: () => ["4242"],
 });
 
+const followupCache = new Map<string, string[]>();
+const normalizeQuestion = (question: string) =>
+  question
+    .toLowerCase()
+    .replace(/^\s*\d+[.)]\s*/, "")
+    .replace(/^\s*[-*]\s*/, "")
+    .replace(/[\s\u00a0]+/g, " ")
+    .trim()
+    .replace(/[?!.,;:"'()\[\]]+$/g, "")
+    .trim();
+mocks.set("@/lib/data/repositories/pg/concern-followup-cache", {
+  getCachedFollowupQuestions: async (concern: string) =>
+    followupCache.get(concern) ?? null,
+  setCachedFollowupQuestions: async (concern: string, questions: string[]) => {
+    if (questions.length > 0) followupCache.set(concern, [...questions]);
+  },
+  applySkipHints: (
+    questions: string[],
+    hints: { avoid: { question: string }[]; prefer: { question: string }[] },
+  ) => {
+    const avoid = new Set(hints.avoid.map((hint) => normalizeQuestion(hint.question)));
+    const prefer = new Set(hints.prefer.map((hint) => normalizeQuestion(hint.question)));
+    const filtered = questions.filter((question) => !avoid.has(normalizeQuestion(question)));
+    return [
+      ...filtered.filter((question) => prefer.has(normalizeQuestion(question))),
+      ...filtered.filter((question) => !prefer.has(normalizeQuestion(question))),
+    ];
+  },
+});
+
 const FAKE_MOS_SHOP_ID = 4242;
 let currentRawShopId = "111";
 const seenRawIds = new Set<string>();
