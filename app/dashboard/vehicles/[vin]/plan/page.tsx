@@ -2727,6 +2727,13 @@ async function PlanContent({ params, searchParams }: PageProps) {
       // a date-projection from the last recorded reading (also CARFAX-backed).
       mileageSource: mileageEstimated ? "estimated_carfax" : "actual",
       mileageEstimateDetails: mileageEstimated ? mileageEstimateDetails : null,
+      // Fence this derived plan to the exact CARFAX report used above. On the
+      // cache-hit/deferred-work re-cache path no report is fetched, so preserve
+      // the already-consumed report's fence rather than consulting the current
+      // CARFAX snapshot (which may belong to a newer concurrent writer).
+      carfaxMaterialRevision: (carfax as any).ok
+        ? ((carfax as any).materialRevision ?? null)
+        : (useCachedData ? (cachedPlan?.plan?.carfaxMaterialRevision ?? null) : null),
       // Task #737: flag plans built while the OEM lookup failed so the cache
       // layer stores them with a short TTL and skips them on the next read
       // (forcing the OEM fetch to be retried and the plan upgraded). On the

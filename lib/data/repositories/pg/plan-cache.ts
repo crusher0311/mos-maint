@@ -548,7 +548,12 @@ export async function pgGetMaintenanceAnalysis(
 export async function pgListMaintenanceAnalysisMeta(
   shopId: number,
   vins: string[],
-): Promise<Array<{ vin: string; analyzedAt: Date; mileageAtAnalysis: number | null }>> {
+): Promise<Array<{
+  vin: string;
+  analyzedAt: Date;
+  mileageAtAnalysis: number | null;
+  carfaxMaterialRevision: string | null;
+}>> {
   if (vins.length === 0) return [];
   const db = getDb();
   const rows = await db
@@ -556,6 +561,8 @@ export async function pgListMaintenanceAnalysisMeta(
       vin: maintenanceAnalysisCache.vin,
       analyzedAt: maintenanceAnalysisCache.analyzedAt,
       mileageAtAnalysis: maintenanceAnalysisCache.mileageAtAnalysis,
+      carfaxMaterialRevision:
+        sql<string | null>`${maintenanceAnalysisCache.raw} ->> 'carfaxMaterialRevision'`,
     })
     .from(maintenanceAnalysisCache)
     .where(
@@ -596,6 +603,23 @@ export async function pgDeleteMaintenanceAnalysisForShop(shopId: number): Promis
   const res = await db
     .delete(maintenanceAnalysisCache)
     .where(eq(maintenanceAnalysisCache.shopId, shopId));
+  return (res as unknown as { count?: number }).count ?? 0;
+}
+
+/** Delete the analysis cache for one vehicle. */
+export async function pgDeleteMaintenanceAnalysis(
+  shopId: number,
+  vin: string,
+): Promise<number> {
+  const db = getDb();
+  const res = await db
+    .delete(maintenanceAnalysisCache)
+    .where(
+      and(
+        eq(maintenanceAnalysisCache.shopId, shopId),
+        eq(maintenanceAnalysisCache.vin, vin.toUpperCase()),
+      ),
+    );
   return (res as unknown as { count?: number }).count ?? 0;
 }
 

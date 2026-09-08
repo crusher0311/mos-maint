@@ -168,6 +168,29 @@ Retry `409`, `429`, and `5xx` responses with exponential backoff, preserving the
 `deliveryId`. Fix the request rather than retrying `400`, `403`, `404`, `413`,
 or `422`. Every response includes `X-Request-Id`; include it in support reports.
 
+### Direct submission rebuild (controlled rollout)
+
+`APPFUELED_DIRECT_VHI_ENABLED=true` enables an internal accelerated path for
+this AppFueled submission endpoint only. It is off by default. Authentication,
+shop resolution, product entitlements, and the public response shape remain
+unchanged; callers do not send a new header or query parameter.
+
+The accepted, committed CARFAX snapshot is passed directly to the existing VHI
+calculation. Duplicate and out-of-order deliveries use the current canonical
+snapshot, never a rejected payload. Mileage is projected from dated odometer
+records using the same rules as the normal VHI path; a report retrieval date
+is not itself an odometer reading.
+
+Material history changes make older dependent plans unusable for the affected
+shop and VIN across partner, dashboard, and extension readers. An unchanged
+report with a new retrieval timestamp does not invalidate a plan solely
+because the timestamp changed.
+
+Roll out on QA first. Measure actual cold rebuilds separately from cache hits;
+the five-second rebuild target is not a response-time guarantee. Missing
+prepared inputs and upstream failures must retain explicit completeness and
+retry behavior rather than silently reducing plan quality.
+
 `GET /api/external/vehicles/{vin}/vhi`
 
 Returns the Vehicle Health Indicator (VHI) plan for a VIN. The endpoint is

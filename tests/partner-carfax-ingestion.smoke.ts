@@ -71,9 +71,19 @@ function collection(docs: Doc[], name: string) {
 
 const reports: Doc[] = [];
 const deliveries: Doc[] = [];
+const cachedPlans: Doc[] = [];
+const analysisCache: Doc[] = [];
 const fakeDb = {
-  collection: (name: string) =>
-    collection(name === "partner_carfax_deliveries" ? deliveries : reports, name),
+  collection: (name: string) => collection(
+    name === "partner_carfax_deliveries"
+      ? deliveries
+      : name === "cached_plans"
+        ? cachedPlans
+        : name === "maintenance_analysis_cache"
+          ? analysisCache
+          : reports,
+    name,
+  ),
 };
 
 async function fakeTransaction(fn: () => Promise<void>) {
@@ -136,10 +146,21 @@ async function main() {
   assert.equal(deadline, "deadline");
   const {
     CARFAX_INGEST_MAX_BYTES,
+    __deps: ingestionDeps,
     ingestPartnerCarfaxReport,
     normalizePartnerCarfaxReport,
     validateCarfaxIngestionBody,
   } = await import("../lib/external-api/carfax-ingestion");
+  let invalidationCalls = 0;
+  let failNextInvalidation = false;
+  ingestionDeps.invalidateCarfaxSnapshotCaches = async () => {
+    invalidationCalls += 1;
+    if (failNextInvalidation) {
+      failNextInvalidation = false;
+      throw new Error("synthetic post-commit cache failure");
+    }
+    return { cachedPlans: 1, analysisCache: 1 };
+  };
   const { fetchCarfaxWithCache, upsertCarfaxSnapshot } = await import("../lib/integrations/carfax");
   const deliveryRepo = await import("../lib/data/repositories/partner-carfax-deliveries");
   deliveryRepo.__deps.getDb = async () => fakeDb as any;
@@ -345,6 +366,7 @@ async function main() {
   assert.equal(reports[0].source, "partner");
   assert.equal(reports[0].fetchedAt.toISOString(), valid.retrievedAt);
   assert.equal(reports[0].provenance.partnerId, "appfueled");
+  assert.equal(invalidationCalls, 1, "material first snapshot invalidates its VIN caches");
   let paidFetches = 0;
   const cached = await fetchCarfaxWithCache(
     36,
@@ -363,6 +385,62 @@ async function main() {
   assert.equal(retry.ok, true);
   assert.equal(retry.duplicate, true);
   assert.equal(reports.length, 1, "duplicate is not processed twice");
+  assert.equal(invalidationCalls, 1, "completed duplicate does not invalidate again");
+
+  const mismatchedVin = "5GAEVCKW2KJ239591";
+  const completedMismatch = await ingestPartnerCarfaxReport({
+    ...args,
+    body: {
+      ...valid,
+      vin: mismatchedVin,
+      report: { ...valid.report, vin: mismatchedVin },
+    },
+  });
+  assert.equal(completedMismatch.ok, false);
+  if (completedMismatch.ok) throw new Error("expected completed delivery VIN mismatch");
+  assert.match(completedMismatch.error, /different VIN/);
+
+  deliveries.push({
+    _id: "appfueled:36:expired-vin-fence",
+    partnerId: "appfueled",
+    shopId: 36,
+    deliveryId: "expired-vin-fence",
+    vin: valid.vin,
+    status: "processing",
+    ownerToken: "expired-owner",
+    leaseUntil: new Date(0),
+  });
+  const processingMismatch = await ingestPartnerCarfaxReport({
+    ...args,
+    body: {
+      ...valid,
+      vin: mismatchedVin,
+      deliveryId: "expired-vin-fence",
+      report: { ...valid.report, vin: mismatchedVin },
+    },
+  });
+  assert.equal(processingMismatch.ok, false);
+  if (processingMismatch.ok) throw new Error("expected processing delivery VIN mismatch");
+  assert.match(processingMismatch.error, /different VIN/);
+  assert.equal(
+    deliveries.find((doc) => doc.deliveryId === "expired-vin-fence")?.ownerToken,
+    "expired-owner",
+    "mismatched retry cannot reclaim expired processing delivery",
+  );
+
+  const identicalDelivery = {
+    ...valid,
+    deliveryId: "report-identical",
+    retrievedAt: "2026-09-01T15:10:00.000Z",
+  };
+  const identicalResult = await ingestPartnerCarfaxReport({
+    ...args,
+    body: identicalDelivery,
+    retrievedAt: new Date(identicalDelivery.retrievedAt),
+  });
+  if (!identicalResult.ok) throw new Error(identicalResult.error);
+  assert.equal(identicalResult.stored, true, "newer retrieval refreshes snapshot freshness");
+  assert.equal(invalidationCalls, 1, "identical normalized contents do not invalidate");
 
   // A stale-but-contract-valid delivery cannot replace a newer healthy cache.
   const priorRecords = reports[0].serviceRecords;
@@ -377,6 +455,12 @@ async function main() {
   assert.equal(staleResult.ok, true);
   assert.equal(staleResult.stored, false);
   assert.equal(reports[0].serviceRecords, priorRecords);
+  assert.equal(
+    staleResult.carfaxReport.serviceRecords,
+    priorRecords,
+    "out-of-order result exposes canonical newer history, not rejected payload",
+  );
+  assert.equal(invalidationCalls, 1, "older snapshot does not invalidate");
 
   const casVin = "1HGCM82633A004352";
   reports.push({
@@ -484,6 +568,62 @@ async function main() {
   assert.equal(recallResult.stored, true, "recall-only report is stored as healthy content");
   const recallSnapshot = reports.find((doc) => doc.vin === recallOnly.vin);
   assert.equal(recallSnapshot?.fetchedAt.toISOString(), valid.retrievedAt);
+  assert.equal(invalidationCalls, 2, "material recall-only snapshot invalidates");
+
+  // A post-commit cache failure must leave a durable pending marker. The
+  // duplicate retry re-attempts invalidation and returns the committed
+  // canonical report rather than writing the snapshot again.
+  const recoveryVin = "1FAFP404X1F123456";
+  const recoveryBody = {
+    ...valid,
+    vin: recoveryVin,
+    deliveryId: "postcommit-recovery",
+    report: {
+      vin: recoveryVin,
+      serviceHistory: {
+        displayRecords: [
+          { type: "service", displayDate: "08/20/2026", odometer: "12,345", text: ["Coolant service"] },
+        ],
+      },
+    },
+  };
+  failNextInvalidation = true;
+  await assert.rejects(
+    ingestPartnerCarfaxReport({
+      ...args,
+      body: recoveryBody,
+      retrievedAt: new Date(valid.retrievedAt),
+    }),
+    /synthetic post-commit cache failure/,
+  );
+  const pendingRecovery = deliveries.find((doc) => doc.deliveryId === "postcommit-recovery");
+  assert.equal(pendingRecovery?.status, "completed", "snapshot transaction remains committed");
+  assert.equal(pendingRecovery?.cacheInvalidationPending, true, "failed invalidation remains retryable");
+  const wrongRecovery = await ingestPartnerCarfaxReport({
+    ...args,
+    body: {
+      ...recoveryBody,
+      vin: valid.vin,
+      report: valid.report,
+    },
+    retrievedAt: new Date(valid.retrievedAt),
+  });
+  assert.equal(wrongRecovery.ok, false, "pending recovery rejects a different request VIN");
+  assert.equal(pendingRecovery?.cacheInvalidationPending, true);
+  const recovered = await ingestPartnerCarfaxReport({
+    ...args,
+    body: recoveryBody,
+    retrievedAt: new Date(valid.retrievedAt),
+  });
+  if (!recovered.ok) throw new Error(recovered.error);
+  assert.equal(recovered.duplicate, true);
+  assert.equal(recovered.carfaxReport.vin, recoveryVin);
+  assert.equal(pendingRecovery?.cacheInvalidationPending, false, "retry clears pending marker");
+  assert.equal(
+    reports.filter((doc) => doc.vin === recoveryVin).length,
+    1,
+    "post-commit recovery never rewrites the snapshot",
+  );
 
   // Exercise the real route wrapper for auth, partner-only scoping, malformed
   // and oversized bodies, unknown shops, and cross-shop resolution.

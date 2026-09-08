@@ -1,11 +1,22 @@
-import { parseCarfaxPayload, upsertCarfaxSnapshot } from "@/lib/integrations/carfax";
+import {
+  getCanonicalCarfaxReport,
+  invalidateCarfaxSnapshotCaches,
+  parseCarfaxPayload,
+  upsertCarfaxSnapshot,
+  type CarfaxReport,
+} from "@/lib/integrations/carfax";
 import {
   claimPartnerCarfaxDelivery,
+  completePartnerCarfaxCacheInvalidation,
   executeOwnedPartnerCarfaxDelivery,
   findPartnerCarfaxDelivery,
   reclaimExpiredPartnerCarfaxDelivery,
   releasePartnerCarfaxDelivery,
 } from "@/lib/data/repositories/partner-carfax-deliveries";
+
+export const __deps = {
+  invalidateCarfaxSnapshotCaches,
+};
 
 export const CARFAX_INGEST_MAX_BYTES = 512 * 1024;
 export const CARFAX_INGEST_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -131,7 +142,14 @@ export async function ingestPartnerCarfaxReport(args: {
   retrievedAt: Date;
 }): Promise<
   | { ok: false; error: string }
-  | { ok: true; duplicate: boolean; stored: boolean; outcome?: string }
+  | {
+      ok: true;
+      duplicate: boolean;
+      stored: boolean;
+      outcome?: string;
+      /** Internal only; external routes must not serialize the raw report. */
+      carfaxReport: CarfaxReport;
+    }
 > {
   const key = {
     partnerId: args.partnerId,
@@ -139,8 +157,26 @@ export async function ingestPartnerCarfaxReport(args: {
     deliveryId: args.body.deliveryId,
   };
   const existing = await findPartnerCarfaxDelivery(key);
+  const persistedVin =
+    typeof existing?.vin === "string" ? existing.vin.toUpperCase() : args.body.vin;
+  if (existing && persistedVin !== args.body.vin) {
+    return {
+      ok: false,
+      error: "deliveryId was already used for a different VIN",
+    };
+  }
   if (existing?.status === "completed") {
-    return { ok: true, duplicate: true, stored: existing.stored !== false, outcome: existing.outcome };
+    if (existing.cacheInvalidationPending === true) {
+      await __deps.invalidateCarfaxSnapshotCaches(args.shopId, persistedVin);
+      await completePartnerCarfaxCacheInvalidation(key);
+    }
+    return {
+      ok: true,
+      duplicate: true,
+      stored: existing.stored !== false,
+      outcome: existing.outcome,
+      carfaxReport: await getCanonicalCarfaxReport(args.shopId, persistedVin),
+    };
   }
 
   const parsed = normalizePartnerCarfaxReport(args.body.report, args.body.vin);
@@ -171,6 +207,7 @@ export async function ingestPartnerCarfaxReport(args: {
             provenance: { partnerId: args.partnerId, deliveryId: args.body.deliveryId },
             db,
             session,
+            invalidateCaches: false,
           },
         );
         const value = {
@@ -178,14 +215,34 @@ export async function ingestPartnerCarfaxReport(args: {
           duplicate: false,
           stored: result?.written !== false,
           outcome: result?.reason,
+          changed: result.changed,
         };
-        return { stored: value.stored, outcome: value.outcome, value };
+        return {
+          stored: value.stored,
+          outcome: value.outcome,
+          cacheInvalidationPending: value.changed,
+          value,
+        };
       },
     );
     if (!committed) {
       return { ok: false, error: "Delivery ownership expired; retry shortly" };
     }
-    return committed;
+    // The snapshot and delivery are now committed. Invalidate only this VIN;
+    // a CARFAX refresh is never a shop/fleet-wide cache event.
+    if (committed.changed) {
+      await __deps.invalidateCarfaxSnapshotCaches(args.shopId, args.body.vin);
+      await completePartnerCarfaxCacheInvalidation(key);
+    }
+    return {
+      ok: true,
+      duplicate: committed.duplicate,
+      stored: committed.stored,
+      outcome: committed.outcome,
+      // Deliberately outside the delivery transaction: this is the committed
+      // canonical snapshot, never an uncommitted/rejected request payload.
+      carfaxReport: await getCanonicalCarfaxReport(args.shopId, args.body.vin),
+    };
   } catch (error) {
     await releasePartnerCarfaxDelivery(key, ownerToken).catch(() => {});
     const transactionError = error as any;

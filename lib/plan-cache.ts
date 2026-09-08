@@ -4,6 +4,7 @@ import {
   findCachedPlanCandidatesBatch,
   upsertCachedPlanDoc,
   deleteCachedPlans,
+  deleteMaintenanceAnalysis,
   deleteMaintenanceAnalysisForShop,
 } from "@/lib/data/repositories/plan-cache-store";
 
@@ -314,6 +315,11 @@ export interface CachedPlanData {
    * upgrades the cached plan in place. Missing/false = plan is complete.
    */
   oemMissing?: boolean;
+  /**
+   * Material CARFAX revision consumed by this build. When a canonical snapshot
+   * has a revision, missing/mismatched values are rejected as stale.
+   */
+  carfaxMaterialRevision?: string | null;
 }
 
 export interface CachedPlan {
@@ -340,18 +346,26 @@ export async function getCachedPlan(
   // (PG-canonical behind PLAN_CACHE_PG_CANONICAL, Mongo otherwise). The
   // validity rules below are store-independent — both arms return the
   // same Mongo-shaped candidate docs, newest-first.
-  const candidates = (await findCachedPlanCandidates(
-    shopId,
-    vin,
-    db,
-  )) as unknown as CachedPlan[];
+  const [candidateDocs, carfaxSnapshot] = await Promise.all([
+    findCachedPlanCandidates(shopId, vin, db),
+    db.collection("carfax_reports").findOne(
+      { shopId, vin: vin.toUpperCase() },
+      { projection: { materialRevision: 1 } },
+    ),
+  ]);
+  const candidates = candidateDocs as unknown as CachedPlan[];
 
   if (candidates.length === 0) {
     console.log(`[PlanCache] MISS: No cache entry for ${vin}`);
     return null;
   }
 
-  const selected = selectValidCachedPlan(candidates, { vin, currentMiles, distanceUnit });
+  const selected = selectValidCachedPlan(candidates, {
+    vin,
+    currentMiles,
+    distanceUnit,
+    carfaxMaterialRevision: carfaxSnapshot?.materialRevision ?? null,
+  });
   if (!selected) {
     console.log(`[PlanCache] MISS: ${candidates.length} entries found but none valid for ${vin}`);
   }
@@ -368,12 +382,22 @@ export async function getCachedPlans(
     distanceUnit?: "miles" | "kilometers";
   }>,
 ): Promise<Map<string, CachedPlan | null>> {
-  const candidates = await findCachedPlanCandidatesBatch(
-    shopId,
-    vehicles.map((vehicle) => vehicle.vin),
-    db,
-  ) as unknown as Map<string, CachedPlan[]>;
+  const [candidateDocs, revisions] = await Promise.all([
+    findCachedPlanCandidatesBatch(
+      shopId,
+      vehicles.map((vehicle) => vehicle.vin),
+      db,
+    ),
+    db.collection("carfax_reports").find(
+      { shopId, vin: { $in: vehicles.map((vehicle) => vehicle.vin.toUpperCase()) } },
+      { projection: { vin: 1, materialRevision: 1 } },
+    ).toArray(),
+  ]);
+  const candidates = candidateDocs as unknown as Map<string, CachedPlan[]>;
   const selected = new Map<string, CachedPlan | null>();
+  const revisionByVin = new Map(
+    revisions.map((row) => [String(row.vin).toUpperCase(), row.materialRevision ?? null]),
+  );
   for (const vehicle of vehicles) {
     const vin = vehicle.vin.toUpperCase();
     selected.set(
@@ -382,6 +406,7 @@ export async function getCachedPlans(
         vin,
         currentMiles: vehicle.currentMiles,
         distanceUnit: vehicle.distanceUnit,
+        carfaxMaterialRevision: revisionByVin.get(vin) ?? null,
       }),
     );
   }
@@ -401,9 +426,10 @@ export function selectValidCachedPlan(
     vin: string;
     currentMiles?: number | null;
     distanceUnit?: "miles" | "kilometers";
+    carfaxMaterialRevision?: string | null;
   },
 ): CachedPlan | null {
-  const { vin, currentMiles, distanceUnit } = opts;
+  const { vin, currentMiles, distanceUnit, carfaxMaterialRevision } = opts;
   for (const entry of candidates) {
     if (entry.expiresAt <= new Date()) {
       const ageMinutes = Math.round((Date.now() - entry.expiresAt.getTime()) / 60000);
@@ -416,6 +442,14 @@ export function selectValidCachedPlan(
     // for natural cache expiry.
     if ((entry.schemaVersion ?? 1) < PLAN_CACHE_SCHEMA_VERSION) {
       console.log(`[PlanCache] SKIP: stale schema v${entry.schemaVersion ?? 1} (current v${PLAN_CACHE_SCHEMA_VERSION}) for ${vin}`);
+      continue;
+    }
+
+    if (
+      carfaxMaterialRevision &&
+      entry.plan?.carfaxMaterialRevision !== carfaxMaterialRevision
+    ) {
+      console.log(`[PlanCache] SKIP: CARFAX material revision changed for ${vin}`);
       continue;
     }
 
@@ -549,6 +583,25 @@ export async function invalidateCachedPlan(
   } catch {
     // module load failed — non-fatal, polling fallback handles it
   }
+}
+
+/**
+ * Drops every per-VIN cache whose output is derived from service history.
+ * The two deletes intentionally run independently: a temporary failure in one
+ * store/cache family must not leave the other one knowingly stale.
+ */
+export async function invalidateCarfaxDependentCaches(
+  db: Db,
+  vin: string,
+  shopId: number,
+): Promise<{ cachedPlans: number; analysisCache: number }> {
+  const [plan, analysis] = await Promise.allSettled([
+    deleteCachedPlans(shopId, vin, db, { requireBothStores: true }),
+    deleteMaintenanceAnalysis(shopId, vin, db, { requireBothStores: true }),
+  ]);
+  if (plan.status === "rejected") throw plan.reason;
+  if (analysis.status === "rejected") throw analysis.reason;
+  return { cachedPlans: plan.value, analysisCache: analysis.value };
 }
 
 /**

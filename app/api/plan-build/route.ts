@@ -65,6 +65,12 @@ import {
 } from "@/lib/plan-build-mileage-metadata";
 import { getFeatureEntitlements } from "@/lib/featureResolver";
 import { canAccessShopFeature } from "@/lib/shop-feature-access";
+import {
+  getAppFueledDirectVhiContext,
+  getTrustedAppFueledReport,
+} from "@/lib/external-api/appfueled-direct-vhi-context";
+import { loadPreparedPartnerInputs } from "@/lib/external-api/partner-vhi-prepared-inputs";
+import { withProtractorDirectDenialCache } from "@/lib/external-api/partner-vhi-protractor-denials";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -151,7 +157,12 @@ export async function POST(req: NextRequest) {
     // Response-only builds (used by partner mode=fast) may consume an
     // existing full cache, but must not persist their shortened-budget output
     // into the shared cache used by later full requests.
-    const persist = req.nextUrl.searchParams.get("persist") !== "0";
+    let persist = req.nextUrl.searchParams.get("persist") !== "0";
+    // This value can only arrive through AsyncLocalStorage from the authenticated
+    // AppFueled ingestion route. Never honor an HTTP flag/body field here.
+    const directVhiContext = getAppFueledDirectVhiContext();
+    const suppliedCarfaxReport = getTrustedAppFueledReport(shopId, vin);
+    const directVhiBuild = suppliedCarfaxReport !== undefined;
     
     if (!vin || vin.length !== 17) {
       return NextResponse.json({ error: "Valid 17-character VIN required" }, { status: 400 });
@@ -181,7 +192,9 @@ export async function POST(req: NextRequest) {
     // diagnostic and triage so a manual fix applies without a code deploy.
     const carfaxKeyOverrides = await getCarfaxOverridesMap(db);
 
-    const existingCache = await getCachedPlan(db, vin, shopId, mileage);
+    const existingCache = directVhiBuild && directVhiContext?.planCacheMissKnown
+      ? null
+      : await getCachedPlan(db, vin, shopId, mileage);
     if (existingCache && !carfaxDiagMode) {
       return NextResponse.json({
         ok: true,
@@ -660,7 +673,9 @@ export async function POST(req: NextRequest) {
     // Task #1184: skipCarfax wins over fast — cache-only, no live or
     // background CARFAX call ever (the fast path's SWR still refreshes in
     // the background, which is a paid fetch).
-    const carfaxFetch = skipCarfax
+    const carfaxFetch = suppliedCarfaxReport
+      ? Promise.resolve({ ok: true, ...(suppliedCarfaxReport as Record<string, unknown>) })
+      : skipCarfax
       ? fetchCarfaxCacheOnly(shopId, vin)
       : fast
       ? Promise.race([
@@ -675,15 +690,89 @@ export async function POST(req: NextRequest) {
           }),
         ])
       : fetchCarfaxWithCache(shopId, vin, CACHE_TTL_MS);
+    const optionalProvidersStartedAt = Date.now();
+    if (directVhiBuild) {
+      console.log(JSON.stringify({
+        event: "appfueled_direct_vhi_stage",
+        stage: "local_input_acquisition",
+        shopId,
+        vin,
+        elapsedMs: optionalProvidersStartedAt - startTime,
+      }));
+    }
+    const preparedInputs = directVhiBuild
+      ? await loadPreparedPartnerInputs({
+          db,
+          shopId,
+          vin,
+          latestRoNumber,
+          protractorConfigured: protractorCfg.configured,
+          autoVitalsConfigured: autoVitalsCfg.configured,
+          autoflowConfigured: autoCfg.configured,
+        })
+      : null;
+    const protractorVehicleFetch = () =>
+      fetchProtractorVehicle(shopId, vin, PROTRACTOR_CACHE_TTL);
+    const protractorVehiclePromise = preparedInputs?.protractor?.vehicleResult ??
+      (protractorCfg.configured
+        ? (directVhiBuild
+            ? withProtractorDirectDenialCache({
+                shopId,
+                vin,
+                operation: "vehicle",
+                fetch: protractorVehicleFetch,
+              })
+            : protractorVehicleFetch())
+        : Promise.resolve({ ok: false }));
     const [carfaxResult, protractorVehicleResult, avInspectionResult] = await Promise.all([
-      carfaxCfg.configured ? carfaxFetch : Promise.resolve({ ok: false }),
-      protractorCfg.configured ? fetchProtractorVehicle(shopId, vin, PROTRACTOR_CACHE_TTL) : Promise.resolve({ ok: false }),
-      autoVitalsCfg.configured ? fetchAutoVitalsInspectionByVin(shopId, vin, PROTRACTOR_CACHE_TTL) : Promise.resolve({ ok: false }),
+      (suppliedCarfaxReport || carfaxCfg.configured) ? carfaxFetch : Promise.resolve({ ok: false }),
+      protractorVehiclePromise,
+      preparedInputs?.autoVitals ??
+        (autoVitalsCfg.configured ? fetchAutoVitalsInspectionByVin(shopId, vin, PROTRACTOR_CACHE_TTL) : Promise.resolve({ ok: false })),
     ]);
 
     let dvi: any = { ok: false };
     if (latestRoNumber && autoCfg.configured) {
-      dvi = await fetchDviWithCache(shopId, String(latestRoNumber), DVI_CACHE_TTL);
+      dvi = preparedInputs?.autoflow ??
+        await fetchDviWithCache(shopId, String(latestRoNumber), DVI_CACHE_TTL);
+    }
+    let optionalDataMayBeIncomplete = directVhiBuild && (
+      (protractorCfg.configured && !(protractorVehicleResult as any).ok) ||
+      (autoVitalsCfg.configured && !(avInspectionResult as any).ok) ||
+      (autoCfg.configured && !!latestRoNumber && !(dvi as any).ok)
+    );
+    // Never publish a direct build with missing configured optional-provider
+    // input as the shared full-quality plan. The inline partner response still
+    // returns the useful CARFAX/OEM/history result and labels it explicitly.
+    if (optionalDataMayBeIncomplete) persist = false;
+    if (directVhiBuild) {
+      console.log(JSON.stringify({
+        event: "appfueled_direct_vhi_stage",
+        stage: "optional_providers",
+        shopId,
+        vin,
+        elapsedMs: Date.now() - optionalProvidersStartedAt,
+        prepared: {
+          protractor: !!preparedInputs?.protractor,
+          autoVitals: !!preparedInputs?.autoVitals,
+          autoflow: !!preparedInputs?.autoflow,
+        },
+        providerState: {
+          protractor: !protractorCfg.configured
+            ? "unconfigured"
+            : [401, 403].includes((protractorVehicleResult as any).statusCode)
+              ? "denied"
+              : (protractorVehicleResult as any).ok ? "available" : "absent_or_error",
+          autoVitals: !autoVitalsCfg.configured
+            ? "unconfigured"
+            : (avInspectionResult as any).ok ? "available" : "absent_or_error",
+          autoflow: !autoCfg.configured
+            ? "unconfigured"
+            : !latestRoNumber ? "absent" : (dvi as any).ok ? "available" : "absent_or_error",
+        },
+        protractorDenialCacheHit:
+          (protractorVehicleResult as any).denialCacheHit === true,
+      }));
     }
 
     const autoflowDviFindings: Array<{ name?: string; status?: string | number; source?: string }> =
@@ -855,10 +944,37 @@ export async function POST(req: NextRequest) {
     const dviFindings = [...autoflowDviFindings, ...autoVitalsDviFindings, ...tekmetricDviFindings, ...dviLinkFindings, ...unresolvedHistoricalFindings];
 
     let protractorDeferredWork: ProtractorDeferredWork[] = [];
-    if (protractorCfg.configured && (protractorVehicleResult as any).ok && (protractorVehicleResult as any).vehicle?.ID) {
-      const deferredResult = await fetchProtractorDeferredWork(shopId, vin, (protractorVehicleResult as any).vehicle.ID, PROTRACTOR_CACHE_TTL);
+    if (preparedInputs?.protractor?.deferredWork) {
+      protractorDeferredWork = preparedInputs.protractor.deferredWork;
+    } else if (protractorCfg.configured && (protractorVehicleResult as any).ok && (protractorVehicleResult as any).vehicle?.ID) {
+      const deferredFetch = () =>
+        fetchProtractorDeferredWork(shopId, vin, (protractorVehicleResult as any).vehicle.ID, PROTRACTOR_CACHE_TTL);
+      const deferredResult = directVhiBuild
+        ? await withProtractorDirectDenialCache({
+            shopId,
+            vin,
+            operation: "deferred",
+            fetch: deferredFetch,
+          })
+        : await deferredFetch();
       if (deferredResult.ok && deferredResult.deferredWork) {
         protractorDeferredWork = deferredResult.deferredWork;
+      }
+      if (directVhiBuild && !deferredResult.ok) {
+        // Deferred work is optional, but a skipped denied/error lookup must
+        // keep this response from masquerading as a complete shared plan.
+        persist = false;
+        optionalDataMayBeIncomplete = true;
+        console.log(JSON.stringify({
+          event: "appfueled_direct_vhi_stage",
+          stage: "protractor_deferred",
+          shopId,
+          vin,
+          state: [401, 403].includes((deferredResult as any).statusCode)
+            ? "denied"
+            : "absent_or_error",
+          denialCacheHit: (deferredResult as any).denialCacheHit === true,
+        }));
       }
     }
 
@@ -967,6 +1083,58 @@ export async function POST(req: NextRequest) {
     // "Unknown Customer" sentinel handling is testable without a live Mongo.
     let tekmetricWorkOrderForName: { customerName?: string | null } | null = null;
     const tekmetricShopId = shopDoc?.tekmetric?.shopId || shopDoc?.tekmetricShopId;
+    let customerName: string | null;
+    if (directVhiBuild) {
+      const namesStartedAt = Date.now();
+      // These are independent local cache reads. Resolve all candidates in
+      // parallel, then apply the unchanged pure priority selector once.
+      const [cachedWO, swRo, vDoc] = await Promise.all([
+        tekmetricShopId
+          ? db.collection("tekmetric_work_orders").findOne(
+              { shopId: { $in: [String(shopId), Number(shopId)] }, vin: vinUpper },
+              { sort: { updatedAt: -1, updatedDate: -1, createdAt: -1, createdDate: -1 }, projection: { workOrderNumber: 1, customerName: 1 } },
+            ).catch((err) => {
+              console.log(`[PlanBuild] MongoDB WO lookup error for ${vin}:`, err);
+              return null;
+            })
+          : Promise.resolve(null),
+        import("@/lib/data/repositories/plan-cache-store")
+          .then(({ findCachedWorkOrderCustomerName }) =>
+            findCachedWorkOrderCustomerName(Number(shopId), vin, db))
+          .catch((err) => {
+            console.log(`[PlanBuild] cached_work_orders customer lookup error for ${vin}:`, err);
+            return null;
+          }),
+        db.collection("vehicles").findOne(
+          {
+            vin: vinUpper,
+            shopId: { $in: [String(shopId), Number(shopId)] },
+            customerName: { $exists: true, $nin: [null, ""] },
+          },
+          { projection: { customerName: 1 } },
+        ).catch((err) => {
+          console.log(`[PlanBuild] vehicles customer lookup error for ${vin}:`, err);
+          return null;
+        }),
+      ]);
+      if (cachedWO?.workOrderNumber) latestRoNumber = String(cachedWO.workOrderNumber);
+      customerName = resolveCustomerName({
+        tekmetricWorkOrder: cachedWO ? { customerName: cachedWO.customerName ?? null } : null,
+        protractorVehicle:
+          protractorCfg.configured && (protractorVehicleResult as any).ok
+            ? ((protractorVehicleResult as any).vehicle ?? null)
+            : null,
+        shopWareWorkOrder: swRo ? { customerName: swRo.customerName ?? null } : null,
+        vehicleDoc: vDoc ? { customerName: vDoc.customerName ?? null } : null,
+      });
+      console.log(JSON.stringify({
+        event: "appfueled_direct_vhi_stage",
+        stage: "customer_name_candidates",
+        shopId,
+        vin,
+        elapsedMs: Date.now() - namesStartedAt,
+      }));
+    } else {
     if (tekmetricShopId) {
       try {
         // Match by internal shopId + exact (uppercased) VIN so this uses the
@@ -1000,7 +1168,7 @@ export async function POST(req: NextRequest) {
         ? ((protractorVehicleResult as any).vehicle ?? null)
         : null;
 
-    let customerName = resolveCustomerName({
+    customerName = resolveCustomerName({
       tekmetricWorkOrder: tekmetricWorkOrderForName,
       protractorVehicle: protractorVehicleForName,
     });
@@ -1037,6 +1205,7 @@ export async function POST(req: NextRequest) {
       }
       customerName = resolveCustomerName({ vehicleDoc: vehicleDocForName });
     }
+    }
 
     // Task #803: all expensive fetch/anchor inputs are assembled once above;
     // triage() itself is pure and in-memory, so multi-plan variants (OE /
@@ -1070,6 +1239,7 @@ export async function POST(req: NextRequest) {
       carfaxKeyOverrides,
     };
 
+    const calculationStartedAt = Date.now();
     const buckets = triage(triageInput);
 
     const isInspectItem = (item: TriagedItem) => {
@@ -1144,6 +1314,15 @@ export async function POST(req: NextRequest) {
       ];
     }
 
+    if (directVhiBuild) {
+      console.log(JSON.stringify({
+        event: "appfueled_direct_vhi_stage",
+        stage: "calculation",
+        shopId,
+        vin,
+        elapsedMs: Date.now() - calculationStartedAt,
+      }));
+    }
     const planData: CachedPlanData = {
       buckets: {
         overdue: filteredBuckets.overdue.map(convertToCache),
@@ -1172,6 +1351,14 @@ export async function POST(req: NextRequest) {
       soonDays,
       showInspectItems,
       ...mileageMetadata,
+      // Fence the plan to the exact canonical CARFAX history consumed above.
+      // Applies to direct and legacy builds alike; null means the used report
+      // predates material revisioning or CARFAX was unavailable.
+      carfaxMaterialRevision:
+        (carfaxResult as any).ok
+          ? ((carfaxResult as any).materialRevision ?? null)
+          : null,
+      ...(optionalDataMayBeIncomplete ? { optionalDataMayBeIncomplete: true } : {}),
       deferredWork: protractorDeferredWork.length > 0 ? protractorDeferredWork.map(dw => ({
         ID: dw.ID,
         ServiceItemID: dw.ServiceItemID,
@@ -1229,7 +1416,7 @@ export async function POST(req: NextRequest) {
     try {
       const cfxRes = carfaxResult as any;
       let carfaxStatus: NonNullable<CachedPlanData["dataQuality"]>["carfaxStatus"];
-      if (!carfaxCfg.configured) {
+      if (!carfaxCfg.configured && !suppliedCarfaxReport) {
         carfaxStatus = "not_configured";
       } else if (cfxRes?.ok) {
         carfaxStatus = carfaxRecords.length > 0 ? "ok" : "no_history";
@@ -1283,6 +1470,7 @@ export async function POST(req: NextRequest) {
     }
 
     const cachedAt = new Date();
+    const persistenceStartedAt = Date.now();
     const persistence = await persistPlanBuildResult({
       db,
       vin,
@@ -1291,6 +1479,16 @@ export async function POST(req: NextRequest) {
       plan: planData,
       persist,
     });
+    if (directVhiBuild) {
+      console.log(JSON.stringify({
+        event: "appfueled_direct_vhi_stage",
+        stage: "persistence",
+        shopId,
+        vin,
+        elapsedMs: Date.now() - persistenceStartedAt,
+        persisted: persistence.persisted,
+      }));
+    }
 
     const duration = Date.now() - startTime;
     console.log(`[PlanBuild] Shop ${shopId}: Built ${persist ? "and cached " : "ephemeral "}plan for ${vin} in ${duration}ms (OEM: ${oemItems.length}, Carfax: ${carfaxRecords.length}, ShopHistory: ${shopServiceHistory.length}, DVI: ${dviFindings.length}, UnresolvedHistory: ${unresolvedHistoricalFindings.length}, Deferred: ${protractorDeferredWork.length}, dataQuality=${planData.dataQuality?.sufficient ? "sufficient" : "INSUFFICIENT"}/${planData.dataQuality?.carfaxStatus})`);

@@ -837,6 +837,9 @@ export async function runOnDemandAnalysis(
   // analysis cache fallback.
   mileageSource: "actual" | "estimated_carfax" | "estimated_annual" = "actual",
   mileageEstimateDetails: Record<string, unknown> | null = null,
+  // Material revision from the exact CARFAX result consumed by this build.
+  // Legacy reports are unversioned, so null remains valid.
+  carfaxMaterialRevision: string | null = null,
 ) {
   const isMetricShop = distanceUnit === "kilometers";
   const oemToShopMiles = (mi: number | null | undefined): number => {
@@ -1515,6 +1518,7 @@ export async function runOnDemandAnalysis(
       mileageSource,
       mileageEstimateDetails:
         mileageSource === "actual" ? null : mileageEstimateDetails,
+      carfaxMaterialRevision,
     },
     db,
   );
@@ -2614,6 +2618,9 @@ async function _GET(request: NextRequest) {
           // serves from this fallback.
           mileageEstimated ? mileageEstimatedSource : "actual",
           mileageEstimated ? mileageEstimateDetails : null,
+          carfaxResult.ok && "materialRevision" in carfaxResult
+            ? (carfaxResult.materialRevision ?? null)
+            : null,
         );
         console.log(`[Extension Plan] TIMING runOnDemandAnalysis=${Date.now() - tBeforeAnalysis}ms parallelFetch=${tBeforeAnalysis - startTime}ms vin=${vin?.toUpperCase()}`);
         analysisData = { recommendations, showInspectItems };

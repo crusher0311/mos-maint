@@ -7,6 +7,7 @@ import {
   signPlanBuildMileageMetadata,
   type PlanBuildMileageMetadata,
 } from "@/lib/plan-build-mileage-metadata";
+import { getAppFueledDirectVhiContext } from "@/lib/external-api/appfueled-direct-vhi-context";
 
 /**
  * Test seam: tests can override these to inject a fake DB / cached plan / build
@@ -22,7 +23,8 @@ export const __deps = {
     mileage: number,
     fast?: boolean,
     persist?: boolean,
-  ) => triggerPlanBuild(shopId, vin, mileage, fast, undefined, undefined, persist),
+    mileageMetadata?: PlanBuildMileageMetadata,
+  ) => triggerPlanBuild(shopId, vin, mileage, fast, undefined, mileageMetadata, persist),
 };
 
 export type VhiRebuildFailedStage =
@@ -112,6 +114,7 @@ export interface VhiRebuildResult {
     shopHistoryCount: number;
     reasons: string[];
   };
+  optionalDataMayBeIncomplete?: boolean;
   error?: string;
   failedStage?: VhiRebuildFailedStage;
   upstreamStatus?: number;
@@ -121,6 +124,16 @@ export interface VhiRebuildResult {
 function getInternalSecret(): string {
   return Buffer.from(process.env.DATABASE_URL || "").toString("base64").slice(0, 32);
 }
+
+export const __triggerDeps: {
+  invokeDirectPost: (requestUrl: string, headers: Record<string, string>) => Promise<Response>;
+} = {
+  invokeDirectPost: async (requestUrl, headers) => {
+    const { POST } = await import("@/app/api/plan-build/route");
+    const { NextRequest } = await import("next/server");
+    return POST(new NextRequest(requestUrl, { method: "POST", headers }));
+  },
+};
 
 export async function triggerPlanBuild(
   shopId: number,
@@ -168,20 +181,22 @@ export async function triggerPlanBuild(
       );
     }
 
-    const res = await fetch(
-      `${baseUrl}/api/plan-build?${params.toString()}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-internal-secret": getInternalSecret(),
-          "x-internal-shop-id": String(shopId),
-          ...(mileageMetadataSignature
-            ? { "x-plan-build-mileage-signature": mileageMetadataSignature }
-            : {}),
-        },
-      }
-    );
+    const requestUrl = `${baseUrl}/api/plan-build?${params.toString()}`;
+    const headers = {
+      "Content-Type": "application/json",
+      "x-internal-secret": getInternalSecret(),
+      "x-internal-shop-id": String(shopId),
+      ...(mileageMetadataSignature
+        ? { "x-plan-build-mileage-signature": mileageMetadataSignature }
+        : {}),
+    };
+    // This preserves the normal fetch behavior everywhere except the
+    // authenticated AppFueled ingestion call, whose accepted report is scoped
+    // in AsyncLocalStorage and therefore survives this direct route call.
+    const directContext = getAppFueledDirectVhiContext();
+    const res = directContext?.shopId === shopId && directContext.vin === vin.toUpperCase()
+      ? await __triggerDeps.invokeDirectPost(requestUrl, headers)
+      : await fetch(requestUrl, { method: "POST", headers });
 
     if (!res.ok) {
       const text = await res.text();
@@ -314,7 +329,10 @@ export async function rebuildVhi(
   }
 
   const tAfterInvalidate = Date.now();
-  let cached = await __deps.getCachedPlan(db, vinUpper, shopId, mileage);
+  const trustedPriorMiss = getAppFueledDirectVhiContext()?.planCacheMissKnown === true;
+  let cached = trustedPriorMiss
+    ? null
+    : await __deps.getCachedPlan(db, vinUpper, shopId, mileage);
   const tAfterFirstRead = Date.now();
 
   if (!cached) {
@@ -326,6 +344,10 @@ export async function rebuildVhi(
       mileage,
       options.fast,
       options.persistBuiltPlan !== false,
+      {
+        mileageSource: options.mileageSource ?? "actual",
+        mileageEstimateDetails: options.mileageEstimateDetails ?? null,
+      },
     );
     const tAfterBuild = Date.now();
     console.log(`[VHI Rebuild] TIMING vin=${vinUpper} shop=${shopId} mileage=${mileage} fast=${!!options.fast} invalidate=${tAfterInvalidate - tStart}ms firstRead=${tAfterFirstRead - tAfterInvalidate}ms triggerPlanBuild=${tAfterBuild - tBeforeBuild}ms buildOk=${built.ok}${built.ok ? "" : ` upstream=${built.status} err=${built.errorMessage}`}`);
@@ -508,6 +530,7 @@ export async function rebuildVhi(
       shopHistoryCount: 0,
       reasons: [],
     },
+    optionalDataMayBeIncomplete: (plan as any).optionalDataMayBeIncomplete === true,
   };
 }
 

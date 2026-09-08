@@ -1,9 +1,13 @@
 // lib/integrations/carfax.ts
 import "server-only";
+import { createHash } from "node:crypto";
 import type { ClientSession, Db } from "mongodb";
 import { getDb } from "@/lib/mongo";
 import { trackApiRequest } from "@/lib/api-usage-tracker";
-import { invalidateShopPlanCache } from "@/lib/plan-cache";
+import {
+  invalidateCarfaxDependentCaches,
+  invalidateShopPlanCache,
+} from "@/lib/plan-cache";
 import {
   parseCarfaxRecallRecords,
   type CarfaxRecallRecord,
@@ -51,7 +55,12 @@ export type CarfaxResult = {
   numberOfRecallRecords?: number | null;
   raw?: any;
   error?: string;
+  /** Internal fence tying derived caches to material service history. */
+  materialRevision?: string | null;
 };
+
+/** Canonical usable CARFAX report shape shared by ingestion and plan builders. */
+export type CarfaxReport = CarfaxResult;
 
 export type CarfaxSnapshotWriteOptions = {
   source?: "carfax" | "partner";
@@ -63,6 +72,11 @@ export type CarfaxSnapshotWriteOptions = {
   /** Internal transaction seam used by partner ingestion. */
   db?: Db;
   session?: ClientSession;
+  /**
+   * Partner writes occur inside the delivery transaction and invalidate only
+   * after it commits. Other writers retain the safe default.
+   */
+  invalidateCaches?: boolean;
 };
 
 /**
@@ -455,6 +469,47 @@ export async function getCarfaxDecodeHint(
 
 /** -------- Snapshot storage (cache) -------- */
 /**
+ * Stable comparison of the normalized, plan-relevant CARFAX payload. Raw
+ * provider envelopes and record ordering are deliberately excluded: neither
+ * changes the history consumed by a VHI, and treating them as changes would
+ * cause duplicate deliveries to rebuild a VIN unnecessarily.
+ */
+function normalizedCarfaxContents(report: CarfaxResult): string {
+  const sortRecords = <T extends Record<string, unknown>>(records: T[] | null | undefined) =>
+    (records ?? [])
+      .map((record) => Object.fromEntries(
+        Object.entries(record).sort(([a], [b]) => a.localeCompare(b)),
+      ))
+      .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+  return JSON.stringify({
+    lastReportedMileage: report.lastReportedMileage ?? null,
+    serviceRecords: sortRecords(report.serviceRecords),
+    serviceCategories: sortRecords(report.serviceCategories),
+    recallRecords: sortRecords(report.recallRecords),
+    numberOfRecallRecords: report.numberOfRecallRecords ?? null,
+  });
+}
+
+export function carfaxMaterialRevision(report: CarfaxReport): string {
+  return createHash("sha256").update(normalizedCarfaxContents(report)).digest("hex");
+}
+
+/** Pure equality seam for duplicate/retry ingestion regression tests. */
+export function hasChangedNormalizedCarfaxContents(
+  existing: CarfaxReport | null | undefined,
+  incoming: CarfaxReport,
+): boolean {
+  return !existing || normalizedCarfaxContents(existing) !== normalizedCarfaxContents(incoming);
+}
+
+function reportHasUsableContents(report: CarfaxReport): boolean {
+  return report.ok && (
+    (Array.isArray(report.serviceRecords) && report.serviceRecords.length > 0) ||
+    (Array.isArray(report.recallRecords) && report.recallRecords.length > 0)
+  );
+}
+
+/**
  * Upserts a CARFAX snapshot for (shopId, vin) — but never destroys a
  * previously-good cached report when the new fetch is unhealthy.
  *
@@ -482,7 +537,13 @@ export async function upsertCarfaxSnapshot(
   vin: string,
   report: CarfaxResult,
   options: CarfaxSnapshotWriteOptions = {},
-) {
+): Promise<{
+  written: boolean;
+  preserved: boolean;
+  reason: "stored" | "failed" | "empty_preserved" | "recalls_stored" | "newer_snapshot_exists";
+  /** True only when accepted usable history changed plan-relevant content. */
+  changed: boolean;
+}> {
   const db = options.db ?? await getDb();
   const now = new Date();
   const fetchedAt = options.sourceRetrievedAt ?? now;
@@ -514,7 +575,12 @@ export async function upsertCarfaxSnapshot(
       existingFetchedAt &&
       existingFetchedAt.getTime() > fetchedAt.getTime()
     ) {
-      return { written: false, preserved: true, reason: "newer_snapshot_exists" as const };
+      return {
+        written: false,
+        preserved: true,
+        reason: "newer_snapshot_exists" as const,
+        changed: false,
+      };
     }
 
     const existingHasContent =
@@ -608,6 +674,17 @@ export async function upsertCarfaxSnapshot(
       preserved = false;
     }
 
+    const existingReport = existing ? snapshotToResult(existing) : null;
+    const effectiveReport = snapshotToResult({ ...(existing ?? {}), ...setFields });
+    const changed =
+      written &&
+      reportHasUsableContents(effectiveReport) &&
+      hasChangedNormalizedCarfaxContents(existingReport, effectiveReport);
+    if (changed) {
+      setFields.materialRevision = carfaxMaterialRevision(effectiveReport);
+      setFields.materialUpdatedAt = now;
+    }
+
     const filter: any = existing
       ? {
           shopId,
@@ -627,7 +704,13 @@ export async function upsertCarfaxSnapshot(
         { upsert: !existing, ...(options.session ? { session: options.session } : {}) },
       );
       if (result.matchedCount === 1 || result.upsertedCount === 1) {
-        return { written, preserved, reason: outcome };
+        // A live writer is already committed here. Partner ingestion defers
+        // this until its delivery transaction commits, avoiding an invalidation
+        // for a transaction that later rolls back.
+        if (changed && options.invalidateCaches !== false) {
+          await invalidateCarfaxDependentCaches(db, vin, shopId);
+        }
+        return { written, preserved, reason: outcome, changed };
       }
     } catch (error: any) {
       // Another first writer won the deterministic _id. Re-read and compare.
@@ -680,7 +763,35 @@ function snapshotToResult(doc: any): CarfaxResult {
     numberOfRecallRecords,
     raw: doc.raw ?? null,
     error: doc.error ?? null,
+    materialRevision: doc.materialRevision ?? null,
   };
+}
+
+/**
+ * Reads the canonical persisted report. Ingestion uses this after a skipped
+ * older delivery or completed duplicate so downstream builders never receive
+ * the rejected request payload.
+ */
+export async function getCanonicalCarfaxReport(
+  shopId: number,
+  vin: string,
+  db?: Db,
+): Promise<CarfaxReport> {
+  const database = db ?? await getDb();
+  const doc = await database.collection("carfax_reports").findOne({
+    shopId,
+    vin: vin.toUpperCase(),
+  });
+  return snapshotToResult(doc);
+}
+
+/** Invalidate the per-VIN VHI/analysis caches after a committed CARFAX write. */
+export async function invalidateCarfaxSnapshotCaches(
+  shopId: number,
+  vin: string,
+  db?: Db,
+): Promise<{ cachedPlans: number; analysisCache: number }> {
+  return invalidateCarfaxDependentCaches(db ?? await getDb(), vin, shopId);
 }
 
 /** -------- Mileage estimation from CARFAX history -------- */
@@ -763,18 +874,14 @@ export async function getCachedCarfaxRecalls(
   return recallRecords;
 }
 
-export async function estimateMileageFromCarfax(
-  shopId: number,
-  vin: string
-): Promise<MileageEstimate> {
-  const db = await getDb();
-  const doc = await db.collection("carfax_reports").findOne({ shopId, vin });
-
-  if (!doc || !doc.ok || !Array.isArray(doc.serviceRecords)) {
+export function estimateMileageFromCarfaxReport(
+  report: CarfaxReport,
+): MileageEstimate {
+  if (!report.ok || !Array.isArray(report.serviceRecords)) {
     return { estimated: false, mileage: null, reason: "No CARFAX data available" };
   }
 
-  const allValidRecords = doc.serviceRecords
+  const allValidRecords = report.serviceRecords
     .filter((r: any) => {
       if (!r.date || r.odometer == null || r.odometer <= 0) return false;
       const d = new Date(r.date);
@@ -837,6 +944,16 @@ export async function estimateMileageFromCarfax(
     lastRecordedDate: newest.date.toISOString().split("T")[0],
     milesPerDay: Math.round(milesPerDay * 10) / 10,
   };
+}
+
+/** Cache-backed convenience wrapper retained for existing callers. */
+export async function estimateMileageFromCarfax(
+  shopId: number,
+  vin: string,
+): Promise<MileageEstimate> {
+  const db = await getDb();
+  const doc = await db.collection("carfax_reports").findOne({ shopId, vin });
+  return estimateMileageFromCarfaxReport(snapshotToResult(doc));
 }
 
 /**
@@ -917,7 +1034,9 @@ export async function fetchCarfaxWithCache(
 
   const live = await fetchCarfaxLive(shopId, vin, doFetch);
   await upsertCarfaxSnapshot(shopId, vin, live);
-  return live;
+  // Return the accepted canonical report (including its material revision).
+  // A concurrent newer writer may have rejected this live payload.
+  return getCanonicalCarfaxReport(shopId, vin, db);
 }
 
 /**
@@ -979,5 +1098,5 @@ export async function fetchCarfaxStaleWhileRevalidate(
   // No usable snapshot at all — must block on a live fetch.
   const live = await fetchCarfaxLive(shopId, vin, doFetch);
   await upsertCarfaxSnapshot(shopId, vin, live);
-  return live;
+  return getCanonicalCarfaxReport(shopId, vin, db);
 }

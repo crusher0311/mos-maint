@@ -75,6 +75,8 @@ function makeFakeCollection() {
       }
       return { matchedCount: 0, modifiedCount: 0, upsertedCount: 0 };
     },
+    findOne: async (q: any, _opts?: any) =>
+      docs.find((d) => matchesQuery(d, q)) ?? null,
     find: (q: any) => {
       const result = docs.filter((d) => matchesQuery(d, q));
       const cursor = {

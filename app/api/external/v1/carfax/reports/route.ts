@@ -11,6 +11,11 @@ import {
 } from "@/lib/data/repositories/appfueled-shop-mappings";
 import { buildPartnerVhiResponse } from "@/lib/external-api/partner-vhi-service";
 import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
+import {
+  acceptedCarfaxReportRevision,
+  isAppFueledDirectVhiEnabled,
+  runWithAppFueledDirectVhiContext,
+} from "@/lib/external-api/appfueled-direct-vhi-context";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -116,8 +121,7 @@ export const POST = createExternalEndpoint(
     let vhiResponse: NextResponse;
     let vhi: any;
     try {
-      vhiResponse = await withUpstreamTimeout(
-        buildPartnerVhiResponse(req, {
+      const buildVhi = () => buildPartnerVhiResponse(req, {
           apiKey,
           shopId: shop.mosShopId,
           isPartner: true,
@@ -127,7 +131,22 @@ export const POST = createExternalEndpoint(
           vin: body.vin,
           shopId: shop.mosShopId,
           mode: "full",
-        }).catch((error) => {
+        });
+      // The accepted snapshot is passed in-process only. A caller cannot
+      // influence plan-build with an HTTP flag or report payload.
+      const acceptedReport = result.carfaxReport;
+      const vhiBuild = isAppFueledDirectVhiEnabled() && acceptedReport
+        ? runWithAppFueledDirectVhiContext({
+            shopId: shop.mosShopId,
+            vin: body.vin,
+            carfaxReport: acceptedReport,
+            reportRevision:
+              acceptedReport.materialRevision ??
+              acceptedCarfaxReportRevision(acceptedReport),
+          }, buildVhi)
+        : buildVhi();
+      vhiResponse = await withUpstreamTimeout(
+        Promise.resolve(vhiBuild).catch((error) => {
           console.error(`[PartnerCarfaxIngest] VHI service error requestId=${requestId}:`, error);
           return NextResponse.json({
             success: false,

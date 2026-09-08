@@ -662,7 +662,7 @@ export async function protractorFetch<T>(
   retryCount = 0,
   shopId?: number,
   opts?: { priority?: boolean; maxRetries?: number }
-): Promise<{ ok: boolean; data?: T; error?: string }> {
+): Promise<{ ok: boolean; data?: T; error?: string; statusCode?: number }> {
   const local = localPolicyError("rest");
   if (local) return local;
 
@@ -802,7 +802,7 @@ export async function protractorFetch<T>(
         } else if (errorMsg.length > 200) {
           errorMsg = errorMsg.substring(0, 200);
         }
-        return { ok: false, error: `HTTP ${res.statusCode}: ${errorMsg}` };
+        return { ok: false, error: `HTTP ${res.statusCode}: ${errorMsg}`, statusCode: res.statusCode };
       }
 
       const data = res.body ? JSON.parse(res.body) : null;
@@ -818,7 +818,7 @@ export async function protractorFetch<T>(
 export async function fetchVehicleByVin(
   shopId: number,
   vin: string
-): Promise<{ ok: boolean; vehicle?: ProtractorVehicle; error?: string }> {
+): Promise<{ ok: boolean; vehicle?: ProtractorVehicle; error?: string; statusCode?: number }> {
   const config = await resolveProtractorConfig(shopId);
   if (!config.configured) {
     return { ok: false, error: "Protractor not configured for this shop" };
@@ -833,7 +833,7 @@ export async function fetchVehicleByVin(
   );
 
   if (!result.ok) {
-    return { ok: false, error: result.error };
+    return { ok: false, error: result.error, statusCode: result.statusCode };
   }
 
   const vehicles = result.data?.ItemCollection || [];
@@ -2353,7 +2353,7 @@ export async function fetchDeferredWork(
   shopId: number,
   serviceItemId: string,
   options?: { startDate?: string; endDate?: string }
-): Promise<{ ok: boolean; deferredWork?: ProtractorDeferredWork[]; error?: string }> {
+): Promise<{ ok: boolean; deferredWork?: ProtractorDeferredWork[]; error?: string; statusCode?: number }> {
   const config = await resolveProtractorConfig(shopId);
   if (!config.configured) {
     return { ok: false, error: "Protractor not configured for this shop" };
@@ -2377,7 +2377,7 @@ export async function fetchDeferredWork(
 
   if (!result.ok) {
     console.log(`[Protractor:DeferredWork] FAILED: ${result.error}`);
-    return { ok: false, error: result.error };
+    return { ok: false, error: result.error, statusCode: result.statusCode };
   }
 
   const items = result.data?.ItemCollection || [];
@@ -2659,11 +2659,18 @@ export async function upsertProtractorDeferredWorkSnapshot(
 
 const CACHE_TTL_HOURS = 6;
 
+/** Pure wrapper seam: preserves structured failures while adding cache provenance. */
+export function withProtractorApiSource<T extends { statusCode?: number }>(
+  result: T,
+): T & { source: "api" } {
+  return { ...result, source: "api" };
+}
+
 export async function fetchVehicleWithCache(
   shopId: number,
   vin: string,
   maxAgeMs = CACHE_TTL_HOURS * 60 * 60 * 1000
-): Promise<{ ok: boolean; vehicle?: ProtractorVehicle; error?: string; source?: "cache" | "api" }> {
+): Promise<{ ok: boolean; vehicle?: ProtractorVehicle; error?: string; source?: "cache" | "api"; statusCode?: number }> {
   const db = await getDb();
   const cached = await db.collection("protractor_vehicles").findOne({
     shopId,
@@ -2701,7 +2708,7 @@ export async function fetchVehicleWithCache(
     await upsertProtractorVehicleSnapshot(shopId, vin, result.vehicle);
   }
 
-  return { ...result, source: "api" };
+  return withProtractorApiSource(result);
 }
 
 export async function fetchDeferredWorkWithCache(
@@ -2709,7 +2716,7 @@ export async function fetchDeferredWorkWithCache(
   vin: string,
   serviceItemId: string,
   maxAgeMs = CACHE_TTL_HOURS * 60 * 60 * 1000
-): Promise<{ ok: boolean; deferredWork?: ProtractorDeferredWork[]; error?: string; source?: "cache" | "api" }> {
+): Promise<{ ok: boolean; deferredWork?: ProtractorDeferredWork[]; error?: string; source?: "cache" | "api"; statusCode?: number }> {
   const cached = await findDeferredWorkByShopAndVin(shopId, vin);
 
   const now = Date.now();
@@ -2738,7 +2745,7 @@ export async function fetchDeferredWorkWithCache(
     await upsertProtractorDeferredWorkSnapshot(shopId, vin, result.deferredWork);
   }
 
-  return { ...result, source: "api" };
+  return withProtractorApiSource(result);
 }
 
 export type ProtractorCannedJob = {

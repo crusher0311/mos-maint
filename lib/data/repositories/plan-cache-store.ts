@@ -32,6 +32,19 @@ import * as pg from "@/lib/data/repositories/pg/plan-cache";
 
 type AnyDoc = Record<string, unknown>;
 
+/** Mutable only for no-socket repository smoke tests. */
+export const __cacheInvalidationDeps = {
+  pgDeleteCachedPlan: pg.pgDeleteCachedPlan,
+  pgDeleteCachedPlansForShop: pg.pgDeleteCachedPlansForShop,
+  pgDeleteMaintenanceAnalysis: pg.pgDeleteMaintenanceAnalysis,
+};
+
+function isUnprovisionedPgCache(error: unknown): boolean {
+  const candidate = error as { code?: string; message?: string };
+  return candidate?.code === "42P01" ||
+    /relation .* does not exist/i.test(String(candidate?.message ?? ""));
+}
+
 async function mongo(db?: Db): Promise<Db> {
   return db ?? (await getSharedMongo());
 }
@@ -141,7 +154,21 @@ export async function findLatestCachedPlanDoc(
   db?: Db,
 ): Promise<AnyDoc | null> {
   const candidates = await findCachedPlanCandidates(shopId, vin, db);
-  return candidates[0] ?? null;
+  const latest = candidates[0] ?? null;
+  if (!latest) return null;
+  const m = await mongo(db);
+  const snapshot = await m.collection("carfax_reports").findOne(
+    { shopId: Number(shopId), vin: vin.toUpperCase() },
+    { projection: { materialRevision: 1 } },
+  );
+  if (
+    snapshot?.materialRevision &&
+    (latest.plan as AnyDoc | undefined)?.carfaxMaterialRevision !==
+      snapshot.materialRevision
+  ) {
+    return null;
+  }
+  return latest;
 }
 
 export async function upsertCachedPlanDoc(
@@ -223,24 +250,33 @@ export async function deleteCachedPlans(
   shopId: number,
   vin?: string,
   db?: Db,
+  options: { requireBothStores?: boolean } = {},
 ): Promise<number> {
   const m = await mongo(db);
   const filter: Document = vin
     ? { vin: vin.toUpperCase(), shopId: shopIdIn(shopId) }
     : { shopId: shopIdIn(shopId) };
-  const res = await m.collection("cached_plans").deleteMany(filter);
-  let pgCount = 0;
-  try {
-    pgCount = vin
-      ? await pg.pgDeleteCachedPlan(Number(shopId), vin)
-      : await pg.pgDeleteCachedPlansForShop(Number(shopId));
-  } catch (err) {
-    // PG delete is best-effort while Mongo is canonical; when PG is
-    // canonical a failure here matters, so rethrow in that mode.
-    if (isPlanCachePgCanonical()) throw err;
-    console.warn("[PlanCacheStore] PG cached_plans delete failed (non-fatal pre-cutover):", (err as Error)?.message);
+  const [mongoResult, pgResult] = await Promise.allSettled([
+    m.collection("cached_plans").deleteMany(filter),
+    vin
+      ? __cacheInvalidationDeps.pgDeleteCachedPlan(Number(shopId), vin)
+      : __cacheInvalidationDeps.pgDeleteCachedPlansForShop(Number(shopId)),
+  ]);
+  if (mongoResult.status === "rejected") {
+    // PG has still been attempted; never let one store prevent the other.
+    throw mongoResult.reason;
   }
-  return Math.max(res.deletedCount ?? 0, pgCount);
+  if (pgResult.status === "rejected") {
+    if (
+      isPlanCachePgCanonical() ||
+      (options.requireBothStores && !isUnprovisionedPgCache(pgResult.reason))
+    ) throw pgResult.reason;
+    console.warn("[PlanCacheStore] PG cached_plans delete failed (non-fatal pre-cutover):", (pgResult.reason as Error)?.message);
+  }
+  return Math.max(
+    mongoResult.value.deletedCount ?? 0,
+    pgResult.status === "fulfilled" ? pgResult.value : 0,
+  );
 }
 
 /** Admin "clear everything" — both stores. */
@@ -310,16 +346,38 @@ export async function getMaintenanceAnalysisDoc(
   vin: string,
   db?: Db,
 ): Promise<AnyDoc | null> {
+  let row: AnyDoc | null = null;
   if (isPlanCachePgCanonical()) {
-    const row = await pg.pgGetMaintenanceAnalysis(Number(shopId), vin);
-    if (row) return row;
+    row = await pg.pgGetMaintenanceAnalysis(Number(shopId), vin);
+    if (row) {
+      const m = await mongo(db);
+      const snapshot = await m.collection("carfax_reports").findOne(
+        { shopId: Number(shopId), vin: vin.toUpperCase() },
+        { projection: { materialRevision: 1 } },
+      );
+      if (
+        snapshot?.materialRevision &&
+        row.carfaxMaterialRevision !== snapshot.materialRevision
+      ) return null;
+      return row;
+    }
     if (!shouldShadowWriteMongoPlanCache()) return null;
   }
   const m = await mongo(db);
-  return m.collection("maintenance_analysis_cache").findOne({
+  row = await m.collection("maintenance_analysis_cache").findOne({
     vin: vin.toUpperCase(),
     shopId: shopIdIn(shopId),
   });
+  if (!row) return null;
+  const snapshot = await m.collection("carfax_reports").findOne(
+    { shopId: Number(shopId), vin: vin.toUpperCase() },
+    { projection: { materialRevision: 1 } },
+  );
+  if (
+    snapshot?.materialRevision &&
+    row.carfaxMaterialRevision !== snapshot.materialRevision
+  ) return null;
+  return row;
 }
 
 /** Freshness metadata for a set of VINs (extension prefetch loop). */
@@ -328,16 +386,33 @@ export async function listMaintenanceAnalysisMeta(
   vins: string[],
   db?: Db,
 ): Promise<Array<{ vin: string; analyzedAt?: Date | null; mileageAtAnalysis?: number | null }>> {
+  let rows: AnyDoc[] = [];
   if (isPlanCachePgCanonical()) {
-    const rows = await pg.pgListMaintenanceAnalysisMeta(Number(shopId), vins);
-    if (rows.length > 0 || !shouldShadowWriteMongoPlanCache()) return rows;
+    rows = await pg.pgListMaintenanceAnalysisMeta(Number(shopId), vins);
   }
   const m = await mongo(db);
-  return m
-    .collection("maintenance_analysis_cache")
-    .find({ vin: { $in: vins }, shopId: Number(shopId) })
-    .project({ vin: 1, analyzedAt: 1, mileageAtAnalysis: 1 })
-    .toArray() as Promise<Array<{ vin: string; analyzedAt?: Date | null; mileageAtAnalysis?: number | null }>>;
+  if (!isPlanCachePgCanonical() || (rows.length === 0 && shouldShadowWriteMongoPlanCache())) {
+    rows = await m
+      .collection("maintenance_analysis_cache")
+      .find({ vin: { $in: vins }, shopId: Number(shopId) })
+      .project({ vin: 1, analyzedAt: 1, mileageAtAnalysis: 1, carfaxMaterialRevision: 1 })
+      .toArray();
+  }
+  if (rows.length === 0) return [];
+  const snapshots = await m.collection("carfax_reports").find(
+    { shopId: Number(shopId), vin: { $in: vins.map((vin) => vin.toUpperCase()) } },
+    { projection: { vin: 1, materialRevision: 1 } },
+  ).toArray();
+  const revisionByVin = new Map(
+    snapshots.map((snapshot) => [
+      String(snapshot.vin).toUpperCase(),
+      snapshot.materialRevision ?? null,
+    ]),
+  );
+  return rows.filter((row) => {
+    const revision = revisionByVin.get(String(row.vin).toUpperCase());
+    return !revision || row.carfaxMaterialRevision === revision;
+  }) as Array<{ vin: string; analyzedAt?: Date | null; mileageAtAnalysis?: number | null }>;
 }
 
 export async function upsertMaintenanceAnalysisDoc(doc: AnyDoc, db?: Db): Promise<void> {
@@ -374,6 +449,38 @@ export async function deleteMaintenanceAnalysisForShop(
     console.warn("[PlanCacheStore] PG analysis-cache delete failed (non-fatal pre-cutover):", (err as Error)?.message);
   }
   return Math.max(res.deletedCount ?? 0, pgCount);
+}
+
+/**
+ * Deletes the analysis cache for one VIN. As with plan invalidations, both
+ * backing stores are cleared regardless of the current cutover flags.
+ */
+export async function deleteMaintenanceAnalysis(
+  shopId: number,
+  vin: string,
+  db?: Db,
+  options: { requireBothStores?: boolean } = {},
+): Promise<number> {
+  const m = await mongo(db);
+  const [mongoResult, pgResult] = await Promise.allSettled([
+    m.collection("maintenance_analysis_cache").deleteMany({
+      vin: vin.toUpperCase(),
+      shopId: shopIdIn(shopId),
+    }),
+    __cacheInvalidationDeps.pgDeleteMaintenanceAnalysis(Number(shopId), vin),
+  ]);
+  if (mongoResult.status === "rejected") throw mongoResult.reason;
+  if (pgResult.status === "rejected") {
+    if (
+      isPlanCachePgCanonical() ||
+      (options.requireBothStores && !isUnprovisionedPgCache(pgResult.reason))
+    ) throw pgResult.reason;
+    console.warn("[PlanCacheStore] PG analysis-cache delete failed (non-fatal pre-cutover):", (pgResult.reason as Error)?.message);
+  }
+  return Math.max(
+    mongoResult.value.deletedCount ?? 0,
+    pgResult.status === "fulfilled" ? pgResult.value : 0,
+  );
 }
 
 /* ========================================================================== */

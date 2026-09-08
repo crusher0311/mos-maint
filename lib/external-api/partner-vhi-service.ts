@@ -6,7 +6,7 @@ import { getStatusIconSet, getServiceIconSet, getStatusIconSvg } from "@/lib/vhi
 import { resolveServiceIconKey, getServiceIconUrl } from "@/lib/service-icons";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { rebuildVhi } from "@/lib/vhi-rebuild";
-import { estimateMileageFromCarfax } from "@/lib/integrations/carfax";
+import { estimateMileageFromCarfax, estimateMileageFromCarfaxReport } from "@/lib/integrations/carfax";
 import { getEnhancedVehicleData } from "@/lib/integrations/dataone-api";
 import { buildMileageDiscrepancyFlag } from "@/lib/plan-build/mileage-discrepancy";
 import { getFeatureEntitlements } from "@/lib/featureResolver";
@@ -19,6 +19,11 @@ import {
   type PartnerVhiSuccessSource,
 } from "@/lib/external-api/partner-vhi-response";
 import type { ExternalApiContext } from "@/lib/external-api/middleware";
+import {
+  getAppFueledDirectVhiContext,
+  markAppFueledPlanCacheMiss,
+} from "@/lib/external-api/appfueled-direct-vhi-context";
+import { runCoalescedAppFueledBuild } from "@/lib/external-api/partner-vhi-build";
 
 export type PartnerVhiOverrides = {
   vin: string;
@@ -428,8 +433,20 @@ export async function buildPartnerVhiResponse(
     // call), so it's cheap on the hot path; the timeout is a safety guard.
     if (!mileage || mileage <= 0 || picked.staleActual) {
       try {
+        const directContext = getAppFueledDirectVhiContext();
+        // A just-accepted AppFueled report is authoritative for this request.
+        // Do not immediately read the CARFAX cache we just wrote (or, on a
+        // duplicate, read it a second time). The helper is intentionally
+        // obtained dynamically while the ingestion rollout lands so this
+        // module remains compatible with older deployments.
+        const directEstimate = directContext?.shopId === Number(resolvedShopId) &&
+          directContext.vin === vin
+          ? estimateMileageFromCarfaxReport(directContext.carfaxReport)
+          : null;
         const est = await withUpstreamTimeout(
-          estimateMileageFromCarfax(Number(resolvedShopId), vin),
+          directEstimate
+            ? Promise.resolve(directEstimate)
+            : estimateMileageFromCarfax(Number(resolvedShopId), vin),
           5000,
           `carfax estimateMileage ${vin}`,
           { estimated: false, mileage: null, reason: "timeout" } as any,
@@ -494,6 +511,7 @@ export async function buildPartnerVhiResponse(
     );
 
     // Task #1119: slow-call log so a plan-cache read hang is visible.
+    const cacheLookupMileage = mileage;
     let cached = await withSlowCallLog(
       getCachedPlan(db, vin, resolvedShopId, mileage),
       "partner-vhi.getCachedPlan",
@@ -502,6 +520,16 @@ export async function buildPartnerVhiResponse(
     );
 
     if (cached) {
+      if (getAppFueledDirectVhiContext()) {
+        console.log(JSON.stringify({
+          event: "appfueled_direct_vhi_stage",
+          stage: "shared_plan_cache_hit",
+          requestId,
+          shopId: Number(resolvedShopId),
+          vin,
+          elapsedMs: 0,
+        }));
+      }
       const plan = cached.plan;
       const separated = separateComplimentary(plan.buckets);
       const score = computeScore(separated);
@@ -591,6 +619,16 @@ export async function buildPartnerVhiResponse(
     );
 
     if (analysisResult) {
+      if (getAppFueledDirectVhiContext()) {
+        console.log(JSON.stringify({
+          event: "appfueled_direct_vhi_stage",
+          stage: "analysis_cache_hit",
+          requestId,
+          shopId: Number(resolvedShopId),
+          vin,
+          elapsedMs: 0,
+        }));
+      }
       console.log(`[VHI External] Found analysis cache for ${vin} at shop ${resolvedShopId}`);
       // Task #384: spread defaults the source/details from the analysis
       // cache (handled by getVhiFromAnalysisCache for legacy entries).
@@ -735,6 +773,9 @@ export async function buildPartnerVhiResponse(
       `shopId=${resolvedShopId} vin=${vin} mileage=${mileage} isPartner=${isPartner} ` +
       `mode=${fastMode ? "fast" : "full"}`
     );
+    // Skip downstream duplicate reads only when the resolved cache key did not
+    // change during expired-plan/year fallback mileage recovery.
+    if (cacheLookupMileage === mileage) markAppFueledPlanCacheMiss();
     // Bound the cold build so a busy-shop stall can't hang the partner for
     // 1-2 min. The rebuild promise keeps running after the timeout fires and
     // still populates cached_plans, so a retry (or the Detect Dog overlay)
@@ -743,7 +784,7 @@ export async function buildPartnerVhiResponse(
     // built VIN falls through to a 202 "building" response.
     const REBUILD_TIMEOUT_MS = 25000;
     const result = await withUpstreamTimeout(
-      rebuildVhi(resolvedShopId, vin, mileage, {
+      runCoalescedAppFueledBuild(Number(resolvedShopId), vin, mileage, () => rebuildVhi(Number(resolvedShopId), vin, mileage, {
         invalidateFirst: false,
         // Task #384: forward the resolved source so the persisted cache row
         // (and therefore the next cache HIT) carries the same fields.
@@ -756,7 +797,7 @@ export async function buildPartnerVhiResponse(
         // cache. Fast callers get the inline result; normal requests continue
         // to read/write only full builds.
         persistBuiltPlan: !fastMode,
-      }),
+      })),
       REBUILD_TIMEOUT_MS,
       `partner rebuildVhi ${vin}`,
       null as unknown as Awaited<ReturnType<typeof rebuildVhi>>,
@@ -858,7 +899,8 @@ export async function buildPartnerVhiResponse(
       cachedAt: result.cachedAt,
       source: "on_demand_build",
       buildMode: fastMode ? "fast" : "full",
-      optionalDataMayBeIncomplete: fastMode,
+      optionalDataMayBeIncomplete:
+        fastMode || result.optionalDataMayBeIncomplete === true,
       // Task #384: prefer the rebuild result so the response matches the
       // values that were just persisted into cached_plans.
       mileageSource: result.mileageSource ?? mileageSource,

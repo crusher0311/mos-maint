@@ -81,7 +81,12 @@ export async function executeOwnedPartnerCarfaxDelivery<T>(
   work: (
     db: Db,
     session: ClientSession,
-  ) => Promise<{ stored: boolean; outcome?: string; value: T }>,
+  ) => Promise<{
+    stored: boolean;
+    outcome?: string;
+    cacheInvalidationPending?: boolean;
+    value: T;
+  }>,
 ): Promise<T | null> {
   const client = await __deps.getMongoClient();
   const session = client.startSession();
@@ -106,6 +111,7 @@ export async function executeOwnedPartnerCarfaxDelivery<T>(
           $set: {
             stored: result.stored,
             outcome: result.outcome,
+            cacheInvalidationPending: result.cacheInvalidationPending === true,
             status: "completed",
             completedAt: new Date(),
           },
@@ -121,6 +127,21 @@ export async function executeOwnedPartnerCarfaxDelivery<T>(
   } finally {
     await session.endSession();
   }
+}
+
+/**
+ * Clears the durable retry marker only after the VIN-scoped derived caches
+ * were successfully invalidated. A crashed/failed post-commit invalidation is
+ * therefore retried by the next duplicate delivery request.
+ */
+export async function completePartnerCarfaxCacheInvalidation(
+  key: PartnerCarfaxDeliveryKey,
+): Promise<void> {
+  const db = await __deps.getDb();
+  await db.collection<any>("partner_carfax_deliveries").updateOne(
+    { ...filterFor(key), status: "completed", cacheInvalidationPending: true },
+    { $set: { cacheInvalidationPending: false, cacheInvalidatedAt: new Date() } },
+  );
 }
 
 export async function releasePartnerCarfaxDelivery(
