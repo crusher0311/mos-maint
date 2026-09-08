@@ -1350,7 +1350,6 @@ export async function POST(req: NextRequest) {
       soonMiles,
       soonDays,
       showInspectItems,
-      ...mileageMetadata,
       // Fence the plan to the exact canonical CARFAX history consumed above.
       // Applies to direct and legacy builds alike; null means the used report
       // predates material revisioning or CARFAX was unavailable.
@@ -1359,6 +1358,7 @@ export async function POST(req: NextRequest) {
           ? ((carfaxResult as any).materialRevision ?? null)
           : null,
       ...(optionalDataMayBeIncomplete ? { optionalDataMayBeIncomplete: true } : {}),
+      ...mileageMetadata,
       deferredWork: protractorDeferredWork.length > 0 ? protractorDeferredWork.map(dw => ({
         ID: dw.ID,
         ServiceItemID: dw.ServiceItemID,
