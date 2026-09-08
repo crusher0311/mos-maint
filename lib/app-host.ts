@@ -8,6 +8,14 @@
  * `buildReportUrl`, so every absolute URL we hand out (report links, hosted
  * icon artwork, etc.) resolves to the same domain.
  */
+/** Verified public origins that may safely receive bearer callback URLs. */
+export const VERIFIED_PUBLIC_APP_BASE_URLS = [
+  "https://mos.tools",
+  "https://www.mos.tools",
+  "https://qa.mos.tools",
+  "https://www.qa.mos.tools",
+] as const;
+
 export function resolveAppHost(): string {
   if (process.env.NEXT_PUBLIC_APP_URL) {
     return process.env.NEXT_PUBLIC_APP_URL.replace(/^https?:\/\//, "").replace(/\/+$/, "");

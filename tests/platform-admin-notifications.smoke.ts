@@ -24,8 +24,8 @@ import {
 } from "../app/api/platform-admin/notifications/route";
 import {
   GET as countNotifications,
-  __deps as countDeps,
 } from "../app/api/platform-admin/notifications/count/route";
+import { __deps as countDeps } from "../app/api/platform-admin/notifications/count/deps";
 import {
   PATCH as patchNotification,
   DELETE as deleteNotification,

@@ -1,5 +1,9 @@
 # Partner VHI API
 
+For the separately implemented (not yet deployed) inbound Vehicle URL callback
+and rollout checklist, see
+[AppFueled Vehicle URL webhook handoff](APPFUELED_URL_WEBHOOK.md).
+
 ## Submit an AppFueled CARFAX report
 
 `POST /api/external/v1/carfax/reports`

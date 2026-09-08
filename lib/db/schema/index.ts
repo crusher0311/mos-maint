@@ -15,3 +15,4 @@ export * from "./integration-ops";
 export * from "./sales-coach";
 export * from "./concern-followup-cache";
 export * from "./slow-queries";
+export * from "./appfueled-url-events";

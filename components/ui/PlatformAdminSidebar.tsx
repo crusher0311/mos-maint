@@ -217,6 +217,7 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
           <NavLink href="/platform-admin/slow-queries" icon={Database} label="Slow Queries" />
           <NavLink href="/platform-admin/extension-telemetry" icon={Activity} label="Ext Telemetry" />
           <NavLink href="/platform-admin/partner-keys" icon={KeyRound} label="Partner Keys" />
+          <NavLink href="/platform-admin/appfueled-url-events" icon={Activity} label="AppFueled URL Feeds" />
           <NavLink href="/platform-admin/shopware-authorizations" icon={KeyRound} label="Shop-Ware Auths" />
           <NavLink href="/platform-admin/job-analytics" icon={BarChart3} label="Job Analytics" />
           <NavLink href="/platform-admin/vhi-analytics" icon={BarChart3} label="VHI Analytics" />

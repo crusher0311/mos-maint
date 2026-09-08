@@ -171,10 +171,81 @@ export async function GET(req: NextRequest) {
   );
 }
 
+// [N7] AppFueled webhook helper mentioned only in a comment must not count.
+{
+  const content = `
+// handleAppFueledUrlWebhook(req, token) is called by a different route
+export async function POST(req: NextRequest) {
+  return NextResponse.json({ ok: true });
+}
+`;
+  assert(
+    '[N7] commented AppFueled helper — lint must flag as unguarded',
+    !guardMatches(content),
+  );
+}
+
+// [N8] Importing the AppFueled helper without invoking it must not count.
+{
+  const content = `
+import { handleAppFueledUrlWebhook } from "@/lib/appfueled-url-webhook";
+export async function POST(req: NextRequest) {
+  return NextResponse.json({ ok: true });
+}
+`;
+  assert(
+    '[N8] import-only AppFueled helper — lint must flag as unguarded',
+    !guardMatches(content),
+  );
+}
+
+// [N9] AppFueled admin helper in a comment/import only must not count.
+{
+  const content = `
+import { handleAppFueledUrlAdmin } from "@/lib/appfueled-url-admin";
+// A future route may call handleAppFueledUrlAdmin(req).
+export async function GET(req: NextRequest) {
+  return NextResponse.json({ ok: true });
+}
+`;
+  assert(
+    '[N9] import/comment-only AppFueled admin helper — lint must flag as unguarded',
+    !guardMatches(content),
+  );
+}
+
 // ---------------------------------------------------------------------------
 // POSITIVE fixtures — these MUST match at least one AUTH_PATTERN (lint passes)
 // ---------------------------------------------------------------------------
 console.log('\npositive fixtures (each MUST match at least one auth guard)\n');
+
+// [P-appfueled] The route invokes the helper that validates its opaque token.
+{
+  const content = `
+import { handleAppFueledUrlWebhook } from "@/lib/appfueled-url-webhook";
+export async function POST(req: NextRequest, { params }: { params: { token: string } }) {
+  return handleAppFueledUrlWebhook(req, params.token);
+}
+`;
+  assert(
+    '[P-appfueled] handleAppFueledUrlWebhook() invocation — lint must pass',
+    guardMatches(content),
+  );
+}
+
+// [P-appfueled-admin] Shared admin handler performs platform-admin auth.
+{
+  const content = `
+import { handleAppFueledUrlAdmin } from "@/lib/appfueled-url-admin";
+export async function GET(req: Request) {
+  return handleAppFueledUrlAdmin(req);
+}
+`;
+  assert(
+    '[P-appfueled-admin] handleAppFueledUrlAdmin() invocation — lint must pass',
+    guardMatches(content),
+  );
+}
 
 // [P1] Calls getSession() — standard session auth.
 {

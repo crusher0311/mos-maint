@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 const { spawn } = require('child_process');
+const { ensurePreloadInNodeOptions } = require('./appfueled-log-preload.cjs');
 
 const PORT = process.env.PORT || 3000;
 
@@ -14,7 +15,10 @@ console.log('');
 
 const nextServer = spawn('npx', ['next', 'start', '-p', PORT, '-H', '0.0.0.0'], {
   stdio: 'inherit',
-  env: process.env
+  env: {
+    ...process.env,
+    NODE_OPTIONS: ensurePreloadInNodeOptions(process.env.NODE_OPTIONS || '')
+  }
 });
 
 nextServer.on('error', (err) => {

@@ -2,6 +2,7 @@
 const { spawn } = require('child_process');
 const http = require('http');
 const { validateProductionEnv } = require('./validate-production-env.cjs');
+const { ensurePreloadInNodeOptions } = require('./appfueled-log-preload.cjs');
 
 const PORT = process.env.PORT || 5000;
 const PRODUCTION_URL = process.env.PRODUCTION_URL || `http://localhost:${PORT}`;
@@ -76,7 +77,9 @@ async function main() {
     stdio: 'inherit',
     env: {
       ...process.env,
-      NODE_OPTIONS: `--max-old-space-size=12288 ${process.env.NODE_OPTIONS || ''}`.trim(),
+      NODE_OPTIONS: ensurePreloadInNodeOptions(
+        `--max-old-space-size=12288 ${process.env.NODE_OPTIONS || ''}`.trim()
+      ),
     }
   });
 
@@ -97,7 +100,11 @@ async function main() {
   }
 
   // Pass COMBINED_SCRIPT=true to workers so they use localhost
-  const workerEnv = { ...process.env, COMBINED_SCRIPT: 'true' };
+  const workerEnv = {
+    ...process.env,
+    COMBINED_SCRIPT: 'true',
+    NODE_OPTIONS: ensurePreloadInNodeOptions(process.env.NODE_OPTIONS || ''),
+  };
 
   console.log('[2/3] Starting Tekmetric Sync Worker...');
   const tekmetricWorker = spawn('npx', ['tsx', 'scripts/tekmetric-sync-worker.ts'], {

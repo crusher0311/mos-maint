@@ -184,6 +184,14 @@ const AUTH_PATTERNS = [
   // Protractor per-shop webhook token
   /protractorWebhookToken/,
 
+  // AppFueled URL webhook helper validates the opaque path token before
+  // processing any callback data. Call syntax prevents import-only bypasses.
+  /\bhandleAppFueledUrlWebhook\s*\(/,
+
+  // AppFueled platform-admin route delegation performs its session and
+  // platform-admin check in the shared handler. Call syntax is required.
+  /\bhandleAppFueledUrlAdmin\s*\(/,
+
   // Tekmetric migration admin auth — call syntax required
   /\brequireMigAdmin\s*\(/,
 

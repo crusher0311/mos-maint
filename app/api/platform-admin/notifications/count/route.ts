@@ -1,8 +1,5 @@
 import { NextResponse } from "next/server";
-import { requirePlatformAdmin } from "@/lib/auth";
-import { getAdminUnreadCount } from "@/lib/notifications";
-
-export const __deps = { requirePlatformAdmin, getAdminUnreadCount };
+import { __deps } from "./deps";
 
 export async function GET() {
   try {

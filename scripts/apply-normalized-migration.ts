@@ -42,6 +42,7 @@ const drizzleMigrationFiles = [
   "0032_task1183_nwo_close_date_idx.sql",
   "0033_task1188_prod_index_parity.sql",
     "0035_task1251_appfueled_shop_mappings.sql",
+    "0036_task1257_appfueled_url_events.sql",
 ];
 
 // Concurrent index migrations must be sent one statement at a time. A
@@ -879,6 +880,7 @@ async function main() {
     'production_logs',             // 0027 baseline
     'platform_features',           // 0027 baseline
     'appfueled_shop_mappings',     // 0035 AppFueled explicit mappings
+    'appfueled_url_connections',   // 0036 AppFueled URL webhook ingress
   ];
   const tables = await sql`
     SELECT table_name FROM information_schema.tables 
