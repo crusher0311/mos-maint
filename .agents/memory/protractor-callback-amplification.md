@@ -92,3 +92,18 @@ callback backlog during a quiet period.
 Advancing it abandons intervening pending callbacks; removing it makes
 pre-rollout history eligible again. Only the canary cutoff should be absent in
 full mode.
+
+Callback safeguards do not make a broad web-service reopening safe: the
+callback pacer is callback-scoped, while scheduled and interactive traffic
+still shares the wider provider limiter.
+
+**Why:** A monitored full reopening produced same-second bursts above the
+provider's 5 RPS ceiling, followed by a 429 and many 5xx responses. The
+callback-only phase had remained correctly spaced and healthy. Immediate
+containment required the provider circuit breaker while the persistent
+service-stop deployment replaced running replicas.
+
+**How to apply:** Keep broad outbound disabled until every physical REST/SOAP
+attempt shares a fleet-wide limiter that cannot burst above the provider
+ceiling. Keep backfill workers suspended. A callback-only rollout does not
+validate scheduled sync or other normal web traffic.
