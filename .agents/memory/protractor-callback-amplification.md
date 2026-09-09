@@ -38,3 +38,17 @@ REST/SOAP attempt (including retries), and hold a fleet mutex through transport
 plus cooldown. Advance shop fairness only after successful fenced completion so
 deadline-truncated drains cannot starve quiet shops. Interactive writes bypass
 the callback lane.
+
+Initial production reopening must be callback-only and automatically expire;
+never test by broadly enabling the web service.
+
+**Why:** The web process also owns scheduled Protractor sync and new-shop jobs,
+while Render environment changes do not alter already-running replicas. A broad
+enable can wake unrelated traffic, and an env-only rollback can take another
+full deploy.
+
+**How to apply:** Keep the service stop highest priority. Use a strict canonical
+UTC deadline that admits only callback-scoped transport; blank, malformed, or
+expired deadlines fail closed and every retry rechecks expiry. Keep workers
+suspended and remove the canary deadline only after a separately approved full
+reopening.

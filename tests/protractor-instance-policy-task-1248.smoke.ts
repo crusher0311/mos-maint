@@ -5,6 +5,7 @@ import {
   __protractorClientTestHooks,
   createServiceItem,
   protractorFetch,
+  runWithProtractorCallbackTransport,
   soapAddServicePackage,
   type ProtractorConfig,
 } from "../lib/integrations/protractor/client";
@@ -74,6 +75,52 @@ async function main() {
     }).reason === "service_disabled",
   );
   ok(
+    "active callback canary is allowed but callback-only",
+    evaluateProtractorOutboundPolicy({
+      ...base,
+      PROTRACTOR_CALLBACK_CANARY_UNTIL: "2026-09-09T18:00:00.000Z",
+    }, Date.parse("2026-09-09T17:00:00.000Z")).callbackOnly === true,
+  );
+  ok(
+    "expired callback canary fails closed",
+    evaluateProtractorOutboundPolicy({
+      ...base,
+      PROTRACTOR_CALLBACK_CANARY_UNTIL: "2026-09-09T17:00:00.000Z",
+    }, Date.parse("2026-09-09T17:00:00.000Z")).reason === "callback_canary_expired",
+  );
+  ok(
+    "malformed callback canary fails closed",
+    evaluateProtractorOutboundPolicy({
+      ...base,
+      PROTRACTOR_CALLBACK_CANARY_UNTIL: "not-a-time",
+    }).reason === "malformed_callback_canary",
+  );
+  for (const malformed of [
+    "",
+    "   ",
+    "2026-02-30T00:00:00.000Z",
+    "2027-02-29T00:00:00.000Z",
+    "2026-09-09",
+    "09/09/2026 18:00:00",
+    " 2026-09-09T18:00:00.000Z ",
+  ]) {
+    ok(
+      `non-canonical callback canary fails closed: ${JSON.stringify(malformed)}`,
+      evaluateProtractorOutboundPolicy({
+        ...base,
+        PROTRACTOR_CALLBACK_CANARY_UNTIL: malformed,
+      }).reason === "malformed_callback_canary",
+    );
+  }
+  ok(
+    "service stop wins over an otherwise active callback canary",
+    evaluateProtractorOutboundPolicy({
+      ...base,
+      PROTRACTOR_OUTBOUND_DISABLED: "true",
+      PROTRACTOR_CALLBACK_CANARY_UNTIL: "2026-09-09T18:00:00.000Z",
+    }, Date.parse("2026-09-09T17:00:00.000Z")).reason === "service_disabled",
+  );
+  ok(
     "deferred POST retains the POST admission identity",
     isPostAdmissionMatch(
       { method: "POST", shopId: 12, workOrderId: "wo-12", status: "open" },
@@ -96,6 +143,7 @@ async function main() {
     rateClaims++;
     return { acquired: true, waitedMs: 0, currentCount: 0 };
   };
+  __protractorClientTestHooks.recordResponse = async () => {};
   __protractorClientTestHooks.resolveProtractorConfig = async () => config;
   __protractorClientTestHooks.enforceLocalPolicyWithMockTransport = true;
   process.env.RENDER_INSTANCE_ID = "srv-denied";
@@ -120,8 +168,71 @@ async function main() {
     }).reason === "denied_instance",
   );
 
+  const beforeCanaryRequests = requests;
+  const beforeCanaryBreakerClaims = breakerClaims;
+  process.env.PROTRACTOR_CALLBACK_CANARY_UNTIL = new Date(Date.now() + 60_000).toISOString();
+  delete process.env.PROTRACTOR_OUTBOUND_DENIED_INSTANCE_IDS;
+  await Promise.all([
+    protractorFetch("/Invoice/non-callback-canary", config, {}, 0, 1, { maxRetries: 0 }),
+    soapAddServicePackage(1, "wo", { ID: "wo" }),
+  ]);
+  ok(
+    "callback canary blocks non-callback REST/SOAP before shared gates",
+    requests === beforeCanaryRequests && breakerClaims === beforeCanaryBreakerClaims,
+  );
+  await runWithProtractorCallbackTransport(Date.now() + 10_000, async () => {
+    await Promise.all([
+      protractorFetch("/Invoice/callback-canary", config, {}, 0, 1, { maxRetries: 0 }),
+      soapAddServicePackage(1, "wo", { ID: "wo" }),
+    ]);
+  });
+  ok("callback canary admits callback-scoped REST/SOAP", requests === beforeCanaryRequests + 2);
+
+  let fakeNow = Date.parse("2026-09-09T17:00:00.000Z");
+  __protractorClientTestHooks.now = () => fakeNow;
+  __protractorClientTestHooks.sleep = async (ms) => { fakeNow += ms; };
+  __protractorClientTestHooks.httpsRequest = async () => {
+    requests++;
+    return { statusCode: 500, body: "transient" };
+  };
+
+  process.env.PROTRACTOR_CALLBACK_CANARY_UNTIL = new Date(fakeNow + 1_000).toISOString();
+  const beforeExpiringRest = {
+    requests,
+    breakerClaims,
+    rateClaims,
+  };
+  await runWithProtractorCallbackTransport(Date.now() + 10_000, () =>
+    protractorFetch("/Invoice/expiring-canary", config, {}, 0, 1, { maxRetries: 1 }),
+  );
+  ok(
+    "REST retry rechecks canary expiry before a second physical request",
+    requests === beforeExpiringRest.requests + 1 &&
+      breakerClaims === beforeExpiringRest.breakerClaims + 1 &&
+      rateClaims === beforeExpiringRest.rateClaims + 1,
+  );
+
+  process.env.PROTRACTOR_CALLBACK_CANARY_UNTIL = new Date(fakeNow + 1_000).toISOString();
+  const beforeExpiringSoap = {
+    requests,
+    breakerClaims,
+    rateClaims,
+  };
+  await runWithProtractorCallbackTransport(Date.now() + 10_000, () =>
+    soapAddServicePackage(1, "wo", { ID: "wo" }),
+  );
+  ok(
+    "SOAP retry rechecks canary expiry before a second physical request",
+    requests === beforeExpiringSoap.requests + 1 &&
+      breakerClaims === beforeExpiringSoap.breakerClaims + 1 &&
+      rateClaims === beforeExpiringSoap.rateClaims + 1,
+  );
+
   delete process.env.RENDER_INSTANCE_ID;
   delete process.env.PROTRACTOR_OUTBOUND_DENIED_INSTANCE_IDS;
+  delete process.env.PROTRACTOR_CALLBACK_CANARY_UNTIL;
+  __protractorClientTestHooks.now = () => Date.now();
+  __protractorClientTestHooks.sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   __protractorClientTestHooks.enforceLocalPolicyWithMockTransport = false;
   if (originalOutboundDisabled === undefined) {
     delete process.env.PROTRACTOR_OUTBOUND_DISABLED;

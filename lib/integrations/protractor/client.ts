@@ -124,6 +124,7 @@ export const __protractorClientTestHooks: {
   recordResponse: (connectionId: string, statusCode: number, retryAfterMs?: number) => Promise<void>;
   sleep: (ms: number) => Promise<void>;
   random: () => number;
+  now: () => number;
 } = {
   httpsRequest: productionHttpsRequest,
   enforceLocalPolicyWithMockTransport: false,
@@ -140,6 +141,7 @@ export const __protractorClientTestHooks: {
     recordProtractorResponse(connectionId, statusCode, retryAfterMs),
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   random: () => Math.random(),
+  now: () => Date.now(),
 };
 
 /**
@@ -667,7 +669,7 @@ export function isProtractorOutboundDisabled(): boolean {
 }
 
 export function getProtractorOutboundPolicy() {
-  return evaluateProtractorOutboundPolicy(process.env);
+  return evaluateProtractorOutboundPolicy(process.env, __protractorClientTestHooks.now());
 }
 
 export function isProtractorOutboundAllowed(context = "unknown"): boolean {
@@ -688,7 +690,22 @@ function localPolicyError(context: string): { ok: false; error: string } | null 
     return null;
   }
   const decision = getProtractorOutboundPolicy();
-  if (decision.allowed) return null;
+  if (decision.allowed && !decision.callbackOnly) return null;
+  if (decision.allowed && decision.callbackOnly && callbackTransportStorage.getStore()) {
+    return null;
+  }
+  if (decision.allowed && decision.callbackOnly) {
+    const callbackOnlyDenial = {
+      allowed: false,
+      reason: "callback_canary_non_callback",
+      identity: decision.identity,
+    };
+    logProtractorPolicyDenial(callbackOnlyDenial, context);
+    return {
+      ok: false,
+      error: "Protractor outbound is restricted to the callback canary",
+    };
+  }
   logProtractorPolicyDenial(decision, context);
   return {
     ok: false,
