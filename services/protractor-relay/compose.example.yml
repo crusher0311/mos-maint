@@ -7,6 +7,7 @@ services:
     environment:
       RELAY_HMAC_SECRET: ${RELAY_HMAC_SECRET:?set RELAY_HMAC_SECRET}
       PORT: "8080"
+      REST_TIMEOUT_MS: "60000"
     expose:
       - "8080"
     read_only: true

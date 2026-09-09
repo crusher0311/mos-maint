@@ -143,6 +143,60 @@ console.log("Layer 1c: server-owned idempotency derivation — clientRequestId c
     "deriveIdempotentUpstreamId is deterministic",
     deriveIdempotentUpstreamId("workOrder", 1, "u", "k") === deriveIdempotentUpstreamId("workOrder", 1, "u", "k"),
   );
+  ok(
+    "service-package retry IDs are deterministic and line-specific",
+    deriveIdempotentUpstreamId("servicePackage", 66, "u", "retry") ===
+      deriveIdempotentUpstreamId("servicePackage", 66, "u", "retry") &&
+      deriveIdempotentUpstreamId("servicePackageLine", 66, "u", "retry:0") !==
+        deriveIdempotentUpstreamId("servicePackageLine", 66, "u", "retry:1"),
+  );
+}
+
+console.log("Layer 1d: add-to-RO waits for truth and keeps one retry identity");
+{
+  const addRoute = read("app/api/jobs/add-to-ro/route.ts");
+  const historyUi = read("components/ui/AddToROWithHistory.tsx");
+  const lookupUi = read("components/JobLookup.tsx");
+
+  ok(
+    "add-to-RO derives server-owned package and line IDs",
+    addRoute.includes('resolveClientRequestId(\n    "servicePackage"') &&
+      addRoute.includes('"servicePackageLine"'),
+  );
+  ok(
+    "add-to-RO returns success without a second POST when the pinned package already exists",
+    addRoute.includes("existingIdempotentPackage") &&
+      addRoute.includes("idempotentReplay: true"),
+  );
+  ok(
+    "add-to-RO confirms the exact package ID before returning success",
+    addRoute.includes("containsPinnedPackage") &&
+      addRoute.includes("verifyPinnedPackage") &&
+      addRoute.includes("if (!writeConfirmed)") &&
+      !addRoute.includes("p.ServicePackageHeader?.Title === job.title"),
+  );
+  ok(
+    "history UI sends and retains clientRequestId until success",
+    historyUi.includes("addRequestIds.current.get(requestKey) || crypto.randomUUID()") &&
+      historyUi.includes("clientRequestId,") &&
+      historyUi.indexOf("addRequestIds.current.delete(requestKey)") >
+        historyUi.indexOf("if (!res.ok || !data.ok)"),
+  );
+  ok(
+    "history UI shows adding before fetch and success only after API success",
+    historyUi.indexOf('setStatus("adding")') < historyUi.indexOf('await fetch("/api/jobs/add-to-ro"') &&
+      historyUi.indexOf('setStatus("success")') > historyUi.indexOf("if (!res.ok || !data.ok)"),
+  );
+  ok(
+    "job lookup also waits for API success and keeps one retry identity",
+    lookupUi.includes("addRequestIds.current.get(requestKey) || crypto.randomUUID()") &&
+      lookupUi.indexOf("setSuccessfulJobs(prev => new Set(prev).add(job._id))") >
+        lookupUi.indexOf("if (!res.ok || !data.ok)"),
+  );
+  ok(
+    "job lookup serializes full-work-order updates to avoid lost packages",
+    lookupUi.includes("disabled={addingJob !== null}"),
+  );
 }
 
 console.log("Layer 2: repeated payloads with the same clientRequestId target the SAME upstream resource");

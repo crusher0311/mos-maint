@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   classifyProtractorRequest,
   createProtractorRelayRequest,
@@ -135,6 +136,39 @@ const soap = createProtractorRelayRequest(
 );
 assert.equal(soap.timeoutMs, 5_000);
 assert.equal(JSON.parse(soap.body).type, "soap");
+const slowPriorityRest = createProtractorRelayRequest(
+  relayConfig(),
+  restTarget.href,
+  "GET",
+  {},
+  undefined,
+  65_000,
+  1_700_000_000_000,
+  fixedRandom,
+);
+assert.equal(
+  slowPriorityRest.timeoutMs,
+  65_000,
+  "priority REST callers must outlive the relay's 60-second upstream deadline",
+);
+const protractorClientSource = readFileSync(
+  join(__dirname, "../lib/integrations/protractor/client.ts"),
+  "utf8",
+);
+const fetchByIdSource = protractorClientSource.slice(
+  protractorClientSource.indexOf("export async function fetchWorkOrderById"),
+  protractorClientSource.indexOf("export type ProtractorActiveInspection"),
+);
+assert.match(
+  fetchByIdSource,
+  /opts\.timeoutMs \?\? 65_000/,
+  "priority work-order reads must request the 65-second caller deadline",
+);
+assert.match(
+  fetchByIdSource,
+  /opts\.maxRetries \?\? 1/,
+  "priority work-order reads must cap retries",
+);
 assert.throws(
   () => createProtractorRelayRequest(
     relayConfig(),

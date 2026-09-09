@@ -177,6 +177,7 @@ export function AddToROWithHistory({
   const [lastPerformed, setLastPerformed] = useState<LastPerformed | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const addRequestIds = useRef(new Map<string, string>());
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -276,41 +277,47 @@ export function AddToROWithHistory({
     }
 
     setSelectedJob(job);
-    setStatus("success");
+    setStatus("adding");
+    setErrorMsg(null);
     setShowDropdown(false);
+    const requestKey = `${workOrderGuid}:${job._id}`;
+    const clientRequestId = addRequestIds.current.get(requestKey) || crypto.randomUUID();
+    addRequestIds.current.set(requestKey, clientRequestId);
 
-    fetch("/api/jobs/add-to-ro", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({
-        workOrderGuid,
-        job: {
-          title: job.job.title,
-          description: job.job.description,
-          code: job.job.code,
-          lines: job.lines,
-        },
-        source: "lookup",
-        vehicle: {
-          vin,
-          year: vehicleYear,
-          make: vehicleMake,
-          model: vehicleModel,
-        },
-      }),
-    }).then(async (res) => {
+    try {
+      const res = await fetch("/api/jobs/add-to-ro", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          workOrderGuid,
+          job: {
+            title: job.job.title,
+            description: job.job.description,
+            code: job.job.code,
+            lines: job.lines,
+          },
+          source: "lookup",
+          clientRequestId,
+          vehicle: {
+            vin,
+            year: vehicleYear,
+            make: vehicleMake,
+            model: vehicleModel,
+          },
+        }),
+      });
       const data = await res.json();
       if (!res.ok || !data.ok) {
-        console.error("[AddToRO] Background add failed:", data.error);
-        setStatus("error");
-        setErrorMsg(data.error || "Failed to add job - please try again");
+        throw new Error(data.error || "Failed to add job - please try again");
       }
-    }).catch((err) => {
-      console.error("[AddToRO] Background add failed:", err);
+      addRequestIds.current.delete(requestKey);
+      setStatus("success");
+    } catch (err) {
+      console.error("[AddToRO] Add failed:", err);
       setStatus("error");
-      setErrorMsg("Network error - please try again");
-    });
+      setErrorMsg(err instanceof Error ? err.message : "Network error - please try again");
+    }
   }
 
   function formatPrice(lines: HistoricalJob["lines"]) {

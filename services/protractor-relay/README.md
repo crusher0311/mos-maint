@@ -69,7 +69,7 @@ Required: `RELAY_HMAC_SECRET`, supplied only through the environment and at
 least 32 bytes. Optional bounded settings are `PORT` (8080),
 `REQUEST_BODY_LIMIT_BYTES` (1048576),
 `RESPONSE_BODY_LIMIT_BYTES` (5242880), `HMAC_CLOCK_SKEW_SECONDS` (60), and
-`REPLAY_TTL_SECONDS` (120). REST upstream deadlines are 30 seconds and SOAP
+`REPLAY_TTL_SECONDS` (120). REST upstream deadlines are 60 seconds and SOAP
 deadlines are 120 seconds (`REST_TIMEOUT_MS`/`SOAP_TIMEOUT_MS`); callers cannot
 extend them. `REQUEST_TIMEOUT_MS` (10000) limits inbound requests, and
 `MAX_CONCURRENT_INGRESS` (64) and `MAX_CONCURRENT_UPSTREAMS` (32) provide

@@ -7,7 +7,7 @@ export {
 } from "./relay-config";
 export type { ProtractorRelayConfig } from "./relay-config";
 
-const RELAY_REST_TIMEOUT_MS = 30_000;
+const RELAY_REST_TIMEOUT_MS = 60_000;
 const RELAY_SOAP_TIMEOUT_MS = 120_000;
 const RELAY_OVERHEAD_MS = 5_000;
 

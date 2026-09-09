@@ -35,7 +35,7 @@ export function loadConfig() {
     port: intEnv("PORT", 8080, 1, 65535),
     requestBodyLimit: intEnv("REQUEST_BODY_LIMIT_BYTES", 1_048_576, 1024, 10_485_760),
     responseBodyLimit: intEnv("RESPONSE_BODY_LIMIT_BYTES", 5_242_880, 1024, 52_428_800),
-    restTimeoutMs: intEnv("REST_TIMEOUT_MS", 30_000, 100, 120_000),
+    restTimeoutMs: intEnv("REST_TIMEOUT_MS", 60_000, 100, 120_000),
     soapTimeoutMs: intEnv("SOAP_TIMEOUT_MS", 120_000, 100, 180_000),
     requestTimeoutMs: intEnv("REQUEST_TIMEOUT_MS", 10_000, 1000, 120_000),
     clockSkewSeconds,

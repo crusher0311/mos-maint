@@ -20,6 +20,7 @@ import {
   needsCachedLaborRate,
   resolveAddToRoLaborRate,
 } from "@/lib/integrations/protractor/labor-rate";
+import { resolveClientRequestId } from "@/lib/idempotent-create-id";
 
 export const dynamic = "force-dynamic";
 
@@ -132,11 +133,12 @@ export async function POST(req: NextRequest) {
   const config = await resolveProtractorConfig(shopId);
 
   const body = await req.json();
-  const { workOrderGuid, job, source, vehicle } = body as { 
+  const { workOrderGuid, job, source, vehicle, clientRequestId } = body as {
     workOrderGuid: string; 
     job: JobPayload;
     source?: "plan" | "failures" | "lookup" | "canned" | "autocomplete";
     vehicle?: { vin?: string; year?: number; make?: string; model?: string };
+    clientRequestId?: string;
   };
 
   if (!workOrderGuid) {
@@ -205,6 +207,28 @@ export async function POST(req: NextRequest) {
   const existingPackages = Array.isArray(existingPackagesRaw)
     ? existingPackagesRaw
     : (existingPackagesRaw?.ItemCollection || []);
+  const idempotencyScope = String(session.email ?? "");
+  const packageId = resolveClientRequestId(
+    "servicePackage",
+    shopId,
+    idempotencyScope,
+    clientRequestId,
+  ) || randomUUID();
+  const existingIdempotentPackage = existingPackages.find(
+    (pkg: any) => String(pkg?.ID || "").toLowerCase() === packageId.toLowerCase(),
+  );
+  if (existingIdempotentPackage) {
+    console.log(`[Add-to-RO:${requestId}] Idempotent replay: package already present`);
+    return NextResponse.json({
+      ok: true,
+      idempotentReplay: true,
+      message: `"${job.title}" was already added to the work order`,
+      servicePackage: {
+        title: job.title,
+        linesAdded: job.lines.length,
+      },
+    });
+  }
 
   const mapLineType = (lineType: string): string => {
     switch (lineType) {
@@ -263,8 +287,14 @@ export async function POST(req: NextRequest) {
   const partCostRatio = await getShopPartCostRatio(shopId);
 
   const servicePackageLines = job.lines.map((line, idx) => {
+    const lineId = resolveClientRequestId(
+      "servicePackageLine",
+      shopId,
+      idempotencyScope,
+      typeof clientRequestId === "string" ? `${clientRequestId}:${idx}` : undefined,
+    ) || randomUUID();
     const baseLine = {
-      ID: randomUUID(),
+      ID: lineId,
       Rank: idx + 1,
       Type: mapLineType(line.lineType),
       Description: line.description,
@@ -279,7 +309,7 @@ export async function POST(req: NextRequest) {
     if (line.lineType === "labor") {
       const laborTotal = line.quantity * shopLaborRate;
       return {
-        ID: randomUUID(),
+        ID: lineId,
         Rank: idx + 1,
         Type: "Labor",
         Description: line.description,
@@ -320,7 +350,7 @@ export async function POST(req: NextRequest) {
   });
 
   const newServicePackage = {
-    ID: randomUUID(),
+    ID: packageId,
     Chapter: "Service",
     Code: job.code || `JL-${Date.now()}`,
     Rank: existingPackages.length + 1,
@@ -352,11 +382,39 @@ export async function POST(req: NextRequest) {
     },
     0,
     shopId,
-    { priority: true }
+    { priority: true, maxRetries: 1 }
   );
   
   console.log(`[Add-to-RO:${requestId}] POST took ${Date.now() - postStart}ms, ok=${updateResult.ok}`);
 
+  const containsPinnedPackage = (workOrder: any): boolean => {
+    const packagesRaw = workOrder?.ServicePackages;
+    const packages = Array.isArray(packagesRaw)
+      ? packagesRaw
+      : (packagesRaw?.ItemCollection || []);
+    return Array.isArray(packages) && packages.some(
+      (pkg: any) => String(pkg?.ID || "").toLowerCase() === packageId.toLowerCase(),
+    );
+  };
+  const verifyPinnedPackage = async (transportLabel: "REST" | "SOAP"): Promise<boolean> => {
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    const verifyResult = await fetchWorkOrderById(shopId, workOrderGuid, {
+      priority: true,
+    });
+    if (!verifyResult.ok || !verifyResult.workOrder) {
+      console.log(
+        `[Add-to-RO:${requestId}] ${transportLabel} verification GET failed: ${verifyResult.error || "work order missing"}`,
+      );
+      return false;
+    }
+    const confirmed = containsPinnedPackage(verifyResult.workOrder);
+    console.log(
+      `[Add-to-RO:${requestId}] ${transportLabel} verification exactPackageId=${confirmed}`,
+    );
+    return confirmed;
+  };
+
+  let writeConfirmed = false;
   if (!updateResult.ok) {
     const isStatusColumnError = (updateResult.error || '').includes("Invalid column name 'Status'");
     
@@ -367,37 +425,15 @@ export async function POST(req: NextRequest) {
       console.log(`[Add-to-RO:${requestId}] SOAP took ${Date.now() - soapStart}ms, ok=${soapResult.ok}`);
       
       if (soapResult.ok) {
-        console.log(`[Add-to-RO:${requestId}] SOAP succeeded: verifying package was added...`);
-        
-        await new Promise(r => setTimeout(r, 1000));
-        const verifyResult = await protractorFetch<any>(
-          `/WorkOrder/${workOrderGuid}`,
-          config,
-          {},
-          0,
-          shopId,
-          { priority: true }
-        );
-        
-        if (verifyResult.ok && verifyResult.data) {
-          const verifyPkgs = verifyResult.data?.ServicePackages?.ItemCollection || 
-                             verifyResult.data?.ServicePackages || [];
-          const found = Array.isArray(verifyPkgs) && verifyPkgs.some(
-            (p: any) => p.ServicePackageHeader?.Title === job.title || p.Code === newServicePackage.Code
+        console.log(`[Add-to-RO:${requestId}] SOAP succeeded: verifying exact package ID...`);
+        writeConfirmed = await verifyPinnedPackage("SOAP");
+        if (!writeConfirmed) {
+          return NextResponse.json(
+            {
+              error: "Protractor accepted the update, but MOS could not confirm it. Retry safely; the same package ID will be reused.",
+            },
+            { status: 502 },
           );
-          
-          if (found) {
-            console.log(`[Add-to-RO:${requestId}] SOAP VERIFIED: Package "${job.title}" confirmed in WO`);
-          } else {
-            console.log(`[Add-to-RO:${requestId}] SOAP WARNING: Package "${job.title}" not found in verification GET. Packages: ${JSON.stringify(verifyPkgs.map((p: any) => p.ServicePackageHeader?.Title)).substring(0, 500)}`);
-            
-            return NextResponse.json(
-              { error: `SOAP update accepted but package was not confirmed. This Protractor installation may have a database issue (missing 'Status' column). Please contact Protractor support.` },
-              { status: 500 }
-            );
-          }
-        } else {
-          console.log(`[Add-to-RO:${requestId}] Could not verify SOAP result (GET failed)`);
         }
       } else {
         console.log(`[Add-to-RO:${requestId}] SOAP also failed: ${soapResult.error}`);
@@ -414,18 +450,26 @@ export async function POST(req: NextRequest) {
       );
     }
   } else {
-    const responsePackages = updateResult.data?.ServicePackages?.ItemCollection || 
-                             updateResult.data?.ServicePackages || [];
-    const addedPackage = Array.isArray(responsePackages) 
-      ? responsePackages.find((p: any) => 
-          p.ServicePackageHeader?.Title === job.title || 
-          p.Code === newServicePackage.Code
-        )
-      : null;
-    
-    if (!addedPackage) {
-      console.log(`[Add-to-RO:${requestId}] WARNING: REST returned OK but package not found in response`);
+    writeConfirmed = containsPinnedPackage(updateResult.data);
+    if (!writeConfirmed) {
+      console.log(`[Add-to-RO:${requestId}] REST returned OK without the exact package ID; verifying with GET...`);
+      writeConfirmed = await verifyPinnedPackage("REST");
     }
+    if (!writeConfirmed) {
+      return NextResponse.json(
+        {
+          error: "Protractor accepted the update, but MOS could not confirm it. Retry safely; the same package ID will be reused.",
+        },
+        { status: 502 },
+      );
+    }
+  }
+
+  if (!writeConfirmed) {
+    return NextResponse.json(
+      { error: "MOS could not confirm that Protractor saved the package." },
+      { status: 502 },
+    );
   }
   
   console.log(`[Add-to-RO:${requestId}] Success: Added "${job.title}" to WO ${workOrderGuid}, total time: ${Date.now() - startTime}ms`);

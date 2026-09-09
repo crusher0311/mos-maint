@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Search, Plus, ChevronDown, ChevronUp, Wrench, Package, Clock, DollarSign, Check } from "lucide-react";
 import { getMatchConfidenceBadge, type AcesTier } from "@/lib/aces-tier-badge";
 
@@ -83,6 +83,7 @@ export default function JobLookup({ currentVehicle, workOrderGuid, onJobAdded }:
   // Same engine / Same submodel) cannot fire and every score below is
   // from the legacy heuristic scorer — surface that to the advisor.
   const [acesUnavailable, setAcesUnavailable] = useState(false);
+  const addRequestIds = useRef(new Map<string, string>());
 
   const handleSearch = async () => {
     if (!query.trim() && !currentVehicle?.make) {
@@ -138,43 +139,46 @@ export default function JobLookup({ currentVehicle, workOrderGuid, onJobAdded }:
       return;
     }
 
-    setSuccessfulJobs(prev => new Set(prev).add(job._id));
-    onJobAdded?.();
-
-    fetch("/api/jobs/add-to-ro", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        workOrderGuid,
-        job: {
-          title: job.job.title,
-          description: job.job.description,
-          code: job.job.code,
-          lines: job.lines,
-        },
-        source: "lookup",
-        vehicle: currentVehicle,
-      }),
-    }).then(async (res) => {
+    setAddingJob(job._id);
+    setError(null);
+    const requestKey = `${workOrderGuid}:${job._id}`;
+    const clientRequestId = addRequestIds.current.get(requestKey) || crypto.randomUUID();
+    addRequestIds.current.set(requestKey, clientRequestId);
+    try {
+      const res = await fetch("/api/jobs/add-to-ro", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workOrderGuid,
+          job: {
+            title: job.job.title,
+            description: job.job.description,
+            code: job.job.code,
+            lines: job.lines,
+          },
+          source: "lookup",
+          clientRequestId,
+          vehicle: currentVehicle,
+        }),
+      });
       const data = await res.json();
-      if (!res.ok) {
-        console.error("[JobLookup] Background add failed:", data.error);
-        setSuccessfulJobs(prev => {
-          const next = new Set(prev);
-          next.delete(job._id);
-          return next;
-        });
-        setError(data.error || "Failed to add job");
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || "Failed to add job");
       }
-    }).catch((err) => {
-      console.error("[JobLookup] Background add failed:", err);
+      addRequestIds.current.delete(requestKey);
+      setSuccessfulJobs(prev => new Set(prev).add(job._id));
+      onJobAdded?.();
+    } catch (err) {
+      console.error("[JobLookup] Add failed:", err);
       setSuccessfulJobs(prev => {
         const next = new Set(prev);
         next.delete(job._id);
         return next;
       });
-      setError("Network error adding job");
-    });
+      setError(err instanceof Error ? err.message : "Network error adding job");
+    } finally {
+      setAddingJob(null);
+    }
   };
 
   const formatCurrency = (amount: number) => {
@@ -446,7 +450,7 @@ export default function JobLookup({ currentVehicle, workOrderGuid, onJobAdded }:
                       ) : (
                         <button
                           onClick={() => handleAddToRO(job)}
-                          disabled={addingJob === job._id}
+                          disabled={addingJob !== null}
                           className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
                         >
                           <Plus className="w-4 h-4" />

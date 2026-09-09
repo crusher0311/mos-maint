@@ -712,7 +712,7 @@ export async function protractorFetch<T>(
   options: RequestInit = {},
   retryCount = 0,
   shopId?: number,
-  opts?: { priority?: boolean; maxRetries?: number }
+  opts?: { priority?: boolean; maxRetries?: number; timeoutMs?: number }
 ): Promise<{ ok: boolean; data?: T; error?: string }> {
   const local = localPolicyError("rest");
   if (local) return local;
@@ -817,12 +817,27 @@ export async function protractorFetch<T>(
           body = JSON.stringify(stripStatus(parsed));
         } catch {}
       }
-      const res = await __protractorClientTestHooks.httpsRequest(url, method, headers, body);
+      const res = await __protractorClientTestHooks.httpsRequest(
+        url,
+        method,
+        headers,
+        body,
+        opts?.timeoutMs,
+      );
 
       const latencyMs = Date.now() - startTime;
       const isServerError = res.statusCode >= 500;
       const isRateLimited = res.statusCode === 429;
       const retryAfterMs = parseProtractorRetryAfter(res.headers?.["retry-after"]);
+      if (relayLogging) {
+        console.log(JSON.stringify({
+          event: "protractor_relay_response",
+          method,
+          statusCode: res.statusCode,
+          durationMs: latencyMs,
+          priority: isPriority,
+        }));
+      }
       await recordBreakerResponse(config, res.statusCode, retryAfterMs);
       
       __protractorClientTestHooks.trackApiRequest('protractor', relayLogging ? 'relay' : endpoint, method, res.statusCode, latencyMs, shopId, {
@@ -2096,7 +2111,7 @@ export async function fetchActiveWorkOrders(
 export async function fetchWorkOrderById(
   shopId: number | string,
   workOrderId: string,
-  opts?: { priority?: boolean }
+  opts?: { priority?: boolean; timeoutMs?: number; maxRetries?: number }
 ): Promise<{ ok: boolean; workOrder?: ProtractorWorkOrder; error?: string }> {
   const config = await __protractorClientTestHooks.resolveProtractorConfig(shopId);
   if (!config.configured) {
@@ -2110,7 +2125,13 @@ export async function fetchWorkOrderById(
     {},
     0,
     numShopId,
-    opts
+    opts?.priority
+      ? {
+          ...opts,
+          timeoutMs: opts.timeoutMs ?? 65_000,
+          maxRetries: opts.maxRetries ?? 1,
+        }
+      : opts
   );
 
   if (!result.ok) {
