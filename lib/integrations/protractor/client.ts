@@ -1054,7 +1054,8 @@ export async function fetchVehicleByVin(
 
 export async function fetchVehicleById(
   shopId: number,
-  serviceItemId: string
+  serviceItemId: string,
+  opts?: { timeoutMs?: number; maxRetries?: number },
 ): Promise<{ ok: boolean; vehicle?: ProtractorVehicle; error?: string }> {
   const config = await resolveProtractorConfig(shopId);
   if (!config.configured) {
@@ -1066,7 +1067,8 @@ export async function fetchVehicleById(
     config,
     {},
     0,
-    shopId
+    shopId,
+    opts,
   );
 
   if (!result.ok) {

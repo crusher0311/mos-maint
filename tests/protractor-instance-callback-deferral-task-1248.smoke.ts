@@ -426,6 +426,7 @@ async function main() {
   events.splice(0);
   events.push(...priorEvents);
   const queueReplayFloor = new Date(Date.now() - 60_000);
+  let terminalReplayFetchOptions: Doc | undefined;
   process.env.PROTRACTOR_CALLBACK_REPLAY_NOT_BEFORE = queueReplayFloor.toISOString();
   process.env.PROTRACTOR_CALLBACK_CANARY_UNTIL = new Date(Date.now() + 60_000).toISOString();
   const queueResult = await processProtractorCallbackQueue(fakeDb as any, async (item) => {
@@ -435,6 +436,10 @@ async function main() {
         { key: item.key, shopId: item.shopId, objectId: item.objectId!, operation: item.operation },
         {
           ...integrationStub,
+          fetchWorkOrderById: async (...args: any[]) => {
+            terminalReplayFetchOptions = args[2];
+            return integrationStub.fetchWorkOrderById();
+          },
           applyProtractorTerminalCallback: terminalHelper,
         },
       );
@@ -452,6 +457,11 @@ async function main() {
     lastCallbackFindFilter?.receivedAt?.$gte?.getTime(),
     queueReplayFloor.getTime(),
     "callback-only queue passes the exact policy replay floor into retrieval",
+  );
+  assert.deepEqual(
+    terminalReplayFetchOptions,
+    { timeoutMs: 8_000, maxRetries: 0 },
+    "terminal callback replay uses the same bounded zero-retry provider read",
   );
   delete process.env.PROTRACTOR_CALLBACK_REPLAY_NOT_BEFORE;
   delete process.env.PROTRACTOR_CALLBACK_CANARY_UNTIL;

@@ -66,3 +66,17 @@ unapproved historical backfill.
 once stale, and retrieve only an oversized newest window through the existing
 callback index. Coalesce generations and round-robin shops inside that bounded
 window. Never widen or refresh the floor merely to prolong a canary.
+
+The callback drain's own budget must stay well below the scheduler's HTTP
+deadline, and every callback replay branch needs a short, zero-retry provider
+read.
+
+**Why:** Matching both deadlines at 50 seconds made every minute tick look
+failed and release its scheduler lock while route work was still finishing.
+Terminal POST replay initially bypassed the shorter read policy, so fixing only
+the main WorkOrder path was incomplete.
+
+**How to apply:** Reserve substantial time for the final provider response and
+local persistence. Apply the same bounded read policy to WorkOrder,
+ServiceItem, and terminal POST replay; leave failures replayable for a later
+minute rather than retrying inside one drain.

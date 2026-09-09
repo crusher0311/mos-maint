@@ -11,6 +11,10 @@ export const TERMINAL_CALLBACK_STATUSES = new Set([
   "CLOSED",
   "VOID",
 ]);
+export const CALLBACK_REPLAY_FETCH_OPTIONS = Object.freeze({
+  timeoutMs: 8_000,
+  maxRetries: 0,
+});
 
 export interface DeferredTerminalPost {
   key: string;
@@ -32,7 +36,11 @@ export async function replayDeferredTerminalPost(
     applyProtractorTerminalCallback,
   },
 ): Promise<boolean> {
-  const result = await deps.fetchWorkOrderById(event.shopId, event.objectId);
+  const result = await deps.fetchWorkOrderById(
+    event.shopId,
+    event.objectId,
+    CALLBACK_REPLAY_FETCH_OPTIONS,
+  );
   if (!result.ok || !result.workOrder) return false;
   await deps.upsertProtractorWorkOrderSnapshot(event.shopId, result.workOrder);
   const applied = await deps.applyProtractorTerminalCallback(db, {

@@ -4,13 +4,17 @@ import { processProtractorCallbackQueue } from "./callback-queue";
 import { fetchVehicleById, fetchWorkOrderById } from "./client";
 import { upsertProtractorVehicleSnapshot, upsertProtractorWorkOrderSnapshot } from "@/lib/integrations/protractor";
 import { applyProtractorTerminalCallback } from "./callback-terminal";
-import { replayDeferredTerminalPost } from "./callback-replay";
+import {
+  CALLBACK_REPLAY_FETCH_OPTIONS,
+  replayDeferredTerminalPost,
+} from "./callback-replay";
 import { NormalizedIngestionService } from "@/lib/integrations/core/normalized-ingestion";
 import { attributeRevenueFromWorkOrder } from "@/lib/enterprise";
 import { extractJobIndexFromWorkOrder, computeJobHash } from "@/lib/job-index";
 import { isProtractorShopRecord } from "./shop-eligibility";
 
 const TERMINAL = new Set(["DELETE", "INVOICED", "INVOICE", "CLOSED", "VOID"]);
+const CALLBACK_DRAIN_BUDGET_MS = 15_000;
 
 /**
  * Library-owned callback replay. Keeping this out of route modules lets the
@@ -40,13 +44,17 @@ export async function processProtractorCallbackDrain(db?: Db, options: { budgetM
       return;
     }
     if (item.objectType === "ServiceItem" && item.objectId) {
-      const result = await fetchVehicleById(item.shopId, item.objectId);
+      const result = await fetchVehicleById(item.shopId, item.objectId, {
+        ...CALLBACK_REPLAY_FETCH_OPTIONS,
+      });
       if (!result.ok || !result.vehicle?.VIN) throw new Error(`Vehicle callback replay failed: ${result.error || "missing data"}`);
       await upsertProtractorVehicleSnapshot(item.shopId, result.vehicle.VIN, result.vehicle);
       return;
     }
     if (item.objectType === "WorkOrder" && item.objectId) {
-      const result = await fetchWorkOrderById(item.shopId, item.objectId);
+      const result = await fetchWorkOrderById(item.shopId, item.objectId, {
+        ...CALLBACK_REPLAY_FETCH_OPTIONS,
+      });
       if (!result.ok || !result.workOrder) throw new Error(`Work-order callback replay failed: ${result.error || "missing data"}`);
       await upsertProtractorWorkOrderSnapshot(item.shopId, result.workOrder);
       try {
@@ -117,7 +125,9 @@ export async function processProtractorCallbackDrain(db?: Db, options: { budgetM
   }, {
     limit: 45,
     maxAttempts: 3,
-    budgetMs: options.budgetMs ?? 50_000,
+    // Leave ample room under the scheduler's 50s request timeout for the
+    // final provider response and local persistence to finish cleanly.
+    budgetMs: options.budgetMs ?? CALLBACK_DRAIN_BUDGET_MS,
     isShopEligible: async (shopId) => isProtractorShopRecord(
       await queueDb.collection("shops").findOne({
         shopId: { $in: [shopId, String(shopId)] },
