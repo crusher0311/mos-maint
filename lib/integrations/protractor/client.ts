@@ -30,6 +30,12 @@ import {
   evaluateProtractorOutboundPolicy,
   logProtractorPolicyDenial,
 } from "./outbound-policy.cjs";
+import {
+  createProtractorRelayRequest,
+  readProtractorRelayConfig,
+  RelayTransportError,
+  shouldUseProtractorRelay,
+} from "./relay-transport";
 export { normalizeProtractorPackageLine } from "./package-normalization";
 
 const BASE_URL_V1 = "https://integration.protractor.com/IntegrationServices/1.0";
@@ -510,36 +516,81 @@ function httpsRequest(
   body?: string,
   timeoutMs = 30000,
 ): Promise<{ statusCode: number; body: string; headers?: Record<string, string | string[] | undefined> }> {
+  const relayConfig = readProtractorRelayConfig();
+  let requestUrl = new URL(urlString);
+  let requestMethod = method;
+  let requestHeaders = headers;
+  let requestBody = body;
+  let requestTimeoutMs = timeoutMs;
+  const targetForMode = new URL(urlString);
+  const relayEligible = shouldUseProtractorRelay(relayConfig, targetForMode, method, headers);
+  if (relayEligible) {
+    const relay = createProtractorRelayRequest(
+      relayConfig as Extract<typeof relayConfig, { mode: "relay-read-only" | "relay" }>,
+      urlString,
+      method,
+      headers,
+      body,
+      timeoutMs,
+    );
+    requestUrl = relay.url;
+    requestMethod = "POST";
+    requestHeaders = relay.headers;
+    requestBody = relay.body;
+    requestTimeoutMs = relay.timeoutMs;
+    console.info(JSON.stringify({ event: "protractor_relay_request", ...relay.metadata }));
+  }
+
   return new Promise((resolve, reject) => {
-    const url = new URL(urlString);
-    
     const options: https.RequestOptions = {
-      hostname: url.hostname,
-      port: url.port || 443,
-      path: url.pathname + url.search,
-      method: method,
-      headers: headers,
+      hostname: requestUrl.hostname,
+      port: requestUrl.port || 443,
+      path: requestUrl.pathname + requestUrl.search,
+      method: requestMethod,
+      headers: requestHeaders,
     };
     
+    let settled = false;
+    let deadline: NodeJS.Timeout;
+    const settleError = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(deadline);
+      reject(relayEligible
+        ? (error instanceof RelayTransportError ? error : new RelayTransportError("relay_transport"))
+        : error);
+    };
     const req = https.request(options, (res) => {
       let data = "";
       res.on("data", (chunk) => { data += chunk; });
       res.on("end", () => {
+        if (settled) return;
+        const relayError = relayEligible
+          ? Object.entries(res.headers).find(([name]) => name.toLowerCase() === "x-relay-error-code")?.[1]
+          : undefined;
+        if (relayError) {
+          const code = Array.isArray(relayError) ? relayError[0] : relayError;
+          settleError(new RelayTransportError(String(code).replace(/[^a-z0-9_]/gi, "").slice(0, 64)));
+          return;
+        }
+        settled = true;
+        clearTimeout(deadline);
         resolve({ statusCode: res.statusCode || 0, body: data, headers: res.headers });
       });
+      res.on("error", (error) => settleError(error));
+      res.on("aborted", () => settleError(new Error("Response aborted")));
     });
     
-    req.on("error", (err) => {
-      reject(err);
-    });
-    
-    req.setTimeout(timeoutMs, () => {
+    req.on("error", (err) => settleError(err));
+    // A wall-clock deadline is required in addition to setTimeout's socket
+    // inactivity behavior. This is the caller's end-to-end deadline.
+    deadline = setTimeout(() => {
       req.destroy();
-      reject(new Error("Request timeout"));
-    });
+      settleError(new Error("Request timeout"));
+    }, requestTimeoutMs);
     
-    if (body) {
-      req.write(body);
+    if (requestBody !== undefined) {
+      req.write(requestBody);
     }
     
     req.end();
@@ -662,9 +713,11 @@ export async function protractorFetch<T>(
   retryCount = 0,
   shopId?: number,
   opts?: { priority?: boolean; maxRetries?: number }
-): Promise<{ ok: boolean; data?: T; error?: string }> {
+): Promise<{ ok: boolean; data?: T; error?: string; statusCode?: number }> {
   const local = localPolicyError("rest");
   if (local) return local;
+  const relayLogging = process.env.PROTRACTOR_RELAY_MODE !== undefined &&
+    process.env.PROTRACTOR_RELAY_MODE !== "direct";
 
   if (!config.configured) {
     return { ok: false, error: "Protractor not configured" };
@@ -703,7 +756,17 @@ export async function protractorFetch<T>(
     const totalWaitMs = Date.now() - concurrencyWaitStart;
     
     if (isPriority) {
-      console.log(`[Protractor:PRIORITY] ${method} ${endpoint} (queue wait: ${totalWaitMs}ms, rate wait: ${rateSlot.waitedMs || 0}ms)`);
+      if (relayLogging) {
+        console.log(JSON.stringify({
+          event: "protractor_priority_request",
+          transport: "relay",
+          method,
+          queueWaitMs: totalWaitMs,
+          rateWaitMs: rateSlot.waitedMs || 0,
+        }));
+      } else {
+        console.log(`[Protractor:PRIORITY] ${method} ${endpoint} (queue wait: ${totalWaitMs}ms, rate wait: ${rateSlot.waitedMs || 0}ms)`);
+      }
     }
   
     try {
@@ -724,7 +787,12 @@ export async function protractorFetch<T>(
       
       let body = options.body ? String(options.body) : undefined;
       
-      if (body && method === 'POST' && endpoint.startsWith('/WorkOrder/')) {
+      if (
+        !relayLogging &&
+        body &&
+        method === 'POST' &&
+        endpoint.startsWith('/WorkOrder/')
+      ) {
         const curlHeaders = Object.entries(headers)
           .map(([k, v]) => `-H '${k}: ${k === 'apikey' || k === 'authentication' ? '***REDACTED***' : v}'`)
           .join(' \\\n  ');
@@ -757,9 +825,9 @@ export async function protractorFetch<T>(
       const retryAfterMs = parseProtractorRetryAfter(res.headers?.["retry-after"]);
       await recordBreakerResponse(config, res.statusCode, retryAfterMs);
       
-      __protractorClientTestHooks.trackApiRequest('protractor', endpoint, method, res.statusCode, latencyMs, shopId, {
+      __protractorClientTestHooks.trackApiRequest('protractor', relayLogging ? 'relay' : endpoint, method, res.statusCode, latencyMs, shopId, {
         retryCount: attempt > 0 ? attempt : undefined,
-        errorMessage: res.statusCode >= 400 ? res.body?.substring(0, 200) : undefined,
+        errorMessage: !relayLogging && res.statusCode >= 400 ? res.body?.substring(0, 200) : undefined,
         sourceWorker: process.env.RENDER ? 'render' : 'replit'
       }).catch(() => {});
 
@@ -782,7 +850,18 @@ export async function protractorFetch<T>(
           Math.max(isRateLimited ? retryAfterMs : 0, Math.min(baseWaitMs + jitter, MAX_TRANSIENT_BACKOFF_MS)),
         );
         
-        console.log(`[Protractor] ${isRateLimited ? 'Rate limited' : `Server error ${res.statusCode}`}, retrying in ${Math.round(waitMs)}ms (attempt ${attempt + 1}/${maxRetries}) | Body: ${(res.body || '').substring(0, 500)}`);
+        if (relayLogging) {
+          console.log(JSON.stringify({
+            event: "protractor_relay_retry",
+            method,
+            statusCode: res.statusCode,
+            waitMs: Math.round(waitMs),
+            attempt: attempt + 1,
+            maxRetries,
+          }));
+        } else {
+          console.log(`[Protractor] ${isRateLimited ? 'Rate limited' : `Server error ${res.statusCode}`}, retrying in ${Math.round(waitMs)}ms (attempt ${attempt + 1}/${maxRetries}) | Body: ${(res.body || '').substring(0, 500)}`);
+        }
 
         const backoffCounter = backoffStorage.getStore();
         if (backoffCounter) backoffCounter.ms += waitMs;
@@ -791,23 +870,42 @@ export async function protractorFetch<T>(
         continue;
       }
       if (isDeterministicError) {
-        console.log(`[Protractor] Deterministic SQL error detected, skipping retries | Body: ${(res.body || '').substring(0, 300)}`);
+        if (relayLogging) {
+          console.log(JSON.stringify({
+            event: "protractor_relay_deterministic_error",
+            method,
+            statusCode: res.statusCode,
+          }));
+        } else {
+          console.log(`[Protractor] Deterministic SQL error detected, skipping retries | Body: ${(res.body || '').substring(0, 300)}`);
+        }
       }
 
       if (res.statusCode < 200 || res.statusCode >= 300) {
-        console.log(`[Protractor] HTTP ${res.statusCode} for ${method} ${endpoint} | Body (${(res.body || '').length} chars): ${(res.body || '(empty)').substring(0, 500)}`);
+        if (relayLogging) {
+          console.log(JSON.stringify({
+            event: "protractor_relay_http_error",
+            method,
+            statusCode: res.statusCode,
+          }));
+        } else {
+          console.log(`[Protractor] HTTP ${res.statusCode} for ${method} ${endpoint} | Body (${(res.body || '').length} chars): ${(res.body || '(empty)').substring(0, 500)}`);
+        }
         let errorMsg = res.body || "Unknown error";
         if (/<[^>]+>/i.test(errorMsg)) {
           errorMsg = `Server returned ${res.statusCode}`;
         } else if (errorMsg.length > 200) {
           errorMsg = errorMsg.substring(0, 200);
         }
-        return { ok: false, error: `HTTP ${res.statusCode}: ${errorMsg}` };
+        return { ok: false, error: `HTTP ${res.statusCode}: ${errorMsg}`, statusCode: res.statusCode };
       }
 
       const data = res.body ? JSON.parse(res.body) : null;
       return { ok: true, data: data as T };
     } catch (err: any) {
+      if (err instanceof RelayTransportError) {
+        return { ok: false, error: err.message };
+      }
       await recordBreakerResponse(config, PROTRACTOR_TRANSPORT_FAILURE_STATUS);
       return { ok: false, error: err.message || "Network error" };
     }
@@ -818,7 +916,7 @@ export async function protractorFetch<T>(
 export async function fetchVehicleByVin(
   shopId: number,
   vin: string
-): Promise<{ ok: boolean; vehicle?: ProtractorVehicle; error?: string }> {
+): Promise<{ ok: boolean; vehicle?: ProtractorVehicle; error?: string; statusCode?: number }> {
   const config = await resolveProtractorConfig(shopId);
   if (!config.configured) {
     return { ok: false, error: "Protractor not configured for this shop" };
@@ -833,7 +931,7 @@ export async function fetchVehicleByVin(
   );
 
   if (!result.ok) {
-    return { ok: false, error: result.error };
+    return { ok: false, error: result.error, statusCode: result.statusCode };
   }
 
   const vehicles = result.data?.ItemCollection || [];
@@ -1116,6 +1214,9 @@ async function protractorSoapServiceItemUpdate(
       const faultMatch = res.body.match(/faultstring>([^<]+)/);
       return { ok: false, error: faultMatch ? faultMatch[1] : `HTTP ${res.statusCode}` };
     } catch (err: any) {
+      if (err instanceof RelayTransportError) {
+        return { ok: false, error: err.message };
+      }
       await recordBreakerResponse(config, PROTRACTOR_TRANSPORT_FAILURE_STATUS);
       if (attempt < maxRetries) {
         await __protractorClientTestHooks.sleep(
@@ -1282,7 +1383,7 @@ async function protractorSoapWorkOrderUpdate(
         const pkgCount = (resultXml.match(/<ServicePackage>/g) || []).length;
         console.log(`[Protractor:SOAP] WorkOrderUpdate succeeded in ${latencyMs}ms (attempt ${attempt + 1}/${maxRetries + 1}) | Response length: ${res.body.length} | ServicePackages in response: ${pkgCount} | Has packages: ${hasServicePkgs}`);
         if (pkgCount === 0 && resultXml.length > 0) {
-          console.log(`[Protractor:SOAP] WARNING: Response has no service packages. Response XML (first 1000): ${resultXml.substring(0, 1000)}`);
+          console.log(`[Protractor:SOAP] WARNING: Response has no service packages (response length: ${res.body.length})`);
         }
         return { ok: true };
       }
@@ -1302,6 +1403,9 @@ async function protractorSoapWorkOrderUpdate(
 
       return { ok: false, error: errorMsg };
     } catch (err: any) {
+      if (err instanceof RelayTransportError) {
+        return { ok: false, error: err.message };
+      }
       await recordBreakerResponse(config, PROTRACTOR_TRANSPORT_FAILURE_STATUS);
       console.log(`[Protractor:SOAP] WorkOrderUpdate exception (attempt ${attempt + 1}/${maxRetries + 1}): ${err.message}`);
       if (attempt < maxRetries) {
@@ -2353,7 +2457,7 @@ export async function fetchDeferredWork(
   shopId: number,
   serviceItemId: string,
   options?: { startDate?: string; endDate?: string }
-): Promise<{ ok: boolean; deferredWork?: ProtractorDeferredWork[]; error?: string }> {
+): Promise<{ ok: boolean; deferredWork?: ProtractorDeferredWork[]; error?: string; statusCode?: number }> {
   const config = await resolveProtractorConfig(shopId);
   if (!config.configured) {
     return { ok: false, error: "Protractor not configured for this shop" };
@@ -2377,7 +2481,7 @@ export async function fetchDeferredWork(
 
   if (!result.ok) {
     console.log(`[Protractor:DeferredWork] FAILED: ${result.error}`);
-    return { ok: false, error: result.error };
+    return { ok: false, error: result.error, statusCode: result.statusCode };
   }
 
   const items = result.data?.ItemCollection || [];
@@ -2659,11 +2763,18 @@ export async function upsertProtractorDeferredWorkSnapshot(
 
 const CACHE_TTL_HOURS = 6;
 
+/** Pure wrapper seam: preserves structured failures while adding cache provenance. */
+export function withProtractorApiSource<T extends { statusCode?: number }>(
+  result: T,
+): T & { source: "api" } {
+  return { ...result, source: "api" };
+}
+
 export async function fetchVehicleWithCache(
   shopId: number,
   vin: string,
   maxAgeMs = CACHE_TTL_HOURS * 60 * 60 * 1000
-): Promise<{ ok: boolean; vehicle?: ProtractorVehicle; error?: string; source?: "cache" | "api" }> {
+): Promise<{ ok: boolean; vehicle?: ProtractorVehicle; error?: string; source?: "cache" | "api"; statusCode?: number }> {
   const db = await getDb();
   const cached = await db.collection("protractor_vehicles").findOne({
     shopId,
@@ -2701,7 +2812,7 @@ export async function fetchVehicleWithCache(
     await upsertProtractorVehicleSnapshot(shopId, vin, result.vehicle);
   }
 
-  return { ...result, source: "api" };
+  return withProtractorApiSource(result);
 }
 
 export async function fetchDeferredWorkWithCache(
@@ -2709,7 +2820,7 @@ export async function fetchDeferredWorkWithCache(
   vin: string,
   serviceItemId: string,
   maxAgeMs = CACHE_TTL_HOURS * 60 * 60 * 1000
-): Promise<{ ok: boolean; deferredWork?: ProtractorDeferredWork[]; error?: string; source?: "cache" | "api" }> {
+): Promise<{ ok: boolean; deferredWork?: ProtractorDeferredWork[]; error?: string; source?: "cache" | "api"; statusCode?: number }> {
   const cached = await findDeferredWorkByShopAndVin(shopId, vin);
 
   const now = Date.now();
@@ -2738,7 +2849,7 @@ export async function fetchDeferredWorkWithCache(
     await upsertProtractorDeferredWorkSnapshot(shopId, vin, result.deferredWork);
   }
 
-  return { ...result, source: "api" };
+  return withProtractorApiSource(result);
 }
 
 export type ProtractorCannedJob = {

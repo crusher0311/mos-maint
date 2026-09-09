@@ -1,0 +1,14 @@
+{$RELAY_HOSTNAME} {
+	request_body {
+		max_size 2MB
+	}
+	reverse_proxy protractor-relay:8080 {
+		header_up -X-Forwarded-For
+		header_up -X-Forwarded-Host
+		header_up -X-Forwarded-Proto
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+}

@@ -1,0 +1,58 @@
+services:
+  protractor-relay:
+    build:
+      context: .
+    restart: unless-stopped
+    stop_grace_period: 140s
+    environment:
+      RELAY_HMAC_SECRET: ${RELAY_HMAC_SECRET:?set RELAY_HMAC_SECRET}
+      PORT: "8080"
+    expose:
+      - "8080"
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,noexec,nosuid,nodev
+    volumes:
+      - replay_state:/var/lib/protractor-relay
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 100
+    mem_limit: 256m
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks:
+      - relay
+
+  caddy:
+    image: caddy:2.8.4-alpine
+    restart: unless-stopped
+    stop_grace_period: 145s
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      RELAY_HOSTNAME: ${RELAY_HOSTNAME:?set RELAY_HOSTNAME}
+    volumes:
+      - ./Caddyfile.example:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      protractor-relay:
+        condition: service_healthy
+    networks:
+      - relay
+
+networks:
+  relay:
+    internal: false
+
+volumes:
+  caddy_data:
+  caddy_config:
+  replay_state:
