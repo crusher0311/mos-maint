@@ -1,3 +1,5 @@
+import { preflightProtractorRelayConfig } from "@/lib/integrations/protractor/relay-transport";
+
 async function recordSchedulerStatus(
   status: "failed" | "disabled",
   reason: string,
@@ -114,6 +116,9 @@ async function ensureCriticalIndexes() {
 }
 
 export async function register() {
+  // Fail startup on malformed relay settings, but remain inert in direct mode.
+  // This runs before workers begin; request policy checks still win per-call.
+  preflightProtractorRelayConfig();
   // Must precede the runtime branch: instrumentation is the earliest common
   // startup point, before Next can emit request/access logs. The installer has
   // no browser dependency and safely no-ops for unavailable console methods.
