@@ -1,5 +1,3 @@
-import { preflightProtractorRelayConfig } from "@/lib/integrations/protractor/relay-transport";
-
 async function recordSchedulerStatus(
   status: "failed" | "disabled",
   reason: string,
@@ -116,9 +114,6 @@ async function ensureCriticalIndexes() {
 }
 
 export async function register() {
-  // Fail startup on malformed relay settings, but remain inert in direct mode.
-  // This runs before workers begin; request policy checks still win per-call.
-  preflightProtractorRelayConfig();
   // Must precede the runtime branch: instrumentation is the earliest common
   // startup point, before Next can emit request/access logs. The installer has
   // no browser dependency and safely no-ops for unavailable console methods.
@@ -128,6 +123,13 @@ export async function register() {
   installAppFueledHookLogRedaction();
 
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
+
+  // Keep the Node crypto transport entirely outside edge instrumentation.
+  // Malformed relay settings still fail Node startup before workers begin.
+  const { preflightProtractorRelayConfig } = await import(
+    "@/lib/integrations/protractor/relay-config"
+  );
+  preflightProtractorRelayConfig();
 
   // Defense in depth for every production server entrypoint, including a
   // direct `next start` that bypasses Render's start-with-workers wrapper.

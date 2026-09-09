@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
+import { readFileSync } from "node:fs";
 import {
   classifyProtractorRequest,
   createProtractorRelayRequest,
@@ -9,6 +10,18 @@ import {
 
 const secret = "s".repeat(32);
 const relayUrl = "https://protractor-relay.mos.tools/relay";
+
+const instrumentationSource = readFileSync(
+  new URL("../src/instrumentation.ts", import.meta.url),
+  "utf8",
+);
+assert.doesNotMatch(instrumentationSource, /^import .*relay-/m);
+assert.doesNotMatch(instrumentationSource, /relay-transport/);
+assert.ok(
+  instrumentationSource.indexOf('NEXT_RUNTIME !== "nodejs"') <
+    instrumentationSource.indexOf("@/lib/integrations/protractor/relay-config"),
+  "relay preflight import must stay behind the Node runtime boundary",
+);
 
 function relayConfig() {
   const config = readProtractorRelayConfig({
