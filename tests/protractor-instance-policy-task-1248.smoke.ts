@@ -78,7 +78,8 @@ async function main() {
     "active callback canary is allowed but callback-only",
     evaluateProtractorOutboundPolicy({
       ...base,
-      PROTRACTOR_CALLBACK_CANARY_UNTIL: "2026-09-09T18:00:00.000Z",
+      PROTRACTOR_CALLBACK_CANARY_UNTIL: "2026-09-09T17:30:00.000Z",
+      PROTRACTOR_CALLBACK_REPLAY_NOT_BEFORE: "2026-09-09T16:50:00.000Z",
     }, Date.parse("2026-09-09T17:00:00.000Z")).callbackOnly === true,
   );
   ok(
@@ -86,6 +87,7 @@ async function main() {
     evaluateProtractorOutboundPolicy({
       ...base,
       PROTRACTOR_CALLBACK_CANARY_UNTIL: "2026-09-09T17:00:00.000Z",
+      PROTRACTOR_CALLBACK_REPLAY_NOT_BEFORE: "2026-09-09T16:50:00.000Z",
     }, Date.parse("2026-09-09T17:00:00.000Z")).reason === "callback_canary_expired",
   );
   ok(
@@ -119,6 +121,52 @@ async function main() {
       PROTRACTOR_OUTBOUND_DISABLED: "true",
       PROTRACTOR_CALLBACK_CANARY_UNTIL: "2026-09-09T18:00:00.000Z",
     }, Date.parse("2026-09-09T17:00:00.000Z")).reason === "service_disabled",
+  );
+  ok(
+    "callback canary without a replay floor fails closed",
+    evaluateProtractorOutboundPolicy({
+      ...base,
+      PROTRACTOR_CALLBACK_CANARY_UNTIL: "2026-09-09T18:00:00.000Z",
+    }, Date.parse("2026-09-09T17:00:00.000Z")).reason === "missing_callback_replay_floor",
+  );
+  ok(
+    "callback replay floor without a canary fails closed",
+    evaluateProtractorOutboundPolicy({
+      ...base,
+      PROTRACTOR_CALLBACK_REPLAY_NOT_BEFORE: "2026-09-09T16:00:00.000Z",
+    }).reason === "orphaned_callback_replay_floor",
+  );
+  ok(
+    "callback replay floor at or after cutoff fails closed",
+    evaluateProtractorOutboundPolicy({
+      ...base,
+      PROTRACTOR_CALLBACK_CANARY_UNTIL: "2026-09-09T18:00:00.000Z",
+      PROTRACTOR_CALLBACK_REPLAY_NOT_BEFORE: "2026-09-09T18:00:00.000Z",
+    }, Date.parse("2026-09-09T17:00:00.000Z")).reason === "malformed_callback_replay_floor",
+  );
+  ok(
+    "stale callback replay floor fails closed",
+    evaluateProtractorOutboundPolicy({
+      ...base,
+      PROTRACTOR_CALLBACK_CANARY_UNTIL: "2026-09-09T17:20:00.000Z",
+      PROTRACTOR_CALLBACK_REPLAY_NOT_BEFORE: "2026-09-09T16:29:59.999Z",
+    }, Date.parse("2026-09-09T17:00:00.000Z")).reason === "stale_callback_replay_floor",
+  );
+  ok(
+    "future callback replay floor fails closed",
+    evaluateProtractorOutboundPolicy({
+      ...base,
+      PROTRACTOR_CALLBACK_CANARY_UNTIL: "2026-09-09T17:20:00.000Z",
+      PROTRACTOR_CALLBACK_REPLAY_NOT_BEFORE: "2026-09-09T17:00:00.001Z",
+    }, Date.parse("2026-09-09T17:00:00.000Z")).reason === "future_callback_replay_floor",
+  );
+  ok(
+    "overlong callback canary fails closed",
+    evaluateProtractorOutboundPolicy({
+      ...base,
+      PROTRACTOR_CALLBACK_CANARY_UNTIL: "2026-09-09T17:45:00.001Z",
+      PROTRACTOR_CALLBACK_REPLAY_NOT_BEFORE: "2026-09-09T16:50:00.000Z",
+    }, Date.parse("2026-09-09T17:00:00.000Z")).reason === "callback_canary_too_long",
   );
   ok(
     "deferred POST retains the POST admission identity",
@@ -171,6 +219,7 @@ async function main() {
   const beforeCanaryRequests = requests;
   const beforeCanaryBreakerClaims = breakerClaims;
   process.env.PROTRACTOR_CALLBACK_CANARY_UNTIL = new Date(Date.now() + 60_000).toISOString();
+  process.env.PROTRACTOR_CALLBACK_REPLAY_NOT_BEFORE = new Date(Date.now() - 60_000).toISOString();
   delete process.env.PROTRACTOR_OUTBOUND_DENIED_INSTANCE_IDS;
   await Promise.all([
     protractorFetch("/Invoice/non-callback-canary", config, {}, 0, 1, { maxRetries: 0 }),
@@ -197,6 +246,7 @@ async function main() {
   };
 
   process.env.PROTRACTOR_CALLBACK_CANARY_UNTIL = new Date(fakeNow + 1_000).toISOString();
+  process.env.PROTRACTOR_CALLBACK_REPLAY_NOT_BEFORE = new Date(fakeNow - 1_000).toISOString();
   const beforeExpiringRest = {
     requests,
     breakerClaims,
@@ -213,6 +263,7 @@ async function main() {
   );
 
   process.env.PROTRACTOR_CALLBACK_CANARY_UNTIL = new Date(fakeNow + 1_000).toISOString();
+  process.env.PROTRACTOR_CALLBACK_REPLAY_NOT_BEFORE = new Date(fakeNow - 1_000).toISOString();
   const beforeExpiringSoap = {
     requests,
     breakerClaims,
@@ -231,6 +282,7 @@ async function main() {
   delete process.env.RENDER_INSTANCE_ID;
   delete process.env.PROTRACTOR_OUTBOUND_DENIED_INSTANCE_IDS;
   delete process.env.PROTRACTOR_CALLBACK_CANARY_UNTIL;
+  delete process.env.PROTRACTOR_CALLBACK_REPLAY_NOT_BEFORE;
   __protractorClientTestHooks.now = () => Date.now();
   __protractorClientTestHooks.sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   __protractorClientTestHooks.enforceLocalPolicyWithMockTransport = false;

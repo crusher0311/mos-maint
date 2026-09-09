@@ -103,6 +103,9 @@ export async function processProtractorCallbackQueue(
     Math.min(5000, Math.max(limit * CALLBACK_CANDIDATE_MULTIPLIER, limit * 100)),
     options.maxAttempts ?? 3,
     limit,
+    outboundPolicy.callbackOnly && outboundPolicy.callbackNotBeforeMs != null
+      ? new Date(outboundPolicy.callbackNotBeforeMs)
+      : undefined,
   );
   const { selected: pending } = selectFairCallbackBatch(candidates, limit);
   let processed = 0;

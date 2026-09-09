@@ -522,10 +522,10 @@ export interface PendingGetEvent {
 export async function findPendingGetEvents(
   limit: number,
   maxAttempts: number,
+  receivedNotBefore?: Date,
 ): Promise<PendingGetEvent[]> {
   const db = getDb();
-  const terminalRankExpression = sql<number>`CASE WHEN upper(coalesce(${t.operation}, ${t.status}, '')) IN ('DELETE','INVOICED','INVOICE','CLOSED','VOID') THEN 1 ELSE 0 END`;
-  const ranked = db
+  const rows = await db
     .select({
       eventKey: t.eventKey,
       method: t.method,
@@ -534,12 +534,6 @@ export async function findPendingGetEvents(
       objectId: t.objectId,
       operation: t.operation,
       receivedAt: t.receivedAt,
-      priority: t.priority,
-      terminalRank: terminalRankExpression.as("terminal_rank"),
-      fairRound: sql<number>`row_number() over (
-        partition by ${t.shopId}
-        order by ${t.priority} asc, ${terminalRankExpression} desc, ${t.receivedAt} desc, ${t.id} desc
-      )`.as("fair_round"),
     })
     .from(t)
     .where(
@@ -548,25 +542,13 @@ export async function findPendingGetEvents(
         eq(t.processed, false),
         isNotNull(t.eventKey),
         or(sql`${t.attempts} IS NULL`, lt(t.attempts, maxAttempts)),
+        receivedNotBefore ? gte(t.receivedAt, receivedNotBefore) : undefined,
       ),
     )
-    .as("ranked_callback_events");
-  const rows = await db
-    .select({
-      eventKey: ranked.eventKey,
-      method: ranked.method,
-      shopId: ranked.shopId,
-      objectType: ranked.objectType,
-      objectId: ranked.objectId,
-      operation: ranked.operation,
-      receivedAt: ranked.receivedAt,
-    })
-    .from(ranked)
     .orderBy(
-      asc(ranked.fairRound),
-      asc(ranked.priority),
-      desc(ranked.terminalRank),
-      desc(ranked.receivedAt),
+      asc(t.priority),
+      desc(t.receivedAt),
+      desc(t.id),
     )
     .limit(limit);
   return rows.map((r) => ({

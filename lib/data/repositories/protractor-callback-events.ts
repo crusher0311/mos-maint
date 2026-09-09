@@ -891,9 +891,10 @@ export async function findPendingGetEvents(
   limit: number,
   maxAttempts: number,
   servedShopBudget = limit,
+  receivedNotBefore?: Date,
 ): Promise<PendingGetEvent[]> {
   if (isProtractorOpsPgCanonical()) {
-    const rows = await pg.findPendingGetEvents(limit, maxAttempts);
+    const rows = await pg.findPendingGetEvents(limit, maxAttempts, receivedNotBefore);
     return rotatePendingByFleetCursor(rows.map((r) => ({
       key: r.eventKey,
       method: r.method,
@@ -907,37 +908,28 @@ export async function findPendingGetEvents(
     })), servedShopBudget);
   }
   const col = await collection();
-  const match = {
+  const matchBase = {
     method: { $in: ["GET", "POST"] },
     processed: false,
+    ...(receivedNotBefore ? { receivedAt: { $gte: receivedNotBefore } } : {}),
     $or: [{ attempts: { $exists: false } }, { attempts: { $lt: maxAttempts } }],
   };
-  // Rank inside each shop first, then sort by that rank. Consequently every
-  // shop contributes its first candidate before any shop contributes a
-  // second, regardless of how large one shop's backlog is.
-  const perShopRoundCap = Math.max(1, Math.min(limit, 100));
-  const docs = typeof (col as any).aggregate === "function"
-    ? await col.aggregate([
-        { $match: match },
-        {
-          $setWindowFields: {
-            partitionBy: "$shopId",
-            sortBy: { priority: 1, receivedAt: -1, _id: -1 },
-            output: { fairRound: { $documentNumber: {} } },
-          },
-        },
-        { $match: { fairRound: { $lte: perShopRoundCap } } },
-        {
-          $project: {
-            _id: 1, eventKey: 1, method: 1, shopId: 1, objectType: 1,
-            objectId: 1, operation: 1, receivedAt: 1, priority: 1,
-            fairRound: 1,
-          },
-        },
-        { $sort: { fairRound: 1, priority: 1, receivedAt: -1 } },
-        { $limit: limit },
-      ]).toArray()
-    : await col.find(match).sort({ priority: 1, receivedAt: -1 }).limit(limit).toArray();
+  // Keep retrieval bounded to the newest indexed callback window. Fleet
+  // fairness and generation coalescing happen in memory over this oversized
+  // window; do not rank the entire historical queue on every minute tick.
+  const fetchPriority = (priority: number, rowLimit: number) => col.find(
+    { ...matchBase, priority },
+    {
+      hint: "method_1_processed_1_priority_1_receivedAt_1",
+      maxTimeMS: 5_000,
+    },
+  ).sort({ receivedAt: -1 }).limit(rowLimit).toArray();
+  // Callback writers use priority 1; priority 0 is the supported urgent lane.
+  // Missing or unknown priorities are intentionally not replayed by this
+  // rollout path because they do not satisfy the current queue contract.
+  const urgent = await fetchPriority(0, limit);
+  const normal = urgent.length >= limit ? [] : await fetchPriority(1, limit - urgent.length);
+  const docs = [...urgent, ...normal];
   return rotatePendingByFleetCursor(docs.map((d) => ({
     key: (d._id as ObjectId).toHexString(),
     method: d.method as "GET" | "POST",

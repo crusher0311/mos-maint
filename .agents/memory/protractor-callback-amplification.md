@@ -52,3 +52,17 @@ UTC deadline that admits only callback-scoped transport; blank, malformed, or
 expired deadlines fail closed and every retry rechecks expiry. Keep workers
 suspended and remove the canary deadline only after a separately approved full
 reopening.
+
+Callback canaries must also carry a fresh replay floor and use bounded,
+index-backed candidate retrieval.
+
+**Why:** Production held roughly 715k historical pending callbacks. A
+per-shop `$documentNumber` window both failed against live Mongo's multi-field
+sort restriction and would have ranked the whole backlog every minute if only
+the syntax were changed. An unbounded queue also turns a canary into an
+unapproved historical backfill.
+
+**How to apply:** Generate the replay floor after the prior rollback, reject it
+once stale, and retrieve only an oversized newest window through the existing
+callback index. Coalesce generations and round-robin shops inside that bounded
+window. Never widen or refresh the floor merely to prolong a canary.

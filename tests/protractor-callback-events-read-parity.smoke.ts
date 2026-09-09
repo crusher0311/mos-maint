@@ -240,25 +240,28 @@ const pgStub = {
     );
     return row?.processedAt ? { processedAt: row.processedAt } : null;
   },
-  findPendingGetEvents: async (limit: number, maxAttempts: number) =>
+  findPendingGetEvents: async (limit: number, maxAttempts: number, receivedNotBefore?: Date) =>
     pgRows
       .filter(
         (r) =>
           r.method === "GET" &&
           r.processed === false &&
           r.eventKey !== null &&
+          (!receivedNotBefore || r.receivedAt >= receivedNotBefore) &&
           (r.attempts === null || r.attempts < maxAttempts),
       )
       .sort((a, b) =>
-        (a.priority! - b.priority!) || (a.receivedAt.getTime() - b.receivedAt.getTime()),
+        (a.priority! - b.priority!) || (b.receivedAt.getTime() - a.receivedAt.getTime()),
       )
       .slice(0, limit)
       .map((r) => ({
         eventKey: r.eventKey,
+        method: r.method,
         shopId: r.shopId,
         objectType: r.objectType,
         objectId: r.objectId,
         operation: r.operation,
+        receivedAt: r.receivedAt,
       })),
   countGetSince: async (field: "receivedAt" | "processedAt", since: Date) =>
     pgRows.filter((r) => {
@@ -350,8 +353,8 @@ async function main() {
     const mOrder = res.mongo.map((e) => e.objectId);
     const pOrder = res.pg.map((e) => e.objectId);
     ok(
-      "queue order identical: priority asc then receivedAt asc (P2,P4,P1)",
-      JSON.stringify(mOrder) === JSON.stringify(["P2", "P4", "P1"]) && JSON.stringify(pOrder) === JSON.stringify(mOrder),
+      "queue order identical: priority asc then receivedAt desc (P2,P1,P4)",
+      JSON.stringify(mOrder) === JSON.stringify(["P2", "P1", "P4"]) && JSON.stringify(pOrder) === JSON.stringify(mOrder),
       `mongo=${mOrder.join(",")} pg=${pOrder.join(",")}`,
     );
     ok("at-cap (attempts=5) excluded in both arms", !mOrder.includes("P3") && !pOrder.includes("P3"));
@@ -372,9 +375,9 @@ async function main() {
 
     const limited = await bothArms(repo, (r) => r.findPendingGetEvents(2, 5));
     ok(
-      "limit honored identically (P2,P4)",
-      JSON.stringify(limited.mongo.map((e) => e.objectId)) === JSON.stringify(["P2", "P4"]) &&
-        JSON.stringify(limited.pg.map((e) => e.objectId)) === JSON.stringify(["P2", "P4"]),
+      "limit honored identically (P2,P1)",
+      JSON.stringify(limited.mongo.map((e) => e.objectId)) === JSON.stringify(["P2", "P1"]) &&
+        JSON.stringify(limited.pg.map((e) => e.objectId)) === JSON.stringify(["P2", "P1"]),
       JSON.stringify(limited),
     );
 
