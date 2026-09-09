@@ -114,14 +114,6 @@ async function ensureCriticalIndexes() {
 }
 
 export async function register() {
-  // Must precede the runtime branch: instrumentation is the earliest common
-  // startup point, before Next can emit request/access logs. The installer has
-  // no browser dependency and safely no-ops for unavailable console methods.
-  const { installAppFueledHookLogRedaction } = await import(
-    "@/lib/appfueled-hook-log-redaction"
-  );
-  installAppFueledHookLogRedaction();
-
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
 
   // Keep the Node crypto transport entirely outside edge instrumentation.
