@@ -139,9 +139,9 @@ async function main() {
   assert.equal(await repo.admitGetEvent(keys[1], identity), false, "second callback queues");
   assert.equal(await repo.admitGetEvent(keys[2], identity), false, "third callback replaces second");
   assert.equal(
-    (eventUpdates[0].filter._id as ObjectId).toHexString(),
-    keys[1],
-    "replaced pending callback is coalesced",
+    eventUpdates.some((entry) => entry.update?.$set?.processed === true),
+    false,
+    "admission never pre-marks siblings processed",
   );
 
   const followUp = await repo.finishGetEventAdmission(keys[0], identity, true);
@@ -198,6 +198,31 @@ async function main() {
     [...coordinators.values()].some((doc) => !doc.activeEventKey && !doc.pendingEventKey),
     false,
     "POST release retains no idle coordinator",
+  );
+  const crossObject = {
+    objectType: "WorkOrder",
+    objectId: "cross-method",
+    operation: "*" as const,
+  };
+  assert.equal(
+    await repo.admitCallbackEvent(new ObjectId().toHexString(), {
+      shopId: 42,
+      method: "POST",
+      ...crossObject,
+      terminal: false,
+    }),
+    true,
+    "cross-method object starts one worker",
+  );
+  assert.equal(
+    await repo.admitCallbackEvent(new ObjectId().toHexString(), {
+      shopId: 42,
+      method: "GET",
+      ...crossObject,
+      terminal: true,
+    }),
+    false,
+    "terminal callback cannot execute concurrently across methods",
   );
 
   const quarantineRepo = await import(

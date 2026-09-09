@@ -148,6 +148,7 @@ function seedWorld(extra?: Record<string, any[]>): FakeDb {
       {
         shopId: SHOP_ID,
         name: "Test Shop",
+        integrationProvider: "protractor",
         protractorWebhookToken: TOKEN,
         protractor: { configured: false },
         preferences: {},
@@ -330,6 +331,7 @@ async function run() {
         {
           shopId: SHOP_ID,
           name: "Test Shop",
+          integrationProvider: "protractor",
           protractorWebhookToken: TOKEN,
           protractor: { configured: true },
           preferences: {},

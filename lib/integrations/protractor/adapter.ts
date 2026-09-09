@@ -64,7 +64,7 @@ export class ProtractorAdapter implements IIntegrationAdapter {
     if (!config.configured) {
       return { ok: false, error: 'Protractor is not configured for this shop' };
     }
-    const result = await testProtractorConnection(config.connectionId, config.apiKey);
+    const result = await testProtractorConnection(config.connectionId, config.apiKey, shopId);
     if (!result.ok) {
       return { ok: false, error: result.error || 'Connection test failed' };
     }

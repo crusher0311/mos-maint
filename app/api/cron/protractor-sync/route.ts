@@ -19,30 +19,18 @@ import {
   upsertProtractorWorkOrderSnapshot,
   upsertProtractorVehicleSnapshot,
 } from "@/lib/integrations/protractor";
+import { isProtractorShopRecord } from "@/lib/integrations/protractor/shop-eligibility";
+import { processProtractorCallbackDrain } from "@/lib/integrations/protractor/callback-drain";
 import { NormalizedIngestionService } from "@/lib/integrations/core/normalized-ingestion";
 import { computeSweepPlan } from "@/lib/integrations/protractor/sync-cursor";
 import { attributeRevenueFromWorkOrder } from "@/lib/enterprise";
 import { extractJobIndexFromWorkOrder, computeJobHash } from "@/lib/job-index";
 import pLimit from "p-limit";
 import { Db } from "mongodb";
-import * as callbackEvents from "@/lib/data/repositories/protractor-callback-events";
 import {
   getProtractorOutboundPolicy,
 } from "@/lib/integrations/protractor/client";
 import { logProtractorPolicyDenial } from "@/lib/integrations/protractor/outbound-policy.cjs";
-import {
-  replayDeferredTerminalPost,
-  TERMINAL_CALLBACK_STATUSES,
-} from "@/lib/integrations/protractor/callback-replay";
-import { processProtractorCallbackQueue } from "@/lib/integrations/protractor/callback-queue";
-
-const QUEUE_BATCH_SIZE = 50;
-const MAX_ATTEMPTS = 3;
-// Safety cap on the pre-sweep webhook-queue drain. Even with the supporting
-// index this loop must never be allowed to consume the whole run and starve
-// the shop sweep — if a batch is unusually slow we stop and let the next run
-// pick up the rest (items stay unprocessed and re-queue naturally).
-const QUEUE_BUDGET_MS = 3 * 60 * 1000;
 
 // Resumable-sweep tuning. The handler used to try to refresh ALL Protractor
 // shops in a single run, which consistently hit the scheduler's 25-min hard
@@ -58,126 +46,8 @@ const SYNC_PROGRESS_ID = "global";
 const SOFT_BUDGET_MS = 18 * 60 * 1000; // stop STARTING new shops after 18 min
 const PREGEN_HARD_MS = 23 * 60 * 1000; // stop pre-generation after 23 min
 
-async function processWebhookQueue(db: Db): Promise<{ processed: number; failed: number }> {
-  return processProtractorCallbackQueue(db, async (item) => {
-      const { shopId, objectType, objectId, operation } = item;
-
-      if (
-        item.method === "POST" &&
-        objectId &&
-        TERMINAL_CALLBACK_STATUSES.has(String(operation || "").toUpperCase())
-      ) {
-        const replayed = await replayDeferredTerminalPost(db, {
-          key: item.key,
-          shopId,
-          objectId,
-          operation,
-        });
-        if (!replayed) throw new Error("Deferred terminal POST replay failed");
-        return;
-      }
-
-      if (objectType === "ServiceItem" && objectId) {
-        const result = await fetchVehicleById(shopId, objectId);
-        if (result.ok && result.vehicle?.VIN) {
-          await upsertProtractorVehicleSnapshot(shopId, result.vehicle.VIN, result.vehicle);
-          
-          await callbackEvents.markOneProcessedByObject(objectId, objectType, {
-            vin: result.vehicle.VIN,
-          });
-        }
-      }
-
-      if (objectType === "WorkOrder" && objectId) {
-        const result = await fetchWorkOrderById(shopId, objectId);
-        if (result.ok && result.workOrder) {
-          await upsertProtractorWorkOrderSnapshot(shopId, result.workOrder);
-
-          // Task #517 — Queue replay path must normalize too, otherwise
-          // any callback event that the webhook handler failed to
-          // process inline (and got queued for retry) would still leave
-          // `normalized_work_orders` stale.
-          try {
-            const shopDoc = await db.collection("shops").findOne(
-              { shopId: { $in: [String(shopId), Number(shopId)] } },
-              { projection: { enterpriseId: 1 } }
-            );
-            const enterpriseId = shopDoc?.enterpriseId as string | undefined;
-            const ingestionService = new NormalizedIngestionService(
-              db,
-              'protractor',
-              shopId,
-              enterpriseId,
-              { dualWriteToJobIndex: false, dualWriteToRepairPatterns: true, ingestionVia: 'webhook-queue-replay' }
-            );
-            await ingestionService.ingestWorkOrderWithAllEntities(result.workOrder);
-          } catch (normErr: any) {
-            console.error(`[Queue] Normalization error for WO ${objectId}:`, normErr?.message || normErr);
-          }
-
-          
-          const queueWoStage = (result.workOrder.WorkflowStage || "").toLowerCase();
-          const queueIsCompleted = result.workOrder.Completed || 
-            ["invoiced", "invoice", "posted", "completed", "closed"].some(s => queueWoStage.includes(s));
-
-          if (queueIsCompleted) {
-            const vin = (result.workOrder.ServiceItem?.VIN || result.workOrder.ServiceItem?.Lookup || '')?.toUpperCase() || null;
-            if (vin) {
-              const savedWO = await db.collection("protractor_work_orders").findOne({
-                shopId,
-                workOrderId: objectId
-              });
-              
-              if (savedWO && savedWO.packageSummaries?.length > 0) {
-                try {
-                  const attribution = await attributeRevenueFromWorkOrder(
-                    shopId,
-                    objectId,
-                    vin,
-                    savedWO.packageSummaries,
-                    "protractor"
-                  );
-                  if (attribution.matched > 0) {
-                    console.log(`[Queue] Revenue attribution: ${attribution.matched} jobs, $${attribution.revenue.toFixed(2)}`);
-                  }
-                } catch (e) {
-                  // Revenue attribution is non-critical
-                }
-              }
-
-              try {
-                const jobEntries = extractJobIndexFromWorkOrder(shopId, result.workOrder, "protractor");
-                let queueIndexed = 0;
-                for (const entry of jobEntries) {
-                  const contentHash = computeJobHash(entry);
-                  const filter = { shopId, workOrderId: entry.workOrderId, servicePackageId: entry.servicePackageId };
-                  const existing = await db.collection("job_index").findOne(filter);
-                  if (existing?.contentHash === contentHash) continue;
-                  await db.collection("job_index").updateOne(filter, { $set: { ...entry, contentHash } }, { upsert: true });
-                  queueIndexed++;
-                }
-                if (queueIndexed > 0) {
-                  console.log(`[Queue] Indexed ${queueIndexed} jobs for WO ${objectId}`);
-                }
-                await db.collection("protractor_work_orders").updateMany(
-                  { shopId: { $in: [String(shopId), Number(shopId)] }, workOrderId: objectId },
-                  { $set: { jobsIndexed: true, jobsIndexedAt: new Date() } }
-                );
-              } catch (e) {
-                console.error(`[Queue] Job indexing error for WO ${objectId}:`, e);
-              }
-            }
-          }
-          
-          await callbackEvents.markOneProcessedByObject(objectId, objectType, {
-            workOrderNumber: result.workOrder.WorkOrderNumber,
-          });
-        }
-      }
-
-      // Mark as processed on success
-      await callbackEvents.markProcessed(item.key);
-  }, { limit: QUEUE_BATCH_SIZE, maxAttempts: MAX_ATTEMPTS, budgetMs: QUEUE_BUDGET_MS });
+async function processWebhookQueue(db?: Db): Promise<{ processed: number; failed: number }> {
+  return processProtractorCallbackDrain(db, { budgetMs: 3 * 60 * 1000 });
 }
 
 export const runtime = "nodejs";
@@ -208,7 +78,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const shops = await db.collection("shops").find({
+    const candidateShops = await db.collection("shops").find({
       $or: [
         { "protractor.apiKey": { $exists: true, $nin: [null, ""] } },
         { "protractorApiKey": { $exists: true, $nin: [null, ""] } },
@@ -216,6 +86,18 @@ export async function GET(req: NextRequest) {
         { "protractorConnectionId": { $exists: true, $nin: [null, ""] } }
       ]
     }).toArray();
+    const shops = candidateShops.filter(isProtractorShopRecord);
+    const rejectedShopIds = candidateShops
+      .filter((shop) => !isProtractorShopRecord(shop))
+      .map((shop) => Number(shop.shopId))
+      .filter(Number.isFinite);
+    if (rejectedShopIds.length > 0) {
+      console.warn(JSON.stringify({
+        event: "protractor_sync_shops_blocked",
+        reason: "provider_mismatch",
+        shopIds: rejectedShopIds,
+      }));
+    }
 
     const results: { shopId: number; synced: number; removed: number; vehiclesUpdated?: number; error?: string }[] = [];
     const syncedVinsPerShop: { shopId: number; vins: string[] }[] = [];

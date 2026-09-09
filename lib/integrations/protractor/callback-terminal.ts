@@ -1,5 +1,4 @@
 import type { Db } from "mongodb";
-import * as callbackEvents from "@/lib/data/repositories/protractor-callback-events";
 
 /**
  * Applies the durable local effects of a terminal POST callback. Kept outside
@@ -11,8 +10,16 @@ export async function applyProtractorTerminalCallback(
   fields: { shopId: number | string; workOrderId: string; status: string | null },
 ): Promise<boolean> {
   const existingWorkOrder = await db.collection("protractor_work_orders").findOne({
-    $or: [{ shopId: String(fields.shopId) }, { shopId: Number(fields.shopId) }],
-    workOrderGuid: fields.workOrderId,
+    $and: [
+      { $or: [{ shopId: String(fields.shopId) }, { shopId: Number(fields.shopId) }] },
+      {
+        $or: [
+          { workOrderGuid: fields.workOrderId },
+          { workOrderId: fields.workOrderId },
+          { "data.ID": fields.workOrderId },
+        ],
+      },
+    ],
   });
   if (!existingWorkOrder) return false;
 
@@ -42,7 +49,18 @@ export async function applyProtractorTerminalCallback(
   }
 
   await db.collection("protractor_work_orders").updateMany(
-    { workOrderGuid: fields.workOrderId },
+    {
+      $and: [
+        { $or: [{ shopId: String(fields.shopId) }, { shopId: Number(fields.shopId) }] },
+        {
+          $or: [
+            { workOrderGuid: fields.workOrderId },
+            { workOrderId: fields.workOrderId },
+            { "data.ID": fields.workOrderId },
+          ],
+        },
+      ],
+    },
     {
       $set: {
         workflowStage: fields.status,
@@ -53,7 +71,6 @@ export async function applyProtractorTerminalCallback(
       },
     },
   );
-  await callbackEvents.markOneProcessedByWorkOrderStatus(fields.workOrderId, fields.status);
   await db.collection("dashboard_updates").updateOne(
     { _id: "lastUpdate" } as any,
     { $set: { timestamp: Date.now() } },

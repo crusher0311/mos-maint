@@ -3,6 +3,8 @@ import { findAndResumeStaleBackfills, findAndRunNewShopFastpath, runProtractorBa
 import { upsertMerge as upsertBackfillProgress } from "@/lib/data/repositories/protractor-backfill-progress";
 import { getProtractorOutboundPolicy } from "@/lib/integrations/protractor/client";
 import { logProtractorPolicyDenial } from "@/lib/integrations/protractor/outbound-policy.cjs";
+import { isProtractorShopRecord } from "@/lib/integrations/protractor/shop-eligibility";
+import { findShopByShopId } from "@/lib/data/repositories/shops";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -51,6 +53,24 @@ export async function GET(req: NextRequest) {
     
     if (shopIdParam) {
       const shopId = parseInt(shopIdParam, 10);
+      if (!Number.isSafeInteger(shopId) || shopId <= 0) {
+        return NextResponse.json({ ok: false, error: "Invalid shop ID" }, { status: 400 });
+      }
+      const shop = await findShopByShopId(shopId, {
+        shopId: 1,
+        integrationProvider: 1,
+        protractor: 1,
+        protractorConnectionId: 1,
+        protractorApiKey: 1,
+      });
+      if (!isProtractorShopRecord(shop)) {
+        return NextResponse.json({
+          ok: true,
+          ignored: true,
+          reason: "Shop is not a Protractor integration",
+          shopId,
+        });
+      }
       console.log(`[Protractor Backfill Cron] Force-starting backfill for shop ${shopId}...`);
       
       await upsertBackfillProgress(shopId, { set: { inProgress: false } });

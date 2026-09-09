@@ -38,6 +38,7 @@ const SCAN_GUID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
 const RO = 9876;
 
 const config: ProtractorConfig = {
+  shopId: SHOP_ID,
   connectionId: "test-conn",
   apiKey: "test-key",
   authentication: "test-auth",

@@ -83,9 +83,9 @@ async function run() {
   {
     const { kicked } = install({
       shops: [
-        { shopId: 1, protractor: { configured: true }, createdAt: recent() }, // eligible (no progress)
-        { shopId: 2, protractor: { configured: true }, createdAt: recent() }, // completed → excluded
-        { shopId: 3, protractor: { configured: true }, createdAt: aged() }, // aged out → excluded
+        { shopId: 1, integrationProvider: "protractor", protractor: { configured: true }, createdAt: recent() }, // eligible (no progress)
+        { shopId: 2, integrationProvider: "protractor", protractor: { configured: true }, createdAt: recent() }, // completed → excluded
+        { shopId: 3, integrationProvider: "protractor", protractor: { configured: true }, createdAt: aged() }, // aged out → excluded
         { shopId: 4, protractor: { configured: false }, createdAt: recent() }, // not protractor → excluded
         { shopId: 5, createdAt: recent() }, // no protractor config → excluded
       ],
@@ -105,8 +105,8 @@ async function run() {
   {
     const { kicked } = install({
       shops: [
-        { shopId: 10, protractor: { configured: true }, createdAt: recent() },
-        { shopId: 11, protractor: { configured: true }, createdAt: recent() },
+        { shopId: 10, integrationProvider: "protractor", protractor: { configured: true }, createdAt: recent() },
+        { shopId: 11, integrationProvider: "protractor", protractor: { configured: true }, createdAt: recent() },
       ],
       backfill_progress: [
         { shopId: 10, completed: false, inProgress: false },
@@ -125,6 +125,7 @@ async function run() {
     const { kicked } = install({
       shops: [1, 2, 3, 4, 5].map((shopId) => ({
         shopId,
+        integrationProvider: "protractor",
         protractor: { configured: true },
         createdAt: recent(),
       })),
@@ -141,7 +142,7 @@ async function run() {
   {
     const { kicked } = install({
       shops: [
-        { shopId: 20, protractor: { configured: true }, createdAt: aged() },
+        { shopId: 20, integrationProvider: "protractor", protractor: { configured: true }, createdAt: aged() },
       ],
       backfill_progress: [],
     });
@@ -163,7 +164,7 @@ async function run() {
       delete process.env.PROTRACTOR_NEW_SHOP_FASTPATH_DAYS;
       const { kicked } = install({
         shops: [
-          { shopId: 30, protractor: { configured: true }, createdAt: new Date(now - 20 * DAY_MS) },
+          { shopId: 30, integrationProvider: "protractor", protractor: { configured: true }, createdAt: new Date(now - 20 * DAY_MS) },
         ],
         backfill_progress: [],
       });
@@ -178,7 +179,7 @@ async function run() {
       process.env.PROTRACTOR_NEW_SHOP_FASTPATH_DAYS = "30";
       const { kicked } = install({
         shops: [
-          { shopId: 30, protractor: { configured: true }, createdAt: new Date(now - 20 * DAY_MS) },
+          { shopId: 30, integrationProvider: "protractor", protractor: { configured: true }, createdAt: new Date(now - 20 * DAY_MS) },
         ],
         backfill_progress: [],
       });

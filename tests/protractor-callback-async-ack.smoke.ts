@@ -47,30 +47,7 @@ function ok(name: string, cond: boolean, detail?: string) {
 
 console.log("Protractor webhook async-ack smoke test\n");
 
-// ---- 1. The helper exists and is declared async ----
-ok(
-  "enrichOpenWorkOrderInBackground helper is defined as async",
-  /async\s+function\s+enrichOpenWorkOrderInBackground\s*\(/.test(src),
-);
-
-// ---- 2. The helper owns its own try/catch ----
-const helperMatch = src.match(
-  /async\s+function\s+enrichOpenWorkOrderInBackground[\s\S]*?\n\}\n/,
-);
-ok("helper body parsed", helperMatch !== null);
-if (helperMatch) {
-  const helperBody = helperMatch[0];
-  ok(
-    "helper wraps work in try/catch (so background failures cannot leak)",
-    /try\s*\{[\s\S]*\}\s*catch/.test(helperBody),
-  );
-  ok(
-    "helper actually performs the Protractor fetch internally",
-    /await\s+fetchWorkOrderById\s*\(/.test(helperBody),
-  );
-}
-
-// ---- 3. Locate the POST handler and inspect its new/open branch ----
+// ---- 1. Locate both callback handlers ----
 const postIdx = src.indexOf("export async function POST(");
 ok("POST handler exists", postIdx >= 0);
 
@@ -79,102 +56,42 @@ const getIdx = src.indexOf("export async function GET(", postIdx + 1);
 ok("GET handler exists (used as POST end-marker)", getIdx > postIdx);
 const postBody = src.slice(postIdx, getIdx);
 
-// ---- 4. POST must launch the admitted background helper WITHOUT await ----
-ok(
-  "POST invokes admitted open-WO enrichment",
-  /processAdmittedOpenPost\s*\(/.test(postBody),
-);
-
-const awaitedCallRe = /await\s+processAdmittedOpenPost\s*\(/;
-ok(
-  "POST does NOT await enrichOpenWorkOrderInBackground (fire-and-forget)",
-  !awaitedCallRe.test(postBody),
-  "found `await enrichOpenWorkOrderInBackground(...)` in POST — that re-introduces the slow-ack regression",
-);
-
-// The fire-and-forget call must attach a .catch so unhandled rejections
-// can't crash the Node process.
-const fireAndForgetRe =
-  /processAdmittedOpenPost\s*\([\s\S]*?\)\s*\.catch\s*\(/;
-ok(
-  "fire-and-forget call has a .catch handler",
-  fireAndForgetRe.test(postBody),
-  "the background promise must have .catch(...) so a Protractor outage cannot become an unhandledRejection",
-);
-
-// The fire-and-forget call must pass `eventId` so the helper updates
-// the SPECIFIC event row (by _id) rather than racing with sibling
-// events for the same workOrderId.
+// ---- 2. Ingress persists a replayable queue row and never launches work ----
 ok(
   "POST captures eventId from the event-insert (repo insertPostEvent)",
   /const\s+eventId\s*=\s*await\s+callbackEvents\.insertPostEvent\s*\(/.test(postBody),
 );
 ok(
-  "POST passes eventId into admitted enrichment",
-  /processAdmittedOpenPost\s*\([\s\S]*?\beventId\s*,\s*postIdentity\s*,\s*true\s*,?\s*\)/.test(
-    postBody,
-  ),
+  "POST always stores the normalized replay shape",
+  /deferredForReplay:\s*true/.test(postBody),
+);
+ok(
+  "POST launches no in-process callback worker",
+  !/processAdmittedOpenPost\s*\(/.test(postBody),
+);
+ok(
+  "POST never returns provider-retry-inducing 429",
+  !/\b429\b/.test(postBody),
 );
 
-// Helper must update the SPECIFIC event (by its per-event key via the
-// repo), not by {workOrderId, processed:false} (which would race across
-// concurrent webhooks for the same WO). Since task #1006 the update goes
-// through lib/data/repositories/protractor-callback-events, whose
-// markProcessed/recordAttempt target the event key ({_id} in Mongo mode,
-// event_key in PG mode).
-if (helperMatch) {
-  const helperBody = helperMatch[0];
-  ok(
-    "helper updates the event by its per-event key (repo markProcessed(eventId))",
-    /callbackEvents\.markProcessed\s*\(\s*eventId\s*,/.test(helperBody) &&
-      !/\{\s*workOrderId\s*,\s*processed:\s*false\s*\}/.test(helperBody),
-    "helper must scope its processed-stamp to the event key so concurrent webhooks for the same WO can't clobber each other's state",
-  );
-  ok(
-    "helper stamps lastAttemptAt + increments attempts on failure (repo recordAttempt)",
-    /callbackEvents\.recordAttempt\s*\(\s*eventId\s*,/.test(helperBody),
-    "without these the daily cron can't tell a failed background attempt from one that was never tried",
-  );
-}
-
-// ---- 5. The legacy synchronous block must be gone ----
-// Specifically: the POST handler must no longer contain an inline
-// `await fetchWorkOrderById(...)` — that is the exact line that was
-// blocking the ack. (The helper above is allowed to await it; the
-// POST handler is not.)
+const getBody = src.slice(getIdx);
 ok(
-  "POST handler no longer contains an inline `await fetchWorkOrderById(...)`",
-  !/await\s+fetchWorkOrderById\s*\(/.test(postBody),
-  "found `await fetchWorkOrderById(...)` in POST — that is the legacy synchronous enrichment that must run in the background",
+  "GET persists before ACK",
+  /await\s+callbackEvents\.insertGetEvent\s*\(/.test(getBody),
+);
+ok(
+  "GET performs no inline provider fetch",
+  !/fetchWorkOrderById\s*\(|fetchVehicleById\s*\(/.test(getBody),
+);
+ok(
+  "POST performs no inline provider fetch",
+  !/fetchWorkOrderById\s*\(|fetchVehicleById\s*\(/.test(postBody),
 );
 
-// Same for the other heavy upstream snapshot upserts that used to live
-// inline. They belong in the background helper now.
+// ---- 3. Final ACK is unconditional after persistence ----
 ok(
-  "POST handler no longer awaits upsertProtractorWorkOrderSnapshot inline",
-  !/await\s+upsertProtractorWorkOrderSnapshot\s*\(/.test(postBody),
-);
-ok(
-  "POST handler no longer awaits upsertProtractorVehicleSnapshot inline",
-  !/await\s+upsertProtractorVehicleSnapshot\s*\(/.test(postBody),
-);
-
-// ---- 6. The closed-WO path is preserved (it's all Mongo, fast) ----
-ok(
-  "POST still handles the closed/terminal-status branch synchronously",
-  /if\s*\(\s*isClosed\s*\)\s*\{/.test(postBody),
-);
-ok(
-  "closed-WO branch still updates protractor_work_orders",
-  /protractor_work_orders[\s\S]*workflowStage:\s*status/.test(postBody),
-);
-
-// ---- 7. Final ack is unconditional and quick ----
-ok(
-  "POST returns the ack JSON at the bottom of the handler",
-  /return\s+NextResponse\.json\s*\(\s*\{[\s\S]*received:\s*true[\s\S]*status:\s*"acknowledged"/.test(
-    postBody,
-  ),
+  "POST returns a queue/deferred 200 response",
+  /received:\s*true[\s\S]*status:\s*requestOutboundPolicy\.allowed\s*\?\s*"queued"\s*:\s*"deferred"/.test(postBody),
 );
 
 console.log("");

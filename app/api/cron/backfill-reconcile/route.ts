@@ -153,7 +153,10 @@ async function reconcileProtractorShop(db: any, shopId: number) {
     try {
       const res = await protractorFetch<{ ItemCollection?: any[]; Count?: number; TotalCount?: number }>(
         `/Invoice/?${params.toString()}`,
-        config
+        config,
+        {},
+        0,
+        shopId,
       );
       if (!res.ok || !res.data) {
         audits.push({ window: { start: startStr, end: endStr }, error: res.error || "no data" });

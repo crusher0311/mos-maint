@@ -128,7 +128,10 @@ export async function prewarmProtractorJobsCacheForOnboarding(
 
     const listResult = await protractorFetch<{ ItemCollection?: any[] }>(
       `/Invoice/?${params.toString()}`,
-      config
+      config,
+      {},
+      0,
+      shopId,
     );
 
     if (!listResult.ok) {

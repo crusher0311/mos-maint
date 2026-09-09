@@ -247,7 +247,9 @@ export async function POST(req: NextRequest) {
     {
       method: "POST",
       body: JSON.stringify(updatedWorkOrder),
-    }
+    },
+    0,
+    shopId,
   );
 
   if (!updateResult.ok) {

@@ -5,6 +5,7 @@
 // claim/release rate-limit slots, and run a small set of stats
 // queries.
 import type { Collection, Document, Filter, ObjectId } from "mongodb";
+import { randomUUID } from "node:crypto";
 import { getDb } from "@/lib/data/db";
 import { shadowWriteMongoIntegrationOps } from "@/lib/db/integration-ops-write-mode";
 import {
@@ -149,6 +150,79 @@ export async function releaseRateLimitSlot(key: string): Promise<void> {
   }
   const col = await rateLimitCollection();
   await col.updateOne({ _id: key }, { $inc: { count: -1 } });
+}
+
+/**
+ * Canonical Mongo CAS lease for callback transport attempts. This primitive is
+ * intentionally Mongo-owned regardless of api-usage cutover flags so every
+ * replica contends on exactly one fleet record.
+ */
+export async function acquireCallbackTransportLease(deadlineMs: number): Promise<string | null> {
+  const db = await getDb();
+  const col = db.collection<any>(RATE_LIMIT_COLLECTION);
+  try {
+    await col.updateOne(
+      { _id: "protractor-callback-transport" },
+      {
+        $setOnInsert: {
+          count: 0,
+          createdAt: new Date(),
+          nextAllowedAt: new Date(0),
+          leaseExpiresAt: new Date(0),
+        },
+      },
+      { upsert: true },
+    );
+  } catch (error: any) {
+    if (!/duplicate key/i.test(String(error?.message || error))) throw error;
+  }
+  while (Date.now() < deadlineMs) {
+    const token = randomUUID();
+    try {
+      const row = await col.findOneAndUpdate(
+        {
+          _id: "protractor-callback-transport",
+          $expr: {
+            $and: [
+              { $lte: [{ $ifNull: ["$nextAllowedAt", "$$NOW"] }, "$$NOW"] },
+              { $lte: [{ $ifNull: ["$leaseExpiresAt", "$$NOW"] }, "$$NOW"] },
+            ],
+          },
+        },
+        [{
+          $set: {
+            count: { $ifNull: ["$count", 0] },
+            createdAt: { $ifNull: ["$createdAt", "$$NOW"] },
+            ownerToken: token,
+            leaseExpiresAt: { $dateAdd: { startDate: "$$NOW", unit: "second", amount: 90 } },
+            expiresAt: { $dateAdd: { startDate: "$$NOW", unit: "day", amount: 1 } },
+          },
+        }],
+        { upsert: false, returnDocument: "after" },
+      );
+      if (row?.ownerToken === token) return token;
+    } catch (error: any) {
+      if (!/duplicate key/i.test(String(error?.message || error))) throw error;
+    }
+    const remaining = deadlineMs - Date.now();
+    if (remaining <= 0) return null;
+    await new Promise((resolve) => setTimeout(resolve, Math.min(50, remaining)));
+  }
+  return null;
+}
+
+export async function releaseCallbackTransportLease(ownerToken: string): Promise<void> {
+  const db = await getDb();
+  await db.collection<any>(RATE_LIMIT_COLLECTION).updateOne(
+    { _id: "protractor-callback-transport", ownerToken },
+    [{
+      $set: {
+        ownerToken: "$$REMOVE",
+        leaseExpiresAt: "$$REMOVE",
+        nextAllowedAt: { $dateAdd: { startDate: "$$NOW", unit: "millisecond", amount: 1000 } },
+      },
+    }],
+  );
 }
 
 export async function countUsage(filter: UsageFilter): Promise<number> {

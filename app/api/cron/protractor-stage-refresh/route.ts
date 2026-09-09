@@ -85,6 +85,7 @@ import { getProtractorOutboundPolicy } from "@/lib/integrations/protractor/clien
 import { logProtractorPolicyDenial } from "@/lib/integrations/protractor/outbound-policy.cjs";
 import { getDb } from "@/lib/mongo";
 import { fetchActiveWorkOrders, resolveProtractorConfig } from "@/lib/integrations/protractor";
+import { isProtractorShopRecord } from "@/lib/integrations/protractor/shop-eligibility";
 import pLimit from "p-limit";
 
 export const runtime = "nodejs";
@@ -180,11 +181,20 @@ export async function GET(req: NextRequest) {
         { protractorConnectionId: { $exists: true, $nin: [null, ""] } },
       ],
     })
-    .project({ _id: 0, shopId: 1 })
+    .project({
+      _id: 0,
+      shopId: 1,
+      integrationProvider: 1,
+      protractor: 1,
+      protractorConnectionId: 1,
+      protractorApiKey: 1,
+    })
     .toArray();
 
   const shops = allShops.filter(
-    (s) => !excludeShops.has(Number((s as any).shopId)),
+    (s) =>
+      isProtractorShopRecord(s) &&
+      !excludeShops.has(Number((s as any).shopId)),
   );
   const skippedShopIds = allShops
     .map((s) => Number((s as any).shopId))

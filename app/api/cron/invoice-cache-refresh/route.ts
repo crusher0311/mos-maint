@@ -40,6 +40,7 @@ import { prewarmProtractorJobsCacheForOnboarding } from "@/lib/integrations/prot
 import { prewarmShopWareJobsCacheForOnboarding } from "@/lib/shopware-jobs-prewarm";
 import { getProtractorOutboundPolicy } from "@/lib/integrations/protractor/client";
 import { logProtractorPolicyDenial } from "@/lib/integrations/protractor/outbound-policy.cjs";
+import { isProtractorShopRecord } from "@/lib/integrations/protractor/shop-eligibility";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -121,13 +122,22 @@ export async function GET(req: NextRequest) {
             { protractorConnectionId: { $exists: true, $nin: [null, ""] } },
           ],
         },
-        { projection: { shopId: 1 } }
+        {
+          projection: {
+            shopId: 1,
+            integrationProvider: 1,
+            protractor: 1,
+            protractorConnectionId: 1,
+            protractorApiKey: 1,
+          },
+        }
       )
       .toArray();
 
+    const eligibleProtractorShops = protractorShops.filter(isProtractorShopRecord);
     const filtered = targetShopId != null
-      ? protractorShops.filter((s) => Number(s.shopId) === targetShopId)
-      : protractorShops;
+      ? eligibleProtractorShops.filter((s) => Number(s.shopId) === targetShopId)
+      : eligibleProtractorShops;
 
     console.log(
       `[Invoice Cache Refresh] Protractor: ${filtered.length} shop(s) to refresh`

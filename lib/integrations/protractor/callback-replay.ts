@@ -3,7 +3,6 @@ import {
   fetchWorkOrderById,
   upsertProtractorWorkOrderSnapshot,
 } from "@/lib/integrations/protractor";
-import * as callbackEvents from "@/lib/data/repositories/protractor-callback-events";
 import { applyProtractorTerminalCallback } from "./callback-terminal";
 
 export const TERMINAL_CALLBACK_STATUSES = new Set([
@@ -31,7 +30,6 @@ export async function replayDeferredTerminalPost(
     fetchWorkOrderById,
     upsertProtractorWorkOrderSnapshot,
     applyProtractorTerminalCallback,
-    markProcessed: callbackEvents.markProcessed,
   },
 ): Promise<boolean> {
   const result = await deps.fetchWorkOrderById(event.shopId, event.objectId);
@@ -43,6 +41,5 @@ export async function replayDeferredTerminalPost(
     status: event.operation,
   });
   if (!applied) return false;
-  await deps.markProcessed(event.key);
   return true;
 }

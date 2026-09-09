@@ -20,6 +20,7 @@ function ok(name: string, condition: boolean) {
 }
 
 const config: ProtractorConfig = {
+  shopId: 1,
   connectionId: "test-connection",
   apiKey: "test-key",
   authentication: "test-auth",

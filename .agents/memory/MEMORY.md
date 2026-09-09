@@ -156,3 +156,4 @@
 - [Entitlements span every delivery channel](product-entitlement-delivery-channels.md) — gate the target shop across dashboard, extension, signed links, partner APIs, media, and derived enrichment.
 - [Mongo update path conflicts](mongo-update-path-conflicts.md) — one update cannot target the same field in both `$set` and `$setOnInsert`; simplistic fakes may miss this runtime failure.
 - [Instance-scoped provider isolation](instance-scoped-provider-isolation.md) — bind deny lists only to the platform's stable replica ID; deferred callbacks must persist full replay semantics before acknowledgment.
+- [Provider routing identity](provider-routing-identity.md) — explicit provider wins; global credentials never fill shop config; bind transport and queued/background work to one validated shop.

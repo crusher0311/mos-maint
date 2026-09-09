@@ -23,6 +23,7 @@ function ok(name: string, condition: boolean, detail = "") {
 }
 
 const config: ProtractorConfig = {
+  shopId: 1,
   connectionId: "connection-a",
   apiKey: "key",
   authentication: "auth",

@@ -19,6 +19,7 @@ import {
 import * as backfillProgress from "@/lib/data/repositories/protractor-backfill-progress";
 import pLimit from "p-limit";
 import { detectDviLinksFromProtractorInvoice, isDviLinkIngestEnabled } from "@/lib/dvi-links/ingest";
+import { isProtractorShopRecord } from "./shop-eligibility";
 
 const MAX_WALL_CLOCK_MS = 1800000; // 30 minutes max
 // Per-chunk metrics rolling window. Mirrors the Tekmetric backfill cap so the
@@ -53,7 +54,10 @@ async function fetchInvoicesForDateRange(
 
     const result = await protractorFetch<{ ItemCollection?: any[] }>(
       `/Invoice/?${params.toString()}`,
-      config
+      config,
+      {},
+      0,
+      shopId,
     );
 
     if (!result.ok) {
@@ -825,6 +829,15 @@ export async function runProtractorBackfill(
   // one giant shop monopolising a worker for the whole 30-min wall clock and
   // starving everyone behind it.
   const singlePass = options.singlePass === true;
+  const config = await resolveProtractorConfig(shopId);
+  if (!config.configured) {
+    return {
+      chunksProcessed: 0,
+      totalJobsIndexed: 0,
+      complete: false,
+      error: "Shop is not configured for Protractor",
+    };
+  }
   const startTime = Date.now();
   const db = await getDb();
   const rateLimiter = pLimit(5);
@@ -981,7 +994,13 @@ export async function findAndResumeStaleBackfills(): Promise<{
   const configuredForReopen = await db
     .collection("shops")
     .find({ "protractor.configured": true })
-    .project({ shopId: 1 })
+    .project({
+      shopId: 1,
+      integrationProvider: 1,
+      protractor: 1,
+      protractorApiKey: 1,
+      protractorConnectionId: 1,
+    })
     .toArray();
   await reopenCompletedShopsForHorizon({
     db,
@@ -989,6 +1008,7 @@ export async function findAndResumeStaleBackfills(): Promise<{
     providerLabel: "Backfill",
     shopFlagField: "protractorBackfillComplete",
     eligibleShopIds: configuredForReopen
+      .filter(isProtractorShopRecord)
       .map((s: any) => Number(s.shopId))
       .filter((n: number) => Number.isFinite(n)),
   });
@@ -1012,10 +1032,20 @@ export async function findAndResumeStaleBackfills(): Promise<{
         },
       ]
     }).toArray(),
-    db.collection("shops").find({ "protractor.configured": true }).project({ shopId: 1 }).toArray()
+    db.collection("shops").find({ "protractor.configured": true }).project({
+      shopId: 1,
+      integrationProvider: 1,
+      protractor: 1,
+      protractorApiKey: 1,
+      protractorConnectionId: 1,
+    }).toArray()
   ]);
   
-  const configuredShopIds = new Set(protractorShops.map((s: any) => s.shopId));
+  const configuredShopIds = new Set(
+    protractorShops
+      .filter(isProtractorShopRecord)
+      .map((s: any) => Number(s.shopId)),
+  );
   const shopIds: number[] = [];
 
   // Smart per-shop quiet-window gate (task #662). OFF by default: no DB read,
@@ -1027,19 +1057,20 @@ export async function findAndResumeStaleBackfills(): Promise<{
   );
 
   for (const progress of staleBackfills) {
-    if (!configuredShopIds.has(progress.shopId)) continue;
+    const progressShopId = Number(progress.shopId);
+    if (!configuredShopIds.has(progressShopId)) continue;
 
-    if (applyQuietWindowGate(quietGate, Number(progress.shopId), "protractor").shouldSkip) {
+    if (applyQuietWindowGate(quietGate, progressShopId, "protractor").shouldSkip) {
       continue;
     }
 
-    console.log(`[Backfill] Resuming stale backfill for shop ${progress.shopId}`);
-    shopIds.push(progress.shopId);
+    console.log(`[Backfill] Resuming stale backfill for shop ${progressShopId}`);
+    shopIds.push(progressShopId);
     
-    runProtractorBackfill(progress.shopId).then(result => {
-      console.log(`[Backfill] Shop ${progress.shopId} resumed backfill completed:`, result);
+    runProtractorBackfill(progressShopId).then(result => {
+      console.log(`[Backfill] Shop ${progressShopId} resumed backfill completed:`, result);
     }).catch(err => {
-      console.error(`[Backfill] Shop ${progress.shopId} resumed backfill failed:`, err.message);
+      console.error(`[Backfill] Shop ${progressShopId} resumed backfill failed:`, err.message);
     });
   }
   
@@ -1114,7 +1145,13 @@ export async function findAndRunNewShopFastpath(): Promise<{
   const newShops = await db
     .collection("shops")
     .find({ "protractor.configured": true, createdAt: { $gte: cutoff } })
-    .project({ shopId: 1 })
+    .project({
+      shopId: 1,
+      integrationProvider: 1,
+      protractor: 1,
+      protractorApiKey: 1,
+      protractorConnectionId: 1,
+    })
     .toArray();
 
   if (newShops.length === 0) {
@@ -1124,7 +1161,9 @@ export async function findAndRunNewShopFastpath(): Promise<{
     return { processed: 0, shopIds: [] };
   }
 
-  const newShopIds = newShops.map((s: any) => Number(s.shopId));
+  const newShopIds = newShops
+    .filter(isProtractorShopRecord)
+    .map((s: any) => Number(s.shopId));
 
   // Drop shops whose backfill is already complete; brand-new shops with
   // no progress doc yet are kept (they need the backfill the most).

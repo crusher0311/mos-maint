@@ -45,6 +45,7 @@ export interface CallbackAdmissionIdentity {
   objectType: string;
   objectId: string;
   operation: string | null;
+  terminal?: boolean;
 }
 
 /** Pure counterpart to the SQL POST admission predicate (regression-testable). */
@@ -56,24 +57,43 @@ export function isPostAdmissionMatch(
     (row.method === null || row.method === "POST") &&
     row.shopId === identity.shopId &&
     row.workOrderId === identity.objectId &&
-    (row.status || "").toUpperCase() === (identity.operation || "");
+    (
+      identity.operation === "*" ||
+      (row.status || "").toUpperCase() === (identity.operation || "")
+    );
 }
 
 function identityWhere(identity: CallbackAdmissionIdentity) {
+  const methodWhere = identity.operation === "*"
+    ? sql`TRUE`
+    : identity.method === "POST"
+      ? or(sql`${t.method} IS NULL`, eq(t.method, "POST"))
+      : eq(t.method, "GET");
+  const objectWhere = identity.operation === "*" && identity.objectType === "WorkOrder"
+    ? or(
+        eq(t.workOrderId, identity.objectId),
+        and(eq(t.objectType, "WorkOrder"), eq(t.objectId, identity.objectId)),
+      )
+    : identity.method === "POST"
+      ? eq(t.workOrderId, identity.objectId)
+      : and(eq(t.objectType, identity.objectType), eq(t.objectId, identity.objectId));
   if (identity.method === "POST") {
     return and(
-      or(sql`${t.method} IS NULL`, eq(t.method, "POST")),
+      methodWhere,
       eq(t.shopId, identity.shopId),
-      eq(t.workOrderId, identity.objectId),
-      sql`upper(coalesce(${t.status}, '')) = ${identity.operation ?? ""}`,
+      objectWhere!,
+      identity.operation === "*"
+        ? sql`TRUE`
+        : sql`upper(coalesce(${t.status}, '')) = ${identity.operation ?? ""}`,
     );
   }
   return and(
-    eq(t.method, "GET"),
+    methodWhere,
     eq(t.shopId, identity.shopId),
-    eq(t.objectType, identity.objectType),
-    eq(t.objectId, identity.objectId),
-    identity.operation == null
+    objectWhere!,
+    identity.operation === "*"
+      ? sql`TRUE`
+      : identity.operation == null
       ? sql`${t.operation} IS NULL`
       : eq(t.operation, identity.operation),
   );
@@ -82,10 +102,8 @@ function identityWhere(identity: CallbackAdmissionIdentity) {
 function identityLockKey(identity: CallbackAdmissionIdentity): string {
   return JSON.stringify([
     identity.shopId,
-    identity.method,
     identity.objectType,
     identity.objectId,
-    identity.operation,
   ]);
 }
 
@@ -100,6 +118,17 @@ export async function admitCallbackEvent(
     await tx.execute(
       sql`SELECT pg_advisory_xact_lock(hashtextextended(${identityLockKey(identity)}, 0))`,
     );
+    const winner = await tx
+      .select({ eventKey: t.eventKey })
+      .from(t)
+      .where(and(identityWhere(identity), eq(t.processed, false)))
+      .orderBy(
+        desc(sql`CASE WHEN upper(coalesce(${t.operation}, ${t.status}, '')) IN ('DELETE','INVOICED','INVOICE','CLOSED','VOID') THEN 1 ELSE 0 END`),
+        desc(t.receivedAt),
+        desc(t.id),
+      )
+      .limit(1);
+    if (winner[0]?.eventKey !== eventKey) return false;
     const active = await tx
       .select({ eventKey: t.eventKey })
       .from(t)
@@ -112,17 +141,6 @@ export async function admitCallbackEvent(
       )
       .limit(1);
     if (active.length > 0) {
-      await tx
-        .update(t)
-        .set({ processed: true, processedAt: now, noAction: true })
-        .where(
-          and(
-            identityWhere(identity),
-            eq(t.processed, false),
-            sql`${t.eventKey} <> ${eventKey}`,
-            sql`${t.eventKey} <> ${active[0].eventKey}`,
-          ),
-        );
       return false;
     }
 
@@ -132,18 +150,33 @@ export async function admitCallbackEvent(
       .where(and(eq(t.eventKey, eventKey), eq(t.processed, false)))
       .returning({ eventKey: t.eventKey });
     if (claimed.length === 0) return false;
-    await tx
-      .update(t)
-      .set({ processed: true, processedAt: now, noAction: true, processingStartedAt: null })
-      .where(
-        and(
-          identityWhere(identity),
-          eq(t.processed, false),
-          sql`${t.eventKey} <> ${eventKey}`,
-        ),
-      );
     return true;
   });
+}
+
+export async function claimCallbackEvent(
+  eventKey: string,
+  identity: CallbackAdmissionIdentity,
+  leaseMs: number,
+): Promise<string | null> {
+  const winner = await getDb()
+    .select({ eventKey: t.eventKey })
+    .from(t)
+    .where(and(identityWhere(identity), eq(t.processed, false)))
+    .orderBy(
+      desc(sql`CASE WHEN upper(coalesce(${t.operation}, ${t.status}, '')) IN ('DELETE','INVOICED','INVOICE','CLOSED','VOID') THEN 1 ELSE 0 END`),
+      desc(t.receivedAt),
+      desc(t.id),
+    )
+    .limit(1);
+  if (winner[0]?.eventKey !== eventKey) return null;
+  if (!(await admitCallbackEvent(eventKey, identity, leaseMs))) return null;
+  const rows = await getDb()
+    .select({ processingStartedAt: t.processingStartedAt })
+    .from(t)
+    .where(and(eq(t.eventKey, eventKey), eq(t.processed, false)))
+    .limit(1);
+  return rows[0]?.processingStartedAt?.toISOString() ?? null;
 }
 
 export async function finishCallbackEventAdmission(
@@ -194,6 +227,71 @@ export async function finishCallbackEventAdmission(
       .set({ processingStartedAt: now })
       .where(eq(t.eventKey, pendingKey));
     return { ...identity, key: pendingKey };
+  });
+}
+
+/** Release a queue worker claim without consuming callbacks that arrived in-flight. */
+export async function releaseCallbackEventAdmission(
+  eventKey: string,
+  identity: CallbackAdmissionIdentity,
+  ownerToken?: string,
+): Promise<void> {
+  await getDb().transaction(async (tx) => {
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtextextended(${identityLockKey(identity)}, 0))`,
+    );
+    await tx
+      .update(t)
+      .set({ processingStartedAt: null })
+      .where(and(
+        eq(t.eventKey, eventKey),
+        ...(ownerToken ? [eq(t.processingStartedAt, new Date(ownerToken))] : []),
+      ));
+  });
+}
+
+export async function completeCallbackGeneration(
+  eventKey: string,
+  identity: CallbackAdmissionIdentity,
+  ownerToken: string,
+  ownerReceivedAt: Date,
+): Promise<boolean> {
+  const db = getDb();
+  return db.transaction(async (tx) => {
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtextextended(${identityLockKey(identity)}, 0))`,
+    );
+    const terminalPredicate = sql`
+      upper(coalesce(${t.operation}, ${t.status}, '')) IN
+      ('DELETE','INVOICED','INVOICE','CLOSED','VOID')
+    `;
+    const owner = await tx
+      .select({ eventKey: t.eventKey })
+      .from(t)
+      .where(and(
+        eq(t.eventKey, eventKey),
+        eq(t.processed, false),
+        eq(t.processingStartedAt, new Date(ownerToken)),
+      ))
+      .limit(1);
+    if (owner.length !== 1) return false;
+    await tx
+      .update(t)
+      .set({ processed: true, processedAt: new Date(), noAction: true })
+      .where(
+        and(
+          eq(t.processed, false),
+          or(
+            eq(t.eventKey, eventKey),
+            and(
+              identityWhere(identity),
+              sql`${t.receivedAt} <= ${ownerReceivedAt}`,
+              ...(identity.terminal ? [] : [sql`NOT (${terminalPredicate})`]),
+            ),
+          ),
+        ),
+      );
+    return true;
   });
 }
 
@@ -391,12 +489,12 @@ export async function recordAttempt(eventKey: string, lastError?: string): Promi
     .where(eq(t.eventKey, eventKey));
 }
 
-/** `$set processingStartedAt` + `$inc attempts` (queue-drain start stamp). */
+/** Increment attempts without changing the immutable admission fence. */
 export async function recordProcessingStarted(eventKey: string): Promise<void> {
   await getDb()
     .update(t)
     .set({
-      processingStartedAt: new Date(),
+      lastAttemptAt: new Date(),
       attempts: sql`COALESCE(${t.attempts}, 0) + 1`,
     })
     .where(eq(t.eventKey, eventKey));
@@ -417,6 +515,7 @@ export interface PendingGetEvent {
   objectType: string | null;
   objectId: string | null;
   operation: string | null;
+  receivedAt: Date;
 }
 
 /** protractor-sync pre-sweep queue: unprocessed callback events under the attempt cap. */
@@ -424,7 +523,9 @@ export async function findPendingGetEvents(
   limit: number,
   maxAttempts: number,
 ): Promise<PendingGetEvent[]> {
-  const rows = await getDb()
+  const db = getDb();
+  const terminalRankExpression = sql<number>`CASE WHEN upper(coalesce(${t.operation}, ${t.status}, '')) IN ('DELETE','INVOICED','INVOICE','CLOSED','VOID') THEN 1 ELSE 0 END`;
+  const ranked = db
     .select({
       eventKey: t.eventKey,
       method: t.method,
@@ -432,6 +533,13 @@ export async function findPendingGetEvents(
       objectType: t.objectType,
       objectId: t.objectId,
       operation: t.operation,
+      receivedAt: t.receivedAt,
+      priority: t.priority,
+      terminalRank: terminalRankExpression.as("terminal_rank"),
+      fairRound: sql<number>`row_number() over (
+        partition by ${t.shopId}
+        order by ${t.priority} asc, ${terminalRankExpression} desc, ${t.receivedAt} desc, ${t.id} desc
+      )`.as("fair_round"),
     })
     .from(t)
     .where(
@@ -442,7 +550,24 @@ export async function findPendingGetEvents(
         or(sql`${t.attempts} IS NULL`, lt(t.attempts, maxAttempts)),
       ),
     )
-    .orderBy(asc(t.priority), asc(t.receivedAt))
+    .as("ranked_callback_events");
+  const rows = await db
+    .select({
+      eventKey: ranked.eventKey,
+      method: ranked.method,
+      shopId: ranked.shopId,
+      objectType: ranked.objectType,
+      objectId: ranked.objectId,
+      operation: ranked.operation,
+      receivedAt: ranked.receivedAt,
+    })
+    .from(ranked)
+    .orderBy(
+      asc(ranked.fairRound),
+      asc(ranked.priority),
+      desc(ranked.terminalRank),
+      desc(ranked.receivedAt),
+    )
     .limit(limit);
   return rows.map((r) => ({
     ...r,

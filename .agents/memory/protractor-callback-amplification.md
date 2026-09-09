@@ -22,3 +22,19 @@ again.
 **How to apply:** Attach privacy-safe scope, response class, cooldown, and a
 one-way connection fingerprint to the transition page. Do not include raw
 connection IDs, credentials, request payloads, or response bodies.
+
+Treat provider callbacks as notifications, never as permission to perform
+inline detail reads from the callback request. Persist and acknowledge first,
+then replay through a shared queue that coalesces by the underlying object.
+
+**Why:** A duplicate-heavy callback stream can still saturate the provider when
+each distinct ServiceItem or WorkOrder event immediately fans out into reads.
+Two healthy web replicas will merely split that amplification; replica-local
+limits or dedupe do not create a fleet safety boundary.
+
+**How to apply:** Fence callback generations across replicas, preserve newer and
+terminal arrivals through crash recovery, pace every physical callback-origin
+REST/SOAP attempt (including retries), and hold a fleet mutex through transport
+plus cooldown. Advance shop fairness only after successful fenced completion so
+deadline-truncated drains cannot starve quiet shops. Interactive writes bypass
+the callback lane.

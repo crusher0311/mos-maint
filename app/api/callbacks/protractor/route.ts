@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/mongo";
 import {
   fetchVehicleById,
   fetchWorkOrderById,
@@ -24,6 +23,8 @@ import {
 } from "@/lib/integrations/protractor/client";
 import { logProtractorPolicyDenial } from "@/lib/integrations/protractor/outbound-policy.cjs";
 import { applyProtractorTerminalCallback } from "@/lib/integrations/protractor/callback-terminal";
+import { isProtractorShopRecord } from "@/lib/integrations/protractor/shop-eligibility";
+import { findShopByQuery } from "@/lib/data/repositories/shops";
 
 const VALID_TERMINAL_STATUSES = ["INVOICED", "INVOICE", "CLOSED", "VOID"];
 const MAX_IMMEDIATE_RETRIES = 3;
@@ -31,7 +32,7 @@ const MAX_IMMEDIATE_RETRIES = 3;
 function logCallbackOutcome(fields: {
   sourceRoute: string;
   method: "GET" | "POST";
-  outcome: "admitted" | "coalesced" | "duplicate" | "rate_limited" | "deferred_instance_policy";
+  outcome: "admitted" | "coalesced" | "duplicate" | "rate_limited" | "deferred_instance_policy" | "ignored_provider_mismatch";
   shopId?: number;
   connectionId: string;
 }): void {
@@ -608,8 +609,6 @@ export async function POST(request: NextRequest) {
       }
     });
     
-    const db = await getDb();
-
     const workOrderId = payload.WorkOrderGuid || payload.workOrderGuid || payload.ID || payload.id;
     const status = payload.Status || payload.status || payload.WorkflowStage || payload.workflowStage;
     const connectionId = payload.ConnectionId || payload.connectionId;
@@ -619,7 +618,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "Missing connectionId" }, { status: 400 });
     }
 
-    const shop = await db.collection("shops").findOne({
+    const shop = await findShopByQuery({
       $or: [
         { "protractor.connectionId": connectionId },
         { protractorConnectionId: connectionId }
@@ -647,27 +646,23 @@ export async function POST(request: NextRequest) {
       );
       return NextResponse.json({ ok: true, ignored: true, reason: "Unknown connectionId" });
     }
+    if (!isProtractorShopRecord(shop)) {
+      logCallbackOutcome({
+        sourceRoute,
+        method: "POST",
+        outcome: "ignored_provider_mismatch",
+        shopId: Number(shop.shopId),
+        connectionId,
+      });
+      return NextResponse.json({ ok: true, ignored: true, reason: "Shop is not a Protractor integration" });
+    }
 
     if (!workOrderId) {
       console.log("[Protractor Callback] No work order ID in payload");
       return NextResponse.json({ ok: true, message: "No work order ID" });
     }
 
-    // A denied replica must durably accept callbacks even during a burst. The
-    // callback limiter applies only when this process could start enrichment.
     const requestOutboundPolicy = getProtractorOutboundPolicy();
-    if (requestOutboundPolicy.allowed) {
-      const rateCheck = await checkRateLimit(connectionId);
-      if (!rateCheck.allowed) {
-        logCallbackOutcome({
-          sourceRoute,
-          method: "POST",
-          outcome: "rate_limited",
-          connectionId,
-        });
-        return NextResponse.json({ ok: false, error: "Rate limit exceeded" }, { status: 429 });
-      }
-    }
 
     const normalizedStatus = String(status || "").trim().toUpperCase();
     const isClosed = VALID_TERMINAL_STATUSES.includes(normalizedStatus);
@@ -678,111 +673,27 @@ export async function POST(request: NextRequest) {
       status: status ?? null,
       connectionId,
       shopId: shop.shopId,
-      deferredForReplay: !requestOutboundPolicy.allowed,
+      // Every callback is queue-owned. This stores the normalized queue shape
+      // even on an outbound-enabled replica; ingress never reads Protractor.
+      deferredForReplay: true,
     });
-    const postIdentity: CallbackAdmissionIdentity = {
-      shopId: Number(shop.shopId),
-      method: "POST",
-      objectType: "WorkOrder",
-      objectId: String(workOrderId),
-      operation: normalizedStatus,
-    };
-    const postAdmitted = await callbackEvents.admitCallbackEvent(
-      eventId,
-      postIdentity,
-    );
-    const outboundPolicy = requestOutboundPolicy;
-    if (postAdmitted && !outboundPolicy.allowed) {
-      // The replay shape was atomically persisted with insertPostEvent before
-      // admission. Only release the local claim here.
-      await callbackEvents
-        .finishCallbackEventAdmission(eventId, postIdentity, false)
-        .catch((error: any) => console.error(JSON.stringify({
-          event: "protractor_callback_admission_release_failed",
-          method: "POST",
-          message: String(error?.message || "unknown").slice(0, 160),
-        })));
-      logCallbackOutcome({
-        sourceRoute,
-        method: "POST",
-        outcome: "deferred_instance_policy",
-        shopId: Number(shop.shopId),
-        connectionId,
-      });
-      logProtractorPolicyDenial(outboundPolicy, "callback_post_deferred");
-      return NextResponse.json({
-        ok: true,
-        received: true,
-        status: "deferred",
-        callbackOutcome: "admitted",
-      });
-    }
     logCallbackOutcome({
       sourceRoute,
       method: "POST",
-      outcome: postAdmitted ? "admitted" : "coalesced",
+      outcome: requestOutboundPolicy.allowed ? "admitted" : "deferred_instance_policy",
       shopId: Number(shop.shopId),
       connectionId,
     });
-
-    // For NEW/OPEN work orders, fire enrichment in the background and ack
-    // the webhook immediately. Doing the Protractor API round-trip inline
-    // used to make our 200 wait on Protractor's own /workorders/{id}
-    // response — which is the exact thing they asked us to stop doing on
-    // 2026-05-13 ("webhooks to hit their site are taking a long time to
-    // complete"). The enrichment helper owns its own try/catch so a
-    // failure can never leak into the ack path.
-    if (!isClosed && workOrderId) {
-      const shopId = Number(shop.shopId);
-      console.log(`[Protractor Callback] New/open work order ${workOrderId} with status: ${status} (shop: ${shopId}) - enriching in background`);
-      if (postAdmitted) {
-        // Fire-and-forget — DO NOT await.
-        processAdmittedOpenPost(
-          db,
-          shopId,
-          String(workOrderId),
-          status ?? null,
-          eventId,
-          postIdentity,
-          true,
-        ).catch((err: any) =>
-          console.error(
-            "[Protractor Callback] Background enrich top-level error:",
-            err?.message || err,
-          ),
-        );
-      }
-    }
-
-    // (Legacy synchronous enrichment block removed 2026-05-13 —
-    // enrichOpenWorkOrderInBackground above is now the single source
-    // of truth so the webhook can ack in <50ms.)
-    if (isClosed) {
-      if (!postAdmitted) {
-        return NextResponse.json({ ok: true, duplicate: true, coalesced: true });
-      }
-      try {
-      const applied = await applyProtractorTerminalCallback(db, {
-        shopId: shop.shopId,
-        workOrderId: String(workOrderId),
-        status: status ?? null,
-      });
-      if (!applied) {
-        return NextResponse.json({ ok: true, skipped: true, reason: "Unknown work order" });
-      }
-      } finally {
-        await callbackEvents.finishCallbackEventAdmission(
-          eventId,
-          postIdentity,
-          false,
-        );
-      }
+    if (!requestOutboundPolicy.allowed) {
+      logProtractorPolicyDenial(requestOutboundPolicy, "callback_post_deferred");
     }
 
     return NextResponse.json({ 
+      ok: true,
       received: true, 
-      status: "acknowledged",
-      callbackOutcome: postAdmitted ? "admitted" : "coalesced",
+      status: requestOutboundPolicy.allowed ? "queued" : "deferred",
+      callbackOutcome: "admitted",
+      eventId,
       workOrderId,
       workOrderStatus: status,
       isClosed 
@@ -811,9 +722,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const db = await getDb();
-
-    const shop = await db.collection("shops").findOne({
+    const shop = await findShopByQuery({
       $or: [
         { "protractor.connectionId": connectionId },
         { protractorConnectionId: connectionId }
@@ -838,38 +747,19 @@ export async function GET(request: NextRequest) {
       );
       return NextResponse.json({ ok: true, ignored: true, reason: "Unknown connectionId" });
     }
+    if (!isProtractorShopRecord(shop)) {
+      logCallbackOutcome({
+        sourceRoute,
+        method: "GET",
+        outcome: "ignored_provider_mismatch",
+        shopId: Number(shop.shopId),
+        connectionId,
+      });
+      return NextResponse.json({ ok: true, ignored: true, reason: "Shop is not a Protractor integration" });
+    }
 
     const shopId = Number(shop.shopId);
     console.log(`[Protractor Callback GET] ${operation} ${objectType} ${objectId} for shop ${shopId}`);
-
-    // Deduplication: skip if we already processed this exact object+operation in the last 60 seconds
-    // IMPORTANT: Include operation in the query so Delete is not skipped when Update was just processed
-    if (objectId) {
-      const recentDuplicate = await callbackEvents.findRecentProcessedGet(
-        shopId,
-        objectType,
-        objectId,
-        operation ?? null,
-        new Date(Date.now() - 60000),
-      );
-
-      if (recentDuplicate) {
-        logCallbackOutcome({
-          sourceRoute,
-          method: "GET",
-          outcome: "duplicate",
-          shopId,
-          connectionId,
-        });
-        console.log(`[Protractor Callback GET] Skipping duplicate ${operation} ${objectType} ${objectId} for shop ${shopId} (processed ${Math.round((Date.now() - recentDuplicate.processedAt.getTime()) / 1000)}s ago)`);
-        return NextResponse.json({ 
-          ok: true, 
-          status: "duplicate_skipped",
-          type: objectType,
-          operation
-        });
-      }
-    }
 
     // Log the event
     const eventId = await callbackEvents.insertGetEvent({
@@ -880,92 +770,22 @@ export async function GET(request: NextRequest) {
       shopId,
     });
     console.log(`[Protractor Callback GET] Logged ${objectType} ${objectId} for shop ${shopId}`);
-
-    // Try to process immediately — if it works, return real success
-    if (objectId) {
-      const identity: GetEventIdentity = {
-        shopId,
-        objectType,
-        objectId,
-        operation: operation ?? null,
-      };
-      const admitted = await callbackEvents.admitGetEvent(eventId, identity);
-      logCallbackOutcome({
-        sourceRoute,
-        method: "GET",
-        outcome: admitted ? "admitted" : "coalesced",
-        shopId,
-        connectionId,
-      });
-      if (!admitted) {
-        return NextResponse.json({
-          ok: true,
-          status: "coalesced",
-          type: objectType,
-          operation,
-        });
-      }
-
-      const outboundPolicy = getProtractorOutboundPolicy();
-      if (!outboundPolicy.allowed) {
-        await callbackEvents
-          .finishGetEventAdmission(eventId, identity, false)
-          .catch((error: any) => console.error(JSON.stringify({
-            event: "protractor_callback_admission_release_failed",
-            method: "GET",
-            message: String(error?.message || "unknown").slice(0, 160),
-          })));
-        logCallbackOutcome({
-          sourceRoute,
-          method: "GET",
-          outcome: "deferred_instance_policy",
-          shopId,
-          connectionId,
-        });
-        logProtractorPolicyDenial(outboundPolicy, "callback_get_deferred");
-        return NextResponse.json({
-          ok: true,
-          received: true,
-          status: "deferred",
-          type: objectType,
-          operation,
-        });
-      }
-
-      const success = await processCallbackEvent(db, eventId, shopId, objectType, objectId, operation || "Unknown");
-      
-      if (success) {
-        const followUp = await callbackEvents.finishGetEventAdmission(
-          eventId,
-          identity,
-          true,
-        );
-        launchFollowUp(db, followUp);
-        return NextResponse.json({ 
-          ok: true, 
-          status: "processed",
-          type: objectType,
-          operation
-        });
-      }
-
-      // First attempt failed — queue remaining retries in background, respond as queued
-      await callbackEvents.recordAttempt(eventId);
-
-      continueAdmittedInitialWorker(db, eventId, identity)
-        .catch(err => console.error(`[Protractor Callback] Background retry error:`, err.message));
-
-      return NextResponse.json({ 
-        received: true, 
-        status: "queued",
-        type: objectType,
-        operation
-      });
+    const outboundPolicy = getProtractorOutboundPolicy();
+    if (!outboundPolicy.allowed) {
+      logProtractorPolicyDenial(outboundPolicy, "callback_get_deferred");
     }
-
+    logCallbackOutcome({
+      sourceRoute,
+      method: "GET",
+      outcome: outboundPolicy.allowed ? "admitted" : "deferred_instance_policy",
+      shopId,
+      connectionId,
+    });
     return NextResponse.json({ 
+      ok: true,
       received: true, 
-      status: "acknowledged",
+      status: outboundPolicy.allowed ? "queued" : "deferred",
+      eventId,
       type: objectType,
       operation
     });

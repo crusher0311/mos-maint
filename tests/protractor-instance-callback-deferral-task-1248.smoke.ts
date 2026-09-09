@@ -6,6 +6,7 @@ import { NextRequest } from "next/server";
 type Doc = Record<string, any>;
 const events: Doc[] = [];
 const admissions = new Map<string, string>();
+const admissionTokens = new Map<string, string>();
 let releases = 0;
 let providerFetches = 0;
 const pgInserts: Doc[] = [];
@@ -35,8 +36,31 @@ const vehicle: Doc = {
   },
 };
 const collections: Record<string, any> = {
+  protractor_callback_fairness: {
+    states: new Map<number, Doc>(),
+    find: (filter: Doc) => ({
+      async toArray() {
+        return [...collections.protractor_callback_fairness.states.values()]
+          .filter((state) => filter._id?.$in?.includes(state._id));
+      },
+    }),
+    async updateOne(filter: Doc, update: any) {
+      const current = this.states.get(Number(filter._id)) || { _id: filter._id };
+      const set = Array.isArray(update) ? update[0].$set : update.$set;
+      this.states.set(Number(filter._id), {
+        ...current,
+        ...set,
+        lastSuccessfullyServedAt: new Date(),
+      });
+      return { matchedCount: 1 };
+    },
+  },
   shops: {
-    findOne: async () => ({ shopId: 42 }),
+    findOne: async () => ({
+      shopId: 42,
+      integrationProvider: "protractor",
+      protractor: { connectionId: "conn-42", apiKey: "key-42" },
+    }),
   },
   protractor_callback_events: {
     insertOne: async (doc: Doc) => {
@@ -44,12 +68,42 @@ const collections: Record<string, any> = {
       events.push(stored);
       return { insertedId: stored._id };
     },
-    findOne: async () => null,
+    findOne: async (filter: Doc) => events.find((event) => matches(event, filter)) || null,
     countDocuments: async () => 0,
-    find: () => ({
+    find: (filter: Doc = {}) => ({
       sort() { return this; },
       limit() { return this; },
+      async next() {
+        return events.find((e) =>
+          !e.processed &&
+          (e.method === "GET" || e.method === "POST") &&
+          (filter.objectType === undefined || e.objectType === filter.objectType) &&
+          (filter.objectId === undefined || e.objectId === filter.objectId),
+        ) || null;
+      },
       async toArray() { return events.filter((e) => !e.processed && (e.method === "GET" || e.method === "POST")); },
+    }),
+    aggregate: (pipeline: Doc[]) => ({
+      async toArray() {
+        const limit = Number(pipeline.find((stage) => stage.$limit)?.$limit || 5000);
+        const byShop = new Map<number, Doc[]>();
+        for (const event of events.filter((e) => !e.processed && (e.method === "GET" || e.method === "POST"))) {
+          const queue = byShop.get(Number(event.shopId)) || [];
+          queue.push(event);
+          byShop.set(Number(event.shopId), queue);
+        }
+        for (const queue of byShop.values()) queue.sort((a, b) => +new Date(b.receivedAt) - +new Date(a.receivedAt));
+        const fair: Doc[] = [];
+        for (let round = 0; fair.length < limit; round++) {
+          let added = false;
+          for (const queue of byShop.values()) if (queue[round]) {
+            fair.push(queue[round]);
+            added = true;
+          }
+          if (!added) break;
+        }
+        return fair.slice(0, limit);
+      },
     }),
     updateOne: async (filter: Doc, update: Doc) => {
       const doc = events.find((e) => matches(e, filter));
@@ -57,8 +111,28 @@ const collections: Record<string, any> = {
       if (doc && update.$inc) for (const [k, v] of Object.entries(update.$inc)) doc[k] = (doc[k] || 0) + Number(v);
       return { matchedCount: doc ? 1 : 0 };
     },
+    updateMany: async (filter: Doc, update: Doc) => {
+      const exact = filter.$or?.[0];
+      const doc = exact ? events.find((event) => matches(event, exact)) : undefined;
+      if (doc && update.$set) Object.assign(doc, update.$set);
+      return { matchedCount: doc ? 1 : 0, modifiedCount: doc ? 1 : 0 };
+    },
   },
   protractor_callback_admissions: {
+    findOne: async (filter: Doc) => {
+      const activeEventKey = admissions.get(String(filter._id));
+      const activeOwnerToken = admissionTokens.get(String(filter._id));
+      return activeEventKey === filter.activeEventKey &&
+        (!filter.activeOwnerToken || filter.activeOwnerToken === activeOwnerToken)
+        ? { _id: filter._id, activeEventKey, activeOwnerToken }
+        : null;
+    },
+    updateOne: async (filter: Doc, update: Doc) => {
+      const id = String(filter._id);
+      if (admissions.get(id) !== filter.activeEventKey) return { matchedCount: 0 };
+      if (update.$set?.activeOwnerToken) admissionTokens.set(id, update.$set.activeOwnerToken);
+      return { matchedCount: 1 };
+    },
     findOneAndUpdate: async (filter: Doc, update: any) => {
       const id = String(filter._id);
       if (Array.isArray(update) && !("activeEventKey" in filter)) {
@@ -95,7 +169,15 @@ const collections: Record<string, any> = {
   },
 };
 const fakeDb = { collection: (name: string) => collections[name] || collections.protractor_callback_events };
-const dbStub = { getDb: async () => fakeDb };
+const dbStub = {
+  getDb: async () => fakeDb,
+  getMongoClient: async () => ({
+    startSession: () => ({
+      withTransaction: async (fn: () => Promise<void>) => fn(),
+      endSession: async () => {},
+    }),
+  }),
+};
 const integrationStub = {
   fetchVehicleById: async () => { providerFetches++; return { ok: false }; },
   fetchWorkOrderById: async () => {
@@ -125,7 +207,17 @@ const pgStub = {
   countRecentByConnection: async () => 0,
   findRecentProcessedGet: async () => null,
   admitCallbackEvent: async () => { pgAdmissions++; return true; },
+  claimCallbackEvent: async (eventKey: string) => {
+    pgAdmissions++;
+    return new Date().toISOString();
+  },
   finishCallbackEventAdmission: async () => { pgReleases++; return null; },
+  releaseCallbackEventAdmission: async () => { pgReleases++; },
+  completeCallbackGeneration: async (eventKey: string) => {
+    const row = pgRows.find((candidate) => candidate.eventKey === eventKey);
+    if (row) row.processed = true;
+    return true;
+  },
   findPendingGetEvents: async () => pgRows.filter((r) => !r.processed),
   recordProcessingStarted: async (key: string) => {
     const row = pgRows.find((r) => r.eventKey === key);
@@ -189,8 +281,21 @@ async function main() {
     assert.equal(event.attempts, 0);
     assert.ok(event.method === "POST" || event.method === "GET");
   }
-  assert.equal(admissions.size, 0, "all denied admissions were released");
-  assert.equal(releases, 3);
+  assert.equal(admissions.size, 0, "denied ingress creates no worker claim");
+  assert.equal(releases, 0);
+
+  process.env.RENDER_INSTANCE_ID = "allowed-replica";
+  process.env.PROTRACTOR_OUTBOUND_DISABLED = "true";
+  const globallyDisabled = await route.GET(new NextRequest(
+    "http://test/api/callbacks/protractor?connectionId=connection-42&type=WorkOrder&id=wo-disabled&operation=Update",
+  ));
+  assert.equal(globallyDisabled.status, 200);
+  assert.equal((await globallyDisabled.json()).status, "deferred");
+  assert.equal(providerFetches, 0, "global outbound disable performs zero provider reads");
+  const disabledEvent = events.find((event) => event.objectId === "wo-disabled")!;
+  assert.equal(disabledEvent.processed, false, "globally disabled work remains replayable");
+  disabledEvent.processed = true;
+  delete process.env.PROTRACTOR_OUTBOUND_DISABLED;
 
   process.env.RENDER_INSTANCE_ID = "allowed-replica";
   const { replayDeferredTerminalPost } = await import(
@@ -200,9 +305,43 @@ async function main() {
   const terminalHelper = (
     await import("../lib/integrations/protractor/callback-terminal")
   ).applyProtractorTerminalCallback;
-  const { processProtractorCallbackQueue } = await import(
+  const { processProtractorCallbackQueue, selectFairCallbackBatch } = await import(
     "../lib/integrations/protractor/callback-queue"
   );
+  const fairnessInput = [
+    { key: "a1", method: "GET" as const, shopId: 1, objectType: "WorkOrder", objectId: "same", operation: "Update", receivedAt: new Date(1) },
+    { key: "a2", method: "GET" as const, shopId: 1, objectType: "WorkOrder", objectId: "same", operation: "Delete", receivedAt: new Date(2) },
+    { key: "a3", method: "GET" as const, shopId: 1, objectType: "WorkOrder", objectId: "same", operation: "Update", receivedAt: new Date(3) },
+    { key: "a4", method: "GET" as const, shopId: 1, objectType: "WorkOrder", objectId: "other", operation: "Update", receivedAt: new Date(4) },
+    { key: "b1", method: "GET" as const, shopId: 2, objectType: "WorkOrder", objectId: "wo-2", operation: "Update", receivedAt: new Date(5) },
+  ];
+  const fair = selectFairCallbackBatch(fairnessInput, 3);
+  assert.equal(fair.selected[0].shopId, 1);
+  assert.equal(fair.selected[1].shopId, 2, "busy shop cannot consume the whole batch");
+  assert.ok(fair.selected.some((item) => item.key === "a2"), "Delete dominates later Update noise");
+  assert.deepEqual(
+    fair.coalesced.map((item) => item.key).sort(),
+    ["a1", "a3"],
+    "duplicate/coalesced events retain one terminal latest-wins event",
+  );
+  const noisyFairnessDocs = Array.from({ length: 501 }, (_, index) => ({
+    _id: new ObjectId(), method: "GET", shopId: 1, objectType: "WorkOrder",
+    objectId: `noisy-${index}`, operation: "Update", processed: false,
+    attempts: 0, priority: 1, receivedAt: new Date(Date.now() + index),
+  }));
+  const quietFairnessDoc = {
+    ...noisyFairnessDocs[0], _id: new ObjectId(), shopId: 2, objectId: "quiet",
+  };
+  const priorEvents = events.splice(0);
+  events.push(...noisyFairnessDocs, quietFairnessDoc);
+  const datastoreFair = await callbackRepo.findPendingGetEvents(2, 3);
+  assert.deepEqual(
+    datastoreFair.map((item) => item.shopId).sort(),
+    [1, 2],
+    "Mongo retrieval includes a quiet shop beyond a noisy global cap",
+  );
+  events.splice(0);
+  events.push(...priorEvents);
   const queueResult = await processProtractorCallbackQueue(fakeDb as any, async (item) => {
     if (item.method === "POST" && item.operation === "CLOSED") {
       const ok = await replayDeferredTerminalPost(
@@ -211,7 +350,6 @@ async function main() {
         {
           ...integrationStub,
           applyProtractorTerminalCallback: terminalHelper,
-          markProcessed: callbackRepo.markProcessed,
         },
       );
       if (!ok) throw new Error("terminal replay failed");
@@ -220,6 +358,9 @@ async function main() {
     const result = await integrationStub.fetchWorkOrderById();
     assert.equal(result.ok, true);
     await callbackRepo.markProcessed(item.key);
+  }, {
+    isShopEligible: async (shopId) => shopId === 42,
+    acquireBudgetSlot: async () => true,
   });
   assert.deepEqual(queueResult, { processed: 3, failed: 0 });
   assert.equal(providerFetches, 3, "allowed queue fetches GET, open POST, and terminal POST");
@@ -231,6 +372,36 @@ async function main() {
   assert.equal(workOrder.status, "CLOSED");
   assert.equal(vehicle.status.active, true);
   assert.deepEqual(vehicle.status.sources, [{ provider: "other", workOrderId: "other" }]);
+
+  const budgetDocs = ["budget-1", "budget-2", "budget-3"].map((objectId) => ({
+    _id: new ObjectId(),
+    receivedAt: new Date(),
+    method: "GET",
+    connectionId: "connection-42",
+    objectType: "WorkOrder",
+    objectId,
+    operation: "Update",
+    shopId: 42,
+    processed: false,
+    attempts: 0,
+    priority: 1,
+  }));
+  events.push(...budgetDocs);
+  let budgetClaims = 0;
+  const budgetResult = await processProtractorCallbackQueue(fakeDb as any, async (item) => {
+    await callbackRepo.markProcessed(item.key);
+  }, {
+    limit: 3,
+    isShopEligible: async () => true,
+    acquireBudgetSlot: async () => ++budgetClaims === 1,
+  });
+  assert.deepEqual(budgetResult, { processed: 1, failed: 0 });
+  assert.equal(
+    budgetDocs.filter((doc) => !doc.processed).length,
+    2,
+    "budget exhaustion leaves callback work replayable",
+  );
+  for (const doc of budgetDocs) doc.processed = true;
 
   process.env.PROTRACTOR_OPS_PG_CANONICAL = "1";
   process.env.WRITE_MONGO_PROTRACTOR_OPS = "0";
@@ -252,8 +423,8 @@ async function main() {
     ["GET", "POST", "POST"],
   );
   assert.ok(pgRows.every((row) => row.attempts === 0 && row.processed === false));
-  assert.equal(pgAdmissions, 3);
-  assert.equal(pgReleases, 3);
+  assert.equal(pgAdmissions, 0);
+  assert.equal(pgReleases, 0);
   assert.equal(providerFetches, 3);
 
   workOrder.status = "OPEN";
@@ -271,7 +442,6 @@ async function main() {
         {
           ...integrationStub,
           applyProtractorTerminalCallback: terminalHelper,
-          markProcessed: callbackRepo.markProcessed,
         },
       );
       if (!ok) throw new Error("PG terminal replay failed");
@@ -279,12 +449,15 @@ async function main() {
     }
     await integrationStub.fetchWorkOrderById();
     await callbackRepo.markProcessed(item.key);
+  }, {
+    isShopEligible: async (shopId) => shopId === 42,
+    acquireBudgetSlot: async () => true,
   });
   assert.deepEqual(pgQueue, { processed: 3, failed: 0 });
   assert.ok(pgRows.every((row) => row.processed === true));
   assert.ok(pgRows.every((row) => row.attempts === 1));
-  assert.equal(pgAdmissions, 6);
-  assert.equal(pgReleases, 6);
+  assert.equal(pgAdmissions, 3);
+  assert.equal(pgReleases, 3);
   assert.equal(providerFetches, 6);
   assert.equal(workOrder.closedViaCallback, true);
   assert.equal(workOrder.status, "CLOSED");

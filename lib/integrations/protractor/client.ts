@@ -3,6 +3,10 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import crypto from "node:crypto";
 import https from "node:https";
 import pLimit from "p-limit";
+import {
+  acquireCallbackTransportLease,
+  releaseCallbackTransportLease,
+} from "@/lib/data/repositories/api-usage";
 import { getDb } from "@/lib/mongo";
 import {
   findDeferredWorkByShopAndVin,
@@ -36,6 +40,7 @@ import {
   RelayTransportError,
   shouldUseProtractorRelay,
 } from "./relay-transport";
+import { readShopProtractorCredentials } from "./shop-eligibility";
 export { normalizeProtractorPackageLine } from "./package-normalization";
 
 const BASE_URL_V1 = "https://integration.protractor.com/IntegrationServices/1.0";
@@ -51,6 +56,46 @@ const protractorConcurrencyLimit = pLimit(3);
 // fine for ad-hoc real-time API calls. Mirrors the Tekmetric/Shop-Ware
 // per-chunk pattern.
 const backoffStorage = new AsyncLocalStorage<{ ms: number }>();
+const callbackTransportStorage = new AsyncLocalStorage<{ deadlineMs: number }>();
+
+export function runWithProtractorCallbackTransport<T>(
+  deadlineMs: number,
+  fn: () => Promise<T>,
+): Promise<T> {
+  return callbackTransportStorage.run({ deadlineMs }, fn);
+}
+
+async function runCallbackPacedTransport<T>(
+  transport: (remainingMs?: number) => Promise<T>,
+): Promise<T> {
+  const context = callbackTransportStorage.getStore();
+  if (!context) return transport();
+  const token = await acquireCallbackTransportLease(context.deadlineMs);
+  if (!token) {
+    throw new Error("callback deadline expired before transport lease");
+  }
+  try {
+    if (Date.now() >= context.deadlineMs) throw new Error("callback transport deadline expired");
+    const policy = getProtractorOutboundPolicy();
+    if (!policy.allowed) throw new Error(`callback transport blocked: ${policy.reason}`);
+    return await transport(Math.max(1, context.deadlineMs - Date.now()));
+  } finally {
+    await releaseCallbackTransportLease(token);
+  }
+}
+
+function callbackRemainingMs(): number | undefined {
+  const context = callbackTransportStorage.getStore();
+  return context ? Math.max(0, context.deadlineMs - Date.now()) : undefined;
+}
+
+async function sleepWithinCallbackDeadline(ms: number): Promise<void> {
+  const remaining = callbackRemainingMs();
+  if (remaining !== undefined && remaining <= ms) {
+    throw new Error("callback transport deadline expired during retry backoff");
+  }
+  await __protractorClientTestHooks.sleep(ms);
+}
 
 // Test-only dependency hooks. Unit tests (see
 // tests/protractor-retry-limiter-deadlock.smoke.ts) override these to
@@ -194,6 +239,11 @@ function processRateLimitQueue(): void {
 }
 
 export type ProtractorConfig = {
+  /**
+   * Shop identity bound by resolveProtractorConfig/testConnection. Optional in
+   * the type only for legacy standalone scripts; transports reject it at runtime.
+   */
+  shopId?: number;
   connectionId: string;
   apiKey: string;
   authentication: string;
@@ -474,11 +524,13 @@ export function computeAuthentication(connectionId: string, apiKey: string): str
 }
 
 export async function resolveProtractorConfig(shopId: number | string): Promise<ProtractorConfig> {
+  const normalizedShopId = Number(shopId);
   const db = await getDb();
   const shop = await db.collection("shops").findOne(
     { $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] },
     {
       projection: {
+        integrationProvider: 1,
         protractor: 1,
         protractorConnectionId: 1,
         protractorApiKey: 1,
@@ -486,22 +538,17 @@ export async function resolveProtractorConfig(shopId: number | string): Promise<
     }
   );
 
-  const connectionId =
-    shop?.protractorConnectionId ??
-    shop?.protractor?.connectionId ??
-    process.env.PROTRACTOR_CONNECTION_ID ??
-    "";
-
-  const apiKey =
-    shop?.protractorApiKey ??
-    shop?.protractor?.apiKey ??
-    process.env.PROTRACTOR_API_KEY ??
-    "";
+  // Never substitute process-wide credentials for a requested shop. Doing so
+  // can send a non-Protractor shop through another tenant's Protractor account.
+  const credentials = readShopProtractorCredentials(shop);
+  const connectionId = credentials?.connectionId ?? "";
+  const apiKey = credentials?.apiKey ?? "";
 
   const configured = Boolean(connectionId && apiKey);
   const authentication = configured ? computeAuthentication(connectionId, apiKey) : "";
 
   return {
+    shopId: normalizedShopId,
     connectionId,
     apiKey,
     authentication,
@@ -686,7 +733,7 @@ async function recordBreakerResponse(
 
 async function runGuardedTransportAttempt<T>(
   config: { connectionId: string },
-  transport: () => Promise<T>,
+  transport: (remainingMs?: number) => Promise<T>,
   priority = false,
 ): Promise<{ ok: true; response: T } | { ok: false; error: string }> {
   const local = localPolicyError("soap");
@@ -695,14 +742,17 @@ async function runGuardedTransportAttempt<T>(
   return concurrencyLimiter(async () => {
     const gate = await acquireOutboundGate(config);
     if (!gate.ok) return gate;
-
     // Every physical transport attempt, including SOAP retries, consumes the
     // same distributed provider budget as REST.
     const rateSlot = await acquireRateLimitSlot(priority);
     if (!rateSlot.acquired) {
       return { ok: false, error: "Rate limit exceeded or circuit breaker open" };
     }
-    return { ok: true, response: await transport() };
+    try {
+      return { ok: true, response: await runCallbackPacedTransport(transport) };
+    } catch (error: any) {
+      return { ok: false, error: `Callback transport pacer unavailable: ${error?.message || "unknown"}` };
+    }
   });
 }
 
@@ -716,6 +766,29 @@ export async function protractorFetch<T>(
 ): Promise<{ ok: boolean; data?: T; error?: string }> {
   const local = localPolicyError("rest");
   if (local) return local;
+  const normalizedShopId = Number(shopId);
+  if (
+    typeof shopId !== "number" ||
+    !Number.isSafeInteger(normalizedShopId) ||
+    normalizedShopId <= 0
+  ) {
+    console.error(JSON.stringify({
+      event: "protractor_request_blocked",
+      reason: "missing_shop_attribution",
+      method: (options.method || "GET").toUpperCase(),
+    }));
+    return { ok: false, error: "Protractor request requires a valid shop ID" };
+  }
+  if (config.shopId !== normalizedShopId) {
+    console.error(JSON.stringify({
+      event: "protractor_request_blocked",
+      reason: "shop_config_mismatch",
+      method: (options.method || "GET").toUpperCase(),
+      shopId: normalizedShopId,
+      configShopId: config.shopId,
+    }));
+    return { ok: false, error: "Protractor configuration does not belong to this shop" };
+  }
   const relayLogging = process.env.PROTRACTOR_RELAY_MODE !== undefined &&
     process.env.PROTRACTOR_RELAY_MODE !== "direct";
 
@@ -817,13 +890,13 @@ export async function protractorFetch<T>(
           body = JSON.stringify(stripStatus(parsed));
         } catch {}
       }
-      const res = await __protractorClientTestHooks.httpsRequest(
+      const res = await runCallbackPacedTransport((remainingMs) => __protractorClientTestHooks.httpsRequest(
         url,
         method,
         headers,
         body,
-        opts?.timeoutMs,
-      );
+        Math.min(opts?.timeoutMs ?? 30_000, remainingMs ?? 30_000),
+      ));
 
       const latencyMs = Date.now() - startTime;
       const isServerError = res.statusCode >= 500;
@@ -836,11 +909,12 @@ export async function protractorFetch<T>(
           statusCode: res.statusCode,
           durationMs: latencyMs,
           priority: isPriority,
+          shopId: normalizedShopId,
         }));
       }
       await recordBreakerResponse(config, res.statusCode, retryAfterMs);
       
-      __protractorClientTestHooks.trackApiRequest('protractor', relayLogging ? 'relay' : endpoint, method, res.statusCode, latencyMs, shopId, {
+      __protractorClientTestHooks.trackApiRequest('protractor', relayLogging ? 'relay' : endpoint, method, res.statusCode, latencyMs, normalizedShopId, {
         retryCount: attempt > 0 ? attempt : undefined,
         errorMessage: !relayLogging && res.statusCode >= 400 ? res.body?.substring(0, 200) : undefined,
         sourceWorker: process.env.RENDER ? 'render' : 'replit'
@@ -880,7 +954,7 @@ export async function protractorFetch<T>(
 
         const backoffCounter = backoffStorage.getStore();
         if (backoffCounter) backoffCounter.ms += waitMs;
-        await __protractorClientTestHooks.sleep(waitMs);
+        await sleepWithinCallbackDeadline(waitMs);
         attempt += 1;
         continue;
       }
@@ -1198,7 +1272,7 @@ async function protractorSoapServiceItemUpdate(
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      const transport = await runGuardedTransportAttempt(config, () =>
+      const transport = await runGuardedTransportAttempt(config, (remainingMs) =>
         __protractorClientTestHooks.httpsRequest(
           PROTRACTOR_SOAP_URL,
           "POST",
@@ -1207,7 +1281,7 @@ async function protractorSoapServiceItemUpdate(
             "SOAPAction": `${PROTRACTOR_SOAP_NS}ServiceItemUpdate`,
           },
           soapEnvelope,
-          timeoutMs,
+          Math.min(timeoutMs, remainingMs ?? timeoutMs),
         ),
       );
       if (!transport.ok) return transport;
@@ -1223,7 +1297,7 @@ async function protractorSoapServiceItemUpdate(
           MAX_RETRY_AFTER_MS,
           Math.max(retryAfterMs, Math.min(2000 * Math.pow(1.5, attempt), MAX_TRANSIENT_BACKOFF_MS)),
         );
-        await __protractorClientTestHooks.sleep(delay);
+        await sleepWithinCallbackDeadline(delay);
         continue;
       }
       const faultMatch = res.body.match(/faultstring>([^<]+)/);
@@ -1234,7 +1308,7 @@ async function protractorSoapServiceItemUpdate(
       }
       await recordBreakerResponse(config, PROTRACTOR_TRANSPORT_FAILURE_STATUS);
       if (attempt < maxRetries) {
-        await __protractorClientTestHooks.sleep(
+        await sleepWithinCallbackDeadline(
           Math.min(2000 * Math.pow(1.5, attempt), MAX_TRANSIENT_BACKOFF_MS),
         );
         continue;
@@ -1334,7 +1408,7 @@ function buildWorkOrderXml(wo: Record<string, any>): string {
 }
 
 async function protractorSoapWorkOrderUpdate(
-  config: { connectionId: string; apiKey: string; authentication: string },
+  config: ProtractorConfig,
   workOrderId: string,
   workOrderXml: string,
   shopId?: number | string,
@@ -1342,6 +1416,21 @@ async function protractorSoapWorkOrderUpdate(
   // socket timeout so a hung SOAP call can't spin a wizard button forever.
   opts?: { maxRetries?: number; timeoutMs?: number }
 ): Promise<{ ok: boolean; data?: any; error?: string }> {
+  const normalizedShopId = Number(shopId);
+  if (
+    (typeof shopId !== "number" && typeof shopId !== "string") ||
+    !Number.isSafeInteger(normalizedShopId) ||
+    normalizedShopId <= 0 ||
+    config.shopId !== normalizedShopId
+  ) {
+    console.error(JSON.stringify({
+      event: "protractor_request_blocked",
+      reason: "soap_shop_attribution_mismatch",
+      shopId: Number.isFinite(normalizedShopId) ? normalizedShopId : undefined,
+      configShopId: config.shopId,
+    }));
+    return { ok: false, error: "Protractor SOAP request requires matching shop configuration" };
+  }
   const timeoutMs = opts?.timeoutMs ?? 120_000;
   const soapEnvelope = [
     '<?xml version="1.0" encoding="utf-8"?>',
@@ -1362,7 +1451,7 @@ async function protractorSoapWorkOrderUpdate(
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const startTime = Date.now();
-      const transport = await runGuardedTransportAttempt(config, () =>
+      const transport = await runGuardedTransportAttempt(config, (remainingMs) =>
         __protractorClientTestHooks.httpsRequest(
           PROTRACTOR_SOAP_WO_URL,
           "POST",
@@ -1371,7 +1460,7 @@ async function protractorSoapWorkOrderUpdate(
             "SOAPAction": `${PROTRACTOR_SOAP_NS}WorkOrderUpdate`,
           },
           soapEnvelope,
-          timeoutMs,
+          Math.min(timeoutMs, remainingMs ?? timeoutMs),
         ),
       );
       if (!transport.ok) return transport;
@@ -1386,7 +1475,7 @@ async function protractorSoapWorkOrderUpdate(
         'POST-SOAP',
         res.statusCode,
         latencyMs,
-        shopId === undefined ? undefined : Number(shopId)
+        normalizedShopId
       );
 
       if (res.statusCode === 200 && !res.body.includes('<soap:Fault>')) {
@@ -1412,7 +1501,7 @@ async function protractorSoapWorkOrderUpdate(
           MAX_RETRY_AFTER_MS,
           Math.max(retryAfterMs, Math.min(2000 * Math.pow(1.5, attempt), MAX_TRANSIENT_BACKOFF_MS)),
         );
-        await __protractorClientTestHooks.sleep(delay);
+        await sleepWithinCallbackDeadline(delay);
         continue;
       }
 
@@ -1425,7 +1514,7 @@ async function protractorSoapWorkOrderUpdate(
       console.log(`[Protractor:SOAP] WorkOrderUpdate exception (attempt ${attempt + 1}/${maxRetries + 1}): ${err.message}`);
       if (attempt < maxRetries) {
         const delay = Math.min(2000 * Math.pow(1.5, attempt), 10000);
-        await __protractorClientTestHooks.sleep(delay);
+        await sleepWithinCallbackDeadline(delay);
         continue;
       }
       return { ok: false, error: err.message || 'SOAP request failed' };
@@ -2512,10 +2601,12 @@ export async function fetchDeferredWork(
 
 export async function testConnection(
   connectionId: string,
-  apiKey: string
+  apiKey: string,
+  shopId: number,
 ): Promise<{ ok: boolean; locations?: any[]; error?: string }> {
   const authentication = computeAuthentication(connectionId, apiKey);
   const config: ProtractorConfig = {
+    shopId,
     connectionId,
     apiKey,
     authentication,
@@ -2527,7 +2618,7 @@ export async function testConnection(
     config,
     {},
     0,
-    undefined,
+    shopId,
     { priority: true }
   );
 

@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
     const cleanConnectionId = connectionId.trim().toLowerCase();
     const cleanApiKey = apiKey.trim().toLowerCase();
 
-    const result = await testConnection(cleanConnectionId, cleanApiKey);
+    const result = await testConnection(cleanConnectionId, cleanApiKey, Number(session.shopId));
 
     if (!result.ok) {
       return NextResponse.json(
