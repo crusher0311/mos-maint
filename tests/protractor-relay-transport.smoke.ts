@@ -41,6 +41,23 @@ assert.deepEqual(readProtractorRelayConfig({
   PROTRACTOR_RELAY_URL: "not a URL",
   PROTRACTOR_RELAY_HMAC_SECRET: "short",
 }), { mode: "direct" });
+assert.throws(
+  () => readProtractorRelayConfig({ PROTRACTOR_RELAY_REQUIRED: "true" }),
+  /must be relay/,
+);
+assert.throws(
+  () => readProtractorRelayConfig({
+    PROTRACTOR_RELAY_REQUIRED: "true",
+    PROTRACTOR_RELAY_MODE: "relay-read-only",
+    PROTRACTOR_RELAY_URL: relayUrl,
+    PROTRACTOR_RELAY_HMAC_SECRET: secret,
+  }),
+  /must be relay/,
+);
+assert.throws(
+  () => readProtractorRelayConfig({ PROTRACTOR_RELAY_REQUIRED: "yes" }),
+  /must be true or false/,
+);
 
 for (const env of [
   { PROTRACTOR_RELAY_MODE: "other" },
@@ -101,6 +118,7 @@ assert.deepEqual(payload, {
   method: "PATCH",
   path: "/IntegrationServices/2.0/WorkOrder/a%2Fb?x=a%2Bb&x=two",
   headers: originalHeaders,
+  deadlineAtMs: 1_700_000_001_999,
   body: '{"exact":"bytes\\n"}',
 });
 assert.equal(plan.headers["content-length"], String(Buffer.byteLength(plan.body)));
@@ -136,6 +154,7 @@ const soap = createProtractorRelayRequest(
 );
 assert.equal(soap.timeoutMs, 5_000);
 assert.equal(JSON.parse(soap.body).type, "soap");
+assert.equal(JSON.parse(soap.body).deadlineAtMs, 1_700_000_005_000);
 const slowPriorityRest = createProtractorRelayRequest(
   relayConfig(),
   restTarget.href,

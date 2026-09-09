@@ -35,6 +35,16 @@ export function readProtractorRelayConfig(
   if (mode !== "direct" && mode !== "relay" && mode !== "relay-read-only") {
     throw new Error("PROTRACTOR_RELAY_MODE must be direct, relay-read-only, or relay");
   }
+  if (
+    env.PROTRACTOR_RELAY_REQUIRED !== undefined &&
+    env.PROTRACTOR_RELAY_REQUIRED !== "true" &&
+    env.PROTRACTOR_RELAY_REQUIRED !== "false"
+  ) {
+    throw new Error("PROTRACTOR_RELAY_REQUIRED must be true or false");
+  }
+  if (env.PROTRACTOR_RELAY_REQUIRED === "true" && mode !== "relay") {
+    throw new Error("PROTRACTOR_RELAY_MODE must be relay when PROTRACTOR_RELAY_REQUIRED=true");
+  }
   if (mode === "direct") return { mode };
 
   const secret = env.PROTRACTOR_RELAY_HMAC_SECRET;

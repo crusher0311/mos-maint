@@ -236,6 +236,7 @@ export async function acquireDistributedRateLimitSlot(
     }
 
     await releaseRateLimitSlot(key);
+    if (attempt === maxRetries - 1) break;
     
     const exponentialWait = baseWaitMs * Math.pow(2, attempt);
     const jitter = Math.random() * 1000;

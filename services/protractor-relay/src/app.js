@@ -5,7 +5,9 @@ import http from "node:http";
 import https from "node:https";
 
 const REQUEST_PATH = "/relay";
-const ALLOWED_FIELDS = new Set(["type", "method", "path", "headers", "body", "bodyEncoding"]);
+const ALLOWED_FIELDS = new Set([
+  "type", "method", "path", "headers", "body", "bodyEncoding", "deadlineAtMs"
+]);
 const REST_METHODS = new Set(["GET", "POST", "PUT", "PATCH", "DELETE"]);
 const HOP_BY_HOP = new Set([
   "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
@@ -132,6 +134,69 @@ function readLimited(stream, limit) {
     });
     stream.on("error", reject);
   });
+}
+
+function abortableDelay(ms, signal) {
+  if (ms <= 0) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(done, ms);
+    const abort = () => {
+      clearTimeout(timer);
+      reject(new HttpError(499, "caller_disconnected", "Caller disconnected"));
+    };
+    function done() {
+      if (signal) signal.removeEventListener("abort", abort);
+      resolve();
+    }
+    if (signal) {
+      if (signal.aborted) return abort();
+      signal.addEventListener("abort", abort, { once: true });
+    }
+  });
+}
+
+/**
+ * Authoritative physical-send pacer. The relay is the final process that can
+ * create a Protractor socket, so it serializes upstream work here and waits
+ * for a full cooldown after each completed/failed physical attempt.
+ */
+function createUpstreamPacer(config, now) {
+  const minimumIntervalMs = config.upstreamMinIntervalMs ?? 1000;
+  let tail = Promise.resolve();
+  // A replacement process has no proof of the prior process's last dispatch.
+  // Start with one full cooldown so a stop-then-start deployment cannot burst
+  // across the process boundary.
+  let nextAllowedAt = now() + minimumIntervalMs;
+  return async function pace(payload, signal, send) {
+    let releaseTurn;
+    const previous = tail;
+    tail = new Promise(resolve => { releaseTurn = resolve; });
+    await previous;
+    let physicalAttemptStarted = false;
+    try {
+      if (signal?.aborted) {
+        throw new HttpError(499, "caller_disconnected", "Caller disconnected");
+      }
+      const waitMs = Math.max(0, nextAllowedAt - now());
+      if (now() + waitMs >= payload.deadlineAtMs) {
+        throw new HttpError(504, "caller_deadline_expired", "Caller deadline expired before upstream dispatch");
+      }
+      await abortableDelay(waitMs, signal);
+      if (signal?.aborted) {
+        throw new HttpError(499, "caller_disconnected", "Caller disconnected");
+      }
+      if (now() >= payload.deadlineAtMs) {
+        throw new HttpError(504, "caller_deadline_expired", "Caller deadline expired before upstream dispatch");
+      }
+      physicalAttemptStarted = true;
+      return await send();
+    } finally {
+      if (physicalAttemptStarted) {
+        nextAllowedAt = now() + minimumIntervalMs;
+      }
+      releaseTurn();
+    }
+  };
 }
 
 function authenticate(req, rawBody, config, replayCache, now) {
@@ -284,6 +349,9 @@ function parsePayload(raw) {
   if (value.bodyEncoding !== undefined && !["utf8", "base64"].includes(value.bodyEncoding)) {
     throw new HttpError(400, "invalid_body_encoding", "bodyEncoding must be utf8 or base64");
   }
+  if (!Number.isSafeInteger(value.deadlineAtMs) || value.deadlineAtMs <= 0) {
+    throw new HttpError(400, "invalid_deadline", "deadlineAtMs must be a positive integer");
+  }
   return { ...value, method, target: value.path, apiVersion: versionMatch[1] };
 }
 
@@ -334,12 +402,21 @@ function filteredResponseHeaders(headers) {
   return result;
 }
 
-function proxy(payload, body, config, incoming, signal) {
+function proxy(payload, body, config, incoming, signal, now) {
   return new Promise((resolve, reject) => {
     const target = new URL(config.upstream);
-    const timeoutMs = payload.type === "soap"
+    const configuredTimeoutMs = payload.type === "soap"
       ? (config.soapTimeoutMs ?? config.timeoutMs ?? 120_000)
       : (config.restTimeoutMs ?? config.timeoutMs ?? 30_000);
+    const callerRemainingMs = payload.deadlineAtMs - now();
+    if (callerRemainingMs <= 0) {
+      reject(new HttpError(504, "caller_deadline_expired", "Caller deadline expired before upstream dispatch"));
+      return;
+    }
+    const timeoutMs = Math.min(configuredTimeoutMs, callerRemainingMs);
+    const timeoutError = callerRemainingMs <= configuredTimeoutMs
+      ? new HttpError(504, "caller_deadline_expired", "Caller deadline expired during upstream response")
+      : new HttpError(504, "upstream_timeout", "Upstream deadline exceeded");
     const transport = target.protocol === "https:" ? https : http;
     const request = transport.request(target, {
       method: payload.method,
@@ -356,14 +433,20 @@ function proxy(payload, body, config, incoming, signal) {
         }
         chunks.push(chunk);
       });
-      response.on("end", () => resolve({
-        status: response.statusCode,
-        headers: filteredResponseHeaders(response.headers),
-        body: Buffer.concat(chunks)
-      }));
+      response.on("end", () => {
+        if (now() >= payload.deadlineAtMs) {
+          reject(new HttpError(504, "caller_deadline_expired", "Caller deadline expired during upstream response"));
+          return;
+        }
+        resolve({
+          status: response.statusCode,
+          headers: filteredResponseHeaders(response.headers),
+          body: Buffer.concat(chunks)
+        });
+      });
       response.on("error", reject);
     });
-    const timer = setTimeout(() => request.destroy(new HttpError(504, "upstream_timeout", "Upstream deadline exceeded")), timeoutMs);
+    const timer = setTimeout(() => request.destroy(timeoutError), timeoutMs);
     const abort = () => request.destroy(new HttpError(499, "caller_disconnected", "Caller disconnected"));
     if (signal) signal.addEventListener("abort", abort, { once: true });
     request.on("close", () => {
@@ -382,15 +465,17 @@ export function createRelayServer(options) {
   let concurrent = 0;
   let ingress = 0;
   const maxIngress = config.maxConcurrentIngress || 64;
+  const maxCallerDeadlineMs = config.maxCallerDeadlineMs ?? 180_000;
   const now = options.now || Date.now;
   const logger = options.logger || log;
+  const paceUpstream = createUpstreamPacer(config, now);
   const server = http.createServer(async (req, res) => {
     const started = now();
     let requestId;
     try {
       const url = new URL(req.url, "http://relay");
       if (req.method === "GET" && url.pathname === "/healthz" && !url.search) {
-        return json(res, 200, { status: "ok" });
+        return json(res, 200, { status: "ok" }, { "x-relay-contract-version": "2" });
       }
       if (url.pathname !== REQUEST_PATH || url.search) {
         throw new HttpError(404, "not_found", "Not found");
@@ -410,6 +495,13 @@ export function createRelayServer(options) {
       const raw = await readLimited(req, config.requestBodyLimit);
       const reservation = authenticate(req, raw, config, replayCache, now);
       const payload = parsePayload(raw);
+      const acceptedAt = now();
+      if (payload.deadlineAtMs <= acceptedAt) {
+        throw new HttpError(408, "caller_deadline_expired", "Caller deadline has expired");
+      }
+      if (payload.deadlineAtMs > acceptedAt + maxCallerDeadlineMs) {
+        throw new HttpError(400, "invalid_deadline", "Caller deadline exceeds the allowed horizon");
+      }
       const body = decodeBody(payload, config.requestBodyLimit);
       outboundHeaders(payload.headers, body);
       if (concurrent >= config.maxConcurrentUpstreams) {
@@ -432,7 +524,11 @@ export function createRelayServer(options) {
       res.on("close", responseDisconnected);
       let upstream;
       try {
-        upstream = await proxy(payload, body, config, req, callerAbort.signal);
+        upstream = await paceUpstream(
+          payload,
+          callerAbort.signal,
+          () => proxy(payload, body, config, req, callerAbort.signal, now),
+        );
       } finally {
         concurrent--;
         req.off("aborted", disconnected);

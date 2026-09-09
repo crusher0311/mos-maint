@@ -25,6 +25,7 @@ export interface RelayRequest {
   method: string;
   path: string;
   headers: Record<string, string>;
+  deadlineAtMs: number;
   body?: string;
 }
 
@@ -95,6 +96,7 @@ export function createProtractorRelayRequest(
     method,
     path: target.pathname + target.search,
     headers,
+    deadlineAtMs: nowMs + callerTimeoutMs,
     ...(body === undefined ? {} : { body }),
   };
   // This string is the immutable wire representation: hash and write these

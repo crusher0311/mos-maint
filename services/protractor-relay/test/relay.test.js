@@ -32,6 +32,8 @@ async function fixture(handler, overrides = {}) {
     responseBodyLimit: 4096,
     timeoutMs: 100,
     requestTimeoutMs: 1000,
+    upstreamMinIntervalMs: 0,
+    maxCallerDeadlineMs: 180_000,
     clockSkewSeconds: 60,
     replayTtlSeconds: 120,
     replayMaxEntries: 1000,
@@ -61,7 +63,10 @@ function auth(body, secret, changes = {}) {
 }
 
 async function relayFetch(url, config, value, changes = {}) {
-  const body = typeof value === "string" ? value : JSON.stringify(value);
+  const withDeadline = typeof value === "string" || value.deadlineAtMs !== undefined
+    ? value
+    : { ...value, deadlineAtMs: Date.now() + 30_000 };
+  const body = typeof withDeadline === "string" ? withDeadline : JSON.stringify(withDeadline);
   return fetch(`${url}/relay`, {
     method: "POST",
     headers: auth(body, config.secret, changes),
@@ -75,6 +80,7 @@ test("health endpoint is public and minimal", async () => {
   const response = await fetch(`${url}/healthz`);
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { status: "ok" });
+  assert.equal(response.headers.get("x-relay-contract-version"), "2");
 });
 
 test("rejects missing, invalid, and stale authentication", async () => {
@@ -111,7 +117,12 @@ test("marks relay-generated errors without marking provider responses", async ()
 
 test("blocks a replay of a valid nonce and request id", async () => {
   const { url, config } = await fixture((_req, res) => res.end("ok"));
-  const body = JSON.stringify({ type: "rest", method: "GET", path: "/IntegrationServices/1.0/Customers" });
+  const body = JSON.stringify({
+    type: "rest",
+    method: "GET",
+    path: "/IntegrationServices/1.0/Customers",
+    deadlineAtMs: Date.now() + 30_000,
+  });
   const headers = auth(body, config.secret);
   const send = () => fetch(`${url}/relay`, { method: "POST", headers, body });
   assert.equal((await send()).status, 200);
@@ -120,7 +131,12 @@ test("blocks a replay of a valid nonce and request id", async () => {
 
 test("rejects reuse of either a nonce or request id", async () => {
   const { url, config } = await fixture((_req, res) => res.end("ok"));
-  const body = JSON.stringify({ type: "rest", method: "GET", path: "/IntegrationServices/1.0/Customers" });
+  const body = JSON.stringify({
+    type: "rest",
+    method: "GET",
+    path: "/IntegrationServices/1.0/Customers",
+    deadlineAtMs: Date.now() + 30_000,
+  });
   const first = auth(body, config.secret);
   assert.equal((await fetch(`${url}/relay`, { method: "POST", headers: first, body })).status, 200);
   const reusedNonce = auth(body, config.secret, { "x-relay-nonce": first["x-relay-nonce"] });
@@ -130,7 +146,12 @@ test("rejects reuse of either a nonce or request id", async () => {
 });
 
 test("loads replay reservations after a relay restart", async () => {
-  const body = JSON.stringify({ type: "rest", method: "GET", path: "/IntegrationServices/1.0/Customers" });
+  const body = JSON.stringify({
+    type: "rest",
+    method: "GET",
+    path: "/IntegrationServices/1.0/Customers",
+    deadlineAtMs: Date.now() + 30_000,
+  });
   const secret = "test-secret-with-at-least-thirty-two-bytes";
   const firstUpstream = http.createServer((_req, res) => res.end("ok"));
   const upstreamUrl = await listen(firstUpstream);
@@ -139,6 +160,7 @@ test("loads replay reservations after a relay restart", async () => {
   const config = {
     secret, upstream: new URL(upstreamUrl), requestBodyLimit: 4096,
     responseBodyLimit: 4096, timeoutMs: 100, requestTimeoutMs: 1000,
+    upstreamMinIntervalMs: 0, maxCallerDeadlineMs: 180_000,
     replayMaxEntries: 1000, replayTtlSeconds: 120, clockSkewSeconds: 60,
     replayJournalPath: join(directory, "replay.journal")
   };
@@ -185,13 +207,19 @@ test("compacts the durable replay journal and fails before exceeding its bound",
     secret: "test-secret-with-at-least-thirty-two-bytes",
     upstream: new URL(upstreamUrl), requestBodyLimit: 4096, responseBodyLimit: 4096,
     timeoutMs: 1000, requestTimeoutMs: 1000, replayMaxEntries: 1000,
+    upstreamMinIntervalMs: 0, maxCallerDeadlineMs: 180_000,
     replayJournalMaxBytes: 65_536, replayTtlSeconds: 120, clockSkewSeconds: 60,
     replayJournalPath: join(journalDir, "replay.journal")
   };
   const relay = createRelayServer(config);
   const url = await listen(relay);
   for (let i = 0; i < 140; i++) {
-    const body = JSON.stringify({ type: "rest", method: "GET", path: "/IntegrationServices/1.0/x" });
+    const body = JSON.stringify({
+      type: "rest",
+      method: "GET",
+      path: "/IntegrationServices/1.0/x",
+      deadlineAtMs: Date.now() + 30_000,
+    });
     const response = await fetch(`${url}/relay`, {
       method: "POST", headers: auth(body, config.secret), body
     });
@@ -307,6 +335,140 @@ test("returns a deadline error when upstream stalls", async () => {
   assert.equal((await response.json()).error, "upstream_timeout");
 });
 
+test("enforces the signed caller deadline during an active upstream response", async () => {
+  let calls = 0;
+  const { url, config } = await fixture((_req, res) => {
+    calls++;
+    setTimeout(() => res.end("late"), 80);
+  });
+  const response = await relayFetch(url, config, {
+    type: "rest",
+    method: "GET",
+    path: "/IntegrationServices/1.0/x",
+    deadlineAtMs: Date.now() + 30,
+  });
+  assert.equal(response.status, 504);
+  assert.equal((await response.json()).error, "caller_deadline_expired");
+  assert.equal(calls, 1);
+});
+
+test("serializes actual upstream dispatches and cools down after completion", async () => {
+  const starts = [];
+  let active = 0;
+  let overlap = false;
+  const { url, config } = await fixture((_req, res) => {
+    starts.push(Date.now());
+    active++;
+    if (active > 1) overlap = true;
+    setTimeout(() => {
+      active--;
+      res.end("ok");
+    }, 5);
+  }, {
+    upstreamMinIntervalMs: 20,
+    maxConcurrentUpstreams: 8,
+  });
+  const values = Array.from({ length: 5 }, (_, index) => ({
+    type: index % 2 ? "soap" : "rest",
+    method: index % 2 ? "POST" : "GET",
+    path: index % 2
+      ? "/IntegrationServices/1.0/WorkOrderServices.asmx"
+      : `/IntegrationServices/2.0/Invoice/${index}`,
+    deadlineAtMs: Date.now() + 5_000,
+  }));
+  const responses = await Promise.all(values.map(value => relayFetch(url, config, value)));
+  assert.ok(responses.every(response => response.status === 200));
+  assert.equal(overlap, false);
+  assert.equal(starts.length, values.length);
+  const gaps = starts.slice(1).map((value, index) => value - starts[index]);
+  assert.ok(gaps.every(gap => gap >= 20), `physical gaps: ${gaps.join(",")}`);
+});
+
+test("drops queued work whose signed caller deadline expires before dispatch", async () => {
+  let calls = 0;
+  const { url, config } = await fixture((_req, res) => {
+    calls++;
+    setTimeout(() => res.end("ok"), 40);
+  }, {
+    upstreamMinIntervalMs: 20,
+    maxConcurrentUpstreams: 8,
+  });
+  const first = relayFetch(url, config, {
+    type: "rest",
+    method: "GET",
+    path: "/IntegrationServices/2.0/Invoice/first",
+    deadlineAtMs: Date.now() + 1_000,
+  });
+  await new Promise(resolve => setTimeout(resolve, 5));
+  const second = relayFetch(url, config, {
+    type: "soap",
+    method: "POST",
+    path: "/IntegrationServices/1.0/WorkOrderServices.asmx",
+    deadlineAtMs: Date.now() + 15,
+  });
+  assert.equal((await first).status, 200);
+  const expired = await second;
+  assert.equal(expired.status, 504);
+  assert.equal((await expired.json()).error, "caller_deadline_expired");
+  assert.equal(calls, 1, "expired queued work must never create an upstream socket");
+});
+
+test("drops queued work when its caller disconnects before dispatch", async () => {
+  let calls = 0;
+  const { url, config } = await fixture((_req, res) => {
+    calls++;
+    setTimeout(() => res.end("ok"), 40);
+  }, {
+    upstreamMinIntervalMs: 20,
+    maxConcurrentUpstreams: 8,
+  });
+  const first = relayFetch(url, config, {
+    type: "rest",
+    method: "GET",
+    path: "/IntegrationServices/2.0/Invoice/first",
+    deadlineAtMs: Date.now() + 1_000,
+  });
+  await new Promise(resolve => setTimeout(resolve, 5));
+  const controller = new AbortController();
+  const value = {
+    type: "rest",
+    method: "GET",
+    path: "/IntegrationServices/2.0/Invoice/disconnected",
+    deadlineAtMs: Date.now() + 1_000,
+  };
+  const body = JSON.stringify(value);
+  const disconnected = fetch(`${url}/relay`, {
+    method: "POST",
+    headers: auth(body, config.secret),
+    body,
+    signal: controller.signal,
+  });
+  setTimeout(() => controller.abort(), 10);
+  await assert.rejects(disconnected, /abort/i);
+  assert.equal((await first).status, 200);
+  await new Promise(resolve => setTimeout(resolve, 30));
+  assert.equal(calls, 1, "disconnected queued work must never create an upstream socket");
+});
+
+test("requires bounded signed caller deadlines", async () => {
+  const { url, config } = await fixture((_req, res) => res.end("ok"));
+  const missing = await relayFetch(url, config, JSON.stringify({
+    type: "rest",
+    method: "GET",
+    path: "/IntegrationServices/2.0/Invoice/missing",
+  }));
+  assert.equal(missing.status, 400);
+  assert.equal((await missing.json()).error, "invalid_deadline");
+  const tooFar = await relayFetch(url, config, {
+    type: "rest",
+    method: "GET",
+    path: "/IntegrationServices/2.0/Invoice/future",
+    deadlineAtMs: Date.now() + config.maxCallerDeadlineMs + 10_000,
+  });
+  assert.equal(tooFar.status, 400);
+  assert.equal((await tooFar.json()).error, "invalid_deadline");
+});
+
 test("admits only the configured number of ingress requests", async () => {
   const { url, config } = await fixture(() => {}, {
     timeoutMs: 80,
@@ -359,6 +521,9 @@ test("structured logs do not contain credentials or request bodies", async () =>
 
 test("compose grants SOAP requests enough shutdown grace", () => {
   const compose = readFileSync(new URL("../compose.example.yml", import.meta.url), "utf8");
+  const configSource = readFileSync(new URL("../src/config.js", import.meta.url), "utf8");
+  assert.match(compose, /protractor-relay:[\s\S]*?container_name:\s*protractor-relay/);
   assert.match(compose, /protractor-relay:[\s\S]*?stop_grace_period:\s*140s/);
   assert.match(compose, /caddy:[\s\S]*?stop_grace_period:\s*145s/);
+  assert.match(configSource, /UPSTREAM_MIN_INTERVAL_MS", 1000, 1000,/);
 });

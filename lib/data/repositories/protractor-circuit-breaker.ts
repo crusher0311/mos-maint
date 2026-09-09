@@ -46,7 +46,7 @@ function connectionKey(connectionId: string): string {
 async function claimScope(key: string, now: Date): Promise<ProtractorGateDecision> {
   const db = await getDb();
   const collection = db.collection<BreakerDocument>(COLLECTION);
-  const state = await collection.findOne({ _id: key });
+  const state = await collection.findOne({ _id: key }, { maxTimeMS: 1000 });
   if (!state?.openUntil) return { allowed: true, probe: false };
 
   if (state.openUntil.getTime() > now.getTime()) {
@@ -65,7 +65,7 @@ async function claimScope(key: string, now: Date): Promise<ProtractorGateDecisio
       $or: [{ probeUntil: { $exists: false } }, { probeUntil: { $lte: now } }],
     },
     { $set: { probeUntil, updatedAt: now } },
-    { returnDocument: "after" },
+    { returnDocument: "after", maxTimeMS: 1000 },
   );
   if (claimed) return { allowed: true, probe: true };
 

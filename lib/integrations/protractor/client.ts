@@ -5,7 +5,10 @@ import https from "node:https";
 import pLimit from "p-limit";
 import {
   acquireCallbackTransportLease,
+  acquireProtractorPhysicalTransportLease,
+  confirmProtractorPhysicalTransportLease,
   releaseCallbackTransportLease,
+  releaseProtractorPhysicalTransportLease,
 } from "@/lib/data/repositories/api-usage";
 import { getDb } from "@/lib/mongo";
 import {
@@ -70,7 +73,7 @@ async function runCallbackPacedTransport<T>(
 ): Promise<T> {
   const context = callbackTransportStorage.getStore();
   if (!context) return transport();
-  const token = await acquireCallbackTransportLease(context.deadlineMs);
+  const token = await __protractorClientTestHooks.acquireCallbackTransportLease(context.deadlineMs);
   if (!token) {
     throw new Error("callback deadline expired before transport lease");
   }
@@ -80,7 +83,7 @@ async function runCallbackPacedTransport<T>(
     if (!policy.allowed) throw new Error(`callback transport blocked: ${policy.reason}`);
     return await transport(Math.max(1, context.deadlineMs - Date.now()));
   } finally {
-    await releaseCallbackTransportLease(token);
+    await __protractorClientTestHooks.releaseCallbackTransportLease(token);
   }
 }
 
@@ -108,6 +111,12 @@ export const __protractorClientTestHooks: {
   httpsRequest: typeof httpsRequest;
   enforceLocalPolicyWithMockTransport: boolean;
   acquireDistributedRateLimitSlot: typeof acquireDistributedRateLimitSlot;
+  acquireCallbackTransportLease: typeof acquireCallbackTransportLease;
+  releaseCallbackTransportLease: typeof releaseCallbackTransportLease;
+  acquirePhysicalTransportLease: typeof acquireProtractorPhysicalTransportLease;
+  confirmPhysicalTransportLease: typeof confirmProtractorPhysicalTransportLease;
+  releasePhysicalTransportLease: typeof releaseProtractorPhysicalTransportLease;
+  enforceFleetPacerWithMockTransport: boolean;
   trackApiRequest: typeof trackApiRequest;
   retryBaseDelayMs: number | null;
   // Task #936: lets wizard-create tests stub Mongo-backed config resolution
@@ -129,6 +138,15 @@ export const __protractorClientTestHooks: {
   httpsRequest: productionHttpsRequest,
   enforceLocalPolicyWithMockTransport: false,
   acquireDistributedRateLimitSlot: (...args) => acquireDistributedRateLimitSlot(...args),
+  acquireCallbackTransportLease: (deadlineMs) => acquireCallbackTransportLease(deadlineMs),
+  releaseCallbackTransportLease: (token) => releaseCallbackTransportLease(token),
+  acquirePhysicalTransportLease: (deadlineMs) =>
+    acquireProtractorPhysicalTransportLease(deadlineMs),
+  confirmPhysicalTransportLease: (token) =>
+    confirmProtractorPhysicalTransportLease(token),
+  releasePhysicalTransportLease: (token) =>
+    releaseProtractorPhysicalTransportLease(token),
+  enforceFleetPacerWithMockTransport: false,
   trackApiRequest: (...args) => trackApiRequest(...args),
   retryBaseDelayMs: null,
   resolveProtractorConfig: (...args) => resolveProtractorConfig(...args),
@@ -187,7 +205,10 @@ async function acquireRateLimitSlot(priority: boolean = false): Promise<{ acquir
   const startTime = Date.now();
   
   // First: acquire distributed slot (blocks if global limit exceeded)
-  const distributed = await __protractorClientTestHooks.acquireDistributedRateLimitSlot('protractor');
+  // The relay hard-paces at one request per second, so this minute guard should
+  // never be full in healthy operation. One bounded claim is enough; do not
+  // let its legacy exponential retry loop outlive request/callback deadlines.
+  const distributed = await __protractorClientTestHooks.acquireDistributedRateLimitSlot('protractor', 1);
   if (!distributed.acquired) {
     if (distributed.circuitOpen) {
       console.warn(`[Protractor] Circuit breaker open, skipping request`);
@@ -730,6 +751,171 @@ async function acquireOutboundGate(config: { connectionId: string }): Promise<{ 
   }
 }
 
+const PROTRACTOR_FLEET_PACER_WAIT_MS = 15_000;
+
+async function settleBefore<T>(
+  pending: Promise<T>,
+  deadlineAtMs: number,
+): Promise<{ timedOut: false; value: T } | { timedOut: true }> {
+  const remainingMs = deadlineAtMs - Date.now();
+  if (remainingMs <= 0) return { timedOut: true };
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      pending.then(value => ({ timedOut: false as const, value })),
+      new Promise<{ timedOut: true }>(resolve => {
+        timer = setTimeout(() => resolve({ timedOut: true }), remainingMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function shouldEnforceFleetPacer(): boolean {
+  return __protractorClientTestHooks.httpsRequest === productionHttpsRequest ||
+    __protractorClientTestHooks.enforceFleetPacerWithMockTransport;
+}
+
+/**
+ * Final provider-wide admission point before a physical REST/SOAP attempt.
+ * One Mongo-owned lease is shared by every shop, replica, priority lane, and
+ * retry. It remains held until the relay responds, then imposes a one-second
+ * cooldown. Priority changes concurrency order only; it never bypasses this
+ * gate.
+ */
+async function runFleetGuardedTransportAttempt<T>(
+  config: { connectionId: string },
+  transport: (remainingMs?: number) => Promise<T>,
+  priority: boolean,
+  remainingMs?: number,
+): Promise<{ ok: true; response: T } | { ok: false; error: string }> {
+  const earlyLocal = localPolicyError("transport_attempt");
+  if (earlyLocal) return earlyLocal;
+
+  const enforceFleetPacer = shouldEnforceFleetPacer();
+  const waitStartedAt = Date.now();
+  const waitBudgetMs = Math.min(
+    PROTRACTOR_FLEET_PACER_WAIT_MS,
+    remainingMs ?? PROTRACTOR_FLEET_PACER_WAIT_MS,
+  );
+  if (waitBudgetMs <= 0) {
+    return { ok: false, error: "Protractor callback deadline expired before admission" };
+  }
+  const admissionDeadlineAtMs = waitStartedAt + waitBudgetMs;
+  let leaseToken: string | null = null;
+
+  if (enforceFleetPacer) {
+    try {
+      const leaseAttempt = __protractorClientTestHooks.acquirePhysicalTransportLease(
+        admissionDeadlineAtMs,
+      );
+      const leaseAdmission = await settleBefore(leaseAttempt, admissionDeadlineAtMs);
+      if (leaseAdmission.timedOut) {
+        // The Mongo operation itself is not cancellable. If it resolves late
+        // with ownership, release it without ever permitting a physical send.
+        void leaseAttempt.then(async lateToken => {
+          if (lateToken) {
+            await __protractorClientTestHooks.releasePhysicalTransportLease(lateToken);
+          }
+        }).catch(() => undefined);
+        return { ok: false, error: "Protractor fleet transport admission deadline expired" };
+      }
+      leaseToken = leaseAdmission.value;
+    } catch (error: any) {
+      console.warn(JSON.stringify({
+        event: "protractor_fleet_pacer_unavailable",
+        message: String(error?.message || "unknown").slice(0, 160),
+      }));
+      return { ok: false, error: "Protractor fleet transport pacer unavailable" };
+    }
+    if (!leaseToken) {
+      console.warn(JSON.stringify({
+        event: "protractor_fleet_pacer_deadline",
+        waitedMs: Date.now() - waitStartedAt,
+        priority,
+      }));
+      return { ok: false, error: "Protractor fleet transport pacer deadline expired" };
+    }
+  }
+
+  try {
+    // Every blocking admission step happens before these final checks.
+    // Exhausted callback time is a rejection, never a 1ms transport grant.
+    const rateAdmission = await settleBefore(acquireRateLimitSlot(priority), admissionDeadlineAtMs);
+    if (rateAdmission.timedOut) {
+      return { ok: false, error: "Protractor rate-limit admission deadline expired" };
+    }
+    const rateSlot = rateAdmission.value;
+    if (!rateSlot.acquired) {
+      return { ok: false, error: "Rate limit exceeded or circuit breaker open" };
+    }
+
+    const elapsedMs = Date.now() - waitStartedAt;
+    if (remainingMs !== undefined && elapsedMs >= remainingMs) {
+      return { ok: false, error: "Protractor callback deadline expired before transport" };
+    }
+
+    const local = localPolicyError("transport_attempt");
+    if (local) return local;
+
+    const gateAdmission = await settleBefore(acquireOutboundGate(config), admissionDeadlineAtMs);
+    if (gateAdmission.timedOut) {
+      return { ok: false, error: "Protractor circuit-breaker admission deadline expired" };
+    }
+    const gate = gateAdmission.value;
+    if (!gate.ok) return gate;
+
+    if (leaseToken) {
+      const ownershipAdmission = await settleBefore(
+        __protractorClientTestHooks.confirmPhysicalTransportLease(leaseToken),
+        admissionDeadlineAtMs,
+      );
+      if (ownershipAdmission.timedOut) {
+        return { ok: false, error: "Protractor fleet lease confirmation deadline expired" };
+      }
+      if (!ownershipAdmission.value) {
+        return { ok: false, error: "Protractor fleet transport lease lost before dispatch" };
+      }
+    }
+
+    const finalElapsedMs = Date.now() - waitStartedAt;
+    if (remainingMs !== undefined && finalElapsedMs >= remainingMs) {
+      return { ok: false, error: "Protractor callback deadline expired before dispatch" };
+    }
+    const finalLocal = localPolicyError("transport_dispatch");
+    if (finalLocal) return finalLocal;
+
+    if (enforceFleetPacer) {
+      console.log(JSON.stringify({
+        event: "protractor_fleet_transport_admitted",
+        waitedMs: Date.now() - waitStartedAt,
+        priority,
+        callbackScoped: callbackTransportStorage.getStore() !== undefined,
+      }));
+    }
+    return {
+      ok: true,
+      response: await transport(
+        remainingMs === undefined ? undefined : remainingMs - finalElapsedMs,
+      ),
+    };
+  } finally {
+    if (leaseToken) {
+      try {
+        await __protractorClientTestHooks.releasePhysicalTransportLease(leaseToken);
+      } catch (error: any) {
+        // A failed release leaves the lease in its fail-closed state until its
+        // expiry; do not mask an upstream response that already completed.
+        console.warn(JSON.stringify({
+          event: "protractor_fleet_pacer_release_failed",
+          message: String(error?.message || "unknown").slice(0, 160),
+        }));
+      }
+    }
+  }
+}
+
 async function recordBreakerResponse(
   config: { connectionId: string },
   statusCode: number,
@@ -757,16 +943,10 @@ async function runGuardedTransportAttempt<T>(
   if (local) return local;
   const concurrencyLimiter = priority ? priorityConcurrencyLimit : protractorConcurrencyLimit;
   return concurrencyLimiter(async () => {
-    const gate = await acquireOutboundGate(config);
-    if (!gate.ok) return gate;
-    // Every physical transport attempt, including SOAP retries, consumes the
-    // same distributed provider budget as REST.
-    const rateSlot = await acquireRateLimitSlot(priority);
-    if (!rateSlot.acquired) {
-      return { ok: false, error: "Rate limit exceeded or circuit breaker open" };
-    }
     try {
-      return { ok: true, response: await runCallbackPacedTransport(transport) };
+      return await runCallbackPacedTransport((remainingMs) =>
+        runFleetGuardedTransportAttempt(config, transport, priority, remainingMs)
+      );
     } catch (error: any) {
       return { ok: false, error: `Callback transport pacer unavailable: ${error?.message || "unknown"}` };
     }
@@ -835,13 +1015,6 @@ export async function protractorFetch<T>(
     let attempt = retryCount;
     // eslint-disable-next-line no-constant-condition
     while (true) {
-    const gate = await acquireOutboundGate(config);
-    if (!gate.ok) return gate;
-    const rateSlot = await acquireRateLimitSlot(isPriority);
-    if (!rateSlot.acquired) {
-      return { ok: false, error: "Rate limit exceeded or circuit breaker open" };
-    }
-
     const startTime = Date.now();
     const totalWaitMs = Date.now() - concurrencyWaitStart;
     
@@ -852,10 +1025,9 @@ export async function protractorFetch<T>(
           transport: "relay",
           method,
           queueWaitMs: totalWaitMs,
-          rateWaitMs: rateSlot.waitedMs || 0,
         }));
       } else {
-        console.log(`[Protractor:PRIORITY] ${method} ${endpoint} (queue wait: ${totalWaitMs}ms, rate wait: ${rateSlot.waitedMs || 0}ms)`);
+        console.log(`[Protractor:PRIORITY] ${method} ${endpoint} (queue wait: ${totalWaitMs}ms)`);
       }
     }
   
@@ -907,13 +1079,22 @@ export async function protractorFetch<T>(
           body = JSON.stringify(stripStatus(parsed));
         } catch {}
       }
-      const res = await runCallbackPacedTransport((remainingMs) => __protractorClientTestHooks.httpsRequest(
-        url,
-        method,
-        headers,
-        body,
-        Math.min(opts?.timeoutMs ?? 30_000, remainingMs ?? 30_000),
-      ));
+      const transport = await runCallbackPacedTransport((remainingMs) =>
+        runFleetGuardedTransportAttempt(
+          config,
+          (fleetRemainingMs) => __protractorClientTestHooks.httpsRequest(
+            url,
+            method,
+            headers,
+            body,
+            Math.min(opts?.timeoutMs ?? 30_000, fleetRemainingMs ?? 30_000),
+          ),
+          isPriority,
+          remainingMs,
+        )
+      );
+      if (!transport.ok) return transport;
+      const res = transport.response;
 
       const latencyMs = Date.now() - startTime;
       const isServerError = res.statusCode >= 500;

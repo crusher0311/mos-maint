@@ -10,7 +10,9 @@ try {
       level: "info",
       event: "server_started",
       host: config.host,
-      port: config.port
+      port: config.port,
+      contractVersion: 2,
+      upstreamMinIntervalMs: config.upstreamMinIntervalMs,
     })}\n`);
   });
 

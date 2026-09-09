@@ -20,6 +20,9 @@ import {
 
 const USAGE_COLLECTION = "api_usage";
 const RATE_LIMIT_COLLECTION = "api_rate_limits";
+const PROTRACTOR_CALLBACK_TRANSPORT_KEY = "protractor-callback-transport";
+const PROTRACTOR_PHYSICAL_TRANSPORT_KEY = "protractor-physical-transport-v1";
+export const PROTRACTOR_PHYSICAL_TRANSPORT_INTERVAL_MS = 1000;
 
 /**
  * Flag helpers for the api-usage cutover (task #999), local to this repo
@@ -152,17 +155,12 @@ export async function releaseRateLimitSlot(key: string): Promise<void> {
   await col.updateOne({ _id: key }, { $inc: { count: -1 } });
 }
 
-/**
- * Canonical Mongo CAS lease for callback transport attempts. This primitive is
- * intentionally Mongo-owned regardless of api-usage cutover flags so every
- * replica contends on exactly one fleet record.
- */
-export async function acquireCallbackTransportLease(deadlineMs: number): Promise<string | null> {
+async function initializeTransportLease(key: string): Promise<void> {
   const db = await getDb();
   const col = db.collection<any>(RATE_LIMIT_COLLECTION);
   try {
     await col.updateOne(
-      { _id: "protractor-callback-transport" },
+      { _id: key },
       {
         $setOnInsert: {
           count: 0,
@@ -171,17 +169,27 @@ export async function acquireCallbackTransportLease(deadlineMs: number): Promise
           leaseExpiresAt: new Date(0),
         },
       },
-      { upsert: true },
+      { upsert: true, maxTimeMS: 1000 },
     );
   } catch (error: any) {
     if (!/duplicate key/i.test(String(error?.message || error))) throw error;
   }
+}
+
+async function acquireTransportLease(
+  key: string,
+  deadlineMs: number,
+  leaseDurationMs: number,
+): Promise<string | null> {
+  await initializeTransportLease(key);
+  const db = await getDb();
+  const col = db.collection<any>(RATE_LIMIT_COLLECTION);
   while (Date.now() < deadlineMs) {
     const token = randomUUID();
     try {
       const row = await col.findOneAndUpdate(
         {
-          _id: "protractor-callback-transport",
+          _id: key,
           $expr: {
             $and: [
               { $lte: [{ $ifNull: ["$nextAllowedAt", "$$NOW"] }, "$$NOW"] },
@@ -194,11 +202,13 @@ export async function acquireCallbackTransportLease(deadlineMs: number): Promise
             count: { $ifNull: ["$count", 0] },
             createdAt: { $ifNull: ["$createdAt", "$$NOW"] },
             ownerToken: token,
-            leaseExpiresAt: { $dateAdd: { startDate: "$$NOW", unit: "second", amount: 90 } },
+            leaseExpiresAt: {
+              $dateAdd: { startDate: "$$NOW", unit: "millisecond", amount: leaseDurationMs },
+            },
             expiresAt: { $dateAdd: { startDate: "$$NOW", unit: "day", amount: 1 } },
           },
         }],
-        { upsert: false, returnDocument: "after" },
+        { upsert: false, returnDocument: "after", maxTimeMS: 1000 },
       );
       if (row?.ownerToken === token) return token;
     } catch (error: any) {
@@ -211,17 +221,72 @@ export async function acquireCallbackTransportLease(deadlineMs: number): Promise
   return null;
 }
 
-export async function releaseCallbackTransportLease(ownerToken: string): Promise<void> {
+async function releaseTransportLease(
+  key: string,
+  ownerToken: string,
+  nextIntervalMs: number,
+): Promise<void> {
   const db = await getDb();
   await db.collection<any>(RATE_LIMIT_COLLECTION).updateOne(
-    { _id: "protractor-callback-transport", ownerToken },
+    { _id: key, ownerToken },
     [{
       $set: {
         ownerToken: "$$REMOVE",
         leaseExpiresAt: "$$REMOVE",
-        nextAllowedAt: { $dateAdd: { startDate: "$$NOW", unit: "millisecond", amount: 1000 } },
+        nextAllowedAt: {
+          $dateAdd: { startDate: "$$NOW", unit: "millisecond", amount: nextIntervalMs },
+        },
       },
     }],
+    { maxTimeMS: 1000 },
+  );
+}
+
+/**
+ * Canonical Mongo CAS lease for callback transport attempts. This primitive is
+ * intentionally Mongo-owned regardless of api-usage cutover flags so every
+ * replica contends on exactly one fleet record.
+ */
+export async function acquireCallbackTransportLease(deadlineMs: number): Promise<string | null> {
+  return acquireTransportLease(PROTRACTOR_CALLBACK_TRANSPORT_KEY, deadlineMs, 90_000);
+}
+
+export async function releaseCallbackTransportLease(ownerToken: string): Promise<void> {
+  return releaseTransportLease(PROTRACTOR_CALLBACK_TRANSPORT_KEY, ownerToken, 1000);
+}
+
+/**
+ * Provider-wide hard pacer for every Protractor physical REST/SOAP attempt.
+ * The lease is held through the relay response, so requests cannot overlap,
+ * accumulate credits, or bunch at a fixed-window boundary. A crashed owner
+ * fails closed until the lease expires beyond the longest relay deadline.
+ */
+export async function acquireProtractorPhysicalTransportLease(
+  deadlineMs: number,
+): Promise<string | null> {
+  return acquireTransportLease(PROTRACTOR_PHYSICAL_TRANSPORT_KEY, deadlineMs, 180_000);
+}
+
+export async function confirmProtractorPhysicalTransportLease(
+  ownerToken: string,
+): Promise<boolean> {
+  const db = await getDb();
+  const row = await db.collection<any>(RATE_LIMIT_COLLECTION).findOne(
+    {
+      _id: PROTRACTOR_PHYSICAL_TRANSPORT_KEY,
+      ownerToken,
+      leaseExpiresAt: { $gt: new Date() },
+    },
+    { projection: { _id: 1 }, maxTimeMS: 1000 },
+  );
+  return row !== null;
+}
+
+export async function releaseProtractorPhysicalTransportLease(ownerToken: string): Promise<void> {
+  return releaseTransportLease(
+    PROTRACTOR_PHYSICAL_TRANSPORT_KEY,
+    ownerToken,
+    PROTRACTOR_PHYSICAL_TRANSPORT_INTERVAL_MS,
   );
 }
 

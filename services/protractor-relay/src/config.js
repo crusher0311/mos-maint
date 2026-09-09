@@ -38,6 +38,8 @@ export function loadConfig() {
     restTimeoutMs: intEnv("REST_TIMEOUT_MS", 60_000, 100, 120_000),
     soapTimeoutMs: intEnv("SOAP_TIMEOUT_MS", 120_000, 100, 180_000),
     requestTimeoutMs: intEnv("REQUEST_TIMEOUT_MS", 10_000, 1000, 120_000),
+    upstreamMinIntervalMs: intEnv("UPSTREAM_MIN_INTERVAL_MS", 1000, 1000, 60_000),
+    maxCallerDeadlineMs: intEnv("MAX_CALLER_DEADLINE_MS", 180_000, 1000, 300_000),
     clockSkewSeconds,
     replayTtlSeconds,
     replayMaxEntries: intEnv("REPLAY_MAX_ENTRIES", 100_000, 100, 1_000_000),

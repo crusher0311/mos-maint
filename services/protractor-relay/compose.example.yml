@@ -1,5 +1,8 @@
 services:
   protractor-relay:
+    # A fixed container name prevents two upstream-dispatch processes from
+    # running concurrently on this host during replacement.
+    container_name: protractor-relay
     build:
       context: .
     restart: unless-stopped

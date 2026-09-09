@@ -107,3 +107,20 @@ service-stop deployment replaced running replicas.
 attempt shares a fleet-wide limiter that cannot burst above the provider
 ceiling. Keep backfill workers suspended. A callback-only rollout does not
 validate scheduled sync or other normal web traffic.
+
+The authoritative provider pacer belongs in the locked-down relay immediately
+around the actual upstream socket, not only in application replicas or Mongo.
+The relay must be a singleton, serialize through each response/failure, wait a
+full second after completion, and enforce a signed caller deadline while queued
+and during active I/O.
+
+**Why:** A Mongo lease expires independently of a paused sender and cannot fence
+the relay's physical socket boundary. Process-local app limiters also multiply
+across web replicas, while overlapping relay replacements would multiply a
+relay-local limiter.
+
+**How to apply:** Keep the app-side lease only as smoothing/defense in depth.
+Deploy the relay with stop-and-drain-before-start singleton replacement plus a
+startup cooldown, verify one DNS target and one relay process, deploy the
+incompatible signed-deadline client contract while outbound stays disabled,
+and require full relay mode before reopening organic traffic.

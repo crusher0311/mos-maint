@@ -17,6 +17,7 @@ with `Content-Type: application/json`:
   "type": "rest",
   "method": "GET",
   "path": "/IntegrationServices/2.0/RepairOrders?shopId=123",
+  "deadlineAtMs": 1760000000000,
   "headers": {
     "Authorization": "Basic ...",
     "Accept": "application/json"
@@ -31,7 +32,8 @@ with `Content-Type: application/json`:
 transfer. End-to-end headers, including Protractor authorization and
 `SOAPAction`, are passed through; hop-by-hop, host, content-length, and relay
 authentication headers are removed. Redirect responses are returned without
-being followed.
+being followed. `deadlineAtMs` is a required signed Unix-millisecond deadline;
+the relay rejects expired work before creating an upstream socket.
 
 Relay-generated admission, authentication, replay, and upstream-transport
 errors include an `X-Relay-Error-Code` safe enum header. Responses proxied from
@@ -77,6 +79,9 @@ admission control. `REPLAY_MAX_ENTRIES` (100000) and
 `REPLAY_JOURNAL_MAX_BYTES` (10485760) bound replay storage; the relay fails
 closed when the journal is full. The destination is not configurable in
 production.
+`UPSTREAM_MIN_INTERVAL_MS` defaults to 1000. The relay serializes all physical
+upstream attempts and starts this cooldown only after each response or
+transport failure. `MAX_CALLER_DEADLINE_MS` defaults to 180000.
 `RELAY_UPSTREAM` works only with `NODE_ENV=test` for local automated tests.
 
 Logs are newline-delimited JSON and intentionally omit request/response
@@ -101,7 +106,11 @@ cat > .env <<'EOF'
 RELAY_HOSTNAME=relay.example.com
 RELAY_HMAC_SECRET=replace-with-a-random-secret-of-at-least-32-bytes
 EOF
-docker compose -f compose.example.yml up -d --build
+docker compose -f compose.example.yml build protractor-relay
+# Stop and fully drain the singleton before starting its replacement.
+docker compose -f compose.example.yml stop -t 140 protractor-relay
+docker compose -f compose.example.yml rm -f protractor-relay
+docker compose -f compose.example.yml up -d
 curl https://relay.example.com/healthz
 ```
 
@@ -118,3 +127,7 @@ stable DNS/FQDN policy, `integration.protractor.com`. Keep `.env` mode 0600,
 use a randomly generated secret, rotate it through the caller and relay
 together, and never bake it into an image. Caddy obtains and renews the public
 certificate. Pin and regularly update the Node and Caddy image versions.
+Run exactly one relay host and one `protractor-relay` container. The fixed
+container name prevents overlap on the host, and the stop/drain/start sequence
+plus startup cooldown prevents a deployment-boundary burst. Do not use
+`docker compose up --scale`, rolling replacement, or multiple DNS targets.
