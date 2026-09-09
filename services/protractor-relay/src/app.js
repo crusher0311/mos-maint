@@ -328,6 +328,7 @@ function filteredResponseHeaders(headers) {
   const result = {};
   const connectionTokens = new Set(String(headers.connection || "").split(",").map(v => v.trim().toLowerCase()));
   for (const [name, value] of Object.entries(headers)) {
+    if (name.toLowerCase() === "x-relay-error-code") continue;
     if (!HOP_BY_HOP.has(name) && !connectionTokens.has(name) && value !== undefined) result[name] = value;
   }
   return result;
@@ -448,7 +449,14 @@ export function createRelayServer(options) {
       const known = error instanceof HttpError;
       const status = known ? error.status : 502;
       const code = known ? error.code : "upstream_error";
-      if (!res.headersSent) json(res, status, { error: code, message: known ? error.message : "Upstream request failed" });
+      if (!res.headersSent) {
+        // This marker distinguishes relay admission/auth/replay failures from
+        // an HTTP status returned by Protractor itself.
+        const marker = /^[a-z0-9_]+$/i.test(code) ? code : "upstream_error";
+        json(res, status, { error: code, message: known ? error.message : "Upstream request failed" }, {
+          "x-relay-error-code": marker
+        });
+      }
       else res.destroy();
       logger(status >= 500 ? "error" : "warn", "relay_rejected", {
         requestId, code, status, durationMs: now() - started,

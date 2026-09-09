@@ -90,6 +90,25 @@ test("rejects missing, invalid, and stale authentication", async () => {
   })).status, 401);
 });
 
+test("marks relay-generated errors without marking provider responses", async () => {
+  const { url, config } = await fixture((_req, res) => {
+    res.setHeader("X-Relay-Error-Code", "provider-forged-marker");
+    res.end("provider");
+  });
+  const invalid = await fetch(`${url}/relay`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{}",
+  });
+  assert.equal(invalid.status, 401);
+  assert.equal(invalid.headers.get("x-relay-error-code"), "invalid_auth");
+  const provider = await relayFetch(url, config, {
+    type: "rest", method: "GET", path: "/IntegrationServices/1.0/provider"
+  });
+  assert.equal(provider.status, 200);
+  assert.equal(provider.headers.get("x-relay-error-code"), null);
+});
+
 test("blocks a replay of a valid nonce and request id", async () => {
   const { url, config } = await fixture((_req, res) => res.end("ok"));
   const body = JSON.stringify({ type: "rest", method: "GET", path: "/IntegrationServices/1.0/Customers" });

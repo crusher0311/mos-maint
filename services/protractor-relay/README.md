@@ -33,6 +33,11 @@ transfer. End-to-end headers, including Protractor authorization and
 authentication headers are removed. Redirect responses are returned without
 being followed.
 
+Relay-generated admission, authentication, replay, and upstream-transport
+errors include an `X-Relay-Error-Code` safe enum header. Responses proxied from
+Protractor never include this marker, even when their status is 4xx/5xx; MOS
+uses it to avoid attributing relay failures to the provider or retrying them.
+
 Four headers authenticate the exact raw JSON bytes:
 
 * `X-Relay-Timestamp`: current Unix seconds
