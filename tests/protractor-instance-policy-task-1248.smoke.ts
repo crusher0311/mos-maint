@@ -130,11 +130,23 @@ async function main() {
     }, Date.parse("2026-09-09T17:00:00.000Z")).reason === "missing_callback_replay_floor",
   );
   ok(
-    "callback replay floor without a canary fails closed",
+    "standalone callback replay floor allows normal transport with a durable queue boundary",
+    (() => {
+      const policy = evaluateProtractorOutboundPolicy({
+        ...base,
+        PROTRACTOR_CALLBACK_REPLAY_NOT_BEFORE: "2026-09-09T16:00:00.000Z",
+      });
+      return policy.allowed === true &&
+        policy.callbackOnly === false &&
+        policy.callbackNotBeforeMs === Date.parse("2026-09-09T16:00:00.000Z");
+    })(),
+  );
+  ok(
+    "malformed standalone callback replay floor fails closed",
     evaluateProtractorOutboundPolicy({
       ...base,
-      PROTRACTOR_CALLBACK_REPLAY_NOT_BEFORE: "2026-09-09T16:00:00.000Z",
-    }).reason === "orphaned_callback_replay_floor",
+      PROTRACTOR_CALLBACK_REPLAY_NOT_BEFORE: "not-a-time",
+    }).reason === "malformed_callback_replay_floor",
   );
   ok(
     "callback replay floor at or after cutoff fails closed",

@@ -476,6 +476,39 @@ async function main() {
   assert.equal(vehicle.status.active, true);
   assert.deepEqual(vehicle.status.sources, [{ provider: "other", workOrderId: "other" }]);
 
+  const standaloneFloor = new Date(Date.now() - 30_000);
+  const standaloneFloorDoc = {
+    _id: new ObjectId(),
+    receivedAt: new Date(),
+    method: "GET",
+    connectionId: "connection-42",
+    objectType: "WorkOrder",
+    objectId: "standalone-floor",
+    operation: "Update",
+    shopId: 42,
+    processed: false,
+    attempts: 0,
+    priority: 1,
+  };
+  events.push(standaloneFloorDoc);
+  process.env.PROTRACTOR_CALLBACK_REPLAY_NOT_BEFORE = standaloneFloor.toISOString();
+  const standaloneFloorResult = await processProtractorCallbackQueue(
+    fakeDb as any,
+    async (item) => callbackRepo.markProcessed(item.key),
+    {
+      limit: 1,
+      isShopEligible: async () => true,
+      acquireBudgetSlot: async () => true,
+    },
+  );
+  assert.deepEqual(standaloneFloorResult, { processed: 1, failed: 0 });
+  assert.equal(
+    lastCallbackFindFilter?.receivedAt?.$gte?.getTime(),
+    standaloneFloor.getTime(),
+    "normal outbound mode keeps the durable callback replay floor",
+  );
+  delete process.env.PROTRACTOR_CALLBACK_REPLAY_NOT_BEFORE;
+
   const budgetDocs = ["budget-1", "budget-2", "budget-3"].map((objectId) => ({
     _id: new ObjectId(),
     receivedAt: new Date(),

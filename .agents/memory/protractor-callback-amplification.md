@@ -80,3 +80,15 @@ the main WorkOrder path was incomplete.
 local persistence. Apply the same bounded read policy to WorkOrder,
 ServiceItem, and terminal POST replay; leave failures replayable for a later
 minute rather than retrying inside one drain.
+
+Normal outbound mode must retain a fixed callback replay floor even after the
+callback-only cutoff is removed.
+
+**Why:** Removing both canary variables correctly reopens normal transport but
+otherwise leaves the newest-first drain eligible to reach the historical
+callback backlog during a quiet period.
+
+**How to apply:** Keep the rollout floor fixed across normal deployments.
+Advancing it abandons intervening pending callbacks; removing it makes
+pre-rollout history eligible again. Only the canary cutoff should be absent in
+full mode.
