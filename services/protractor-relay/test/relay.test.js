@@ -115,6 +115,27 @@ test("marks relay-generated errors without marking provider responses", async ()
   assert.equal(provider.headers.get("x-relay-error-code"), null);
 });
 
+test("marks oversized upstream responses without logging request details", async () => {
+  const records = [];
+  const { url, config } = await fixture((_req, res) => {
+    res.end("response-body-that-is-too-large");
+  }, {
+    responseBodyLimit: 8,
+    logger: (level, event, fields) => records.push({ level, event, ...fields }),
+  });
+  const response = await relayFetch(url, config, {
+    type: "rest",
+    method: "GET",
+    path: "/IntegrationServices/2.0/WorkOrder/private-id?vin=private-vin",
+  });
+  assert.equal(response.status, 502);
+  assert.equal(response.headers.get("x-relay-error-code"), "upstream_response_too_large");
+  assert.equal((await response.json()).error, "upstream_response_too_large");
+  const rejection = records.find(record => record.event === "relay_rejected");
+  assert.equal(rejection.code, "upstream_response_too_large");
+  assert.doesNotMatch(JSON.stringify(records), /private-id|private-vin|response-body/);
+});
+
 test("blocks a replay of a valid nonce and request id", async () => {
   const { url, config } = await fixture((_req, res) => res.end("ok"));
   const body = JSON.stringify({

@@ -11,13 +11,146 @@ const RELAY_REST_TIMEOUT_MS = 60_000;
 const RELAY_SOAP_TIMEOUT_MS = 120_000;
 const RELAY_OVERHEAD_MS = 5_000;
 
+export type ProtractorRelayErrorCode =
+  | "busy"
+  | "caller_deadline_expired"
+  | "caller_disconnected"
+  | "invalid_auth"
+  | "invalid_body"
+  | "invalid_body_encoding"
+  | "invalid_deadline"
+  | "invalid_headers"
+  | "invalid_json"
+  | "invalid_method"
+  | "invalid_path"
+  | "invalid_request"
+  | "invalid_type"
+  | "method_not_allowed"
+  | "not_found"
+  | "replayed_request"
+  | "replay_journal_full"
+  | "request_too_large"
+  | "stale_request"
+  | "unsupported_media_type"
+  | "upstream_body_too_large"
+  | "upstream_error"
+  | "upstream_response_too_large"
+  | "upstream_timeout";
+
+const RELAY_ERROR_CODES = new Set<ProtractorRelayErrorCode>([
+  "busy",
+  "caller_deadline_expired",
+  "caller_disconnected",
+  "invalid_auth",
+  "invalid_body",
+  "invalid_body_encoding",
+  "invalid_deadline",
+  "invalid_headers",
+  "invalid_json",
+  "invalid_method",
+  "invalid_path",
+  "invalid_request",
+  "invalid_type",
+  "method_not_allowed",
+  "not_found",
+  "replayed_request",
+  "replay_journal_full",
+  "request_too_large",
+  "stale_request",
+  "unsupported_media_type",
+  "upstream_body_too_large",
+  "upstream_error",
+  "upstream_response_too_large",
+  "upstream_timeout",
+]);
+
+export function normalizeProtractorRelayErrorCode(value: string): ProtractorRelayErrorCode {
+  return RELAY_ERROR_CODES.has(value as ProtractorRelayErrorCode)
+    ? value as ProtractorRelayErrorCode
+    : "upstream_error";
+}
+
+export function readProtractorRelayErrorCode(
+  headers: Record<string, string | string[] | undefined>,
+): ProtractorRelayErrorCode | undefined {
+  const value = Object.entries(headers).find(
+    ([name]) => name.toLowerCase() === "x-relay-error-code",
+  )?.[1];
+  if (value === undefined) return undefined;
+  const raw = Array.isArray(value) ? value[0] : value;
+  return normalizeProtractorRelayErrorCode(raw || "");
+}
+
 export class RelayTransportError extends Error {
-  readonly code: string;
+  readonly code: ProtractorRelayErrorCode;
   constructor(code: string, message = "Protractor relay transport failed") {
     super(message);
     this.name = "RelayTransportError";
-    this.code = code;
+    this.code = normalizeProtractorRelayErrorCode(code);
   }
+}
+
+export type ProtractorEndpointClass =
+  | "appointment"
+  | "contact"
+  | "employee"
+  | "inspection"
+  | "invoice"
+  | "service_item"
+  | "service_package"
+  | "service_package_template"
+  | "soap"
+  | "vehicle"
+  | "work_order"
+  | "other";
+
+const ENDPOINT_CLASSES: Record<string, ProtractorEndpointClass> = {
+  appointment: "appointment",
+  appointments: "appointment",
+  contact: "contact",
+  contacts: "contact",
+  employee: "employee",
+  employees: "employee",
+  inspection: "inspection",
+  inspections: "inspection",
+  invoice: "invoice",
+  invoices: "invoice",
+  serviceitem: "service_item",
+  serviceitems: "service_item",
+  servicepackage: "service_package",
+  servicepackages: "service_package",
+  servicepackagetemplate: "service_package_template",
+  servicepackagetemplates: "service_package_template",
+  vehicle: "vehicle",
+  vehicles: "vehicle",
+  workorder: "work_order",
+  workorders: "work_order",
+};
+
+export function classifyProtractorEndpoint(
+  target: string | URL,
+  requestType?: "rest" | "soap",
+): ProtractorEndpointClass {
+  if (requestType === "soap") return "soap";
+  let pathname: string;
+  try {
+    pathname = target instanceof URL
+      ? target.pathname
+      : new URL(target, "https://integration.protractor.com").pathname;
+  } catch {
+    return "other";
+  }
+  const segments = pathname.split("/").filter(Boolean);
+  const integrationIndex = segments.findIndex(
+    segment => segment.toLowerCase() === "integrationservices",
+  );
+  const resourceIndex = integrationIndex >= 0 &&
+    /^\d+\.\d+$/.test(segments[integrationIndex + 1] || "")
+    ? integrationIndex + 2
+    : 0;
+  const resource = (segments[resourceIndex] || "").toLowerCase();
+  if (resource.endsWith(".asmx")) return "soap";
+  return ENDPOINT_CLASSES[resource] || "other";
 }
 
 export interface RelayRequest {

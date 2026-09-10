@@ -8,11 +8,13 @@
 import assert from "node:assert/strict";
 import {
   __protractorClientTestHooks,
+  createServiceItem,
   protractorFetch,
   runWithProtractorCallbackTransport,
   soapAddServicePackage,
   type ProtractorConfig,
 } from "../lib/integrations/protractor/client";
+import { RelayTransportError } from "../lib/integrations/protractor/relay-transport";
 
 const TEST_GAP_MS = 20;
 const config: ProtractorConfig = {
@@ -289,6 +291,133 @@ async function main(): Promise<void> {
   assert.equal(lostOwnership.ok, false);
   assert.match(lostOwnership.error || "", /lease lost/);
   assert.equal(physicalStarts.length, 0);
+
+  console.log("Scenario 7: relay failures retain privacy-safe shop and endpoint attribution");
+  resetObservations();
+  installWorkingPhysicalLease();
+  const capturedErrors: string[] = [];
+  const originalConsoleError = console.error;
+  console.error = (...args: unknown[]) => {
+    capturedErrors.push(args.map(String).join(" "));
+  };
+  let restTransportAttempts = 0;
+  __protractorClientTestHooks.httpsRequest = async () => {
+    restTransportAttempts += 1;
+    throw new RelayTransportError("upstream_response_too_large");
+  };
+  try {
+    const oversized = await protractorFetch(
+      "/WorkOrder/private-work-order-id?vin=private-vin",
+      config,
+      {},
+      0,
+      1,
+      { maxRetries: 3 },
+    );
+    assert.equal(oversized.ok, false);
+    assert.equal(oversized.error, "Protractor relay transport failed");
+    assert.equal(restTransportAttempts, 1, "relay REST failure must not retry");
+  } finally {
+    console.error = originalConsoleError;
+  }
+  const restAttributions = capturedErrors
+    .map(line => {
+      try { return JSON.parse(line); } catch { return null; }
+    })
+    .filter(value => value?.event === "protractor_relay_transport_error");
+  assert.equal(restAttributions.length, 1);
+  assert.deepEqual(restAttributions[0], {
+    event: "protractor_relay_transport_error",
+    method: "GET",
+    shopId: 1,
+    endpointClass: "work_order",
+    relayErrorCode: "upstream_response_too_large",
+    attempt: 1,
+    priority: false,
+  });
+  assert.doesNotMatch(JSON.stringify(restAttributions), /private-work-order-id|private-vin/);
+
+  console.log("Scenario 8: SOAP relay failures are attributed once without private identifiers");
+  resetObservations();
+  installWorkingPhysicalLease();
+  const capturedSoapLogs: string[] = [];
+  const originalConsoleLog = console.log;
+  const originalSoapConsoleError = console.error;
+  console.log = (...args: unknown[]) => {
+    capturedSoapLogs.push(args.map(String).join(" "));
+  };
+  console.error = (...args: unknown[]) => {
+    capturedSoapLogs.push(args.map(String).join(" "));
+  };
+  let soapTransportAttempts = 0;
+  const trackedApiEndpoints: string[] = [];
+  __protractorClientTestHooks.trackApiRequest = async (_provider, endpoint) => {
+    trackedApiEndpoints.push(String(endpoint));
+  };
+  __protractorClientTestHooks.httpsRequest = async () => {
+    soapTransportAttempts += 1;
+    throw new RelayTransportError("upstream_response_too_large");
+  };
+  try {
+    const workOrderResult = await soapAddServicePackage(
+      1,
+      "private-work-order-guid",
+      { ID: "private-work-order-guid", Type: "WorkOrder", ServicePackages: [] },
+    );
+    assert.equal(workOrderResult.ok, false);
+    assert.equal(soapTransportAttempts, 1, "relay WorkOrder failure must not retry");
+
+    const serviceItemResult = await createServiceItem(1, {
+      ownerId: "private-owner-id",
+      vin: "PRIVATEVIN123456789",
+      year: 2020,
+      make: "Private Make",
+      model: "Private Model",
+    });
+    assert.equal(serviceItemResult.ok, false);
+    assert.equal(soapTransportAttempts, 2, "relay ServiceItem failure must not retry");
+
+    __protractorClientTestHooks.httpsRequest = async () => {
+      soapTransportAttempts += 1;
+      return {
+        statusCode: 400,
+        body: "<soap:Fault><faultstring>private-provider-fault-vin</faultstring></soap:Fault>",
+      };
+    };
+    const providerFault = await soapAddServicePackage(
+      1,
+      "private-fault-work-order-guid",
+      { ID: "private-fault-work-order-guid", Type: "WorkOrder", ServicePackages: [] },
+    );
+    assert.equal(providerFault.ok, false);
+    assert.equal(providerFault.error, "private-provider-fault-vin");
+    assert.equal(soapTransportAttempts, 3);
+  } finally {
+    console.log = originalConsoleLog;
+    console.error = originalSoapConsoleError;
+  }
+  const soapAttributions = capturedSoapLogs
+    .map(line => {
+      try { return JSON.parse(line); } catch { return null; }
+    })
+    .filter(value => value?.event === "protractor_relay_transport_error");
+  assert.equal(soapAttributions.length, 2);
+  for (const event of soapAttributions) {
+    assert.deepEqual(event, {
+      event: "protractor_relay_transport_error",
+      method: "POST",
+      shopId: 1,
+      endpointClass: "soap",
+      relayErrorCode: "upstream_response_too_large",
+      attempt: 1,
+      priority: false,
+    });
+  }
+  assert.doesNotMatch(
+    capturedSoapLogs.join("\n"),
+    /private-work-order-guid|private-fault-work-order-guid|private-provider-fault-vin|private-owner-id|PRIVATEVIN|Private Make|Private Model/,
+  );
+  assert.deepEqual(trackedApiEndpoints, ["soap:work_order"]);
 
   console.log("All Protractor fleet-pacer checks passed");
 }
