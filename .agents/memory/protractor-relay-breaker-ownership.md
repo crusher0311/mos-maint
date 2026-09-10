@@ -32,3 +32,20 @@ relay host may be unreachable for direct containment.
 **How to apply:** Keep workers and historical backfill off, begin the disabling
 deployment immediately after enabling traffic, confirm emergency suspension
 actually took effect, and resume only after all dark-mode gates are verified.
+
+Do not treat a monitoring/control-plane timeout as evidence that provider
+containment failed. Full-service suspension must require an observed provider
+safety violation, such as continued physical admissions after a stop signal.
+
+**Why:** A canary controller's Render log request timed out and its generic
+error handler suspended the shared web service. Suspension canceled the dark
+deployment, and each resume temporarily reactivated the enabled process while a
+replacement deployment built.
+
+**How to apply:** Keep telemetry failures fail-safe for the canary decision but
+separate from the full-service emergency action. If the service is already
+suspended, use a production-context one-off job to open the actual provider
+breaker, disable autodeploy, resume, and activate the built image with
+`deployMode: "deploy_only"`. Verify zero new physical admissions before trusting
+the recovery. Local Mongo credentials may target a different cluster or
+environment-group context than the Render service.
