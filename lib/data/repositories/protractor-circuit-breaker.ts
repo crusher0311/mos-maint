@@ -5,6 +5,7 @@ import { sendOpsAlert } from "@/lib/alerts/notify";
 const COLLECTION = "protractor_circuit_breakers";
 const AUTH_COOLDOWN_MS = 5 * 60_000;
 const TRANSIENT_COOLDOWN_MS = 30_000;
+const RELAY_OVERSIZED_RESPONSE_COOLDOWN_MS = 30 * 60_000;
 const PROBE_LEASE_MS = 30_000;
 const AUTH_CORRELATION_WINDOW_MS = 60_000;
 const PROVIDER_AUTH_CONNECTIONS = 3;
@@ -12,6 +13,7 @@ const PROVIDER_TRANSIENT_FAILURES = 3;
 // A transport exception has no HTTP response.  It is deliberately distinct
 // from auth statuses so it can only contribute to transient provider health.
 export const PROTRACTOR_TRANSPORT_FAILURE_STATUS = 599;
+export const PROTRACTOR_RELAY_OVERSIZED_RESPONSE_STATUS = 598;
 
 type BreakerDocument = {
   _id: string;
@@ -19,6 +21,7 @@ type BreakerDocument = {
   connectionHash?: string;
   openUntil?: Date;
   probeUntil?: Date;
+  oversizedResponseAt?: Date;
   authFailureAt?: Date;
   transientFailures?: number;
   totalResponses?: number;
@@ -173,7 +176,8 @@ export async function recordProtractorResponse(
         ? "authFailureResponses"
         : statusCode === 429
           ? "throttledResponses"
-          : statusCode === PROTRACTOR_TRANSPORT_FAILURE_STATUS
+          : statusCode === PROTRACTOR_TRANSPORT_FAILURE_STATUS ||
+              statusCode === PROTRACTOR_RELAY_OVERSIZED_RESPONSE_STATUS
             ? "transportFailureResponses"
             : statusCode >= 500
               ? "serverFailureResponses"
@@ -209,7 +213,15 @@ export async function recordProtractorResponse(
           _id: "provider",
           $or: [{ openUntil: { $exists: false } }, { probeUntil: { $exists: true } }],
         },
-        { $unset: { openUntil: "", probeUntil: "", transientFailures: "" }, $set: { updatedAt: now } },
+        {
+          $unset: {
+            openUntil: "",
+            probeUntil: "",
+            transientFailures: "",
+            oversizedResponseAt: "",
+          },
+          $set: { updatedAt: now },
+        },
       ),
     ]);
     return;
@@ -286,30 +298,112 @@ export async function recordProtractorResponse(
     return;
   }
 
-  if (statusCode === 429 || statusCode >= 500 || statusCode === PROTRACTOR_TRANSPORT_FAILURE_STATUS) {
-    const result = await collection.findOneAndUpdate(
+  if (statusCode === PROTRACTOR_RELAY_OVERSIZED_RESPONSE_STATUS) {
+    await collection.updateOne(
       { _id: "provider" },
+      { $setOnInsert: { scope: "provider", updatedAt: now } },
+      { upsert: true },
+    );
+    const openedProvider = await collection.findOneAndUpdate(
       {
-        $set: { scope: "provider", updatedAt: now },
+        _id: "provider",
+        $or: [
+          { oversizedResponseAt: { $exists: false } },
+          { probeUntil: { $exists: true } },
+        ],
+      },
+      {
+        $set: {
+          scope: "provider",
+          oversizedResponseAt: now,
+          openUntil: new Date(now.getTime() + RELAY_OVERSIZED_RESPONSE_COOLDOWN_MS),
+          updatedAt: now,
+        },
+        $unset: { probeUntil: "" },
+      },
+      { returnDocument: "after" },
+    );
+    if (openedProvider) {
+      await pageBreakerOpen({
+        scope: "provider",
+        responseClass: "transport",
+        cooldownMs: RELAY_OVERSIZED_RESPONSE_COOLDOWN_MS,
+        connectionFingerprint: connHash,
+      }).catch((error) => {
+        console.error("[ProtractorCircuitBreaker] Failed to deliver provider-open alert:", error);
+      });
+    }
+    return;
+  }
+
+  if (statusCode === 429 || statusCode >= 500 || statusCode === PROTRACTOR_TRANSPORT_FAILURE_STATUS) {
+    const cooldown = Math.max(TRANSIENT_COOLDOWN_MS, retryAfterMs);
+    const responseClass: ResponseClass =
+      statusCode === 429
+        ? "throttled"
+        : statusCode === PROTRACTOR_TRANSPORT_FAILURE_STATUS
+          ? "transport"
+          : "server";
+    const failedProbe = await collection.findOneAndUpdate(
+      { _id: "provider", probeUntil: { $exists: true } },
+      {
+        $set: {
+          scope: "provider",
+          openUntil: new Date(now.getTime() + cooldown),
+          updatedAt: now,
+        },
         $inc: { transientFailures: 1 },
         $unset: { probeUntil: "" },
       },
-      { upsert: true, returnDocument: "after" },
+      { returnDocument: "after" },
+    );
+    if (failedProbe) {
+      await pageBreakerOpen({
+        scope: "provider",
+        responseClass,
+        cooldownMs: cooldown,
+        connectionFingerprint: connHash,
+      }).catch((error) => {
+        console.error("[ProtractorCircuitBreaker] Failed to deliver provider-open alert:", error);
+      });
+      return;
+    }
+
+    await collection.updateOne(
+      { _id: "provider" },
+      { $setOnInsert: { scope: "provider", updatedAt: now } },
+      { upsert: true },
+    );
+    const result = await collection.findOneAndUpdate(
+      {
+        _id: "provider",
+        $or: [
+          { openUntil: { $exists: false } },
+          { openUntil: { $lte: now } },
+        ],
+      },
+      {
+        $set: { scope: "provider", updatedAt: now },
+        $inc: { transientFailures: 1 },
+      },
+      { returnDocument: "after" },
     );
     if ((result?.transientFailures ?? 0) >= PROVIDER_TRANSIENT_FAILURES) {
-      const cooldown = Math.max(TRANSIENT_COOLDOWN_MS, retryAfterMs);
       const openedProvider = await collection.findOneAndUpdate(
-        { _id: "provider", openUntil: { $exists: false } },
-        { $set: { openUntil: new Date(now.getTime() + cooldown), updatedAt: now } },
+        {
+          _id: "provider",
+          $or: [
+            { openUntil: { $exists: false } },
+            { openUntil: { $lte: now } },
+          ],
+        },
+        {
+          $set: { openUntil: new Date(now.getTime() + cooldown), updatedAt: now },
+          $unset: { probeUntil: "" },
+        },
         { returnDocument: "after" },
       );
       if (openedProvider) {
-        const responseClass: ResponseClass =
-          statusCode === 429
-            ? "throttled"
-            : statusCode === PROTRACTOR_TRANSPORT_FAILURE_STATUS
-              ? "transport"
-              : "server";
         await pageBreakerOpen({
           scope: "provider",
           responseClass,

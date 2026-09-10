@@ -14,6 +14,10 @@ import {
   soapAddServicePackage,
   type ProtractorConfig,
 } from "../lib/integrations/protractor/client";
+import {
+  PROTRACTOR_RELAY_OVERSIZED_RESPONSE_STATUS,
+  PROTRACTOR_TRANSPORT_FAILURE_STATUS,
+} from "../lib/data/repositories/protractor-circuit-breaker";
 import { RelayTransportError } from "../lib/integrations/protractor/relay-transport";
 
 const TEST_GAP_MS = 20;
@@ -85,12 +89,15 @@ for (const key of [
 }
 
 __protractorClientTestHooks.enforceFleetPacerWithMockTransport = true;
+__protractorClientTestHooks.physicalTransportHeartbeatMs = 30_000;
 __protractorClientTestHooks.acquireDistributedRateLimitSlot = async () => ({
   acquired: true,
   waitedMs: 0,
   currentCount: 1,
 });
 __protractorClientTestHooks.acquireOutboundGate = async () => ({ allowed: true, probe: false });
+__protractorClientTestHooks.renewPhysicalTransportLease = async (token) =>
+  token === ownerToken;
 __protractorClientTestHooks.recordResponse = async () => {};
 __protractorClientTestHooks.trackApiRequest = async () => {};
 __protractorClientTestHooks.retryBaseDelayMs = 1;
@@ -296,11 +303,24 @@ async function main(): Promise<void> {
   resetObservations();
   installWorkingPhysicalLease();
   const capturedErrors: string[] = [];
+  const relayOrdering: string[] = [];
   const originalConsoleError = console.error;
   console.error = (...args: unknown[]) => {
     capturedErrors.push(args.map(String).join(" "));
   };
   let restTransportAttempts = 0;
+  const relayBreakerStatuses: number[] = [];
+  __protractorClientTestHooks.recordResponse = async (_connectionId, statusCode) => {
+    relayOrdering.push("record");
+    relayBreakerStatuses.push(statusCode);
+  };
+  __protractorClientTestHooks.releasePhysicalTransportLease = async (token) => {
+    assert.equal(token, ownerToken);
+    relayOrdering.push("release");
+    ownerToken = null;
+    nextAllowedAt = Date.now() + TEST_GAP_MS;
+    leaseReleases += 1;
+  };
   __protractorClientTestHooks.httpsRequest = async () => {
     restTransportAttempts += 1;
     throw new RelayTransportError("upstream_response_too_large");
@@ -326,6 +346,16 @@ async function main(): Promise<void> {
     })
     .filter(value => value?.event === "protractor_relay_transport_error");
   assert.equal(restAttributions.length, 1);
+  assert.deepEqual(
+    relayBreakerStatuses,
+    [PROTRACTOR_RELAY_OVERSIZED_RESPONSE_STATUS],
+    "oversized relay responses must trip the immediate shared breaker signal",
+  );
+  assert.deepEqual(
+    relayOrdering,
+    ["record", "release"],
+    "relay failure feedback must be committed before the fleet lease is released",
+  );
   assert.deepEqual(restAttributions[0], {
     event: "protractor_relay_transport_error",
     method: "GET",
@@ -336,6 +366,87 @@ async function main(): Promise<void> {
     priority: false,
   });
   assert.doesNotMatch(JSON.stringify(restAttributions), /private-work-order-id|private-vin/);
+
+  relayBreakerStatuses.length = 0;
+  relayOrdering.length = 0;
+  restTransportAttempts = 0;
+  __protractorClientTestHooks.httpsRequest = async () => {
+    restTransportAttempts += 1;
+    throw new RelayTransportError("busy");
+  };
+  const busy = await protractorFetch(
+    "/Invoice/private-invoice-id",
+    config,
+    {},
+    0,
+    1,
+    { maxRetries: 3 },
+  );
+  assert.equal(busy.ok, false);
+  assert.equal(restTransportAttempts, 1, "other relay failures must not retry");
+  assert.deepEqual(
+    relayBreakerStatuses,
+    [PROTRACTOR_TRANSPORT_FAILURE_STATUS],
+    "other relay failures must feed the existing transient breaker signal",
+  );
+  assert.deepEqual(relayOrdering, ["record", "release"]);
+
+  relayBreakerStatuses.length = 0;
+  relayOrdering.length = 0;
+  __protractorClientTestHooks.httpsRequest = async () => ({
+    statusCode: 200,
+    body: "{}",
+  });
+  const recordedSuccess = await protractorFetch(
+    "/Invoice/success-ordering",
+    config,
+    {},
+    0,
+    1,
+    { maxRetries: 0 },
+  );
+  assert.equal(recordedSuccess.ok, true);
+  assert.deepEqual(relayBreakerStatuses, [200]);
+  assert.deepEqual(
+    relayOrdering,
+    ["record", "release"],
+    "successful probe feedback must be committed before the fleet lease is released",
+  );
+
+  console.log("Scenario 7b: slow breaker persistence keeps the physical lease alive");
+  relayBreakerStatuses.length = 0;
+  relayOrdering.length = 0;
+  let heartbeatRenewals = 0;
+  __protractorClientTestHooks.physicalTransportHeartbeatMs = 5;
+  __protractorClientTestHooks.renewPhysicalTransportLease = async (token) => {
+    assert.equal(token, ownerToken);
+    heartbeatRenewals += 1;
+    return true;
+  };
+  __protractorClientTestHooks.recordResponse = async (_connectionId, statusCode) => {
+    relayOrdering.push("record-start");
+    relayBreakerStatuses.push(statusCode);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    relayOrdering.push("record-end");
+  };
+  const slowRecorded = await protractorFetch(
+    "/Invoice/slow-breaker-record",
+    config,
+    {},
+    0,
+    1,
+    { maxRetries: 0 },
+  );
+  assert.equal(slowRecorded.ok, true);
+  assert.ok(heartbeatRenewals >= 2, "lease must renew while breaker persistence is delayed");
+  assert.deepEqual(
+    relayOrdering,
+    ["record-start", "record-end", "release"],
+    "lease release must wait for delayed breaker persistence",
+  );
+  __protractorClientTestHooks.physicalTransportHeartbeatMs = 30_000;
+  __protractorClientTestHooks.renewPhysicalTransportLease = async (token) =>
+    token === ownerToken;
 
   console.log("Scenario 8: SOAP relay failures are attributed once without private identifiers");
   resetObservations();
@@ -351,6 +462,7 @@ async function main(): Promise<void> {
   };
   let soapTransportAttempts = 0;
   const trackedApiEndpoints: string[] = [];
+  relayBreakerStatuses.length = 0;
   __protractorClientTestHooks.trackApiRequest = async (_provider, endpoint) => {
     trackedApiEndpoints.push(String(endpoint));
   };
@@ -402,6 +514,14 @@ async function main(): Promise<void> {
     })
     .filter(value => value?.event === "protractor_relay_transport_error");
   assert.equal(soapAttributions.length, 2);
+  assert.deepEqual(
+    relayBreakerStatuses.slice(0, 2),
+    [
+      PROTRACTOR_RELAY_OVERSIZED_RESPONSE_STATUS,
+      PROTRACTOR_RELAY_OVERSIZED_RESPONSE_STATUS,
+    ],
+    "both SOAP families must trip the immediate shared breaker signal",
+  );
   for (const event of soapAttributions) {
     assert.deepEqual(event, {
       event: "protractor_relay_transport_error",

@@ -7,7 +7,10 @@ egress IP may be tested.
 
 ## Safety rules
 
-- Do not suspend the shared MOS web service to control Protractor traffic.
+- Do not suspend the shared MOS web service as a normal Protractor traffic
+  control. A bounded canary may use the emergency-suspend exception below only
+  after the rollout owner explicitly accepts that it can cause a temporary full
+  MOS outage.
 - Keep `PROTRACTOR_OUTBOUND_DISABLED=true` during deployment and initial
   verification. This switch takes precedence over callback, cron, interactive,
   REST, and SOAP requests.
@@ -104,6 +107,36 @@ then prune identities that no longer exist. Treat an unexpected
    cooldown.
 7. Restore `PROTRACTOR_OUTBOUND_DISABLED=true` before investigating any anomaly.
 
+### Emergency-suspend exception for a bounded organic canary
+
+Use this exception only when relay-host containment is unavailable and the
+rollout owner has explicitly approved a temporary full MOS outage if a stop
+condition fires.
+
+1. Identify the active production service exactly as Render service
+   `mos-tools` (`srv-d55jaqkhg0os73a5dd8g`). Do not target QA, workers,
+   `mos-tools-east`, or a service selected by a partial name.
+2. Keep both production background workers suspended and historical backfill
+   off for the complete canary.
+3. Deploy and verify the canary code while
+   `PROTRACTOR_OUTBOUND_DISABLED=true`.
+4. After the enabling deployment is live, immediately restore
+   `PROTRACTOR_OUTBOUND_DISABLED=true` so the disabling deployment is already
+   building throughout the observation window.
+5. If any stop condition fires before that deployment is live, call Render's
+   suspend operation for the exact active service ID above. Confirm the service
+   reports `suspended`; do not assume that an accepted API request completed.
+6. Treat suspension as a full production outage. Keep the service suspended
+   until the disabling deployment is `live`, the effective environment again
+   reports `PROTRACTOR_OUTBOUND_DISABLED=true`, both workers remain suspended,
+   and production telemetry shows zero new Protractor upstream calls.
+7. Resume only the exact `mos-tools` service after all gates in step 6 pass.
+   Recheck the service health and zero-outbound telemetry after resume before
+   investigating or retrying the canary.
+
+This exception provides an emergency stop, not permission to run synthetic
+provider traffic, resume workers, start backfill, or expand the canary.
+
 ## 4. Expand gradually
 
 Only after a clean canary:
@@ -120,9 +153,11 @@ incident is closed.
 
 ## Rollback
 
-Set `PROTRACTOR_OUTBOUND_DISABLED=true`. Do not suspend MOS. Confirm API usage
-returns to zero, then preserve privacy-safe callback and breaker telemetry for
-incident review.
+Set `PROTRACTOR_OUTBOUND_DISABLED=true`. Do not normally suspend MOS. For a
+pre-approved bounded organic canary, use the emergency-suspend exception above
+if the disabling deployment is not yet live when a stop condition fires.
+Confirm API usage returns to zero, then preserve privacy-safe callback and
+breaker telemetry for incident review.
 
 After traffic is stopped, remove or correct
 `PROTRACTOR_OUTBOUND_DENIED_INSTANCE_IDS`, deploy to every replica, and verify
