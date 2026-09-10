@@ -59,15 +59,27 @@ export async function POST(req: NextRequest) {
       typeof (body as { expectedStopId?: unknown }).expectedStopId === "string"
       ? (body as { expectedStopId: string }).expectedStopId
       : undefined;
+  const expiresAtRaw =
+    body && typeof body === "object" && "expiresAt" in body &&
+      typeof (body as { expiresAt?: unknown }).expiresAt === "string"
+      ? (body as { expiresAt: string }).expiresAt
+      : undefined;
+  const maxAdmissions =
+    body && typeof body === "object" && "maxAdmissions" in body
+      ? (body as { maxAdmissions?: unknown }).maxAdmissions
+      : undefined;
   if (action !== "activate" && action !== "clear") {
     return NextResponse.json({ ok: false, error: "action must be activate or clear" }, { status: 400 });
   }
   if (action === "activate" && !reason?.trim()) {
     return NextResponse.json({ ok: false, error: "reason is required when activating" }, { status: 400 });
   }
-  if (action === "clear" && (!reason?.trim() || !expectedStopId?.trim())) {
+  if (action === "clear" && (
+    !reason?.trim() || !expectedStopId?.trim() || !expiresAtRaw ||
+    !Number.isInteger(maxAdmissions)
+  )) {
     return NextResponse.json(
-      { ok: false, error: "reason and expectedStopId are required when clearing" },
+      { ok: false, error: "reason, expectedStopId, expiresAt, and maxAdmissions are required when clearing" },
       { status: 400 },
     );
   }
@@ -80,16 +92,25 @@ export async function POST(req: NextRequest) {
           changedBy: operator,
           reason: reason!,
           expectedStopId: expectedStopId!,
+          expiresAt: new Date(expiresAtRaw!),
+          maxAdmissions: maxAdmissions as number,
         });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Operator stop update failed";
-    const status = /operator stop changed/.test(message) ? 409 : 500;
+    const status = /operator stop changed/.test(message)
+      ? 409
+      : /expiresAt|maxAdmissions|required/.test(message) ? 400 : 500;
     return NextResponse.json({ ok: false, error: message }, { status });
   }
   await logAdminAction({
     action: action === "activate" ? "protractor_operator_stop_activated" : "protractor_operator_stop_cleared",
     adminEmail: operator,
-    details: { reason: reason?.trim(), via: "platform_admin_session" },
+    details: {
+      reason: reason?.trim(),
+      via: "platform_admin_session",
+      state,
+      canary: state.canary,
+    },
     ipAddress: req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || undefined,
     userAgent: req.headers.get("user-agent") || undefined,
   }).catch(error => {

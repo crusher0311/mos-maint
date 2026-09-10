@@ -94,6 +94,9 @@ then prune identities that no longer exist. Treat an unexpected
 ## 3. Run the controlled probe
 
 1. Set `PROTRACTOR_OUTBOUND_DISABLED=false` only for the coordinated window.
+   Keep the Mongo operator stop active until the platform administrator clears
+   the current `stopId` into a bounded generation as described below. Do not use
+   an environment-variable window alone.
 2. Trigger one idempotent read for the canary connection.
 3. Confirm exactly one upstream request and a successful response.
 4. Wait through the observation window before allowing another request.
@@ -117,10 +120,43 @@ The operator stop is provider-only and permanent until explicitly cleared.
 Breaker successes, failures, cooldowns, and recovery-probe ownership cannot
 clear or shorten it.
 
-Clearing requires a platform-admin session, an incident reason, and the current
-`stopId`. The production one-off command is activation-only, and the shared
+Clearing requires a platform-admin session, an incident reason, the current
+`stopId`, an explicit future `expiresAt`, and `maxAdmissions` from 1 through 3.
+It creates a new canary generation with zero consumed admissions. The final
+Mongo confirmation immediately before either REST or SOAP dispatch atomically
+consumes one admission; expiry, the third admission, or operator activation
+closes that generation before any later transport send. Status and audit output
+show generation, expiry, consumed/remaining admissions, and `endedBy`
+(`time`, `budget`, or `operator`). The lease record's embedded audit trail
+records opening, each admission, and terminal/operator-stop events in the same
+atomic updates as the safety state. The production one-off command is
+activation-only, and the shared
 scheduler credential has no access to this control. A stale clear cannot remove
 a newer stop.
+
+POST `/api/platform-admin/protractor-operator-stop` using the existing
+platform-admin session with `action: "clear"`, `reason`, `expectedStopId`,
+`expiresAt` (an explicit future ISO timestamp), and `maxAdmissions: 3`.
+Budget is fleet-wide, not per shop or protocol; retries also consume admissions.
+A zero-request expiry is inconclusive, not a successful canary.
+An admission consumed by a confirmation whose response is lost is never refunded:
+this deliberately favors containment over reaching the full budget.
+To start another generation, activate the stop again and use its new `stopId`;
+replaying the old clear cannot reset counters. Status retains the latest 20
+prior generations with their embedded audit snapshots. The physical safety
+record must not expire with the rate-limit collection's TTL.
+
+Production log queries are observational only. Restrict canary telemetry to
+`syslog.host = mos-maintenance-mvp-main` and syslog app names matching `web-*`;
+also add an explicit `NOT bld-*` condition. Never use log counts to enforce or
+extend the physical-admission budget because build telemetry, delayed delivery,
+or truncation cannot change the Mongo safety control.
+
+```sql
+WHERE syslog.host = 'mos-maintenance-mvp-main'
+  AND syslog.appname LIKE 'web-%'
+  AND syslog.appname NOT LIKE 'bld-%'
+```
 
 1. Identify the active production service exactly as Render service
    `mos-tools` (`srv-d55jaqkhg0os73a5dd8g`). Do not target QA, workers,
