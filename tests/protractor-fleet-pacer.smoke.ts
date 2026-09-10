@@ -539,6 +539,137 @@ async function main(): Promise<void> {
   );
   assert.deepEqual(trackedApiEndpoints, ["soap:work_order"]);
 
+  console.log("Scenario 9: operator stop survives every stale in-flight outcome");
+  let operatorStopActive = false;
+  let operatorOwner: string | null = null;
+  let operatorSequence = 0;
+  let operatorPhysicalStarts = 0;
+  const recordedOutcomes: number[] = [];
+  __protractorClientTestHooks.acquirePhysicalTransportLease = async () => {
+    if (operatorStopActive || operatorOwner) return null;
+    operatorOwner = `operator-race-${++operatorSequence}`;
+    return operatorOwner;
+  };
+  __protractorClientTestHooks.confirmPhysicalTransportLease = async token =>
+    !operatorStopActive && token === operatorOwner;
+  __protractorClientTestHooks.renewPhysicalTransportLease = async token =>
+    token === operatorOwner;
+  __protractorClientTestHooks.releasePhysicalTransportLease = async token => {
+    if (token === operatorOwner) operatorOwner = null;
+  };
+  __protractorClientTestHooks.acquireDistributedRateLimitSlot = async () => ({
+    acquired: true,
+    waitedMs: 0,
+    currentCount: 1,
+  });
+  __protractorClientTestHooks.acquireOutboundGate = async () => ({
+    allowed: true,
+    probe: true,
+  });
+  __protractorClientTestHooks.recordResponse = async (_connectionId, status) => {
+    recordedOutcomes.push(status);
+  };
+
+  const staleOutcomes: Array<{
+    name: string;
+    expectedStatus: number;
+    complete: (
+      resolve: (value: { statusCode: number; body: string }) => void,
+      reject: (error: Error) => void,
+    ) => void;
+  }> = [
+    { name: "success", expectedStatus: 200, complete: resolve => resolve({ statusCode: 200, body: "{}" }) },
+    { name: "authentication", expectedStatus: 401, complete: resolve => resolve({ statusCode: 401, body: "unauthorized" }) },
+    { name: "throttled", expectedStatus: 429, complete: resolve => resolve({ statusCode: 429, body: "slow down" }) },
+    { name: "server", expectedStatus: 503, complete: resolve => resolve({ statusCode: 503, body: "down" }) },
+    {
+      name: "transport",
+      expectedStatus: PROTRACTOR_TRANSPORT_FAILURE_STATUS,
+      complete: (_resolve, reject) => reject(new Error("socket reset")),
+    },
+  ];
+
+  for (const outcome of staleOutcomes) {
+    operatorStopActive = false;
+    operatorOwner = null;
+    let signalStarted!: () => void;
+    const started = new Promise<void>(resolve => { signalStarted = resolve; });
+    let completeTransport!: (value: { statusCode: number; body: string }) => void;
+    let failTransport!: (error: Error) => void;
+    const completion = new Promise<{ statusCode: number; body: string }>((resolve, reject) => {
+      completeTransport = resolve;
+      failTransport = reject;
+    });
+    __protractorClientTestHooks.httpsRequest = async () => {
+      operatorPhysicalStarts += 1;
+      signalStarted();
+      return completion;
+    };
+    const pending = protractorFetch(
+      `/Invoice/operator-stop-${outcome.name}`,
+      config,
+      {},
+      0,
+      1,
+      { maxRetries: 0 },
+    );
+    await started;
+    operatorStopActive = true;
+    outcome.complete(completeTransport, failTransport);
+    await pending;
+    assert.equal(operatorStopActive, true, `${outcome.name} feedback must not clear the operator stop`);
+    assert.equal(recordedOutcomes.at(-1), outcome.expectedStatus);
+
+    const startsBeforeDeniedCall = operatorPhysicalStarts;
+    const denied = await protractorFetch(
+      `/Invoice/operator-stop-denied-${outcome.name}`,
+      config,
+      {},
+      0,
+      1,
+      { maxRetries: 0 },
+    );
+    assert.equal(denied.ok, false);
+    assert.equal(
+      operatorPhysicalStarts,
+      startsBeforeDeniedCall,
+      `${outcome.name} feedback must not permit a post-stop physical admission`,
+    );
+  }
+
+  console.log("Scenario 10: operator stop wins recovery-probe and REST/SOAP admission races");
+  operatorStopActive = false;
+  operatorOwner = null;
+  __protractorClientTestHooks.acquirePhysicalTransportLease = async () => {
+    operatorOwner = `operator-probe-${++operatorSequence}`;
+    operatorStopActive = true;
+    return operatorOwner;
+  };
+  let recoveryRaceStarts = 0;
+  __protractorClientTestHooks.httpsRequest = async () => {
+    recoveryRaceStarts += 1;
+    return { statusCode: 200, body: "{}" };
+  };
+  const recoveryRace = await protractorFetch(
+    "/Invoice/operator-stop-probe-race",
+    config,
+    {},
+    0,
+    1,
+    { maxRetries: 0 },
+  );
+  assert.equal(recoveryRace.ok, false);
+  assert.equal(recoveryRaceStarts, 0, "activation before atomic dispatch must beat a claimed recovery probe");
+
+  __protractorClientTestHooks.acquirePhysicalTransportLease = async () => null;
+  const blockedFamilies = await Promise.all([
+    protractorFetch("/Invoice/operator-stop-rest", config, {}, 0, 1, { maxRetries: 0 }),
+    createServiceItem(1, { ownerId: "owner" }),
+    soapAddServicePackage(1, "wo", { ID: "wo" }),
+  ]);
+  assert.ok(blockedFamilies.every(result => !result.ok));
+  assert.equal(recoveryRaceStarts, 0, "active stop must block REST and both SOAP transport families");
+
   console.log("All Protractor fleet-pacer checks passed");
 }
 

@@ -25,6 +25,14 @@ const PROTRACTOR_PHYSICAL_TRANSPORT_KEY = "protractor-physical-transport-v1";
 export const PROTRACTOR_PHYSICAL_TRANSPORT_INTERVAL_MS = 1000;
 const PROTRACTOR_PHYSICAL_TRANSPORT_LEASE_MS = 180_000;
 
+export const __protractorPhysicalTransportTestHooks: {
+  getDb: typeof getDb;
+  randomUUID: () => string;
+} = {
+  getDb,
+  randomUUID,
+};
+
 /**
  * Flag helpers for the api-usage cutover (task #999), local to this repo
  * per the ops-store convention (mirroring
@@ -70,6 +78,16 @@ export interface RateLimitRecord {
   count: number;
   createdAt?: Date;
   expiresAt?: Date;
+}
+
+export interface ProtractorOperatorStopState {
+  active: boolean;
+  stopId?: string;
+  reason?: string;
+  changedBy?: string;
+  activatedAt?: Date;
+  updatedAt?: Date;
+  physicalAdmissionInFlight: boolean;
 }
 
 async function usageCollection(): Promise<Collection<Document>> {
@@ -156,8 +174,11 @@ export async function releaseRateLimitSlot(key: string): Promise<void> {
   await col.updateOne({ _id: key }, { $inc: { count: -1 } });
 }
 
-async function initializeTransportLease(key: string): Promise<void> {
-  const db = await getDb();
+async function initializeTransportLease(
+  key: string,
+  getDatabase: typeof getDb = getDb,
+): Promise<void> {
+  const db = await getDatabase();
   const col = db.collection<any>(RATE_LIMIT_COLLECTION);
   try {
     await col.updateOne(
@@ -290,44 +311,255 @@ export async function releaseCallbackTransportLease(ownerToken: string): Promise
 export async function acquireProtractorPhysicalTransportLease(
   deadlineMs: number,
 ): Promise<string | null> {
-  return acquireTransportLease(
+  await initializeTransportLease(
     PROTRACTOR_PHYSICAL_TRANSPORT_KEY,
-    deadlineMs,
-    PROTRACTOR_PHYSICAL_TRANSPORT_LEASE_MS,
+    __protractorPhysicalTransportTestHooks.getDb,
   );
+  const db = await __protractorPhysicalTransportTestHooks.getDb();
+  const col = db.collection<any>(RATE_LIMIT_COLLECTION);
+  while (Date.now() < deadlineMs) {
+    const token = __protractorPhysicalTransportTestHooks.randomUUID();
+    const row = await col.findOneAndUpdate(
+      {
+        _id: PROTRACTOR_PHYSICAL_TRANSPORT_KEY,
+        "operatorStop.active": { $ne: true },
+        $expr: {
+          $and: [
+            { $lte: [{ $ifNull: ["$nextAllowedAt", "$$NOW"] }, "$$NOW"] },
+            { $lte: [{ $ifNull: ["$leaseExpiresAt", "$$NOW"] }, "$$NOW"] },
+          ],
+        },
+      },
+      [{
+        $set: {
+          count: { $ifNull: ["$count", 0] },
+          createdAt: { $ifNull: ["$createdAt", "$$NOW"] },
+          ownerToken: token,
+          leaseExpiresAt: {
+            $dateAdd: {
+              startDate: "$$NOW",
+              unit: "millisecond",
+              amount: PROTRACTOR_PHYSICAL_TRANSPORT_LEASE_MS,
+            },
+          },
+          expiresAt: { $dateAdd: { startDate: "$$NOW", unit: "day", amount: 1 } },
+        },
+      }],
+      { returnDocument: "after", maxTimeMS: 1000 },
+    );
+    if (row?.ownerToken === token) return token;
+    const stopped = await col.findOne(
+      {
+        _id: PROTRACTOR_PHYSICAL_TRANSPORT_KEY,
+        "operatorStop.active": true,
+      },
+      { projection: { _id: 1 }, maxTimeMS: 1000 },
+    );
+    if (stopped) return null;
+    const remaining = deadlineMs - Date.now();
+    if (remaining <= 0) return null;
+    await new Promise(resolve => setTimeout(resolve, Math.min(50, remaining)));
+  }
+  return null;
 }
 
 export async function confirmProtractorPhysicalTransportLease(
   ownerToken: string,
 ): Promise<boolean> {
-  const db = await getDb();
-  const row = await db.collection<any>(RATE_LIMIT_COLLECTION).findOne(
+  const db = await __protractorPhysicalTransportTestHooks.getDb();
+  // This update is the atomic physical-admission boundary. Operator activation
+  // and dispatch contend on the same document: whichever commits first wins.
+  // If dispatch wins, activation still blocks every subsequent lease/dispatch.
+  const row = await db.collection<any>(RATE_LIMIT_COLLECTION).findOneAndUpdate(
     {
       _id: PROTRACTOR_PHYSICAL_TRANSPORT_KEY,
       ownerToken,
       leaseExpiresAt: { $gt: new Date() },
+      "operatorStop.active": { $ne: true },
     },
-    { projection: { _id: 1 }, maxTimeMS: 1000 },
+    [{
+      $set: {
+        physicalAdmissionStartedAt: "$$NOW",
+        physicalAdmissionOwnerToken: ownerToken,
+      },
+    }],
+    { returnDocument: "after", maxTimeMS: 1000 },
   );
-  return row !== null;
+  return row?.ownerToken === ownerToken;
 }
 
 export async function renewProtractorPhysicalTransportLease(
   ownerToken: string,
 ): Promise<boolean> {
-  return renewTransportLease(
-    PROTRACTOR_PHYSICAL_TRANSPORT_KEY,
-    ownerToken,
-    PROTRACTOR_PHYSICAL_TRANSPORT_LEASE_MS,
+  const db = await __protractorPhysicalTransportTestHooks.getDb();
+  const row = await db.collection<any>(RATE_LIMIT_COLLECTION).findOneAndUpdate(
+    {
+      _id: PROTRACTOR_PHYSICAL_TRANSPORT_KEY,
+      ownerToken,
+      leaseExpiresAt: { $gt: new Date() },
+    },
+    [{
+      $set: {
+        leaseExpiresAt: {
+          $dateAdd: {
+            startDate: "$$NOW",
+            unit: "millisecond",
+            amount: PROTRACTOR_PHYSICAL_TRANSPORT_LEASE_MS,
+          },
+        },
+        expiresAt: { $dateAdd: { startDate: "$$NOW", unit: "day", amount: 1 } },
+      },
+    }],
+    { returnDocument: "after", maxTimeMS: 1000 },
   );
+  return row?.ownerToken === ownerToken;
 }
 
 export async function releaseProtractorPhysicalTransportLease(ownerToken: string): Promise<void> {
-  return releaseTransportLease(
-    PROTRACTOR_PHYSICAL_TRANSPORT_KEY,
-    ownerToken,
-    PROTRACTOR_PHYSICAL_TRANSPORT_INTERVAL_MS,
+  const db = await __protractorPhysicalTransportTestHooks.getDb();
+  await db.collection<any>(RATE_LIMIT_COLLECTION).updateOne(
+    { _id: PROTRACTOR_PHYSICAL_TRANSPORT_KEY, ownerToken },
+    [{
+      $set: {
+        ownerToken: "$$REMOVE",
+        leaseExpiresAt: "$$REMOVE",
+        physicalAdmissionStartedAt: "$$REMOVE",
+        physicalAdmissionOwnerToken: "$$REMOVE",
+        nextAllowedAt: {
+          $dateAdd: {
+            startDate: "$$NOW",
+            unit: "millisecond",
+            amount: PROTRACTOR_PHYSICAL_TRANSPORT_INTERVAL_MS,
+          },
+        },
+      },
+    }],
+    { maxTimeMS: 1000 },
   );
+}
+
+export async function getProtractorOperatorStop(): Promise<ProtractorOperatorStopState> {
+  await initializeTransportLease(
+    PROTRACTOR_PHYSICAL_TRANSPORT_KEY,
+    __protractorPhysicalTransportTestHooks.getDb,
+  );
+  const db = await __protractorPhysicalTransportTestHooks.getDb();
+  const now = new Date();
+  const row = await db.collection<any>(RATE_LIMIT_COLLECTION).findOne(
+    { _id: PROTRACTOR_PHYSICAL_TRANSPORT_KEY },
+    {
+      projection: {
+        operatorStop: 1,
+        physicalAdmissionOwnerToken: 1,
+        leaseExpiresAt: 1,
+      },
+      maxTimeMS: 1000,
+    },
+  );
+  const state = row?.operatorStop;
+  return {
+    active: state?.active === true,
+    stopId: state?.stopId,
+    reason: state?.reason,
+    changedBy: state?.changedBy,
+    activatedAt: state?.activatedAt,
+    updatedAt: state?.updatedAt,
+    physicalAdmissionInFlight:
+      Boolean(row?.physicalAdmissionOwnerToken) &&
+      row?.leaseExpiresAt instanceof Date &&
+      row.leaseExpiresAt.getTime() > now.getTime(),
+  };
+}
+
+export async function activateProtractorOperatorStop(input: {
+  changedBy: string;
+  reason: string;
+  now?: Date;
+}): Promise<ProtractorOperatorStopState> {
+  const changedBy = input.changedBy.trim();
+  const reason = input.reason.trim();
+  if (!changedBy) throw new Error("changedBy is required");
+  if (!reason) throw new Error("reason is required");
+  await initializeTransportLease(
+    PROTRACTOR_PHYSICAL_TRANSPORT_KEY,
+    __protractorPhysicalTransportTestHooks.getDb,
+  );
+  const db = await __protractorPhysicalTransportTestHooks.getDb();
+  const now = input.now ?? new Date();
+  const stopId = __protractorPhysicalTransportTestHooks.randomUUID();
+  const row = await db.collection<any>(RATE_LIMIT_COLLECTION).findOneAndUpdate(
+    { _id: PROTRACTOR_PHYSICAL_TRANSPORT_KEY },
+    {
+      $set: {
+        operatorStop: {
+          active: true,
+          stopId,
+          reason,
+          changedBy,
+          activatedAt: now,
+          updatedAt: now,
+        },
+      },
+    },
+    { returnDocument: "after", maxTimeMS: 1000 },
+  );
+  return {
+    active: true,
+    stopId,
+    reason,
+    changedBy,
+    activatedAt: now,
+    updatedAt: now,
+    physicalAdmissionInFlight:
+      Boolean(row?.physicalAdmissionOwnerToken) &&
+      row?.leaseExpiresAt instanceof Date &&
+      row.leaseExpiresAt.getTime() > now.getTime(),
+  };
+}
+
+export async function clearProtractorOperatorStop(input: {
+  changedBy: string;
+  expectedStopId: string;
+  reason: string;
+  now?: Date;
+}): Promise<ProtractorOperatorStopState> {
+  const changedBy = input.changedBy.trim();
+  const reason = input.reason.trim();
+  const expectedStopId = input.expectedStopId.trim();
+  if (!changedBy || !reason || !expectedStopId) {
+    throw new Error("changedBy, reason, and expectedStopId are required");
+  }
+  const db = await __protractorPhysicalTransportTestHooks.getDb();
+  const now = input.now ?? new Date();
+  const row = await db.collection<any>(RATE_LIMIT_COLLECTION).findOneAndUpdate(
+    {
+      _id: PROTRACTOR_PHYSICAL_TRANSPORT_KEY,
+      "operatorStop.active": true,
+      "operatorStop.stopId": expectedStopId,
+    },
+    {
+      $set: {
+        operatorStop: {
+          active: false,
+          stopId: expectedStopId,
+          reason,
+          changedBy,
+          clearedAt: now,
+          updatedAt: now,
+        },
+      },
+    },
+    { returnDocument: "after", maxTimeMS: 1000 },
+  );
+  if (!row) throw new Error("operator stop changed; refresh state before clearing");
+  return {
+    active: false,
+    stopId: expectedStopId,
+    reason,
+    changedBy,
+    updatedAt: now,
+    physicalAdmissionInFlight: false,
+  };
 }
 
 export async function countUsage(filter: UsageFilter): Promise<number> {

@@ -7,10 +7,9 @@ egress IP may be tested.
 
 ## Safety rules
 
-- Do not suspend the shared MOS web service as a normal Protractor traffic
-  control. A bounded canary may use the emergency-suspend exception below only
-  after the rollout owner explicitly accepts that it can cause a temporary full
-  MOS outage.
+- Use the production-scoped Protractor operator stop as the primary emergency
+  control. Do not suspend the shared MOS web service unless telemetry proves
+  physical Protractor admissions continued after that stop was activated.
 - Keep `PROTRACTOR_OUTBOUND_DISABLED=true` during deployment and initial
   verification. This switch takes precedence over callback, cron, interactive,
   REST, and SOAP requests.
@@ -105,13 +104,23 @@ then prune identities that no longer exist. Treat an unexpected
    and that the provider breaker prevents continued amplification. Confirm
    exactly one provider-scope ops alert with the matching response class and
    cooldown.
-7. Restore `PROTRACTOR_OUTBOUND_DISABLED=true` before investigating any anomaly.
+7. Activate the production operator stop before investigating any anomaly:
+   `npm run protractor:operator-stop -- activate "<incident reason>"` from a
+   production-context Render one-off job for service `mos-tools`. The command
+   refuses any other service identity and writes directly to the same atomic
+   fleet-admission record used by every live transport. It does not require the
+   web process to be healthy. Confirm `status` reports `active: true`.
 
-### Emergency-suspend exception for a bounded organic canary
+### Containment verification and last-resort web suspension
 
-Use this exception only when relay-host containment is unavailable and the
-rollout owner has explicitly approved a temporary full MOS outage if a stop
-condition fires.
+The operator stop is provider-only and permanent until explicitly cleared.
+Breaker successes, failures, cooldowns, and recovery-probe ownership cannot
+clear or shorten it.
+
+Clearing requires a platform-admin session, an incident reason, and the current
+`stopId`. The production one-off command is activation-only, and the shared
+scheduler credential has no access to this control. A stale clear cannot remove
+a newer stop.
 
 1. Identify the active production service exactly as Render service
    `mos-tools` (`srv-d55jaqkhg0os73a5dd8g`). Do not target QA, workers,
@@ -123,10 +132,12 @@ condition fires.
 4. After the enabling deployment is live, immediately restore
    `PROTRACTOR_OUTBOUND_DISABLED=true` so the disabling deployment is already
    building throughout the observation window.
-5. If any stop condition fires before that deployment is live, call Render's
-   suspend operation for the exact active service ID above. Confirm the service
-   reports `suspended`; do not assume that an accepted API request completed.
-6. Treat suspension as a full production outage. Keep the service suspended
+5. If any stop condition fires, activate the operator stop. A timeout reading
+   logs, metrics, Render state, or the control response aborts the canary and
+   pages operators, but must not invoke web suspension.
+6. Suspend the exact active service only if observed provider telemetry shows a
+   new physical admission after the operator stop activation timestamp. Treat
+   suspension as a full production outage. Keep the service suspended
    until the disabling deployment is `live`, the effective environment again
    reports `PROTRACTOR_OUTBOUND_DISABLED=true`, both workers remain suspended,
    and production telemetry shows zero new Protractor upstream calls.
@@ -153,9 +164,8 @@ incident is closed.
 
 ## Rollback
 
-Set `PROTRACTOR_OUTBOUND_DISABLED=true`. Do not normally suspend MOS. For a
-pre-approved bounded organic canary, use the emergency-suspend exception above
-if the disabling deployment is not yet live when a stop condition fires.
+Activate the production operator stop. Do not suspend MOS unless observed
+provider telemetry proves containment failed after activation.
 Confirm API usage returns to zero, then preserve privacy-safe callback and
 breaker telemetry for incident review.
 

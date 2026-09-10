@@ -49,3 +49,20 @@ breaker, disable autodeploy, resume, and activate the built image with
 `deployMode: "deploy_only"`. Verify zero new physical admissions before trusting
 the recovery. Local Mongo credentials may target a different cluster or
 environment-group context than the Render service.
+
+An operator stop and the final physical admission must serialize on the same
+fleet lease document. Lease claim and final dispatch confirmation both reject
+an active stop; activation updates that document, while ordinary breaker
+feedback remains in separate state. Clearing requires the current stop
+generation so a stale operator action cannot remove a newer stop.
+
+**Why:** A separate stop document or a final read before dispatch leaves a
+time-of-check/time-of-use window where another replica can activate the stop
+after the read but before the provider call starts. Reusing a new lease key
+during rollout also splits old and new replicas into independent pacers.
+
+**How to apply:** Preserve the established fleet lease key across deployments.
+Make dispatch confirmation the atomic admission point, keep stop activation on
+that exact record, and treat an admission that linearized first as already in
+flight. Never let response telemetry, breaker cooldowns, or recovery probes
+write operator-stop fields.
