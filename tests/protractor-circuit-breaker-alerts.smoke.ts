@@ -1,5 +1,7 @@
 import {
   __protractorCircuitBreakerTestHooks,
+  PROTRACTOR_RELAY_OVERSIZED_RESPONSE_STATUS,
+  PROTRACTOR_TRANSPORT_FAILURE_STATUS,
   recordProtractorResponse,
 } from "../lib/data/repositories/protractor-circuit-breaker";
 import type { OpsAlert } from "../lib/alerts/notify";
@@ -14,6 +16,7 @@ function matches(doc: Doc | undefined, filter: Record<string, any>): boolean {
     if (expected && typeof expected === "object" && !(expected instanceof Date)) {
       if ("$exists" in expected) return expected.$exists ? value !== undefined : value === undefined;
       if ("$gte" in expected) return value instanceof Date && value >= expected.$gte;
+      if ("$lte" in expected) return value instanceof Date && value <= expected.$lte;
     }
     return value === expected;
   });
@@ -111,6 +114,92 @@ async function main() {
   await recordProtractorResponse("transient-a", 503, 45_000, new Date(start.getTime() + 9_000));
   const transient = alerts.find((alert) => alert.fields?.responseClass === "server");
   ok("transient provider transition reports response class and Retry-After cooldown", transient?.fields?.scope === "provider" && transient?.fields?.cooldownMs === 45_000);
+
+  const oversizedAt = new Date(start.getTime() + 10_000);
+  await Promise.all([
+    recordProtractorResponse(
+      "oversized-connection-a",
+      PROTRACTOR_RELAY_OVERSIZED_RESPONSE_STATUS,
+      0,
+      oversizedAt,
+    ),
+    recordProtractorResponse(
+      "oversized-connection-b",
+      PROTRACTOR_RELAY_OVERSIZED_RESPONSE_STATUS,
+      0,
+      new Date(oversizedAt.getTime() + 1),
+    ),
+  ]);
+  const oversizedAlerts = alerts.filter(
+    (alert) =>
+      alert.fields?.scope === "provider" &&
+      alert.fields?.responseClass === "transport" &&
+      alert.fields?.cooldownMs === 1_800_000,
+  );
+  ok("first oversized relay response opens the provider breaker for thirty minutes", oversizedAlerts.length === 1);
+  ok(
+    "oversized response stores no raw connection id",
+    !JSON.stringify(oversizedAlerts).includes("oversized-connection-a") &&
+      !JSON.stringify(oversizedAlerts).includes("oversized-connection-b"),
+  );
+  ok(
+    "oversized response extends the provider stop immediately",
+    db.docs.get("provider")?.openUntil?.getTime() === oversizedAt.getTime() + 1_800_000,
+  );
+  ok(
+    "concurrent oversized responses do not duplicate the provider alert",
+    alerts.filter(
+      (alert) =>
+        alert.fields?.scope === "provider" &&
+        alert.fields?.responseClass === "transport" &&
+        alert.fields?.cooldownMs === 1_800_000,
+    ).length === 1,
+  );
+
+  const recoveryCases = [
+    {
+      statusCode: PROTRACTOR_TRANSPORT_FAILURE_STATUS,
+      retryAfterMs: 0,
+      responseClass: "transport",
+      cooldownMs: 30_000,
+    },
+    {
+      statusCode: 503,
+      retryAfterMs: 0,
+      responseClass: "server",
+      cooldownMs: 30_000,
+    },
+    {
+      statusCode: 429,
+      retryAfterMs: 45_000,
+      responseClass: "throttled",
+      cooldownMs: 45_000,
+    },
+  ] as const;
+  for (const [index, recovery] of recoveryCases.entries()) {
+    const probeAt = new Date(oversizedAt.getTime() + 1_900_000 + index * 60_000);
+    const provider = db.docs.get("provider")!;
+    provider.openUntil = new Date(probeAt.getTime() - 1);
+    provider.probeUntil = new Date(probeAt.getTime() + 30_000);
+    const alertCountBefore = alerts.length;
+    await recordProtractorResponse(
+      `recovery-${recovery.responseClass}`,
+      recovery.statusCode,
+      recovery.retryAfterMs,
+      probeAt,
+    );
+    ok(
+      `failed ${recovery.responseClass} recovery probe renews provider containment`,
+      provider.openUntil?.getTime() === probeAt.getTime() + recovery.cooldownMs &&
+        provider.probeUntil === undefined,
+    );
+    ok(
+      `failed ${recovery.responseClass} recovery probe pages its renewed transition`,
+      alerts.length === alertCountBefore + 1 &&
+        alerts.at(-1)?.fields?.responseClass === recovery.responseClass &&
+        alerts.at(-1)?.fields?.cooldownMs === recovery.cooldownMs,
+    );
+  }
 
   if (failed) throw new Error(`${failed} breaker-alert check(s) failed`);
   console.log("\nAll Protractor circuit-breaker alert checks passed");

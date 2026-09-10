@@ -9,6 +9,7 @@ import {
   confirmProtractorPhysicalTransportLease,
   releaseCallbackTransportLease,
   releaseProtractorPhysicalTransportLease,
+  renewProtractorPhysicalTransportLease,
 } from "@/lib/data/repositories/api-usage";
 import { getDb } from "@/lib/mongo";
 import {
@@ -22,6 +23,7 @@ import {
 import { findCachedWorkOrderByRoNumber } from "@/lib/data/repositories/protractor-work-orders";
 import {
   acquireProtractorOutboundGate,
+  PROTRACTOR_RELAY_OVERSIZED_RESPONSE_STATUS,
   recordProtractorResponse,
   PROTRACTOR_TRANSPORT_FAILURE_STATUS,
   type ProtractorGateDecision,
@@ -118,7 +120,9 @@ export const __protractorClientTestHooks: {
   releaseCallbackTransportLease: typeof releaseCallbackTransportLease;
   acquirePhysicalTransportLease: typeof acquireProtractorPhysicalTransportLease;
   confirmPhysicalTransportLease: typeof confirmProtractorPhysicalTransportLease;
+  renewPhysicalTransportLease: typeof renewProtractorPhysicalTransportLease;
   releasePhysicalTransportLease: typeof releaseProtractorPhysicalTransportLease;
+  physicalTransportHeartbeatMs: number;
   enforceFleetPacerWithMockTransport: boolean;
   trackApiRequest: typeof trackApiRequest;
   retryBaseDelayMs: number | null;
@@ -147,8 +151,11 @@ export const __protractorClientTestHooks: {
     acquireProtractorPhysicalTransportLease(deadlineMs),
   confirmPhysicalTransportLease: (token) =>
     confirmProtractorPhysicalTransportLease(token),
+  renewPhysicalTransportLease: (token) =>
+    renewProtractorPhysicalTransportLease(token),
   releasePhysicalTransportLease: (token) =>
     releaseProtractorPhysicalTransportLease(token),
+  physicalTransportHeartbeatMs: 30_000,
   enforceFleetPacerWithMockTransport: false,
   trackApiRequest: (...args) => trackApiRequest(...args),
   retryBaseDelayMs: null,
@@ -811,6 +818,9 @@ async function runFleetGuardedTransportAttempt<T>(
   }
   const admissionDeadlineAtMs = waitStartedAt + waitBudgetMs;
   let leaseToken: string | null = null;
+  let leaseHeartbeat: ReturnType<typeof setInterval> | null = null;
+  let heartbeatInFlight: Promise<void> | null = null;
+  let heartbeatFailed = false;
 
   if (enforceFleetPacer) {
     try {
@@ -893,6 +903,28 @@ async function runFleetGuardedTransportAttempt<T>(
     const finalLocal = localPolicyError("transport_dispatch");
     if (finalLocal) return finalLocal;
 
+    if (leaseToken) {
+      const token = leaseToken;
+      const heartbeat = () => {
+        if (heartbeatInFlight || heartbeatFailed) return;
+        heartbeatInFlight = (async () => {
+          try {
+            const renewed = await __protractorClientTestHooks.renewPhysicalTransportLease(token);
+            if (!renewed) heartbeatFailed = true;
+          } catch {
+            heartbeatFailed = true;
+          }
+        })().finally(() => {
+          heartbeatInFlight = null;
+        });
+      };
+      leaseHeartbeat = setInterval(
+        heartbeat,
+        __protractorClientTestHooks.physicalTransportHeartbeatMs,
+      );
+      leaseHeartbeat.unref?.();
+    }
+
     if (enforceFleetPacer) {
       console.log(JSON.stringify({
         event: "protractor_fleet_transport_admitted",
@@ -908,16 +940,25 @@ async function runFleetGuardedTransportAttempt<T>(
       ),
     };
   } finally {
+    if (leaseHeartbeat) clearInterval(leaseHeartbeat);
+    if (heartbeatInFlight) await heartbeatInFlight;
     if (leaseToken) {
-      try {
-        await __protractorClientTestHooks.releasePhysicalTransportLease(leaseToken);
-      } catch (error: any) {
-        // A failed release leaves the lease in its fail-closed state until its
-        // expiry; do not mask an upstream response that already completed.
-        console.warn(JSON.stringify({
-          event: "protractor_fleet_pacer_release_failed",
-          message: String(error?.message || "unknown").slice(0, 160),
+      if (heartbeatFailed) {
+        console.error(JSON.stringify({
+          event: "protractor_fleet_pacer_heartbeat_failed",
+          action: "lease_left_to_expire",
         }));
+      } else {
+        try {
+          await __protractorClientTestHooks.releasePhysicalTransportLease(leaseToken);
+        } catch (error: any) {
+          // A failed release leaves the lease in its fail-closed state until its
+          // expiry; do not mask an upstream response that already completed.
+          console.warn(JSON.stringify({
+            event: "protractor_fleet_pacer_release_failed",
+            message: String(error?.message || "unknown").slice(0, 160),
+          }));
+        }
       }
     }
   }
@@ -938,6 +979,38 @@ async function recordBreakerResponse(
       statusCode,
       message: String(error?.message || "unknown").slice(0, 160),
     }));
+  }
+}
+
+async function runBreakerRecordedTransport(
+  config: { connectionId: string },
+  transport: () => Promise<{
+    statusCode: number;
+    body: string;
+    headers?: Record<string, string | string[] | undefined>;
+  }>,
+): Promise<{
+  statusCode: number;
+  body: string;
+  headers?: Record<string, string | string[] | undefined>;
+}> {
+  try {
+    const response = await transport();
+    await recordBreakerResponse(
+      config,
+      response.statusCode,
+      parseProtractorRetryAfter(response.headers?.["retry-after"]),
+    );
+    return response;
+  } catch (error) {
+    await recordBreakerResponse(
+      config,
+      error instanceof RelayTransportError &&
+        error.code === "upstream_response_too_large"
+        ? PROTRACTOR_RELAY_OVERSIZED_RESPONSE_STATUS
+        : PROTRACTOR_TRANSPORT_FAILURE_STATUS,
+    );
+    throw error;
   }
 }
 
@@ -1112,12 +1185,15 @@ export async function protractorFetch<T>(
       const transport = await runCallbackPacedTransport((remainingMs) =>
         runFleetGuardedTransportAttempt(
           config,
-          (fleetRemainingMs) => __protractorClientTestHooks.httpsRequest(
-            url,
-            method,
-            headers,
-            body,
-            Math.min(opts?.timeoutMs ?? 30_000, fleetRemainingMs ?? 30_000),
+          (fleetRemainingMs) => runBreakerRecordedTransport(
+            config,
+            () => __protractorClientTestHooks.httpsRequest(
+              url,
+              method,
+              headers,
+              body,
+              Math.min(opts?.timeoutMs ?? 30_000, fleetRemainingMs ?? 30_000),
+            ),
           ),
           isPriority,
           remainingMs,
@@ -1140,7 +1216,6 @@ export async function protractorFetch<T>(
           shopId: normalizedShopId,
         }));
       }
-      await recordBreakerResponse(config, res.statusCode, retryAfterMs);
       
       __protractorClientTestHooks.trackApiRequest('protractor', relayLogging ? 'relay' : endpoint, method, res.statusCode, latencyMs, normalizedShopId, {
         retryCount: attempt > 0 ? attempt : undefined,
@@ -1230,7 +1305,6 @@ export async function protractorFetch<T>(
         });
         return { ok: false, error: err.message };
       }
-      await recordBreakerResponse(config, PROTRACTOR_TRANSPORT_FAILURE_STATUS);
       return { ok: false, error: err.message || "Network error" };
     }
     }
@@ -1518,21 +1592,23 @@ async function protractorSoapServiceItemUpdate(
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const transport = await runGuardedTransportAttempt(config, (remainingMs) =>
-        __protractorClientTestHooks.httpsRequest(
-          PROTRACTOR_SOAP_URL,
-          "POST",
-          {
-            "Content-Type": "text/xml; charset=utf-8",
-            "SOAPAction": `${PROTRACTOR_SOAP_NS}ServiceItemUpdate`,
-          },
-          soapEnvelope,
-          Math.min(timeoutMs, remainingMs ?? timeoutMs),
+        runBreakerRecordedTransport(
+          config,
+          () => __protractorClientTestHooks.httpsRequest(
+            PROTRACTOR_SOAP_URL,
+            "POST",
+            {
+              "Content-Type": "text/xml; charset=utf-8",
+              "SOAPAction": `${PROTRACTOR_SOAP_NS}ServiceItemUpdate`,
+            },
+            soapEnvelope,
+            Math.min(timeoutMs, remainingMs ?? timeoutMs),
+          ),
         ),
       );
       if (!transport.ok) return transport;
       const res = transport.response;
       const retryAfterMs = parseProtractorRetryAfter(res.headers?.["retry-after"]);
-      await recordBreakerResponse(config, res.statusCode, retryAfterMs);
       if (res.statusCode === 200 && !res.body.includes("<soap:Fault>")) {
         return { ok: true };
       }
@@ -1558,7 +1634,6 @@ async function protractorSoapServiceItemUpdate(
         });
         return { ok: false, error: err.message };
       }
-      await recordBreakerResponse(config, PROTRACTOR_TRANSPORT_FAILURE_STATUS);
       if (attempt < maxRetries) {
         await sleepWithinCallbackDeadline(
           Math.min(2000 * Math.pow(1.5, attempt), MAX_TRANSIENT_BACKOFF_MS),
@@ -1704,21 +1779,23 @@ async function protractorSoapWorkOrderUpdate(
     try {
       const startTime = Date.now();
       const transport = await runGuardedTransportAttempt(config, (remainingMs) =>
-        __protractorClientTestHooks.httpsRequest(
-          PROTRACTOR_SOAP_WO_URL,
-          "POST",
-          {
-            "Content-Type": "text/xml; charset=utf-8",
-            "SOAPAction": `${PROTRACTOR_SOAP_NS}WorkOrderUpdate`,
-          },
-          soapEnvelope,
-          Math.min(timeoutMs, remainingMs ?? timeoutMs),
+        runBreakerRecordedTransport(
+          config,
+          () => __protractorClientTestHooks.httpsRequest(
+            PROTRACTOR_SOAP_WO_URL,
+            "POST",
+            {
+              "Content-Type": "text/xml; charset=utf-8",
+              "SOAPAction": `${PROTRACTOR_SOAP_NS}WorkOrderUpdate`,
+            },
+            soapEnvelope,
+            Math.min(timeoutMs, remainingMs ?? timeoutMs),
+          ),
         ),
       );
       if (!transport.ok) return transport;
       const res = transport.response;
       const retryAfterMs = parseProtractorRetryAfter(res.headers?.["retry-after"]);
-      await recordBreakerResponse(config, res.statusCode, retryAfterMs);
 
       const latencyMs = Date.now() - startTime;
       __protractorClientTestHooks.trackApiRequest(
@@ -1776,7 +1853,6 @@ async function protractorSoapWorkOrderUpdate(
         });
         return { ok: false, error: err.message };
       }
-      await recordBreakerResponse(config, PROTRACTOR_TRANSPORT_FAILURE_STATUS);
       console.log(JSON.stringify({
         event: "protractor_soap_transport_exception",
         method: "POST",

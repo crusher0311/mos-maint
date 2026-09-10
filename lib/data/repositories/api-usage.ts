@@ -23,6 +23,7 @@ const RATE_LIMIT_COLLECTION = "api_rate_limits";
 const PROTRACTOR_CALLBACK_TRANSPORT_KEY = "protractor-callback-transport";
 const PROTRACTOR_PHYSICAL_TRANSPORT_KEY = "protractor-physical-transport-v1";
 export const PROTRACTOR_PHYSICAL_TRANSPORT_INTERVAL_MS = 1000;
+const PROTRACTOR_PHYSICAL_TRANSPORT_LEASE_MS = 180_000;
 
 /**
  * Flag helpers for the api-usage cutover (task #999), local to this repo
@@ -242,6 +243,31 @@ async function releaseTransportLease(
   );
 }
 
+async function renewTransportLease(
+  key: string,
+  ownerToken: string,
+  leaseDurationMs: number,
+): Promise<boolean> {
+  const db = await getDb();
+  const row = await db.collection<any>(RATE_LIMIT_COLLECTION).findOneAndUpdate(
+    {
+      _id: key,
+      ownerToken,
+      leaseExpiresAt: { $gt: new Date() },
+    },
+    [{
+      $set: {
+        leaseExpiresAt: {
+          $dateAdd: { startDate: "$$NOW", unit: "millisecond", amount: leaseDurationMs },
+        },
+        expiresAt: { $dateAdd: { startDate: "$$NOW", unit: "day", amount: 1 } },
+      },
+    }],
+    { returnDocument: "after", maxTimeMS: 1000 },
+  );
+  return row?.ownerToken === ownerToken;
+}
+
 /**
  * Canonical Mongo CAS lease for callback transport attempts. This primitive is
  * intentionally Mongo-owned regardless of api-usage cutover flags so every
@@ -264,7 +290,11 @@ export async function releaseCallbackTransportLease(ownerToken: string): Promise
 export async function acquireProtractorPhysicalTransportLease(
   deadlineMs: number,
 ): Promise<string | null> {
-  return acquireTransportLease(PROTRACTOR_PHYSICAL_TRANSPORT_KEY, deadlineMs, 180_000);
+  return acquireTransportLease(
+    PROTRACTOR_PHYSICAL_TRANSPORT_KEY,
+    deadlineMs,
+    PROTRACTOR_PHYSICAL_TRANSPORT_LEASE_MS,
+  );
 }
 
 export async function confirmProtractorPhysicalTransportLease(
@@ -280,6 +310,16 @@ export async function confirmProtractorPhysicalTransportLease(
     { projection: { _id: 1 }, maxTimeMS: 1000 },
   );
   return row !== null;
+}
+
+export async function renewProtractorPhysicalTransportLease(
+  ownerToken: string,
+): Promise<boolean> {
+  return renewTransportLease(
+    PROTRACTOR_PHYSICAL_TRANSPORT_KEY,
+    ownerToken,
+    PROTRACTOR_PHYSICAL_TRANSPORT_LEASE_MS,
+  );
 }
 
 export async function releaseProtractorPhysicalTransportLease(ownerToken: string): Promise<void> {
