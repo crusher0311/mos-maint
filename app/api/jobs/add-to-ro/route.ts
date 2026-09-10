@@ -436,7 +436,12 @@ export async function POST(req: NextRequest) {
           );
         }
       } else {
-        console.log(`[Add-to-RO:${requestId}] SOAP also failed: ${soapResult.error}`);
+        console.log(JSON.stringify({
+          event: "add_to_ro_soap_failed",
+          requestId,
+          shopId,
+          endpointClass: "soap",
+        }));
         return NextResponse.json(
           { error: `Failed to add job: Protractor's database has a missing 'Status' column. Both REST and SOAP methods failed. Please contact Protractor support about this SQL error.` },
           { status: 500 }

@@ -3,9 +3,12 @@ import crypto from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  classifyProtractorEndpoint,
   classifyProtractorRequest,
   createProtractorRelayRequest,
+  readProtractorRelayErrorCode,
   readProtractorRelayConfig,
+  RelayTransportError,
   shouldUseProtractorRelay,
 } from "../lib/integrations/protractor/relay-transport";
 
@@ -92,6 +95,30 @@ assert.equal(shouldUseProtractorRelay(readOnly, restTarget, "GET", {}), true);
 assert.equal(shouldUseProtractorRelay(readOnly, restTarget, "POST", {}), false);
 assert.equal(shouldUseProtractorRelay(readOnly, soapReadTarget, "GET", {}), false);
 
+assert.equal(classifyProtractorEndpoint("/WorkOrder/private-id?vin=secret", "rest"), "work_order");
+assert.equal(classifyProtractorEndpoint("/Invoice/private-id?customer=secret", "rest"), "invoice");
+assert.equal(
+  classifyProtractorEndpoint(
+    "https://integration.protractor.com/IntegrationServices/2.0/Vehicle/private-id?vin=secret",
+    "rest",
+  ),
+  "vehicle",
+);
+assert.equal(classifyProtractorEndpoint("/ServicePackageTemplate/private-id", "rest"), "service_package_template");
+assert.equal(classifyProtractorEndpoint(soapReadTarget, "soap"), "soap");
+assert.equal(classifyProtractorEndpoint("/PrivateCustomerName/private-id?vin=secret", "rest"), "other");
+assert.equal(new RelayTransportError("upstream_response_too_large").code, "upstream_response_too_large");
+assert.equal(new RelayTransportError("provider-controlled-value").code, "upstream_error");
+assert.equal(
+  readProtractorRelayErrorCode({ "x-relay-error-code": "upstream_response_too_large" }),
+  "upstream_response_too_large",
+);
+assert.equal(
+  readProtractorRelayErrorCode({ "X-Relay-Error-Code": "upstream_response_too_large!" }),
+  "upstream_error",
+);
+assert.equal(readProtractorRelayErrorCode({}), undefined);
+
 const fixedRandom = (size: number) => Buffer.alloc(size, 7);
 const originalHeaders = {
   connectionid: "connection-secret",
@@ -112,6 +139,8 @@ const plan = createProtractorRelayRequest(
 assert.equal(plan.url.href, relayUrl);
 assert.equal(plan.timeoutMs, 1_000);
 assert.equal(plan.metadata.type, "rest");
+assert.equal("shopId" in plan.metadata, false);
+assert.equal("endpointClass" in plan.metadata, false);
 const payload = JSON.parse(plan.body);
 assert.deepEqual(payload, {
   type: "rest",
@@ -173,6 +202,15 @@ assert.equal(
 const protractorClientSource = readFileSync(
   join(__dirname, "../lib/integrations/protractor/client.ts"),
   "utf8",
+);
+const addToRoRouteSource = readFileSync(
+  join(__dirname, "../app/api/jobs/add-to-ro/route.ts"),
+  "utf8",
+);
+assert.doesNotMatch(
+  addToRoRouteSource,
+  /SOAP also failed[^]*soapResult\.error/,
+  "add-to-RO logs must not include SOAP provider error text",
 );
 const fetchByIdSource = protractorClientSource.slice(
   protractorClientSource.indexOf("export async function fetchWorkOrderById"),

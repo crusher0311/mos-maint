@@ -38,10 +38,13 @@ import {
   logProtractorPolicyDenial,
 } from "./outbound-policy.cjs";
 import {
+  classifyProtractorEndpoint,
   createProtractorRelayRequest,
+  readProtractorRelayErrorCode,
   readProtractorRelayConfig,
   RelayTransportError,
   shouldUseProtractorRelay,
+  type ProtractorEndpointClass,
 } from "./relay-transport";
 import { readShopProtractorCredentials } from "./shop-eligibility";
 export { normalizeProtractorPackageLine } from "./package-normalization";
@@ -532,7 +535,12 @@ export async function soapAddServicePackage(
     return { ok: false, error: "Protractor not configured" };
   }
   const woXml = buildWorkOrderXml(workOrderPayload);
-  console.log(`[Protractor:SOAP] Attempting SOAP WorkOrderUpdate for ${workOrderGuid}, XML length: ${woXml.length}`);
+  console.log(JSON.stringify({
+    event: "protractor_soap_request",
+    method: "POST",
+    shopId: Number(shopId),
+    endpointClass: "soap",
+  }));
   return protractorSoapWorkOrderUpdate(config, workOrderGuid, woXml, shopId);
 }
 
@@ -635,12 +643,11 @@ function httpsRequest(
       res.on("data", (chunk) => { data += chunk; });
       res.on("end", () => {
         if (settled) return;
-        const relayError = relayEligible
-          ? Object.entries(res.headers).find(([name]) => name.toLowerCase() === "x-relay-error-code")?.[1]
+        const relayErrorCode = relayEligible
+          ? readProtractorRelayErrorCode(res.headers)
           : undefined;
-        if (relayError) {
-          const code = Array.isArray(relayError) ? relayError[0] : relayError;
-          settleError(new RelayTransportError(String(code).replace(/[^a-z0-9_]/gi, "").slice(0, 64)));
+        if (relayErrorCode) {
+          settleError(new RelayTransportError(relayErrorCode));
           return;
         }
         settled = true;
@@ -934,6 +941,27 @@ async function recordBreakerResponse(
   }
 }
 
+function logRelayTransportFailure(
+  error: RelayTransportError,
+  context: {
+    method: string;
+    shopId: number;
+    endpointClass: ProtractorEndpointClass;
+    attempt: number;
+    priority: boolean;
+  },
+): void {
+  console.error(JSON.stringify({
+    event: "protractor_relay_transport_error",
+    method: context.method,
+    shopId: context.shopId,
+    endpointClass: context.endpointClass,
+    relayErrorCode: error.code,
+    attempt: context.attempt,
+    priority: context.priority,
+  }));
+}
+
 async function runGuardedTransportAttempt<T>(
   config: { connectionId: string },
   transport: (remainingMs?: number) => Promise<T>,
@@ -948,6 +976,7 @@ async function runGuardedTransportAttempt<T>(
         runFleetGuardedTransportAttempt(config, transport, priority, remainingMs)
       );
     } catch (error: any) {
+      if (error instanceof RelayTransportError) throw error;
       return { ok: false, error: `Callback transport pacer unavailable: ${error?.message || "unknown"}` };
     }
   });
@@ -1007,6 +1036,7 @@ export async function protractorFetch<T>(
     const method = (options.method || "GET").toUpperCase();
     const baseUrl = method === "GET" ? BASE_URL_V2 : BASE_URL_V1;
     const url = `${baseUrl}${endpoint}`;
+    const endpointClass = classifyProtractorEndpoint(endpoint, "rest");
 
     // Retries MUST stay inside this callback as a loop. A recursive
     // protractorFetch() call would try to acquire a SECOND concurrency slot
@@ -1191,6 +1221,13 @@ export async function protractorFetch<T>(
       return { ok: true, data: data as T };
     } catch (err: any) {
       if (err instanceof RelayTransportError) {
+        logRelayTransportFailure(err, {
+          method,
+          shopId: normalizedShopId,
+          endpointClass,
+          attempt: attempt + 1,
+          priority: isPriority,
+        });
         return { ok: false, error: err.message };
       }
       await recordBreakerResponse(config, PROTRACTOR_TRANSPORT_FAILURE_STATUS);
@@ -1447,12 +1484,20 @@ const PROTRACTOR_SOAP_WO_URL = "https://integration.protractor.com/IntegrationSe
 const PROTRACTOR_SOAP_NS = "http://www.protractor.com/Integration/";
 
 async function protractorSoapServiceItemUpdate(
-  config: { connectionId: string; apiKey: string; authentication: string },
+  config: ProtractorConfig,
   serviceItemXml: string,
   // Task #936: per-request socket timeout (there was none — a hung SOAP
   // socket blocked the wizard's create-vehicle step indefinitely).
   opts?: { timeoutMs?: number; maxRetries?: number }
 ): Promise<{ ok: boolean; error?: string }> {
+  const normalizedShopId = Number(config.shopId);
+  if (!Number.isSafeInteger(normalizedShopId) || normalizedShopId <= 0) {
+    console.error(JSON.stringify({
+      event: "protractor_request_blocked",
+      reason: "soap_shop_attribution_missing",
+    }));
+    return { ok: false, error: "Protractor SOAP request requires a valid shop ID" };
+  }
   const timeoutMs = opts?.timeoutMs ?? 120_000;
   const maxRetries = opts?.maxRetries ?? 3;
   const soapEnvelope = [
@@ -1504,6 +1549,13 @@ async function protractorSoapServiceItemUpdate(
       return { ok: false, error: faultMatch ? faultMatch[1] : `HTTP ${res.statusCode}` };
     } catch (err: any) {
       if (err instanceof RelayTransportError) {
+        logRelayTransportFailure(err, {
+          method: "POST",
+          shopId: normalizedShopId,
+          endpointClass: "soap",
+          attempt: attempt + 1,
+          priority: false,
+        });
         return { ok: false, error: err.message };
       }
       await recordBreakerResponse(config, PROTRACTOR_TRANSPORT_FAILURE_STATUS);
@@ -1669,14 +1721,14 @@ async function protractorSoapWorkOrderUpdate(
       await recordBreakerResponse(config, res.statusCode, retryAfterMs);
 
       const latencyMs = Date.now() - startTime;
-      trackApiRequest(
+      __protractorClientTestHooks.trackApiRequest(
         'protractor',
-        `/WorkOrder/${workOrderId}`,
+        'soap:work_order',
         'POST-SOAP',
         res.statusCode,
         latencyMs,
         normalizedShopId
-      );
+      ).catch(() => {});
 
       if (res.statusCode === 200 && !res.body.includes('<soap:Fault>')) {
         const resultMatch = res.body.match(/WorkOrderUpdateResult>([\s\S]*?)<\//);
@@ -1694,7 +1746,14 @@ async function protractorSoapWorkOrderUpdate(
 
       const faultMatch = res.body.match(/faultstring>([^<]+)/);
       const errorMsg = faultMatch ? faultMatch[1] : `HTTP ${res.statusCode}`;
-      console.log(`[Protractor:SOAP] WorkOrderUpdate error (attempt ${attempt + 1}/${maxRetries + 1}): ${errorMsg}`);
+      console.log(JSON.stringify({
+        event: "protractor_soap_http_error",
+        method: "POST",
+        shopId: normalizedShopId,
+        endpointClass: "soap",
+        statusCode: res.statusCode,
+        attempt: attempt + 1,
+      }));
 
       if ((res.statusCode === 429 || res.statusCode >= 500) && attempt < maxRetries) {
         const delay = Math.min(
@@ -1708,10 +1767,23 @@ async function protractorSoapWorkOrderUpdate(
       return { ok: false, error: errorMsg };
     } catch (err: any) {
       if (err instanceof RelayTransportError) {
+        logRelayTransportFailure(err, {
+          method: "POST",
+          shopId: normalizedShopId,
+          endpointClass: "soap",
+          attempt: attempt + 1,
+          priority: false,
+        });
         return { ok: false, error: err.message };
       }
       await recordBreakerResponse(config, PROTRACTOR_TRANSPORT_FAILURE_STATUS);
-      console.log(`[Protractor:SOAP] WorkOrderUpdate exception (attempt ${attempt + 1}/${maxRetries + 1}): ${err.message}`);
+      console.log(JSON.stringify({
+        event: "protractor_soap_transport_exception",
+        method: "POST",
+        shopId: normalizedShopId,
+        endpointClass: "soap",
+        attempt: attempt + 1,
+      }));
       if (attempt < maxRetries) {
         const delay = Math.min(2000 * Math.pow(1.5, attempt), 10000);
         await sleepWithinCallbackDeadline(delay);
@@ -1776,20 +1848,35 @@ export async function createServiceItem(
     usage: params.odometer,
   });
 
-  console.log(`[Protractor] Creating vehicle via SOAP ServiceItemUpdate: ${description} VIN:${params.vin || 'N/A'}`);
+  console.log(JSON.stringify({
+    event: "protractor_soap_request",
+    method: "POST",
+    shopId,
+    endpointClass: "soap",
+  }));
 
   const soapResult = await protractorSoapServiceItemUpdate(
-    { connectionId: config.connectionId, apiKey: config.apiKey, authentication: config.authentication },
+    config,
     xmlBody,
     opts?.soapTimeoutMs !== undefined ? { timeoutMs: opts.soapTimeoutMs } : undefined
   );
 
   if (!soapResult.ok) {
-    console.error(`[Protractor] SOAP vehicle creation failed: ${soapResult.error}`);
+    console.error(JSON.stringify({
+      event: "protractor_soap_service_item_failed",
+      method: "POST",
+      shopId,
+      endpointClass: "soap",
+    }));
     return { ok: false, error: soapResult.error || "Failed to create vehicle via SOAP" };
   }
 
-  console.log(`[Protractor] Created vehicle ${newVehicleId}: ${description} VIN:${params.vin || 'N/A'}`);
+  console.log(JSON.stringify({
+    event: "protractor_soap_service_item_created",
+    method: "POST",
+    shopId,
+    endpointClass: "soap",
+  }));
   return { ok: true, vehicleId: newVehicleId };
 }
 
