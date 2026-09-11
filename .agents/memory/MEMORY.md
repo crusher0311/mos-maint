@@ -124,3 +124,4 @@
 - [Provider routing identity](provider-routing-identity.md) — explicit provider wins; global credentials never fill shop config; bind transport and queued/background work to one validated shop.
 - [Relay breaker ownership](protractor-relay-breaker-ownership.md) — persist outcome under a renewable fleet lease (or matching claim token) before another recovery probe can start.
 - [Protractor canary accounting](protractor-canary-accounting.md) — Mongo confirmation consumes budget; ambiguous results never refund admissions, and terminal canaries never silently reopen.
+- [Labor Rates context safety](labor-rates-context-safety.md) — scoped lookup failures do not prove provider disconnection; Rates identity resolution must not auto-learn mappings.

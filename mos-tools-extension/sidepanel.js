@@ -66,16 +66,16 @@ try {
 let isAuthenticated = false;
 // Role-derived write permission (viewer roles / readOnly flag). Conservative
 // default; refined via GET_MOS_AUTH.
-let roleCanWrite = true;
+let roleCanWrite = false;
 // Tiered session trust level (basic read-only vs verified). Derived by
 // session-tier-core.js from the login response's optional assurance /
 // capabilities fields. A basic session can never mutate, regardless of role.
 let sessionTier = null;        // raw derived object from MosSessionTierCore
-let sessionCanMutate = true;   // session permits mutations
-let sessionCanAdmin = true;    // session permits admin actions
+let sessionCanMutate = false;  // session permits mutations
+let sessionCanAdmin = false;   // session permits admin actions
 // Effective write permission consumed everywhere in the panel: BOTH the role
 // AND the session must allow writes. Recomputed by refreshEffectivePermissions.
-let currentUserCanWrite = true;
+let currentUserCanWrite = false;
 let currentContext = null;
 let currentTab = 'plan';
 
@@ -546,6 +546,7 @@ async function init() {
 
 function applyAuthenticatedState(authStatus) {
   isAuthenticated = true;
+  updateLaborRateSession(authStatus);
   mosShops = authStatus.shops || [];
   if (authStatus.defaultExtensionTab) {
     userDefaultTab = sanitizeDefaultTab(authStatus.defaultExtensionTab);
@@ -759,7 +760,19 @@ function setupEventListeners() {
   // Listen for context changes from background
   chrome.runtime.onMessage.addListener((message) => {
     if (message.action === 'SMS_CONTEXT_CHANGED') {
+      // Invalidate first and wait for GET_MOS_AUTH to provide the current
+      // discriminator. Never trust a delayed context broadcast to advance (or
+      // roll back) the session identity used by LABOR_RATE_APPLIED.
+      laborRateSessionDiscriminator = null;
+      invalidateLaborRateState('SMS context changed');
       updateContext(message.context);
+      // The provider proof/session discriminator can rotate without a
+      // different RO id. Refresh it before accepting a labor-rate broadcast.
+      sendMessage({ action: 'GET_MOS_AUTH' })
+        .then((auth) => {
+          if (auth?.isAuthenticated) updateLaborRateSession(auth);
+        })
+        .catch(() => {});
     }
     if (message.action === 'MOS_BOOTSTRAP_RESOLVED') {
       if (message.outcome === 'basic' || message.outcome === 'matched_user') {
@@ -774,11 +787,17 @@ function setupEventListeners() {
             applyAuthenticatedState(auth);
           } else {
             isAuthenticated = false;
+            laborRateSessionKey = null;
+            laborRateSessionDiscriminator = null;
+            invalidateLaborRateState('session changed');
             showLoginState();
             showBootstrapOutcome(message.outcome);
           }
         }).catch(() => {
           isAuthenticated = false;
+          laborRateSessionKey = null;
+          laborRateSessionDiscriminator = null;
+          invalidateLaborRateState('session changed');
           showLoginState();
           showBootstrapOutcome(message.outcome);
         });
@@ -806,7 +825,13 @@ function setupEventListeners() {
       loadPlan(true);
     }
     if (message.action === 'LABOR_RATE_APPLIED') {
-      if (message.success) {
+      if (!laborRateAppliedBroadcastMatchesCurrent(message)) return;
+      if (message.success && message.partialFailure) {
+        showNotification(
+          message.error || 'Some labor-rate updates failed. Review the active repair order and try again.',
+          'warning'
+        );
+      } else if (message.success) {
         const rate = typeof message.rate === 'number' ? message.rate.toFixed(2) : message.rate;
         if (message.perJob) {
           showNotification(
@@ -883,6 +908,7 @@ async function applyPlatformAdminVisibility() {
   try {
     const auth = await sendMessage({ action: 'GET_MOS_AUTH' });
     const u = auth?.user;
+    updateLaborRateSession(auth);
     // Absorb the tiered session trust level from the same auth payload.
     applySessionTier(auth?.sessionTier);
     const isAdmin = u?.role === 'platform_admin' || u?.isPlatformAdmin === true;
@@ -916,11 +942,17 @@ function applySessionTier(rawTier) {
   sessionCanMutate = sessionTier.canMutate !== false;
   sessionCanAdmin = sessionTier.canAdmin !== false;
   renderSessionTierBanner();
+  // applyPlatformAdminVisibility performs the role lookup asynchronously.
+  // Recompute now so a Basic session is read-only before that lookup settles.
+  refreshEffectivePermissions();
 }
 
 // Effective write permission is the AND of role permission and session trust.
 function refreshEffectivePermissions() {
-  currentUserCanWrite = !!roleCanWrite && !!sessionCanMutate;
+  const core = globalThis.MosLaborRateCore;
+  currentUserCanWrite = core
+    ? core.effectiveMutationPermission(roleCanWrite, sessionCanMutate)
+    : roleCanWrite === true && sessionCanMutate === true;
   applyMutationControlLock();
 }
 
@@ -952,6 +984,7 @@ function applyMutationControlLock() {
   const selectors = [
     '.btn-add-toggle', '.btn-add-job', '.btn-add-canned',
     '#rates-apply-now-btn', '#rates-add-btn', '#rates-auto-apply-toggle',
+    '#rate-form-save', '.rate-group-delete-btn',
     '#add-all-declined-btn',
   ];
   document.querySelectorAll(selectors.join(',')).forEach(el => {
@@ -1081,6 +1114,13 @@ function switchJobsSubTab(subtab) {
 function switchTab(tab) {
   if (tab === 'lookup') { tab = 'jobs'; switchJobsSubTab('lookup'); }
   else if (tab === 'canned') { tab = 'jobs'; switchJobsSubTab('canned'); }
+
+  // Labor-rate responses are scoped to the panel view as well as the active
+  // SMS context. Leaving Rates must invalidate an in-flight response so a
+  // late result cannot repaint rules after the advisor has moved elsewhere.
+  if (currentTab === 'rates' && tab !== 'rates') {
+    invalidateLaborRateState('panel tab changed');
+  }
 
   // Leaving the Concern Assistant for anywhere other than itself cancels the
   // Create RO "return" mode, so a later standalone concern doesn't wrongly show
@@ -1223,9 +1263,25 @@ function updateContext(context) {
   if (context && context.provider === 'autoflow') {
     context = enrichContextWithMosShop(context);
   }
+  if (context && typeof context === 'object') {
+    // Context broadcasts can carry the discriminator from the provider
+    // session that produced them. Rebind to the side panel's latest auth
+    // discriminator (or clear it while auth is refreshing) before computing
+    // invalidation keys, so stale broadcasts cannot strand fresh requests.
+    context = {
+      ...context,
+      laborRateSessionDiscriminator: laborRateSessionDiscriminator || null,
+    };
+  }
   
   const prevContext = currentContext;
+  const laborRateContextChanged =
+    laborRateContextKey(prevContext) !== laborRateContextKey(context);
   currentContext = context;
+
+  if (laborRateContextChanged) {
+    invalidateLaborRateState('shop, tab, or repair-order context changed');
+  }
   
   if (!prevContext || !context || prevContext.roId !== context.roId || prevContext.shopId !== context.shopId) {
     keytagContextEnriched = false;
@@ -1310,6 +1366,11 @@ function updateContext(context) {
         loadCannedJobs();
       } else if (currentTab === 'specs') {
         loadVehicleSpecs();
+      } else if (currentTab === 'rates') {
+        // Rates are shop-scoped but the worker also binds the operation to
+        // the active RO/tab context. Re-load after an RO switch so the
+        // invalidated cache cannot leave the Rates panel blank.
+        loadLaborRates();
       }
     } else if (RO_INDEPENDENT_TABS.includes(currentTab)) {
       switchTab(currentTab);
@@ -1661,6 +1722,11 @@ async function handleLogin(e) {
 }
 
 async function handleLogout() {
+  // Invalidate before awaiting the worker so an in-flight Rates request cannot
+  // paint or merge into the old session while logout is still being handled.
+  invalidateLaborRateState('session ended');
+  laborRateSessionKey = null;
+  laborRateSessionDiscriminator = null;
   await sendMessage({ action: 'MOS_LOGOUT' });
   isAuthenticated = false;
   currentContext = null;
@@ -3907,36 +3973,334 @@ async function handleAddCannedJob(job) {
 let currentLaborRateRules = [];
 let currentLaborRateRulesRevision = 0;
 let currentLaborRateRulesSmsShopId = null;
+// Rules are a shop/tab/session-scoped client cache. Keep the context that was
+// actually displayed alongside the rules and revision; a response from an
+// older context must never become the basis for a write in the new one.
+let currentLaborRateRulesContext = null;
+let laborRateContextGeneration = 0;
+let laborRateOperationSequence = 0;
+let laborRateSessionKey = null;
+let laborRateSessionDiscriminator = null;
+
+function cloneLaborRateContext(context) {
+  if (!context || typeof context !== 'object') return null;
+  try {
+    return JSON.parse(JSON.stringify(context));
+  } catch (_) {
+    // Contexts are normally plain JSON objects. Keep a shallow copy as a
+    // defensive fallback so the outgoing request is still detached from the
+    // mutable currentContext object.
+    return { ...context };
+  }
+}
+
+// Labor-rate rules are shop configuration, so loading and editing them must
+// work while the provider tab is on a shop-level page with no active RO.
+// Applying a rule is the one operation that requires a captured RO.
+function getRatesContextSnapshot({ requiresRo = false } = {}) {
+  const snapshot = cloneLaborRateContext(currentContext);
+  if (!snapshot) return null;
+
+  const provider = snapshot.provider == null
+    ? ''
+    : String(snapshot.provider).trim().toLowerCase().replace(/^shop[-_]ware$/, 'shopware');
+  const tabId = snapshot._tabId ?? snapshot.tabId;
+  if (
+    provider !== 'tekmetric' ||
+    snapshot.shopId == null ||
+    snapshot.shopId === '' ||
+    tabId == null ||
+    !laborRateSessionDiscriminator ||
+    (requiresRo && (snapshot.roId == null || snapshot.roId === ''))
+  ) {
+    return null;
+  }
+
+  snapshot.provider = provider;
+  snapshot._tabId = tabId;
+  // Never trust a discriminator copied from a delayed provider-context
+  // broadcast; bind every request to the side panel's refreshed auth state.
+  snapshot.laborRateSessionDiscriminator = laborRateSessionDiscriminator;
+  return snapshot;
+}
+
+function laborRateContextKey(context) {
+  if (!context || typeof context !== 'object') return null;
+  const tabId = context._tabId ?? context.tabId ?? null;
+  return JSON.stringify({
+    provider: context.provider == null ? '' : String(context.provider).trim().toLowerCase().replace(/^shop[-_]ware$/, 'shopware'),
+    shopId: context.shopId == null ? null : String(context.shopId),
+    tabId: tabId == null ? null : String(tabId),
+    roId: context.roId == null ? null : String(context.roId),
+    sessionDiscriminator: context.laborRateSessionDiscriminator || null,
+  });
+}
+
+function laborRateContextScopeKey(context) {
+  if (!context || typeof context !== 'object') return null;
+  const tabId = context._tabId ?? context.tabId ?? null;
+  return JSON.stringify({
+    provider: context.provider == null ? '' : String(context.provider).trim().toLowerCase().replace(/^shop[-_]ware$/, 'shopware'),
+    shopId: context.shopId == null ? null : String(context.shopId),
+    tabId: tabId == null ? null : String(tabId),
+  });
+}
+
+function laborRateSessionFingerprint(authStatus) {
+  if (!authStatus?.isAuthenticated) return null;
+  const tier = authStatus.sessionTier && typeof authStatus.sessionTier === 'object'
+    ? authStatus.sessionTier
+    : {};
+  const user = authStatus.user && typeof authStatus.user === 'object'
+    ? authStatus.user
+    : {};
+  // The bearer token is intentionally not exposed to the panel. These
+  // server-provided session fields are enough to distinguish the normal
+  // login/bootstrap/logout transitions without putting credentials in UI
+  // state or telemetry.
+  return JSON.stringify({
+    authSource: authStatus.authSource || tier.authSource || null,
+    userId: user.id || user._id || user.email || null,
+    displayName: tier.displayName || null,
+    expiresAt: tier.expiresAt || null,
+    assurance: tier.assurance || tier.tier || null,
+  });
+}
+
+function laborRateAppliedBroadcastMatchesCurrent(message) {
+  const core = globalThis.MosLaborRateCore;
+  if (core?.appliedBroadcastMatchesCurrent) {
+    return core.appliedBroadcastMatchesCurrent(
+      message,
+      currentContext,
+      laborRateSessionDiscriminator,
+    );
+  }
+  const messageContext = message?.context;
+  const currentTabId = currentContext?._tabId ?? currentContext?.tabId;
+  const messageTabId = message?.tabId ?? messageContext?._tabId ?? messageContext?.tabId;
+  return Boolean(
+    messageContext &&
+    currentContext &&
+    currentTabId != null &&
+    messageTabId != null &&
+    String(currentTabId) === String(messageTabId) &&
+    laborRateContextScopeKey(messageContext) === laborRateContextScopeKey(currentContext) &&
+    messageContext.roId != null &&
+    currentContext.roId != null &&
+    String(messageContext.roId) === String(currentContext.roId) &&
+    message?.sessionDiscriminator &&
+    laborRateSessionDiscriminator &&
+    message.sessionDiscriminator === laborRateSessionDiscriminator
+  );
+}
+
+function synchronizeLaborRateContextSession() {
+  if (!currentContext || !laborRateSessionDiscriminator) return;
+  if (currentContext.laborRateSessionDiscriminator === laborRateSessionDiscriminator) return;
+  // Auth/bootstrap can rotate the provider session without another
+  // SMS_CONTEXT_CHANGED message. Keep the unchanged provider/shop/RO context
+  // usable for fresh requests, while invalidateLaborRateState below rejects
+  // every operation captured under the previous discriminator.
+  currentContext.laborRateSessionDiscriminator = laborRateSessionDiscriminator;
+}
+
+function updateLaborRateSession(authStatus) {
+  const nextKey = laborRateSessionFingerprint(authStatus);
+  const nextDiscriminator = authStatus?.laborRateSessionDiscriminator || null;
+  const sessionChanged = laborRateSessionKey !== nextKey;
+  const discriminatorChanged = laborRateSessionDiscriminator !== nextDiscriminator;
+  laborRateSessionKey = nextKey;
+  laborRateSessionDiscriminator = nextDiscriminator;
+  synchronizeLaborRateContextSession();
+  if (!sessionChanged && !discriminatorChanged) return;
+  invalidateLaborRateState('session changed');
+  // A session refresh can arrive without another SMS_CONTEXT_CHANGED
+  // broadcast. Re-fetch only when Rates is already the visible panel.
+  if (nextKey && currentContext?.shopId && currentTab === 'rates' && isAuthenticated) {
+    loadLaborRates();
+  }
+}
+
+function invalidateLaborRateState(reason) {
+  laborRateContextGeneration += 1;
+  laborRateOperationSequence += 1;
+  currentLaborRateRules = [];
+  currentLaborRateRulesRevision = 0;
+  currentLaborRateRulesSmsShopId = null;
+  currentLaborRateRulesContext = null;
+
+  // Clear the visible cache immediately. This is deliberately not a
+  // best-effort repaint: keeping old cards visible while a new shop loads
+  // invites an accidental save against the wrong location.
+  if (elements.ratesLoading) elements.ratesLoading.classList.add('hidden');
+  if (elements.ratesList) elements.ratesList.innerHTML = '';
+  if (elements.ratesEmptyHint) elements.ratesEmptyHint.classList.add('hidden');
+  if (elements.ratesMain) elements.ratesMain.classList.add('hidden');
+  if (elements.ratesError) {
+    elements.ratesError.textContent = '';
+    elements.ratesError.classList.add('hidden');
+  }
+  resetLaborRateApplyButton();
+  if (reason) {
+    console.debug('[LaborRate] Invalidated cached rules:', reason);
+  }
+}
+
+function startLaborRateOperation(context, { requiresRo = false } = {}) {
+  return {
+    sequence: ++laborRateOperationSequence,
+    generation: laborRateContextGeneration,
+    sessionKey: laborRateSessionKey,
+    context: cloneLaborRateContext(context),
+    contextKey: laborRateContextKey(context),
+    requiresRo,
+  };
+}
+
+function isCurrentLaborRateOperation(operation) {
+  if (!operation) return false;
+  return operation.sequence === laborRateOperationSequence &&
+    operation.generation === laborRateContextGeneration &&
+    operation.sessionKey === laborRateSessionKey &&
+    operation.contextKey === laborRateContextKey(currentContext);
+}
+
+function laborRateResponseMatchesContext(result, requestContext) {
+  if (!result || !requestContext) return false;
+  // Newer workers may echo the complete context. If they do, validate it;
+  // older workers only return smsShopId, which is still checked below.
+  if (result.context) {
+    if (laborRateContextScopeKey(result.context) !== laborRateContextScopeKey(requestContext)) {
+      return false;
+    }
+    if (result.context.roId != null && requestContext.roId != null &&
+        String(result.context.roId) !== String(requestContext.roId)) {
+      return false;
+    }
+    if (result.context.laborRateSessionDiscriminator &&
+        requestContext.laborRateSessionDiscriminator &&
+        result.context.laborRateSessionDiscriminator !== requestContext.laborRateSessionDiscriminator) {
+      return false;
+    }
+  }
+  if (result.sessionDiscriminator && laborRateSessionDiscriminator &&
+      result.sessionDiscriminator !== laborRateSessionDiscriminator) {
+    return false;
+  }
+  if (result.smsShopId != null && requestContext.shopId != null &&
+      String(result.smsShopId) !== String(requestContext.shopId)) {
+    return false;
+  }
+  if (
+    result.sessionDiscriminator &&
+    requestContext.laborRateSessionDiscriminator &&
+    result.sessionDiscriminator !== requestContext.laborRateSessionDiscriminator
+  ) {
+    return false;
+  }
+  if (
+    result.context?.laborRateSessionDiscriminator &&
+    requestContext.laborRateSessionDiscriminator &&
+    result.context.laborRateSessionDiscriminator !== requestContext.laborRateSessionDiscriminator
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function laborRateErrorMessage(result, operation) {
+  if (result?.contextChanged) {
+    return 'The active shop or browser tab changed while this request was in progress. Return to Rates and reload the rules for the current location.';
+  }
+
+  const code = String(result?.code || result?.serverCode || '').toUpperCase();
+  const raw = String(result?.error || '').trim();
+  if (code === 'TOKEN_INVALID' || code === 'TOKEN_EXPIRED' || code === 'TOKEN_REVOKED' ||
+      result?._mosStatus === 401 || result?.status === 401) {
+    return 'Your MOS.Tools session may have expired. Sign in again, then reload Labor Rates.';
+  }
+  if (code === 'SHOP_FORBIDDEN' || result?._mosStatus === 403 || result?.status === 403) {
+    return 'You do not have permission to manage labor rates for this location. Switch to an authorized shop or contact your MOS.Tools administrator.';
+  }
+  if (!operation?.context?.shopId) {
+    return 'Open the intended shop location in your shop-management tab, then reload Labor Rates.';
+  }
+  if (operation?.requiresRo && !operation?.context?.roId) {
+    return 'Open a repair order in your shop-management tab before applying a labor rate.';
+  }
+  if (/no accessible shop|not found|shop.*(access|configured)|unauthori[sz]ed|forbidden/i.test(raw)) {
+    return 'Labor rates are not available for this location. Verify the active shop and your MOS.Tools access, then reload Labor Rates.';
+  }
+  if (raw) return `Labor rates could not be loaded for this location: ${raw}`;
+  return 'Labor rates could not be loaded for this location. Verify the active shop and reload Labor Rates.';
+}
+
+function showLaborRateError(result, operation) {
+  const message = laborRateErrorMessage(result, operation);
+  elements.ratesError.textContent = message;
+  elements.ratesError.classList.remove('hidden');
+  elements.ratesMain.classList.remove('hidden');
+  return message;
+}
+
+function resetLaborRateApplyButton() {
+  if (!elements.ratesApplyNowBtn) return;
+  elements.ratesApplyNowBtn.disabled = !currentUserCanWrite;
+  elements.ratesApplyNowBtn.innerHTML = `
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="20 6 9 17 4 12"/>
+    </svg>
+    Apply Now
+  `;
+}
 
 async function loadLaborRates() {
+  const requestContext = getRatesContextSnapshot();
+  if (!requestContext) {
+    elements.ratesLoading.classList.add('hidden');
+    showLaborRateError({ error: 'missing shop context' }, { context: requestContext });
+    return;
+  }
+
+  const operation = startLaborRateOperation(requestContext);
   elements.ratesLoading.classList.remove('hidden');
   elements.ratesMain.classList.add('hidden');
   elements.ratesError.classList.add('hidden');
 
   try {
-    const autoApplyResult = await sendMessage({ action: 'GET_LABOR_RATE_AUTO_APPLY' });
+    const autoApplyResult = await sendMessage({
+      action: 'GET_LABOR_RATE_AUTO_APPLY',
+      context: requestContext,
+    });
+    if (!isCurrentLaborRateOperation(operation)) return;
     elements.ratesAutoApplyToggle.checked = !!autoApplyResult.enabled;
 
-    const result = await sendMessage({ action: 'GET_LABOR_RATE_RULES' });
+    const result = await sendMessage({
+      action: 'GET_LABOR_RATE_RULES',
+      context: requestContext,
+    });
+    if (!isCurrentLaborRateOperation(operation)) return;
     elements.ratesLoading.classList.add('hidden');
 
-    if (result.success) {
+    if (result.success && laborRateResponseMatchesContext(result, requestContext)) {
       currentLaborRateRules = result.rules || [];
       currentLaborRateRulesRevision = Number(result.revision ?? 0);
       currentLaborRateRulesSmsShopId = result.smsShopId ?? null;
+      currentLaborRateRulesContext = requestContext;
       renderLaborRateRules();
       elements.ratesMain.classList.remove('hidden');
     } else {
-      elements.ratesError.textContent = result.error || 'Failed to load rules';
-      elements.ratesError.classList.remove('hidden');
-      elements.ratesMain.classList.remove('hidden');
+      showLaborRateError(
+        result.success ? { contextChanged: true } : result,
+        operation,
+      );
     }
   } catch (err) {
+    if (!isCurrentLaborRateOperation(operation)) return;
     console.error('[MOS] Error loading labor rates:', err);
     elements.ratesLoading.classList.add('hidden');
-    elements.ratesError.textContent = err.message || 'Failed to load labor rate groups';
-    elements.ratesError.classList.remove('hidden');
-    elements.ratesMain.classList.remove('hidden');
+    showLaborRateError({ error: err.message || 'request failed' }, operation);
   }
 }
 
@@ -4021,6 +4385,10 @@ function renderLaborRateRules() {
   elements.ratesList.querySelectorAll('.rate-group-delete-btn').forEach(btn => {
     btn.addEventListener('click', () => handleDeleteRateGroup(btn.dataset.ruleId));
   });
+  // These buttons are rendered after the session-tier lock is applied during
+  // login. Re-apply it here so a Basic session cannot mutate freshly loaded
+  // labor-rate cards.
+  applyMutationControlLock();
 }
 
 function showRateForm(editRule = null) {
@@ -4110,6 +4478,16 @@ function hideRateForm() {
 
 async function handleSaveRateGroup() {
   if (!currentUserCanWrite) { notifyReadOnlyBlocked(); return; }
+  const requestContext = getRatesContextSnapshot();
+  if (!requestContext) {
+    showNotification('Open the intended shop location before saving labor rates.', 'error');
+    return;
+  }
+  if (!currentLaborRateRulesContext ||
+      laborRateContextKey(currentLaborRateRulesContext) !== laborRateContextKey(requestContext)) {
+    showNotification('The active shop or tab changed. Reload Labor Rates before saving.', 'warning');
+    return;
+  }
   const name = elements.rateFormName.value.trim();
   const makesRaw = elements.rateFormMakes.value.trim();
   const categoriesRaw = elements.rateFormCategories.value.trim();
@@ -4186,17 +4564,32 @@ async function handleSaveRateGroup() {
 
   elements.rateFormSave.disabled = true;
   elements.rateFormSaveText.textContent = 'Saving...';
+  const operation = startLaborRateOperation(requestContext);
+  const expectedRevision = currentLaborRateRulesRevision;
 
   try {
     const result = await sendMessage({
       action: 'SAVE_LABOR_RATE_RULES',
       rules: updatedRules,
-      expectedRevision: currentLaborRateRulesRevision,
+      expectedRevision,
       smsShopId: currentLaborRateRulesSmsShopId,
+      context: requestContext,
     });
+    if (!isCurrentLaborRateOperation(operation)) {
+      // The request may have completed against the old shop, but its result is
+      // no longer safe to display or merge into the current shop's cache.
+      showNotification('The active shop or tab changed while saving. Reload Labor Rates for the current location.', 'warning');
+      return;
+    }
+    if (!laborRateResponseMatchesContext(result, requestContext)) {
+      showNotification(laborRateErrorMessage({ contextChanged: true }, operation), 'warning');
+      return;
+    }
     if (result.success) {
-      currentLaborRateRules = updatedRules;
+      currentLaborRateRules = result.rules || updatedRules;
       currentLaborRateRulesRevision = Number(result.revision ?? currentLaborRateRulesRevision + 1);
+      currentLaborRateRulesSmsShopId = result.smsShopId ?? currentLaborRateRulesSmsShopId ?? requestContext.shopId;
+      currentLaborRateRulesContext = requestContext;
       renderLaborRateRules();
       hideRateForm();
       showNotification(editId ? 'Group updated' : 'Group added', 'success');
@@ -4205,16 +4598,24 @@ async function handleSaveRateGroup() {
         currentLaborRateRules = result.rules;
         currentLaborRateRulesRevision = Number(result.revision ?? currentLaborRateRulesRevision);
         currentLaborRateRulesSmsShopId = result.smsShopId ?? currentLaborRateRulesSmsShopId;
+        currentLaborRateRulesContext = requestContext;
         renderLaborRateRules();
         hideRateForm();
       }
-      showNotification(result.error || 'Failed to save', 'error');
+      showNotification(laborRateErrorMessage(result, operation), 'error');
     }
   } catch (err) {
-    showNotification(err.message || 'Failed to save labor rate group', 'error');
+    if (isCurrentLaborRateOperation(operation)) {
+      showNotification(laborRateErrorMessage({ error: err.message || 'Failed to save labor rate group' }, operation), 'error');
+    } else {
+      showNotification('The active shop or tab changed while saving. Reload Labor Rates for the current location.', 'warning');
+    }
   } finally {
-    elements.rateFormSave.disabled = false;
-    elements.rateFormSaveText.textContent = editId ? 'Update Group' : 'Add Group';
+    if (isCurrentLaborRateOperation(operation)) {
+      elements.rateFormSave.disabled = false;
+      elements.rateFormSaveText.textContent = editId ? 'Update Group' : 'Add Group';
+      applyMutationControlLock();
+    }
   }
 }
 
@@ -4226,12 +4627,24 @@ function handleEditRateGroup(ruleId) {
 }
 
 async function handleDeleteRateGroup(ruleId) {
+  if (!currentUserCanWrite) { notifyReadOnlyBlocked(); return; }
   const rule = currentLaborRateRules.find(r => r.id === ruleId);
   if (!rule) return;
 
   if (!confirm(`Delete "${rule.name}"? This cannot be undone.`)) return;
 
+  const requestContext = getRatesContextSnapshot();
+  if (!requestContext) {
+    showNotification('Open the intended shop location before deleting labor rates.', 'error');
+    return;
+  }
+  if (!currentLaborRateRulesContext ||
+      laborRateContextKey(currentLaborRateRulesContext) !== laborRateContextKey(requestContext)) {
+    showNotification('The active shop or tab changed. Reload Labor Rates before deleting.', 'warning');
+    return;
+  }
   const updatedRules = currentLaborRateRules.filter(r => r.id !== ruleId);
+  const operation = startLaborRateOperation(requestContext);
 
   try {
     const result = await sendMessage({
@@ -4239,10 +4652,21 @@ async function handleDeleteRateGroup(ruleId) {
       rules: updatedRules,
       expectedRevision: currentLaborRateRulesRevision,
       smsShopId: currentLaborRateRulesSmsShopId,
+      context: requestContext,
     });
+    if (!isCurrentLaborRateOperation(operation)) {
+      showNotification('The active shop or tab changed while deleting. Reload Labor Rates for the current location.', 'warning');
+      return;
+    }
+    if (!laborRateResponseMatchesContext(result, requestContext)) {
+      showNotification(laborRateErrorMessage({ contextChanged: true }, operation), 'warning');
+      return;
+    }
     if (result.success) {
       currentLaborRateRules = result.rules || updatedRules;
       currentLaborRateRulesRevision = Number(result.revision ?? currentLaborRateRulesRevision + 1);
+      currentLaborRateRulesSmsShopId = result.smsShopId ?? currentLaborRateRulesSmsShopId ?? requestContext.shopId;
+      currentLaborRateRulesContext = requestContext;
       renderLaborRateRules();
       showNotification(`"${rule.name}" deleted`, 'info');
     } else {
@@ -4250,21 +4674,28 @@ async function handleDeleteRateGroup(ruleId) {
         currentLaborRateRules = result.rules;
         currentLaborRateRulesRevision = Number(result.revision ?? currentLaborRateRulesRevision);
         currentLaborRateRulesSmsShopId = result.smsShopId ?? currentLaborRateRulesSmsShopId;
+        currentLaborRateRulesContext = requestContext;
         renderLaborRateRules();
       }
-      showNotification(result.error || 'Failed to delete', 'error');
+      showNotification(laborRateErrorMessage(result, operation), 'error');
     }
   } catch (err) {
-    showNotification(err.message || 'Failed to delete group', 'error');
+    if (isCurrentLaborRateOperation(operation)) {
+      showNotification(laborRateErrorMessage({ error: err.message || 'Failed to delete group' }, operation), 'error');
+    } else {
+      showNotification('The active shop or tab changed while deleting. Reload Labor Rates for the current location.', 'warning');
+    }
   }
 }
 
 async function handleApplyLaborRateNow() {
   if (!currentUserCanWrite) { notifyReadOnlyBlocked(); return; }
-  if (!currentContext?.roId) {
+  const requestContext = getRatesContextSnapshot({ requiresRo: true });
+  if (!requestContext) {
     showNotification('Navigate to a repair order first', 'error');
     return;
   }
+  const operation = startLaborRateOperation(requestContext, { requiresRo: true });
 
   elements.ratesApplyNowBtn.disabled = true;
   elements.ratesApplyNowBtn.innerHTML = `
@@ -4273,27 +4704,44 @@ async function handleApplyLaborRateNow() {
   `;
 
   try {
-    const result = await sendMessage({ action: 'APPLY_LABOR_RATE_NOW' });
-    if (result.success) {
+    const result = await sendMessage({
+      action: 'APPLY_LABOR_RATE_NOW',
+      context: requestContext,
+    });
+    if (!isCurrentLaborRateOperation(operation)) {
+      showNotification('The active shop, repair order, or browser tab changed while applying. Reload Rates and try again.', 'warning');
+      return;
+    }
+    if (!laborRateResponseMatchesContext(result, requestContext)) {
+      showNotification(laborRateErrorMessage({ contextChanged: true }, operation), 'warning');
+      return;
+    }
+    if (result.success && result.partialFailure) {
       showNotification(
-        `Labor rate updated: "${result.ruleName}" → $${result.rate.toFixed(2)}/hr`,
+        result.error || 'Some labor-rate updates failed. Review the active repair order and try again.',
+        'warning',
+      );
+    } else if (result.success) {
+      const rate = typeof result.rate === 'number'
+        ? result.rate.toFixed(2)
+        : String(result.rate ?? '');
+      showNotification(
+        `Labor rate updated: "${result.ruleName}" → $${rate}/hr`,
         'success'
       );
     } else if (result.noMatch) {
       showNotification('No matching rule for this vehicle', 'info');
     } else {
-      showNotification(result.error || 'Failed to apply labor rate', 'error');
+      showNotification(laborRateErrorMessage(result, operation), 'error');
     }
   } catch (err) {
-    showNotification(err.message || 'Failed to apply labor rate', 'error');
+    if (isCurrentLaborRateOperation(operation)) {
+      showNotification(laborRateErrorMessage({ error: err.message || 'Failed to apply labor rate' }, operation), 'error');
+    } else {
+      showNotification('The active shop, repair order, or browser tab changed while applying. Reload Rates and try again.', 'warning');
+    }
   } finally {
-    elements.ratesApplyNowBtn.disabled = false;
-    elements.ratesApplyNowBtn.innerHTML = `
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="20 6 9 17 4 12"/>
-      </svg>
-      Apply Now
-    `;
+    if (isCurrentLaborRateOperation(operation)) resetLaborRateApplyButton();
   }
 }
 

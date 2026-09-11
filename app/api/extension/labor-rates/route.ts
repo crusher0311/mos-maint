@@ -1,13 +1,24 @@
 import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 import { NextRequest, NextResponse } from "next/server";
-import { validateExtensionToken, getAuthErrorStatus, getUserShopIds, buildAuthErrorBody, requireExtensionPrincipalScope } from "@/lib/extension-auth";
-import { findShopBySmsId } from "@/lib/extension-shop-lookup";
+import {
+  validateExtensionToken,
+  getAuthErrorStatus,
+  buildAuthErrorBody,
+  requireExtensionCapabilities,
+  requireExtensionPrincipalScope,
+} from "@/lib/extension-auth";
 import { checkShopFeatureGate } from "@/lib/extension-route-guard";
 import {
   findShopLaborRateRulesById,
   replaceLaborRateRulesForShopIdIfRevision,
   replaceLaborRateRulesForShopIds,
 } from "@/lib/data/repositories/shops";
+import {
+  defaultLaborRateShopId,
+  resolveLaborRateShop,
+  scopedUserShopIds,
+  type LaborRateShopResolution,
+} from "@/lib/extension-labor-rate-shop";
 import { ObjectId } from "mongodb";
 
 export const runtime = "nodejs";
@@ -18,6 +29,18 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Methods": "GET, PUT, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
+
+function shopResolutionResponse(resolution: LaborRateShopResolution) {
+  if (resolution.ok) return null;
+  return NextResponse.json(
+    {
+      ok: false,
+      error: resolution.error,
+      ...(resolution.code ? { code: resolution.code } : {}),
+    },
+    { status: resolution.status, headers: CORS_HEADERS },
+  );
+}
 
 export async function OPTIONS() {
   return NextResponse.json({}, { headers: CORS_HEADERS });
@@ -31,20 +54,24 @@ async function _GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const smsShopId = searchParams.get("smsShopId") || searchParams.get("shopId");
+  const requestedProvider = searchParams.get("provider");
 
-  const userShopIds = getUserShopIds(auth.user).map(id => parseInt(id));
-  const isPlatformAdmin = auth.user.role === "platform_admin";
+  const userShopIds = scopedUserShopIds(auth.user);
+  const isPlatformAdmin =
+    auth.user.role === "platform_admin" || auth.user.isPlatformAdmin === true;
 
   let resolvedShopId: number;
   if (smsShopId) {
-    const provider = searchParams.get("provider") || undefined;
-    const shopResult = await findShopBySmsId(smsShopId, { userShopIds, isPlatformAdmin, providerHint: provider });
-    if (!shopResult) {
-      return NextResponse.json({ ok: false, error: `No accessible shop configured for SMS shop ID ${smsShopId}` }, { status: 404, headers: CORS_HEADERS });
-    }
+    const resolution = await resolveLaborRateShop({
+      auth,
+      smsShopId,
+      requestedProvider,
+    });
+    if (!resolution.ok) return shopResolutionResponse(resolution) as NextResponse;
+    resolvedShopId = resolution.mosShopId;
     const scopeFailure = requireExtensionPrincipalScope(auth, {
-      shopId: shopResult.mosShopId,
-      provider: provider || shopResult.provider,
+      shopId: resolution.mosShopId,
+      provider: resolution.provider,
     });
     if (scopeFailure) {
       return NextResponse.json(
@@ -52,9 +79,10 @@ async function _GET(req: NextRequest) {
         { status: getAuthErrorStatus(scopeFailure), headers: CORS_HEADERS }
       );
     }
-    resolvedShopId = shopResult.mosShopId;
   } else if (userShopIds.length <= 1) {
-    resolvedShopId = auth.user.shopId;
+    const resolution = defaultLaborRateShopId(auth, userShopIds, isPlatformAdmin);
+    if (!resolution.ok) return shopResolutionResponse(resolution) as NextResponse;
+    resolvedShopId = resolution.mosShopId;
   } else {
     return NextResponse.json(
       { ok: false, error: "shopId or smsShopId is required for multi-shop users" },
@@ -83,6 +111,17 @@ async function _PUT(req: NextRequest) {
   const auth = await validateExtensionToken(req);
   if (!auth.authorized || !auth.user) {
     return NextResponse.json(buildAuthErrorBody(auth, { ok: false }), { status: getAuthErrorStatus(auth), headers: CORS_HEADERS });
+  }
+  // `validateExtensionToken` enforces the route-policy matrix, including the
+  // PUT write tier. Keep this explicit guard at the mutation boundary too so
+  // a future policy-map regression cannot turn a read-only session into a
+  // labor-rate write.
+  const writeCapabilityFailure = requireExtensionCapabilities(auth, ["write"]);
+  if (writeCapabilityFailure) {
+    return NextResponse.json(
+      buildAuthErrorBody(writeCapabilityFailure, { ok: false }),
+      { status: getAuthErrorStatus(writeCapabilityFailure), headers: CORS_HEADERS },
+    );
   }
 
   const body = await req.json();
@@ -119,21 +158,25 @@ async function _PUT(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const smsShopId = searchParams.get("smsShopId") || searchParams.get("shopId");
+  const requestedProvider = searchParams.get("provider");
 
-  const userShopIds = getUserShopIds(auth.user).map(id => parseInt(id));
-  const isPlatformAdmin = auth.user.role === "platform_admin";
+  const userShopIds = scopedUserShopIds(auth.user);
+  const isPlatformAdmin =
+    auth.user.role === "platform_admin" || auth.user.isPlatformAdmin === true;
 
   let targetShopId: number;
 
   if (smsShopId) {
-    const provider = searchParams.get("provider") || undefined;
-    const shopResult = await findShopBySmsId(smsShopId, { userShopIds, isPlatformAdmin, providerHint: provider });
-    if (!shopResult) {
-      return NextResponse.json({ ok: false, error: `No accessible shop configured for SMS shop ID ${smsShopId}` }, { status: 404, headers: CORS_HEADERS });
-    }
+    const resolution = await resolveLaborRateShop({
+      auth,
+      smsShopId,
+      requestedProvider,
+    });
+    if (!resolution.ok) return shopResolutionResponse(resolution) as NextResponse;
+    targetShopId = resolution.mosShopId;
     const scopeFailurePut = requireExtensionPrincipalScope(auth, {
-      shopId: shopResult.mosShopId,
-      provider: provider || shopResult.provider,
+      shopId: resolution.mosShopId,
+      provider: resolution.provider,
     });
     if (scopeFailurePut) {
       return NextResponse.json(
@@ -141,9 +184,10 @@ async function _PUT(req: NextRequest) {
         { status: getAuthErrorStatus(scopeFailurePut), headers: CORS_HEADERS }
       );
     }
-    targetShopId = shopResult.mosShopId;
   } else if (userShopIds.length <= 1) {
-    targetShopId = auth.user.shopId;
+    const resolution = defaultLaborRateShopId(auth, userShopIds, isPlatformAdmin);
+    if (!resolution.ok) return shopResolutionResponse(resolution) as NextResponse;
+    targetShopId = resolution.mosShopId;
   } else {
     return NextResponse.json(
       { ok: false, error: "shopId or smsShopId is required for multi-shop users to prevent cross-shop rule contamination" },
