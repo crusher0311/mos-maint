@@ -132,6 +132,14 @@ function checkWorkers(container: HTMLElement): void {
   });
 }
 
+function selectScope(container: HTMLElement, scope: "callbacks" | "callbacks_and_interactive"): void {
+  const radio = container.querySelector(`input[type="radio"][value="${scope}"]`) as HTMLInputElement | null;
+  assert.ok(radio, `expected trial scope radio ${scope}`);
+  act(() => {
+    radio.click();
+  });
+}
+
 function mount(): { container: HTMLElement; root: Root } {
   const container = document.createElement("div");
   document.body.appendChild(container);
@@ -182,6 +190,13 @@ await scenario("start eligibility requires reason and both explicit confirmation
   try {
     await settle();
     const start = button(container, "Start 30-minute timed trial");
+    const callbackScope = container.querySelector('input[type="radio"][value="callbacks"]') as HTMLInputElement | null;
+    const allShopsScope = container.querySelector('input[type="radio"][value="callbacks_and_interactive"]') as HTMLInputElement | null;
+    assert.ok(callbackScope, "expected callback-only scope radio");
+    assert.ok(allShopsScope, "expected all-shops scope radio");
+    assert.equal(callbackScope.checked, true, "callback-only scope must remain the default");
+    assert.equal(allShopsScope.checked, false, "all-shops scope must not be selected by default");
+    assert.equal((container.textContent || "").includes("all connected, non-canceled Protractor shops"), true);
     assert.equal(start.disabled, true, "reason and attestation must be required");
     setTextarea(container, "trial-reason", "approved maintenance window");
     checkWorkers(container);
@@ -192,6 +207,39 @@ await scenario("start eligibility requires reason and both explicit confirmation
     });
     await settle();
     assert.equal(start.disabled, true, "clearing the operator stop must disable start");
+  } finally {
+    await unmount(root, container);
+    mock.restore();
+  }
+});
+
+await scenario("legacy generations without scope are shown as callback-only", async () => {
+  const mock = installFetch([
+    json(200, {
+      ok: true,
+      trialReady: true,
+      state: statusState({
+        active: false,
+        canary: {
+          mode: "timed_trial",
+          startedAt: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + 1_800_000).toISOString(),
+          maxAdmissions: null,
+          consumedAdmissions: 0,
+          remainingAdmissions: null,
+          audit: [],
+        },
+      }),
+    }),
+  ]);
+  const { container, root } = mount();
+  try {
+    await settle();
+    assert.equal(
+      (container.textContent || "").includes("Callback-only (legacy default)"),
+      true,
+      "legacy generations must default to the callback-only scope label",
+    );
   } finally {
     await unmount(root, container);
     mock.restore();
@@ -225,11 +273,67 @@ await scenario("stale 409 refreshes status once and never retries start", async 
     );
     const postBody = JSON.parse(String(mock.calls[1].init?.body));
     assert.equal(postBody.action, "start_trial");
+    assert.equal(postBody.scope, "callbacks", "legacy callback-only scope must be submitted by default");
     assert.equal(postBody.expectedStopId, "stop-1");
     assert.equal(
       (container.textContent || "").includes("nothing was retried"),
       true,
       "stale conflict must be visible to the operator",
+    );
+  } finally {
+    await unmount(root, container);
+    mock.restore();
+  }
+});
+
+await scenario("all-shops scope submits callbacks_and_interactive and reports generation scope", async () => {
+  const mock = installFetch([
+    readyStatus,
+    json(200, {
+      ok: true,
+      trialReady: true,
+      state: statusState({
+        active: false,
+        canary: {
+          mode: "timed_trial",
+          scope: "callbacks_and_interactive",
+          startedAt: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + 1_800_000).toISOString(),
+          maxAdmissions: null,
+          consumedAdmissions: 0,
+          remainingAdmissions: null,
+          audit: [],
+        },
+      }),
+    }),
+  ]);
+  const { container, root } = mount();
+  try {
+    await settle();
+    setTextarea(container, "trial-reason", "all-shops scope test");
+    selectScope(container, "callbacks_and_interactive");
+    checkWorkers(container);
+    assert.equal(
+      (container.textContent || "").includes("All shops: callbacks + normal staff activity"),
+      true,
+      "all-shops scope must be explained in the form",
+    );
+    await act(async () => {
+      button(container, "Start 30-minute timed trial").click();
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    });
+    await settle();
+    assert.deepEqual(
+      mock.calls.map((call) => call.init?.method || "GET"),
+      ["GET", "POST"],
+      "scope selection should use one start POST",
+    );
+    const postBody = JSON.parse(String(mock.calls[1].init?.body));
+    assert.equal(postBody.scope, "callbacks_and_interactive");
+    assert.equal(
+      (container.textContent || "").includes("All shops: callbacks + normal staff activity"),
+      true,
+      "current generation scope must be visible after start",
     );
   } finally {
     await unmount(root, container);

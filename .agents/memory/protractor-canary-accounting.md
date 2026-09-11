@@ -36,7 +36,33 @@ production readiness. Build-time deadlines consumed much of the intended
 observation window. Combining worker/backfill load with callback traffic would
 make the result harder to interpret.
 
-**How to apply:** Keep timed trials callback-only and workers/backfill off,
-derive the replay floor from activation, and never silently extend or reopen a
-terminal generation. Worker suspension is an operator attestation in the UI,
-not an independently verified service-state check.
+**How to apply:** Default timed trials to callback-only. The broader all-shop
+scope may add authenticated foreground staff activity, but workers, backfill,
+unattended sync, and enrichment remain excluded. Derive the callback replay
+floor from activation and never extend or reopen a terminal generation.
+Worker suspension is an operator attestation in the UI, not an independently
+verified service-state check.
+
+Foreground admission must be bound to the authenticated target shop and close
+when the awaited request ends. Priority/retry flags are not proof of foreground
+activity; helpers using them may also be invoked by cron jobs.
+
+**Why:** Canned-job cache helpers can launch detached or large enrichment jobs
+inside what appears to be a normal staff lookup. Merely wrapping their caller
+can accidentally grant background work the staff request's permission.
+
+**How to apply:** Audit transitive work inside every scoped helper. During a
+foreground trial, serve cache or perform a bounded list fetch without enrichment
+or partial-cache writes. Test real handler auth branches and detached-work
+exclusion, not just source-text presence of auth and scope helpers.
+
+Mocked provider tests must block network egress independently of mock hooks and
+retain those hooks until all detached work finishes or the subprocess exits.
+
+**Why:** A canned-cache test restored live transport after observing a detail
+request start, not finish; its detached continuation then reached the real
+provider with fake credentials despite the test assertions passing.
+
+**How to apply:** Await the actual completion effect, keep mocks in place on
+failure paths too, and install a transport-level network-denial guard for tests
+that promise no provider requests.

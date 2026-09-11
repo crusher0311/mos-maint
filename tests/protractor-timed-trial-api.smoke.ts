@@ -81,10 +81,13 @@ async function main(): Promise<void> {
     startProtractorTimedTrial: async (input: Doc) => {
       startCalls.push(input);
       if (startError) throw startError;
+      const scope = input.scope ?? "callbacks";
       currentState = state({
         active: false,
         canary: {
           mode: "timed_trial",
+          scope,
+          requiresCallback: scope === "callbacks",
           startedAt: new Date("2026-09-11T12:00:00.000Z"),
           expiresAt: new Date("2026-09-11T12:30:00.000Z"),
           maxAdmissions: null,
@@ -200,6 +203,8 @@ async function main(): Promise<void> {
       { durationMs: 60_000 },
       { expiresAt: "2026-09-11T12:30:00.000Z" },
       { maxAdmissions: 3 },
+      { scope: "not-a-scope" },
+      { scope: null },
     ]) {
       response = await POST(post({
         action: "start_trial",
@@ -225,9 +230,39 @@ async function main(): Promise<void> {
       reason: "approved callback trial",
       expectedStopId: "stop-current",
     }, "the API must pass only fixed-duration repository arguments");
+    assert.equal(
+      (await responseBody(response)).state.canary.scope,
+      "callbacks",
+      "omitting scope must preserve callback-only compatibility",
+    );
     assert.equal(auditCalls.length, 1);
     assert.equal(auditCalls[0].action, "protractor_timed_trial_started");
     assert.equal(alertCalls.length, 0, "starting a trial must not send emergency-stop alert");
+
+    response = await POST(post({
+      action: "start_trial",
+      scope: "callbacks_and_interactive",
+      reason: "approved broad trial",
+      expectedStopId: "stop-current",
+      workersSuspendedConfirmed: true,
+    }));
+    assert.equal(response.status, 200, "the explicit broad scope should be accepted");
+    assert.deepEqual(startCalls[1], {
+      changedBy: "operator@example.com",
+      reason: "approved broad trial",
+      expectedStopId: "stop-current",
+      scope: "callbacks_and_interactive",
+    });
+    assert.equal(
+      (await responseBody(response)).state.canary.requiresCallback,
+      false,
+    );
+    assert.equal(auditCalls.length, 2);
+    assert.equal(
+      auditCalls[1].details.canary.scope,
+      "callbacks_and_interactive",
+      "the existing full-state audit must retain the selected scope",
+    );
 
     startError = new Error("operator stop changed; refresh state before starting trial");
     response = await POST(post({
@@ -237,7 +272,7 @@ async function main(): Promise<void> {
       workersSuspendedConfirmed: true,
     }));
     assert.equal(response.status, 409, "stale current stop ID must be a conflict");
-    assert.equal(auditCalls.length, 1, "stale mutation must not be audited as successful");
+    assert.equal(auditCalls.length, 2, "stale mutation must not be audited as successful");
 
     currentState = state({ active: false });
     const getResponse = await GET(new NextRequest(

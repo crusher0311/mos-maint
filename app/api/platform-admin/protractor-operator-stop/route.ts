@@ -117,9 +117,28 @@ export async function POST(req: NextRequest) {
     body && typeof body === "object" && "workersSuspendedConfirmed" in body
       ? (body as { workersSuspendedConfirmed?: unknown }).workersSuspendedConfirmed
       : undefined;
+  const scope =
+    body && typeof body === "object" && "scope" in body
+      ? (body as { scope?: unknown }).scope
+      : undefined;
+  const requestedScope =
+    scope === "callbacks" || scope === "callbacks_and_interactive"
+      ? scope
+      : undefined;
   if (action !== "activate" && action !== "clear" && action !== "start_trial") {
     return NextResponse.json(
       { ok: false, error: "action must be activate, clear, or start_trial" },
+      { status: 400 },
+    );
+  }
+  if (
+    action === "start_trial" &&
+    scope !== undefined &&
+    scope !== "callbacks" &&
+    scope !== "callbacks_and_interactive"
+  ) {
+    return NextResponse.json(
+      { ok: false, error: "scope must be callbacks or callbacks_and_interactive" },
       { status: 400 },
     );
   }
@@ -178,6 +197,7 @@ export async function POST(req: NextRequest) {
             changedBy: operator,
             reason: reason!,
             expectedStopId: expectedStopId!,
+             ...(requestedScope !== undefined ? { scope: requestedScope } : {}),
           })
       : await deps.clearProtractorOperatorStop({
           changedBy: operator,

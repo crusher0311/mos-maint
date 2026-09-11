@@ -50,6 +50,11 @@ import {
   type ProtractorEndpointClass,
 } from "./relay-transport";
 import { readShopProtractorCredentials } from "./shop-eligibility";
+import {
+  getProtractorInteractiveTransportContext,
+  type ProtractorInteractiveTransportContext,
+} from "./interactive-context";
+export { runWithProtractorInteractiveTransport } from "./interactive-context";
 export { normalizeProtractorPackageLine } from "./package-normalization";
 
 const BASE_URL_V1 = "https://integration.protractor.com/IntegrationServices/1.0";
@@ -168,6 +173,7 @@ export const __protractorClientTestHooks: {
     context?: {
       requireTimedTrial?: boolean;
       callbackReceivedAt?: Date;
+      interactiveShopId?: number;
     },
   ) => Promise<boolean>;
   renewPhysicalTransportLease: typeof renewProtractorPhysicalTransportLease;
@@ -206,6 +212,7 @@ export const __protractorClientTestHooks: {
       context?: {
         requireTimedTrial?: boolean;
         callbackReceivedAt?: Date;
+        interactiveShopId?: number;
       },
     ) => Promise<boolean>)(token, context),
   renewPhysicalTransportLease: (token) =>
@@ -820,9 +827,32 @@ export async function getEffectiveProtractorOutboundPolicy() {
     };
   }
 
+  // The persisted scope is the sole authority for widening the staged
+  // callback transport to reviewed interactive routes.  Legacy records omit
+  // `scope`/`requiresCallback`; those retain the strict callback-only
+  // behavior.  Reject every other combination rather than treating an
+  // unknown value as broad.
+  const scope = trial?.scope === undefined ? "callbacks" : trial.scope;
+  const requiresCallback =
+    trial?.requiresCallback === undefined ? true : trial.requiresCallback;
+  const validScope =
+    (scope === "callbacks" && requiresCallback === true) ||
+    (scope === "callbacks_and_interactive" && requiresCallback === false);
+  if (!validScope) {
+    return {
+      ...policy,
+      allowed: false,
+      reason: "timed_trial_scope_invalid",
+    };
+  }
+
   return {
     ...policy,
     callbackNotBeforeMs: startedAt!.getTime(),
+    // callbackOnly intentionally remains true in the broad mode: interactive
+    // transport is admitted only from the dedicated shop-bound ALS context.
+    allowInteractive: scope === "callbacks_and_interactive" &&
+      requiresCallback === false,
   };
 }
 
@@ -830,6 +860,27 @@ export function isProtractorOutboundAllowed(context = "unknown"): boolean {
   const decision = getProtractorOutboundPolicy();
   if (!decision.allowed) logProtractorPolicyDenial(decision, context);
   return decision.allowed;
+}
+
+function interactiveContextForShop(
+  actualShopId: number,
+): { context?: ProtractorInteractiveTransportContext; error?: string } {
+  const context = getProtractorInteractiveTransportContext();
+  if (!context) return {};
+  if (
+    !context.active ||
+    Date.now() >= context.expiresAtMs
+  ) {
+    return { error: "Protractor interactive transport context expired" };
+  }
+  if (
+    !Number.isSafeInteger(actualShopId) ||
+    actualShopId <= 0 ||
+    context.shopId !== actualShopId
+  ) {
+    return { error: "Protractor interactive transport shop mismatch" };
+  }
+  return { context };
 }
 
 function localPolicyError(context: string): { ok: false; error: string } | null {
@@ -847,6 +898,19 @@ function localPolicyError(context: string): { ok: false; error: string } | null 
   if (decision.allowed && !decision.callbackOnly) return null;
   if (decision.allowed && decision.callbackOnly && callbackTransportStorage.getStore()) {
     return null;
+  }
+  if (decision.allowed && decision.callbackOnly) {
+    // A request-scoped interactive context is a trusted source only after the
+    // final async effective-policy/physical-lease checks below.  Let it reach
+    // those checks even while this synchronous local policy still reflects the
+    // env staging flag (which cannot contain the persisted scope).
+    const interactive = getProtractorInteractiveTransportContext();
+    if (
+      interactive?.active === true &&
+      Date.now() < interactive.expiresAtMs
+    ) {
+      return null;
+    }
   }
   if (decision.allowed && decision.callbackOnly) {
     const callbackOnlyDenial = {
@@ -919,12 +983,17 @@ function shouldEnforceFleetPacer(): boolean {
  */
 async function runFleetGuardedTransportAttempt<T>(
   config: { connectionId: string },
+  actualShopId: number,
   transport: (remainingMs?: number) => Promise<T>,
   priority: boolean,
   remainingMs?: number,
 ): Promise<{ ok: true; response: T } | { ok: false; error: string }> {
   const earlyLocal = localPolicyError("transport_attempt");
   if (earlyLocal) return earlyLocal;
+  const earlyInteractive = interactiveContextForShop(actualShopId);
+  if (earlyInteractive.error) {
+    return { ok: false, error: earlyInteractive.error };
+  }
 
   const enforceFleetPacer = shouldEnforceFleetPacer();
   const waitStartedAt = Date.now();
@@ -1002,15 +1071,42 @@ async function runFleetGuardedTransportAttempt<T>(
     const gate = gateAdmission.value;
     if (!gate.ok) return gate;
 
+    const callbackContext = callbackTransportStorage.getStore();
+    let finalPolicy = getProtractorOutboundPolicy();
+    const interactiveAtAdmission = interactiveContextForShop(actualShopId);
+    if (interactiveAtAdmission.error) {
+      return { ok: false, error: interactiveAtAdmission.error };
+    }
+    if (
+      interactiveAtAdmission.context &&
+      finalPolicy.callbackOnly === true
+    ) {
+      // The env flag permits staging but deliberately does not encode the
+      // persisted scope.  Read that scope before every final attempt; Mongo
+      // confirmation below remains the atomic generation/expiry authority.
+      const effective = await getEffectiveProtractorOutboundPolicy();
+      if (!effective.allowed || effective.allowInteractive !== true) {
+        return {
+          ok: false,
+          error: effective.reason === "timed_trial_scope_invalid"
+            ? "Protractor interactive transport scope is invalid"
+            : "Protractor interactive transport is not enabled",
+        };
+      }
+      finalPolicy = effective;
+    }
+    const interactiveBeforeConfirm = interactiveContextForShop(actualShopId);
+    if (interactiveBeforeConfirm.error) {
+      return { ok: false, error: interactiveBeforeConfirm.error };
+    }
     if (leaseToken) {
-      const finalPolicy = getProtractorOutboundPolicy();
-      const callbackContext = callbackTransportStorage.getStore();
       const ownershipAdmission = await settleBefore(
         __protractorClientTestHooks.confirmPhysicalTransportLease(leaseToken, {
           requireTimedTrial:
             finalPolicy.requireTimedTrial === true ||
             callbackContext?.requireTimedTrial === true,
           callbackReceivedAt: callbackContext?.callbackReceivedAt,
+          interactiveShopId: interactiveBeforeConfirm.context?.shopId,
         }),
         admissionDeadlineAtMs,
       );
@@ -1028,6 +1124,10 @@ async function runFleetGuardedTransportAttempt<T>(
     }
     const finalLocal = localPolicyError("transport_dispatch");
     if (finalLocal) return finalLocal;
+    const interactiveAtDispatch = interactiveContextForShop(actualShopId);
+    if (interactiveAtDispatch.error) {
+      return { ok: false, error: interactiveAtDispatch.error };
+    }
 
     if (leaseToken) {
       const token = leaseToken;
@@ -1163,6 +1263,7 @@ function logRelayTransportFailure(
 
 async function runGuardedTransportAttempt<T>(
   config: { connectionId: string },
+  actualShopId: number,
   transport: (remainingMs?: number) => Promise<T>,
   priority = false,
 ): Promise<{ ok: true; response: T } | { ok: false; error: string }> {
@@ -1172,7 +1273,13 @@ async function runGuardedTransportAttempt<T>(
   return concurrencyLimiter(async () => {
     try {
       return await runCallbackPacedTransport((remainingMs) =>
-        runFleetGuardedTransportAttempt(config, transport, priority, remainingMs)
+        runFleetGuardedTransportAttempt(
+          config,
+          actualShopId,
+          transport,
+          priority,
+          remainingMs,
+        )
       );
     } catch (error: any) {
       if (error instanceof RelayTransportError) throw error;
@@ -1311,6 +1418,7 @@ export async function protractorFetch<T>(
       const transport = await runCallbackPacedTransport((remainingMs) =>
         runFleetGuardedTransportAttempt(
           config,
+          normalizedShopId,
           (fleetRemainingMs) => runBreakerRecordedTransport(
             config,
             () => __protractorClientTestHooks.httpsRequest(
@@ -1717,7 +1825,7 @@ async function protractorSoapServiceItemUpdate(
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      const transport = await runGuardedTransportAttempt(config, (remainingMs) =>
+      const transport = await runGuardedTransportAttempt(config, normalizedShopId, (remainingMs) =>
         runBreakerRecordedTransport(
           config,
           () => __protractorClientTestHooks.httpsRequest(
@@ -1904,7 +2012,7 @@ async function protractorSoapWorkOrderUpdate(
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const startTime = Date.now();
-      const transport = await runGuardedTransportAttempt(config, (remainingMs) =>
+      const transport = await runGuardedTransportAttempt(config, normalizedShopId, (remainingMs) =>
         runBreakerRecordedTransport(
           config,
           () => __protractorClientTestHooks.httpsRequest(
@@ -3497,6 +3605,7 @@ export async function fetchCannedJobs(
   const pageSize = 100;
   let hasMore = true;
   let cannedJobSuccess = false;
+  let successfulEmptySource: ProtractorCannedJobsListSource | undefined;
 
   while (hasMore && skip < 5000) {
     const params = new URLSearchParams();
@@ -3535,6 +3644,9 @@ export async function fetchCannedJobs(
     console.log(`[Protractor:CannedJobs] SUCCESS — Found ${allCannedJobs.length} canned jobs via GET /CannedJob/`);
     return { ok: true, cannedJobs: allCannedJobs, source: "cannedjob" };
   }
+  if (cannedJobSuccess) {
+    successfulEmptySource = "cannedjob";
+  }
 
   // Try GET /ServicePackageTemplate
   console.log(`[Protractor:CannedJobs] Trying GET /ServicePackageTemplate for shop ${shopId}...`);
@@ -3553,6 +3665,9 @@ export async function fetchCannedJobs(
       cannedJobs: getResult.data.ItemCollection,
       source: "servicepackagetemplate",
     };
+  }
+  if (getResult.ok) {
+    successfulEmptySource = successfulEmptySource || "servicepackagetemplate";
   }
   
   if (getResult.error) {
@@ -3600,6 +3715,9 @@ export async function fetchCannedJobs(
       // /ServicePackageTemplate/{id} bare endpoint, not /ServicePackage/CannedJob/{id}.
       return { ok: true, cannedJobs: items, source: "servicepackagetemplate" };
     }
+    if (result.ok) {
+      successfulEmptySource = successfulEmptySource || "servicepackagetemplate";
+    }
     
     if (result.error) {
       console.log(`[Protractor:CannedJobs] FAILED POST ${endpoint}: ${result.error}`);
@@ -3607,6 +3725,13 @@ export async function fetchCannedJobs(
     } else {
       console.log(`[Protractor:CannedJobs] POST ${endpoint} returned OK but no items. Response keys: ${Object.keys(result.data || {}).join(', ')}`);
     }
+  }
+
+  if (successfulEmptySource) {
+    console.log(
+      `[Protractor:CannedJobs] All successful list endpoints returned an empty list for shop ${shopId}`,
+    );
+    return { ok: true, cannedJobs: [], source: successfulEmptySource };
   }
 
   console.error(`[Protractor:CannedJobs] ALL endpoints failed for shop ${shopId}:`, errors);
@@ -5599,6 +5724,28 @@ export async function fetchCannedJobsWithCache(
   const db = await getDb();
   const cached = await db.collection("protractor_canned_jobs").findOne({ shopId });
 
+  /**
+   * Interactive routes run inside a shop-bound ALS capability. During the
+   * staged timed trial that capability must not turn this cache helper into a
+   * detached/deep-sync launcher: the request's transport budget is
+   * foreground-only and the wrapper can settle while enrichment is still
+   * running. Check the local timed-trial mode (rather than inferring it from
+   * the route's options) so every caller of this helper gets the same guard.
+   *
+   * Deliberately key this on the timed-trial requirement even if the
+   * persisted shop gate has just been cancelled. A stale/inherited context
+   * must never be allowed to start background work while the physical
+   * transport gate is denying that shop.
+   */
+  const interactiveContext = getProtractorInteractiveTransportContext();
+  const foregroundOnlyTimedTrial =
+    interactiveContext?.active === true &&
+    Date.now() < interactiveContext.expiresAtMs &&
+    Number.isSafeInteger(shopId) &&
+    shopId > 0 &&
+    interactiveContext.shopId === shopId &&
+    getProtractorOutboundPolicy().requireTimedTrial === true;
+
   // Normalize cached items to consistent format
   const extractRawLines = (job: any): any[] => {
     if (Array.isArray(job.lines)) return job.lines;
@@ -5621,6 +5768,49 @@ export async function fetchCannedJobsWithCache(
       lines: rawLines.map((l: any) => normalizeProtractorPackageLine(l)),
     };
   });
+
+  if (foregroundOnlyTimedTrial) {
+    // A force refresh is explicitly rejected rather than silently treated as
+    // a normal read. The route can translate this stable error into its 409
+    // response, and no list/detail request or cache write is started.
+    if (options?.forceRefresh) {
+      return {
+        ok: false,
+        error: "PROTRACTOR_CANNED_JOBS_FORCE_REFRESH_UNAVAILABLE_DURING_TIMED_TRIAL",
+      };
+    }
+
+    const hasCachedItems =
+      Array.isArray(cached?.items) &&
+      cached.items.length > 0 &&
+      !isCannedJobsCacheContentBlank(cached.items);
+    if (hasCachedItems) {
+      // Cache reads are safe in this foreground-only mode. In particular, do
+      // not run the normal lineless-cache background re-enrich branch.
+      return {
+        ok: true,
+        cannedJobs: normalizeCachedItems(cached.items),
+        source: cached?.source === "enriched" ? "enriched" : "cache",
+      };
+    }
+
+    // A true miss may fetch the bounded list, but must not persist the basic
+    // list: it is a partial representation and a failed/deferred detail pass
+    // must never overwrite a complete cache. There is intentionally no
+    // detached enrichment from this branch.
+    const listResult = await fetchCannedJobs(shopId);
+    if (!listResult.ok || listResult.cannedJobs === undefined) {
+      return {
+        ok: false,
+        error: listResult.error || "Could not fetch canned jobs during timed interactive transport",
+      };
+    }
+    return {
+      ok: true,
+      cannedJobs: normalizeCachedItems(listResult.cannedJobs),
+      source: "api",
+    };
+  }
 
   // Check if we have a valid enriched cache (not forcing refresh).
   // Task #891: an "enriched" stamp on an all-blank cache is a lie — treat it

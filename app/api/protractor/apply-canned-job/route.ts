@@ -7,6 +7,7 @@ import {
   fetchVehicleByVin,
   fetchWorkOrdersForVehicle,
 } from "@/lib/integrations/protractor";
+import { runWithProtractorInteractiveTransport } from "@/lib/integrations/protractor/interactive-context";
 import { logRecommendationEvent } from "@/lib/enterprise";
 import { trackPushToRO } from "@/lib/extension-analytics";
 import {
@@ -100,7 +101,10 @@ export async function POST(req: NextRequest) {
     // already supply a work-order handle — each hop is an upstream round-trip.
     console.log(`[Apply Canned Job] Looking up vehicle by VIN: ${vin}`);
     const vinLookupStart = Date.now();
-    const vehicleResult = await fetchVehicleByVin(shopId, vin);
+    const vehicleResult = await runWithProtractorInteractiveTransport(
+      shopId,
+      () => fetchVehicleByVin(shopId, vin),
+    );
     if (!vehicleResult.ok || !vehicleResult.vehicle) {
       console.log(`[Apply Canned Job] Vehicle not found: ${vehicleResult.error}`);
       return NextResponse.json(
@@ -112,9 +116,12 @@ export async function POST(req: NextRequest) {
     const serviceItemId = vehicleResult.vehicle.ID;
     console.log(`[Apply Canned Job] Found vehicle, ServiceItemID: ${serviceItemId}`);
     
-    const workOrdersResult = await fetchWorkOrdersForVehicle(shopId, serviceItemId, {
-      includeOpen: true,
-    });
+    const workOrdersResult = await runWithProtractorInteractiveTransport(
+      shopId,
+      () => fetchWorkOrdersForVehicle(shopId, serviceItemId, {
+        includeOpen: true,
+      }),
+    );
 
     if (!workOrdersResult.ok) {
       console.log(`[Apply Canned Job] Failed to fetch work orders: ${workOrdersResult.error}`);
@@ -160,7 +167,10 @@ export async function POST(req: NextRequest) {
   }
 
   const applyStart = Date.now();
-  const result = await applyCannedJobToWorkOrder(shopId, targetWorkOrderId, cannedJobId, cannedJobTitle);
+  const result = await runWithProtractorInteractiveTransport(
+    shopId,
+    () => applyCannedJobToWorkOrder(shopId, targetWorkOrderId!, cannedJobId, cannedJobTitle),
+  );
   console.log(`[Apply Canned Job] applyCannedJobToWorkOrder took ${Date.now() - applyStart}ms (ok=${result.ok}, request total ${Date.now() - requestStart}ms)`);
 
   if (!result.ok) {

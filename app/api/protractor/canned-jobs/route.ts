@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { fetchCannedJobsWithCache } from "@/lib/integrations/protractor";
+import { runWithProtractorInteractiveTransport } from "@/lib/integrations/protractor/interactive-context";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const TIMED_TRIAL_FORCE_REFRESH_ERROR =
+  "PROTRACTOR_CANNED_JOBS_FORCE_REFRESH_UNAVAILABLE_DURING_TIMED_TRIAL";
 
 export async function GET(req: NextRequest) {
   try {
@@ -19,7 +23,10 @@ export async function GET(req: NextRequest) {
 
     const refresh = req.nextUrl.searchParams.get("refresh") === "true";
 
-    const result = await fetchCannedJobsWithCache(shopId, undefined, { forceRefresh: refresh });
+    const result = await runWithProtractorInteractiveTransport(
+      shopId,
+      () => fetchCannedJobsWithCache(shopId, undefined, { forceRefresh: refresh }),
+    );
 
     if (!result.ok) {
       if (result.error?.includes("not configured")) {
@@ -28,6 +35,15 @@ export async function GET(req: NextRequest) {
           source: "none",
           message: "Protractor not configured",
         });
+      }
+      if (result.error === TIMED_TRIAL_FORCE_REFRESH_ERROR) {
+        return NextResponse.json(
+          {
+            error: result.error,
+            code: TIMED_TRIAL_FORCE_REFRESH_ERROR,
+          },
+          { status: 409 },
+        );
       }
       console.error("[Canned Jobs] Fetch error:", result.error);
       return NextResponse.json({ error: result.error }, { status: 500 });

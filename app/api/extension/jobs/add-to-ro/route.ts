@@ -9,6 +9,7 @@ import {
   buildMinimalPayloadForPost,
   soapAddServicePackage,
 } from "@/lib/integrations/protractor";
+import { runWithProtractorInteractiveTransport } from "@/lib/integrations/protractor/interactive-context";
 import {
   getShopPartCostRatio,
   resolvePartLineCost,
@@ -167,13 +168,16 @@ async function _POST(req: NextRequest) {
     }
 
     if (!workOrderGuid && sanitizedRoNumber) {
-      const searchResult = await protractorFetch<any>(
-        `/WorkOrder?$filter=WorkOrderNumber eq '${sanitizedRoNumber}'&$top=5`,
-        config,
-        {},
-        0,
+      const searchResult = await runWithProtractorInteractiveTransport(
         shopId,
-        { priority: true }
+        () => protractorFetch<any>(
+          `/WorkOrder?$filter=WorkOrderNumber eq '${sanitizedRoNumber}'&$top=5`,
+          config,
+          {},
+          0,
+          shopId,
+          { priority: true },
+        ),
       );
 
       if (searchResult.ok && searchResult.data) {
@@ -194,17 +198,23 @@ async function _POST(req: NextRequest) {
 
     if (!workOrderGuid && vin) {
       const { fetchVehicleByVin, fetchWorkOrdersForVehicle } = await import("@/lib/integrations/protractor");
-      const vehicleResult = await fetchVehicleByVin(shopId, vin);
-      if (vehicleResult.ok && vehicleResult.vehicle) {
-        const woResult = await fetchWorkOrdersForVehicle(shopId, vehicleResult.vehicle.ID, {
-          includeOpen: true,
-        });
-        if (woResult.ok) {
-          const openWos = (woResult.workOrders || []).filter((wo: any) => !wo.Completed);
-          if (openWos.length > 0) {
-            workOrderGuid = openWos[0].ID;
-            console.log(`[Ext Add-to-RO:${requestId}] Found WO by VIN ${vin}: ${workOrderGuid}`);
+      const vehicleAndWorkOrders = await runWithProtractorInteractiveTransport(
+        shopId,
+        async () => {
+          const vehicleResult = await fetchVehicleByVin(shopId, vin);
+          if (!vehicleResult.ok || !vehicleResult.vehicle) {
+            return { vehicleResult, woResult: null };
           }
+          const woResult = await fetchWorkOrdersForVehicle(shopId, vehicleResult.vehicle.ID, {
+            includeOpen: true,
+          });
+          return { vehicleResult, woResult };
+        });
+      if (vehicleAndWorkOrders.woResult?.ok) {
+        const openWos = (vehicleAndWorkOrders.woResult.workOrders || []).filter((wo: any) => !wo.Completed);
+        if (openWos.length > 0) {
+          workOrderGuid = openWos[0].ID;
+          console.log(`[Ext Add-to-RO:${requestId}] Found WO by VIN ${vin}: ${workOrderGuid}`);
         }
       }
     }
@@ -222,7 +232,10 @@ async function _POST(req: NextRequest) {
     }
 
     const fetchWOStart = Date.now();
-    const existingWOResult = await fetchWorkOrderById(shopId, workOrderGuid, { priority: true });
+    const existingWOResult = await runWithProtractorInteractiveTransport(
+      shopId,
+      () => fetchWorkOrderById(shopId, workOrderGuid!, { priority: true }),
+    );
     console.log(`[Ext Add-to-RO:${requestId}] WO fetch took ${Date.now() - fetchWOStart}ms`);
 
     if (!existingWOResult.ok || !existingWOResult.workOrder) {
@@ -365,13 +378,16 @@ async function _POST(req: NextRequest) {
     console.log(`[Ext Add-to-RO:${requestId}] POSTing "${job.title}" with ${servicePackageLines.length} lines...`);
     const postStart = Date.now();
 
-    const updateResult = await protractorFetch<any>(
-      `/WorkOrder/${workOrderGuid}`,
-      config,
-      { method: "POST", body: JSON.stringify(updatedWorkOrder) },
-      0,
+    const updateResult = await runWithProtractorInteractiveTransport(
       shopId,
-      { priority: true }
+      () => protractorFetch<any>(
+        `/WorkOrder/${workOrderGuid}`,
+        config,
+        { method: "POST", body: JSON.stringify(updatedWorkOrder) },
+        0,
+        shopId,
+        { priority: true },
+      ),
     );
 
     console.log(`[Ext Add-to-RO:${requestId}] POST took ${Date.now() - postStart}ms, ok=${updateResult.ok}`);
@@ -380,7 +396,10 @@ async function _POST(req: NextRequest) {
       const isStatusColumnError = (updateResult.error || "").includes("Invalid column name 'Status'");
       if (isStatusColumnError) {
         console.log(`[Ext Add-to-RO:${requestId}] REST failed with Status column error — SOAP fallback`);
-        const soapResult = await soapAddServicePackage(shopId, workOrderGuid, updatedWorkOrder);
+        const soapResult = await runWithProtractorInteractiveTransport(
+          shopId,
+          () => soapAddServicePackage(shopId, workOrderGuid!, updatedWorkOrder),
+        );
         if (!soapResult.ok) {
           return NextResponse.json(
             { error: "Failed to add job — Protractor database issue. Please contact Protractor support." },

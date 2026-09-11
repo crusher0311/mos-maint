@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { createServiceItem } from "@/lib/integrations/protractor";
+import { runWithProtractorInteractiveTransport } from "@/lib/integrations/protractor/interactive-context";
 import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
 import { resolveClientRequestId } from "@/lib/idempotent-create-id";
 
@@ -30,33 +31,36 @@ export async function POST(req: NextRequest) {
     const shopId = Number(sess.shopId);
     // Client-pinned vehicle ID: a wizard retry after a timeout upserts the
     // SAME service item instead of creating a duplicate vehicle.
-    const result = await withUpstreamTimeout(
-      createServiceItem(
-        shopId,
-        {
-          ownerId,
-          vin: vin || undefined,
-          year: year ? Number(year) : undefined,
-          make: make || undefined,
-          model: model || undefined,
-          submodel: submodel || undefined,
-          color: color || undefined,
-          engine: engine || undefined,
-          transmission: transmission || undefined,
-          odometer: odometer ? Number(odometer) : undefined,
-          licensePlate: licensePlate || undefined,
-        },
-        {
-          // Task #937: derive the upstream ID server-side (hash of
-          // kind+shop+user+key) so the wizard's retry stays duplicate-safe
-          // without letting a caller target an existing record's UUID.
-          vehicleId: resolveClientRequestId("vehicle", shopId, sess.email, clientRequestId),
-          soapTimeoutMs: SOAP_TIMEOUT_MS,
-        },
+    const result = await runWithProtractorInteractiveTransport(
+      shopId,
+      () => withUpstreamTimeout(
+        createServiceItem(
+          shopId,
+          {
+            ownerId,
+            vin: vin || undefined,
+            year: year ? Number(year) : undefined,
+            make: make || undefined,
+            model: model || undefined,
+            submodel: submodel || undefined,
+            color: color || undefined,
+            engine: engine || undefined,
+            transmission: transmission || undefined,
+            odometer: odometer ? Number(odometer) : undefined,
+            licensePlate: licensePlate || undefined,
+          },
+          {
+            // Task #937: derive the upstream ID server-side (hash of
+            // kind+shop+user+key) so the wizard's retry stays duplicate-safe
+            // without letting a caller target an existing record's UUID.
+            vehicleId: resolveClientRequestId("vehicle", shopId, sess.email, clientRequestId),
+            soapTimeoutMs: SOAP_TIMEOUT_MS,
+          },
+        ),
+        UPSTREAM_DEADLINE_MS,
+        `wizard-create-vehicle shop=${shopId}`,
+        { ok: false, error: SLOW_UPSTREAM_MSG, timedOut: true } as any,
       ),
-      UPSTREAM_DEADLINE_MS,
-      `wizard-create-vehicle shop=${shopId}`,
-      { ok: false, error: SLOW_UPSTREAM_MSG, timedOut: true } as any,
     );
 
     if (!result.ok) {
