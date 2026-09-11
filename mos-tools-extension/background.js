@@ -1476,7 +1476,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === "CREATE_TEKMETRIC_JOB") {
-    createTekmetricJob(message.shopId, message.roId, message.jobData)
+    createTekmetricJob(
+      message.shopId,
+      message.roId,
+      message.jobData,
+      message.auditSelection,
+      message.vehicle,
+      message.mosShopId,
+      message.auditFinding,
+    )
       .then(result => sendResponse(result))
       .catch(err => sendResponse({ success: false, error: err.message }));
     return true;
@@ -1501,11 +1509,66 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           }
           tabId = tabs[0].id;
         }
+
+        if (message.auditSelection) {
+          const hydrated = await handleMosApiRequest('/api/extension/jobs/rehydrate-recommendation', {
+            method: 'POST',
+            body: JSON.stringify({
+              shopId: Number(message.mosShopId || message.shopId || currentSmsContext?.shopId),
+              provider: 'shopware',
+              auditSelection: message.auditSelection,
+              auditFinding: message.auditFinding,
+              vehicle: message.vehicle || null,
+            }),
+          });
+          if (!hydrated?.ok || !hydrated.recommendation) {
+            sendResponse({
+              success: false,
+              code: hydrated?.code || 'RECOMMENDATION_UNAVAILABLE',
+              error: hydrated?.error || 'The selected source is no longer available. Review matches again.',
+              handoff: true,
+            });
+            return;
+          }
+          const selectedSource = hydrated.recommendation.source;
+          const sourceSystem = String(selectedSource?.sourceSystem || '')
+            .toLowerCase()
+            .replace(/^shop[-_]ware$/, 'shopware');
+          if (
+            selectedSource?.kind !== 'canned' ||
+            sourceSystem !== 'shopware' ||
+            selectedSource?.id == null ||
+            String(selectedSource.id).trim() === ''
+          ) {
+            sendResponse({
+              success: false,
+              code: 'SHOPWARE_SOURCE_UNSUPPORTED',
+              error: 'This verified source cannot be imported directly into Shop-Ware. Use the generated estimate fallback or add it manually.',
+              handoff: true,
+            });
+            return;
+          }
+          chrome.tabs.sendMessage(tabId, {
+            action: 'SW_IMPORT_SERVICE',
+            serviceId: String(selectedSource.id),
+            workOrderId: message.workOrderId,
+          }, (res) => {
+            sendResponse({
+              ...(res || { success: false, error: 'No response from Shop-Ware content script' }),
+              source: selectedSource,
+              ...(Array.isArray(hydrated.recommendation.warnings) && hydrated.recommendation.warnings.length
+                ? { warnings: hydrated.recommendation.warnings }
+                : {}),
+            });
+          });
+          return;
+        }
+
         chrome.tabs.sendMessage(tabId, {
           action: 'SW_ADD_SERVICE',
           serviceName: message.serviceName,
           workOrderId: message.workOrderId,
-          vehicle: message.vehicle
+          vehicle: message.vehicle,
         }, (res) => {
           sendResponse(res || { success: false, error: 'No response from content script' });
         });
@@ -3685,7 +3748,7 @@ async function fetchRoAuditLineItems(shopId, roId) {
   return { success: true, lineItems };
 }
 
-async function createTekmetricJob(shopId, roId, jobData) {
+async function createTekmetricJob(shopId, roId, jobData, auditSelection, vehicle, mosShopId, auditFinding) {
   const tekmetricSession = tekmetricSessionForContext(currentSmsContext);
   if (!tekmetricSession) {
     return { success: false, error: "No Tekmetric session. Navigate to a repair order first." };
@@ -3698,6 +3761,55 @@ async function createTekmetricJob(shopId, roId, jobData) {
   }
 
   try {
+    // A resolver preview is display-only. Rehydrate the selected source
+    // immediately before the direct page-session write so stale/forged
+    // client-side lines and prices cannot reach Tekmetric.
+    let effectiveJobData = jobData;
+    let selectedSource = null;
+    let selectedWarnings = [];
+    if (auditSelection) {
+      const hydrated = await handleMosApiRequest('/api/extension/jobs/rehydrate-recommendation', {
+        method: 'POST',
+        body: JSON.stringify({
+          shopId: Number(mosShopId || effectiveShopId),
+          provider: 'tekmetric',
+          auditSelection,
+          auditFinding,
+          vehicle: vehicle || null,
+        }),
+      });
+      if (!hydrated?.ok || !hydrated.recommendation) {
+        return {
+          success: false,
+          error: hydrated?.error || 'The selected source is no longer available. Review matches again.',
+          code: hydrated?.code || 'RECOMMENDATION_UNAVAILABLE',
+        };
+      }
+      const recommendation = hydrated.recommendation;
+      selectedSource = recommendation.source || null;
+      selectedWarnings = Array.isArray(recommendation.warnings) ? recommendation.warnings : [];
+      const laborLines = (recommendation.lines || []).filter(line => line.lineType === 'labor');
+      const partLines = (recommendation.lines || []).filter(line => line.lineType === 'part');
+      effectiveJobData = {
+        ...jobData,
+        name: recommendation.title || jobData.name,
+        note: recommendation.description || jobData.note || '',
+        laborItems: laborLines.map(line => ({
+          name: line.description,
+          hours: Number(line.hours) > 0 ? Number(line.hours) : Number(line.quantity) > 0 ? Number(line.quantity) : 1,
+        })),
+        parts: partLines.map(line => ({
+          name: line.description,
+          partNumber: line.partNumber || '',
+          brand: line.manufacturer || '',
+          quantity: Number(line.quantity) > 0 ? Number(line.quantity) : 1,
+          cost: Number(line.unitPrice) > 0 ? Number(line.unitPrice) : 0,
+          retail: Number(line.unitPrice) > 0 ? Number(line.unitPrice) : 0,
+          ...(Number(line.cost) > 0 ? { unitCost: Number(line.cost) } : {}),
+        })),
+      };
+    }
+
     // First fetch RO to get labor rate and vehicle info
     const roRes = await tekmetricFetch(
       `/api/shop/${effectiveShopId}/repair-order/${roId}`,
@@ -3737,7 +3849,7 @@ async function createTekmetricJob(shopId, roId, jobData) {
     const laborRate = roData.laborRate || 15000; // Default $150/hr in cents
 
     // Build labor items
-    const laborItems = (jobData.laborItems || []).map(item => ({
+    const laborItems = (effectiveJobData.laborItems || []).map(item => ({
       tempId: Math.random(),
       jobId: null,
       name: item.name || item.description || "Labor",
@@ -3754,7 +3866,7 @@ async function createTekmetricJob(shopId, roId, jobData) {
     // paths). The legacy `cost` field is deliberately NOT used as a cost
     // source — sidepanel builds fill it with retail as a fallback, which
     // would write a 0%-GP cost into Tekmetric.
-    const rawParts = (jobData.parts || []).map(part => ({
+    const rawParts = (effectiveJobData.parts || []).map(part => ({
       name: part.name || part.description || "Part",
       partNumber: part.partNumber || "",
       brand: part.brand || "",
@@ -3770,7 +3882,7 @@ async function createTekmetricJob(shopId, roId, jobData) {
           method: 'POST',
           body: JSON.stringify({
             shopId: effectiveShopId,
-            jobTitle: jobData.name || jobData.jobName || 'New Job',
+            jobTitle: effectiveJobData.name || effectiveJobData.jobName || 'New Job',
             parts: rawParts.map(p => ({
               name: p.name,
               quantity: p.quantity,
@@ -3818,7 +3930,7 @@ async function createTekmetricJob(shopId, roId, jobData) {
       repairOrderId: parseInt(roId),
       repairOrderNumber: roData.repairOrderNumber,
       repairOrderVehicleDescription: vehicleDesc,
-      name: jobData.name || jobData.jobName || "New Job",
+      name: effectiveJobData.name || effectiveJobData.jobName || "New Job",
       status: "Pending",
       selected: true,
       archived: false,
@@ -3836,7 +3948,7 @@ async function createTekmetricJob(shopId, roId, jobData) {
       taxFees: roData.taxFees ?? true,
       taxTires: roData.taxTires ?? false,
       taxTiresFet: roData.taxTiresFet ?? true,
-      note: jobData.note ?? null,
+      note: effectiveJobData.note ?? null,
       notDeclined: true
     };
 
@@ -3918,7 +4030,9 @@ async function createTekmetricJob(shopId, roId, jobData) {
       jobId: createdJob.id,
       jobName: createdJob.name,
       laborCount: laborItems.length,
-      partsCount: partsItems.length
+      partsCount: partsItems.length,
+      ...(selectedSource ? { source: selectedSource } : {}),
+      ...(selectedWarnings.length ? { warnings: selectedWarnings } : {}),
     };
 
   } catch (err) {

@@ -125,3 +125,4 @@
 - [Relay breaker ownership](protractor-relay-breaker-ownership.md) — persist outcome under a renewable fleet lease (or matching claim token) before another recovery probe can start.
 - [Protractor canary accounting](protractor-canary-accounting.md) — Mongo confirmation consumes budget; ambiguous results never refund admissions, and terminal canaries never silently reopen.
 - [Labor Rates context safety](labor-rates-context-safety.md) — scoped lookup failures do not prove provider disconnection; Rates identity resolution must not auto-learn mappings.
+- [Audit reusable job review](audit-reusable-job-review.md) — thin catalog summaries must not suppress usable history; hydrate selected items and revalidate at the write boundary.

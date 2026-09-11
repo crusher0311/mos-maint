@@ -421,7 +421,7 @@ async function run() {
           // parts-only line → static Missing Labor warning
           { title: "Front Brake Pad Replacement", description: "long enough description here", partsTotal: 89 },
         ],
-        vehicleInfo: { year: 2020, make: "Honda", model: "Civic", mileage: 45000 },
+        vehicleInfo: { vin: "1hgc m82633a004352".replace(/\s/g, ""), year: 2020, make: "Honda", model: "Civic", mileage: 45000 },
       }),
     );
     ok("valid audit → 200", res.status === 200);
@@ -438,6 +438,13 @@ async function run() {
       String(body.report.summary.score),
     );
     ok("  → vehicleDisplay built from vehicleInfo", body.report.vehicleDisplay === "2020 Honda Civic");
+    ok(
+      "  → vehicle metadata preserves audited VIN and identity",
+      body.report.vehicle?.vin === "1HGCM82633A004352" &&
+        body.report.vehicle?.year === 2020 &&
+        body.report.vehicle?.make === "Honda" &&
+        body.report.vehicle?.model === "Civic",
+    );
     ok("  → OpenAI called exactly once", aiCalls.n === 1);
     ok("  → usage tracked", tracked.length === 1 && tracked[0][0] === 42);
     const saved = fake.collections[ESTIMATE_COLLECTIONS.estimateAudits] || [];

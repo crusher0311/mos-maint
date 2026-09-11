@@ -8,6 +8,7 @@ import { ESTIMATE_COLLECTIONS } from "@/lib/estimate-assist/job-knowledge-base";
 import {
   AuditFinding,
   AuditReport,
+  AuditVehicleMetadata,
   AuditLineItem,
   runStaticAuditRules,
   dedupeAndSortFindings,
@@ -78,6 +79,7 @@ interface AuditRequest {
   workOrderId?: string;
   lineItems?: AuditLineItem[];
   vehicleInfo?: {
+    vin?: string;
     year?: number;
     make?: string;
     model?: string;
@@ -218,7 +220,7 @@ export async function POST(req: NextRequest) {
     let vehicleInfo = body.vehicleInfo || null;
     // Task #1145: VIN for the VHI comparison, resolved from whichever WO
     // lookup succeeds below. Null → comparison skipped (never fails the audit).
-    let vehicleVin: string | null = null;
+    let vehicleVin: string | null = body.vehicleInfo?.vin ? String(body.vehicleInfo.vin) : null;
     let workOrderNumber: string | undefined;
     let workOrderId = body.workOrderId;
     // Provider + the provider's own primary RO id (from normalized
@@ -519,6 +521,21 @@ Only include genuinely useful findings. Do not repeat obvious items. Maximum 5 f
     const deduped = dedupeAndSortFindings([...findings, ...aiFindings]);
     const summary = summarizeFindings(deduped);
 
+    // Keep the audited vehicle as stable metadata on the report.  This does
+    // not participate in the rule engine; it lets review/fallback surfaces
+    // carry the same VIN and vehicle context without re-deriving it from a
+    // stale display string.  The property is omitted when legacy/manual
+    // audits have no vehicle identity so old saved reports remain compatible.
+    const vehicle: AuditVehicleMetadata | undefined =
+      vehicleInfo || vehicleVin
+        ? {
+            ...(vehicleVin ? { vin: vehicleVin.toUpperCase() } : {}),
+            ...(vehicleInfo?.year != null ? { year: vehicleInfo.year } : {}),
+            ...(vehicleInfo?.make ? { make: vehicleInfo.make } : {}),
+            ...(vehicleInfo?.model ? { model: vehicleInfo.model } : {}),
+          }
+        : undefined;
+
     const report: AuditReport = {
       workOrderId,
       workOrderNumber,
@@ -527,6 +544,7 @@ Only include genuinely useful findings. Do not repeat obvious items. Maximum 5 f
       vehicleDisplay: vehicleInfo
         ? `${vehicleInfo.year || ''} ${vehicleInfo.make || ''} ${vehicleInfo.model || ''}`.trim()
         : undefined,
+      vehicle,
       auditDate: new Date().toISOString(),
       findings: deduped,
       summary,

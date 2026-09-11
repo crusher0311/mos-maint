@@ -10,6 +10,7 @@ export async function searchSupabaseServiceJobs(
   limit: number = 50,
   vehicleModel?: string,
   strictModel: boolean = false,
+  diagnostics?: { error?: string },
 ): Promise<any[]> {
   if (searchShopIds.length === 0) return [];
 
@@ -172,7 +173,8 @@ export async function searchSupabaseServiceJobs(
 
     return filtered.map(sj => mapServiceJobToCanonicalResult(sj, lineItemsByJob.get(sj.id) || []));
   } catch (err) {
-    console.log("[Supabase Job Search] Error:", (err as Error).message);
+    diagnostics && (diagnostics.error = (err as Error)?.message || String(err));
+    console.log("[Supabase Job Search] Error:", diagnostics?.error);
     return [];
   }
 }

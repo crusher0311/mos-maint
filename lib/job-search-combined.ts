@@ -24,6 +24,16 @@ export interface CombinedJobSearchResult {
   mongoCount: number;
   /** Which store actually served the returned jobs. */
   source: "supabase" | "mongo" | "none";
+  /**
+   * Optional diagnostics for callers that need to distinguish a successful
+   * empty search from both backing stores being unavailable.  Existing
+   * callers can ignore this field; search/result semantics are unchanged.
+   */
+  diagnostics?: {
+    supabaseError?: string;
+    mongoError?: string;
+    supabaseTimedOut?: boolean;
+  };
 }
 
 export interface CombinedJobSearchOptions {
@@ -54,6 +64,10 @@ export async function searchJobsCombined(
   coreTokens: string[],
   opts: CombinedJobSearchOptions,
 ): Promise<CombinedJobSearchResult> {
+  let supabaseError: string | undefined;
+  let mongoError: string | undefined;
+  const supabaseDiagnostics: { error?: string } = {};
+  const mongoDiagnostics: { error?: string } = {};
   const supabasePromise = searchSupabaseServiceJobs(
     searchShopIds,
     coreTokens,
@@ -61,8 +75,10 @@ export async function searchJobsCombined(
     opts.supabaseLimit,
     opts.model,
     opts.strictModel ?? false,
+    supabaseDiagnostics,
   ).catch((err) => {
-    console.log("[Jobs Search] Supabase arm error:", (err as Error).message);
+    supabaseError = (err as Error)?.message || String(err);
+    console.log("[Jobs Search] Supabase arm error:", supabaseError);
     return [] as any[];
   });
 
@@ -74,12 +90,25 @@ export async function searchJobsCombined(
     opts.mongoLimit,
     opts.model,
     opts.strictModel ?? false,
+    mongoDiagnostics,
   ).catch((err) => {
-    console.log("[Jobs Search] Mongo arm error:", (err as Error).message);
+    mongoError = (err as Error)?.message || String(err);
+    console.log("[Jobs Search] Mongo arm error:", mongoError);
     return [] as any[];
   });
 
-  return selectCombinedResults(supabasePromise, mongoPromise);
+  const selected = await selectCombinedResults(supabasePromise, mongoPromise);
+  const diagnostics = {
+    ...selected.diagnostics,
+    ...(supabaseDiagnostics.error ? { supabaseError: supabaseDiagnostics.error } : {}),
+    ...(mongoDiagnostics.error ? { mongoError: mongoDiagnostics.error } : {}),
+    ...(supabaseError ? { supabaseError } : {}),
+    ...(mongoError ? { mongoError } : {}),
+  };
+  return {
+    ...selected,
+    ...(Object.keys(diagnostics).length > 0 ? { diagnostics } : {}),
+  };
 }
 
 /**
@@ -110,8 +139,13 @@ export async function selectCombinedResults(
   // If Postgres hasn't resolved yet, give it a brief grace window so a fast
   // (single-shop / single-word) query can still serve the canonical result.
   // We never wait the full ~16s of the slow enterprise case.
+  let supabaseTimedOut = false;
   if (!supabaseDone) {
-    await Promise.race([trackedSupabase, delay(graceMs)]);
+    const completedWithinGrace = await Promise.race([
+      trackedSupabase.then(() => true),
+      delay(graceMs).then(() => false),
+    ]);
+    supabaseTimedOut = !completedWithinGrace && !supabaseDone;
   }
 
   if (supabaseResults.length > 0) {
@@ -129,6 +163,7 @@ export async function selectCombinedResults(
       supabaseCount: supabaseResults.length,
       mongoCount: mongoResults.length,
       source: "supabase",
+      ...(supabaseTimedOut ? { diagnostics: { supabaseTimedOut: true } } : {}),
     };
   }
 
@@ -146,5 +181,6 @@ export async function selectCombinedResults(
     supabaseCount: supabaseResults.length,
     mongoCount: mongoResults.length,
     source: jobs.length > 0 ? "mongo" : "none",
+    ...(supabaseTimedOut ? { diagnostics: { supabaseTimedOut: true } } : {}),
   };
 }

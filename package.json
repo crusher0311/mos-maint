@@ -98,6 +98,7 @@
     "test:extension-auth-context-advisory": "tsx tests/extension-auth-context-advisory.smoke.ts",
     "test:extension-bootstrap-unavailable": "tsx tests/extension-bootstrap-unavailable.smoke.ts",
     "test:extension-direct-provider-grants": "tsx tests/extension-direct-provider-grants.smoke.ts",
+    "test:extension-estimate-recommendation": "tsx tests/extension-estimate-recommendation.smoke.ts && tsx tests/extension-estimate-audit-race.smoke.ts",
     "test:extension-action-grants": "npm run test:extension-secure-sessions && npm run test:extension-direct-provider-grants",
     "test:stripe-webhook-idempotency": "tsx tests/stripe-webhook-idempotency.smoke.ts",
     "test:tekmetric-webhook-idempotency": "tsx tests/tekmetric-webhook-idempotency.smoke.ts",

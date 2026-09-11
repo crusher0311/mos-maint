@@ -22,6 +22,11 @@ import {
   resolveAddToRoLaborRate,
 } from "@/lib/integrations/protractor/labor-rate";
 import { resolveClientRequestId } from "@/lib/idempotent-create-id";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
+import {
+  rehydrateRecommendationSelection,
+} from "@/lib/estimate-assist/recommendation-resolver";
+import type { AuditSelection } from "@/lib/estimate-assist/recommendation-types";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +48,11 @@ type JobPayload = {
   description?: string;
   code?: string;
   lines: JobLine[];
+};
+
+type AuditSelectionPayload = AuditSelection & {
+  /** Older UI builds may send the identity directly under auditSelection. */
+  sourceIdentity?: AuditSelection["source"];
 };
 
 /**
@@ -134,19 +144,105 @@ export async function POST(req: NextRequest) {
   const config = await resolveProtractorConfig(shopId);
 
   const body = await req.json();
-  const { workOrderGuid, job, source, vehicle, clientRequestId } = body as {
+  const {
+    workOrderGuid,
+    job: submittedJob,
+    source: submittedSource,
+    vehicle,
+    clientRequestId,
+    auditSelection: rawAuditSelection,
+  } = body as {
     workOrderGuid: string; 
-    job: JobPayload;
-    source?: "plan" | "failures" | "lookup" | "canned" | "autocomplete";
+    job?: JobPayload;
+    source?: "plan" | "failures" | "lookup" | "canned" | "autocomplete" | "history" | "audit";
     vehicle?: { vin?: string; year?: number; make?: string; model?: string };
     clientRequestId?: string;
+    auditSelection?: AuditSelectionPayload;
   };
 
   if (!workOrderGuid) {
     return NextResponse.json({ error: "Work order GUID is required" }, { status: 400 });
   }
 
-  if (!job || !job.title) {
+  let job: JobPayload | undefined = submittedJob;
+  let source = submittedSource;
+  let auditSelectionWarnings: Array<{ code: string; message: string }> = [];
+  let auditSelectionSource: AuditSelection["source"] | undefined;
+
+  // Task #1274: a selected audit candidate is an identity, not a client-side
+  // job payload.  Rehydrate it before checking/constructing the provider
+  // write, so a browser cannot alter lines, prices, or cross-shop source data.
+  if (rawAuditSelection) {
+    const entitlements = await getFeatureEntitlements(shopId);
+    if (!entitlements.canUseFeature("estimate_assist")) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Estimate Assist is not available on your current plan",
+          code: "FEATURE_NOT_AVAILABLE",
+          feature: "estimate_assist",
+          upgradeRequired: true,
+          currentPlan: entitlements.billing.plan,
+        },
+        { status: 402 },
+      );
+    }
+    if (!entitlements.canUseFeature("job_lookup")) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Job Lookup is not available on your current plan",
+          code: "FEATURE_NOT_AVAILABLE",
+          feature: "job_lookup",
+          upgradeRequired: true,
+          currentPlan: entitlements.billing.plan,
+        },
+        { status: 402 },
+      );
+    }
+
+    const selection: AuditSelection = rawAuditSelection.source
+      ? rawAuditSelection
+      : { source: rawAuditSelection.sourceIdentity || (rawAuditSelection as any) };
+    const hydrated = await rehydrateRecommendationSelection(
+      shopId,
+      selection,
+      vehicle || {},
+    );
+    if (!hydrated.ok) {
+      const status =
+        hydrated.code === "FORBIDDEN" ? 403 :
+        hydrated.code === "UNAVAILABLE" ? 503 :
+        404;
+      return NextResponse.json(
+        { ok: false, error: hydrated.error, code: hydrated.code },
+        { status },
+      );
+    }
+
+    const hydratedJob = hydrated.recommendation;
+    auditSelectionSource = hydratedJob.source;
+    job = {
+      title: hydratedJob.title,
+      description: hydratedJob.description || undefined,
+      code: hydratedJob.code || undefined,
+      lines: hydratedJob.lines.map((line) => ({
+        lineType: line.lineType,
+        description: line.description,
+        partNumber: line.partNumber || undefined,
+        manufacturer: line.manufacturer || undefined,
+        quantity: line.quantity,
+        unitPrice: line.unitPrice,
+        extendedPrice: line.extendedPrice,
+        cost: line.cost == null ? undefined : line.cost,
+        extendedCost: line.extendedCost == null ? undefined : line.extendedCost,
+      })),
+    };
+    source = hydratedJob.source.kind === "canned" ? "canned" : "history";
+    auditSelectionWarnings = hydratedJob.warnings;
+  }
+
+  if (!job || !job.title || !Array.isArray(job.lines) || job.lines.length === 0) {
     return NextResponse.json({ error: "Job details are required" }, { status: 400 });
   }
 
@@ -230,6 +326,8 @@ export async function POST(req: NextRequest) {
       servicePackage: {
         title: job.title,
         linesAdded: job.lines.length,
+        ...(auditSelectionSource ? { source: auditSelectionSource } : {}),
+        ...(auditSelectionWarnings.length ? { warnings: auditSelectionWarnings } : {}),
       },
     });
   }
@@ -504,7 +602,10 @@ export async function POST(req: NextRequest) {
     vehicleMake: vehicle?.make,
     vehicleModel: vehicle?.model,
     jobTitle: job.title,
-    jobSource: source || "lookup",
+    // Analytics predates Task #1274's explicit audit/history source labels;
+    // keep the write route's richer source while mapping those labels to the
+    // existing lookup bucket for the stable event schema.
+    jobSource: source === "history" || source === "audit" ? "lookup" : source || "lookup",
     repairOrderId: workOrderGuid,
     laborAmount,
     partsAmount,
@@ -517,6 +618,8 @@ export async function POST(req: NextRequest) {
     servicePackage: {
       title: job.title,
       linesAdded: job.lines.length,
+      ...(auditSelectionSource ? { source: auditSelectionSource } : {}),
+      ...(auditSelectionWarnings.length ? { warnings: auditSelectionWarnings } : {}),
     },
   });
 }

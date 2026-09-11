@@ -79,6 +79,62 @@ let currentUserCanWrite = false;
 let currentContext = null;
 let currentTab = 'plan';
 
+// Estimate-audit requests can outlive both a rerun and the page context that
+// started them.  Keep a monotonic generation alongside the request's context
+// identity so a late response can never repaint a newer audit slot (the slot
+// is indexed by finding number, which is not an identity).
+let estimateAuditGeneration = 0;
+let activeEstimateAuditToken = null;
+
+function estimateAuditContextKey(context) {
+  if (!context) return 'no-context';
+  return JSON.stringify([
+    context.provider || '',
+    context.shopId ?? '',
+    context.roId ?? '',
+    context.tabId ?? context._tabId ?? '',
+  ]);
+}
+
+function invalidateEstimateAudit(reason) {
+  estimateAuditGeneration += 1;
+  activeEstimateAuditToken = null;
+  // This is intentionally a hard reset.  A stale finding must not remain
+  // actionable while a new RO/context is being painted.
+  if (typeof estimateAuditRecommendationStates !== 'undefined') {
+    estimateAuditRecommendationStates.clear();
+  }
+  const resultEl = document.getElementById('estimate-audit-result');
+  if (resultEl) {
+    resultEl.innerHTML = '';
+    resultEl.classList.add('hidden');
+  }
+  document.getElementById('estimate-audit-loading')?.classList.add('hidden');
+  if (reason) console.debug(`[MOS] Estimate audit invalidated: ${reason}`);
+}
+
+function captureEstimateAuditToken() {
+  return {
+    generation: estimateAuditGeneration,
+    contextKey: estimateAuditContextKey(currentContext),
+  };
+}
+
+function estimateAuditTokenIsCurrent(token) {
+  return Boolean(
+    token &&
+    token.generation === estimateAuditGeneration &&
+    token.contextKey === estimateAuditContextKey(currentContext),
+  );
+}
+
+function beginEstimateAudit() {
+  invalidateEstimateAudit('audit rerun');
+  const token = captureEstimateAuditToken();
+  activeEstimateAuditToken = token;
+  return token;
+}
+
 // Client-side plan cache so revisiting an RO (tab switch or RO re-open) is
 // instant instead of re-hitting /api/extension/plan over the network every
 // time. Stale-while-revalidate: a cached entry paints immediately; if it's
@@ -1115,6 +1171,10 @@ function switchTab(tab) {
   if (tab === 'lookup') { tab = 'jobs'; switchJobsSubTab('lookup'); }
   else if (tab === 'canned') { tab = 'jobs'; switchJobsSubTab('canned'); }
 
+  if (currentTab !== tab) {
+    invalidateEstimateAudit('panel navigation changed');
+  }
+
   // Labor-rate responses are scoped to the panel view as well as the active
   // SMS context. Leaving Rates must invalidate an in-flight response so a
   // late result cannot repaint rules after the advisor has moved elsewhere.
@@ -1275,10 +1335,15 @@ function updateContext(context) {
   }
   
   const prevContext = currentContext;
+  const estimateAuditContextChanged =
+    estimateAuditContextKey(prevContext) !== estimateAuditContextKey(context);
   const laborRateContextChanged =
     laborRateContextKey(prevContext) !== laborRateContextKey(context);
   currentContext = context;
 
+  if (estimateAuditContextChanged) {
+    invalidateEstimateAudit('shop, tab, or repair-order context changed');
+  }
   if (laborRateContextChanged) {
     invalidateLaborRateState('shop, tab, or repair-order context changed');
   }
@@ -1725,6 +1790,7 @@ async function handleLogout() {
   // Invalidate before awaiting the worker so an in-flight Rates request cannot
   // paint or merge into the old session while logout is still being handled.
   invalidateLaborRateState('session ended');
+  invalidateEstimateAudit('session ended');
   laborRateSessionKey = null;
   laborRateSessionDiscriminator = null;
   await sendMessage({ action: 'MOS_LOGOUT' });
@@ -3567,7 +3633,11 @@ async function handleSwAddFinding(service, isDraft = false) {
 // because errors are handled in here (notification) rather than thrown.
 // Task #888 — `source` marks where the job came from ('canned' makes the
 // server keep the template's own labor rate instead of the RO/cached rate).
-async function handleAddJob(job, source) {
+// `auditSelection` is an opaque source identity returned by the resolver. It
+// is deliberately separate from preview data: server-side write routes
+// rehydrate this identity before constructing a provider payload.
+async function handleAddJob(job, source, auditSelection, auditFinding, auditToken) {
+  if (auditToken && !estimateAuditTokenIsCurrent(auditToken)) return false;
   if (!currentUserCanWrite) {
     notifyReadOnlyBlocked();
     return false;
@@ -3586,16 +3656,22 @@ async function handleAddJob(job, source) {
         action: 'SW_ADD_SERVICE',
         serviceName,
         workOrderId: currentContext.roId,
-        vehicle: currentContext.vehicle || null
+        vehicle: currentContext.vehicle || null,
+        shopId: currentContext.mosShopId || currentContext.shopId,
+        ...(auditSelection ? { auditSelection } : {}),
+        ...(auditFinding ? { auditFinding } : {}),
       }, undefined, 'Still adding this job — big shops can take a minute. Please keep this panel open…');
+      if (auditToken && !estimateAuditTokenIsCurrent(auditToken)) return false;
       if (result.success) {
         showNotification(`Added: ${result.jobName || serviceName}`, 'success');
+        showAuditWriteWarnings(result);
         markServiceOnEstimate(result.jobName || serviceName, reqPlanCacheKey);
         return true;
       } else {
         throw new Error(result.error || 'Failed to add service');
       }
     } catch (err) {
+      if (auditToken && !estimateAuditTokenIsCurrent(auditToken)) return false;
       console.error('[MOS] Error adding Shop-Ware service:', err);
       showNotification(err.message, 'error');
       return false;
@@ -3663,7 +3739,7 @@ async function handleAddJob(job, source) {
           authRetryDelaysMs: [500, 1500, 4000, 8000, 12000],
           body: JSON.stringify({
             shopId: Number(mosShopId),
-            provider: currentContext.provider || sessionTier?.provider || 'protractor',
+            provider: currentContext?.provider || sessionTier?.provider || 'protractor',
             roNumber: currentContext.roId ? String(currentContext.roId) : undefined,
             vin: currentContext.vehicle?.vin || undefined,
             // Prefer the GUID captured when this RO was just created in
@@ -3672,6 +3748,8 @@ async function handleAddJob(job, source) {
             workOrderGuid: getRecentlyCreatedWoGuid(currentContext.vehicle?.vin, currentContext.roId),
             // Task #888 — 'canned' keeps the template's saved labor rate.
             source: source || undefined,
+            ...(auditSelection ? { auditSelection } : {}),
+            ...(auditFinding ? { auditFinding } : {}),
             job: jobData
           })
         }
@@ -3681,8 +3759,10 @@ async function handleAddJob(job, source) {
         // false timeout while the background still completes it.
       }, 90000, 'Still adding this job — big shops can take a minute. Please keep this panel open…');
 
+      if (auditToken && !estimateAuditTokenIsCurrent(auditToken)) return false;
       if (result.success) {
         showNotification(`Added: ${result.jobName || jobData.title}`, 'success');
+        showAuditWriteWarnings(result);
         markServiceOnEstimate(result.jobName || jobData.title, reqPlanCacheKey);
         // Task #1094: snapshot for undo (server returns the created package id).
         if (result.servicePackageId && result.workOrderId) {
@@ -3697,6 +3777,7 @@ async function handleAddJob(job, source) {
         throw new Error(result.error || 'Failed to add job to Protractor');
       }
     } catch (err) {
+      if (auditToken && !estimateAuditTokenIsCurrent(auditToken)) return false;
       console.error('[MOS] Error adding Protractor job:', err);
       showNotification(err.message, 'error');
       return false;
@@ -3737,11 +3818,17 @@ async function handleAddJob(job, source) {
       action: 'CREATE_TEKMETRIC_JOB',
       shopId: currentContext.shopId,
       roId: currentContext.roId,
-      jobData
+      jobData,
+      ...(auditSelection ? { auditSelection } : {}),
+      ...(auditFinding ? { auditFinding } : {}),
+      vehicle: currentContext.vehicle || null,
+      mosShopId: currentContext.mosShopId || resolvedMosShopId || null,
     }, undefined, 'Still adding this job — big shops can take a minute. Please keep this panel open…');
     
+    if (auditToken && !estimateAuditTokenIsCurrent(auditToken)) return false;
     if (result.success) {
       showNotification(`Added: ${result.jobName}`, 'success');
+      showAuditWriteWarnings(result);
       markServiceOnEstimate(result.jobName || jobData.name, reqPlanCacheKey);
       // Task #1094: the background snapshotted the created job id inside
       // CREATE_TEKMETRIC_JOB — just repaint the undo bar.
@@ -3751,6 +3838,7 @@ async function handleAddJob(job, source) {
       throw new Error(result.error || 'Failed to add job');
     }
   } catch (err) {
+    if (auditToken && !estimateAuditTokenIsCurrent(auditToken)) return false;
     console.error('[MOS] Error adding job:', err);
     showNotification(err.message, 'error');
     return false;
@@ -6624,6 +6712,7 @@ function hideConcernError() {
 // ==================== ESTIMATE ASSIST ====================
 let estimateLanguageMode = 'customer';
 
+const estimateAuditRecommendationStates = new Map();
 function escEstimate(str) {
   if (!str) return '';
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -6988,6 +7077,11 @@ async function runEstimateBuilder() {
   }
 }
 
+function auditRecommendationSourcePayload(candidate) {
+  const source = estimateCandidateSource(candidate);
+  if (!source || typeof source !== 'object' || !source.kind || !source.id) return null;
+  return { source: { ...source } };
+}
 async function runEstimateAudit() {
   const loadingEl = document.getElementById('estimate-audit-loading');
   const resultEl = document.getElementById('estimate-audit-result');
@@ -6998,6 +7092,14 @@ async function runEstimateAudit() {
     return;
   }
 
+  const auditToken = beginEstimateAudit();
+  // Keep the request bound to the context that started it.  `currentContext`
+  // is mutable and may be replaced while either the live page read or the
+  // server audit is in flight.
+  const auditContext = {
+    ...currentContext,
+    vehicle: currentContext.vehicle ? { ...currentContext.vehicle } : currentContext.vehicle,
+  };
   loadingEl.classList.remove('hidden');
   resultEl.classList.add('hidden');
   resultEl.innerHTML = '';
@@ -7009,13 +7111,13 @@ async function runEstimateAudit() {
     // yet (open/in-progress ROs, freshly added estimate lines). If the
     // live fetch fails or yields nothing, fall back to the server-side
     // lookup by RO id — exactly the old behavior.
-    const auditBody = { workOrderId: String(currentContext.roId) };
-    if (currentContext.provider === 'tekmetric') {
+    const auditBody = { workOrderId: String(auditContext.roId) };
+    if (auditContext.provider === 'tekmetric') {
       try {
         const liveJobs = await sendMessage({
           action: 'GET_RO_AUDIT_LINE_ITEMS',
-          shopId: currentContext.shopId,
-          roId: currentContext.roId
+          shopId: auditContext.shopId,
+          roId: auditContext.roId
         });
         if (liveJobs?.success && Array.isArray(liveJobs.lineItems) && liveJobs.lineItems.length > 0) {
           auditBody.lineItems = liveJobs.lineItems;
@@ -7026,15 +7128,16 @@ async function runEstimateAudit() {
         console.warn('[MOS] Audit live-jobs fetch failed, using server lookup:', liveErr?.message || liveErr);
       }
     }
-    if (currentContext.vehicle && (currentContext.vehicle.year || currentContext.vehicle.make)) {
+    if (auditContext.vehicle && (auditContext.vehicle.year || auditContext.vehicle.make)) {
       auditBody.vehicleInfo = {
-        year: currentContext.vehicle.year,
-        make: currentContext.vehicle.make,
-        model: currentContext.vehicle.model,
-        mileage: currentContext.scrapedOdometer || currentContext.mileage || undefined
+        year: auditContext.vehicle.year,
+        make: auditContext.vehicle.make,
+        model: auditContext.vehicle.model,
+        mileage: auditContext.scrapedOdometer || auditContext.mileage || undefined
       };
     }
 
+    if (!estimateAuditTokenIsCurrent(auditToken)) return;
     const result = await sendMessage({
       action: 'MOS_API_REQUEST',
       endpoint: '/api/estimate-assist/audit',
@@ -7044,6 +7147,7 @@ async function runEstimateAudit() {
       }
     });
 
+    if (!estimateAuditTokenIsCurrent(auditToken)) return;
     loadingEl.classList.add('hidden');
 
     if (result.error) {
@@ -7103,10 +7207,10 @@ async function runEstimateAudit() {
         info: { bg: '#eff6ff', border: '#bfdbfe', badge: '#2563eb', badgeBg: '#dbeafe' }
       };
 
-      for (const finding of report.findings) {
+      for (const [findingIndex, finding] of report.findings.entries()) {
         const s = severityStyles[finding.severity] || severityStyles.info;
         html += `
-          <div style="background:${s.bg}; border:1px solid ${s.border}; border-radius:6px; padding:8px; margin-bottom:6px;">
+          <div class="estimate-audit-finding" data-finding-index="${findingIndex}" style="background:${s.bg}; border:1px solid ${s.border}; border-radius:6px; padding:8px; margin-bottom:6px;">
             <div style="display:flex; align-items:center; gap:4px; margin-bottom:3px; flex-wrap:wrap;">
               <span style="font-size:9px; font-weight:700; padding:1px 5px; background:${s.badgeBg}; color:${s.badge}; border-radius:8px; text-transform:uppercase;">${escEstimate(finding.severity)}</span>
               <span style="font-size:10px; color:var(--gray-500);">${escEstimate(finding.category)}</span>
@@ -7117,9 +7221,9 @@ async function runEstimateAudit() {
             ${finding.suggestedAction ? `<div style="font-size:11px; color:var(--gray-500); margin-top:4px; font-style:italic;">${escEstimate(finding.suggestedAction)}</div>` : ''}
             ${finding.suggestedJobTitle ? `
               <div style="display:flex; gap:4px; margin-top:4px;">
-                <button class="estimate-audit-build-btn" data-job-title="${escEstimate(finding.suggestedJobTitle)}" style="font-size:10px; padding:3px 8px; background:white; border:1px solid var(--gray-300); border-radius:4px; cursor:pointer;">+ Build Estimate</button>
-                <button class="estimate-audit-add-to-ro-btn" data-job-title="${escEstimate(finding.suggestedJobTitle)}" data-finding-desc="${escEstimate(finding.description)}" style="font-size:10px; padding:3px 8px; background:#2563eb; color:white; border:none; border-radius:4px; cursor:pointer;">+ Add to RO</button>
+                <button class="estimate-audit-review-btn" data-finding-index="${findingIndex}" style="font-size:10px; padding:3px 8px; background:white; border:1px solid var(--gray-300); border-radius:4px; cursor:pointer;">+ Review matches</button>
               </div>` : ''}
+            ${finding.suggestedJobTitle ? '<div class="estimate-audit-recommendation-slot" data-recommendation-slot></div>' : ''}
           </div>`;
       }
     }
@@ -7127,52 +7231,18 @@ async function runEstimateAudit() {
     resultEl.innerHTML = html;
     resultEl.classList.remove('hidden');
 
-    resultEl.querySelectorAll('.estimate-audit-build-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const title = btn.dataset.jobTitle;
-        if (title) {
-          document.getElementById('estimate-job-search').value = title;
-          document.querySelector('.estimate-subtab[data-subtab="builder"]').click();
-          runEstimateBuilder();
-        }
-      });
-    });
-
-    resultEl.querySelectorAll('.estimate-audit-add-to-ro-btn').forEach(btn => {
+    resultEl.querySelectorAll('.estimate-audit-review-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
-        const title = btn.dataset.jobTitle || '';
-        const desc = btn.dataset.findingDesc || '';
-
-        const job = {
-          title: title,
-          name: title,
-          description: desc,
-          note: desc,
-          laborItems: [{ name: title, hours: 1 }],
-          parts: []
-        };
-
-        btn.disabled = true;
-        btn.textContent = 'Adding...';
-        // handleAddJob reports failures via its return value (it notifies and
-        // swallows errors internally), so check the boolean.
-        const ok = await handleAddJob(job);
-        if (ok) {
-          btn.textContent = 'Added!';
-          btn.style.background = '#16a34a';
-        } else {
-          btn.textContent = 'Failed';
-          btn.style.background = '#dc2626';
-        }
-        setTimeout(() => {
-          btn.textContent = '+ Add to RO';
-          btn.style.background = '#2563eb';
-          btn.disabled = false;
-        }, 2000);
+        if (!estimateAuditTokenIsCurrent(auditToken)) return;
+        const findingIndex = Number(btn.dataset.findingIndex);
+        const finding = report.findings[findingIndex];
+        if (finding) await resolveAuditRecommendation(finding, findingIndex, resultEl, report, auditToken);
       });
     });
+    bindAuditRecommendationControls(resultEl, report);
 
   } catch (err) {
+    if (!estimateAuditTokenIsCurrent(auditToken)) return;
     loadingEl.classList.add('hidden');
     resultEl.innerHTML = `<p style="color:#dc2626; font-size:12px; padding:8px;">${escEstimate(err.message || 'Audit failed')}</p>`;
     resultEl.classList.remove('hidden');
@@ -8985,4 +9055,592 @@ function autoDviChecklistPayload() {
   return (autoDviData?.items || [])
     .filter((it) => it.source !== 'recall')
     .map((it) => ({ itemId: it.id, name: it.name, serviceKey: it.serviceKey || null }));
+}
+
+function estimateCandidateTitle(candidate) {
+  return String(candidate?.title || candidate?.name || candidate?.job?.title || 'Untitled job');
+}
+
+function estimateLineIsIncomplete(line) {
+  const description = String(line?.description || line?.name || line?.title || '').trim();
+  const quantity = estimateLineNumber(line?.quantity ?? line?.hours ?? 1);
+  const type = String(line?.lineType || line?.type || '').toLowerCase();
+  return !description || quantity == null || (type !== 'labor' && estimateLineNumber(line?.extendedPrice ?? line?.total ?? line?.amount ?? line?.price ?? line?.unitPrice) == null);
+}
+
+async function buildAuditGeneratedFallback(finding, findingIndex, resultEl, report, auditToken) {
+  if (!finding?.suggestedJobTitle) return;
+  const key = String(findingIndex);
+  const state = estimateAuditRecommendationStates.get(key);
+  const token = auditToken || state?.auditToken || activeEstimateAuditToken;
+  if (!state || !estimateAuditTokenIsCurrent(token)) return;
+  state.auditToken = token;
+  state.fallbackLoading = true;
+  estimateAuditRecommendationStates.set(key, state);
+  renderAuditRecommendationReview(finding, findingIndex, resultEl, report);
+  const auditVehicle = estimateAuditVehicle(currentContext);
+  try {
+    const result = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: '/api/estimate-assist/job-builder',
+      options: {
+        method: 'POST',
+        body: JSON.stringify({
+          jobNameOrId: finding.suggestedJobTitle,
+          ...auditVehicle,
+          languageMode: estimateLanguageMode,
+        }),
+      },
+    });
+    if (result.error) throw new Error(result.error);
+    if (!result.ok || !result.estimate) throw new Error('Generated estimate fallback failed.');
+    if (
+      !estimateAuditTokenIsCurrent(token) ||
+      estimateAuditRecommendationStates.get(key) !== state
+    ) return;
+    state.fallbackLoading = false;
+    state.fallbackJob = auditGeneratedFallbackJob(result.estimate, finding.suggestedJobTitle);
+    state.error = '';
+  } catch (error) {
+    if (
+      !estimateAuditTokenIsCurrent(token) ||
+      estimateAuditRecommendationStates.get(key) !== state
+    ) return;
+    state.fallbackLoading = false;
+    state.error = error.message || 'Generated estimate fallback failed.';
+  }
+  estimateAuditRecommendationStates.set(key, state);
+  renderAuditRecommendationReview(finding, findingIndex, resultEl, report);
+}
+
+function showAuditWriteWarnings(result) {
+  const warnings = Array.isArray(result?.warnings)
+    ? result.warnings
+    : Array.isArray(result?.servicePackage?.warnings)
+      ? result.servicePackage.warnings
+      : [];
+  if (warnings.length > 0) {
+    showNotification(`Added with review note: ${estimateWarningText(warnings[0])}`, 'info');
+  }
+}
+
+function estimateCandidateSourceLabel(candidate) {
+  const source = estimateCandidateSource(candidate);
+  if (typeof candidate?.source === 'string' && candidate.source.trim()) return candidate.source;
+  if (source && typeof source === 'object') {
+    const kind = String(source.kind || source.type || '').toLowerCase();
+    const base = source.label || source.name || source.listSource ||
+      (kind === 'canned' ? 'Canned job' : kind === 'history' ? 'Shop history' : source.sourceSystem);
+    const workOrder = source.workOrderNumber || source.workOrderId;
+    return `${base || 'Existing job'}${workOrder ? ` (RO ${workOrder})` : ''}`;
+  }
+  return String(candidate?.sourceLabel || candidate?.sourceType || 'Existing job');
+}
+
+function renderAuditRecommendationReview(finding, findingIndex, resultEl, report) {
+  const slot = auditRecommendationSlot(resultEl, findingIndex);
+  if (!slot) return;
+  const state = estimateAuditRecommendationStates.get(String(findingIndex)) || {
+    status: 'unavailable',
+    candidates: [],
+    warnings: [],
+  };
+  if (state.auditToken && !estimateAuditTokenIsCurrent(state.auditToken)) return;
+  const candidates = Array.isArray(state.candidates) ? state.candidates : [];
+  let html = '<div style="margin-top:8px; border-top:1px solid var(--gray-200); padding-top:8px;">';
+
+  if (state.loading) {
+    html += '<div style="font-size:11px; color:var(--gray-500);">Looking for reusable shop jobs and vehicle history…</div></div>';
+    slot.innerHTML = html;
+    return;
+  }
+  if (state.error) {
+    html += `<div style="font-size:11px; color:#dc2626; margin-bottom:5px;">${escEstimate(state.error)}</div>`;
+  }
+  const warnings = (Array.isArray(state.warnings) ? state.warnings : []).map(estimateWarningText);
+  if (warnings.length > 0) {
+    html += `<div style="background:#fffbeb; border:1px solid #fde68a; border-radius:5px; padding:6px 8px; margin-bottom:6px;"><div style="font-size:10px; font-weight:700; color:#92400e;">Review warnings</div><ul style="font-size:10px; color:#78350f; margin:3px 0 0 14px; padding:0;">${warnings.map(warning => `<li>${escEstimate(warning)}</li>`).join('')}</ul></div>`;
+  }
+
+  if (state.fallbackLoading) {
+    html += '<div style="font-size:11px; color:var(--gray-500);">Building an explicit generated estimate fallback…</div></div>';
+    slot.innerHTML = html;
+    return;
+  }
+
+  if (state.fallbackJob) {
+    const fallback = state.fallbackJob;
+    const labor = fallback.laborItems?.[0];
+    html += `
+      <div style="background:#f5f3ff; border:1px solid #ddd6fe; border-radius:5px; padding:7px; margin-bottom:6px;">
+        <div style="font-size:10px; font-weight:700; color:#6d28d9;">Generated estimate fallback</div>
+        <div style="font-size:12px; font-weight:600; color:var(--gray-800); margin-top:2px;">${escEstimate(fallback.title)}</div>
+        <div style="font-size:10px; color:var(--gray-600); margin-top:3px;">Labor: ${escEstimate(labor?.hours || 1)}h · ${escEstimate(fallback.parts?.length || 0)} part${fallback.parts?.length === 1 ? '' : 's'}</div>
+        <div style="font-size:11px; color:var(--gray-600); margin-top:4px;">This fallback is generated content, not a selected shop source.</div>
+        <button class="estimate-audit-fallback-add-btn" data-finding-index="${findingIndex}" style="font-size:10px; margin-top:6px; padding:4px 8px; background:#7c3aed; color:white; border:none; border-radius:4px; cursor:pointer;">Add generated estimate to RO</button>
+      </div>
+    `;
+    html += '</div>';
+    slot.innerHTML = html;
+    bindAuditRecommendationControls(resultEl, report);
+    return;
+  }
+
+  if (candidates.length === 0) {
+    const unavailable = state.status === 'unavailable';
+    html += `
+      <div style="font-size:11px; color:${unavailable ? '#92400e' : 'var(--gray-600)'}; margin-bottom:5px;">${unavailable
+        ? 'Existing-source lookup is temporarily unavailable, so no match could be verified.'
+        : 'No suitable existing shop job or vehicle-history match was found.'}</div>
+      <button class="estimate-audit-fallback-btn" data-finding-index="${findingIndex}" style="font-size:10px; padding:4px 8px; background:white; border:1px solid #7c3aed; color:#6d28d9; border-radius:4px; cursor:pointer;">Use generated estimate fallback</button>
+    `;
+    html += '</div>';
+    slot.innerHTML = html;
+    bindAuditRecommendationControls(resultEl, report);
+    return;
+  }
+
+  html += `<div style="font-size:10px; font-weight:700; color:var(--gray-600); margin-bottom:5px;">Select an existing source before adding “${escEstimate(finding.suggestedJobTitle)}”</div>`;
+  candidates.forEach((candidate, candidateIndex) => {
+    const id = estimateCandidateId(candidate, candidateIndex);
+    const checked = state.selectedCandidateId === id;
+    const lines = estimateCandidateLines(candidate);
+    const hydrating = state.hydratingCandidateIndex === candidateIndex;
+    const candidateWarnings = (Array.isArray(candidate.warnings) ? candidate.warnings : []).map(estimateWarningText);
+    const source = estimateCandidateSource(candidate);
+    const relevance = candidate.relevance && typeof candidate.relevance === 'object'
+      ? [candidate.relevance.band, candidate.relevance.vehicleMatch, candidate.relevance.reason].filter(Boolean).join(' · ')
+      : (candidate.vehicleRelevance || '');
+    html += `
+      <label style="display:block; background:${checked ? '#eff6ff' : 'white'}; border:1px solid ${checked ? '#60a5fa' : 'var(--gray-200)'}; border-radius:5px; padding:7px; margin-bottom:5px; cursor:pointer;">
+        <div style="display:flex; gap:5px; align-items:flex-start;">
+          <input type="radio" name="estimate-audit-candidate-${findingIndex}" data-candidate-index="${candidateIndex}" ${checked ? 'checked' : ''} style="margin-top:2px;">
+          <div style="min-width:0; flex:1;">
+            <div style="font-size:12px; font-weight:700; color:var(--gray-800);">${escEstimate(estimateCandidateTitle(candidate))}</div>
+            <div style="font-size:10px; color:var(--gray-500); margin-top:2px;">Source: <strong>${escEstimate(estimateCandidateSourceLabel(candidate))}</strong>${source?.sourceSystem ? ` · ${escEstimate(source.sourceSystem)}` : ''}</div>
+            ${relevance ? `<div style="font-size:10px; color:#2563eb; margin-top:2px;">Vehicle relevance: ${escEstimate(relevance)}</div>` : ''}
+            ${hydrating ? '<div style="font-size:10px; color:#2563eb; margin-top:4px;">Loading verified source lines…</div>' : lines.length > 0 ? `<div style="margin-top:5px;">${lines.map(line => `
+              <div style="display:flex; justify-content:space-between; gap:5px; font-size:10px; color:var(--gray-600); border-top:1px solid var(--gray-100); padding-top:2px;">
+                <span style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escEstimate(line.description || line.name || 'Line item')} × ${escEstimate(line.quantity ?? line.hours ?? 1)}</span>
+                <span style="white-space:nowrap;">${escEstimate(estimateLinePrice(line))}</span>
+              </div>`).join('')}</div>` : '<div style="font-size:10px; color:#dc2626; margin-top:4px;">Line details unavailable — this candidate cannot be confirmed.</div>'}
+            ${candidateWarnings.length > 0 ? `<ul style="font-size:10px; color:#92400e; margin:4px 0 0 14px; padding:0;">${candidateWarnings.map(warning => `<li>${escEstimate(warning)}</li>`).join('')}</ul>` : ''}
+          </div>
+        </div>
+      </label>
+    `;
+  });
+  html += `
+    <button class="estimate-audit-confirm-btn" data-finding-index="${findingIndex}" ${state.selectedCandidateId && state.hydratingCandidateIndex == null ? '' : 'disabled'} style="font-size:10px; padding:4px 8px; background:#2563eb; color:white; border:none; border-radius:4px; cursor:${state.selectedCandidateId && state.hydratingCandidateIndex == null ? 'pointer' : 'not-allowed'}; opacity:${state.selectedCandidateId && state.hydratingCandidateIndex == null ? '1' : '.55'};">Confirm selected existing job</button>
+    <button class="estimate-audit-fallback-btn" data-finding-index="${findingIndex}" style="font-size:10px; margin-left:4px; padding:4px 8px; background:white; border:1px solid #7c3aed; color:#6d28d9; border-radius:4px; cursor:pointer;">Use generated fallback</button>
+  `;
+  html += '</div>';
+  slot.innerHTML = html;
+  bindAuditRecommendationControls(resultEl, report);
+}
+
+async function hydrateAuditCandidatePreview(finding, findingIndex, candidateIndex, resultEl, report) {
+  const key = String(findingIndex);
+  const state = estimateAuditRecommendationStates.get(key);
+  const candidate = state?.candidates?.[candidateIndex];
+  const source = estimateCandidateSource(candidate);
+  const auditToken = state?.auditToken || activeEstimateAuditToken;
+  if (
+    !state ||
+    !candidate ||
+    !source?.kind ||
+    !source?.id ||
+    !estimateAuditTokenIsCurrent(auditToken)
+  ) return;
+  state.auditToken = auditToken;
+
+  const hydrationRequest = (state.hydrationRequest || 0) + 1;
+  state.hydrationRequest = hydrationRequest;
+  state.hydratingCandidateIndex = candidateIndex;
+  state.error = '';
+  estimateAuditRecommendationStates.set(key, state);
+  renderAuditRecommendationReview(finding, findingIndex, resultEl, report);
+  const auditVehicle = estimateAuditVehicle(currentContext);
+
+  try {
+    const result = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: '/api/estimate-assist/resolve-recommendation',
+      options: {
+        method: 'POST',
+        body: JSON.stringify({
+          mode: 'preview',
+          selection: { source: { ...source } },
+          finding: {
+            suggestedJobTitle: finding.suggestedJobTitle,
+            suggestedJobId: finding.suggestedJobId || null,
+          },
+          vehicle: auditVehicle,
+        }),
+      },
+    });
+    if (result.error) throw new Error(result.error);
+    if (!result.ok || !result.resolution) throw new Error('Selected source details were unavailable.');
+
+    const currentState = estimateAuditRecommendationStates.get(key);
+    if (
+      !estimateAuditTokenIsCurrent(auditToken) ||
+      currentState !== state ||
+      state.hydrationRequest !== hydrationRequest
+    ) return;
+    const resolution = result.resolution;
+    const hydratedCandidate = result.candidate ||
+      (Array.isArray(resolution.candidates) ? resolution.candidates[0] : null);
+    state.hydratingCandidateIndex = null;
+    if (!hydratedCandidate) {
+      state.selectedCandidateId = null;
+      state.status = resolution.status || 'no_match';
+      state.error = state.status === 'unavailable'
+        ? 'This source could not be verified right now. Use the generated estimate fallback or try again.'
+        : 'This source no longer matches the audit finding. Choose another source or use the generated fallback.';
+    } else {
+      // Replace the thin search row with the server-hydrated candidate. The
+      // source identity remains the server-returned identity; only its lines,
+      // title and warnings are adopted by the preview.
+      state.candidates[candidateIndex] = hydratedCandidate;
+      state.selectedCandidateId = estimateCandidateId(hydratedCandidate, candidateIndex);
+      state.status = 'candidates';
+      state.warnings = [
+        ...(Array.isArray(state.warnings) ? state.warnings : []),
+        ...(Array.isArray(resolution.warnings) ? resolution.warnings : []),
+      ];
+    }
+  } catch (error) {
+    const currentState = estimateAuditRecommendationStates.get(key);
+    if (
+      !estimateAuditTokenIsCurrent(auditToken) ||
+      currentState !== state ||
+      state.hydrationRequest !== hydrationRequest
+    ) return;
+    state.hydratingCandidateIndex = null;
+    state.selectedCandidateId = null;
+    state.status = 'unavailable';
+    state.error = error.message || 'Selected source details were unavailable.';
+  }
+  estimateAuditRecommendationStates.set(key, state);
+  renderAuditRecommendationReview(finding, findingIndex, resultEl, report);
+}
+
+async function resolveAuditRecommendation(finding, findingIndex, resultEl, report, auditToken) {
+  if (!finding?.suggestedJobTitle) return;
+  const key = String(findingIndex);
+  const token = auditToken || activeEstimateAuditToken;
+  if (!estimateAuditTokenIsCurrent(token)) return;
+  const state = {
+    status: 'resolving',
+    candidates: [],
+    warnings: [],
+    loading: true,
+    auditToken: token,
+  };
+  estimateAuditRecommendationStates.set(key, state);
+  renderAuditRecommendationReview(finding, findingIndex, resultEl, report);
+  const auditVehicle = estimateAuditVehicle(currentContext);
+  try {
+    const result = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: '/api/estimate-assist/resolve-recommendation',
+      options: {
+        method: 'POST',
+        body: JSON.stringify({
+          finding: {
+            suggestedJobTitle: finding.suggestedJobTitle,
+            suggestedJobId: finding.suggestedJobId || null,
+          },
+          vehicle: auditVehicle,
+        }),
+      },
+    });
+    if (result.error) throw new Error(result.error);
+    if (!result.ok || !result.resolution) throw new Error('Existing job lookup was unavailable.');
+    if (
+      !estimateAuditTokenIsCurrent(token) ||
+      estimateAuditRecommendationStates.get(key) !== state
+    ) return;
+    const resolution = result.resolution;
+    estimateAuditRecommendationStates.set(key, {
+      status: resolution.status || 'no_match',
+      candidates: Array.isArray(resolution.candidates) ? resolution.candidates : [],
+      warnings: Array.isArray(resolution.warnings) ? resolution.warnings : [],
+      loading: false,
+      auditToken: token,
+    });
+    renderAuditRecommendationReview(finding, findingIndex, resultEl, report);
+  } catch (error) {
+    if (
+      !estimateAuditTokenIsCurrent(token) ||
+      estimateAuditRecommendationStates.get(key) !== state
+    ) return;
+    estimateAuditRecommendationStates.set(key, {
+      status: 'unavailable',
+      candidates: [],
+      warnings: [],
+      loading: false,
+      error: error.message || 'Existing job lookup was unavailable.',
+      auditToken: token,
+    });
+    renderAuditRecommendationReview(finding, findingIndex, resultEl, report);
+  }
+}
+
+function estimateLineNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function auditRecommendationJob(candidate) {
+  const lines = estimateCandidateLines(candidate);
+  return {
+    title: estimateCandidateTitle(candidate),
+    name: estimateCandidateTitle(candidate),
+    description: candidate?.description || candidate?.customerDescription || candidate?.note || '',
+    note: candidate?.description || candidate?.customerDescription || candidate?.note || '',
+    lines,
+    laborItems: lines
+      .filter(line => String(line.lineType || line.type || '').toLowerCase() === 'labor')
+      .map(line => ({
+        name: line.description || line.name || estimateCandidateTitle(candidate),
+        hours: estimateLineNumber(line.hours ?? line.quantity) || 1,
+        ...(estimateLineNumber(line.unitPrice) > 0 ? { rate: estimateLineNumber(line.unitPrice) } : {}),
+      })),
+    parts: lines
+      .filter(line => String(line.lineType || line.type || '').toLowerCase() === 'part')
+      .map(line => ({
+        name: line.description || line.name || 'Part',
+        partNumber: line.partNumber || '',
+        brand: line.manufacturer || line.brand || '',
+        quantity: estimateLineNumber(line.quantity) || 1,
+        cost: estimateLineNumber(line.cost) || estimateLineNumber(line.unitPrice) || 0,
+        retail: estimateLineNumber(line.unitPrice) || estimateLineNumber(line.extendedPrice) || 0,
+        ...(estimateLineNumber(line.cost) > 0 ? { unitCost: estimateLineNumber(line.cost) } : {}),
+      })),
+  };
+}
+
+function estimateCandidateSource(candidate) {
+  const source = candidate?.sourceIdentity || candidate?.source;
+  if (source && typeof source === 'object') return source;
+  return candidate?.sourceIdentity || null;
+}
+
+function estimateLinePrice(line) {
+  const value = line?.extendedPrice ?? line?.total ?? line?.amount ?? line?.price ?? line?.unitPrice;
+  const number = estimateLineNumber(value);
+  return number == null ? 'Price unavailable' : `$${number.toFixed(2)}`;
+}
+
+function estimateWarningText(warning) {
+  if (typeof warning === 'string') return warning;
+  if (warning && typeof warning === 'object') return String(warning.message || warning.code || JSON.stringify(warning));
+  return String(warning || 'Review warning');
+}
+
+function auditRecommendationSlot(resultEl, findingIndex) {
+  const finding = Array.from(resultEl.querySelectorAll('.estimate-audit-finding'))
+    .find(element => element.dataset.findingIndex === String(findingIndex));
+  return finding?.querySelector('[data-recommendation-slot]') || null;
+}
+
+function bindAuditRecommendationControls(resultEl, report) {
+  resultEl.querySelectorAll('[data-candidate-index]').forEach(radio => {
+    if (radio.matches('input[type="radio"]')) {
+      radio.classList.add('estimate-audit-candidate-radio');
+    }
+  });
+  // The class is added above for compatibility with older extension CSS; bind
+  // Bind listeners for radios that were just classified.
+  resultEl.querySelectorAll('.estimate-audit-candidate-radio').forEach(radio => {
+    if (radio._mosRecommendationBound) return;
+    radio._mosRecommendationBound = true;
+    radio.addEventListener('change', () => {
+      const findingIndex = Number(radio.closest('[data-finding-index]')?.dataset.findingIndex);
+      const state = estimateAuditRecommendationStates.get(String(findingIndex));
+      const candidateIndex = Number(radio.dataset.candidateIndex);
+      const candidate = state?.candidates?.[candidateIndex];
+      if (!state || !candidate || !estimateAuditTokenIsCurrent(state.auditToken)) return;
+      state.selectedCandidateId = estimateCandidateId(candidate, candidateIndex);
+      estimateAuditRecommendationStates.set(String(findingIndex), state);
+      const finding = report.findings[findingIndex];
+      if (finding) {
+        renderAuditRecommendationReview(finding, findingIndex, resultEl, report);
+        void hydrateAuditCandidatePreview(finding, findingIndex, candidateIndex, resultEl, report);
+      }
+    });
+  });
+  resultEl.querySelectorAll('.estimate-audit-confirm-btn').forEach(btn => {
+    if (btn._mosRecommendationBound) return;
+    btn._mosRecommendationBound = true;
+    btn.addEventListener('click', () => {
+      const findingIndex = Number(btn.dataset.findingIndex);
+      const state = estimateAuditRecommendationStates.get(String(findingIndex));
+      if (!state || !estimateAuditTokenIsCurrent(state.auditToken)) return;
+      const candidateIndex = state?.candidates?.findIndex((candidate, index) =>
+        estimateCandidateId(candidate, index) === state.selectedCandidateId);
+      const candidate = candidateIndex != null && candidateIndex >= 0 ? state.candidates[candidateIndex] : null;
+      if (!candidate) return;
+      const lines = estimateCandidateLines(candidate);
+      const auditSelection = auditRecommendationSourcePayload(candidate);
+      state.confirmedCandidateId = null;
+      state.confirmedJob = null;
+      state.auditSelection = null;
+      if (lines.length === 0) {
+        state.error = 'This existing job has no usable line details. Use the generated estimate fallback instead.';
+      } else if (!auditSelection) {
+        state.error = 'This match has no authorized source identity and cannot be added.';
+      } else {
+        state.confirmedCandidateId = state.selectedCandidateId;
+        state.confirmedJob = auditRecommendationJob(candidate);
+        state.auditSelection = auditSelection;
+        state.error = lines.some(estimateLineIsIncomplete)
+          ? 'This package has incomplete line pricing. Review the source before adding it to the RO.'
+          : '';
+      }
+      estimateAuditRecommendationStates.set(String(findingIndex), state);
+      const finding = report.findings[findingIndex];
+      if (finding && estimateAuditTokenIsCurrent(state.auditToken)) {
+        renderConfirmedAuditRecommendation(finding, findingIndex, resultEl, report);
+      }
+    });
+  });
+  resultEl.querySelectorAll('.estimate-audit-fallback-btn').forEach(btn => {
+    if (btn._mosRecommendationBound) return;
+    btn._mosRecommendationBound = true;
+    btn.addEventListener('click', () => buildAuditGeneratedFallback(
+      report.findings[Number(btn.dataset.findingIndex)],
+      Number(btn.dataset.findingIndex),
+      resultEl,
+      report,
+      estimateAuditRecommendationStates.get(String(btn.dataset.findingIndex))?.auditToken,
+    ));
+  });
+  resultEl.querySelectorAll('.estimate-audit-fallback-add-btn').forEach(btn => {
+    if (btn._mosRecommendationBound) return;
+    btn._mosRecommendationBound = true;
+    btn.addEventListener('click', async () => {
+      const findingIndex = Number(btn.dataset.findingIndex);
+      const state = estimateAuditRecommendationStates.get(String(findingIndex));
+      const auditToken = state?.auditToken;
+      if (!state?.fallbackJob || !estimateAuditTokenIsCurrent(auditToken)) return;
+      btn.disabled = true;
+      btn.textContent = 'Adding…';
+      const ok = await handleAddJob(state.fallbackJob, 'audit', null, null, auditToken);
+      if (
+        !estimateAuditTokenIsCurrent(auditToken) ||
+        estimateAuditRecommendationStates.get(String(findingIndex)) !== state
+      ) return;
+      btn.textContent = ok ? 'Added!' : 'Failed';
+      btn.style.background = ok ? '#16a34a' : '#dc2626';
+      if (!ok) btn.disabled = false;
+    });
+  });
+}
+
+function renderConfirmedAuditRecommendation(finding, findingIndex, resultEl, report) {
+  const slot = auditRecommendationSlot(resultEl, findingIndex);
+  if (!slot) return;
+  const state = estimateAuditRecommendationStates.get(String(findingIndex));
+  if (!state || !estimateAuditTokenIsCurrent(state.auditToken)) return;
+  if (!state.confirmedJob) {
+    renderAuditRecommendationReview(finding, findingIndex, resultEl, report);
+    return;
+  }
+  const source = state.confirmedJob;
+  const lines = estimateCandidateLines(source);
+  const warning = state.error ? `<div style="font-size:10px; color:#92400e; background:#fffbeb; border:1px solid #fde68a; border-radius:5px; padding:5px; margin-bottom:5px;">${escEstimate(state.error)}</div>` : '';
+  slot.innerHTML = `
+    <div style="margin-top:8px; border-top:1px solid var(--gray-200); padding-top:8px;">
+      <div style="font-size:10px; font-weight:700; color:#166534; margin-bottom:4px;">Selected source lines — ${escEstimate(estimateCandidateSourceLabel(state.candidates.find((candidate, index) => estimateCandidateId(candidate, index) === state.confirmedCandidateId)))}</div>
+      ${warning}
+      ${lines.map(line => `<div style="display:flex; justify-content:space-between; gap:5px; font-size:10px; color:var(--gray-600);"><span>${escEstimate(line.description || line.name)} × ${escEstimate(line.quantity ?? line.hours ?? 1)}</span><span>${escEstimate(estimateLinePrice(line))}</span></div>`).join('')}
+      <button class="estimate-audit-selected-add-btn" data-finding-index="${findingIndex}" style="font-size:10px; margin-top:6px; padding:4px 8px; background:#2563eb; color:white; border:none; border-radius:4px; cursor:pointer;">Add selected job to RO</button>
+    </div>`;
+  bindAuditRecommendationControls(resultEl, report);
+  const addBtn = slot.querySelector('.estimate-audit-selected-add-btn');
+  if (addBtn) {
+    addBtn.addEventListener('click', async () => {
+      const auditToken = state.auditToken;
+      if (
+        !estimateAuditTokenIsCurrent(auditToken) ||
+        estimateAuditRecommendationStates.get(String(findingIndex)) !== state
+      ) return;
+      addBtn.disabled = true;
+      addBtn.textContent = 'Adding…';
+      const ok = await handleAddJob(
+        state.confirmedJob,
+        state.auditSelection?.source?.kind || 'audit',
+        state.auditSelection,
+        finding,
+        auditToken,
+      );
+      if (
+        !estimateAuditTokenIsCurrent(auditToken) ||
+        estimateAuditRecommendationStates.get(String(findingIndex)) !== state
+      ) return;
+      addBtn.textContent = ok ? 'Added!' : 'Failed';
+      addBtn.style.background = ok ? '#16a34a' : '#dc2626';
+      if (!ok) addBtn.disabled = false;
+      if (ok && state.error) {
+        state.error = '';
+        estimateAuditRecommendationStates.set(String(findingIndex), state);
+      }
+    });
+  }
+}
+
+function auditGeneratedFallbackJob(estimate, title) {
+  const recommendedHours = estimateLineNumber(estimate?.laborHours?.recommended) ||
+    estimateLineNumber(estimate?.laborHours?.typical) || 1;
+  const parts = Array.isArray(estimate?.requiredParts) ? estimate.requiredParts : [];
+  return {
+    title: estimate?.title || title,
+    name: estimate?.title || title,
+    description: estimateLanguageMode === 'customer'
+      ? (estimate?.customerDescription || estimate?.description || '')
+      : (estimate?.technicalDescription || estimate?.description || ''),
+    note: estimateLanguageMode === 'customer'
+      ? (estimate?.customerDescription || estimate?.description || '')
+      : (estimate?.technicalDescription || estimate?.description || ''),
+    laborItems: [{ name: estimate?.title || title, hours: recommendedHours }],
+    parts: parts.map(name => ({ name, quantity: 1 })),
+  };
+}
+
+function estimateCandidateLines(candidate) {
+  const direct = candidate?.lines || candidate?.lineItems || candidate?.servicePackageLines || candidate?.job?.lines;
+  if (Array.isArray(direct)) return direct.filter(Boolean);
+  const labor = Array.isArray(candidate?.laborLines)
+    ? candidate.laborLines.map(line => ({ ...line, lineType: line.lineType || 'labor' }))
+    : [];
+  const parts = Array.isArray(candidate?.partsLines)
+    ? candidate.partsLines.map(line => ({ ...line, lineType: line.lineType || 'part' }))
+    : [];
+  return [...labor, ...parts];
+}
+
+function estimateCandidateId(candidate, index) {
+  const source = candidate?.sourceIdentity || candidate?.source;
+  if (source && typeof source === 'object' && source.id != null) {
+    return `${source.kind || 'source'}:${source.sourceSystem || ''}:${source.shopId || ''}:${source.id}`;
+  }
+  return String(
+    candidate?.id ??
+    candidate?.jobId ??
+    candidate?.sourceId ??
+    `candidate-${index}`,
+  );
+}
+
+function estimateAuditVehicle(context = currentContext) {
+  const vehicle = context?.vehicle || {};
+  return {
+    vin: vehicle.vin || context?.vin || undefined,
+    year: vehicle.year || undefined,
+    make: vehicle.make || undefined,
+    model: vehicle.model || undefined,
+  };
 }

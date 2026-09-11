@@ -21,6 +21,7 @@ export async function searchMongoJobIndex(
   limit: number = 50,
   vehicleModel?: string,
   strictModel: boolean = false,
+  diagnostics?: { error?: string },
 ): Promise<any[]> {
   if (searchShopIds.length === 0) return [];
   // Mirror the supabase guard: refuse unbounded queries (no tokens AND no make).
@@ -102,6 +103,7 @@ export async function searchMongoJobIndex(
     // queries exceed the combined-search grace window so THIS arm is what
     // actually serves enterprise searches.
     const perShopLimit = Math.max(8, Math.ceil(limit / searchShopIds.length));
+    let failedShopQueries = 0;
     const fetchShop = async (shopId: number): Promise<any[]> => {
       try {
         const variants = [Number(shopId), String(shopId)];
@@ -112,6 +114,7 @@ export async function searchMongoJobIndex(
         sortByPerformedAtDesc(docs);
         return docs;
       } catch (err) {
+        failedShopQueries++;
         console.log(`[Mongo Job Search] Per-shop fetch failed (shop ${shopId}):`, (err as Error).message);
         return [] as any[];
       }
@@ -144,9 +147,13 @@ export async function searchMongoJobIndex(
       depth++;
     }
 
+    if (merged.length === 0 && failedShopQueries > 0) {
+      diagnostics && (diagnostics.error = `Mongo job search failed for ${failedShopQueries} authorized shop${failedShopQueries === 1 ? "" : "s"}.`);
+    }
     return merged.map((d) => ({ ...d, dataSource: "job_index" }));
   } catch (err) {
-    console.log("[Mongo Job Search] Error:", (err as Error).message);
+    diagnostics && (diagnostics.error = (err as Error)?.message || String(err));
+    console.log("[Mongo Job Search] Error:", diagnostics?.error);
     return [];
   }
 }

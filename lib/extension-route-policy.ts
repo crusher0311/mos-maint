@@ -158,6 +158,13 @@ const POLICY_MAP: Record<string, PolicyTier[]> = {
   "/api/extension/jobs/add-to-ro|POST": ["write", "provider_action"],
   "/api/extension/jobs/add-to-ro|OPTIONS": ["preflight"],
 
+  // ── jobs/rehydrate-recommendation ────────────────────────────────────────
+  // POST is an authenticated, shop-scoped read of the current source details;
+  // the provider write happens only after this route returns authoritative
+  // lines to the adapter.
+  "/api/extension/jobs/rehydrate-recommendation|POST": ["read"],
+  "/api/extension/jobs/rehydrate-recommendation|OPTIONS": ["preflight"],
+
   // ── jobs/apply-canned ────────────────────────────────────────────────────
   "/api/extension/jobs/apply-canned|POST": ["write", "provider_action"],
   "/api/extension/jobs/apply-canned|OPTIONS": ["preflight"],
