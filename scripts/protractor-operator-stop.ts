@@ -30,7 +30,7 @@ async function main() {
   await logAdminAction({
     action: "protractor_operator_stop_activated",
     adminEmail: changedBy,
-    details: { reason, via: "production_one_off" },
+    details: { reason, via: "production_one_off", state, canary: state.canary },
   });
   console.log(JSON.stringify(state, null, 2));
 }

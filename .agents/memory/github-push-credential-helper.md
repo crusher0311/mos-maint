@@ -7,3 +7,17 @@ The repo's `.git/config` carries a credential.helper that echoes `$GITHUB_TOKEN`
 **Why:** helper could read the injected bearer token from the environment.
 
 **How to apply:** `git config --local --unset-all credential.helper`, run the push, then restore the helper exactly (`!f() { echo username=crusher0311; echo "password=$GITHUB_TOKEN"; }; f`) so the user's own git flows keep working. Note: memory files live on the branch being worked on.
+
+For exact-tree Git Data API pushes from CodeExecution, do not depend on its
+`readFile` callback for hidden paths or on Node's `Buffer` in durable scope.
+Encode validated workspace files with `shellExec` and send the base64 directly
+to GitHub's blob API with `encoding: "base64"`.
+
+**Why:** The sandbox rejected `.agents` reads, omitted `Buffer`, and normalized
+the separator in `git diff --name-status`, causing repeated preparation failures
+before any GitHub write.
+
+**How to apply:** Get paths with `git diff --name-only`, validate them against a
+strict path allowlist/pattern, base64 each file, create blobs and a tree from the
+known GitHub parent tree, and require the resulting tree SHA to equal the local
+validated tree before updating `main`.

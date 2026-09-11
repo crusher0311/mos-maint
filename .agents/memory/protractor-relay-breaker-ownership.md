@@ -66,3 +66,18 @@ Make dispatch confirmation the atomic admission point, keep stop activation on
 that exact record, and treat an admission that linearized first as already in
 flight. Never let response telemetry, breaker cooldowns, or recovery probes
 write operator-stop fields.
+
+Render service log queries also include `bld-*` prebuild output. Those builds
+run offline mocked Protractor smoke tests that intentionally emit admission,
+relay-response, `401`, `429`, and `5xx` events; Render may label them as
+`type=app`.
+
+**Why:** A callback canary monitor counted mocked build events as live provider
+traffic while a disabling deployment was building. The authoritative Better
+Stack query showed all apparent traffic under `bld-*` and zero events under
+every live `web-*` process.
+
+**How to apply:** Canary telemetry must filter the nested syslog app name to
+`web-*`, not just service ID or Render log type. Treat logs as observation only:
+enforce time and admission budgets atomically at the final fleet gate so log
+latency, query limits, or build-noise contamination cannot expand a canary.

@@ -122,3 +122,4 @@
 - [Instance-scoped provider isolation](instance-scoped-provider-isolation.md) — bind deny lists only to the platform's stable replica ID; deferred callbacks must persist full replay semantics before acknowledgment.
 - [Provider routing identity](provider-routing-identity.md) — explicit provider wins; global credentials never fill shop config; bind transport and queued/background work to one validated shop.
 - [Relay breaker ownership](protractor-relay-breaker-ownership.md) — persist outcome under a renewable fleet lease (or matching claim token) before another recovery probe can start.
+- [Protractor canary accounting](protractor-canary-accounting.md) — Mongo confirmation consumes budget; ambiguous results never refund admissions, and terminal canaries never silently reopen.

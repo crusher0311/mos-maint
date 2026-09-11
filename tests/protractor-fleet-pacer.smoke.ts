@@ -19,6 +19,15 @@ import {
   PROTRACTOR_TRANSPORT_FAILURE_STATUS,
 } from "../lib/data/repositories/protractor-circuit-breaker";
 import { RelayTransportError } from "../lib/integrations/protractor/relay-transport";
+import {
+  __protractorPhysicalTransportTestHooks,
+  acquireProtractorPhysicalTransportLease,
+  clearProtractorOperatorStop,
+  confirmProtractorPhysicalTransportLease,
+  releaseProtractorPhysicalTransportLease,
+  renewProtractorPhysicalTransportLease,
+} from "../lib/data/repositories/api-usage";
+import { createMongoExpressionCollection } from "./helpers/mongo-expression-collection";
 
 const TEST_GAP_MS = 20;
 const config: ProtractorConfig = {
@@ -669,6 +678,130 @@ async function main(): Promise<void> {
   ]);
   assert.ok(blockedFamilies.every(result => !result.ok));
   assert.equal(recoveryRaceStarts, 0, "active stop must block REST and both SOAP transport families");
+
+  console.log("Scenario 11: real repository admission has REST/SOAP budget and expiry parity");
+  let repositoryNow = new Date(Date.now() + 1_000);
+  let repositorySequence = 0;
+  const repositoryCollection = createMongoExpressionCollection({
+    _id: "protractor-physical-transport-v1",
+    count: 0,
+    nextAllowedAt: new Date(0),
+    leaseExpiresAt: new Date(0),
+    operatorStop: {
+      active: true,
+      stopId: "repository-stop-0",
+      reason: "test",
+      changedBy: "test",
+      activatedAt: repositoryNow,
+      updatedAt: repositoryNow,
+    },
+  }, { now: () => repositoryNow });
+  __protractorPhysicalTransportTestHooks.getDb = async () => ({
+    collection: () => repositoryCollection,
+  } as any);
+  __protractorPhysicalTransportTestHooks.randomUUID = () =>
+    `repository-${++repositorySequence}`;
+  __protractorClientTestHooks.acquirePhysicalTransportLease =
+    acquireProtractorPhysicalTransportLease;
+  __protractorClientTestHooks.confirmPhysicalTransportLease =
+    confirmProtractorPhysicalTransportLease;
+  __protractorClientTestHooks.renewPhysicalTransportLease =
+    renewProtractorPhysicalTransportLease;
+  __protractorClientTestHooks.releasePhysicalTransportLease =
+    releaseProtractorPhysicalTransportLease;
+  __protractorClientTestHooks.acquireOutboundGate = async () => ({
+    allowed: true,
+    probe: false,
+  });
+  __protractorClientTestHooks.recordResponse = async () => {};
+  __protractorClientTestHooks.trackApiRequest = async () => {};
+  __protractorClientTestHooks.enforceFleetPacerWithMockTransport = true;
+  __protractorClientTestHooks.httpsRequest = async url => ({
+    statusCode: 200,
+    body: url.endsWith("WorkOrderServices.asmx")
+      ? "<WorkOrderUpdateResult>&lt;WorkOrder&gt;&lt;ServicePackage&gt;&lt;/ServicePackage&gt;&lt;/WorkOrder&gt;</WorkOrderUpdateResult>"
+      : "{}",
+  });
+
+  const repositoryFamilies = [
+    {
+      name: "REST",
+      send: () => protractorFetch(
+        "/Invoice/repository-backed",
+        config,
+        {},
+        0,
+        1,
+        { maxRetries: 0 },
+      ),
+    },
+    {
+      name: "SOAP ServiceItem",
+      send: () => createServiceItem(1, { ownerId: "repository-owner" }),
+    },
+    {
+      name: "SOAP WorkOrder",
+      send: () => soapAddServicePackage(
+        1,
+        "repository-work-order",
+        { ID: "repository-work-order", Type: "WorkOrder", ServicePackages: [] },
+      ),
+    },
+  ];
+
+  async function openRepositoryCanary(lifetimeMs: number): Promise<void> {
+    const stopId = `repository-stop-${repositorySequence}`;
+    repositoryCollection.row.operatorStop = {
+      active: true,
+      stopId,
+      reason: "test",
+      changedBy: "test",
+      activatedAt: repositoryNow,
+      updatedAt: repositoryNow,
+    };
+    delete repositoryCollection.row.ownerToken;
+    delete repositoryCollection.row.ownerCanaryGeneration;
+    delete repositoryCollection.row.physicalAdmissionOwnerToken;
+    repositoryCollection.row.nextAllowedAt = new Date(0);
+    repositoryCollection.row.leaseExpiresAt = new Date(0);
+    await clearProtractorOperatorStop({
+      changedBy: "test",
+      reason: "repository-backed client parity",
+      expectedStopId: stopId,
+      expiresAt: new Date(repositoryNow.getTime() + lifetimeMs),
+      maxAdmissions: 1,
+      now: repositoryNow,
+    });
+  }
+
+  for (const family of repositoryFamilies) {
+    await openRepositoryCanary(60_000);
+    let sends = 0;
+    const transport = __protractorClientTestHooks.httpsRequest;
+    __protractorClientTestHooks.httpsRequest = async (...args) => {
+      sends += 1;
+      return transport(...args);
+    };
+    assert.equal((await family.send()).ok, true, `${family.name} must consume its one admission`);
+    assert.equal((await family.send()).ok, false, `${family.name} must be denied after budget`);
+    assert.equal(sends, 1, `${family.name} budget denial must occur before physical transport`);
+    assert.equal(repositoryCollection.row.canary.consumedAdmissions, 1);
+    assert.equal(repositoryCollection.row.canary.endedBy, "budget");
+    __protractorClientTestHooks.httpsRequest = transport;
+
+    await openRepositoryCanary(10);
+    repositoryNow = new Date(repositoryNow.getTime() + 11);
+    sends = 0;
+    __protractorClientTestHooks.httpsRequest = async (...args) => {
+      sends += 1;
+      return transport(...args);
+    };
+    assert.equal((await family.send()).ok, false, `${family.name} must honor canary expiry`);
+    assert.equal(sends, 0, `${family.name} expiry must be enforced before transport`);
+    assert.equal(repositoryCollection.row.canary.endedBy, "time");
+    __protractorClientTestHooks.httpsRequest = transport;
+    repositoryNow = new Date(repositoryNow.getTime() + 1_001);
+  }
 
   console.log("All Protractor fleet-pacer checks passed");
 }

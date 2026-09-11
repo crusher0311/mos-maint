@@ -88,6 +88,247 @@ export interface ProtractorOperatorStopState {
   activatedAt?: Date;
   updatedAt?: Date;
   physicalAdmissionInFlight: boolean;
+  canary?: ProtractorCanaryState;
+  canaryHistory: ProtractorCanaryState[];
+}
+
+export interface ProtractorCanaryState {
+  generation: string;
+  expiresAt: Date;
+  maxAdmissions: number;
+  consumedAdmissions: number;
+  remainingAdmissions: number;
+  endedBy?: "time" | "budget" | "operator";
+  endedAt?: Date;
+  audit: Array<{
+    event: "opened" | "admitted" | "ended" | "operator_stop";
+    at: Date;
+    generation: string;
+    consumedAdmissions: number;
+    remainingAdmissions: number;
+    endedBy?: "time" | "budget" | "operator";
+  }>;
+}
+
+/*
+ * Keep these predicates in expression form instead of relying on JavaScript
+ * validation after a document has been read.  The physical transport record
+ * is a shared CAS boundary, so malformed persisted accounting must be
+ * rejected by the same Mongo operation that admits or finalizes it.
+ *
+ * The range checks are deliberately inside $cond. MongoDB is allowed to
+ * evaluate $and/$or operands eagerly; putting comparisons behind the type
+ * guard prevents a malformed value from reaching arithmetic/comparison
+ * expressions that expect numeric operands.
+ */
+const validCanaryAccountingExpression = {
+  $cond: [
+    {
+      $and: [
+        { $eq: [{ $type: "$canary.generation" }, "string"] },
+        { $eq: [{ $type: "$canary.expiresAt" }, "date"] },
+        { $in: [{ $type: "$canary.maxAdmissions" }, ["int", "long"]] },
+        { $in: [{ $type: "$canary.consumedAdmissions" }, ["int", "long"]] },
+        { $in: [{ $type: "$canary.audit" }, ["missing", "array"]] },
+        {
+          $or: [
+            { $eq: [{ $type: "$canary.endedBy" }, "missing"] },
+            { $in: ["$canary.endedBy", ["time", "budget", "operator"]] },
+          ],
+        },
+        {
+          $or: [
+            { $eq: [{ $type: "$canary.endedAt" }, "missing"] },
+            { $eq: [{ $type: "$canary.endedAt" }, "date"] },
+          ],
+        },
+      ],
+    },
+    {
+      $and: [
+        { $gte: ["$canary.maxAdmissions", 1] },
+        { $lte: ["$canary.maxAdmissions", 3] },
+        { $gte: ["$canary.consumedAdmissions", 0] },
+        { $lte: ["$canary.consumedAdmissions", "$canary.maxAdmissions"] },
+      ],
+    },
+    false,
+  ],
+};
+
+const openCanaryExpression = {
+  $cond: [
+    validCanaryAccountingExpression,
+    {
+      $and: [
+        { $eq: [{ $type: "$canary.endedBy" }, "missing"] },
+        { $gt: ["$canary.expiresAt", "$$NOW"] },
+        { $lt: ["$canary.consumedAdmissions", "$canary.maxAdmissions"] },
+      ],
+    },
+    false,
+  ],
+};
+
+const terminalCanaryExpression = {
+  $cond: [
+    validCanaryAccountingExpression,
+    { $eq: [{ $type: "$canary.endedBy" }, "missing"] },
+    false,
+  ],
+};
+
+const canaryAdmissionExpression = {
+  $or: [
+    { $eq: [{ $type: "$canary" }, "missing"] },
+    openCanaryExpression,
+  ],
+};
+
+const nextCanaryConsumedExpression = {
+  $add: ["$canary.consumedAdmissions", 1],
+};
+
+const finalCanaryAdmissionExpression = {
+  $gte: [nextCanaryConsumedExpression, "$canary.maxAdmissions"],
+};
+
+function projectProtractorStopState(row: any, now: Date): ProtractorOperatorStopState {
+  const state = row?.operatorStop;
+  const projectCanary = (canary: any): ProtractorCanaryState => {
+    let endedBy = canary?.endedBy as "time" | "budget" | "operator" | undefined;
+    if (!endedBy && canary) {
+      if (state?.active === true && canary === row?.canary) endedBy = "operator";
+      else if ((canary.consumedAdmissions ?? 0) >= (canary.maxAdmissions ?? 0)) endedBy = "budget";
+      else if (canary.expiresAt instanceof Date && canary.expiresAt.getTime() <= now.getTime()) endedBy = "time";
+    }
+    return {
+      generation: canary.generation,
+      expiresAt: canary.expiresAt,
+      maxAdmissions: canary.maxAdmissions,
+      consumedAdmissions: canary.consumedAdmissions ?? 0,
+      remainingAdmissions: Math.max(
+        0,
+        (canary.maxAdmissions ?? 0) - (canary.consumedAdmissions ?? 0),
+      ),
+      endedBy,
+      endedAt: canary.endedAt ?? (endedBy === "time" ? canary.expiresAt : undefined),
+      audit: Array.isArray(canary.audit) ? canary.audit : [],
+    };
+  };
+  const canary = row?.canary;
+  let endedBy = canary?.endedBy as "time" | "budget" | "operator" | undefined;
+  if (!endedBy && canary) {
+    if (state?.active === true) endedBy = "operator";
+    else if ((canary.consumedAdmissions ?? 0) >= (canary.maxAdmissions ?? 0)) endedBy = "budget";
+    else if (canary.expiresAt instanceof Date && canary.expiresAt.getTime() <= now.getTime()) endedBy = "time";
+  }
+  return {
+    active: state?.active === true,
+    stopId: state?.stopId,
+    reason: state?.reason,
+    changedBy: state?.changedBy,
+    activatedAt: state?.activatedAt,
+    updatedAt: state?.updatedAt,
+    physicalAdmissionInFlight:
+      Boolean(row?.physicalAdmissionOwnerToken) &&
+      row?.leaseExpiresAt instanceof Date &&
+      row.leaseExpiresAt.getTime() > now.getTime(),
+    canary: canary ? { ...projectCanary(canary), endedBy } : undefined,
+    canaryHistory: Array.isArray(row?.canaryHistory)
+      ? row.canaryHistory.map(projectCanary)
+      : [],
+  };
+}
+
+async function finalizeProtractorCanaryTerminalState(
+  col: Collection<any>,
+): Promise<any | null> {
+  return col.findOneAndUpdate(
+    {
+      _id: PROTRACTOR_PHYSICAL_TRANSPORT_KEY,
+      "operatorStop.active": { $ne: true },
+      $expr: {
+        $cond: [
+          terminalCanaryExpression,
+          {
+            $or: [
+              { $gte: ["$canary.consumedAdmissions", "$canary.maxAdmissions"] },
+              { $lte: ["$canary.expiresAt", "$$NOW"] },
+            ],
+          },
+          false,
+        ],
+      },
+    },
+    [{
+      $set: {
+        "canary.endedBy": {
+          $cond: [
+            validCanaryAccountingExpression,
+            {
+              $cond: [
+                { $gte: ["$canary.consumedAdmissions", "$canary.maxAdmissions"] },
+                "budget",
+                "time",
+              ],
+            },
+            "$canary.endedBy",
+          ],
+        },
+        "canary.endedAt": {
+          $cond: [
+            validCanaryAccountingExpression,
+            {
+              $cond: [
+                { $gte: ["$canary.consumedAdmissions", "$canary.maxAdmissions"] },
+                "$$NOW",
+                "$canary.expiresAt",
+              ],
+            },
+            "$canary.endedAt",
+          ],
+        },
+        "canary.audit": {
+          $cond: [
+            validCanaryAccountingExpression,
+            {
+              $concatArrays: [
+                { $ifNull: ["$canary.audit", []] },
+                [{
+                  event: "ended",
+                  at: {
+                    $cond: [
+                      { $gte: ["$canary.consumedAdmissions", "$canary.maxAdmissions"] },
+                      "$$NOW",
+                      "$canary.expiresAt",
+                    ],
+                  },
+                  generation: "$canary.generation",
+                  consumedAdmissions: "$canary.consumedAdmissions",
+                  remainingAdmissions: {
+                    $max: [
+                      0,
+                      { $subtract: ["$canary.maxAdmissions", "$canary.consumedAdmissions"] },
+                    ],
+                  },
+                  endedBy: {
+                    $cond: [
+                      { $gte: ["$canary.consumedAdmissions", "$canary.maxAdmissions"] },
+                      "budget",
+                      "time",
+                    ],
+                  },
+                }],
+              ],
+            },
+            "$canary.audit",
+          ],
+        },
+      },
+    }],
+    { returnDocument: "after", maxTimeMS: 1000 },
+  );
 }
 
 async function usageCollection(): Promise<Collection<Document>> {
@@ -190,6 +431,9 @@ async function initializeTransportLease(
           nextAllowedAt: new Date(0),
           leaseExpiresAt: new Date(0),
         },
+        ...(key === PROTRACTOR_PHYSICAL_TRANSPORT_KEY
+          ? { $unset: { expiresAt: "" } }
+          : {}),
       },
       { upsert: true, maxTimeMS: 1000 },
     );
@@ -325,6 +569,7 @@ export async function acquireProtractorPhysicalTransportLease(
         "operatorStop.active": { $ne: true },
         $expr: {
           $and: [
+              canaryAdmissionExpression,
             { $lte: [{ $ifNull: ["$nextAllowedAt", "$$NOW"] }, "$$NOW"] },
             { $lte: [{ $ifNull: ["$leaseExpiresAt", "$$NOW"] }, "$$NOW"] },
           ],
@@ -335,6 +580,15 @@ export async function acquireProtractorPhysicalTransportLease(
           count: { $ifNull: ["$count", 0] },
           createdAt: { $ifNull: ["$createdAt", "$$NOW"] },
           ownerToken: token,
+          ownerCanaryGeneration: {
+            $cond: [
+              { $eq: [{ $type: "$canary.generation" }, "string"] },
+              "$canary.generation",
+              "$$REMOVE",
+            ],
+          },
+          physicalAdmissionStartedAt: "$$REMOVE",
+          physicalAdmissionOwnerToken: "$$REMOVE",
           leaseExpiresAt: {
             $dateAdd: {
               startDate: "$$NOW",
@@ -342,20 +596,47 @@ export async function acquireProtractorPhysicalTransportLease(
               amount: PROTRACTOR_PHYSICAL_TRANSPORT_LEASE_MS,
             },
           },
-          expiresAt: { $dateAdd: { startDate: "$$NOW", unit: "day", amount: 1 } },
+          expiresAt: "$$REMOVE",
         },
       }],
       { returnDocument: "after", maxTimeMS: 1000 },
     );
     if (row?.ownerToken === token) return token;
-    const stopped = await col.findOne(
+    const terminal = await finalizeProtractorCanaryTerminalState(col);
+    if (terminal) return null;
+    const state = await col.findOne(
       {
         _id: PROTRACTOR_PHYSICAL_TRANSPORT_KEY,
-        "operatorStop.active": true,
       },
-      { projection: { _id: 1 }, maxTimeMS: 1000 },
+      {
+        projection: {
+          operatorStop: 1,
+          canary: 1,
+        },
+        maxTimeMS: 1000,
+      },
     );
-    if (stopped) return null;
+    if (state?.operatorStop?.active === true) return null;
+    const hasCanary = Boolean(
+      state && Object.prototype.hasOwnProperty.call(state, "canary"),
+    );
+    if (
+      hasCanary &&
+      (
+        state?.canary?.endedBy ||
+        typeof state?.canary?.generation !== "string" ||
+        !(state?.canary?.expiresAt instanceof Date) ||
+        !Number.isInteger(state?.canary?.maxAdmissions) ||
+        state.canary?.maxAdmissions < 1 ||
+        state.canary?.maxAdmissions > 3 ||
+        !Number.isInteger(state?.canary?.consumedAdmissions) ||
+        state.canary?.consumedAdmissions < 0 ||
+        state.canary?.consumedAdmissions > state.canary?.maxAdmissions ||
+        (state?.canary?.audit !== undefined && !Array.isArray(state.canary?.audit)) ||
+        state.canary?.expiresAt.getTime() <= Date.now() ||
+        state.canary?.consumedAdmissions >= state.canary?.maxAdmissions
+      )
+    ) return null;
     const remaining = deadlineMs - Date.now();
     if (remaining <= 0) return null;
     await new Promise(resolve => setTimeout(resolve, Math.min(50, remaining)));
@@ -367,24 +648,133 @@ export async function confirmProtractorPhysicalTransportLease(
   ownerToken: string,
 ): Promise<boolean> {
   const db = await __protractorPhysicalTransportTestHooks.getDb();
+  const col = db.collection<any>(RATE_LIMIT_COLLECTION);
   // This update is the atomic physical-admission boundary. Operator activation
   // and dispatch contend on the same document: whichever commits first wins.
   // If dispatch wins, activation still blocks every subsequent lease/dispatch.
-  const row = await db.collection<any>(RATE_LIMIT_COLLECTION).findOneAndUpdate(
+  const row = await col.findOneAndUpdate(
     {
       _id: PROTRACTOR_PHYSICAL_TRANSPORT_KEY,
       ownerToken,
       leaseExpiresAt: { $gt: new Date() },
       "operatorStop.active": { $ne: true },
+      physicalAdmissionOwnerToken: { $ne: ownerToken },
+      $expr: {
+        $or: [
+          { $eq: [{ $type: "$canary" }, "missing"] },
+          {
+            $cond: [
+              openCanaryExpression,
+              { $eq: ["$ownerCanaryGeneration", "$canary.generation"] },
+              false,
+            ],
+          },
+        ],
+      },
     },
     [{
       $set: {
         physicalAdmissionStartedAt: "$$NOW",
-        physicalAdmissionOwnerToken: ownerToken,
+        physicalAdmissionOwnerToken: { $literal: ownerToken },
+        "canary.consumedAdmissions": {
+          $cond: [
+            { $eq: [{ $type: "$canary" }, "missing"] },
+            "$$REMOVE",
+            {
+              $cond: [
+                validCanaryAccountingExpression,
+                nextCanaryConsumedExpression,
+                "$canary.consumedAdmissions",
+              ],
+            },
+          ],
+        },
+        "canary.endedBy": {
+          $cond: [
+            { $eq: [{ $type: "$canary" }, "missing"] },
+            "$$REMOVE",
+            {
+              $cond: [
+                validCanaryAccountingExpression,
+                {
+                  $cond: [
+                    finalCanaryAdmissionExpression,
+                    "budget",
+                    "$$REMOVE",
+                  ],
+                },
+                "$canary.endedBy",
+              ],
+            },
+          ],
+        },
+        "canary.endedAt": {
+          $cond: [
+            { $eq: [{ $type: "$canary" }, "missing"] },
+            "$$REMOVE",
+            {
+              $cond: [
+                validCanaryAccountingExpression,
+                {
+                  $cond: [
+                    finalCanaryAdmissionExpression,
+                    "$$NOW",
+                    "$$REMOVE",
+                  ],
+                },
+                "$canary.endedAt",
+              ],
+            },
+          ],
+        },
+        "canary.audit": {
+          $cond: [
+            { $eq: [{ $type: "$canary" }, "missing"] },
+            "$$REMOVE",
+            {
+              $cond: [
+                validCanaryAccountingExpression,
+                {
+                  $concatArrays: [
+                    { $ifNull: ["$canary.audit", []] },
+                    [{
+                      event: "admitted",
+                      at: "$$NOW",
+                      generation: "$canary.generation",
+                      consumedAdmissions: nextCanaryConsumedExpression,
+                      remainingAdmissions: {
+                        $subtract: [
+                          "$canary.maxAdmissions",
+                          nextCanaryConsumedExpression,
+                        ],
+                      },
+                    }],
+                    {
+                      $cond: [
+                        finalCanaryAdmissionExpression,
+                        [{
+                          event: "ended",
+                          at: "$$NOW",
+                          generation: "$canary.generation",
+                          consumedAdmissions: nextCanaryConsumedExpression,
+                          remainingAdmissions: 0,
+                          endedBy: "budget",
+                        }],
+                        [],
+                      ],
+                    },
+                  ],
+                },
+                "$canary.audit",
+              ],
+            },
+          ],
+        },
       },
     }],
     { returnDocument: "after", maxTimeMS: 1000 },
   );
+  if (!row) await finalizeProtractorCanaryTerminalState(col);
   return row?.ownerToken === ownerToken;
 }
 
@@ -407,7 +797,7 @@ export async function renewProtractorPhysicalTransportLease(
             amount: PROTRACTOR_PHYSICAL_TRANSPORT_LEASE_MS,
           },
         },
-        expiresAt: { $dateAdd: { startDate: "$$NOW", unit: "day", amount: 1 } },
+        expiresAt: "$$REMOVE",
       },
     }],
     { returnDocument: "after", maxTimeMS: 1000 },
@@ -422,6 +812,7 @@ export async function releaseProtractorPhysicalTransportLease(ownerToken: string
     [{
       $set: {
         ownerToken: "$$REMOVE",
+        ownerCanaryGeneration: "$$REMOVE",
         leaseExpiresAt: "$$REMOVE",
         physicalAdmissionStartedAt: "$$REMOVE",
         physicalAdmissionOwnerToken: "$$REMOVE",
@@ -445,30 +836,22 @@ export async function getProtractorOperatorStop(): Promise<ProtractorOperatorSto
   );
   const db = await __protractorPhysicalTransportTestHooks.getDb();
   const now = new Date();
-  const row = await db.collection<any>(RATE_LIMIT_COLLECTION).findOne(
+  const col = db.collection<any>(RATE_LIMIT_COLLECTION);
+  await finalizeProtractorCanaryTerminalState(col);
+  const row = await col.findOne(
     { _id: PROTRACTOR_PHYSICAL_TRANSPORT_KEY },
     {
       projection: {
         operatorStop: 1,
+        canary: 1,
+          canaryHistory: 1,
         physicalAdmissionOwnerToken: 1,
         leaseExpiresAt: 1,
       },
       maxTimeMS: 1000,
     },
   );
-  const state = row?.operatorStop;
-  return {
-    active: state?.active === true,
-    stopId: state?.stopId,
-    reason: state?.reason,
-    changedBy: state?.changedBy,
-    activatedAt: state?.activatedAt,
-    updatedAt: state?.updatedAt,
-    physicalAdmissionInFlight:
-      Boolean(row?.physicalAdmissionOwnerToken) &&
-      row?.leaseExpiresAt instanceof Date &&
-      row.leaseExpiresAt.getTime() > now.getTime(),
-  };
+  return projectProtractorStopState(row, now);
 }
 
 export async function activateProtractorOperatorStop(input: {
@@ -486,41 +869,137 @@ export async function activateProtractorOperatorStop(input: {
   );
   const db = await __protractorPhysicalTransportTestHooks.getDb();
   const now = input.now ?? new Date();
+  const pipelineNow = input.now ?? "$$NOW";
   const stopId = __protractorPhysicalTransportTestHooks.randomUUID();
   const row = await db.collection<any>(RATE_LIMIT_COLLECTION).findOneAndUpdate(
     { _id: PROTRACTOR_PHYSICAL_TRANSPORT_KEY },
-    {
+    [{
       $set: {
         operatorStop: {
           active: true,
           stopId,
-          reason,
-          changedBy,
-          activatedAt: now,
-          updatedAt: now,
+          reason: { $literal: reason },
+          changedBy: { $literal: changedBy },
+          activatedAt: pipelineNow,
+          updatedAt: pipelineNow,
         },
+        canary: {
+          $cond: [
+            { $eq: [{ $type: "$canary" }, "missing"] },
+            "$$REMOVE",
+            {
+              $cond: [
+                validCanaryAccountingExpression,
+                {
+                  $mergeObjects: [
+                    "$canary",
+                    {
+                      endedBy: {
+                        $ifNull: [
+                          "$canary.endedBy",
+                          {
+                            $switch: {
+                              branches: [
+                                {
+                                  case: {
+                                    $gte: [
+                                      "$canary.consumedAdmissions",
+                                      "$canary.maxAdmissions",
+                                    ],
+                                  },
+                                  then: "budget",
+                                },
+                                {
+                                  case: { $lte: ["$canary.expiresAt", pipelineNow] },
+                                  then: "time",
+                                },
+                              ],
+                              default: "operator",
+                            },
+                          },
+                        ],
+                      },
+                      endedAt: {
+                        $ifNull: [
+                          "$canary.endedAt",
+                          {
+                            $cond: [
+                              { $lte: ["$canary.expiresAt", pipelineNow] },
+                              "$canary.expiresAt",
+                              pipelineNow,
+                            ],
+                          },
+                        ],
+                      },
+                      audit: {
+                        $concatArrays: [
+                          { $ifNull: ["$canary.audit", []] },
+                          [{
+                            event: "operator_stop",
+                            at: pipelineNow,
+                            generation: "$canary.generation",
+                            consumedAdmissions: "$canary.consumedAdmissions",
+                            remainingAdmissions: {
+                              $max: [
+                                0,
+                                {
+                                  $subtract: [
+                                    "$canary.maxAdmissions",
+                                    "$canary.consumedAdmissions",
+                                  ],
+                                },
+                              ],
+                            },
+                            endedBy: {
+                              $ifNull: [
+                                "$canary.endedBy",
+                                {
+                                  $switch: {
+                                    branches: [
+                                      {
+                                        case: {
+                                          $gte: [
+                                            "$canary.consumedAdmissions",
+                                            "$canary.maxAdmissions",
+                                          ],
+                                        },
+                                        then: "budget",
+                                      },
+                                      {
+                                        case: { $lte: ["$canary.expiresAt", pipelineNow] },
+                                        then: "time",
+                                      },
+                                    ],
+                                    default: "operator",
+                                  },
+                                },
+                              ],
+                            },
+                          }],
+                        ],
+                      },
+                    },
+                  ],
+                },
+                "$canary",
+              ],
+            },
+          ],
+        },
+        expiresAt: "$$REMOVE",
       },
-    },
+    }],
     { returnDocument: "after", maxTimeMS: 1000 },
   );
-  return {
-    active: true,
-    stopId,
-    reason,
-    changedBy,
-    activatedAt: now,
-    updatedAt: now,
-    physicalAdmissionInFlight:
-      Boolean(row?.physicalAdmissionOwnerToken) &&
-      row?.leaseExpiresAt instanceof Date &&
-      row.leaseExpiresAt.getTime() > now.getTime(),
-  };
+  return projectProtractorStopState(row, now);
 }
 
 export async function clearProtractorOperatorStop(input: {
   changedBy: string;
   expectedStopId: string;
   reason: string;
+  expiresAt: Date;
+  maxAdmissions: number;
   now?: Date;
 }): Promise<ProtractorOperatorStopState> {
   const changedBy = input.changedBy.trim();
@@ -531,35 +1010,80 @@ export async function clearProtractorOperatorStop(input: {
   }
   const db = await __protractorPhysicalTransportTestHooks.getDb();
   const now = input.now ?? new Date();
+  if (!(input.expiresAt instanceof Date) || !Number.isFinite(input.expiresAt.getTime()) ||
+      input.expiresAt.getTime() <= now.getTime()) {
+    throw new Error("expiresAt must be a future date");
+  }
+  if (!Number.isInteger(input.maxAdmissions) || input.maxAdmissions < 1 || input.maxAdmissions > 3) {
+    throw new Error("maxAdmissions must be an integer from 1 to 3");
+  }
+  const generation = __protractorPhysicalTransportTestHooks.randomUUID();
   const row = await db.collection<any>(RATE_LIMIT_COLLECTION).findOneAndUpdate(
     {
       _id: PROTRACTOR_PHYSICAL_TRANSPORT_KEY,
       "operatorStop.active": true,
       "operatorStop.stopId": expectedStopId,
     },
-    {
+    [{
       $set: {
         operatorStop: {
           active: false,
-          stopId: expectedStopId,
-          reason,
-          changedBy,
+          stopId: { $literal: expectedStopId },
+          reason: { $literal: reason },
+          changedBy: { $literal: changedBy },
           clearedAt: now,
           updatedAt: now,
         },
+        canaryHistory: {
+          $cond: [
+            {
+              $and: [
+                  validCanaryAccountingExpression,
+                  { $in: ["$canary.endedBy", ["time", "budget", "operator"]] },
+                  { $eq: [{ $type: "$canary.endedAt" }, "date"] },
+                  { $isArray: "$canary.audit" },
+              ],
+            },
+            {
+              $slice: [
+                {
+                  $concatArrays: [
+                    { $cond: [{ $isArray: "$canaryHistory" }, "$canaryHistory", []] },
+                    ["$canary"],
+                  ],
+                },
+                -20,
+              ],
+            },
+            {
+              $slice: [
+                { $cond: [{ $isArray: "$canaryHistory" }, "$canaryHistory", []] },
+                -20,
+              ],
+            },
+          ],
+        },
+        canary: {
+          generation,
+          expiresAt: input.expiresAt,
+          maxAdmissions: input.maxAdmissions,
+          consumedAdmissions: 0,
+          startedAt: now,
+          audit: [{
+            event: "opened",
+            at: now,
+            generation,
+            consumedAdmissions: 0,
+            remainingAdmissions: input.maxAdmissions,
+          }],
+        },
+        expiresAt: "$$REMOVE",
       },
-    },
+    }],
     { returnDocument: "after", maxTimeMS: 1000 },
   );
   if (!row) throw new Error("operator stop changed; refresh state before clearing");
-  return {
-    active: false,
-    stopId: expectedStopId,
-    reason,
-    changedBy,
-    updatedAt: now,
-    physicalAdmissionInFlight: false,
-  };
+  return projectProtractorStopState(row, now);
 }
 
 export async function countUsage(filter: UsageFilter): Promise<number> {
