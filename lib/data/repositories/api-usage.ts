@@ -110,6 +110,89 @@ export interface ProtractorCanaryState {
   }>;
 }
 
+/*
+ * Keep these predicates in expression form instead of relying on JavaScript
+ * validation after a document has been read.  The physical transport record
+ * is a shared CAS boundary, so malformed persisted accounting must be
+ * rejected by the same Mongo operation that admits or finalizes it.
+ *
+ * The range checks are deliberately inside $cond. MongoDB is allowed to
+ * evaluate $and/$or operands eagerly; putting comparisons behind the type
+ * guard prevents a malformed value from reaching arithmetic/comparison
+ * expressions that expect numeric operands.
+ */
+const validCanaryAccountingExpression = {
+  $cond: [
+    {
+      $and: [
+        { $eq: [{ $type: "$canary.generation" }, "string"] },
+        { $eq: [{ $type: "$canary.expiresAt" }, "date"] },
+        { $in: [{ $type: "$canary.maxAdmissions" }, ["int", "long"]] },
+        { $in: [{ $type: "$canary.consumedAdmissions" }, ["int", "long"]] },
+        { $in: [{ $type: "$canary.audit" }, ["missing", "array"]] },
+        {
+          $or: [
+            { $eq: [{ $type: "$canary.endedBy" }, "missing"] },
+            { $in: ["$canary.endedBy", ["time", "budget", "operator"]] },
+          ],
+        },
+        {
+          $or: [
+            { $eq: [{ $type: "$canary.endedAt" }, "missing"] },
+            { $eq: [{ $type: "$canary.endedAt" }, "date"] },
+          ],
+        },
+      ],
+    },
+    {
+      $and: [
+        { $gte: ["$canary.maxAdmissions", 1] },
+        { $lte: ["$canary.maxAdmissions", 3] },
+        { $gte: ["$canary.consumedAdmissions", 0] },
+        { $lte: ["$canary.consumedAdmissions", "$canary.maxAdmissions"] },
+      ],
+    },
+    false,
+  ],
+};
+
+const openCanaryExpression = {
+  $cond: [
+    validCanaryAccountingExpression,
+    {
+      $and: [
+        { $eq: [{ $type: "$canary.endedBy" }, "missing"] },
+        { $gt: ["$canary.expiresAt", "$$NOW"] },
+        { $lt: ["$canary.consumedAdmissions", "$canary.maxAdmissions"] },
+      ],
+    },
+    false,
+  ],
+};
+
+const terminalCanaryExpression = {
+  $cond: [
+    validCanaryAccountingExpression,
+    { $eq: [{ $type: "$canary.endedBy" }, "missing"] },
+    false,
+  ],
+};
+
+const canaryAdmissionExpression = {
+  $or: [
+    { $eq: [{ $type: "$canary" }, "missing"] },
+    openCanaryExpression,
+  ],
+};
+
+const nextCanaryConsumedExpression = {
+  $add: ["$canary.consumedAdmissions", 1],
+};
+
+const finalCanaryAdmissionExpression = {
+  $gte: [nextCanaryConsumedExpression, "$canary.maxAdmissions"],
+};
+
 function projectProtractorStopState(row: any, now: Date): ProtractorOperatorStopState {
   const state = row?.operatorStop;
   const projectCanary = (canary: any): ProtractorCanaryState => {
@@ -165,19 +248,16 @@ async function finalizeProtractorCanaryTerminalState(
     {
       _id: PROTRACTOR_PHYSICAL_TRANSPORT_KEY,
       "operatorStop.active": { $ne: true },
-      "canary.generation": { $type: "string" },
-      "canary.expiresAt": { $type: "date" },
-      "canary.maxAdmissions": { $type: "number" },
-      "canary.consumedAdmissions": { $type: "number" },
-      "canary.endedBy": { $exists: false },
-      $or: [
-        { "canary.audit": { $exists: false } },
-        { "canary.audit": { $type: "array" } },
-      ],
       $expr: {
-        $or: [
-          { $gte: ["$canary.consumedAdmissions", "$canary.maxAdmissions"] },
-          { $lte: ["$canary.expiresAt", "$$NOW"] },
+        $cond: [
+          terminalCanaryExpression,
+          {
+            $or: [
+              { $gte: ["$canary.consumedAdmissions", "$canary.maxAdmissions"] },
+              { $lte: ["$canary.expiresAt", "$$NOW"] },
+            ],
+          },
+          false,
         ],
       },
     },
@@ -185,46 +265,64 @@ async function finalizeProtractorCanaryTerminalState(
       $set: {
         "canary.endedBy": {
           $cond: [
-            { $gte: ["$canary.consumedAdmissions", "$canary.maxAdmissions"] },
-            "budget",
-            "time",
+            validCanaryAccountingExpression,
+            {
+              $cond: [
+                { $gte: ["$canary.consumedAdmissions", "$canary.maxAdmissions"] },
+                "budget",
+                "time",
+              ],
+            },
+            "$canary.endedBy",
           ],
         },
         "canary.endedAt": {
           $cond: [
-            { $gte: ["$canary.consumedAdmissions", "$canary.maxAdmissions"] },
-            "$$NOW",
-            "$canary.expiresAt",
+            validCanaryAccountingExpression,
+            {
+              $cond: [
+                { $gte: ["$canary.consumedAdmissions", "$canary.maxAdmissions"] },
+                "$$NOW",
+                "$canary.expiresAt",
+              ],
+            },
+            "$canary.endedAt",
           ],
         },
         "canary.audit": {
-          $concatArrays: [
-            { $ifNull: ["$canary.audit", []] },
-            [{
-              event: "ended",
-              at: {
-                $cond: [
-                  { $gte: ["$canary.consumedAdmissions", "$canary.maxAdmissions"] },
-                  "$$NOW",
-                  "$canary.expiresAt",
-                ],
-              },
-              generation: "$canary.generation",
-              consumedAdmissions: "$canary.consumedAdmissions",
-              remainingAdmissions: {
-                $max: [
-                  0,
-                  { $subtract: ["$canary.maxAdmissions", "$canary.consumedAdmissions"] },
-                ],
-              },
-              endedBy: {
-                $cond: [
-                  { $gte: ["$canary.consumedAdmissions", "$canary.maxAdmissions"] },
-                  "budget",
-                  "time",
-                ],
-              },
-            }],
+          $cond: [
+            validCanaryAccountingExpression,
+            {
+              $concatArrays: [
+                { $ifNull: ["$canary.audit", []] },
+                [{
+                  event: "ended",
+                  at: {
+                    $cond: [
+                      { $gte: ["$canary.consumedAdmissions", "$canary.maxAdmissions"] },
+                      "$$NOW",
+                      "$canary.expiresAt",
+                    ],
+                  },
+                  generation: "$canary.generation",
+                  consumedAdmissions: "$canary.consumedAdmissions",
+                  remainingAdmissions: {
+                    $max: [
+                      0,
+                      { $subtract: ["$canary.maxAdmissions", "$canary.consumedAdmissions"] },
+                    ],
+                  },
+                  endedBy: {
+                    $cond: [
+                      { $gte: ["$canary.consumedAdmissions", "$canary.maxAdmissions"] },
+                      "budget",
+                      "time",
+                    ],
+                  },
+                }],
+              ],
+            },
+            "$canary.audit",
           ],
         },
       },
@@ -471,23 +569,7 @@ export async function acquireProtractorPhysicalTransportLease(
         "operatorStop.active": { $ne: true },
         $expr: {
           $and: [
-              {
-                $or: [
-                  { $eq: [{ $type: "$canary" }, "missing"] },
-                  {
-                    $and: [
-                      { $eq: [{ $type: "$canary.generation" }, "string"] },
-                      { $eq: [{ $type: "$canary.expiresAt" }, "date"] },
-                      { $in: [{ $type: "$canary.maxAdmissions" }, ["int", "long", "double", "decimal"]] },
-                      { $in: [{ $type: "$canary.consumedAdmissions" }, ["int", "long", "double", "decimal"]] },
-                      { $in: [{ $type: "$canary.audit" }, ["missing", "array"]] },
-                      { $eq: [{ $type: "$canary.endedBy" }, "missing"] },
-                      { $gt: ["$canary.expiresAt", "$$NOW"] },
-                      { $lt: ["$canary.consumedAdmissions", "$canary.maxAdmissions"] },
-                    ],
-                  },
-                ],
-              },
+              canaryAdmissionExpression,
             { $lte: [{ $ifNull: ["$nextAllowedAt", "$$NOW"] }, "$$NOW"] },
             { $lte: [{ $ifNull: ["$leaseExpiresAt", "$$NOW"] }, "$$NOW"] },
           ],
@@ -544,10 +626,15 @@ export async function acquireProtractorPhysicalTransportLease(
         state?.canary?.endedBy ||
         typeof state?.canary?.generation !== "string" ||
         !(state?.canary?.expiresAt instanceof Date) ||
-        typeof state?.canary?.maxAdmissions !== "number" ||
-        typeof state?.canary?.consumedAdmissions !== "number" ||
-        state.canary.expiresAt.getTime() <= Date.now() ||
-        state.canary.consumedAdmissions >= state.canary.maxAdmissions
+        !Number.isInteger(state?.canary?.maxAdmissions) ||
+        state.canary?.maxAdmissions < 1 ||
+        state.canary?.maxAdmissions > 3 ||
+        !Number.isInteger(state?.canary?.consumedAdmissions) ||
+        state.canary?.consumedAdmissions < 0 ||
+        state.canary?.consumedAdmissions > state.canary?.maxAdmissions ||
+        (state?.canary?.audit !== undefined && !Array.isArray(state.canary?.audit)) ||
+        state.canary?.expiresAt.getTime() <= Date.now() ||
+        state.canary?.consumedAdmissions >= state.canary?.maxAdmissions
       )
     ) return null;
     const remaining = deadlineMs - Date.now();
@@ -576,16 +663,10 @@ export async function confirmProtractorPhysicalTransportLease(
         $or: [
           { $eq: [{ $type: "$canary" }, "missing"] },
           {
-            $and: [
-              { $eq: [{ $type: "$canary.generation" }, "string"] },
-              { $eq: [{ $type: "$canary.expiresAt" }, "date"] },
-              { $in: [{ $type: "$canary.maxAdmissions" }, ["int", "long", "double", "decimal"]] },
-              { $in: [{ $type: "$canary.consumedAdmissions" }, ["int", "long", "double", "decimal"]] },
-              { $in: [{ $type: "$canary.audit" }, ["missing", "array"]] },
-              { $eq: [{ $type: "$canary.endedBy" }, "missing"] },
+            $cond: [
+              openCanaryExpression,
               { $eq: ["$ownerCanaryGeneration", "$canary.generation"] },
-              { $gt: ["$canary.expiresAt", "$$NOW"] },
-              { $lt: ["$canary.consumedAdmissions", "$canary.maxAdmissions"] },
+              false,
             ],
           },
         ],
@@ -599,7 +680,13 @@ export async function confirmProtractorPhysicalTransportLease(
           $cond: [
             { $eq: [{ $type: "$canary" }, "missing"] },
             "$$REMOVE",
-            { $add: [{ $ifNull: ["$canary.consumedAdmissions", 0] }, 1] },
+            {
+              $cond: [
+                validCanaryAccountingExpression,
+                nextCanaryConsumedExpression,
+                "$canary.consumedAdmissions",
+              ],
+            },
           ],
         },
         "canary.endedBy": {
@@ -608,14 +695,15 @@ export async function confirmProtractorPhysicalTransportLease(
             "$$REMOVE",
             {
               $cond: [
+                validCanaryAccountingExpression,
                 {
-                  $gte: [
-                    { $add: [{ $ifNull: ["$canary.consumedAdmissions", 0] }, 1] },
-                    "$canary.maxAdmissions",
+                  $cond: [
+                    finalCanaryAdmissionExpression,
+                    "budget",
+                    "$$REMOVE",
                   ],
                 },
-                "budget",
-                "$$REMOVE",
+                "$canary.endedBy",
               ],
             },
           ],
@@ -626,14 +714,15 @@ export async function confirmProtractorPhysicalTransportLease(
             "$$REMOVE",
             {
               $cond: [
+                validCanaryAccountingExpression,
                 {
-                  $gte: [
-                    { $add: [{ $ifNull: ["$canary.consumedAdmissions", 0] }, 1] },
-                    "$canary.maxAdmissions",
+                  $cond: [
+                    finalCanaryAdmissionExpression,
+                    "$$NOW",
+                    "$$REMOVE",
                   ],
                 },
-                "$$NOW",
-                "$$REMOVE",
+                "$canary.endedAt",
               ],
             },
           ],
@@ -643,50 +732,40 @@ export async function confirmProtractorPhysicalTransportLease(
             { $eq: [{ $type: "$canary" }, "missing"] },
             "$$REMOVE",
             {
-              $concatArrays: [
-                { $ifNull: ["$canary.audit", []] },
-                [{
-              event: {
-                $cond: [
-                  {
-                    $gte: [
-                      { $add: [{ $ifNull: ["$canary.consumedAdmissions", 0] }, 1] },
-                      "$canary.maxAdmissions",
-                    ],
-                  },
-                  "ended",
-                  "admitted",
-                ],
-              },
-              at: "$$NOW",
-              generation: "$canary.generation",
-              consumedAdmissions: {
-                $add: [{ $ifNull: ["$canary.consumedAdmissions", 0] }, 1],
-              },
-              remainingAdmissions: {
-                $max: [
-                  0,
-                  {
-                    $subtract: [
-                      "$canary.maxAdmissions",
-                      { $add: [{ $ifNull: ["$canary.consumedAdmissions", 0] }, 1] },
-                    ],
-                  },
-                ],
-              },
-              endedBy: {
-                $cond: [
-                  {
-                    $gte: [
-                      { $add: [{ $ifNull: ["$canary.consumedAdmissions", 0] }, 1] },
-                      "$canary.maxAdmissions",
-                    ],
-                  },
-                  "budget",
-                  null,
-                ],
-              },
-                }],
+              $cond: [
+                validCanaryAccountingExpression,
+                {
+                  $concatArrays: [
+                    { $ifNull: ["$canary.audit", []] },
+                    [{
+                      event: "admitted",
+                      at: "$$NOW",
+                      generation: "$canary.generation",
+                      consumedAdmissions: nextCanaryConsumedExpression,
+                      remainingAdmissions: {
+                        $subtract: [
+                          "$canary.maxAdmissions",
+                          nextCanaryConsumedExpression,
+                        ],
+                      },
+                    }],
+                    {
+                      $cond: [
+                        finalCanaryAdmissionExpression,
+                        [{
+                          event: "ended",
+                          at: "$$NOW",
+                          generation: "$canary.generation",
+                          consumedAdmissions: nextCanaryConsumedExpression,
+                          remainingAdmissions: 0,
+                          endedBy: "budget",
+                        }],
+                        [],
+                      ],
+                    },
+                  ],
+                },
+                "$canary.audit",
               ],
             },
           ],
@@ -806,99 +885,105 @@ export async function activateProtractorOperatorStop(input: {
         },
         canary: {
           $cond: [
-            { $eq: [{ $type: "$canary.generation" }, "string"] },
+            { $eq: [{ $type: "$canary" }, "missing"] },
+            "$$REMOVE",
             {
-              $mergeObjects: [
-                "$canary",
+              $cond: [
+                validCanaryAccountingExpression,
                 {
-                  endedBy: {
-                    $ifNull: [
-                      "$canary.endedBy",
-                      {
-                        $switch: {
-                          branches: [
-                            {
-                              case: {
-                                $gte: [
-                                  "$canary.consumedAdmissions",
-                                  "$canary.maxAdmissions",
-                                ],
-                              },
-                              then: "budget",
+                  $mergeObjects: [
+                    "$canary",
+                    {
+                      endedBy: {
+                        $ifNull: [
+                          "$canary.endedBy",
+                          {
+                            $switch: {
+                              branches: [
+                                {
+                                  case: {
+                                    $gte: [
+                                      "$canary.consumedAdmissions",
+                                      "$canary.maxAdmissions",
+                                    ],
+                                  },
+                                  then: "budget",
+                                },
+                                {
+                                  case: { $lte: ["$canary.expiresAt", pipelineNow] },
+                                  then: "time",
+                                },
+                              ],
+                              default: "operator",
                             },
-                            {
-                              case: { $lte: ["$canary.expiresAt", pipelineNow] },
-                              then: "time",
-                            },
-                          ],
-                          default: "operator",
-                        },
-                      },
-                    ],
-                  },
-                  endedAt: {
-                    $ifNull: [
-                      "$canary.endedAt",
-                      {
-                        $cond: [
-                          { $lte: ["$canary.expiresAt", pipelineNow] },
-                          "$canary.expiresAt",
-                          pipelineNow,
+                          },
                         ],
                       },
-                    ],
-                  },
-                  audit: {
-                    $concatArrays: [
-                      { $ifNull: ["$canary.audit", []] },
-                      [{
-                        event: "operator_stop",
-                        at: pipelineNow,
-                        generation: "$canary.generation",
-                        consumedAdmissions: "$canary.consumedAdmissions",
-                        remainingAdmissions: {
-                          $max: [
-                            0,
-                            {
-                              $subtract: [
-                                "$canary.maxAdmissions",
-                                "$canary.consumedAdmissions",
+                      endedAt: {
+                        $ifNull: [
+                          "$canary.endedAt",
+                          {
+                            $cond: [
+                              { $lte: ["$canary.expiresAt", pipelineNow] },
+                              "$canary.expiresAt",
+                              pipelineNow,
+                            ],
+                          },
+                        ],
+                      },
+                      audit: {
+                        $concatArrays: [
+                          { $ifNull: ["$canary.audit", []] },
+                          [{
+                            event: "operator_stop",
+                            at: pipelineNow,
+                            generation: "$canary.generation",
+                            consumedAdmissions: "$canary.consumedAdmissions",
+                            remainingAdmissions: {
+                              $max: [
+                                0,
+                                {
+                                  $subtract: [
+                                    "$canary.maxAdmissions",
+                                    "$canary.consumedAdmissions",
+                                  ],
+                                },
                               ],
                             },
-                          ],
-                        },
-                        endedBy: {
-                          $ifNull: [
-                            "$canary.endedBy",
-                            {
-                              $switch: {
-                                branches: [
-                                  {
-                                    case: {
-                                      $gte: [
-                                        "$canary.consumedAdmissions",
-                                        "$canary.maxAdmissions",
-                                      ],
-                                    },
-                                    then: "budget",
+                            endedBy: {
+                              $ifNull: [
+                                "$canary.endedBy",
+                                {
+                                  $switch: {
+                                    branches: [
+                                      {
+                                        case: {
+                                          $gte: [
+                                            "$canary.consumedAdmissions",
+                                            "$canary.maxAdmissions",
+                                          ],
+                                        },
+                                        then: "budget",
+                                      },
+                                      {
+                                        case: { $lte: ["$canary.expiresAt", pipelineNow] },
+                                        then: "time",
+                                      },
+                                    ],
+                                    default: "operator",
                                   },
-                                  {
-                                    case: { $lte: ["$canary.expiresAt", pipelineNow] },
-                                    then: "time",
-                                  },
-                                ],
-                                default: "operator",
-                              },
+                                },
+                              ],
                             },
-                          ],
-                        },
-                      }],
-                    ],
-                  },
+                          }],
+                        ],
+                      },
+                    },
+                  ],
                 },
+                "$canary",
               ],
             },
-            "$$REMOVE",
           ],
         },
         expiresAt: "$$REMOVE",
@@ -953,13 +1038,10 @@ export async function clearProtractorOperatorStop(input: {
           $cond: [
             {
               $and: [
-                { $eq: [{ $type: "$canary.generation" }, "string"] },
-                { $eq: [{ $type: "$canary.expiresAt" }, "date"] },
-                { $in: [{ $type: "$canary.maxAdmissions" }, ["int", "long", "double", "decimal"]] },
-                { $in: [{ $type: "$canary.consumedAdmissions" }, ["int", "long", "double", "decimal"]] },
-                { $in: ["$canary.endedBy", ["time", "budget", "operator"]] },
-                { $eq: [{ $type: "$canary.endedAt" }, "date"] },
-                { $isArray: "$canary.audit" },
+                  validCanaryAccountingExpression,
+                  { $in: ["$canary.endedBy", ["time", "budget", "operator"]] },
+                  { $eq: [{ $type: "$canary.endedAt" }, "date"] },
+                  { $isArray: "$canary.audit" },
               ],
             },
             {

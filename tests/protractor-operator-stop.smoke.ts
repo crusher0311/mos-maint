@@ -13,6 +13,7 @@ import { createMongoExpressionCollection } from "./helpers/mongo-expression-coll
 
 let now = new Date(Date.now() + 1_000);
 let sequence = 0;
+let failAfterCommit = false;
 const collection = createMongoExpressionCollection({
   _id: "protractor-physical-transport-v1",
   count: 0,
@@ -26,7 +27,14 @@ const collection = createMongoExpressionCollection({
     activatedAt: now,
     updatedAt: now,
   },
-}, { now: () => now });
+}, {
+  now: () => now,
+  afterFindOneAndUpdate: () => {
+    if (!failAfterCommit) return undefined;
+    failAfterCommit = false;
+    return new Error("confirmation response lost after commit");
+  },
+});
 
 __protractorPhysicalTransportTestHooks.getDb = async () => ({
   collection: () => collection,
@@ -87,7 +95,7 @@ async function main(): Promise<void> {
   assert.equal(status.canary?.remainingAdmissions, 0);
   assert.equal(status.canary?.endedBy, "budget");
   assert.deepEqual(status.canary?.audit.map(event => event.event), [
-    "opened", "admitted", "admitted", "ended",
+    "opened", "admitted", "admitted", "admitted", "ended",
   ]);
 
   console.log("Scenario 2: simultaneous duplicate confirmation consumes exactly once");
@@ -109,7 +117,80 @@ async function main(): Promise<void> {
   await releaseProtractorPhysicalTransportLease(duplicateLease!);
   now = new Date(now.getTime() + 1_001);
 
-  console.log("Scenario 3: expiry between lease and confirmation is finalized");
+  console.log("Scenario 3: committed confirmation errors do not refund or re-dispatch");
+  const committed = await openCanary("commit-then-error-stop", 1);
+  const committedLease = await acquireProtractorPhysicalTransportLease(Date.now() + 20);
+  assert.ok(committedLease);
+  failAfterCommit = true;
+  await assert.rejects(
+    confirmProtractorPhysicalTransportLease(committedLease!),
+    /confirmation response lost after commit/,
+  );
+  await releaseProtractorPhysicalTransportLease(committedLease!);
+  status = await getProtractorOperatorStop();
+  assert.equal(status.canary?.generation, committed.canary?.generation);
+  assert.equal(status.canary?.consumedAdmissions, 1);
+  assert.deepEqual(status.canary?.audit.slice(-2).map(event => event.event), [
+    "admitted",
+    "ended",
+  ]);
+  assert.equal(
+    await acquireProtractorPhysicalTransportLease(Date.now() + 20),
+    null,
+    "a lost confirmation response must not refund a committed admission",
+  );
+  now = new Date(now.getTime() + 1_001);
+
+  console.log("Scenario 4: malformed accounting records fail closed without arithmetic");
+  const malformedCounters = [
+    { maxAdmissions: 4, consumedAdmissions: 0 },
+    { maxAdmissions: 3.5, consumedAdmissions: 0 },
+    { maxAdmissions: 3, consumedAdmissions: -1 },
+    { maxAdmissions: 3, consumedAdmissions: 4 },
+    { maxAdmissions: "3", consumedAdmissions: 0 },
+    { maxAdmissions: 3, consumedAdmissions: "0" },
+  ];
+  for (const [index, counters] of malformedCounters.entries()) {
+    const generation = `malformed-generation-${index}`;
+    activeStop(`malformed-stop-${index}`);
+    collection.row.operatorStop = { active: false };
+    collection.row.canary = {
+      generation,
+      expiresAt: new Date(now.getTime() + 60_000),
+      ...counters,
+      audit: [],
+    };
+    delete collection.row.ownerToken;
+    delete collection.row.ownerCanaryGeneration;
+    delete collection.row.physicalAdmissionOwnerToken;
+    collection.row.nextAllowedAt = new Date(0);
+    collection.row.leaseExpiresAt = new Date(0);
+    const before = JSON.stringify(collection.row.canary);
+    assert.equal(
+      await acquireProtractorPhysicalTransportLease(Date.now() + 20),
+      null,
+      `malformed accounting record ${index} must not acquire`,
+    );
+    collection.row.ownerToken = `malformed-owner-${index}`;
+    collection.row.ownerCanaryGeneration = generation;
+    collection.row.leaseExpiresAt = new Date(now.getTime() + 60_000);
+    assert.equal(
+      await confirmProtractorPhysicalTransportLease(collection.row.ownerToken),
+      false,
+      `malformed accounting record ${index} must not confirm`,
+    );
+    assert.equal(
+      JSON.stringify(collection.row.canary),
+      before,
+      `malformed accounting record ${index} must remain unchanged`,
+    );
+    delete collection.row.ownerToken;
+    delete collection.row.ownerCanaryGeneration;
+    collection.row.leaseExpiresAt = new Date(0);
+    now = new Date(now.getTime() + 1_001);
+  }
+
+  console.log("Scenario 5: expiry between lease and confirmation is finalized");
   const expiring = await openCanary("expiry-stop", 3, 100);
   const expiringLease = await acquireProtractorPhysicalTransportLease(Date.now() + 20);
   assert.ok(expiringLease);
@@ -124,7 +205,7 @@ async function main(): Promise<void> {
   await releaseProtractorPhysicalTransportLease(expiringLease!);
   now = new Date(now.getTime() + 1_001);
 
-  console.log("Scenario 4: stop/clear races and stale stop IDs fail closed");
+  console.log("Scenario 6: stop/clear races and stale stop IDs fail closed");
   activeStop("race-stop");
   const race = await Promise.allSettled([
     clearProtractorOperatorStop({
@@ -157,7 +238,7 @@ async function main(): Promise<void> {
   );
   assert.equal((await getProtractorOperatorStop()).active, true);
 
-  console.log("Scenario 5: an in-flight old generation cannot confirm after replacement");
+  console.log("Scenario 7: an in-flight old generation cannot confirm after replacement");
   const old = await openCanary(status.stopId!);
   const staleLease = await acquireProtractorPhysicalTransportLease(Date.now() + 20);
   assert.ok(staleLease);
@@ -171,7 +252,7 @@ async function main(): Promise<void> {
   assert.notEqual(collection.row.canary.generation, old.canary?.generation);
   assert.equal(await confirmProtractorPhysicalTransportLease(staleLease!), false);
 
-  console.log("Scenario 6: legacy records remain usable without a canary");
+  console.log("Scenario 8: legacy records remain usable without a canary");
   delete collection.row.canary;
   collection.row.operatorStop = { active: false };
   delete collection.row.ownerToken;
@@ -196,7 +277,7 @@ async function main(): Promise<void> {
   assert.equal(await confirmProtractorPhysicalTransportLease(legacyLease!), false);
   await releaseProtractorPhysicalTransportLease(legacyLease!);
 
-  console.log("Scenario 7: status retains only the latest twenty completed generations");
+  console.log("Scenario 9: status retains only the latest twenty completed generations");
   activeStop("history-0");
   const generations: string[] = [];
   for (let index = 0; index < 21; index += 1) {
@@ -224,7 +305,7 @@ async function main(): Promise<void> {
   );
   assert.ok(history.every((canary: any) => canary.audit.length >= 2));
 
-  console.log("Scenario 8: safety record updates carry no physical-record TTL");
+  console.log("Scenario 10: safety record updates carry no physical-record TTL");
   const physicalUpdates = collection.calls.filter(call =>
     call.filter?._id === "protractor-physical-transport-v1" && call.update
   );
@@ -234,7 +315,7 @@ async function main(): Promise<void> {
     "the permanent physical safety record must not receive collection TTL expiresAt",
   );
 
-  console.log("Scenario 9: activation uses the Mongo server clock outside the test seam");
+  console.log("Scenario 11: activation uses the Mongo server clock outside the test seam");
   await activateProtractorOperatorStop({
     changedBy: "server-clock-operator",
     reason: "server-clock containment",
@@ -251,7 +332,7 @@ async function main(): Promise<void> {
     "operator-stop audit timestamps must use the Mongo server clock",
   );
 
-  console.log("Scenario 10: production log fixture excludes build-service contamination");
+  console.log("Scenario 12: production log fixture excludes build-service contamination");
   const runbook = readFileSync("docs/runbooks/protractor-storm-recovery.md", "utf8");
   const sql = runbook.match(/```sql\s+([\s\S]*?)```/)?.[1] ?? "";
   const rows = [

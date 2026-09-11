@@ -50,8 +50,17 @@ function expression(value: any, row: Row, now: Date): any {
   const [operator, argument] = entries[0];
   const args = () => expression(argument, row, now);
   switch (operator) {
-    case "$and": return (argument as any[]).every(item => expression(item, row, now));
-    case "$or": return (argument as any[]).some(item => expression(item, row, now));
+    // MongoDB does not promise short-circuit evaluation for these boolean
+    // operators. Evaluate every operand so malformed-record tests catch any
+    // arithmetic that was left outside a type/range guard.
+    case "$and": {
+      const values = (argument as any[]).map(item => Boolean(expression(item, row, now)));
+      return values.every(Boolean);
+    }
+    case "$or": {
+      const values = (argument as any[]).map(item => Boolean(expression(item, row, now)));
+      return values.some(Boolean);
+    }
     case "$eq": { const [a, b] = args(); return compare(a, b) === 0; }
     case "$ne": { const [a, b] = args(); return compare(a, b) !== 0; }
     case "$gt": { const [a, b] = args(); return compare(a, b) > 0; }
@@ -62,9 +71,30 @@ function expression(value: any, row: Row, now: Date): any {
       const [item, values] = args();
       return values.some((value: any) => compare(item, value) === 0);
     }
-    case "$add": return args().reduce((sum: number, item: number) => sum + item, 0);
-    case "$subtract": { const [a, b] = args(); return a - b; }
-    case "$max": return Math.max(...args());
+    case "$add": {
+      const values = args();
+      assert.ok(
+        values.every((item: any) => typeof item === "number" && Number.isFinite(item)),
+        "$add requires finite numeric operands",
+      );
+      return values.reduce((sum: number, item: number) => sum + item, 0);
+    }
+    case "$subtract": {
+      const [a, b] = args();
+      assert.ok(
+        [a, b].every(item => typeof item === "number" && Number.isFinite(item)),
+        "$subtract requires finite numeric operands",
+      );
+      return a - b;
+    }
+    case "$max": {
+      const values = args();
+      assert.ok(
+        values.every((item: any) => typeof item === "number" && Number.isFinite(item)),
+        "$max requires finite numeric operands",
+      );
+      return Math.max(...values);
+    }
     case "$ifNull": {
       const values = argument as any[];
       const first = expression(values[0], row, now);
@@ -76,7 +106,8 @@ function expression(value: any, row: Row, now: Date): any {
       if (evaluated === null) return "null";
       if (evaluated instanceof Date) return "date";
       if (Array.isArray(evaluated)) return "array";
-      if (typeof evaluated === "number") return "double";
+       if (typeof evaluated === "bigint") return "long";
+       if (typeof evaluated === "number") return Number.isInteger(evaluated) ? "int" : "double";
       return typeof evaluated;
     }
     case "$isArray": return Array.isArray(args());
@@ -105,7 +136,11 @@ function expression(value: any, row: Row, now: Date): any {
       };
       assert.ok(start instanceof Date, "$dateAdd requires a Date");
       assert.ok(spec.unit in multipliers, `unsupported $dateAdd unit ${spec.unit}`);
-      return new Date(start.getTime() + amount * multipliers[spec.unit]);
+       assert.ok(
+         typeof amount === "number" && Number.isFinite(amount),
+         "$dateAdd requires a finite numeric amount",
+       );
+       return new Date(start.getTime() + amount * multipliers[spec.unit]);
     }
     case "$concatArrays": return args().flat();
     case "$mergeObjects": return Object.assign({}, ...args());
@@ -130,6 +165,9 @@ function matches(row: Row, filter: Row, now: Date): boolean {
         if (operator === "$exists") return (actual !== undefined) === operand;
         if (operator === "$type") {
           if (operand === "number") return typeof actual === "number";
+          if (operand === "int") return typeof actual === "number" && Number.isInteger(actual);
+          if (operand === "long") return typeof actual === "bigint";
+          if (operand === "double") return typeof actual === "number" && !Number.isInteger(actual);
           if (operand === "date") return actual instanceof Date;
           if (operand === "array") return Array.isArray(actual);
           return typeof actual === operand;
@@ -171,7 +209,10 @@ function applyUpdate(row: Row, update: any, now: Date, inserted: boolean): void 
 
 export function createMongoExpressionCollection(
   initialRow: Row,
-  options: { now?: () => Date } = {},
+  options: {
+    now?: () => Date;
+    afterFindOneAndUpdate?: () => Error | undefined;
+  } = {},
 ) {
   const row = clone(initialRow);
   const calls: Array<{ method: string; filter: any; update?: any; options?: any }> = [];
@@ -197,7 +238,10 @@ export function createMongoExpressionCollection(
       calls.push({ method: "findOneAndUpdate", filter, update, options: updateOptions });
       if (!matches(row, filter, currentTime())) return null;
       applyUpdate(row, update, currentTime(), false);
-      return clone(row);
+      const committed = clone(row);
+      const postCommitError = options.afterFindOneAndUpdate?.();
+      if (postCommitError) throw postCommitError;
+      return committed;
     },
     async findOne(filter: any) {
       calls.push({ method: "findOne", filter });
