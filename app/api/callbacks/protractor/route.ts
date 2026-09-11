@@ -25,14 +25,27 @@ import { logProtractorPolicyDenial } from "@/lib/integrations/protractor/outboun
 import { applyProtractorTerminalCallback } from "@/lib/integrations/protractor/callback-terminal";
 import { isProtractorShopRecord } from "@/lib/integrations/protractor/shop-eligibility";
 import { findShopByQuery } from "@/lib/data/repositories/shops";
+import type { CallbackHistoryOutcome } from "@/lib/integrations/protractor/callback-outcomes";
 
 const VALID_TERMINAL_STATUSES = ["INVOICED", "INVOICE", "CLOSED", "VOID"];
 const MAX_IMMEDIATE_RETRIES = 3;
+
+/**
+ * Ingress only persists a replayable event.  It does not read Protractor,
+ * apply a snapshot, or write history, so an ACK must never be presented as
+ * evidence that history was applied.  Keep this helper pure so every direct
+ * ingress response (including an outbound-policy deferral) carries the same
+ * conservative evidence.
+ */
+function callbackIngressHistoryOutcome(): CallbackHistoryOutcome {
+  return { category: "deferred", reason: "pending_replay" };
+}
 
 function logCallbackOutcome(fields: {
   sourceRoute: string;
   method: "GET" | "POST";
   outcome: "admitted" | "coalesced" | "duplicate" | "rate_limited" | "deferred_instance_policy" | "ignored_provider_mismatch";
+  historyOutcome?: CallbackHistoryOutcome;
   shopId?: number;
   connectionId: string;
 }): void {
@@ -41,6 +54,7 @@ function logCallbackOutcome(fields: {
     sourceRoute: fields.sourceRoute,
     method: fields.method,
     outcome: fields.outcome,
+    ...(fields.historyOutcome === undefined ? {} : { historyOutcome: fields.historyOutcome }),
     ...(fields.shopId === undefined ? {} : { shopId: fields.shopId }),
     connectionFingerprint: fingerprintProtractorConnection(fields.connectionId),
   }));
@@ -90,7 +104,13 @@ async function processCallbackEvent(
         await upsertProtractorVehicleSnapshot(shopId, result.vehicle.VIN, result.vehicle);
         console.log(`[Protractor Callback] Processed vehicle ${result.vehicle.VIN}`);
         
-        await callbackEvents.markProcessed(eventId, { vin: result.vehicle.VIN });
+        await callbackEvents.markProcessed(eventId, {
+          vin: result.vehicle.VIN,
+          historyOutcome: {
+            category: "terminal_no_history",
+            reason: "vehicle_snapshot",
+          },
+        });
         return true;
       }
     }
@@ -151,6 +171,10 @@ async function processCallbackEvent(
       await callbackEvents.markProcessed(eventId, {
         workOrderNumber: existingWO?.workOrderNumber,
         deletedFromDashboard: true,
+        historyOutcome: {
+          category: "terminal_no_history",
+          reason: "terminal_applied",
+        },
       });
       return true;
     }
@@ -266,13 +290,27 @@ async function processCallbackEvent(
         
         await callbackEvents.markProcessed(eventId, {
           workOrderNumber: result.workOrder.WorkOrderNumber,
+          // This legacy direct path predates callback history indexing.  A
+          // snapshot/revenue update is not evidence that jobs were indexed.
+          historyOutcome: {
+            category: "deferred",
+            reason: "unverified",
+          },
         });
         return true;
       }
     }
 
     // No action needed for this event type
-    await callbackEvents.markProcessed(eventId, { noAction: true });
+    await callbackEvents.markProcessed(eventId, {
+      noAction: true,
+      // `noAction` only says that this handler had no local mutation to make;
+      // it is not evidence that callback history was applied.
+      historyOutcome: {
+        category: "deferred",
+        reason: "unverified",
+      },
+    });
     return true;
 
   } catch (error: any) {
@@ -398,6 +436,12 @@ async function enrichOpenWorkOrderInBackground(
 
     await callbackEvents.markProcessed(eventId, {
       workOrderNumber: result.workOrder.WorkOrderNumber,
+      // Open-work-order enrichment stores a snapshot only.  It deliberately
+      // does not claim history indexing.
+      historyOutcome: {
+        category: "terminal_no_history",
+        reason: "open_work_order",
+      },
     });
   } catch (err: any) {
     console.error(`[Protractor Callback] Background enrich error for WO ${workOrderId}:`, err?.message || err);
@@ -677,10 +721,12 @@ export async function POST(request: NextRequest) {
       // even on an outbound-enabled replica; ingress never reads Protractor.
       deferredForReplay: true,
     });
+    const historyOutcome = callbackIngressHistoryOutcome();
     logCallbackOutcome({
       sourceRoute,
       method: "POST",
       outcome: requestOutboundPolicy.allowed ? "admitted" : "deferred_instance_policy",
+      historyOutcome,
       shopId: Number(shop.shopId),
       connectionId,
     });
@@ -693,6 +739,7 @@ export async function POST(request: NextRequest) {
       received: true, 
       status: requestOutboundPolicy.allowed ? "queued" : "deferred",
       callbackOutcome: "admitted",
+      historyOutcome,
       eventId,
       workOrderId,
       workOrderStatus: status,
@@ -771,6 +818,7 @@ export async function GET(request: NextRequest) {
     });
     console.log(`[Protractor Callback GET] Logged ${objectType} ${objectId} for shop ${shopId}`);
     const outboundPolicy = getProtractorOutboundPolicy();
+    const historyOutcome = callbackIngressHistoryOutcome();
     if (!outboundPolicy.allowed) {
       logProtractorPolicyDenial(outboundPolicy, "callback_get_deferred");
     }
@@ -778,6 +826,7 @@ export async function GET(request: NextRequest) {
       sourceRoute,
       method: "GET",
       outcome: outboundPolicy.allowed ? "admitted" : "deferred_instance_policy",
+      historyOutcome,
       shopId,
       connectionId,
     });
@@ -785,6 +834,7 @@ export async function GET(request: NextRequest) {
       ok: true,
       received: true, 
       status: outboundPolicy.allowed ? "queued" : "deferred",
+      historyOutcome,
       eventId,
       type: objectType,
       operation

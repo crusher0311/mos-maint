@@ -7,9 +7,9 @@
  * insertPostEvent / insertGetEvent / markProcessed / recordAttempt
  * against FAKE stores (no DB access — dev Mongo is prod), pinning:
  *
- *   1. Flag OFF (default): Mongo writes are byte-identical to the
- *      pre-task-#1006 shape — exact document keys, no `eventKey`
- *      field, updates target `_id` — and PG is NEVER touched.
+ *   1. Flag OFF (default): Mongo keeps the canonical legacy event shape
+ *      (without `eventKey`) while recording bounded `historyOutcome`
+ *      evidence; updates still target `_id` and PG is NEVER touched.
  *   2. Flag ON: PG receives the write keyed by an app UUID, the
  *      return key IS that UUID, and the Mongo shadow doc carries the
  *      same `eventKey` with otherwise-matching fields (so the
@@ -137,12 +137,16 @@ async function main() {
     ok("insertPostEvent writes one Mongo doc", ins?.op === "insertOne");
     const doc = (ins as any)?.doc ?? {};
     ok(
-      "POST doc keys are the exact legacy shape (no eventKey/method)",
+      "POST doc keys keep the legacy shape plus deferred evidence",
       JSON.stringify(Object.keys(doc).sort()) ===
-        JSON.stringify(["connectionId", "payload", "processed", "receivedAt", "shopId", "status", "workOrderId"]),
+        JSON.stringify(["connectionId", "historyOutcome", "payload", "processed", "receivedAt", "shopId", "status", "workOrderId"]),
       `got keys: ${Object.keys(doc).sort().join(",")}`,
     );
     ok("POST doc processed=false", doc.processed === false);
+    ok(
+      "POST doc records deferred evidence",
+      doc.historyOutcome?.category === "deferred" && doc.historyOutcome?.reason === "pending_replay",
+    );
     ok("returned key is the inserted ObjectId hex", postKey === lastInsertedId?.toHexString());
     ok("PG never touched with flag OFF (insert)", pgCalls.length === 0);
   }
@@ -157,15 +161,19 @@ async function main() {
   {
     const doc = (mongoOps[1] as any)?.doc ?? {};
     ok(
-      "GET doc keys are the exact legacy shape",
+      "GET doc keys keep the legacy queue shape plus deferred evidence",
       JSON.stringify(Object.keys(doc).sort()) ===
         JSON.stringify([
-          "attempts", "connectionId", "method", "objectId", "objectType",
+          "attempts", "connectionId", "historyOutcome", "method", "objectId", "objectType",
           "operation", "priority", "processed", "receivedAt", "shopId",
         ]),
       `got keys: ${Object.keys(doc).sort().join(",")}`,
     );
     ok("GET doc method/attempts/priority defaults", doc.method === "GET" && doc.attempts === 0 && doc.priority === 1);
+    ok(
+      "GET doc records deferred evidence",
+      doc.historyOutcome?.category === "deferred" && doc.historyOutcome?.reason === "pending_replay",
+    );
     ok("GET returned key is ObjectId hex", /^[0-9a-f]{24}$/.test(getKey));
   }
 
@@ -259,7 +267,9 @@ async function main() {
     ok(
       "denied PG shadow record is immediately replay-eligible",
       shadow.method === "POST" && shadow.objectType === "WorkOrder" &&
-        shadow.objectId === "WO-PG-DEFERRED" && shadow.attempts === 0,
+        shadow.objectId === "WO-PG-DEFERRED" && shadow.attempts === 0 &&
+        shadow.historyOutcome?.category === "deferred" &&
+        shadow.historyOutcome?.reason === "pending_replay",
     );
   }
 

@@ -17,6 +17,18 @@
 import { and, asc, count, desc, eq, gte, inArray, isNotNull, lt, max, or, sql } from "drizzle-orm";
 import { getDb } from "@/lib/db/drizzle";
 import { protractorCallbackEvents as t } from "@/lib/db/schema/wave3";
+import {
+  DEFAULT_CALLBACK_HISTORY_OUTCOME,
+  normalizeCallbackHistoryOutcome,
+  parseCallbackHistoryOutcome,
+  type CallbackHistoryOutcome,
+} from "@/lib/integrations/protractor/callback-outcomes";
+
+const CALLBACK_OUTCOME_JSON_KEY = "historyOutcome";
+const CALLBACK_OUTCOME_COALESCED: CallbackHistoryOutcome = {
+  category: "coalesced",
+  reason: "superseded",
+};
 
 export interface InsertPostEventFields {
   eventKey: string;
@@ -105,6 +117,34 @@ function identityLockKey(identity: CallbackAdmissionIdentity): string {
     identity.objectType,
     identity.objectId,
   ]);
+}
+
+function outcomePayload(payload: unknown, outcome: CallbackHistoryOutcome): unknown {
+  if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+    return {
+      ...(payload as Record<string, unknown>),
+      [CALLBACK_OUTCOME_JSON_KEY]: outcome,
+    };
+  }
+  return {
+    callbackPayload: payload ?? null,
+    [CALLBACK_OUTCOME_JSON_KEY]: outcome,
+  };
+}
+
+function setOutcomeSql(outcome: CallbackHistoryOutcome) {
+  return sql`
+    jsonb_set(
+      CASE
+        WHEN jsonb_typeof(coalesce(${t.payload}, '{}'::jsonb)) = 'object'
+          THEN coalesce(${t.payload}, '{}'::jsonb)
+        ELSE '{}'::jsonb
+      END,
+      '{historyOutcome}',
+      ${JSON.stringify(outcome)}::jsonb,
+      true
+    )
+  `;
 }
 
 export async function admitCallbackEvent(
@@ -212,7 +252,13 @@ export async function finishCallbackEventAdmission(
 
     await tx
       .update(t)
-      .set({ processed: true, processedAt: now, noAction: true, processingStartedAt: null })
+      .set({
+        processed: true,
+        processedAt: now,
+        noAction: true,
+        processingStartedAt: null,
+        payload: setOutcomeSql(CALLBACK_OUTCOME_COALESCED),
+      })
       .where(
         and(
           identityWhere(identity),
@@ -255,8 +301,10 @@ export async function completeCallbackGeneration(
   identity: CallbackAdmissionIdentity,
   ownerToken: string,
   ownerReceivedAt: Date,
+  outcome: CallbackHistoryOutcome = DEFAULT_CALLBACK_HISTORY_OUTCOME,
 ): Promise<boolean> {
   const db = getDb();
+  const ownerOutcome = normalizeCallbackHistoryOutcome(outcome);
   return db.transaction(async (tx) => {
     await tx.execute(
       sql`SELECT pg_advisory_xact_lock(hashtextextended(${identityLockKey(identity)}, 0))`,
@@ -275,22 +323,38 @@ export async function completeCallbackGeneration(
       ))
       .limit(1);
     if (owner.length !== 1) return false;
+    const completedOwner = await tx
+      .update(t)
+      .set({
+        processed: true,
+        processedAt: new Date(),
+        noAction: true,
+        processingStartedAt: null,
+        payload: setOutcomeSql(ownerOutcome),
+      })
+      .where(and(
+        eq(t.eventKey, eventKey),
+        eq(t.processed, false),
+        eq(t.processingStartedAt, new Date(ownerToken)),
+      ))
+      .returning({ eventKey: t.eventKey });
+    if (completedOwner.length !== 1) return false;
     await tx
       .update(t)
-      .set({ processed: true, processedAt: new Date(), noAction: true })
-      .where(
-        and(
-          eq(t.processed, false),
-          or(
-            eq(t.eventKey, eventKey),
-            and(
-              identityWhere(identity),
-              sql`${t.receivedAt} <= ${ownerReceivedAt}`,
-              ...(identity.terminal ? [] : [sql`NOT (${terminalPredicate})`]),
-            ),
-          ),
-        ),
-      );
+      .set({
+        processed: true,
+        processedAt: new Date(),
+        noAction: true,
+        processingStartedAt: null,
+        payload: setOutcomeSql(CALLBACK_OUTCOME_COALESCED),
+      })
+      .where(and(
+        identityWhere(identity),
+        eq(t.processed, false),
+        sql`${t.eventKey} <> ${eventKey}`,
+        sql`${t.receivedAt} <= ${ownerReceivedAt}`,
+        ...(identity.terminal ? [] : [sql`NOT (${terminalPredicate})`]),
+      ));
     return true;
   });
 }
@@ -307,7 +371,10 @@ export async function insertPostEvent(f: InsertPostEventFields): Promise<void> {
       attempts: 0,
       priority: 1,
     } : {}),
-    payload: f.payload,
+    payload: outcomePayload(f.payload, {
+      category: "deferred",
+      reason: "pending_replay",
+    }),
     workOrderId: f.workOrderId,
     status: f.status ?? null,
     connectionId: f.connectionId,
@@ -329,6 +396,10 @@ export async function insertGetEvent(f: InsertGetEventFields): Promise<void> {
     processed: false,
     attempts: 0,
     priority: 1,
+    payload: outcomePayload(null, {
+      category: "deferred",
+      reason: "pending_replay",
+    }),
   });
 }
 
@@ -398,6 +469,7 @@ export async function markProcessedByKey(
     workOrderNumber?: string | number | null;
     noAction?: boolean;
     deletedFromDashboard?: boolean;
+    historyOutcome?: CallbackHistoryOutcome;
   } = {},
 ): Promise<void> {
   await getDb()
@@ -412,6 +484,9 @@ export async function markProcessedByKey(
       ...(fields.noAction !== undefined ? { noAction: fields.noAction } : {}),
       ...(fields.deletedFromDashboard !== undefined
         ? { deletedFromDashboard: fields.deletedFromDashboard }
+        : {}),
+      ...(fields.historyOutcome !== undefined
+        ? { payload: setOutcomeSql(normalizeCallbackHistoryOutcome(fields.historyOutcome)) }
         : {}),
     })
     .where(eq(t.eventKey, eventKey));
@@ -506,6 +581,27 @@ export async function recordError(eventKey: string, message: string): Promise<vo
     .update(t)
     .set({ lastError: message, lastErrorAt: new Date() })
     .where(eq(t.eventKey, eventKey));
+}
+
+/** Persist queue-failure evidence only while this owner still holds the fence. */
+export async function recordCallbackOutcome(
+  eventKey: string,
+  ownerToken: string,
+  outcome: CallbackHistoryOutcome,
+): Promise<void> {
+  const ownerStartedAt = new Date(ownerToken);
+  if (Number.isNaN(ownerStartedAt.getTime())) return;
+  await getDb()
+    .update(t)
+    .set({ payload: setOutcomeSql(normalizeCallbackHistoryOutcome(outcome, {
+      category: "failed",
+      reason: "dispatch_failed",
+    })) })
+    .where(and(
+      eq(t.eventKey, eventKey),
+      eq(t.processed, false),
+      eq(t.processingStartedAt, ownerStartedAt),
+    ));
 }
 
 export interface PendingGetEvent {
@@ -685,4 +781,84 @@ export async function connectionShopPairs(): Promise<
       shopId: Number(r.shopId),
       last: r.last ?? null,
     }));
+}
+
+function reportReceivedAt(value: unknown): string | null {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString();
+  }
+  if (typeof value === "string") {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+  }
+  return null;
+}
+
+/**
+ * Bounded, redacted callback-outcome sample. Each method gets its own bounded
+ * read (2.5s statement timeout) so PostgreSQL can use
+ * pro_cb_method_received_idx; the two windows are merged in memory and capped
+ * at the newest 200 rows. Raw provider payload and error columns never cross
+ * this repository boundary.
+ */
+export async function getCallbackOutcomeReport() {
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const rows = await getDb().transaction(async (tx) => {
+    await tx.execute(sql`SET LOCAL statement_timeout = '2500ms'`);
+    const boundedRows: any[] = [];
+    for (const method of ["GET", "POST"] as const) {
+      const methodRows = await tx
+        .select({
+          method: t.method,
+          shopId: t.shopId,
+          receivedAt: t.receivedAt,
+          historyOutcome: sql<unknown>`${t.payload} -> 'historyOutcome'`,
+        })
+        .from(t)
+        .where(and(eq(t.method, method), gte(t.receivedAt, since)))
+        .orderBy(desc(t.receivedAt))
+        .limit(200);
+      boundedRows.push(...methodRows);
+    }
+    return boundedRows;
+  });
+  const counts: Record<string, number> = {};
+  const reportReceivedTime = (value: unknown): number => {
+    if (value instanceof Date) {
+      const time = value.getTime();
+      return Number.isNaN(time) ? Number.NEGATIVE_INFINITY : time;
+    }
+    if (typeof value === "string") {
+      const time = Date.parse(value);
+      return Number.isNaN(time) ? Number.NEGATIVE_INFINITY : time;
+    }
+    return Number.NEGATIVE_INFINITY;
+  };
+  const reportRows = rows
+    .sort((a, b) => {
+      return reportReceivedTime(b.receivedAt) - reportReceivedTime(a.receivedAt);
+    })
+    .slice(0, 200)
+    .map((row) => {
+      const outcome = parseCallbackHistoryOutcome(row.historyOutcome);
+      const category = outcome?.category ?? "unknown";
+      const reason = outcome?.reason ?? "unknown";
+      counts[category] = (counts[category] ?? 0) + 1;
+      return {
+        method: row.method === "GET" ? "GET" as const : "POST" as const,
+        shopId: row.shopId == null ? 0 : Number(row.shopId),
+        receivedAt: reportReceivedAt(row.receivedAt),
+        category,
+        reason,
+        ...(outcome?.indexedJobs === undefined ? {} : { indexedJobs: outcome.indexedJobs }),
+        ...(outcome?.changedJobs === undefined ? {} : { changedJobs: outcome.changedJobs }),
+      };
+    });
+  return {
+    sampleLimit: 200 as const,
+    windowHours: 24 as const,
+    sampled: reportRows.length,
+    counts,
+    rows: reportRows,
+  };
 }

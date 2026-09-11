@@ -5,6 +5,7 @@ import {
   runWithProtractorCallbackTransport,
 } from "./client";
 import { logProtractorPolicyDenial } from "./outbound-policy.cjs";
+import type { CallbackHistoryOutcome } from "./callback-outcomes";
 
 const CALLBACK_CANDIDATE_MULTIPLIER = 10;
 const TERMINAL_OPERATIONS = new Set([
@@ -87,7 +88,7 @@ export function selectFairCallbackBatch(
 
 export async function processProtractorCallbackQueue(
   db: Db,
-  dispatch: (item: callbackEvents.PendingGetEvent) => Promise<void>,
+  dispatch: (item: callbackEvents.PendingGetEvent) => Promise<CallbackHistoryOutcome | void>,
   options: {
     limit?: number;
     maxAttempts?: number;
@@ -132,7 +133,10 @@ export async function processProtractorCallbackQueue(
         !(await options.isShopEligible(shopId))
       )
     ) {
-      await callbackEvents.markProcessed(item.key, { noAction: true });
+      await callbackEvents.markProcessed(item.key, {
+        noAction: true,
+        historyOutcome: { category: "terminal_no_history", reason: "ineligible" },
+      });
       continue;
     }
     const identity = item.objectType && item.objectId ? {
@@ -154,7 +158,7 @@ export async function processProtractorCallbackQueue(
         if (!admitted) continue;
       }
       await callbackEvents.recordProcessingStarted(item.key);
-      await runWithProtractorCallbackTransport(
+      const outcome = await runWithProtractorCallbackTransport(
         deadlineMs,
         () => dispatch(item),
         // This is the timestamp persisted by insertGetEvent. Never replace it
@@ -174,11 +178,18 @@ export async function processProtractorCallbackQueue(
         objectId: item.objectId!,
         operation: "*",
         terminal: isTerminal(item),
-      }, ownerToken, item.receivedAt ?? new Date(0));
+      }, ownerToken, item.receivedAt ?? new Date(0), outcome || {
+        category: "deferred", reason: "unverified",
+      });
       if (!completed) throw new Error("Callback completion fence rejected stale owner");
       await callbackEvents.markCallbackShopSuccessfullyServed(shopId, item.key);
       processed++;
     } catch (error: any) {
+      if (ownerToken) {
+        await callbackEvents.recordCallbackOutcome(item.key, ownerToken, {
+          category: "failed", reason: "dispatch_failed",
+        });
+      }
       await callbackEvents.recordError(item.key, error?.message || String(error));
       failed++;
     } finally {

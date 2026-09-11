@@ -27,6 +27,12 @@ import {
   shouldShadowWriteMongoProtractorOps,
   shadowWriteMongoIntegrationOps,
 } from "@/lib/db/integration-ops-write-mode";
+import {
+  DEFAULT_CALLBACK_HISTORY_OUTCOME,
+  normalizeCallbackHistoryOutcome,
+  parseCallbackHistoryOutcome,
+  type CallbackHistoryOutcome,
+} from "@/lib/integrations/protractor/callback-outcomes";
 import * as pg from "./pg/protractor-callback-events";
 
 const COLLECTION = "protractor_callback_events";
@@ -83,6 +89,12 @@ function mongoKeyFilter(key: CallbackEventKey): Document {
     : { eventKey: key };
 }
 
+function mongoKeyExclusion(key: CallbackEventKey): Document {
+  return ObjectId.isValid(key) && String(new ObjectId(key)) === key
+    ? { _id: { $ne: new ObjectId(key) } }
+    : { eventKey: { $ne: key } };
+}
+
 function admissionId(identity: CallbackAdmissionIdentity): string {
   return JSON.stringify([
     identity.shopId,
@@ -91,9 +103,12 @@ function admissionId(identity: CallbackAdmissionIdentity): string {
   ]);
 }
 
-async function coalesceMongoEvent(key: unknown): Promise<void> {
+async function coalesceMongoEvent(
+  key: unknown,
+  outcome: CallbackHistoryOutcome = { category: "coalesced", reason: "superseded" },
+): Promise<void> {
   if (typeof key !== "string") return;
-  await markProcessedMongo(key, { noAction: true });
+  await markProcessedMongo(key, { noAction: true, historyOutcome: outcome });
 }
 
 /**
@@ -416,10 +431,16 @@ export async function completeCallbackGeneration(
   identity: CallbackAdmissionIdentity,
   ownerToken: string,
   ownerReceivedAt: Date,
+  outcome: CallbackHistoryOutcome = DEFAULT_CALLBACK_HISTORY_OUTCOME,
 ): Promise<boolean> {
   if (isProtractorOpsPgCanonical()) {
-    return pg.completeCallbackGeneration(key, identity, ownerToken, ownerReceivedAt);
+    return pg.completeCallbackGeneration(key, identity, ownerToken, ownerReceivedAt, outcome);
   }
+  const ownerOutcome = normalizeCallbackHistoryOutcome(outcome);
+  const coalescedOutcome: CallbackHistoryOutcome = {
+    category: "coalesced",
+    reason: "superseded",
+  };
   const terminalOps = /^(DELETE|INVOICED|INVOICE|CLOSED|VOID)$/i;
   const sibling = {
     shopId: { $in: [identity.shopId, String(identity.shopId)] },
@@ -448,10 +469,37 @@ export async function completeCallbackGeneration(
         { session },
       );
       if (!coordinator || !owner) return;
-      await db.collection<Document>(COLLECTION).updateMany(
-        { processed: false, $or: [mongoKeyFilter(key), sibling] } as Document,
+      const completedOwner = await db.collection<Document>(COLLECTION).updateOne(
         {
-          $set: { processed: true, processedAt: new Date(), noAction: true },
+          ...mongoKeyFilter(key),
+          processed: false,
+          processingOwnerToken: ownerToken,
+        } as Document,
+        {
+          $set: {
+            processed: true,
+            processedAt: new Date(),
+            noAction: true,
+            historyOutcome: ownerOutcome,
+          },
+          $unset: { processingOwnerToken: "", processingStartedAt: "" },
+        },
+        { session },
+      );
+      if (completedOwner.matchedCount !== 1) return;
+      await db.collection<Document>(COLLECTION).updateMany(
+        {
+          ...mongoKeyExclusion(key),
+          processed: false,
+          $or: [sibling],
+        } as Document,
+        {
+          $set: {
+            processed: true,
+            processedAt: new Date(),
+            noAction: true,
+            historyOutcome: coalescedOutcome,
+          },
           $unset: { processingOwnerToken: "", processingStartedAt: "" },
         },
         { session },
@@ -513,6 +561,7 @@ export async function insertPostEvent(fields: {
             deferredByInstancePolicy: true,
           } : {}),
           payload: fields.payload,
+          historyOutcome: { category: "deferred", reason: "pending_replay" },
           workOrderId: fields.workOrderId,
           status: fields.status,
           connectionId: fields.connectionId,
@@ -536,6 +585,7 @@ export async function insertPostEvent(fields: {
       deferredByInstancePolicy: true,
     } : {}),
     payload: fields.payload,
+    historyOutcome: { category: "deferred", reason: "pending_replay" },
     workOrderId: fields.workOrderId,
     status: fields.status,
     connectionId: fields.connectionId,
@@ -578,6 +628,7 @@ export async function insertGetEvent(fields: {
           objectId: fields.objectId,
           operation: fields.operation,
           shopId: fields.shopId,
+          historyOutcome: { category: "deferred", reason: "pending_replay" },
           processed: false,
           attempts: 0,
           priority: 1,
@@ -595,6 +646,7 @@ export async function insertGetEvent(fields: {
     objectId: fields.objectId,
     operation: fields.operation,
     shopId: fields.shopId,
+    historyOutcome: { category: "deferred", reason: "pending_replay" },
     processed: false,
     attempts: 0,
     priority: 1,
@@ -666,6 +718,7 @@ export interface ProcessedFields {
   workOrderNumber?: string | number | null;
   noAction?: boolean;
   deletedFromDashboard?: boolean;
+  historyOutcome?: CallbackHistoryOutcome;
 }
 
 export async function markProcessed(
@@ -700,6 +753,9 @@ async function markProcessedMongo(
       ...(fields.noAction !== undefined ? { noAction: fields.noAction } : {}),
       ...(fields.deletedFromDashboard !== undefined
         ? { deletedFromDashboard: fields.deletedFromDashboard }
+        : {}),
+      ...(fields.historyOutcome !== undefined
+        ? { historyOutcome: normalizeCallbackHistoryOutcome(fields.historyOutcome) }
         : {}),
     },
   });
@@ -824,6 +880,43 @@ export async function recordError(key: CallbackEventKey, message: string): Promi
     await shadowWriteMongoIntegrationOps(
       shouldShadowWriteMongoProtractorOps,
       "protractor.callback_events.recordError",
+      doMongo,
+    );
+    return;
+  }
+  await doMongo();
+}
+
+/**
+ * Fenced queue-failure evidence.  A failed owner may leave the event
+ * replayable, but it must not be able to overwrite a newer owner or an
+ * already-completed generation.
+ */
+export async function recordCallbackOutcome(
+  key: CallbackEventKey,
+  ownerToken: string,
+  outcome: CallbackHistoryOutcome,
+): Promise<void> {
+  const safeOutcome = normalizeCallbackHistoryOutcome(outcome, {
+    category: "failed",
+    reason: "dispatch_failed",
+  });
+  const doMongo = async () => {
+    const col = await collection();
+    await col.updateOne(
+      {
+        ...mongoKeyFilter(key),
+        processed: false,
+        processingOwnerToken: ownerToken,
+      } as Document,
+      { $set: { historyOutcome: safeOutcome } },
+    );
+  };
+  if (isProtractorOpsPgCanonical()) {
+    await pg.recordCallbackOutcome(key, ownerToken, safeOutcome);
+    await shadowWriteMongoIntegrationOps(
+      shouldShadowWriteMongoProtractorOps,
+      "protractor.callback_events.recordOutcome",
       doMongo,
     );
     return;
@@ -1007,6 +1100,92 @@ export async function connectionShopPairs(): Promise<
       (r: any): r is { connectionId: string; shopId: number; last: Date | null } =>
         typeof r.connectionId === "string" && typeof r.shopId === "number",
     );
+}
+
+export interface CallbackOutcomeReportRow {
+  method: "GET" | "POST";
+  shopId: number;
+  receivedAt: string | null;
+  category: string;
+  reason: string;
+  indexedJobs?: number;
+  changedJobs?: number;
+}
+
+export interface CallbackOutcomeReport {
+  sampleLimit: 200;
+  windowHours: 24;
+  sampled: number;
+  counts: Record<string, number>;
+  rows: CallbackOutcomeReportRow[];
+}
+
+function reportReceivedAt(value: unknown): string | null {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString();
+  }
+  if (typeof value === "string") {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+  }
+  return null;
+}
+
+function reportOutcome(value: unknown): {
+  category: string;
+  reason: string;
+  indexedJobs?: number;
+  changedJobs?: number;
+} {
+  const parsed = parseCallbackHistoryOutcome(value);
+  if (!parsed) return { category: "unknown", reason: "unknown" };
+  return parsed;
+}
+
+/**
+ * Return only a recent, bounded, redacted sample. The Mongo read is pinned to
+ * the existing receivedAt_-1 index; the projection excludes raw payloads,
+ * identifiers, VINs, customer fields, and error strings. Legacy rows remain
+ * `unknown` rather than being treated as successful applications.
+ */
+export async function getCallbackOutcomeReport(
+  dbOverride?: Db,
+): Promise<CallbackOutcomeReport> {
+  if (isProtractorOpsPgCanonical()) {
+    return pg.getCallbackOutcomeReport();
+  }
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const col = dbOverride ? dbOverride.collection(COLLECTION) : await collection();
+  const docs = await col.find(
+    { receivedAt: { $gte: since } } as Document,
+    {
+      projection: { method: 1, shopId: 1, receivedAt: 1, historyOutcome: 1 },
+      maxTimeMS: 5_000,
+      hint: "receivedAt_-1",
+    },
+  ).sort({ receivedAt: -1 }).limit(200).toArray();
+  const counts: Record<string, number> = {};
+  const rows = docs.map((doc: Document) => {
+    const outcome = reportOutcome(doc.historyOutcome);
+    counts[outcome.category] = (counts[outcome.category] ?? 0) + 1;
+    const shopId = Number(doc.shopId);
+    return {
+      method: doc.method === "GET" ? "GET" as const : "POST" as const,
+      shopId: Number.isFinite(shopId) ? shopId : 0,
+      receivedAt: reportReceivedAt(doc.receivedAt),
+      category: outcome.category,
+      reason: outcome.reason,
+      ...(outcome.indexedJobs === undefined ? {} : { indexedJobs: outcome.indexedJobs }),
+      ...(outcome.changedJobs === undefined ? {} : { changedJobs: outcome.changedJobs }),
+    };
+  });
+  return {
+    sampleLimit: 200,
+    windowHours: 24,
+    sampled: rows.length,
+    counts,
+    rows,
+  };
 }
 
 /**

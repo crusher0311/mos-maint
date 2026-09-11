@@ -10,7 +10,8 @@ import {
 } from "./callback-replay";
 import { NormalizedIngestionService } from "@/lib/integrations/core/normalized-ingestion";
 import { attributeRevenueFromWorkOrder } from "@/lib/enterprise";
-import { extractJobIndexFromWorkOrder, computeJobHash } from "@/lib/job-index";
+import { indexCallbackHistory } from "./callback-history-index";
+import type { CallbackHistoryOutcome } from "./callback-outcomes";
 import { isProtractorShopRecord } from "./shop-eligibility";
 
 const TERMINAL = new Set(["DELETE", "INVOICED", "INVOICE", "CLOSED", "VOID"]);
@@ -22,7 +23,7 @@ const CALLBACK_DRAIN_BUDGET_MS = 15_000;
  */
 export async function processProtractorCallbackDrain(db?: Db, options: { budgetMs?: number } = {}) {
   const queueDb = db ?? await callbackEvents.getCallbackQueueDb();
-  return processProtractorCallbackQueue(queueDb, async (item) => {
+  return processProtractorCallbackQueue(queueDb, async (item): Promise<CallbackHistoryOutcome> => {
     const operation = String(item.operation || "").toUpperCase();
     if (item.objectType === "WorkOrder" && item.objectId && operation === "DELETE") {
       const applied = await applyProtractorTerminalCallback(queueDb, {
@@ -31,7 +32,7 @@ export async function processProtractorCallbackDrain(db?: Db, options: { budgetM
         status: "Deleted",
       });
       if (!applied) throw new Error("Terminal callback references an unknown work order");
-      return;
+      return { category: "terminal_no_history", reason: "terminal_applied" };
     }
     if (item.method === "POST" && item.objectId && TERMINAL.has(operation)) {
       const replayed = await replayDeferredTerminalPost(queueDb, {
@@ -41,7 +42,7 @@ export async function processProtractorCallbackDrain(db?: Db, options: { budgetM
         operation,
       });
       if (!replayed) throw new Error("Deferred terminal POST replay failed");
-      return;
+      return { category: "terminal_no_history", reason: "terminal_applied" };
     }
     if (item.objectType === "ServiceItem" && item.objectId) {
       const result = await fetchVehicleById(item.shopId, item.objectId, {
@@ -49,7 +50,7 @@ export async function processProtractorCallbackDrain(db?: Db, options: { budgetM
       });
       if (!result.ok || !result.vehicle?.VIN) throw new Error(`Vehicle callback replay failed: ${result.error || "missing data"}`);
       await upsertProtractorVehicleSnapshot(item.shopId, result.vehicle.VIN, result.vehicle);
-      return;
+      return { category: "terminal_no_history", reason: "vehicle_snapshot" };
     }
     if (item.objectType === "WorkOrder" && item.objectId) {
       const result = await fetchWorkOrderById(item.shopId, item.objectId, {
@@ -94,32 +95,23 @@ export async function processProtractorCallbackDrain(db?: Db, options: { budgetM
             // Revenue attribution remains non-critical.
           }
         }
+        const outcome = await indexCallbackHistory(queueDb, item.shopId, result.workOrder);
         try {
-          for (const entry of extractJobIndexFromWorkOrder(item.shopId, result.workOrder, "protractor")) {
-            const filter = {
-              shopId: item.shopId,
-              workOrderId: entry.workOrderId,
-              servicePackageId: entry.servicePackageId,
-            };
-            const existing = await queueDb.collection("job_index").findOne(filter);
-            const contentHash = computeJobHash(entry);
-            if (existing?.contentHash !== contentHash) {
-              await queueDb.collection("job_index").updateOne(
-                filter,
-                { $set: { ...entry, contentHash } },
-                { upsert: true },
-              );
-            }
+          if (outcome.category !== "failed") {
+            await queueDb.collection("protractor_work_orders").updateMany(
+              { shopId: { $in: [String(item.shopId), Number(item.shopId)] }, workOrderId: item.objectId },
+              { $set: { jobsIndexed: true, jobsIndexedAt: new Date() } },
+            );
           }
-          await queueDb.collection("protractor_work_orders").updateMany(
-            { shopId: { $in: [String(item.shopId), Number(item.shopId)] }, workOrderId: item.objectId },
-            { $set: { jobsIndexed: true, jobsIndexedAt: new Date() } },
-          );
-        } catch (error) {
-          console.error(`[Queue] Job indexing error for WO ${item.objectId}:`, error);
+        } catch {
+          // Snapshot bookkeeping is not evidence of job-index application.
+          console.error("[Queue] Callback index marker update failed");
         }
+        return outcome;
       }
-      return;
+      return completed
+        ? { category: "failed", reason: "missing_vin" }
+        : { category: "terminal_no_history", reason: "open_work_order" };
     }
     throw new Error("Callback event has no replayable object");
   }, {

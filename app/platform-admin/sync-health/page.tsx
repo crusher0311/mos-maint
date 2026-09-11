@@ -193,6 +193,32 @@ interface ProtractorInvoiceCachePrewarmShop {
   durationMs: number | null;
 }
 
+type CallbackOutcomeCategory =
+  | "applied_indexed"
+  | "terminal_no_history"
+  | "coalesced"
+  | "deferred"
+  | "failed"
+  | "unknown";
+
+interface ProtractorCallbackOutcomeRow {
+  method: "GET" | "POST";
+  shopId: number;
+  receivedAt: string | null;
+  category: CallbackOutcomeCategory;
+  reason: string;
+  indexedJobs?: number;
+  changedJobs?: number;
+}
+
+interface ProtractorCallbackOutcomeReport {
+  sampleLimit: number;
+  windowHours: number;
+  sampled: number;
+  counts: Record<string, number>;
+  rows: ProtractorCallbackOutcomeRow[];
+}
+
 interface ProviderBackfill {
   complete: number;
   total: number;
@@ -1021,6 +1047,223 @@ function TriageSummarySection() {
           </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+const CALLBACK_OUTCOME_CATEGORIES: Array<{
+  key: CallbackOutcomeCategory;
+  label: string;
+  className: string;
+}> = [
+  { key: "applied_indexed", label: "Applied / indexed", className: "bg-emerald-100 text-emerald-800" },
+  { key: "terminal_no_history", label: "Terminal, no history", className: "bg-sky-100 text-sky-800" },
+  { key: "coalesced", label: "Coalesced", className: "bg-violet-100 text-violet-800" },
+  { key: "deferred", label: "Deferred", className: "bg-amber-100 text-amber-800" },
+  { key: "failed", label: "Failed", className: "bg-rose-100 text-rose-800" },
+  { key: "unknown", label: "Unknown", className: "bg-gray-100 text-gray-700" },
+];
+
+/**
+ * Manually loaded, read-only callback outcome drilldown. This deliberately
+ * lives outside the main sync-health load: opening the page must not add
+ * another callback-event scan, and viewing it can never invoke a provider or
+ * worker.
+ */
+function ProtractorCallbackOutcomeSection() {
+  const [report, setReport] = useState<ProtractorCallbackOutcomeReport | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(
+        "/api/admin/sync-health/protractor-callback-outcomes",
+        { cache: "no-store" },
+      );
+      const json = await response.json();
+      if (!response.ok) {
+        throw new Error(json.error || `Failed to load callback outcomes (${response.status})`);
+      }
+      setReport(json);
+    } catch (err: any) {
+      setError(err?.message || "Failed to load callback outcomes");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+      <div className="p-4 border-b border-gray-100 flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="w-5 h-5 text-teal-600" />
+          <h2 className="font-semibold text-gray-900">
+            Protractor callback outcomes
+          </h2>
+          <span className="px-2 py-0.5 text-xs bg-teal-100 text-teal-800 rounded-full">
+            read-only
+          </span>
+        </div>
+        <button
+          onClick={load}
+          disabled={loading}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border border-gray-200 hover:bg-gray-50 disabled:opacity-50"
+          title="Load the bounded callback outcome sample"
+        >
+          {loading ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <RefreshCw className="w-3.5 h-3.5" />
+          )}
+          {report ? "Refresh sample" : "Load sample"}
+        </button>
+      </div>
+
+      <div className="p-4">
+        <p className="text-xs text-gray-600 max-w-4xl">
+          Manually loaded from a bounded, read-only report. It never invokes a
+          provider or worker. Counts below are <strong>sample counts, not fleet totals</strong>:
+          up to the {report?.sampleLimit ?? 200} most recent outcomes in the last{" "}
+          {report?.windowHours ?? 24} hours.
+        </p>
+
+        {error ? (
+          <div className="mt-4 p-3 flex items-center gap-2 text-red-700 bg-red-50 rounded-lg text-sm">
+            <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+            <span>{error}</span>
+          </div>
+        ) : !report ? (
+          <div className="mt-4 p-6 border border-dashed border-gray-200 rounded-lg flex flex-col items-center justify-center gap-2 text-gray-500 text-sm">
+            <ShieldCheck className="w-5 h-5 text-gray-400" />
+            <span>Load the sample when investigating callback processing.</span>
+          </div>
+        ) : (
+          <>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {CALLBACK_OUTCOME_CATEGORIES.map((category) => (
+                <div
+                  key={category.key}
+                  className="min-w-[145px] flex-1 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span
+                      className={`px-2 py-0.5 text-[11px] rounded-full ${category.className}`}
+                    >
+                      {category.label}
+                    </span>
+                    <span className="font-semibold text-gray-900">
+                      {(report.counts[category.key] ?? 0).toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-3 text-xs text-gray-500 flex flex-wrap gap-x-5 gap-y-1">
+              <span>
+                Sampled{" "}
+                <strong className="text-gray-700">{report.sampled.toLocaleString()}</strong>{" "}
+                of up to {report.sampleLimit.toLocaleString()}
+              </span>
+              <span>Window: last {report.windowHours} hours</span>
+              <span className="text-gray-400">Sample counts are not fleet totals</span>
+            </div>
+
+            <div className="mt-3 rounded-lg border border-teal-100 bg-teal-50 p-3 text-xs text-teal-900 space-y-1">
+              <p>
+                <strong>Applied / indexed</strong> includes hash-verified
+                unchanged index entries; unchanged does not mean unprocessed.
+              </p>
+              <p>
+                <strong>Legacy unknown</strong> is never proof that a callback
+                failed or succeeded.
+              </p>
+            </div>
+
+            {report.rows.length === 0 ? (
+              <div className="mt-4 p-6 flex items-center justify-center gap-2 text-gray-500 text-sm">
+                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                No callback outcomes in the bounded window.
+              </div>
+            ) : (
+              <div className="mt-4 overflow-x-auto">
+                <table className="w-full min-w-[760px] text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="text-left px-3 py-2 font-medium text-gray-600">
+                        Method
+                      </th>
+                      <th className="text-left px-3 py-2 font-medium text-gray-600">
+                        Shop ID
+                      </th>
+                      <th className="text-left px-3 py-2 font-medium text-gray-600">
+                        Received
+                      </th>
+                      <th className="text-left px-3 py-2 font-medium text-gray-600">
+                        Outcome
+                      </th>
+                      <th className="text-left px-3 py-2 font-medium text-gray-600">
+                        Reason
+                      </th>
+                      <th className="text-right px-3 py-2 font-medium text-gray-600">
+                        Indexed jobs
+                      </th>
+                      <th className="text-right px-3 py-2 font-medium text-gray-600">
+                        Changed jobs
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {report.rows.map((row, index) => {
+                      const category = CALLBACK_OUTCOME_CATEGORIES.find(
+                        (item) => item.key === row.category,
+                      );
+                      return (
+                        <tr key={`${row.shopId}-${row.receivedAt || "unknown"}-${index}`} className="hover:bg-gray-50">
+                          <td className="px-3 py-2 font-mono text-gray-900">
+                            {row.method}
+                          </td>
+                          <td className="px-3 py-2 font-mono text-gray-900">
+                            {row.shopId}
+                          </td>
+                          <td className="px-3 py-2 text-gray-600 whitespace-nowrap">
+                            {formatDateTime(row.receivedAt)}
+                          </td>
+                          <td className="px-3 py-2">
+                            <span
+                              className={`inline-block px-2 py-0.5 text-xs rounded-full ${
+                                category?.className || "bg-gray-100 text-gray-700"
+                              }`}
+                            >
+                              {category?.label || row.category}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-gray-700">
+                            {row.reason || "—"}
+                          </td>
+                          <td className="px-3 py-2 text-right text-gray-700">
+                            {row.indexedJobs == null
+                              ? "—"
+                              : row.indexedJobs.toLocaleString()}
+                          </td>
+                          <td className="px-3 py-2 text-right text-gray-700">
+                            {row.changedJobs == null
+                              ? "—"
+                              : row.changedJobs.toLocaleString()}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -4279,6 +4522,10 @@ export default function SyncHealthPage() {
 
       {/* Triage summary — one-load first read (task #1119). */}
       <TriageSummarySection />
+
+      {/* Callback outcomes are intentionally a separate manual read so the
+          page's normal refresh does not scan callback-event history. */}
+      <ProtractorCallbackOutcomeSection />
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
