@@ -27,13 +27,19 @@ on ALL THREE or an under-configured process self-throttles its own backfill
 contribution. Confirm IDs by name each time — never hardcode.
 
 **Env-var change ≠ live: Render does NOT auto-deploy on an API env-var edit.**
-`PUT /v1/services/{id}/env-vars/{KEY}` (body `{"value":"..."}`, returns 200)
-persists the value but the running container keeps the OLD value until it
-restarts (env is injected at container start; our getters re-read process.env but
-process.env is frozen per-container). To apply WITHOUT a 7-8 min rebuild, use
-**`POST /v1/services/{id}/restart`** (returns 200) — spins a fresh container that
-picks up the new env, web stays zero-downtime. Use this for transient throttle
-tweaks; reserve full `POST .../deploys` for actual code changes.
+An env-var PUT persists the value, but **Restart service reuses the previous
+deployment's user-defined environment values**. A new deploy is required to
+apply saved settings; restart is not sufficient.
+
+**Why:** On 2026-09-11, saved trial flags looked correct in the API and restarted
+web instances logged Ready, yet the authenticated readiness endpoint still
+reported the feature disabled. Render's deploy documentation explicitly states
+that restart reuses the same commit and user-defined env values.
+
+**How to apply:** Deploy the exact intended commit after env changes, wait for
+live, and verify runtime behavior rather than treating configuration readback or
+startup logs as proof. Preserve operator-stop protection during trial staging.
+Source: https://render.com/docs/deploys (Restart service).
 
 **Why:** chasing a "still broken after the fix" report led to discovering prod
 was several commits behind main; the fix was never deployed. Render's last-built
