@@ -1,3 +1,4 @@
+import "./helpers/deny-network-egress";
 import assert from "node:assert/strict";
 import Module from "node:module";
 import { ObjectId } from "mongodb";
@@ -301,7 +302,39 @@ function post(body: Doc) {
   });
 }
 
+const ENV_KEYS = [
+  "NODE_ENV",
+  "REPLIT_DEV_DOMAIN",
+  "PROTRACTOR_DEVELOPMENT_RELAY_APPROVED",
+  "RENDER_INSTANCE_ID",
+  "PROTRACTOR_OUTBOUND_DENIED_INSTANCE_IDS",
+  "PROTRACTOR_OUTBOUND_DISABLED",
+  "PROTRACTOR_OPS_PG_CANONICAL",
+  "WRITE_MONGO_PROTRACTOR_OPS",
+  "PROTRACTOR_CALLBACK_REPLAY_NOT_BEFORE",
+  "PROTRACTOR_CALLBACK_CANARY_UNTIL",
+] as const;
+
 async function main() {
+  const originalEnvironment = new Map<string, string | undefined>(
+    ENV_KEYS.map(key => [key, process.env[key]]),
+  );
+  const restoreEnvironment = () => {
+    for (const key of ENV_KEYS) {
+      const value = originalEnvironment.get(key);
+      if (value === undefined) delete process.env[key];
+      else (process.env as Record<string, string | undefined>)[key] = value;
+    }
+  };
+  process.once("exit", restoreEnvironment);
+  const testEnv = process.env as Record<string, string | undefined>;
+  // Keep callback deferral assertions in the neutral test environment. An
+  // inherited Replit preview domain must not become an implicit
+  // development-relay decision for these mocked routes.
+  testEnv.NODE_ENV = "test";
+  delete testEnv.REPLIT_DEV_DOMAIN;
+  delete testEnv.PROTRACTOR_DEVELOPMENT_RELAY_APPROVED;
+
   process.env.RENDER_INSTANCE_ID = "denied-replica";
   process.env.PROTRACTOR_OUTBOUND_DENIED_INSTANCE_IDS = "denied-replica";
   delete process.env.PROTRACTOR_OPS_PG_CANONICAL;
@@ -609,6 +642,8 @@ async function main() {
   assert.equal(ping.status, 200);
   assert.equal((await ping.json()).ok, true);
 
+  restoreEnvironment();
+  process.removeListener("exit", restoreEnvironment);
   console.log("protractor instance callback deferral: all checks passed");
   process.exit(0);
 }

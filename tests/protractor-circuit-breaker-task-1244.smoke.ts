@@ -1,3 +1,4 @@
+import "./helpers/deny-network-egress";
 import {
   __protractorClientTestHooks,
   createServiceItem,

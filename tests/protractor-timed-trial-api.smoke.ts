@@ -8,6 +8,7 @@
  * The route dependencies are replaced through its test seam. No auth session,
  * Mongo, audit store, alert provider, or network request is used.
  */
+import "./helpers/deny-network-egress";
 import assert from "node:assert/strict";
 import { NextRequest } from "next/server";
 import { GET, POST } from "../app/api/platform-admin/protractor-operator-stop/route";
@@ -16,6 +17,8 @@ import { deps } from "../app/api/platform-admin/protractor-operator-stop/deps";
 type Doc = Record<string, any>;
 
 const ENV_KEYS = [
+  "NODE_ENV",
+  "REPLIT_DEV_DOMAIN",
   "RENDER_SERVICE_ID",
   "PROTRACTOR_CALLBACK_TRIAL_ENABLED",
   "PROTRACTOR_CALLBACK_CANARY_UNTIL",
@@ -23,6 +26,9 @@ const ENV_KEYS = [
   "PROTRACTOR_OUTBOUND_DENIED_INSTANCE_IDS",
   "PROTRACTOR_RELAY_REQUIRED",
   "PROTRACTOR_RELAY_MODE",
+  "PROTRACTOR_RELAY_URL",
+  "PROTRACTOR_RELAY_HMAC_SECRET",
+  "PROTRACTOR_DEVELOPMENT_RELAY_APPROVED",
   "RENDER_INSTANCE_ID",
 ] as const;
 
@@ -48,6 +54,9 @@ function state(overrides: Doc = {}): Doc {
 }
 
 function readyEnvironment(): void {
+  const env = process.env as Record<string, string | undefined>;
+  env.NODE_ENV = "production";
+  delete env.REPLIT_DEV_DOMAIN;
   process.env.RENDER_SERVICE_ID = PRODUCTION_SERVICE_ID;
   process.env.PROTRACTOR_CALLBACK_TRIAL_ENABLED = "true";
   delete process.env.PROTRACTOR_CALLBACK_CANARY_UNTIL;
@@ -55,6 +64,9 @@ function readyEnvironment(): void {
   delete process.env.PROTRACTOR_OUTBOUND_DENIED_INSTANCE_IDS;
   process.env.PROTRACTOR_RELAY_REQUIRED = "true";
   process.env.PROTRACTOR_RELAY_MODE = "relay";
+  process.env.PROTRACTOR_RELAY_URL = "https://protractor-relay.mos.tools/relay";
+  process.env.PROTRACTOR_RELAY_HMAC_SECRET = "t".repeat(32);
+  delete process.env.PROTRACTOR_DEVELOPMENT_RELAY_APPROVED;
   delete process.env.RENDER_INSTANCE_ID;
 }
 
@@ -88,6 +100,7 @@ async function main(): Promise<void> {
           mode: "timed_trial",
           scope,
           requiresCallback: scope === "callbacks",
+          requiresRelay: input.requiresRelay === true,
           startedAt: new Date("2026-09-11T12:00:00.000Z"),
           expiresAt: new Date("2026-09-11T12:30:00.000Z"),
           maxAdmissions: null,
@@ -152,6 +165,21 @@ async function main(): Promise<void> {
       }));
       assert.equal(response.status, 409, message);
     }
+    process.env.REPLIT_DEV_DOMAIN = "preview-task-1275.replit.dev";
+    delete process.env.PROTRACTOR_DEVELOPMENT_RELAY_APPROVED;
+    response = await POST(post({
+      action: "start_trial",
+      reason: "production-shaped preview must be denied",
+      expectedStopId: "stop-current",
+      workersSuspendedConfirmed: true,
+    }));
+    assert.equal(response.status, 409);
+    assert.equal(
+      (await responseBody(response)).error,
+      "Protractor outbound policy denied: development_relay_required",
+      "a production NODE_ENV plus a development domain must not authorize trial start",
+    );
+    readyEnvironment();
     process.env.PROTRACTOR_CALLBACK_CANARY_UNTIL = "2026-09-11T12:15:00.000Z";
     response = await POST(post({
       action: "start_trial",
@@ -229,6 +257,7 @@ async function main(): Promise<void> {
       changedBy: "operator@example.com",
       reason: "approved callback trial",
       expectedStopId: "stop-current",
+      requiresRelay: true,
     }, "the API must pass only fixed-duration repository arguments");
     assert.equal(
       (await responseBody(response)).state.canary.scope,
@@ -251,6 +280,7 @@ async function main(): Promise<void> {
       changedBy: "operator@example.com",
       reason: "approved broad trial",
       expectedStopId: "stop-current",
+      requiresRelay: true,
       scope: "callbacks_and_interactive",
     });
     assert.equal(
@@ -302,7 +332,7 @@ async function main(): Promise<void> {
     for (const key of ENV_KEYS) {
       const value = originalEnvironment.get(key);
       if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
+      else (process.env as Record<string, string | undefined>)[key] = value;
     }
   }
 }

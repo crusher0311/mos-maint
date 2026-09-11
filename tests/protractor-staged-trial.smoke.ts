@@ -5,6 +5,7 @@
  * persisted-event timestamps as the callback transport input so a worker clock
  * cannot accidentally make a stale callback eligible.
  */
+import "./helpers/deny-network-egress";
 import assert from "node:assert/strict";
 import {
   __protractorClientTestHooks,
@@ -18,12 +19,19 @@ import { runWithProtractorInteractiveTransport } from "../lib/integrations/protr
 import { evaluateProtractorOutboundPolicy } from "../lib/integrations/protractor/outbound-policy.cjs";
 
 const POLICY_ENV_KEYS = [
+  "NODE_ENV",
+  "REPLIT_DEV_DOMAIN",
   "RENDER_INSTANCE_ID",
   "PROTRACTOR_OUTBOUND_DISABLED",
   "PROTRACTOR_OUTBOUND_DENIED_INSTANCE_IDS",
   "PROTRACTOR_CALLBACK_CANARY_UNTIL",
   "PROTRACTOR_CALLBACK_REPLAY_NOT_BEFORE",
   "PROTRACTOR_CALLBACK_TRIAL_ENABLED",
+  "PROTRACTOR_RELAY_MODE",
+  "PROTRACTOR_RELAY_REQUIRED",
+  "PROTRACTOR_RELAY_URL",
+  "PROTRACTOR_RELAY_HMAC_SECRET",
+  "PROTRACTOR_DEVELOPMENT_RELAY_APPROVED",
 ] as const;
 
 const config: ProtractorConfig = {
@@ -52,6 +60,7 @@ function timedTrial(
     maxAdmissions: null,
     consumedAdmissions: 0,
     remainingAdmissions: null,
+    requiresRelay: true,
     endedBy: undefined,
     endedAt: undefined,
     ...extra,
@@ -102,7 +111,17 @@ async function main(): Promise<void> {
 
   try {
     for (const key of POLICY_ENV_KEYS) delete process.env[key];
-    process.env.RENDER_INSTANCE_ID = baseEnv.RENDER_INSTANCE_ID;
+    // This suite exercises persisted trial behavior, not the development
+    // deployment gate. Keep its mocked callback transport explicitly
+    // relay-configured while denying all real network egress at module load.
+    const testEnv = process.env as Record<string, string | undefined>;
+    testEnv.NODE_ENV = "test";
+    delete testEnv.REPLIT_DEV_DOMAIN;
+    testEnv.RENDER_INSTANCE_ID = baseEnv.RENDER_INSTANCE_ID;
+    testEnv.PROTRACTOR_RELAY_MODE = "relay";
+    testEnv.PROTRACTOR_RELAY_REQUIRED = "true";
+    testEnv.PROTRACTOR_RELAY_URL = "https://protractor-relay.mos.tools/relay";
+    testEnv.PROTRACTOR_RELAY_HMAC_SECRET = "s".repeat(32);
 
     console.log("Scenario 1: staged policy is strict, callback-only, and clock-free");
     const staged = evaluateProtractorOutboundPolicy(
@@ -155,6 +174,33 @@ async function main(): Promise<void> {
     assert.equal(legacy.allowed, true);
     assert.equal(legacy.callbackOnly, true);
     assert.equal(legacy.requireTimedTrial, false);
+
+    console.log("Scenario 1b: production-shaped previews cannot self-authorize relay traffic");
+    assert.equal(
+      evaluateProtractorOutboundPolicy(
+        envForPolicy({
+          NODE_ENV: "production",
+          REPLIT_DEV_DOMAIN: "preview-task-1275.replit.dev",
+          PROTRACTOR_RELAY_MODE: "relay",
+        }),
+        baseNow,
+      ).allowed,
+      false,
+      "a production NODE_ENV with a development domain must remain denied without approval",
+    );
+    assert.equal(
+      evaluateProtractorOutboundPolicy(
+        envForPolicy({
+          NODE_ENV: "production",
+          REPLIT_DEV_DOMAIN: "preview-task-1275.replit.dev",
+          PROTRACTOR_RELAY_MODE: "relay",
+          PROTRACTOR_DEVELOPMENT_RELAY_APPROVED: "true",
+        }),
+        baseNow,
+      ).allowed,
+      true,
+      "the same production-shaped process may proceed only after explicit relay approval",
+    );
 
     console.log("Scenario 2: only staged mode reads the live Mongo trial state");
     let nowMs = baseNow;
@@ -513,7 +559,7 @@ async function main(): Promise<void> {
     for (const key of POLICY_ENV_KEYS) {
       const prior = previousEnv.get(key);
       if (prior === undefined) delete process.env[key];
-      else process.env[key] = prior;
+      else (process.env as Record<string, string | undefined>)[key] = prior;
     }
     __protractorClientTestHooks.httpsRequest = originalHooks.httpsRequest;
     __protractorClientTestHooks.enforceLocalPolicyWithMockTransport =

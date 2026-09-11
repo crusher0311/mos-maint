@@ -1,3 +1,4 @@
+import "./helpers/deny-network-egress";
 import {
   __protractorCircuitBreakerTestHooks,
   PROTRACTOR_RELAY_OVERSIZED_RESPONSE_STATUS,

@@ -1,3 +1,4 @@
+import "./helpers/deny-network-egress";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
@@ -446,6 +447,7 @@ async function main(): Promise<void> {
   assert.equal(timedTrial.canary?.mode, "timed_trial");
   assert.equal(timedTrial.canary?.scope, "callbacks");
   assert.equal(timedTrial.canary?.requiresCallback, true);
+  assert.equal(timedTrial.canary?.requiresRelay, true);
   assert.equal(timedTrial.canary?.maxAdmissions, null);
   assert.equal(timedTrial.canary?.remainingAdmissions, null);
   assert.equal(
@@ -491,6 +493,8 @@ async function main(): Promise<void> {
     assert.equal(
       await confirmProtractorPhysicalTransportLease(trialLease!, {
         callbackReceivedAt: new Date(now),
+        transport: "relay",
+        environment: "test",
       }),
       true,
       "timed trials admit callback-confirmed requests beyond the bounded cap",
@@ -526,6 +530,7 @@ async function main(): Promise<void> {
   });
   assert.equal(broadTrial.canary?.scope, "callbacks_and_interactive");
   assert.equal(broadTrial.canary?.requiresCallback, false);
+  assert.equal(broadTrial.canary?.requiresRelay, true);
   now = new Date(now.getTime() + 1_001);
   const broadLease = await acquireProtractorPhysicalTransportLease(Date.now() + 20);
   assert.ok(broadLease);
@@ -535,12 +540,20 @@ async function main(): Promise<void> {
     "broad trials still require an explicit admission context",
   );
   assert.equal(
-    await confirmProtractorPhysicalTransportLease(broadLease!, { interactiveShopId: 0 }),
+    await confirmProtractorPhysicalTransportLease(broadLease!, {
+      interactiveShopId: 0,
+      transport: "relay",
+      environment: "test",
+    }),
     false,
     "zero is not a valid interactive target",
   );
   assert.equal(
-    await confirmProtractorPhysicalTransportLease(broadLease!, { interactiveShopId: 42 }),
+    await confirmProtractorPhysicalTransportLease(broadLease!, {
+      interactiveShopId: 42,
+      transport: "relay",
+      environment: "test",
+    }),
     true,
     "broad trials admit a positive interactive target",
   );

@@ -68,6 +68,10 @@ export interface ApiUsageRecord extends Document {
   latencyMs: number;
   requestId?: string;
   sourceWorker?: string;
+  /** Coarse, privacy-safe deployment provenance for reconciliation. */
+  environment?: "production" | "development" | "test" | "unknown";
+  /** Physical provider transport used by the request. */
+  transport?: "direct" | "relay";
   timestamp: Date;
 }
 
@@ -102,6 +106,15 @@ export interface ProtractorCanaryState {
   consumedAdmissions: number;
   remainingAdmissions: number | null;
   requiresCallback?: boolean;
+  /**
+   * Timed-trial physical admissions require a relay-configured caller.  The
+   * field is retained for persisted-record provenance, but missing legacy
+   * values default to true at every admission boundary; no live backfill or
+   * stop/reopen operation is needed.
+   */
+  requiresRelay?: boolean;
+  /** Read compatibility for early trial records using the noun-first name. */
+  relayRequired?: boolean;
   endedBy?: "time" | "budget" | "operator";
   endedAt?: Date;
   auditTruncatedAdmissions?: number;
@@ -112,6 +125,8 @@ export interface ProtractorCanaryState {
     consumedAdmissions: number;
     remainingAdmissions: number | null;
     endedBy?: "time" | "budget" | "operator";
+    transport?: "direct" | "relay";
+    environment?: "production" | "development" | "test" | "unknown";
   }>;
 }
 
@@ -234,6 +249,28 @@ const validTimedTrialCanaryAccountingExpression = {
                 { $eq: ["$canary.scope", "callbacks_and_interactive"] },
                 { $in: [{ $type: "$canary.requiresCallback" }, ["bool", "boolean"]] },
                 { $eq: ["$canary.requiresCallback", false] },
+              ],
+            },
+          ],
+        },
+        {
+          $or: [
+            { $eq: [{ $type: "$canary.requiresRelay" }, "missing"] },
+            {
+              $and: [
+                { $in: [{ $type: "$canary.requiresRelay" }, ["bool", "boolean"]] },
+                { $in: ["$canary.requiresRelay", [true, false]] },
+              ],
+            },
+          ],
+        },
+        {
+          $or: [
+            { $eq: [{ $type: "$canary.relayRequired" }, "missing"] },
+            {
+              $and: [
+                { $in: [{ $type: "$canary.relayRequired" }, ["bool", "boolean"]] },
+                { $in: ["$canary.relayRequired", [true, false]] },
               ],
             },
           ],
@@ -373,6 +410,9 @@ function projectProtractorStopState(row: any, now: Date): ProtractorOperatorStop
         : Math.max(0, (canary.maxAdmissions ?? 0) - (canary.consumedAdmissions ?? 0)),
       scope: timedTrial ? canary.scope ?? "callbacks" : undefined,
       requiresCallback: canary.requiresCallback,
+      requiresRelay: timedTrial
+        ? true
+        : canary.requiresRelay ?? canary.relayRequired,
       endedBy,
       endedAt: canary.endedAt ?? (endedBy === "time" ? canary.expiresAt : undefined),
       auditTruncatedAdmissions: canary.auditTruncatedAdmissions,
@@ -918,6 +958,8 @@ export interface ProtractorPhysicalTransportConfirmationContext {
   requireTimedTrial?: boolean;
   callbackReceivedAt?: Date;
   interactiveShopId?: number;
+  transport?: "direct" | "relay";
+  environment?: "production" | "development" | "test" | "unknown";
 }
 
 export async function confirmProtractorPhysicalTransportLease(
@@ -939,6 +981,23 @@ export async function confirmProtractorPhysicalTransportLease(
   const interactiveShopId = interactiveShopIdIsValid
     ? { $literal: context.interactiveShopId }
     : null;
+  const transportIsValid =
+    context.transport === "relay" || context.transport === "direct";
+  const transport = transportIsValid
+    ? { $literal: context.transport }
+    : null;
+  const environmentIsValid =
+    context.environment === "production" ||
+    context.environment === "development" ||
+    context.environment === "test" ||
+    context.environment === "unknown";
+  const environment = environmentIsValid
+    ? { $literal: context.environment }
+    : null;
+  // Every timed trial is relay-bound, including legacy generations that
+  // predate the persisted requiresRelay field.  Do not infer an opt-out from
+  // an absent/false marker: the shared trial feature is relay-only.
+  const relayRequiredExpression = { $eq: [transport, "relay"] };
   const timedTrialAdmissionExpression = {
     $cond: [
       validTimedTrialCanaryAccountingExpression,
@@ -948,6 +1007,7 @@ export async function confirmProtractorPhysicalTransportLease(
           { $gt: ["$canary.expiresAt", "$$NOW"] },
           { $lt: ["$canary.consumedAdmissions", MAX_SAFE_ADMISSIONS] },
           { $eq: ["$ownerCanaryGeneration", "$canary.generation"] },
+          relayRequiredExpression,
           {
             $or: [
               {
@@ -1009,6 +1069,8 @@ export async function confirmProtractorPhysicalTransportLease(
           },
         ],
       },
+      ...(transportIsValid ? { transport: context.transport } : {}),
+      ...(environmentIsValid ? { environment: context.environment } : {}),
     }],
     {
       $cond: [
@@ -1448,6 +1510,7 @@ function assertFreshProtractorGeneration(
   stopId: string,
   mode: "timed_trial" | "bounded",
   expectedScope?: ProtractorTimedTrialScope,
+  expectedRequiresRelay = false,
 ): void {
   const canary = row?.canary;
   if (
@@ -1470,6 +1533,7 @@ function assertFreshProtractorGeneration(
     (mode === "timed_trial" && (
       canary.scope !== expectedScope ||
       canary.requiresCallback !== (expectedScope === "callbacks") ||
+      canary.requiresRelay !== expectedRequiresRelay ||
       canary.maxAdmissions !== null ||
       canary.remainingAdmissions !== null ||
       canary.expiresAt.getTime() - canary.startedAt.getTime() !== 1_800_000
@@ -1493,12 +1557,16 @@ export async function startProtractorTimedTrial(input: {
   reason: string;
   expectedStopId: string;
   scope?: ProtractorTimedTrialScope;
+  requiresRelay?: boolean;
   now?: Date;
 }): Promise<ProtractorOperatorStopState> {
   const changedBy = input.changedBy.trim();
   const reason = input.reason.trim();
   const expectedStopId = input.expectedStopId.trim();
   const scope = input.scope === undefined ? "callbacks" : input.scope;
+  // Timed trials are relay-only by definition. Keep the input property for
+  // caller compatibility, but never allow an operator request to opt out.
+  const requiresRelay = true;
   if (!changedBy || !reason || !expectedStopId) {
     throw new Error("changedBy, reason, and expectedStopId are required");
   }
@@ -1574,6 +1642,7 @@ export async function startProtractorTimedTrial(input: {
           mode: "timed_trial",
           scope,
           requiresCallback: scope === "callbacks",
+          requiresRelay,
           startedAt: pipelineNow,
           expiresAt,
           maxAdmissions: null,
@@ -1593,7 +1662,14 @@ export async function startProtractorTimedTrial(input: {
     { returnDocument: "after", maxTimeMS: 1000 },
   );
   if (!row) throw new Error("operator stop changed; refresh state before starting trial");
-  assertFreshProtractorGeneration(row, generation, expectedStopId, "timed_trial", scope);
+  assertFreshProtractorGeneration(
+    row,
+    generation,
+    expectedStopId,
+    "timed_trial",
+    scope,
+    requiresRelay,
+  );
   return projectProtractorStopState(row, now);
 }
 

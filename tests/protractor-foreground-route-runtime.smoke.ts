@@ -7,6 +7,7 @@
  * exact server-resolved numeric shop ID while denied requests never reach a
  * transport-facing function.
  */
+import "./helpers/deny-network-egress";
 import assert from "node:assert/strict";
 import { NextRequest, NextResponse } from "next/server";
 import {

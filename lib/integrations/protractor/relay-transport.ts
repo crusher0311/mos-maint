@@ -29,6 +29,7 @@ export type ProtractorRelayErrorCode =
   | "not_found"
   | "replayed_request"
   | "replay_journal_full"
+  | "relay_required"
   | "request_too_large"
   | "stale_request"
   | "unsupported_media_type"
@@ -55,6 +56,7 @@ const RELAY_ERROR_CODES = new Set<ProtractorRelayErrorCode>([
   "not_found",
   "replayed_request",
   "replay_journal_full",
+  "relay_required",
   "request_too_large",
   "stale_request",
   "unsupported_media_type",
@@ -172,6 +174,7 @@ export interface RelayRequestPlan {
     type: "rest" | "soap";
     method: string;
     requestId: string;
+    transport: "relay";
   };
 }
 
@@ -200,6 +203,29 @@ export function shouldUseProtractorRelay(
   return config.mode === "relay-read-only" &&
     method === "GET" &&
     classifyProtractorRequest(target, headers) === "rest";
+}
+
+/**
+ * A timed trial can require relay transport even when the local process has
+ * no relay flag (for example, a preview sharing the production Mongo record).
+ * Keep this check at the shared transport boundary rather than deriving it
+ * from local environment policy.
+ */
+export function isProtractorRelayConfigured(
+  config: ProtractorRelayConfig,
+): config is Extract<ProtractorRelayConfig, { mode: "relay" }> {
+  return config.mode === "relay";
+}
+
+export function assertProtractorRelayConfigured(
+  config: ProtractorRelayConfig,
+): asserts config is Extract<ProtractorRelayConfig, { mode: "relay" }> {
+  if (!isProtractorRelayConfigured(config)) {
+    throw new RelayTransportError(
+      "relay_required",
+      "Protractor relay transport is required for this admission",
+    );
+  }
 }
 
 export function createProtractorRelayRequest(
@@ -257,6 +283,6 @@ export function createProtractorRelayRequest(
       "x-relay-request-id": requestId,
       "x-relay-signature": `sha256=${signature}`,
     },
-    metadata: { mode: config.mode, type, method, requestId },
+    metadata: { mode: config.mode, type, method, requestId, transport: "relay" },
   };
 }

@@ -197,6 +197,7 @@ export async function POST(req: NextRequest) {
             changedBy: operator,
             reason: reason!,
             expectedStopId: expectedStopId!,
+            requiresRelay: true,
              ...(requestedScope !== undefined ? { scope: requestedScope } : {}),
           })
       : await deps.clearProtractorOperatorStop({

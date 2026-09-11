@@ -39,8 +39,10 @@ import { normalizeProtractorPackageLine } from "./package-normalization";
 import {
   evaluateProtractorOutboundPolicy,
   logProtractorPolicyDenial,
+  resolveProtractorEnvironment,
 } from "./outbound-policy.cjs";
 import {
+  assertProtractorRelayConfigured,
   classifyProtractorEndpoint,
   createProtractorRelayRequest,
   readProtractorRelayErrorCode,
@@ -59,6 +61,17 @@ export { normalizeProtractorPackageLine } from "./package-normalization";
 
 const BASE_URL_V1 = "https://integration.protractor.com/IntegrationServices/1.0";
 const BASE_URL_V2 = "https://integration.protractor.com/IntegrationServices/2.0";
+
+type EffectiveProtractorOutboundPolicy = {
+  allowed: boolean;
+  reason: string;
+  identity: string | null;
+  callbackOnly?: boolean;
+  requireTimedTrial?: boolean;
+  relayRequired?: boolean;
+  allowInteractive?: boolean;
+  callbackNotBeforeMs?: number | null;
+};
 
 // Concurrency limiter: max 3 concurrent Protractor requests per process (for background tasks)
 const protractorConcurrencyLimit = pLimit(3);
@@ -174,6 +187,8 @@ export const __protractorClientTestHooks: {
       requireTimedTrial?: boolean;
       callbackReceivedAt?: Date;
       interactiveShopId?: number;
+      transport?: "direct" | "relay";
+      environment?: "production" | "development" | "test" | "unknown";
     },
   ) => Promise<boolean>;
   renewPhysicalTransportLease: typeof renewProtractorPhysicalTransportLease;
@@ -213,6 +228,8 @@ export const __protractorClientTestHooks: {
         requireTimedTrial?: boolean;
         callbackReceivedAt?: Date;
         interactiveShopId?: number;
+        transport?: "direct" | "relay";
+        environment?: "production" | "development" | "test" | "unknown";
       },
     ) => Promise<boolean>)(token, context),
   renewPhysicalTransportLease: (token) =>
@@ -665,8 +682,17 @@ function httpsRequest(
   headers: Record<string, string>,
   body?: string,
   timeoutMs = 30000,
-): Promise<{ statusCode: number; body: string; headers?: Record<string, string | string[] | undefined> }> {
+  dispatchContext?: { relayRequired?: boolean },
+): Promise<{
+  statusCode: number;
+  body: string;
+  headers?: Record<string, string | string[] | undefined>;
+  transport?: "direct" | "relay";
+}> {
   const relayConfig = readProtractorRelayConfig();
+  if (dispatchContext?.relayRequired === true) {
+    assertProtractorRelayConfigured(relayConfig);
+  }
   let requestUrl = new URL(urlString);
   let requestMethod = method;
   let requestHeaders = headers;
@@ -724,7 +750,12 @@ function httpsRequest(
         }
         settled = true;
         clearTimeout(deadline);
-        resolve({ statusCode: res.statusCode || 0, body: data, headers: res.headers });
+        resolve({
+          statusCode: res.statusCode || 0,
+          body: data,
+          headers: res.headers,
+          transport: relayEligible ? "relay" : "direct",
+        });
       });
       res.on("error", (error) => settleError(error));
       res.on("aborted", () => settleError(new Error("Response aborted")));
@@ -744,6 +775,28 @@ function httpsRequest(
     
     req.end();
   });
+}
+
+/**
+ * Resolve the physical route before admission so the same decision is used
+ * for the Mongo audit context and the eventual usage record.  Relay mode is
+ * not itself the route: relay-read-only only relays REST GETs, while SOAP and
+ * writes remain direct unless full relay mode is configured.
+ */
+function resolveProtractorPhysicalTransport(
+  urlString: string,
+  method: string,
+  headers: Record<string, string>,
+): "direct" | "relay" {
+  const relayConfig = readProtractorRelayConfig();
+  return shouldUseProtractorRelay(
+    relayConfig,
+    new URL(urlString),
+    method,
+    headers,
+  )
+    ? "relay"
+    : "direct";
 }
 
 const MAX_RETRY_AFTER_MS = 60_000;
@@ -786,9 +839,20 @@ function asFiniteDate(value: unknown): Date | null {
  * exclude events that predate the trial, so only this mode performs the
  * operator-stop read.
  */
-export async function getEffectiveProtractorOutboundPolicy() {
+export async function getEffectiveProtractorOutboundPolicy(): Promise<EffectiveProtractorOutboundPolicy> {
   const policy = getProtractorOutboundPolicy();
-  if (!policy.allowed || !policy.requireTimedTrial) return policy;
+  if (!policy.allowed) return policy;
+
+  // A shared Mongo trial is authoritative even when this process did not
+  // receive the corresponding staging env flag.  Avoid a read for ordinary
+  // unscoped traffic (which preserves the legacy hot path), but always resolve
+  // it for callback/interactive admissions where a timed trial could consume
+  // the shared physical budget.
+  const shouldReadSharedTrial =
+    policy.requireTimedTrial === true ||
+    callbackTransportStorage.getStore() !== undefined ||
+    getProtractorInteractiveTransportContext() !== undefined;
+  if (!shouldReadSharedTrial) return policy;
 
   let stop: any;
   try {
@@ -820,6 +884,17 @@ export async function getEffectiveProtractorOutboundPolicy() {
     trial?.remainingAdmissions === null;
 
   if (!live) {
+    // An invalid/expired timed-trial generation must not be reinterpreted as
+    // unrestricted local traffic. Timed trials are relay-only even when this
+    // record predates the requiresRelay field.
+    if (trial?.mode === "timed_trial") {
+      return {
+        ...policy,
+        allowed: false,
+        reason: "timed_trial_not_active",
+      };
+    }
+    if (!policy.requireTimedTrial) return policy;
     return {
       ...policy,
       allowed: false,
@@ -849,6 +924,8 @@ export async function getEffectiveProtractorOutboundPolicy() {
   return {
     ...policy,
     callbackNotBeforeMs: startedAt!.getTime(),
+    relayRequired: policy.requireTimedTrial === true ||
+      trial?.mode === "timed_trial",
     // callbackOnly intentionally remains true in the broad mode: interactive
     // transport is admitted only from the dedicated shop-bound ALS context.
     allowInteractive: scope === "callbacks_and_interactive" &&
@@ -984,9 +1061,13 @@ function shouldEnforceFleetPacer(): boolean {
 async function runFleetGuardedTransportAttempt<T>(
   config: { connectionId: string },
   actualShopId: number,
-  transport: (remainingMs?: number) => Promise<T>,
+  transport: (
+    remainingMs?: number,
+    dispatchContext?: { relayRequired: boolean },
+  ) => Promise<T>,
   priority: boolean,
   remainingMs?: number,
+  admissionTransport?: "direct" | "relay",
 ): Promise<{ ok: true; response: T } | { ok: false; error: string }> {
   const earlyLocal = localPolicyError("transport_attempt");
   if (earlyLocal) return earlyLocal;
@@ -1071,29 +1152,65 @@ async function runFleetGuardedTransportAttempt<T>(
     const gate = gateAdmission.value;
     if (!gate.ok) return gate;
 
-    const callbackContext = callbackTransportStorage.getStore();
-    let finalPolicy = getProtractorOutboundPolicy();
     const interactiveAtAdmission = interactiveContextForShop(actualShopId);
     if (interactiveAtAdmission.error) {
       return { ok: false, error: interactiveAtAdmission.error };
     }
+    const callbackContext = callbackTransportStorage.getStore();
+    let finalPolicy: EffectiveProtractorOutboundPolicy = getProtractorOutboundPolicy();
     if (
-      interactiveAtAdmission.context &&
-      finalPolicy.callbackOnly === true
+      callbackContext !== undefined ||
+      interactiveAtAdmission.context !== undefined ||
+      finalPolicy.requireTimedTrial === true
     ) {
-      // The env flag permits staging but deliberately does not encode the
-      // persisted scope.  Read that scope before every final attempt; Mongo
-      // confirmation below remains the atomic generation/expiry authority.
+      // The local env flag cannot encode the persisted scope or whether the
+      // generation requires relay. Resolve the shared state immediately before
+      // confirmation, after all waits/gates, so a preview cannot consume the
+      // production admission with stale local settings.
       const effective = await getEffectiveProtractorOutboundPolicy();
-      if (!effective.allowed || effective.allowInteractive !== true) {
+      if (!effective.allowed) {
         return {
           ok: false,
           error: effective.reason === "timed_trial_scope_invalid"
             ? "Protractor interactive transport scope is invalid"
-            : "Protractor interactive transport is not enabled",
+            : effective.reason === "development_relay_required"
+              ? "Development Protractor traffic requires approved relay transport"
+              : "Protractor outbound trial policy is not active",
+        };
+      }
+      if (
+        interactiveAtAdmission.context &&
+        effective.callbackOnly === true &&
+        effective.allowInteractive !== true
+      ) {
+        return {
+          ok: false,
+          error: "Protractor interactive transport is not enabled",
         };
       }
       finalPolicy = effective;
+    }
+    const relayRequired = finalPolicy.relayRequired === true;
+    let dispatchTransport: "direct" | "relay" | undefined = admissionTransport;
+    if (relayRequired) {
+      try {
+        const relayConfig = readProtractorRelayConfig();
+        assertProtractorRelayConfigured(relayConfig);
+        dispatchTransport = "relay";
+      } catch (error: any) {
+        logProtractorPolicyDenial(
+          {
+            allowed: false,
+            reason: "timed_trial_state_unavailable",
+            identity: null,
+          },
+          "relay_required_transport",
+        );
+        return {
+          ok: false,
+          error: String(error?.message || "Protractor relay transport is required"),
+        };
+      }
     }
     const interactiveBeforeConfirm = interactiveContextForShop(actualShopId);
     if (interactiveBeforeConfirm.error) {
@@ -1107,6 +1224,8 @@ async function runFleetGuardedTransportAttempt<T>(
             callbackContext?.requireTimedTrial === true,
           callbackReceivedAt: callbackContext?.callbackReceivedAt,
           interactiveShopId: interactiveBeforeConfirm.context?.shopId,
+          transport: dispatchTransport,
+          environment: resolveProtractorEnvironment(process.env),
         }),
         admissionDeadlineAtMs,
       );
@@ -1163,6 +1282,7 @@ async function runFleetGuardedTransportAttempt<T>(
       ok: true,
       response: await transport(
         remainingMs === undefined ? undefined : remainingMs - finalElapsedMs,
+        { relayRequired },
       ),
     };
   } finally {
@@ -1214,11 +1334,13 @@ async function runBreakerRecordedTransport(
     statusCode: number;
     body: string;
     headers?: Record<string, string | string[] | undefined>;
+    transport?: "direct" | "relay";
   }>,
 ): Promise<{
   statusCode: number;
   body: string;
   headers?: Record<string, string | string[] | undefined>;
+  transport?: "direct" | "relay";
 }> {
   try {
     const response = await transport();
@@ -1264,8 +1386,12 @@ function logRelayTransportFailure(
 async function runGuardedTransportAttempt<T>(
   config: { connectionId: string },
   actualShopId: number,
-  transport: (remainingMs?: number) => Promise<T>,
+  transport: (
+    remainingMs?: number,
+    dispatchContext?: { relayRequired: boolean },
+  ) => Promise<T>,
   priority = false,
+  admissionTransport?: "direct" | "relay",
 ): Promise<{ ok: true; response: T } | { ok: false; error: string }> {
   const local = localPolicyError("soap");
   if (local) return local;
@@ -1279,6 +1405,7 @@ async function runGuardedTransportAttempt<T>(
           transport,
           priority,
           remainingMs,
+          admissionTransport,
         )
       );
     } catch (error: any) {
@@ -1321,9 +1448,6 @@ export async function protractorFetch<T>(
     }));
     return { ok: false, error: "Protractor configuration does not belong to this shop" };
   }
-  const relayLogging = process.env.PROTRACTOR_RELAY_MODE !== undefined &&
-    process.env.PROTRACTOR_RELAY_MODE !== "direct";
-
   if (!config.configured) {
     return { ok: false, error: "Protractor not configured" };
   }
@@ -1353,20 +1477,6 @@ export async function protractorFetch<T>(
     while (true) {
     const startTime = Date.now();
     const totalWaitMs = Date.now() - concurrencyWaitStart;
-    
-    if (isPriority) {
-      if (relayLogging) {
-        console.log(JSON.stringify({
-          event: "protractor_priority_request",
-          transport: "relay",
-          method,
-          queueWaitMs: totalWaitMs,
-        }));
-      } else {
-        console.log(`[Protractor:PRIORITY] ${method} ${endpoint} (queue wait: ${totalWaitMs}ms)`);
-      }
-    }
-  
     try {
       const headers: Record<string, string> = {
         "connectionid": config.connectionId,
@@ -1384,9 +1494,23 @@ export async function protractorFetch<T>(
       }
       
       let body = options.body ? String(options.body) : undefined;
+      const admissionTransport = resolveProtractorPhysicalTransport(url, method, headers);
+
+      if (isPriority) {
+        if (admissionTransport === "relay") {
+          console.log(JSON.stringify({
+            event: "protractor_priority_request",
+            transport: "relay",
+            method,
+            queueWaitMs: totalWaitMs,
+          }));
+        } else {
+          console.log(`[Protractor:PRIORITY] ${method} ${endpoint} (queue wait: ${totalWaitMs}ms)`);
+        }
+      }
       
       if (
-        !relayLogging &&
+        admissionTransport !== "relay" &&
         body &&
         method === 'POST' &&
         endpoint.startsWith('/WorkOrder/')
@@ -1419,7 +1543,7 @@ export async function protractorFetch<T>(
         runFleetGuardedTransportAttempt(
           config,
           normalizedShopId,
-          (fleetRemainingMs) => runBreakerRecordedTransport(
+          (fleetRemainingMs, dispatchContext) => runBreakerRecordedTransport(
             config,
             () => __protractorClientTestHooks.httpsRequest(
               url,
@@ -1427,20 +1551,24 @@ export async function protractorFetch<T>(
               headers,
               body,
               Math.min(opts?.timeoutMs ?? 30_000, fleetRemainingMs ?? 30_000),
+              dispatchContext,
             ),
           ),
           isPriority,
           remainingMs,
+          admissionTransport,
         )
       );
       if (!transport.ok) return transport;
       const res = transport.response;
+      const physicalTransport = res.transport ?? admissionTransport;
+      const actualRelayLogging = physicalTransport === "relay";
 
       const latencyMs = Date.now() - startTime;
       const isServerError = res.statusCode >= 500;
       const isRateLimited = res.statusCode === 429;
       const retryAfterMs = parseProtractorRetryAfter(res.headers?.["retry-after"]);
-      if (relayLogging) {
+      if (actualRelayLogging) {
         console.log(JSON.stringify({
           event: "protractor_relay_response",
           method,
@@ -1451,10 +1579,12 @@ export async function protractorFetch<T>(
         }));
       }
       
-      __protractorClientTestHooks.trackApiRequest('protractor', relayLogging ? 'relay' : endpoint, method, res.statusCode, latencyMs, normalizedShopId, {
+      __protractorClientTestHooks.trackApiRequest('protractor', actualRelayLogging ? 'relay' : endpoint, method, res.statusCode, latencyMs, normalizedShopId, {
         retryCount: attempt > 0 ? attempt : undefined,
-        errorMessage: !relayLogging && res.statusCode >= 400 ? res.body?.substring(0, 200) : undefined,
-        sourceWorker: process.env.RENDER ? 'render' : 'replit'
+        errorMessage: !actualRelayLogging && res.statusCode >= 400 ? res.body?.substring(0, 200) : undefined,
+        sourceWorker: process.env.RENDER ? 'render' : 'replit',
+        environment: resolveProtractorEnvironment(process.env),
+        transport: physicalTransport,
       }).catch(() => {});
 
       // Interactive (user-facing) callers can cap retries via opts.maxRetries so
@@ -1476,7 +1606,7 @@ export async function protractorFetch<T>(
           Math.max(isRateLimited ? retryAfterMs : 0, Math.min(baseWaitMs + jitter, MAX_TRANSIENT_BACKOFF_MS)),
         );
         
-        if (relayLogging) {
+        if (actualRelayLogging) {
           console.log(JSON.stringify({
             event: "protractor_relay_retry",
             method,
@@ -1496,7 +1626,7 @@ export async function protractorFetch<T>(
         continue;
       }
       if (isDeterministicError) {
-        if (relayLogging) {
+        if (actualRelayLogging) {
           console.log(JSON.stringify({
             event: "protractor_relay_deterministic_error",
             method,
@@ -1508,7 +1638,7 @@ export async function protractorFetch<T>(
       }
 
       if (res.statusCode < 200 || res.statusCode >= 300) {
-        if (relayLogging) {
+        if (actualRelayLogging) {
           console.log(JSON.stringify({
             event: "protractor_relay_http_error",
             method,
@@ -1822,23 +1952,32 @@ async function protractorSoapServiceItemUpdate(
     '  </soap:Body>',
     '</soap:Envelope>',
   ].join("\n");
+  const soapHeaders = {
+    "Content-Type": "text/xml; charset=utf-8",
+    "SOAPAction": `${PROTRACTOR_SOAP_NS}ServiceItemUpdate`,
+  };
+  const admissionTransport = resolveProtractorPhysicalTransport(
+    PROTRACTOR_SOAP_URL,
+    "POST",
+    soapHeaders,
+  );
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      const transport = await runGuardedTransportAttempt(config, normalizedShopId, (remainingMs) =>
+      const transport = await runGuardedTransportAttempt(config, normalizedShopId, (remainingMs, dispatchContext) =>
         runBreakerRecordedTransport(
           config,
           () => __protractorClientTestHooks.httpsRequest(
             PROTRACTOR_SOAP_URL,
             "POST",
-            {
-              "Content-Type": "text/xml; charset=utf-8",
-              "SOAPAction": `${PROTRACTOR_SOAP_NS}ServiceItemUpdate`,
-            },
+            soapHeaders,
             soapEnvelope,
             Math.min(timeoutMs, remainingMs ?? timeoutMs),
+            dispatchContext,
           ),
         ),
+        false,
+        admissionTransport,
       );
       if (!transport.ok) return transport;
       const res = transport.response;
@@ -2007,28 +2146,38 @@ async function protractorSoapWorkOrderUpdate(
     '  </soap:Body>',
     '</soap:Envelope>',
   ].join('\n');
+  const soapHeaders = {
+    "Content-Type": "text/xml; charset=utf-8",
+    "SOAPAction": `${PROTRACTOR_SOAP_NS}WorkOrderUpdate`,
+  };
+  const admissionTransport = resolveProtractorPhysicalTransport(
+    PROTRACTOR_SOAP_WO_URL,
+    "POST",
+    soapHeaders,
+  );
 
   const maxRetries = opts?.maxRetries ?? 6;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const startTime = Date.now();
-      const transport = await runGuardedTransportAttempt(config, normalizedShopId, (remainingMs) =>
+      const transport = await runGuardedTransportAttempt(config, normalizedShopId, (remainingMs, dispatchContext) =>
         runBreakerRecordedTransport(
           config,
           () => __protractorClientTestHooks.httpsRequest(
             PROTRACTOR_SOAP_WO_URL,
             "POST",
-            {
-              "Content-Type": "text/xml; charset=utf-8",
-              "SOAPAction": `${PROTRACTOR_SOAP_NS}WorkOrderUpdate`,
-            },
+            soapHeaders,
             soapEnvelope,
             Math.min(timeoutMs, remainingMs ?? timeoutMs),
+            dispatchContext,
           ),
         ),
+        false,
+        admissionTransport,
       );
       if (!transport.ok) return transport;
       const res = transport.response;
+      const physicalTransport = res.transport ?? admissionTransport;
       const retryAfterMs = parseProtractorRetryAfter(res.headers?.["retry-after"]);
 
       const latencyMs = Date.now() - startTime;
@@ -2038,7 +2187,11 @@ async function protractorSoapWorkOrderUpdate(
         'POST-SOAP',
         res.statusCode,
         latencyMs,
-        normalizedShopId
+        normalizedShopId,
+        {
+          environment: resolveProtractorEnvironment(process.env),
+          transport: physicalTransport,
+        },
       ).catch(() => {});
 
       if (res.statusCode === 200 && !res.body.includes('<soap:Fault>')) {

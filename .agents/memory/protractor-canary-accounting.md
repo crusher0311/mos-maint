@@ -78,3 +78,14 @@ transport. Production-only relay logs therefore could not account for them.
 approved and configured for the required relay. Enforce relay-only trial policy
 at the common admission/transport boundary, not solely with production-local
 environment flags; include environment provenance in future admission audits.
+
+Preview identity must outrank the Node build mode when applying development
+egress restrictions.
+
+**Why:** A preview can run a production build, so `NODE_ENV=production` does not
+prove it is an approved production deployment. Shared trial safety must also
+cover generations created before relay requirements were explicitly persisted;
+requiring a live migration to close that gap defeats the isolation guarantee.
+
+**How to apply:** Treat preview indicators as development regardless of build
+mode, and default legacy timed trials to relay-only without changing live state.

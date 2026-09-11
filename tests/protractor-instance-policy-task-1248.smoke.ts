@@ -1,3 +1,4 @@
+import "./helpers/deny-network-egress";
 import {
   evaluateProtractorOutboundPolicy,
 } from "../lib/integrations/protractor/outbound-policy.cjs";
@@ -28,8 +29,42 @@ const config: ProtractorConfig = {
   configured: true,
 };
 
+const ENV_KEYS = [
+  "NODE_ENV",
+  "REPLIT_DEV_DOMAIN",
+  "PROTRACTOR_DEVELOPMENT_RELAY_APPROVED",
+  "PROTRACTOR_OUTBOUND_DISABLED",
+  "PROTRACTOR_OUTBOUND_DENIED_INSTANCE_IDS",
+  "PROTRACTOR_CALLBACK_CANARY_UNTIL",
+  "PROTRACTOR_CALLBACK_REPLAY_NOT_BEFORE",
+  "RENDER_INSTANCE_ID",
+] as const;
+
 async function main() {
-  const originalOutboundDisabled = process.env.PROTRACTOR_OUTBOUND_DISABLED;
+  const originalEnvironment = new Map<string, string | undefined>(
+    ENV_KEYS.map(key => [key, process.env[key]]),
+  );
+  const restoreEnvironment = () => {
+    for (const key of ENV_KEYS) {
+      const value = originalEnvironment.get(key);
+      if (value === undefined) delete process.env[key];
+      else (process.env as Record<string, string | undefined>)[key] = value;
+    }
+  };
+  process.once("exit", restoreEnvironment);
+  const testEnv = process.env as Record<string, string | undefined>;
+  // This suite owns the instance-policy fixtures. Do not let the hosting
+  // preview identity silently turn ordinary-policy assertions into the
+  // development relay gate; restore every selector before the process exits.
+  testEnv.NODE_ENV = "test";
+  delete testEnv.REPLIT_DEV_DOMAIN;
+  delete testEnv.PROTRACTOR_DEVELOPMENT_RELAY_APPROVED;
+  delete testEnv.PROTRACTOR_OUTBOUND_DISABLED;
+  delete testEnv.PROTRACTOR_OUTBOUND_DENIED_INSTANCE_IDS;
+  delete testEnv.PROTRACTOR_CALLBACK_CANARY_UNTIL;
+  delete testEnv.PROTRACTOR_CALLBACK_REPLAY_NOT_BEFORE;
+  delete testEnv.RENDER_INSTANCE_ID;
+
   const base = { RENDER_INSTANCE_ID: "srv-a" };
   ok("empty deny policy allows", evaluateProtractorOutboundPolicy(base).allowed);
   ok(
@@ -205,6 +240,12 @@ async function main() {
   };
   __protractorClientTestHooks.recordResponse = async () => {};
   __protractorClientTestHooks.resolveProtractorConfig = async () => config;
+  __protractorClientTestHooks.getOperatorStop = async () => ({
+    active: false,
+    canary: undefined,
+  } as any);
+  __protractorClientTestHooks.acquireCallbackTransportLease = async () => "callback-test";
+  __protractorClientTestHooks.releaseCallbackTransportLease = async () => {};
   __protractorClientTestHooks.enforceLocalPolicyWithMockTransport = true;
   process.env.RENDER_INSTANCE_ID = "srv-denied";
   process.env.PROTRACTOR_OUTBOUND_DENIED_INSTANCE_IDS = "srv-denied";
@@ -298,11 +339,8 @@ async function main() {
   __protractorClientTestHooks.now = () => Date.now();
   __protractorClientTestHooks.sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   __protractorClientTestHooks.enforceLocalPolicyWithMockTransport = false;
-  if (originalOutboundDisabled === undefined) {
-    delete process.env.PROTRACTOR_OUTBOUND_DISABLED;
-  } else {
-    process.env.PROTRACTOR_OUTBOUND_DISABLED = originalOutboundDisabled;
-  }
+  restoreEnvironment();
+  process.removeListener("exit", restoreEnvironment);
   if (failures) throw new Error(`${failures} task 1248 checks failed`);
   console.log("\nAll task 1248 instance-policy checks passed");
   process.exit(0);

@@ -8,6 +8,7 @@
  *   "test:protractor-operator-stop-ui": "tsx tests/protractor-operator-stop-ui.smoke.ts"
  */
 
+import "./helpers/deny-network-egress";
 import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
 

@@ -6,6 +6,7 @@
  * Run: `npx tsx tests/protractor-foreground-canned-cache.smoke.ts`
  */
 
+import "./helpers/deny-network-egress";
 import assert from "node:assert/strict";
 import https from "node:https";
 
@@ -14,6 +15,14 @@ import https from "node:https";
 https.request = (() => {
   throw new Error("Network access forbidden in foreground canned-cache smoke");
 }) as typeof https.request;
+
+const testEnv = process.env as Record<string, string | undefined>;
+testEnv.NODE_ENV = "test";
+delete testEnv.REPLIT_DEV_DOMAIN;
+testEnv.PROTRACTOR_RELAY_MODE = "relay";
+testEnv.PROTRACTOR_RELAY_REQUIRED = "true";
+testEnv.PROTRACTOR_RELAY_URL = "https://protractor-relay.mos.tools/relay";
+testEnv.PROTRACTOR_RELAY_HMAC_SECRET = "c".repeat(32);
 
 const Module = require("module");
 const originalModuleLoad = Module._load;
@@ -125,6 +134,7 @@ function configureTimedTrial(): void {
       remainingAdmissions: null,
       scope: "callbacks_and_interactive",
       requiresCallback: false,
+      requiresRelay: true,
     },
   } as any);
 }

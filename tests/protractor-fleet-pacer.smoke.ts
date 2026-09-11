@@ -5,6 +5,7 @@
  * Mongo-owned record shared by concurrent priority/background callers and the
  * mocked transport records the actual send boundary.
  */
+import "./helpers/deny-network-egress";
 import assert from "node:assert/strict";
 import {
   __protractorClientTestHooks,
@@ -89,6 +90,8 @@ function installWorkingPhysicalLease(): void {
 }
 
 for (const key of [
+  "NODE_ENV",
+  "REPLIT_DEV_DOMAIN",
   "PROTRACTOR_OUTBOUND_DISABLED",
   "PROTRACTOR_OUTBOUND_DENIED_INSTANCE_IDS",
   "PROTRACTOR_CALLBACK_CANARY_UNTIL",
@@ -96,6 +99,9 @@ for (const key of [
 ]) {
   delete process.env[key];
 }
+const testEnv = process.env as Record<string, string | undefined>;
+testEnv.NODE_ENV = "test";
+delete testEnv.REPLIT_DEV_DOMAIN;
 
 __protractorClientTestHooks.enforceFleetPacerWithMockTransport = true;
 __protractorClientTestHooks.physicalTransportHeartbeatMs = 30_000;
@@ -113,6 +119,10 @@ __protractorClientTestHooks.retryBaseDelayMs = 1;
 __protractorClientTestHooks.random = () => 0;
 __protractorClientTestHooks.sleep = async () => {};
 __protractorClientTestHooks.resolveProtractorConfig = async () => config;
+__protractorClientTestHooks.getOperatorStop = async () => ({
+  active: false,
+  canary: undefined,
+} as any);
 __protractorClientTestHooks.acquireCallbackTransportLease = async () => {
   callbackLeaseAcquisitions += 1;
   return `callback-${callbackLeaseAcquisitions}`;
@@ -194,6 +204,54 @@ async function main(): Promise<void> {
   assert.equal(leaseAcquisitions, 2);
   assert.equal(transportOverlap, false);
   assert.ok(minimumGap(physicalStarts) >= TEST_GAP_MS);
+
+  console.log("Scenario 3b: usage provenance records the actual transport for REST writes and SOAP");
+  const provenance: Array<{
+    endpoint: string;
+    method: string;
+    options?: { environment?: string; transport?: string };
+  }> = [];
+  const originalProvenanceTracker = __protractorClientTestHooks.trackApiRequest;
+  const originalProvenanceTransport = __protractorClientTestHooks.httpsRequest;
+  __protractorClientTestHooks.trackApiRequest = async (...args) => {
+    provenance.push({
+      endpoint: String(args[1]),
+      method: String(args[2]),
+      options: args[6] as { environment?: string; transport?: string } | undefined,
+    });
+  };
+  __protractorClientTestHooks.httpsRequest = async (...args) => ({
+    statusCode: 200,
+    body: String(args[1]) === "POST" && String(args[0]).endsWith("WorkOrderServices.asmx")
+      ? "<WorkOrderUpdateResult>&lt;WorkOrder&gt;&lt;ServicePackage&gt;&lt;/ServicePackage&gt;&lt;/WorkOrderUpdateResult>"
+      : "{}",
+    transport: "relay",
+  } as any);
+  const restWrite = await protractorFetch(
+    "/WorkOrder/provenance-rest-write",
+    config,
+    { method: "POST", body: "{}" },
+    0,
+    1,
+    { maxRetries: 0 },
+  );
+  const soapProvenance = await soapAddServicePackage(1, "provenance-soap", {
+    ID: "provenance-soap",
+    Type: "WorkOrder",
+    ServicePackages: [],
+  });
+  assert.equal(restWrite.ok, true);
+  assert.equal(soapProvenance.ok, true);
+  assert.deepEqual(
+    provenance.map(item => [item.endpoint, item.method, item.options?.transport, item.options?.environment]),
+    [
+      ["relay", "POST", "relay", "test"],
+      ["soap:work_order", "POST-SOAP", "relay", "test"],
+    ],
+    "usage records must reflect the transport actually returned by the dispatch boundary",
+  );
+  __protractorClientTestHooks.trackApiRequest = originalProvenanceTracker;
+  __protractorClientTestHooks.httpsRequest = originalProvenanceTransport;
 
   console.log("Scenario 4: callback traffic keeps its stricter outer lease");
   resetObservations();

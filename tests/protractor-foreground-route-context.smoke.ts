@@ -7,6 +7,7 @@
  * capability semantics; this test locks the route inventory and trust-boundary
  * placement.
  */
+import "./helpers/deny-network-egress";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
