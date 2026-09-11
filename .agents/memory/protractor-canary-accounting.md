@@ -8,3 +8,18 @@ Count physical admission at the Mongo confirmation, never from runtime logs. Do 
 **Why:** Once confirmation commits, the caller may have dispatched even if the coordinator never receives its result. Refunding would permit more real requests than the agreed budget. Render build smoke tests also emit mocked transport telemetry.
 
 **How to apply:** Preserve conservative accounting across retries and failures. Keep terminal causes immutable, use Mongo time at the write boundary, and keep the physical safety record outside rate-limit TTL deletion. Legacy traffic without a canary remains compatible; a completed canary never silently becomes unrestricted traffic.
+
+Treat a timed live trial as distinct from a small request-budget canary. Its
+observation clock starts at the operator's activation, not at build/deploy time,
+and it deliberately tests sustained organic callbacks without a request cap.
+Production pacing, breakers, and the permanent operator stop still apply.
+
+**Why:** A three-request cap proves admission accounting, not sustained
+production readiness. Build-time deadlines consumed much of the intended
+observation window. Combining worker/backfill load with callback traffic would
+make the result harder to interpret.
+
+**How to apply:** Keep timed trials callback-only and workers/backfill off,
+derive the replay floor from activation, and never silently extend or reopen a
+terminal generation. Worker suspension is an operator attestation in the UI,
+not an independently verified service-state check.

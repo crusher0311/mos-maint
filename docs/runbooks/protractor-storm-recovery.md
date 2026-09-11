@@ -1,156 +1,157 @@
-# Protractor storm recovery runbook
+# Protractor timed live-trial and storm-recovery runbook
 
-Use this checklist only during a coordinated production maintenance window. The
-safe default is to keep Protractor outbound traffic blocked and Render
-autodeploy disabled until an operator and Protractor agree that the production
-egress IP may be tested.
+Use this runbook only for an approved, coordinated **production** maintenance
+window. The platform-admin page is an operator control, not a load-test
+surface. The safe state is an active Mongo operator stop, both Protractor
+workers suspended, historical backfill stopped, and Protractor outbound
+traffic disabled.
 
-## Safety rules
+The implementation does not perform Render, Mongo, worker, or provider
+operations. An operator must perform the deployment and attestations described
+here.
 
-- Use the production-scoped Protractor operator stop as the primary emergency
-  control. Do not suspend the shared MOS web service unless telemetry proves
-  physical Protractor admissions continued after that stop was activated.
-- Keep `PROTRACTOR_OUTBOUND_DISABLED=true` during deployment and initial
-  verification. This switch takes precedence over callback, cron, interactive,
-  REST, and SOAP requests.
-- Do not enable Render autodeploy as part of this rollout.
+## Non-negotiable safety rules
+
+- The Mongo operator stop is the physical-admission gate. Keep it active while
+  the trial configuration is staged and deployed.
+- A timed trial is exactly 30 minutes, beginning when Mongo records activation.
+  It has no operator-selected expiry and no request cap. “No request cap” does
+  **not** mean unguarded: the production fleet pacer, connection breakers,
+  provider breaker, retry limits, and transport protections remain in force.
+- An expired generation is terminal. Never reopen, extend, or clear an expired
+  generation; activate a fresh stop and start a fresh generation instead.
+- Workers and historical backfill stay off for the entire trial. Worker
+  readiness is a manual operator attestation; the UI does not independently
+  verify worker state.
+- Use organic provider callbacks only. Do not send synthetic callbacks,
+  synthetic reads, replay probes, curl probes, or other manufactured traffic to
+  create trial volume.
+- Do not use a second or legacy callback-canary deadline variable. The Mongo
+  generation and its `expiresAt` are the sole trial clock.
 - Never log or paste API keys, authentication values, callback payloads, or raw
   connection IDs.
-- Stop immediately if request volume exceeds the agreed canary ceiling, any
-  unrelated provider is affected, or the provider-wide breaker opens.
-- A closed-to-open connection or provider breaker transition emits one critical
-  `Protractor traffic automatically blocked` ops alert. It includes the scope,
-  response class, cooldown, and a one-way connection fingerprint only. Repeated
-  failures during the same open period do not page again; a successful recovery
-  clears the incident so a later open transition pages again.
+- Stop immediately for unexpected volume, an affected unrelated provider, a
+  breaker transition, or any outbound call that is not explained by organic
+  traffic.
 
-## 1. Deploy while outbound remains blocked
+## 1. Prepare the staged deployment
 
-1. Confirm Render autodeploy is off.
-2. Confirm `PROTRACTOR_OUTBOUND_DISABLED=true` in the production service.
-3. Deploy the reviewed commit manually.
-4. Confirm the web service and background workers are healthy.
-5. Deliver duplicate GET and POST callback probes for a test connection.
-6. Confirm callbacks are acknowledged and telemetry shows admitted/coalesced
-   outcomes, while Protractor API usage remains at zero.
-7. Deliver several callbacks with an unknown connection ID. Confirm they are
-   acknowledged, counted in `protractor_callback_quarantine`, and create no
-   Protractor API usage.
+1. Confirm the exact production service is Render `mos-tools`
+   (`srv-d55jaqkhg0os73a5dd8g`). Do not target QA, workers, `mos-tools-east`,
+   or a service selected by a partial name.
+2. Activate or confirm the production Mongo operator stop. Record its current
+   `stopId`; the timed-trial start uses that value for stale-write protection.
+3. Manually suspend **both** production Protractor workers and stop historical
+   backfill. Record the operator, time, and evidence in the change ticket.
+   This is an attestation, not an automated readiness claim.
+4. Stage the following values while the operator stop remains active:
 
-Do not proceed if any REST or SOAP call is recorded while the switch is on.
+   ```text
+   PROTRACTOR_CALLBACK_TRIAL_ENABLED=true
+   PROTRACTOR_OUTBOUND_DISABLED=false
+   ```
+
+   The first flag enables the callback trial path. The second value is safe to
+   stage only because the Mongo operator stop still denies physical
+   admissions. Do not stage a competing deadline variable.
+5. Deploy the reviewed commit manually with Render autodeploy disabled. Do
+   not start workers or historical backfill as part of this deployment.
+6. Verify the effective staged configuration and that the operator stop is
+   still active. A timeout or unavailable status is a failed gate, not
+   permission to proceed.
+
+Do not proceed to activation if the stop is not active, either worker is
+running, backfill is enabled, or outbound-disabled has not been staged exactly
+as above.
 
 ## Isolate one Render replica
 
+Replica isolation remains a recovery control separate from the timed-trial
+configuration. Use it when one exact replica must be denied while the web
+service remains available; do not use it to manufacture trial traffic.
+
 `PROTRACTOR_OUTBOUND_DENIED_INSTANCE_IDS` accepts either a comma-separated list
 or a JSON string array of exact replica identities. Use `RENDER_INSTANCE_ID`
-from the structured runtime telemetry; do not use an IP address, connection ID,
-or credential. Identity values are emitted only as one-way 12-character
+from structured runtime telemetry; do not use an IP address, connection ID, or
+credential. Identity values are emitted only as one-way 12-character
 fingerprints in policy-denial telemetry.
 
-1. Keep `PROTRACTOR_OUTBOUND_DISABLED=true` while preparing the rollout.
-2. From Render's instance metadata, copy the exact `RENDER_INSTANCE_ID` of the
+1. Keep `PROTRACTOR_OUTBOUND_DISABLED=true` while preparing an isolation
+   rollout.
+2. From Render instance metadata, copy the exact `RENDER_INSTANCE_ID` of the
    blocked replica and set, for example,
    `PROTRACTOR_OUTBOUND_DENIED_INSTANCE_IDS=instance-a,instance-b`.
 3. Deploy without suspending the web service. A denied replica continues to
    serve MOS and non-Protractor traffic. Its Protractor cron jobs and drain
-   worker are not registered; route-level and transport-level checks remain as
+   worker are not registered; route-level and transport-level checks remain
    defense in depth.
 4. Remove `PROTRACTOR_OUTBOUND_DISABLED` (or set it to `false`) only after all
-   replicas have the deny policy. Verify allowed replica canaries first.
+   replicas have the deny policy. Verify allowed-replica health and organic
+   traffic first; do not send a synthetic probe.
 5. Filter structured logs for `protractor_outbound_policy_denied`. Confirm the
    expected instance fingerprint and contexts, and confirm upstream Protractor
    request telemetry is zero for that fingerprint. These local denials must not
    appear as upstream 403s or circuit-breaker responses.
-6. Send GET and POST callbacks to the denied replica. Verify HTTP 200 with
-   `status=deferred`, durable unprocessed callback rows, no attempt increment,
-   and no enrichment request. Then run queue recovery on an allowed replica and
-   confirm the event is claimed and processed there.
+6. When an organic GET or POST callback arrives at the denied replica, verify
+   HTTP 200 with `status=deferred`, durable unprocessed callback rows, no
+   attempt increment, and no enrichment request. Then run queue recovery on an
+   allowed replica and confirm the event is claimed and processed there.
 7. Verify an unrelated MOS endpoint and a non-Protractor background job on the
    denied replica. Both must remain available.
 
 The deny policy fails closed if non-empty but malformed, duplicated, or if no
-stable instance identity is available. Fix the value rather than bypassing this
-protection. `PROTRACTOR_OUTBOUND_DISABLED=true` remains the highest-priority
-control and blocks every replica regardless of the deny list.
+stable instance identity is available. Fix the value rather than bypassing
+this protection. `PROTRACTOR_OUTBOUND_DISABLED=true` remains the highest
+priority control and blocks every replica regardless of the deny list.
 
 ### Identity rotation and verification
 
 Render may replace `RENDER_INSTANCE_ID` during any deploy or restart. Before
 and after each deploy, compare current instance metadata with the deny list.
 If the blocked egress moved to a replacement instance, add the new identity
-before removing the old one, deploy, repeat the zero-outbound canary, and only
-then prune identities that no longer exist. Treat an unexpected
+before removing the old one, deploy, repeat the zero-outbound verification,
+and only then prune identities that no longer exist. Treat an unexpected
 `missing_identity` or `malformed_policy` denial as a rollout failure.
 
-## 2. Prepare a one-connection canary
+## 2. Start the 30-minute trial from the platform-admin UI
 
-1. Agree with Protractor on one test connection and a short observation window.
-2. Set the distributed request ceiling to the lowest practical value.
-3. Ensure callback and cron sources for all non-canary shops remain paused or
-   otherwise unable to consume the canary budget.
-4. Record the baseline callback, breaker, and API-usage counters.
-5. Confirm no connection or provider breaker is already waiting on a probe.
+1. Open **Platform Admin → Protractor Trial** and refresh status. Confirm the
+   current stop ID and that the API reports `trialReady: true`.
+2. Enter a change-specific reason. Check the explicit attestation for both
+   workers suspended and historical backfill off.
+3. Select **Start 30-minute timed trial**. The UI sends only the reason, the
+   fresh `expectedStopId`, and `workersSuspendedConfirmed: true`; it does not
+   accept a user duration or request cap.
+4. Mongo activation records the exact start time and a **fresh replay floor**.
+   Only organic callback activity after that floor belongs to this trial.
+5. Confirm the returned status shows `mode: "timed_trial"`, `startedAt`,
+   `expiresAt` approximately 30 minutes later, and a new generation. Treat the
+   countdown in the UI as advisory; the Mongo expiry is authoritative.
 
-## 3. Run the controlled probe
+If the start returns `409`, refresh status and review the new stop ID. Never
+automatically retry a stale start or clear. If the network outcome is
+uncertain, fetch status to determine whether the generation started; do not
+retry the POST.
 
-1. Set `PROTRACTOR_OUTBOUND_DISABLED=false` only for the coordinated window.
-   Keep the Mongo operator stop active until the platform administrator clears
-   the current `stopId` into a bounded generation as described below. Do not use
-   an environment-variable window alone.
-2. Trigger one idempotent read for the canary connection.
-3. Confirm exactly one upstream request and a successful response.
-4. Wait through the observation window before allowing another request.
-5. If the response is 401/403, stop. Confirm the per-connection breaker opens
-   and that subsequent requests produce zero upstream calls. Confirm exactly one
-   connection-scope ops alert with response class `authentication`.
-6. If responses are 429 or 5xx, stop. Confirm bounded Retry-After-aware backoff
-   and that the provider breaker prevents continued amplification. Confirm
-   exactly one provider-scope ops alert with the matching response class and
-   cooldown.
-7. Activate the production operator stop before investigating any anomaly:
-   `npm run protractor:operator-stop -- activate "<incident reason>"` from a
-   production-context Render one-off job for service `mos-tools`. The command
-   refuses any other service identity and writes directly to the same atomic
-   fleet-admission record used by every live transport. It does not require the
-   web process to be healthy. Confirm `status` reports `active: true`.
+## 3. Observe organic traffic only
 
-### Containment verification and last-resort web suspension
+During the live window:
 
-The operator stop is provider-only and permanent until explicitly cleared.
-Breaker successes, failures, cooldowns, and recovery-probe ownership cannot
-clear or shorten it.
+1. Do not trigger a callback, read, replay, or request to manufacture traffic.
+   Wait for organic provider callbacks.
+2. Observe the timed generation, physical-admission state, upstream request
+   classes, pacer waits, connection breakers, provider breaker, callback
+   outcomes, and error budget.
+3. Compare traffic with the agreed organic baseline. A timed trial has no
+   request-count ceiling, but pacer and breaker protections must continue to
+   constrain dispatch.
+4. Keep both workers suspended and historical backfill off. Do not “restore”
+   either one to increase observations.
+5. Do not treat zero organic requests as a successful provider canary; record
+   the window as inconclusive if no callbacks arrive.
 
-Clearing requires a platform-admin session, an incident reason, the current
-`stopId`, an explicit future `expiresAt`, and `maxAdmissions` from 1 through 3.
-It creates a new canary generation with zero consumed admissions. The final
-Mongo confirmation immediately before either REST or SOAP dispatch atomically
-consumes one admission; expiry, the third admission, or operator activation
-closes that generation before any later transport send. Status and audit output
-show generation, expiry, consumed/remaining admissions, and `endedBy`
-(`time`, `budget`, or `operator`). The lease record's embedded audit trail
-records opening, each admission, and terminal/operator-stop events in the same
-atomic updates as the safety state. The production one-off command is
-activation-only, and the shared
-scheduler credential has no access to this control. A stale clear cannot remove
-a newer stop.
-
-POST `/api/platform-admin/protractor-operator-stop` using the existing
-platform-admin session with `action: "clear"`, `reason`, `expectedStopId`,
-`expiresAt` (an explicit future ISO timestamp), and `maxAdmissions: 3`.
-Budget is fleet-wide, not per shop or protocol; retries also consume admissions.
-A zero-request expiry is inconclusive, not a successful canary.
-An admission consumed by a confirmation whose response is lost is never refunded:
-this deliberately favors containment over reaching the full budget.
-To start another generation, activate the stop again and use its new `stopId`;
-replaying the old clear cannot reset counters. Status retains the latest 20
-prior generations with their embedded audit snapshots. The physical safety
-record must not expire with the rate-limit collection's TTL.
-
-Production log queries are observational only. Restrict canary telemetry to
-`syslog.host = mos-maintenance-mvp-main` and syslog app names matching `web-*`;
-also add an explicit `NOT bld-*` condition. Never use log counts to enforce or
-extend the physical-admission budget because build telemetry, delayed delivery,
-or truncation cannot change the Mongo safety control.
+Production log queries are observational only. Restrict telemetry to the
+production web service and exclude build services:
 
 ```sql
 WHERE syslog.host = 'mos-maintenance-mvp-main'
@@ -158,55 +159,69 @@ WHERE syslog.host = 'mos-maintenance-mvp-main'
   AND syslog.appname NOT LIKE 'bld-%'
 ```
 
-1. Identify the active production service exactly as Render service
-   `mos-tools` (`srv-d55jaqkhg0os73a5dd8g`). Do not target QA, workers,
-   `mos-tools-east`, or a service selected by a partial name.
-2. Keep both production background workers suspended and historical backfill
-   off for the complete canary.
-3. Deploy and verify the canary code while
-   `PROTRACTOR_OUTBOUND_DISABLED=true`.
-4. After the enabling deployment is live, immediately restore
-   `PROTRACTOR_OUTBOUND_DISABLED=true` so the disabling deployment is already
-   building throughout the observation window.
-5. If any stop condition fires, activate the operator stop. A timeout reading
-   logs, metrics, Render state, or the control response aborts the canary and
-   pages operators, but must not invoke web suspension.
-6. Suspend the exact active service only if observed provider telemetry shows a
-   new physical admission after the operator stop activation timestamp. Treat
-   suspension as a full production outage. Keep the service suspended
-   until the disabling deployment is `live`, the effective environment again
-   reports `PROTRACTOR_OUTBOUND_DISABLED=true`, both workers remain suspended,
-   and production telemetry shows zero new Protractor upstream calls.
-7. Resume only the exact `mos-tools` service after all gates in step 6 pass.
-   Recheck the service health and zero-outbound telemetry after resume before
-   investigating or retrying the canary.
+Never use log counts to enforce, extend, or reopen a generation. Delayed,
+truncated, or contaminated telemetry cannot change the Mongo safety state.
 
-This exception provides an emergency stop, not permission to run synthetic
-provider traffic, resume workers, start backfill, or expand the canary.
+## 4. Emergency stop
 
-## 4. Expand gradually
+The **Activate emergency operator stop** action remains available while a
+timed generation is live. Enter a reason and submit it if organic traffic or
+provider telemetry is unsafe. This action is never automatic and does not
+reopen an expired generation.
 
-Only after a clean canary:
+If the web UI is unavailable, use a production-context Render one-off job for
+the exact `mos-tools` service:
 
-1. Increase the distributed ceiling in small steps.
-2. Add a small group of known-good connections.
-3. At each step, compare callback admissions, coalesced events, per-connection
-   request counts, response classes, and breaker transitions.
-4. Hold each step long enough to cover callback and cron traffic.
-5. Keep an operator ready to restore the emergency switch immediately.
+```text
+npm run protractor:operator-stop -- activate "<incident reason>"
+```
 
-Render autodeploy remains off until the rollout owner separately decides the
-incident is closed.
+The command refuses a non-production service identity and writes the same
+operator-stop record used by physical REST and SOAP admission. Confirm with:
 
-## Rollback
+```text
+npm run protractor:operator-stop -- status
+```
 
-Activate the production operator stop. Do not suspend MOS unless observed
-provider telemetry proves containment failed after activation.
-Confirm API usage returns to zero, then preserve privacy-safe callback and
-breaker telemetry for incident review.
+If the emergency command or status response is lost, do not repeat an
+activation blindly. Fetch status from another trusted operator surface and
+then investigate.
 
-After traffic is stopped, remove or correct
-`PROTRACTOR_OUTBOUND_DENIED_INSTANCE_IDS`, deploy to every replica, and verify
-identity metadata plus an allowed canary. Only then clear the service-wide
-switch. If isolation itself must be abandoned, leave the service-wide switch
-on; never roll back by allowing a known-blocked replica to call Protractor.
+Only consider suspending the web service if provider telemetry proves that a
+new physical admission occurred after the operator-stop activation timestamp.
+An unavailable dashboard, breaker alert, or log query alone is not evidence
+that requires suspension.
+
+## 5. Expiry and rollback
+
+At `expiresAt`, Mongo closes the timed generation. The UI may show an advisory
+zero clock before telemetry catches up, but it must not reopen or extend the
+generation. A later trial requires a newly activated stop, a new stop ID, a
+new reason, a new manual worker/backfill attestation, and a new fresh replay
+floor.
+
+For an unsafe result or a deployment rollback:
+
+1. Activate the emergency operator stop, using the UI or the production
+   one-off CLI above.
+2. Confirm physical admissions stop and preserve privacy-safe telemetry.
+3. Restore `PROTRACTOR_OUTBOUND_DISABLED=true`.
+4. Deploy that disabling configuration manually. Keep Render autodeploy off.
+5. Confirm the effective disabled value, both workers still suspended, and zero
+   new Protractor upstream calls.
+6. Leave the operator stop active until a separate incident owner authorizes
+   the next staged change. Never roll back by allowing a known-blocked replica
+   to call Protractor.
+
+If a replica must be isolated, use exact stable `RENDER_INSTANCE_ID` values in
+`PROTRACTOR_OUTBOUND_DENIED_INSTANCE_IDS`. Identity rotation requires adding a
+replacement identity before removing the old one and re-running the
+zero-outbound verification. A malformed or missing identity fails closed.
+
+## Existing bounded mode
+
+The API's existing bounded generation remains supported for separately
+approved operations with one through three fleet-wide admissions. This UI does
+not expose or create that mode. Do not confuse its admission counter with the
+timed trial: timed mode intentionally has no request cap and is bounded only
+by its fixed Mongo lifetime plus the production pacer and breakers.
