@@ -73,6 +73,25 @@ function expression(value: any, row: Row, now: Date): any {
     }
     case "$add": {
       const values = args();
+      if (values[0] instanceof Date) {
+        assert.ok(
+          values.slice(1).every((item: any) => typeof item === "number" && Number.isFinite(item)),
+          "$add requires finite numeric date offsets",
+        );
+        return new Date(
+          values[0].getTime() + values.slice(1).reduce((sum: number, item: number) => sum + item, 0),
+        );
+      }
+      if (values.some((item: any) => typeof item === "bigint")) {
+        assert.ok(
+          values.every((item: any) =>
+            typeof item === "bigint" ||
+            (typeof item === "number" && Number.isSafeInteger(item)),
+          ),
+          "$add requires integer numeric operands",
+        );
+        return values.reduce((sum: bigint, item: bigint | number) => sum + BigInt(item), 0n);
+      }
       assert.ok(
         values.every((item: any) => typeof item === "number" && Number.isFinite(item)),
         "$add requires finite numeric operands",
@@ -81,6 +100,17 @@ function expression(value: any, row: Row, now: Date): any {
     }
     case "$subtract": {
       const [a, b] = args();
+      if (a instanceof Date && b instanceof Date) return a.getTime() - b.getTime();
+      if (typeof a === "bigint" || typeof b === "bigint") {
+        assert.ok(
+          [a, b].every(item =>
+            typeof item === "bigint" ||
+            (typeof item === "number" && Number.isSafeInteger(item)),
+          ),
+          "$subtract requires integer numeric operands",
+        );
+        return BigInt(a) - BigInt(b);
+      }
       assert.ok(
         [a, b].every(item => typeof item === "number" && Number.isFinite(item)),
         "$subtract requires finite numeric operands",
@@ -149,6 +179,11 @@ function expression(value: any, row: Row, now: Date): any {
       return values.length === 2
         ? values[0].slice(values[1] < 0 ? values[1] : 0, values[1] < 0 ? undefined : values[1])
         : values[0].slice(values[1], values[1] + values[2]);
+    }
+    case "$size": {
+      const value = args();
+      assert.ok(Array.isArray(value), "$size requires an array");
+      return value.length;
     }
     default: throw new Error(`unsupported Mongo expression ${operator}`);
   }

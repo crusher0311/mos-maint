@@ -7,6 +7,7 @@ import {
   acquireCallbackTransportLease,
   acquireProtractorPhysicalTransportLease,
   confirmProtractorPhysicalTransportLease,
+  getProtractorOperatorStop,
   releaseCallbackTransportLease,
   releaseProtractorPhysicalTransportLease,
   renewProtractorPhysicalTransportLease,
@@ -64,13 +65,56 @@ const protractorConcurrencyLimit = pLimit(3);
 // fine for ad-hoc real-time API calls. Mirrors the Tekmetric/Shop-Ware
 // per-chunk pattern.
 const backoffStorage = new AsyncLocalStorage<{ ms: number }>();
-const callbackTransportStorage = new AsyncLocalStorage<{ deadlineMs: number }>();
+export interface ProtractorCallbackTransportContext {
+  /**
+   * Timestamp persisted with the callback event that caused this replay.
+   * This is intentionally never synthesized from the worker clock.
+   */
+  callbackReceivedAt?: Date;
+  requireTimedTrial?: boolean;
+}
+
+const callbackTransportStorage = new AsyncLocalStorage<{
+  deadlineMs: number;
+  callbackReceivedAt?: Date;
+  requireTimedTrial?: boolean;
+}>();
 
 export function runWithProtractorCallbackTransport<T>(
   deadlineMs: number,
   fn: () => Promise<T>,
+  receivedAtOrContext?: Date | ProtractorCallbackTransportContext,
+): Promise<T>;
+export function runWithProtractorCallbackTransport<T>(
+  deadlineMs: number,
+  receivedAtOrContext: Date | ProtractorCallbackTransportContext | undefined,
+  fn: () => Promise<T>,
+): Promise<T>;
+export function runWithProtractorCallbackTransport<T>(
+  deadlineMs: number,
+  fnOrReceivedAt: (() => Promise<T>) | Date | ProtractorCallbackTransportContext | undefined,
+  receivedAtOrFn?: Date | ProtractorCallbackTransportContext | (() => Promise<T>),
 ): Promise<T> {
-  return callbackTransportStorage.run({ deadlineMs }, fn);
+  const fn = typeof fnOrReceivedAt === "function"
+    ? fnOrReceivedAt
+    : receivedAtOrFn as (() => Promise<T>);
+  const receivedAtOrContext = typeof fnOrReceivedAt === "function"
+    ? receivedAtOrFn as Date | ProtractorCallbackTransportContext | undefined
+    : fnOrReceivedAt;
+  const requireTimedTrial =
+    !(receivedAtOrContext instanceof Date) &&
+    receivedAtOrContext?.requireTimedTrial === true;
+  const callbackReceivedAt = receivedAtOrContext instanceof Date
+    ? (
+      Number.isFinite(receivedAtOrContext.getTime())
+        ? new Date(receivedAtOrContext.getTime())
+        : undefined
+    )
+    : receivedAtOrContext?.callbackReceivedAt instanceof Date &&
+        Number.isFinite(receivedAtOrContext.callbackReceivedAt.getTime())
+      ? new Date(receivedAtOrContext.callbackReceivedAt.getTime())
+      : undefined;
+  return callbackTransportStorage.run({ deadlineMs, callbackReceivedAt, requireTimedTrial }, fn);
 }
 
 async function runCallbackPacedTransport<T>(
@@ -119,7 +163,13 @@ export const __protractorClientTestHooks: {
   acquireCallbackTransportLease: typeof acquireCallbackTransportLease;
   releaseCallbackTransportLease: typeof releaseCallbackTransportLease;
   acquirePhysicalTransportLease: typeof acquireProtractorPhysicalTransportLease;
-  confirmPhysicalTransportLease: typeof confirmProtractorPhysicalTransportLease;
+  confirmPhysicalTransportLease: (
+    token: string,
+    context?: {
+      requireTimedTrial?: boolean;
+      callbackReceivedAt?: Date;
+    },
+  ) => Promise<boolean>;
   renewPhysicalTransportLease: typeof renewProtractorPhysicalTransportLease;
   releasePhysicalTransportLease: typeof releaseProtractorPhysicalTransportLease;
   physicalTransportHeartbeatMs: number;
@@ -135,6 +185,7 @@ export const __protractorClientTestHooks: {
   // collaborators used by the service-package append loop.
   getDb: typeof getDb;
   getShopPartCostRatio: typeof getShopPartCostRatio;
+  getOperatorStop: typeof getProtractorOperatorStop;
   onFetchStart: ((endpoint: string, opts?: { priority?: boolean; maxRetries?: number }) => void) | null;
   acquireOutboundGate: (connectionId: string) => Promise<ProtractorGateDecision>;
   recordResponse: (connectionId: string, statusCode: number, retryAfterMs?: number) => Promise<void>;
@@ -149,8 +200,14 @@ export const __protractorClientTestHooks: {
   releaseCallbackTransportLease: (token) => releaseCallbackTransportLease(token),
   acquirePhysicalTransportLease: (deadlineMs) =>
     acquireProtractorPhysicalTransportLease(deadlineMs),
-  confirmPhysicalTransportLease: (token) =>
-    confirmProtractorPhysicalTransportLease(token),
+  confirmPhysicalTransportLease: (token, context) =>
+    (confirmProtractorPhysicalTransportLease as unknown as (
+      token: string,
+      context?: {
+        requireTimedTrial?: boolean;
+        callbackReceivedAt?: Date;
+      },
+    ) => Promise<boolean>)(token, context),
   renewPhysicalTransportLease: (token) =>
     renewProtractorPhysicalTransportLease(token),
   releasePhysicalTransportLease: (token) =>
@@ -163,6 +220,7 @@ export const __protractorClientTestHooks: {
   findCachedWorkOrderByRoNumber: (...args) => findCachedWorkOrderByRoNumber(...args),
   getDb: (...args) => getDb(...args),
   getShopPartCostRatio: (...args) => getShopPartCostRatio(...args),
+  getOperatorStop: (...args) => getProtractorOperatorStop(...args),
   onFetchStart: null,
   acquireOutboundGate: (connectionId) => acquireProtractorOutboundGate(connectionId),
   recordResponse: (connectionId, statusCode, retryAfterMs) =>
@@ -707,6 +765,67 @@ export function getProtractorOutboundPolicy() {
   return evaluateProtractorOutboundPolicy(process.env, __protractorClientTestHooks.now());
 }
 
+function asFiniteDate(value: unknown): Date | null {
+  if (!(value instanceof Date) || !Number.isFinite(value.getTime())) return null;
+  return new Date(value.getTime());
+}
+
+/**
+ * Resolve the effective callback policy at queue-admission time.
+ *
+ * The staged policy intentionally has no process-clock deadline: activation
+ * lives in Mongo and the physical lease confirmation is the final, atomic
+ * authority. The queue still needs the persisted activation timestamp to
+ * exclude events that predate the trial, so only this mode performs the
+ * operator-stop read.
+ */
+export async function getEffectiveProtractorOutboundPolicy() {
+  const policy = getProtractorOutboundPolicy();
+  if (!policy.allowed || !policy.requireTimedTrial) return policy;
+
+  let stop: any;
+  try {
+    stop = await __protractorClientTestHooks.getOperatorStop();
+  } catch {
+    return {
+      ...policy,
+      allowed: false,
+      reason: "timed_trial_state_unavailable",
+    };
+  }
+
+  const trial = stop?.canary;
+  const startedAt = asFiniteDate(trial?.startedAt);
+  const expiresAt = asFiniteDate(trial?.expiresAt);
+  const nowMs = __protractorClientTestHooks.now();
+  const live =
+    stop?.active !== true &&
+    trial?.mode === "timed_trial" &&
+    typeof trial?.generation === "string" &&
+    trial.generation.length > 0 &&
+    startedAt !== null &&
+    expiresAt !== null &&
+    startedAt.getTime() <= nowMs &&
+    expiresAt.getTime() > nowMs &&
+    trial?.endedBy == null &&
+    trial?.endedAt == null &&
+    trial?.maxAdmissions === null &&
+    trial?.remainingAdmissions === null;
+
+  if (!live) {
+    return {
+      ...policy,
+      allowed: false,
+      reason: "timed_trial_not_active",
+    };
+  }
+
+  return {
+    ...policy,
+    callbackNotBeforeMs: startedAt!.getTime(),
+  };
+}
+
 export function isProtractorOutboundAllowed(context = "unknown"): boolean {
   const decision = getProtractorOutboundPolicy();
   if (!decision.allowed) logProtractorPolicyDenial(decision, context);
@@ -884,8 +1003,15 @@ async function runFleetGuardedTransportAttempt<T>(
     if (!gate.ok) return gate;
 
     if (leaseToken) {
+      const finalPolicy = getProtractorOutboundPolicy();
+      const callbackContext = callbackTransportStorage.getStore();
       const ownershipAdmission = await settleBefore(
-        __protractorClientTestHooks.confirmPhysicalTransportLease(leaseToken),
+        __protractorClientTestHooks.confirmPhysicalTransportLease(leaseToken, {
+          requireTimedTrial:
+            finalPolicy.requireTimedTrial === true ||
+            callbackContext?.requireTimedTrial === true,
+          callbackReceivedAt: callbackContext?.callbackReceivedAt,
+        }),
         admissionDeadlineAtMs,
       );
       if (ownershipAdmission.timedOut) {

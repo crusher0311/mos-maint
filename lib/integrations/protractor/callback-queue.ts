@@ -1,6 +1,9 @@
 import type { Db } from "mongodb";
 import * as callbackEvents from "@/lib/data/repositories/protractor-callback-events";
-import { getProtractorOutboundPolicy, runWithProtractorCallbackTransport } from "./client";
+import {
+  getEffectiveProtractorOutboundPolicy,
+  runWithProtractorCallbackTransport,
+} from "./client";
 import { logProtractorPolicyDenial } from "./outbound-policy.cjs";
 
 const CALLBACK_CANDIDATE_MULTIPLIER = 10;
@@ -93,7 +96,7 @@ export async function processProtractorCallbackQueue(
     acquireBudgetSlot?: () => Promise<boolean>;
   },
 ): Promise<{ processed: number; failed: number }> {
-  const outboundPolicy = getProtractorOutboundPolicy();
+  const outboundPolicy = await getEffectiveProtractorOutboundPolicy();
   if (!outboundPolicy.allowed) {
     logProtractorPolicyDenial(outboundPolicy, "protractor_callback_queue");
     return { processed: 0, failed: 0 };
@@ -154,6 +157,13 @@ export async function processProtractorCallbackQueue(
       await runWithProtractorCallbackTransport(
         deadlineMs,
         () => dispatch(item),
+        // This is the timestamp persisted by insertGetEvent. Never replace it
+        // with the queue worker's clock: the staged trial's activation floor
+        // is based on when Protractor actually delivered the callback.
+        {
+          callbackReceivedAt: item.receivedAt,
+          requireTimedTrial: outboundPolicy.requireTimedTrial === true,
+        },
       );
       if (Date.now() >= deadlineMs) throw new Error("Callback deadline elapsed before completion");
       if (!ownerToken) throw new Error("Callback completion missing owner token");

@@ -8,6 +8,7 @@ import {
   confirmProtractorPhysicalTransportLease,
   getProtractorOperatorStop,
   releaseProtractorPhysicalTransportLease,
+  startProtractorTimedTrial,
 } from "../lib/data/repositories/api-usage";
 import { createMongoExpressionCollection } from "./helpers/mongo-expression-collection";
 
@@ -305,17 +306,75 @@ async function main(): Promise<void> {
   );
   assert.ok(history.every((canary: any) => canary.audit.length >= 2));
 
-  console.log("Scenario 10: safety record updates carry no physical-record TTL");
+  console.log("Scenario 10: timed trials require fresh callbacks and have no three-admission cap");
+  activeStop("timed-trial-stop");
+  const timedTrial = await startProtractorTimedTrial({
+    changedBy: "trial-operator",
+    reason: "callback trial",
+    expectedStopId: "timed-trial-stop",
+    now,
+  });
+  assert.equal(timedTrial.canary?.mode, "timed_trial");
+  assert.equal(timedTrial.canary?.requiresCallback, true);
+  assert.equal(timedTrial.canary?.maxAdmissions, null);
+  assert.equal(timedTrial.canary?.remainingAdmissions, null);
+  assert.equal(
+    timedTrial.canary!.expiresAt.getTime() - timedTrial.canary!.startedAt!.getTime(),
+    1_800_000,
+  );
+  now = new Date(now.getTime() + 1_001);
+  for (let index = 0; index < 5; index += 1) {
+    const trialLease = await acquireProtractorPhysicalTransportLease(Date.now() + 20);
+    assert.ok(trialLease);
+    assert.equal(
+      await confirmProtractorPhysicalTransportLease(trialLease!),
+      false,
+      "a timed trial admission without callback receipt must fail closed",
+    );
+    assert.equal(
+      await confirmProtractorPhysicalTransportLease(trialLease!, {
+        callbackReceivedAt: new Date(now),
+      }),
+      true,
+      "timed trials admit callback-confirmed requests beyond the bounded cap",
+    );
+    await releaseProtractorPhysicalTransportLease(trialLease!);
+    now = new Date(now.getTime() + 1_001);
+  }
+  status = await getProtractorOperatorStop();
+  assert.equal(status.canary?.consumedAdmissions, 5);
+  assert.equal(status.canary?.audit.filter(event => event.event === "admitted").length, 5);
+  now = new Date(timedTrial.canary!.expiresAt.getTime());
+  assert.equal(
+    await acquireProtractorPhysicalTransportLease(Date.now() + 20),
+    null,
+    "the Mongo expiry boundary ends a trial without a timer",
+  );
+  status = await getProtractorOperatorStop();
+  assert.equal(status.canary?.endedBy, "time");
+  await assert.rejects(
+    startProtractorTimedTrial({
+      changedBy: "trial-operator",
+      reason: "must not reopen terminal generation",
+      expectedStopId: status.stopId!,
+      now,
+    }),
+    /operator stop changed/,
+  );
+
+  console.log("Scenario 11: safety record updates carry no physical-record TTL");
   const physicalUpdates = collection.calls.filter(call =>
     call.filter?._id === "protractor-physical-transport-v1" && call.update
   );
   assert.ok(physicalUpdates.length > 0);
   assert.ok(
-    physicalUpdates.every(call => !JSON.stringify(call.update).includes('"expiresAt":{"$dateAdd"')),
+    physicalUpdates.every(call =>
+      !String(JSON.stringify(call.update?.[0]?.$set?.expiresAt)).includes("$dateAdd")
+    ),
     "the permanent physical safety record must not receive collection TTL expiresAt",
   );
 
-  console.log("Scenario 11: activation uses the Mongo server clock outside the test seam");
+  console.log("Scenario 12: activation uses the Mongo server clock outside the test seam");
   await activateProtractorOperatorStop({
     changedBy: "server-clock-operator",
     reason: "server-clock containment",
@@ -332,7 +391,7 @@ async function main(): Promise<void> {
     "operator-stop audit timestamps must use the Mongo server clock",
   );
 
-  console.log("Scenario 12: production log fixture excludes build-service contamination");
+  console.log("Scenario 13: production log fixture excludes build-service contamination");
   const runbook = readFileSync("docs/runbooks/protractor-storm-recovery.md", "utf8");
   const sql = runbook.match(/```sql\s+([\s\S]*?)```/)?.[1] ?? "";
   const rows = [
