@@ -1,3 +1,18 @@
+## Production generation replacement regression
+
+A new timed generation was observed retaining the previous bounded generation's
+terminal reason and timestamp, despite a new generation ID, new clock, and zero
+admissions. Do not treat a successful activation response as proof of a live gate.
+
+**Why:** Offline tests passed, but the first production timed activation inherited
+the old budget-ended marker and admitted no outbound requests. The operator stop
+was restored rather than altering that generation in place.
+
+**How to apply:** Verify full replacement of nested state under actual Mongo
+aggregation semantics, not only a fake collection's assignment behavior. Test
+activation from a terminal bounded generation and inspect the returned current
+generation for stale terminal fields before reporting a live trial.
+
 ---
 name: Protractor canary accounting
 description: Safety and audit tradeoffs for bounded fleet canaries
