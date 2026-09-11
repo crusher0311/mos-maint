@@ -66,3 +66,15 @@ provider with fake credentials despite the test assertions passing.
 **How to apply:** Await the actual completion effect, keep mocks in place on
 failure paths too, and install a transport-level network-denial guard for tests
 that promise no provider requests.
+
+Fleet trial reconciliation must include the Replit preview, not just production
+web logs. A shared Mongo trial is also visible to development processes.
+
+**Why:** Two apparent missing admissions were real dashboard-plan requests from
+the preview, which used the shared production counter but defaulted to direct
+transport. Production-only relay logs therefore could not account for them.
+
+**How to apply:** Keep development Protractor traffic blocked unless explicitly
+approved and configured for the required relay. Enforce relay-only trial policy
+at the common admission/transport boundary, not solely with production-local
+environment flags; include environment provenance in future admission audits.
