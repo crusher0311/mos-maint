@@ -21,3 +21,13 @@ before any GitHub write.
 strict path allowlist/pattern, base64 each file, create blobs and a tree from the
 known GitHub parent tree, and require the resulting tree SHA to equal the local
 validated tree before updating `main`.
+
+Large Git tree manifests should be written as JSON to a temporary file and
+loaded with `readFile` using an explicit byte budget, not parsed from shell
+stdout in CodeExecution.
+
+**Why:** Shell-output normalization can remove tab separators, and large tree
+listings can be truncated despite a requested output budget.
+
+**How to apply:** Compare the full local manifest with GitHub's recursive tree,
+upload only changed blobs, and retain the exact-tree SHA check before pushing.
