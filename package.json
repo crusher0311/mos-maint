@@ -47,6 +47,7 @@
     "test:protractor-circuit-breaker": "tsx tests/protractor-circuit-breaker-task-1244.smoke.ts && tsx tests/protractor-circuit-breaker-alerts.smoke.ts && tsx tests/protractor-operator-stop.smoke.ts && npm run test:protractor-timed-trial-api && npm run test:protractor-operator-stop-ui",
     "test:protractor-timed-trial-api": "NODE_OPTIONS='--require ./scripts/_stubs/server-only-stub.cjs' tsx tests/protractor-timed-trial-api.smoke.ts",
     "test:protractor-operator-stop-ui": "tsx tests/protractor-operator-stop-ui.smoke.ts",
+    "test:protractor-generation-replacement-mongo": "NODE_OPTIONS='--require ./scripts/_stubs/server-only-stub.cjs' tsx tests/protractor-generation-replacement.mongo.smoke.ts",
     "protractor:operator-stop": "tsx scripts/protractor-operator-stop.ts",
     "test:protractor-instance-policy": "tsx tests/protractor-instance-policy-task-1248.smoke.ts",
     "test:protractor-instance-callback-deferral": "tsx tests/protractor-instance-callback-deferral-task-1248.smoke.ts",

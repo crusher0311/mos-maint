@@ -1379,6 +1379,51 @@ export async function activateProtractorOperatorStop(input: {
   return projectProtractorStopState(row, now);
 }
 
+// Verify the returned write result, not a later read that could belong to a
+// different generation. Failure is ambiguous: never retry/clear/refund here.
+function assertFreshProtractorGeneration(
+  row: any,
+  generation: string,
+  stopId: string,
+  mode: "timed_trial" | "bounded",
+): void {
+  const canary = row?.canary;
+  if (
+    row?.operatorStop?.active !== false ||
+    row?.operatorStop?.stopId !== stopId ||
+    canary?.generation !== generation ||
+    canary?.mode !== mode ||
+    canary?.consumedAdmissions !== 0 ||
+    canary?.endedBy !== undefined ||
+    canary?.endedAt !== undefined ||
+    canary?.auditTruncatedAdmissions !== undefined ||
+    !(canary?.startedAt instanceof Date) ||
+    !Number.isFinite(canary.startedAt.getTime()) ||
+    !(canary?.expiresAt instanceof Date) ||
+    !Number.isFinite(canary.expiresAt.getTime()) ||
+    !Array.isArray(canary?.audit) ||
+    canary.audit.length !== 1 ||
+    canary.audit[0]?.event !== "opened" ||
+    canary.audit[0]?.generation !== generation ||
+    (mode === "timed_trial" && (
+      canary.requiresCallback !== true ||
+      canary.maxAdmissions !== null ||
+      canary.remainingAdmissions !== null ||
+      canary.expiresAt.getTime() - canary.startedAt.getTime() !== 1_800_000
+    )) ||
+    (mode === "bounded" && (
+      !Number.isInteger(canary.maxAdmissions) ||
+      canary.maxAdmissions < 1 ||
+      canary.maxAdmissions > 3 ||
+      canary.remainingAdmissions !== canary.maxAdmissions ||
+      canary.requiresCallback !== undefined ||
+      canary.expiresAt.getTime() <= canary.startedAt.getTime()
+    ))
+  ) {
+    throw new Error("New Protractor generation could not be verified; refresh status before retrying");
+  }
+}
+
 export async function startProtractorTimedTrial(input: {
   changedBy: string;
   reason: string;
@@ -1410,14 +1455,6 @@ export async function startProtractorTimedTrial(input: {
     },
     [{
       $set: {
-        operatorStop: {
-          active: false,
-          stopId: { $literal: expectedStopId },
-          reason: { $literal: reason },
-          changedBy: { $literal: changedBy },
-          clearedAt: pipelineNow,
-          updatedAt: pipelineNow,
-        },
         canaryHistory: {
           $cond: [
             {
@@ -1447,6 +1484,22 @@ export async function startProtractorTimedTrial(input: {
             },
           ],
         },
+      },
+    },
+    // Aggregation $set merges object-shaped assignments into existing objects.
+    // Archive first, then remove old state before creating this generation.
+    // All stages remain one atomic, stop-ID-fenced update; $$NOW is unchanged.
+    { $unset: ["canary", "operatorStop"] },
+    {
+      $set: {
+        operatorStop: {
+          active: false,
+          stopId: { $literal: expectedStopId },
+          reason: { $literal: reason },
+          changedBy: { $literal: changedBy },
+          clearedAt: pipelineNow,
+          updatedAt: pipelineNow,
+        },
         canary: {
           generation,
           mode: "timed_trial",
@@ -1470,6 +1523,7 @@ export async function startProtractorTimedTrial(input: {
     { returnDocument: "after", maxTimeMS: 1000 },
   );
   if (!row) throw new Error("operator stop changed; refresh state before starting trial");
+  assertFreshProtractorGeneration(row, generation, expectedStopId, "timed_trial");
   return projectProtractorStopState(row, now);
 }
 
@@ -1505,14 +1559,6 @@ export async function clearProtractorOperatorStop(input: {
     },
     [{
       $set: {
-        operatorStop: {
-          active: false,
-          stopId: { $literal: expectedStopId },
-          reason: { $literal: reason },
-          changedBy: { $literal: changedBy },
-          clearedAt: now,
-          updatedAt: now,
-        },
         canaryHistory: {
           $cond: [
             {
@@ -1542,6 +1588,19 @@ export async function clearProtractorOperatorStop(input: {
             },
           ],
         },
+      },
+    },
+    { $unset: ["canary", "operatorStop"] },
+    {
+      $set: {
+        operatorStop: {
+          active: false,
+          stopId: { $literal: expectedStopId },
+          reason: { $literal: reason },
+          changedBy: { $literal: changedBy },
+          clearedAt: now,
+          updatedAt: now,
+        },
         canary: {
           generation,
           mode: "bounded",
@@ -1564,6 +1623,7 @@ export async function clearProtractorOperatorStop(input: {
     { returnDocument: "after", maxTimeMS: 1000 },
   );
   if (!row) throw new Error("operator stop changed; refresh state before clearing");
+  assertFreshProtractorGeneration(row, generation, expectedStopId, "bounded");
   return projectProtractorStopState(row, now);
 }
 

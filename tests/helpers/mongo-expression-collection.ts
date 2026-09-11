@@ -19,12 +19,25 @@ function get(row: Row, path: string): any {
   return path.split(".").reduce((value, key) => value?.[key], row);
 }
 
+function isObject(value: any): value is Row {
+  return Boolean(value) &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    !(value instanceof Date);
+}
+
 function set(row: Row, path: string, value: any): void {
   const keys = path.split(".");
   const last = keys.pop()!;
   let target = row;
   for (const key of keys) target = target[key] ??= {};
   if (value === REMOVE) delete target[last];
+  else if (isObject(value) && isObject(target[last])) {
+    // Aggregation pipeline $set merges an object assignment with the existing
+    // object at that path. A separate $unset stage is therefore required when
+    // a replacement must not retain fields from the prior generation.
+    target[last] = { ...target[last], ...value };
+  }
   else target[last] = value;
 }
 
@@ -233,7 +246,12 @@ function applyUpdate(row: Row, update: any, now: Date, inserted: boolean): void 
       }
     }
     if (stage.$unset) {
-      for (const path of Object.keys(stage.$unset)) set(row, path, REMOVE);
+      const paths = Array.isArray(stage.$unset)
+        ? stage.$unset
+        : typeof stage.$unset === "string"
+          ? [stage.$unset]
+          : Object.keys(stage.$unset);
+      for (const path of paths) set(row, path, REMOVE);
     }
     const unsupported = Object.keys(stage).filter(
       key => !["$set", "$setOnInsert", "$unset"].includes(key),

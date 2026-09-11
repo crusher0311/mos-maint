@@ -37,6 +37,20 @@ const collection = createMongoExpressionCollection({
   },
 });
 
+let corruptReturnedWrite = false;
+const unwrappedFindOneAndUpdate = collection.findOneAndUpdate.bind(collection);
+collection.findOneAndUpdate = async (
+  filter: any,
+  update: any,
+  updateOptions: any = {},
+) => {
+  const result = await unwrappedFindOneAndUpdate(filter, update, updateOptions);
+  if (!corruptReturnedWrite || !result?.canary) return result;
+  corruptReturnedWrite = false;
+  result.canary.endedBy = "budget";
+  return result;
+};
+
 __protractorPhysicalTransportTestHooks.getDb = async () => ({
   collection: () => collection,
 } as any);
@@ -75,6 +89,28 @@ async function consumeAdmission(): Promise<boolean> {
 }
 
 async function main(): Promise<void> {
+  console.log("Scenario 0: offline aggregation updates merge objects and honor array $unset");
+  const mergeProbe = createMongoExpressionCollection({
+    _id: "merge-probe",
+    nested: {
+      retained: "from-prior-generation",
+      replaced: "old",
+    },
+  }, { now: () => now });
+  await mergeProbe.updateOne(
+    { _id: "merge-probe" },
+    [{ $set: { nested: { replaced: "new" } } }],
+  );
+  assert.deepEqual(mergeProbe.row.nested, {
+    retained: "from-prior-generation",
+    replaced: "new",
+  });
+  await mergeProbe.updateOne(
+    { _id: "merge-probe" },
+    [{ $unset: ["nested"] }],
+  );
+  assert.equal(Object.hasOwn(mergeProbe.row, "nested"), false);
+
   console.log("Scenario 1: repository expressions enforce a bounded generation");
   const cleared = await clearProtractorOperatorStop({
     changedBy: "test-operator",
@@ -306,14 +342,77 @@ async function main(): Promise<void> {
   );
   assert.ok(history.every((canary: any) => canary.audit.length >= 2));
 
-  console.log("Scenario 10: timed trials require fresh callbacks and have no three-admission cap");
+  console.log("Scenario 10: terminal bounded generations archive before timed replacement");
   activeStop("timed-trial-stop");
-  const timedTrial = await startProtractorTimedTrial({
+  const boundedBeforeTimed = await clearProtractorOperatorStop({
     changedBy: "trial-operator",
-    reason: "callback trial",
+    reason: "bounded generation before callback trial",
     expectedStopId: "timed-trial-stop",
+    expiresAt: new Date(now.getTime() + 60_000),
+    maxAdmissions: 3,
     now,
   });
+  assert.equal(boundedBeforeTimed.canary?.mode, "bounded");
+  // Scenario 8 released a legacy lease immediately before the history churn;
+  // advance the deterministic Mongo clock past that one-second pacer interval
+  // before making the first admission of this generation.
+  now = new Date(now.getTime() + 1_001);
+  for (let index = 0; index < 3; index += 1) {
+    assert.equal(await consumeAdmission(), true);
+  }
+  status = await getProtractorOperatorStop();
+  assert.equal(status.canary?.endedBy, "budget");
+  assert.ok(status.canary?.endedAt instanceof Date);
+  await activateProtractorOperatorStop({
+    changedBy: "trial-operator",
+    reason: "prepare callback trial replacement",
+    now,
+  });
+  collection.row.canary.auditTruncatedAdmissions = 7;
+  collection.row.canary.legacyTerminalField = {
+    source: "bounded-generation",
+    shouldNotCarryForward: true,
+  };
+  collection.row.operatorStop.legacyTerminalStopField = "should-not-carry-forward";
+  const boundedTerminalSnapshot = structuredClone(collection.row.canary);
+  assert.equal(boundedTerminalSnapshot.endedBy, "budget");
+  assert.ok(boundedTerminalSnapshot.endedAt instanceof Date);
+  assert.equal(boundedTerminalSnapshot.auditTruncatedAdmissions, 7);
+
+  console.log("Scenario 11: timed trials verify the write result and require fresh callbacks");
+  const timedStartWritesBefore = collection.calls.filter(call =>
+    call.method === "findOneAndUpdate"
+  ).length;
+  corruptReturnedWrite = true;
+  await assert.rejects(
+    startProtractorTimedTrial({
+      changedBy: "trial-operator",
+      reason: "callback trial",
+      expectedStopId: collection.row.operatorStop.stopId,
+    }),
+    /New Protractor generation could not be verified; refresh status before retrying/,
+  );
+  assert.equal(
+    collection.calls.filter(call => call.method === "findOneAndUpdate").length,
+    timedStartWritesBefore + 1,
+    "a corrupt start response must not trigger an implicit retry",
+  );
+  const timedStartUpdate = [...collection.calls].reverse().find(call =>
+    call.method === "findOneAndUpdate" &&
+    call.update?.[2]?.$set?.canary?.mode === "timed_trial"
+  );
+  assert.equal(
+    timedStartUpdate?.update?.[2]?.$set?.canary?.expiresAt?.$add?.[0],
+    "$$NOW",
+    "timed trial expiry must use the Mongo server clock",
+  );
+  assert.equal(
+    timedStartUpdate?.update?.[2]?.$set?.canary?.expiresAt?.$add?.[1],
+    1_800_000,
+    "timed trial expiry must be exactly thirty minutes",
+  );
+  status = await getProtractorOperatorStop();
+  const timedTrial = status;
   assert.equal(timedTrial.canary?.mode, "timed_trial");
   assert.equal(timedTrial.canary?.requiresCallback, true);
   assert.equal(timedTrial.canary?.maxAdmissions, null);
@@ -321,7 +420,27 @@ async function main(): Promise<void> {
   assert.equal(
     timedTrial.canary!.expiresAt.getTime() - timedTrial.canary!.startedAt!.getTime(),
     1_800_000,
+    "timed trials use an exact thirty-minute Mongo clock duration",
   );
+  assert.deepEqual(collection.row.canaryHistory.at(-1), boundedTerminalSnapshot);
+  for (const field of [
+    "endedBy",
+    "endedAt",
+    "auditTruncatedAdmissions",
+    "legacyTerminalField",
+  ]) {
+    assert.equal(
+      Object.hasOwn(collection.row.canary, field),
+      false,
+      `new timed generation must not retain ${field}`,
+    );
+  }
+  assert.equal(
+    Object.hasOwn(collection.row.operatorStop, "legacyTerminalStopField"),
+    false,
+    "new operator-stop state must not retain unknown terminal fields",
+  );
+
   now = new Date(now.getTime() + 1_001);
   for (let index = 0; index < 5; index += 1) {
     const trialLease = await acquireProtractorPhysicalTransportLease(Date.now() + 20);
@@ -352,6 +471,69 @@ async function main(): Promise<void> {
   );
   status = await getProtractorOperatorStop();
   assert.equal(status.canary?.endedBy, "time");
+  assert.equal(status.canary?.endedAt?.getTime(), timedTrial.canary!.expiresAt.getTime());
+
+  console.log("Scenario 12: terminal timed generations archive before bounded replacement");
+  await activateProtractorOperatorStop({
+    changedBy: "trial-operator",
+    reason: "prepare bounded replacement",
+    now,
+  });
+  collection.row.canary.legacyTimedTerminalField = {
+    source: "timed-generation",
+    shouldNotCarryForward: true,
+  };
+  collection.row.operatorStop.legacyTimedStopField = "should-not-carry-forward";
+  const timedTerminalSnapshot = structuredClone(collection.row.canary);
+  assert.equal(timedTerminalSnapshot.mode, "timed_trial");
+  assert.equal(timedTerminalSnapshot.endedBy, "time");
+  assert.ok(timedTerminalSnapshot.endedAt instanceof Date);
+  const boundedClearWritesBefore = collection.calls.filter(call =>
+    call.method === "findOneAndUpdate"
+  ).length;
+  corruptReturnedWrite = true;
+  await assert.rejects(
+    clearProtractorOperatorStop({
+      changedBy: "trial-operator",
+      reason: "bounded replacement",
+      expectedStopId: collection.row.operatorStop.stopId,
+      expiresAt: new Date(now.getTime() + 60_000),
+      maxAdmissions: 3,
+      now,
+    }),
+    /New Protractor generation could not be verified; refresh status before retrying/,
+  );
+  assert.equal(
+    collection.calls.filter(call => call.method === "findOneAndUpdate").length,
+    boundedClearWritesBefore + 1,
+    "a corrupt clear response must not trigger an implicit retry",
+  );
+  assert.deepEqual(collection.row.canaryHistory.at(-1), timedTerminalSnapshot);
+  assert.equal(collection.row.canary.mode, "bounded");
+  assert.equal(collection.row.canary.maxAdmissions, 3);
+  assert.equal(collection.row.canary.remainingAdmissions, 3);
+  for (const field of [
+    "requiresCallback",
+    "endedBy",
+    "endedAt",
+    "auditTruncatedAdmissions",
+    "legacyTimedTerminalField",
+  ]) {
+    assert.equal(
+      Object.hasOwn(collection.row.canary, field),
+      false,
+      `new bounded generation must not retain ${field}`,
+    );
+  }
+  assert.equal(
+    Object.hasOwn(collection.row.operatorStop, "legacyTimedStopField"),
+    false,
+    "new operator-stop state must not retain timed terminal fields",
+  );
+
+  console.log("Scenario 13: terminal generations cannot be reopened as timed trials");
+  status = await getProtractorOperatorStop();
+  assert.equal(status.canary?.mode, "bounded");
   await assert.rejects(
     startProtractorTimedTrial({
       changedBy: "trial-operator",
@@ -362,7 +544,7 @@ async function main(): Promise<void> {
     /operator stop changed/,
   );
 
-  console.log("Scenario 11: safety record updates carry no physical-record TTL");
+  console.log("Scenario 14: safety record updates carry no physical-record TTL");
   const physicalUpdates = collection.calls.filter(call =>
     call.filter?._id === "protractor-physical-transport-v1" && call.update
   );
@@ -374,7 +556,7 @@ async function main(): Promise<void> {
     "the permanent physical safety record must not receive collection TTL expiresAt",
   );
 
-  console.log("Scenario 12: activation uses the Mongo server clock outside the test seam");
+  console.log("Scenario 15: activation uses the Mongo server clock outside the test seam");
   await activateProtractorOperatorStop({
     changedBy: "server-clock-operator",
     reason: "server-clock containment",
@@ -391,7 +573,7 @@ async function main(): Promise<void> {
     "operator-stop audit timestamps must use the Mongo server clock",
   );
 
-  console.log("Scenario 13: production log fixture excludes build-service contamination");
+  console.log("Scenario 16: production log fixture excludes build-service contamination");
   const runbook = readFileSync("docs/runbooks/protractor-storm-recovery.md", "utf8");
   const sql = runbook.match(/```sql\s+([\s\S]*?)```/)?.[1] ?? "";
   const rows = [

@@ -1,3 +1,8 @@
+---
+name: Protractor canary accounting
+description: Safety and audit tradeoffs for fleet canaries and timed trials
+---
+
 ## Production generation replacement regression
 
 A new timed generation was observed retaining the previous bounded generation's
@@ -8,15 +13,12 @@ admissions. Do not treat a successful activation response as proof of a live gat
 the old budget-ended marker and admitted no outbound requests. The operator stop
 was restored rather than altering that generation in place.
 
-**How to apply:** Verify full replacement of nested state under actual Mongo
-aggregation semantics, not only a fake collection's assignment behavior. Test
-activation from a terminal bounded generation and inspect the returned current
-generation for stale terminal fields before reporting a live trial.
-
----
-name: Protractor canary accounting
-description: Safety and audit tradeoffs for bounded fleet canaries
----
+**How to apply:** Mongo aggregation `$set` with an object-shaped assignment
+merges nested fields rather than fully replacing that object. Archive before
+removing old nested state, and replace within the same atomic update. Keep a
+real isolated Mongo regression as well as the fake collection tests; never use
+the app's Mongo connection for this test. Inspect returned activation state
+before reporting a live trial.
 
 Count physical admission at the Mongo confirmation, never from runtime logs. Do not refund an admission after a lost confirmation response or a subsequent local cancellation.
 
