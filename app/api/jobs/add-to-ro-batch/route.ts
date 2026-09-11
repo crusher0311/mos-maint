@@ -5,6 +5,7 @@ import {
   fetchWorkOrderById,
   protractorFetch 
 } from "@/lib/integrations/protractor";
+import { runWithProtractorInteractiveTransport } from "@/lib/integrations/protractor/interactive-context";
 import { getDb } from "@/lib/mongo";
 import {
   getShopPartCostRatio,
@@ -71,7 +72,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "At least one job is required" }, { status: 400 });
   }
 
-  const existingWOResult = await fetchWorkOrderById(shopId, workOrderGuid);
+  const existingWOResult = await runWithProtractorInteractiveTransport(
+    shopId,
+    () => fetchWorkOrderById(shopId, workOrderGuid),
+  );
   if (!existingWOResult.ok || !existingWOResult.workOrder) {
     return NextResponse.json(
       { error: existingWOResult.error || "Work order not found" },
@@ -241,15 +245,18 @@ export async function POST(req: NextRequest) {
   const jobTitles = jobs.map(j => j.job.title).join(", ");
   console.log(`[Jobs Batch] Adding ${jobs.length} jobs to WO ${workOrderGuid}: ${jobTitles}`);
 
-  const updateResult = await protractorFetch<any>(
-    `/WorkOrder/${workOrderGuid}`,
-    config,
-    {
-      method: "POST",
-      body: JSON.stringify(updatedWorkOrder),
-    },
-    0,
+  const updateResult = await runWithProtractorInteractiveTransport(
     shopId,
+    () => protractorFetch<any>(
+      `/WorkOrder/${workOrderGuid}`,
+      config,
+      {
+        method: "POST",
+        body: JSON.stringify(updatedWorkOrder),
+      },
+      0,
+      shopId,
+    ),
   );
 
   if (!updateResult.ok) {

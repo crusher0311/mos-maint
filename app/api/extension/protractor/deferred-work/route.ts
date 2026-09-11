@@ -2,6 +2,7 @@ import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 import { NextRequest, NextResponse } from "next/server";
 import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
 import { fetchDeferredWorkWithCache } from "@/lib/integrations/protractor";
+import { runWithProtractorInteractiveTransport } from "@/lib/integrations/protractor/interactive-context";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,7 +37,10 @@ async function _GET(req: NextRequest) {
     });
     if (!guard.ok) return guard.response;
 
-    const result = await fetchDeferredWorkWithCache(guard.mosShopId, vin, serviceItemId);
+    const result = await runWithProtractorInteractiveTransport(
+      guard.mosShopId,
+      () => fetchDeferredWorkWithCache(guard.mosShopId, vin, serviceItemId),
+    );
 
     if (!result.ok || !result.deferredWork) {
       return NextResponse.json({ error: result.error || "Failed to fetch deferred work" }, { status: 500, headers: corsHeaders });

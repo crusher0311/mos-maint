@@ -14,7 +14,8 @@ export type ProtractorOutboundPolicyReason =
   | "callback_canary_too_long"
   | "callback_canary_expired"
   | "timed_trial_state_unavailable"
-  | "timed_trial_not_active";
+  | "timed_trial_not_active"
+  | "timed_trial_scope_invalid";
 
 export interface ProtractorOutboundPolicyDecision {
   allowed: boolean;
@@ -22,6 +23,7 @@ export interface ProtractorOutboundPolicyDecision {
   identity: string | null;
   callbackOnly?: boolean;
   requireTimedTrial?: boolean;
+  allowInteractive?: boolean;
   callbackNotBeforeMs?: number | null;
 }
 

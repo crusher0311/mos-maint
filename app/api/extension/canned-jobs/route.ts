@@ -4,6 +4,7 @@ import { getDb } from "@/lib/mongo";
 import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
 import { getCannedJobs } from "@/lib/integrations/tekmetric";
 import { protractorAdapter } from "@/lib/integrations/protractor/adapter";
+import { runWithProtractorInteractiveTransport } from "@/lib/integrations/protractor/interactive-context";
 import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
 
 const corsHeaders = {
@@ -233,7 +234,10 @@ async function _GET(request: NextRequest) {
         );
       } else {
         // No usable cache — must fetch synchronously.
-        cannedJobs = await fetchAndCacheProtractorCannedJobs(db, mosShopId);
+        cannedJobs = await runWithProtractorInteractiveTransport(
+          mosShopId,
+          () => fetchAndCacheProtractorCannedJobs(db, mosShopId),
+        );
         if (cannedJobs.length > 0) {
           source = "api";
         } else {

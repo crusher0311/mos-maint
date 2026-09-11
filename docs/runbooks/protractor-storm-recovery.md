@@ -23,9 +23,10 @@ here.
 - Workers and historical backfill stay off for the entire trial. Worker
   readiness is a manual operator attestation; the UI does not independently
   verify worker state.
-- Use organic provider callbacks only. Do not send synthetic callbacks,
-  synthetic reads, replay probes, curl probes, or other manufactured traffic to
-  create trial volume.
+- Use organic activity only. Callback-only scope uses organic provider callbacks;
+  all-shops scope may also observe ordinary staff activity. Do not send
+  synthetic callbacks, synthetic reads, replay probes, curl probes, or other
+  manufactured traffic to create trial volume.
 - Do not use a second or legacy callback-canary deadline variable. The Mongo
   generation and its `expiresAt` are the sole trial clock.
 - Never log or paste API keys, authentication values, callback payloads, or raw
@@ -63,6 +64,21 @@ here.
 Do not proceed to activation if the stop is not active, either worker is
 running, backfill is enabled, or outbound-disabled has not been staged exactly
 as above.
+
+### Trial scope
+
+Choose the scope deliberately in the platform-admin UI before starting the
+generation:
+
+- **Callback-only (default):** the legacy scope, limited to organic provider
+  callbacks.
+- **All shops: callbacks + normal staff activity:** fleet-wide across all
+  connected, non-canceled Protractor shops. There is no per-shop selection.
+
+All-shops scope still excludes unattended cron/background work and automatic
+post-request refreshes; it is not full worker or historical-backfill traffic.
+Both workers must remain suspended and historical backfill must remain off in
+either scope, as required by the unchanged manual attestation.
 
 ## Isolate one Render replica
 
@@ -117,16 +133,20 @@ and only then prune identities that no longer exist. Treat an unexpected
 
 1. Open **Platform Admin → Protractor Trial** and refresh status. Confirm the
    current stop ID and that the API reports `trialReady: true`.
-2. Enter a change-specific reason. Check the explicit attestation for both
-   workers suspended and historical backfill off.
-3. Select **Start 30-minute timed trial**. The UI sends only the reason, the
-   fresh `expectedStopId`, and `workersSuspendedConfirmed: true`; it does not
-   accept a user duration or request cap.
+2. Enter a change-specific reason. Select **Callback-only (default)** or
+   **All shops: callbacks + normal staff activity**. Check the explicit
+   attestation for both workers suspended and historical backfill off.
+3. Select **Start 30-minute timed trial**. The UI sends the selected
+   `scope` (`"callbacks"` or `"callbacks_and_interactive"`), reason, fresh
+   `expectedStopId`, and `workersSuspendedConfirmed: true`; it does not accept
+   a user duration or request cap.
 4. Mongo activation records the exact start time and a **fresh replay floor**.
-   Only organic callback activity after that floor belongs to this trial.
-5. Confirm the returned status shows `mode: "timed_trial"`, `startedAt`,
-   `expiresAt` approximately 30 minutes later, and a new generation. Treat the
-   countdown in the UI as advisory; the Mongo expiry is authoritative.
+   Only organic activity allowed by the selected scope after that floor belongs
+   to this trial.
+5. Confirm the returned status shows `mode: "timed_trial"`, the selected
+   generation scope, `startedAt`, `expiresAt` approximately 30 minutes later,
+   and a new generation. Treat the countdown in the UI as advisory; the Mongo
+   expiry is authoritative.
 
 If the start returns `409`, refresh status and review the new stop ID. Never
 automatically retry a stale start or clear. If the network outcome is
@@ -138,7 +158,9 @@ retry the POST.
 During the live window:
 
 1. Do not trigger a callback, read, replay, or request to manufacture traffic.
-   Wait for organic provider callbacks.
+   In callback-only scope, wait for organic provider callbacks. In all-shops
+   scope, observe organic provider callbacks and ordinary staff activity from
+   all connected, non-canceled shops.
 2. Observe the timed generation, physical-admission state, upstream request
    classes, pacer waits, connection breakers, provider breaker, callback
    outcomes, and error budget.
@@ -149,6 +171,15 @@ During the live window:
    either one to increase observations.
 5. Do not treat zero organic requests as a successful provider canary; record
    the window as inconclusive if no callbacks arrive.
+
+### Stop criteria
+
+Activate the emergency operator stop promptly for repeated timeouts, 5xx
+responses, throttles, or circuit-breaker events; queue delay or site-health
+deterioration; unexpected volume; or an unrelated provider being affected.
+Record the evidence and stop reason. Do not extend a terminal generation or
+retry a start automatically; a later trial requires a new stop and a new
+generation.
 
 Production log queries are observational only. Restrict telemetry to the
 production web service and exclude build services:

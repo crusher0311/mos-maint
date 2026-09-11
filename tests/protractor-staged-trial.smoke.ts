@@ -14,6 +14,7 @@ import {
   soapAddServicePackage,
   type ProtractorConfig,
 } from "../lib/integrations/protractor/client";
+import { runWithProtractorInteractiveTransport } from "../lib/integrations/protractor/interactive-context";
 import { evaluateProtractorOutboundPolicy } from "../lib/integrations/protractor/outbound-policy.cjs";
 
 const POLICY_ENV_KEYS = [
@@ -37,7 +38,12 @@ function canonical(ms: number): string {
   return new Date(ms).toISOString();
 }
 
-function timedTrial(startedAt: Date, expiresAt: Date, generation = "trial-generation"): any {
+function timedTrial(
+  startedAt: Date,
+  expiresAt: Date,
+  generation = "trial-generation",
+  extra: Record<string, unknown> = {},
+): any {
   return {
     mode: "timed_trial",
     generation,
@@ -48,6 +54,7 @@ function timedTrial(startedAt: Date, expiresAt: Date, generation = "trial-genera
     remainingAdmissions: null,
     endedBy: undefined,
     endedAt: undefined,
+    ...extra,
   };
 }
 
@@ -105,6 +112,7 @@ async function main(): Promise<void> {
     assert.equal(staged.allowed, true);
     assert.equal(staged.callbackOnly, true);
     assert.equal(staged.requireTimedTrial, true);
+    assert.equal(staged.allowInteractive, false);
     assert.equal(staged.callbackNotBeforeMs, null);
 
     assert.equal(
@@ -172,8 +180,24 @@ async function main(): Promise<void> {
     const live = await getEffectiveProtractorOutboundPolicy();
     assert.equal(live.allowed, true);
     assert.equal(live.requireTimedTrial, true);
+    assert.equal(live.allowInteractive, false);
     assert.equal(live.callbackNotBeforeMs, baseNow - 1_000);
     assert.equal(stopReads, 1);
+
+    __protractorClientTestHooks.getOperatorStop = async () => ({
+      active: false,
+      canary: timedTrial(
+        new Date(baseNow - 1_000),
+        new Date(baseNow + 1_800_000),
+        "broad-trial-generation",
+        { scope: "callbacks_and_interactive", requiresCallback: false },
+      ),
+    } as any);
+    const broadPolicy = await getEffectiveProtractorOutboundPolicy();
+    assert.equal(broadPolicy.allowed, true);
+    assert.equal(broadPolicy.callbackOnly, true);
+    assert.equal(broadPolicy.requireTimedTrial, true);
+    assert.equal(broadPolicy.allowInteractive, true);
 
     __protractorClientTestHooks.getOperatorStop = async () => ({
       active: false,
@@ -203,6 +227,7 @@ async function main(): Promise<void> {
     const confirmations: Array<{
       requireTimedTrial?: boolean;
       callbackReceivedAt?: Date;
+      interactiveShopId?: number;
     }> = [];
     const persistedReceivedAt = new Date(baseNow - 100);
     const trialStartedAt = new Date(baseNow - 500);
@@ -234,11 +259,19 @@ async function main(): Promise<void> {
       confirmations.push({
         requireTimedTrial: context?.requireTimedTrial,
         callbackReceivedAt: context?.callbackReceivedAt,
+        interactiveShopId: context?.interactiveShopId,
       });
       if (token !== ownerToken) return false;
+      if (
+        context?.interactiveShopId !== undefined &&
+        context.interactiveShopId !== 1
+      ) {
+        return false;
+      }
       const receivedAt = context?.callbackReceivedAt?.getTime() ?? Number.NaN;
       if (
         context?.requireTimedTrial === true &&
+        context?.interactiveShopId === undefined &&
         (receivedAt < trialStartedAt.getTime() || receivedAt > Date.now())
       ) {
         return false;
@@ -354,6 +387,126 @@ async function main(): Promise<void> {
       confirmations.every((context) => context.callbackReceivedAt instanceof Date),
       "physical confirmation must receive persisted receivedAt, never a worker-clock fallback",
     );
+
+    console.log("Scenario 5: broad timed scope admits only the shop-bound interactive source");
+    const callbackOnlyPriority = await protractorFetch(
+      "/Invoice/priority-without-context",
+      config,
+      { headers: { "x-protractor-interactive": "true" } },
+      0,
+      1,
+      { priority: true, maxRetries: 0 },
+    );
+    assert.equal(callbackOnlyPriority.ok, false);
+    assert.equal(transportSends, 4);
+
+    __protractorClientTestHooks.getOperatorStop = async () => ({
+      active: false,
+      canary: timedTrial(
+        trialStartedAt,
+        new Date(baseNow + 1_800_000),
+        "broad-trial-generation",
+        { scope: "callbacks_and_interactive", requiresCallback: false },
+      ),
+    } as any);
+
+    const absentInteractive = await protractorFetch(
+      "/Invoice/broad-without-context",
+      config,
+      {},
+      0,
+      1,
+      { priority: true, maxRetries: 0 },
+    );
+    assert.equal(absentInteractive.ok, false);
+    assert.equal(transportSends, 4);
+
+    const broadMixed = await runWithProtractorInteractiveTransport(1, () =>
+      Promise.all([
+        protractorFetch(
+          "/Invoice/broad-rest",
+          config,
+          {},
+          0,
+          1,
+          { priority: true, maxRetries: 0 },
+        ),
+        soapAddServicePackage(1, "broad-wo", {
+          ID: "broad-wo",
+          Type: "WorkOrder",
+          ServicePackages: [],
+        }),
+      ]),
+    );
+    assert.ok(broadMixed.every((result) => result.ok));
+    assert.equal(transportSends, 6);
+    assert.ok(confirmations.slice(-2).every((context) =>
+      context.requireTimedTrial === true &&
+      context.interactiveShopId === 1 &&
+      context.callbackReceivedAt === undefined,
+    ));
+
+    const mismatchedInteractive = await runWithProtractorInteractiveTransport(2, () =>
+      protractorFetch(
+        "/Invoice/mismatched-interactive-shop",
+        config,
+        {},
+        0,
+        1,
+        { priority: true, maxRetries: 0 },
+      ),
+    );
+    assert.equal(mismatchedInteractive.ok, false);
+    assert.equal(transportSends, 6);
+
+    let detached: Promise<{ ok: boolean }> | undefined;
+    await runWithProtractorInteractiveTransport(1, async () => {
+      detached = new Promise((resolve) => {
+        setTimeout(() => {
+          resolve(protractorFetch(
+            "/Invoice/closed-interactive-context",
+            config,
+            {},
+            0,
+            1,
+            { maxRetries: 0 },
+          ));
+        }, 0);
+      });
+    });
+    assert.ok(detached);
+    assert.equal((await detached!).ok, false);
+    assert.equal(transportSends, 6);
+
+    __protractorClientTestHooks.getOperatorStop = async () => ({
+      active: true,
+      canary: timedTrial(
+        trialStartedAt,
+        new Date(baseNow + 1_800_000),
+        "broad-trial-generation",
+        { scope: "callbacks_and_interactive", requiresCallback: false },
+      ),
+    } as any);
+    const terminalBroad = await runWithProtractorInteractiveTransport(1, () =>
+      protractorFetch("/Invoice/terminal-broad", config, {}, 0, 1, { maxRetries: 0 }),
+    );
+    assert.equal(terminalBroad.ok, false);
+    assert.equal(transportSends, 6);
+
+    __protractorClientTestHooks.getOperatorStop = async () => ({
+      active: false,
+      canary: timedTrial(
+        trialStartedAt,
+        new Date(baseNow - 1),
+        "broad-trial-generation",
+        { scope: "callbacks_and_interactive", requiresCallback: false },
+      ),
+    } as any);
+    const expiredBroad = await runWithProtractorInteractiveTransport(1, () =>
+      protractorFetch("/Invoice/expired-broad", config, {}, 0, 1, { maxRetries: 0 }),
+    );
+    assert.equal(expiredBroad.ok, false);
+    assert.equal(transportSends, 6);
 
     console.log("All staged Protractor trial checks passed");
   } finally {

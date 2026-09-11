@@ -4,6 +4,7 @@ import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
 import { checkExtensionWritePermission } from "@/lib/extension-write-guard";
 import { createProtractorWorkOrder } from "@/lib/integrations/protractor";
 import { finalizeProtractorWorkOrderCreation } from "@/lib/integrations/protractor/work-order-service";
+import { runWithProtractorInteractiveTransport } from "@/lib/integrations/protractor/interactive-context";
 import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
 import { resolveClientRequestId } from "@/lib/idempotent-create-id";
 
@@ -74,29 +75,32 @@ async function _POST(req: NextRequest) {
       guard.user?._id ?? guard.user?.email,
       clientRequestId,
     );
-    const result = await withUpstreamTimeout(
-      createProtractorWorkOrder(
-        numShopId,
-        {
-          contactId,
-          vehicleId,
-          vin: vin || undefined,
-          concernText: concernText || undefined,
-          concerns: Array.isArray(concerns)
-            ? (concerns as unknown[]).filter((c): c is string => typeof c === "string" && c.trim().length > 0)
-            : undefined,
-          note: note || undefined,
-          mileage: mileage || undefined,
-          servicePackages: servicePackages || undefined,
-        },
-        {
-          interactive: true,
-          workOrderId: pinnedWorkOrderId,
-        },
+    const result = await runWithProtractorInteractiveTransport(
+      numShopId,
+      () => withUpstreamTimeout(
+        createProtractorWorkOrder(
+          numShopId,
+          {
+            contactId,
+            vehicleId,
+            vin: vin || undefined,
+            concernText: concernText || undefined,
+            concerns: Array.isArray(concerns)
+              ? (concerns as unknown[]).filter((c): c is string => typeof c === "string" && c.trim().length > 0)
+              : undefined,
+            note: note || undefined,
+            mileage: mileage || undefined,
+            servicePackages: servicePackages || undefined,
+          },
+          {
+            interactive: true,
+            workOrderId: pinnedWorkOrderId,
+          },
+        ),
+        UPSTREAM_DEADLINE_MS,
+        `ext-create-work-order shop=${numShopId}`,
+        { ok: false, error: SLOW_UPSTREAM_MSG, timedOut: true } as any,
       ),
-      UPSTREAM_DEADLINE_MS,
-      `ext-create-work-order shop=${numShopId}`,
-      { ok: false, error: SLOW_UPSTREAM_MSG, timedOut: true } as any,
     );
 
     if (!result.ok) {

@@ -5,6 +5,9 @@ import React, { FormEvent, useCallback, useEffect, useMemo, useState } from "rea
 const ENDPOINT = "/api/platform-admin/protractor-operator-stop";
 const STATUS_POLL_MS = 15_000;
 const TRIAL_DURATION_MINUTES = 30;
+const DEFAULT_TRIAL_SCOPE = "callbacks" as const;
+
+type TrialScope = "callbacks" | "callbacks_and_interactive";
 
 type AuditEntry = {
   event?: string;
@@ -15,6 +18,7 @@ type AuditEntry = {
 
 type Canary = {
   mode?: "bounded" | "timed_trial" | string;
+  scope?: TrialScope | string | null;
   generation?: string;
   startedAt?: string | Date | null;
   expiresAt?: string | Date | null;
@@ -85,6 +89,16 @@ function canaryLabel(canary: Canary | null | undefined): string {
   return canary.mode || "Generation";
 }
 
+function scopeLabel(scope: Canary["scope"]): string {
+  if (scope === "callbacks_and_interactive") {
+    return "All shops: callbacks + normal staff activity";
+  }
+  if (scope === "callbacks" || !scope) {
+    return "Callback-only (legacy default)";
+  }
+  return `Unknown scope (${scope})`;
+}
+
 export default function ProtractorOperatorStopClient() {
   const [state, setState] = useState<OperatorStopState | null>(null);
   const [trialReady, setTrialReady] = useState<boolean | null>(null);
@@ -96,6 +110,7 @@ export default function ProtractorOperatorStopClient() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [trialReason, setTrialReason] = useState("");
+  const [trialScope, setTrialScope] = useState<TrialScope>(DEFAULT_TRIAL_SCOPE);
   const [emergencyReason, setEmergencyReason] = useState("");
   const [workersSuspendedConfirmed, setWorkersSuspendedConfirmed] = useState(false);
   const [startingTrial, setStartingTrial] = useState(false);
@@ -239,6 +254,7 @@ export default function ProtractorOperatorStopClient() {
         body: JSON.stringify({
           action: "start_trial",
           reason: trialReason.trim(),
+          scope: trialScope,
           expectedStopId: stopId,
           workersSuspendedConfirmed: true,
         }),
@@ -263,6 +279,7 @@ export default function ProtractorOperatorStopClient() {
       }
       applyStatus(payload);
       setTrialReason("");
+      setTrialScope(DEFAULT_TRIAL_SCOPE);
       setWorkersSuspendedConfirmed(false);
       setNotice("Timed trial started for the fixed 30-minute window. Mongo activation is the start time.");
     } catch (caught) {
@@ -429,6 +446,49 @@ export default function ProtractorOperatorStopClient() {
               className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
+          <fieldset className="rounded border border-blue-200 bg-blue-50 p-3">
+            <legend className="px-1 text-sm font-semibold text-gray-900">Trial scope</legend>
+            <div className="mt-1 space-y-3 text-sm">
+              <label className="flex items-start gap-3">
+                <input
+                  type="radio"
+                  name="trial-scope"
+                  value="callbacks"
+                  checked={trialScope === "callbacks"}
+                  onChange={() => setTrialScope("callbacks")}
+                  className="mt-0.5 h-4 w-4 border-gray-400"
+                />
+                <span>
+                  <strong>Callback-only (default)</strong>
+                  <span className="mt-0.5 block text-xs text-gray-700">
+                    Legacy scope: organic provider callbacks only.
+                  </span>
+                </span>
+              </label>
+              <label className="flex items-start gap-3">
+                <input
+                  type="radio"
+                  name="trial-scope"
+                  value="callbacks_and_interactive"
+                  checked={trialScope === "callbacks_and_interactive"}
+                  onChange={() => setTrialScope("callbacks_and_interactive")}
+                  className="mt-0.5 h-4 w-4 border-gray-400"
+                />
+                <span>
+                  <strong>All shops: callbacks + normal staff activity</strong>
+                  <span className="mt-0.5 block text-xs text-gray-700">
+                    Fleet-wide across all connected, non-canceled Protractor shops; there is no
+                    per-shop selection.
+                  </span>
+                </span>
+              </label>
+            </div>
+            <p className="mt-3 border-t border-blue-200 pt-3 text-xs text-blue-900">
+              All-shops scope still excludes unattended cron/background work and automatic post-request
+              refreshes. It is not full worker or historical-backfill traffic. Both workers remain
+              suspended and historical backfill stays off in either scope.
+            </p>
+          </fieldset>
           <label className="flex items-start gap-3 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
             <input
               type="checkbox"
@@ -514,6 +574,7 @@ export default function ProtractorOperatorStopClient() {
           <StatusField label="Expires" value={timestamp(currentCanary?.expiresAt)} />
           <StatusField label="Terminal reason" value={terminalReason || "Still live / not reported"} />
           <StatusField label="Consumed requests" value={currentCanary?.consumedAdmissions === undefined ? "Not reported" : String(currentCanary.consumedAdmissions)} />
+           <StatusField label="Scope" value={currentCanary ? scopeLabel(currentCanary.scope) : "No generation"} />
           <StatusField
             label="Remaining requests"
             value={
@@ -550,6 +611,7 @@ export default function ProtractorOperatorStopClient() {
             <thead className="border-b border-gray-200 text-xs uppercase tracking-wide text-gray-500">
               <tr>
                 <th className="px-2 py-2">Mode</th>
+                <th className="px-2 py-2">Scope</th>
                 <th className="px-2 py-2">Started</th>
                 <th className="px-2 py-2">Expired</th>
                 <th className="px-2 py-2">Requests</th>
@@ -561,6 +623,7 @@ export default function ProtractorOperatorStopClient() {
               {(state?.canaryHistory ?? []).map((historyCanary, index) => (
                 <tr key={historyCanary.generation || `${historyCanary.startedAt || "generation"}-${index}`}>
                   <td className="px-2 py-2">{canaryLabel(historyCanary)}</td>
+                   <td className="px-2 py-2">{scopeLabel(historyCanary.scope)}</td>
                   <td className="px-2 py-2 whitespace-nowrap">{timestamp(historyCanary.startedAt)}</td>
                   <td className="px-2 py-2 whitespace-nowrap">{timestamp(historyCanary.expiresAt)}</td>
                   <td className="px-2 py-2">{historyCanary.consumedAdmissions ?? "Not reported"}</td>
@@ -570,7 +633,7 @@ export default function ProtractorOperatorStopClient() {
               ))}
               {(state?.canaryHistory ?? []).length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-2 py-4 text-center text-sm text-gray-500">
+                   <td colSpan={7} className="px-2 py-4 text-center text-sm text-gray-500">
                     No completed generations reported.
                   </td>
                 </tr>

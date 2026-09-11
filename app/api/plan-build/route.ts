@@ -58,6 +58,7 @@ import {
   detectMileageDiscrepancy,
   shopHistoryLabelFromProvider,
 } from "@/lib/plan-build/mileage-discrepancy";
+import { runWithProtractorInteractiveTransport } from "@/lib/integrations/protractor/interactive-context";
 import { resolveShopDistanceUnit, type ShopDistanceDoc } from "@/lib/shop-distance-unit";
 import {
   readPlanBuildMileageMetadata,
@@ -677,7 +678,14 @@ export async function POST(req: NextRequest) {
       : fetchCarfaxWithCache(shopId, vin, CACHE_TTL_MS);
     const [carfaxResult, protractorVehicleResult, avInspectionResult] = await Promise.all([
       carfaxCfg.configured ? carfaxFetch : Promise.resolve({ ok: false }),
-      protractorCfg.configured ? fetchProtractorVehicle(shopId, vin, PROTRACTOR_CACHE_TTL) : Promise.resolve({ ok: false }),
+      protractorCfg.configured
+        ? trustedInternalRequest
+          ? fetchProtractorVehicle(shopId, vin, PROTRACTOR_CACHE_TTL)
+          : runWithProtractorInteractiveTransport(
+              shopId,
+              () => fetchProtractorVehicle(shopId, vin, PROTRACTOR_CACHE_TTL),
+            )
+        : Promise.resolve({ ok: false }),
       autoVitalsCfg.configured ? fetchAutoVitalsInspectionByVin(shopId, vin, PROTRACTOR_CACHE_TTL) : Promise.resolve({ ok: false }),
     ]);
 
@@ -856,7 +864,12 @@ export async function POST(req: NextRequest) {
 
     let protractorDeferredWork: ProtractorDeferredWork[] = [];
     if (protractorCfg.configured && (protractorVehicleResult as any).ok && (protractorVehicleResult as any).vehicle?.ID) {
-      const deferredResult = await fetchProtractorDeferredWork(shopId, vin, (protractorVehicleResult as any).vehicle.ID, PROTRACTOR_CACHE_TTL);
+      const deferredResult = trustedInternalRequest
+        ? await fetchProtractorDeferredWork(shopId, vin, (protractorVehicleResult as any).vehicle.ID, PROTRACTOR_CACHE_TTL)
+        : await runWithProtractorInteractiveTransport(
+            shopId,
+            () => fetchProtractorDeferredWork(shopId, vin, (protractorVehicleResult as any).vehicle.ID, PROTRACTOR_CACHE_TTL),
+          );
       if (deferredResult.ok && deferredResult.deferredWork) {
         protractorDeferredWork = deferredResult.deferredWork;
       }

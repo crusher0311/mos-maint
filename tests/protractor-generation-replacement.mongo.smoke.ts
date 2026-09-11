@@ -21,6 +21,7 @@ import {
   clearProtractorOperatorStop,
   confirmProtractorPhysicalTransportLease,
   getProtractorOperatorStop,
+  PROTRACTOR_PHYSICAL_TRANSPORT_INTERVAL_MS,
   releaseProtractorPhysicalTransportLease,
   startProtractorTimedTrial,
 } from "../lib/data/repositories/api-usage";
@@ -261,6 +262,7 @@ async function main(): Promise<void> {
       expectedStopId: oldOperatorStop.stopId,
     });
     assert.equal(timedTrial.canary?.mode, "timed_trial");
+    assert.equal(timedTrial.canary?.scope, "callbacks");
     assert.equal(timedTrial.canary?.requiresCallback, true);
     assert.equal(timedTrial.canary?.maxAdmissions, null);
     assert.equal(timedTrial.canary?.remainingAdmissions, null);
@@ -353,18 +355,112 @@ async function main(): Promise<void> {
       "an expired timed trial must deny new physical admission",
     );
 
-    console.log("Scenario 4: real Mongo archives timed terminal state before bounded replacement");
+    console.log("Scenario 4: real Mongo broad trial admits a positive interactive target");
     const activated = await activateProtractorOperatorStop({
-      changedBy: "bounded-operator",
-      reason: "close expired timed trial",
+      changedBy: "broad-operator",
+      reason: "close expired callback trial",
     });
     assert.equal(activated.active, true);
+    const callbackTerminalBeforeBroad = (await collection.findOne({ _id: PHYSICAL_KEY }))!.canary;
+    const broadTrial = await startProtractorTimedTrial({
+      changedBy: "broad-operator",
+      reason: "interactive generation replacement",
+      expectedStopId: activated.stopId!,
+      scope: "callbacks_and_interactive",
+    });
+    assert.equal(broadTrial.canary?.scope, "callbacks_and_interactive");
+    assert.equal(broadTrial.canary?.requiresCallback, false);
+    const broadOwner = await acquire();
+    assert.equal(
+      await confirmProtractorPhysicalTransportLease(broadOwner),
+      false,
+      "a broad trial still requires an admission context",
+    );
+    assert.equal(
+      await confirmProtractorPhysicalTransportLease(broadOwner, { interactiveShopId: 0 }),
+      false,
+      "zero is not a valid interactive target",
+    );
+    assert.equal(
+      await confirmProtractorPhysicalTransportLease(broadOwner, { interactiveShopId: 42 }),
+      true,
+      "real Mongo admits the positive interactive target",
+    );
+    let contenderSettled = false;
+    const contenderPromise = acquireProtractorPhysicalTransportLease(Date.now() + 5_000)
+      .then((token) => {
+        contenderSettled = true;
+        return token;
+      });
+    await delay(100);
+    assert.equal(
+      contenderSettled,
+      false,
+      "a second broad-scope acquisition must wait behind the held lease",
+    );
+    await releaseProtractorPhysicalTransportLease(broadOwner);
+    const releasedAt = Date.now();
+    const afterRelease = await collection.findOne({ _id: PHYSICAL_KEY });
+    assert.ok(afterRelease?.nextAllowedAt instanceof Date);
+    assert.ok(
+      afterRelease.nextAllowedAt.getTime() >=
+        releasedAt + PROTRACTOR_PHYSICAL_TRANSPORT_INTERVAL_MS - 500,
+      "release must preserve the Mongo cooldown before the contender can acquire",
+    );
+    const contender = await contenderPromise;
+    assert.ok(contender, "the broad-scope contender must acquire after release/cooldown");
+    await releaseProtractorPhysicalTransportLease(contender);
+
+    const malformedScopePairs = [
+      { scope: "callbacks", requiresCallback: false },
+      { scope: "callbacks_and_interactive", requiresCallback: true },
+    ] as const;
+    for (const malformedPair of malformedScopePairs) {
+      await collection.updateOne(
+        { _id: PHYSICAL_KEY },
+        [{
+          $set: {
+            "canary.scope": malformedPair.scope,
+            "canary.requiresCallback": malformedPair.requiresCallback,
+          },
+        }],
+      );
+      assert.equal(
+        await acquireProtractorPhysicalTransportLease(Date.now() + 1_000),
+        null,
+        `malformed scope pair ${malformedPair.scope}/${malformedPair.requiresCallback} must reject`,
+      );
+      await collection.updateOne(
+        { _id: PHYSICAL_KEY },
+        [{
+          $set: {
+            "canary.scope": "callbacks_and_interactive",
+            "canary.requiresCallback": false,
+          },
+        }],
+      );
+    }
+
+    current = await collection.findOne({ _id: PHYSICAL_KEY });
+    assert.ok(current);
+    const broadExpiredAt = new Date(Date.now() - 1_000);
+    const broadStartedAt = new Date(broadExpiredAt.getTime() - 1_800_000);
+    await collection.updateOne(
+      { _id: PHYSICAL_KEY },
+      [{ $set: { "canary.startedAt": broadStartedAt, "canary.expiresAt": broadExpiredAt } }],
+    );
+    const broadTerminal = await getProtractorOperatorStop();
+    assert.equal(broadTerminal.canary?.endedBy, "time");
+    const boundedStop = await activateProtractorOperatorStop({
+      changedBy: "bounded-operator",
+      reason: "close expired broad trial",
+    });
     const timedTerminalBeforeClear = (await collection.findOne({ _id: PHYSICAL_KEY }))!.canary;
     assert.equal(timedTerminalBeforeClear.endedBy, "time");
     const bounded = await clearProtractorOperatorStop({
       changedBy: "bounded-operator",
       reason: "bounded replacement",
-      expectedStopId: activated.stopId!,
+      expectedStopId: boundedStop.stopId!,
       expiresAt: dateAt(60_000),
       maxAdmissions: 2,
     });
@@ -373,7 +469,7 @@ async function main(): Promise<void> {
     assert.ok(current);
     assert.deepEqual(
       current.canaryHistory,
-      [oldBoundedCanary, timedTerminalBeforeClear],
+      [oldBoundedCanary, callbackTerminalBeforeBroad, timedTerminalBeforeClear],
       "each valid terminal generation must be archived byte-for-byte as a history object",
     );
     assert.equal(current.canary.mode, "bounded");
@@ -382,6 +478,7 @@ async function main(): Promise<void> {
     assert.equal(current.canary.endedBy, undefined);
     assert.equal(current.canary.endedAt, undefined);
     assert.equal(current.canary.requiresCallback, undefined);
+    assert.equal(current.canary.scope, undefined);
     assert.equal(current.canary.staleCanaryField, undefined);
     assert.equal(current.operatorStop.activatedAt, undefined);
     assert.equal(current.operatorStop.staleOperatorStopField, undefined);

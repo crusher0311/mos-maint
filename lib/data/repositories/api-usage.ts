@@ -95,6 +95,7 @@ export interface ProtractorOperatorStopState {
 export interface ProtractorCanaryState {
   generation: string;
   mode?: "bounded" | "timed_trial";
+  scope?: ProtractorTimedTrialScope;
   startedAt?: Date;
   expiresAt: Date;
   maxAdmissions: number | null;
@@ -113,6 +114,8 @@ export interface ProtractorCanaryState {
     endedBy?: "time" | "budget" | "operator";
   }>;
 }
+
+export type ProtractorTimedTrialScope = "callbacks" | "callbacks_and_interactive";
 
 /*
  * Keep these predicates in expression form instead of relying on JavaScript
@@ -199,6 +202,42 @@ const validTimedTrialCanaryAccountingExpression = {
       $and: [
         { $eq: [{ $type: "$canary.generation" }, "string"] },
         { $eq: ["$canary.mode", "timed_trial"] },
+        {
+          $or: [
+            {
+              $and: [
+                { $eq: [{ $type: "$canary.scope" }, "missing"] },
+                {
+                  $or: [
+                    { $eq: [{ $type: "$canary.requiresCallback" }, "missing"] },
+                    {
+                      $and: [
+                        { $in: [{ $type: "$canary.requiresCallback" }, ["bool", "boolean"]] },
+                        { $eq: ["$canary.requiresCallback", true] },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+            {
+              $and: [
+                { $eq: [{ $type: "$canary.scope" }, "string"] },
+                { $eq: ["$canary.scope", "callbacks"] },
+                { $in: [{ $type: "$canary.requiresCallback" }, ["bool", "boolean"]] },
+                { $eq: ["$canary.requiresCallback", true] },
+              ],
+            },
+            {
+              $and: [
+                { $eq: [{ $type: "$canary.scope" }, "string"] },
+                { $eq: ["$canary.scope", "callbacks_and_interactive"] },
+                { $in: [{ $type: "$canary.requiresCallback" }, ["bool", "boolean"]] },
+                { $eq: ["$canary.requiresCallback", false] },
+              ],
+            },
+          ],
+        },
         { $eq: [{ $type: "$canary.startedAt" }, "date"] },
         { $eq: [{ $type: "$canary.expiresAt" }, "date"] },
         { $eq: [{ $type: "$canary.maxAdmissions" }, "null"] },
@@ -209,12 +248,6 @@ const validTimedTrialCanaryAccountingExpression = {
           $or: [
             { $eq: [{ $type: "$canary.auditTruncatedAdmissions" }, "missing"] },
             { $in: [{ $type: "$canary.auditTruncatedAdmissions" }, ["int", "long"]] },
-          ],
-        },
-        {
-          $or: [
-            { $eq: [{ $type: "$canary.requiresCallback" }, "missing"] },
-            { $eq: ["$canary.requiresCallback", true] },
           ],
         },
         {
@@ -338,6 +371,7 @@ function projectProtractorStopState(row: any, now: Date): ProtractorOperatorStop
       remainingAdmissions: timedTrial
         ? null
         : Math.max(0, (canary.maxAdmissions ?? 0) - (canary.consumedAdmissions ?? 0)),
+      scope: timedTrial ? canary.scope ?? "callbacks" : undefined,
       requiresCallback: canary.requiresCallback,
       endedBy,
       endedAt: canary.endedAt ?? (endedBy === "time" ? canary.expiresAt : undefined),
@@ -847,7 +881,6 @@ export async function acquireProtractorPhysicalTransportLease(
           canary.expiresAt.getTime() - canary.startedAt.getTime() !== 1_800_000 ||
           canary?.maxAdmissions !== null ||
           canary?.remainingAdmissions !== null ||
-          canary?.requiresCallback === false ||
           !isSafeAdmissionCounter(canary?.consumedAdmissions) ||
           (canary?.audit !== undefined && !Array.isArray(canary.audit)) ||
           canary.expiresAt.getTime() <= Date.now()
@@ -865,7 +898,13 @@ export async function acquireProtractorPhysicalTransportLease(
           canary.expiresAt.getTime() <= Date.now()
         );
       if (canary?.mode !== undefined && !timedTrial && canary.mode !== "bounded") return null;
+      const validTimedScopePair =
+        (canary?.scope === undefined &&
+          (canary?.requiresCallback === undefined || canary?.requiresCallback === true)) ||
+        (canary?.scope === "callbacks" && canary?.requiresCallback === true) ||
+        (canary?.scope === "callbacks_and_interactive" && canary?.requiresCallback === false);
       if (malformed) return null;
+      if (timedTrial && !validTimedScopePair) return null;
       if (!timedTrial && canary.consumedAdmissions >= canary.maxAdmissions) return null;
     }
     const remaining = deadlineMs - Date.now();
@@ -878,6 +917,7 @@ export async function acquireProtractorPhysicalTransportLease(
 export interface ProtractorPhysicalTransportConfirmationContext {
   requireTimedTrial?: boolean;
   callbackReceivedAt?: Date;
+  interactiveShopId?: number;
 }
 
 export async function confirmProtractorPhysicalTransportLease(
@@ -892,6 +932,13 @@ export async function confirmProtractorPhysicalTransportLease(
   const callbackReceivedAt = callbackReceivedAtIsValid
     ? { $literal: context.callbackReceivedAt }
     : null;
+  const interactiveShopIdIsValid =
+    typeof context.interactiveShopId === "number" &&
+    Number.isSafeInteger(context.interactiveShopId) &&
+    context.interactiveShopId > 0;
+  const interactiveShopId = interactiveShopIdIsValid
+    ? { $literal: context.interactiveShopId }
+    : null;
   const timedTrialAdmissionExpression = {
     $cond: [
       validTimedTrialCanaryAccountingExpression,
@@ -901,8 +948,22 @@ export async function confirmProtractorPhysicalTransportLease(
           { $gt: ["$canary.expiresAt", "$$NOW"] },
           { $lt: ["$canary.consumedAdmissions", MAX_SAFE_ADMISSIONS] },
           { $eq: ["$ownerCanaryGeneration", "$canary.generation"] },
-          { $gte: [callbackReceivedAt, "$canary.startedAt"] },
-          { $lte: [callbackReceivedAt, "$$NOW"] },
+          {
+            $or: [
+              {
+                $and: [
+                  { $gte: [callbackReceivedAt, "$canary.startedAt"] },
+                  { $lte: [callbackReceivedAt, "$$NOW"] },
+                ],
+              },
+              {
+                $and: [
+                  { $eq: ["$canary.scope", "callbacks_and_interactive"] },
+                  { $gt: [interactiveShopId, 0] },
+                ],
+              },
+            ],
+          },
         ],
       },
       false,
@@ -1386,6 +1447,7 @@ function assertFreshProtractorGeneration(
   generation: string,
   stopId: string,
   mode: "timed_trial" | "bounded",
+  expectedScope?: ProtractorTimedTrialScope,
 ): void {
   const canary = row?.canary;
   if (
@@ -1406,7 +1468,8 @@ function assertFreshProtractorGeneration(
     canary.audit[0]?.event !== "opened" ||
     canary.audit[0]?.generation !== generation ||
     (mode === "timed_trial" && (
-      canary.requiresCallback !== true ||
+      canary.scope !== expectedScope ||
+      canary.requiresCallback !== (expectedScope === "callbacks") ||
       canary.maxAdmissions !== null ||
       canary.remainingAdmissions !== null ||
       canary.expiresAt.getTime() - canary.startedAt.getTime() !== 1_800_000
@@ -1417,6 +1480,7 @@ function assertFreshProtractorGeneration(
       canary.maxAdmissions > 3 ||
       canary.remainingAdmissions !== canary.maxAdmissions ||
       canary.requiresCallback !== undefined ||
+      canary.scope !== undefined ||
       canary.expiresAt.getTime() <= canary.startedAt.getTime()
     ))
   ) {
@@ -1428,13 +1492,18 @@ export async function startProtractorTimedTrial(input: {
   changedBy: string;
   reason: string;
   expectedStopId: string;
+  scope?: ProtractorTimedTrialScope;
   now?: Date;
 }): Promise<ProtractorOperatorStopState> {
   const changedBy = input.changedBy.trim();
   const reason = input.reason.trim();
   const expectedStopId = input.expectedStopId.trim();
+  const scope = input.scope === undefined ? "callbacks" : input.scope;
   if (!changedBy || !reason || !expectedStopId) {
     throw new Error("changedBy, reason, and expectedStopId are required");
+  }
+  if (scope !== "callbacks" && scope !== "callbacks_and_interactive") {
+    throw new Error("scope must be callbacks or callbacks_and_interactive");
   }
   await initializeTransportLease(
     PROTRACTOR_PHYSICAL_TRANSPORT_KEY,
@@ -1503,7 +1572,8 @@ export async function startProtractorTimedTrial(input: {
         canary: {
           generation,
           mode: "timed_trial",
-          requiresCallback: true,
+          scope,
+          requiresCallback: scope === "callbacks",
           startedAt: pipelineNow,
           expiresAt,
           maxAdmissions: null,
@@ -1523,7 +1593,7 @@ export async function startProtractorTimedTrial(input: {
     { returnDocument: "after", maxTimeMS: 1000 },
   );
   if (!row) throw new Error("operator stop changed; refresh state before starting trial");
-  assertFreshProtractorGeneration(row, generation, expectedStopId, "timed_trial");
+  assertFreshProtractorGeneration(row, generation, expectedStopId, "timed_trial", scope);
   return projectProtractorStopState(row, now);
 }
 

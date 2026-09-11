@@ -226,6 +226,36 @@ async function main(): Promise<void> {
     collection.row.leaseExpiresAt = new Date(0);
     now = new Date(now.getTime() + 1_001);
   }
+  console.log("Scenario 4b: unknown and malformed timed scopes fail closed");
+  const malformedScopes = [
+    { scope: "unknown", requiresCallback: true },
+    { scope: null, requiresCallback: true },
+  ];
+  for (const [index, fields] of malformedScopes.entries()) {
+    activeStop(`malformed-scope-stop-${index}`);
+    collection.row.operatorStop = { active: false };
+    collection.row.canary = {
+      generation: `malformed-scope-generation-${index}`,
+      mode: "timed_trial",
+      startedAt: new Date(now.getTime() - 1_000),
+      expiresAt: new Date(now.getTime() + 60_000),
+      maxAdmissions: null,
+      remainingAdmissions: null,
+      consumedAdmissions: 0,
+      audit: [],
+      ...fields,
+    };
+    delete collection.row.ownerToken;
+    delete collection.row.ownerCanaryGeneration;
+    collection.row.nextAllowedAt = new Date(0);
+    collection.row.leaseExpiresAt = new Date(0);
+    assert.equal(
+      await acquireProtractorPhysicalTransportLease(Date.now() + 20),
+      null,
+      `malformed timed scope ${index} must not acquire`,
+    );
+    now = new Date(now.getTime() + 1_001);
+  }
 
   console.log("Scenario 5: expiry between lease and confirmation is finalized");
   const expiring = await openCanary("expiry-stop", 3, 100);
@@ -414,6 +444,7 @@ async function main(): Promise<void> {
   status = await getProtractorOperatorStop();
   const timedTrial = status;
   assert.equal(timedTrial.canary?.mode, "timed_trial");
+  assert.equal(timedTrial.canary?.scope, "callbacks");
   assert.equal(timedTrial.canary?.requiresCallback, true);
   assert.equal(timedTrial.canary?.maxAdmissions, null);
   assert.equal(timedTrial.canary?.remainingAdmissions, null);
@@ -452,6 +483,13 @@ async function main(): Promise<void> {
     );
     assert.equal(
       await confirmProtractorPhysicalTransportLease(trialLease!, {
+        interactiveShopId: 42,
+      }),
+      false,
+      "callback-only trials must reject interactive admissions",
+    );
+    assert.equal(
+      await confirmProtractorPhysicalTransportLease(trialLease!, {
         callbackReceivedAt: new Date(now),
       }),
       true,
@@ -473,7 +511,50 @@ async function main(): Promise<void> {
   assert.equal(status.canary?.endedBy, "time");
   assert.equal(status.canary?.endedAt?.getTime(), timedTrial.canary!.expiresAt.getTime());
 
-  console.log("Scenario 12: terminal timed generations archive before bounded replacement");
+  console.log("Scenario 12: broad timed trials admit positive interactive targets only");
+  await activateProtractorOperatorStop({
+    changedBy: "trial-operator",
+    reason: "prepare broad trial replacement",
+    now,
+  });
+  const broadTrial = await startProtractorTimedTrial({
+    changedBy: "trial-operator",
+    reason: "interactive trial",
+    expectedStopId: collection.row.operatorStop.stopId,
+    scope: "callbacks_and_interactive",
+    now,
+  });
+  assert.equal(broadTrial.canary?.scope, "callbacks_and_interactive");
+  assert.equal(broadTrial.canary?.requiresCallback, false);
+  now = new Date(now.getTime() + 1_001);
+  const broadLease = await acquireProtractorPhysicalTransportLease(Date.now() + 20);
+  assert.ok(broadLease);
+  assert.equal(
+    await confirmProtractorPhysicalTransportLease(broadLease!),
+    false,
+    "broad trials still require an explicit admission context",
+  );
+  assert.equal(
+    await confirmProtractorPhysicalTransportLease(broadLease!, { interactiveShopId: 0 }),
+    false,
+    "zero is not a valid interactive target",
+  );
+  assert.equal(
+    await confirmProtractorPhysicalTransportLease(broadLease!, { interactiveShopId: 42 }),
+    true,
+    "broad trials admit a positive interactive target",
+  );
+  await releaseProtractorPhysicalTransportLease(broadLease!);
+  now = new Date(broadTrial.canary!.expiresAt.getTime());
+  assert.equal(
+    await acquireProtractorPhysicalTransportLease(Date.now() + 20),
+    null,
+    "broad trials remain bounded by their persisted expiry",
+  );
+  status = await getProtractorOperatorStop();
+  assert.equal(status.canary?.endedBy, "time");
+
+  console.log("Scenario 13: terminal timed generations archive before bounded replacement");
   await activateProtractorOperatorStop({
     changedBy: "trial-operator",
     reason: "prepare bounded replacement",
@@ -514,6 +595,7 @@ async function main(): Promise<void> {
   assert.equal(collection.row.canary.remainingAdmissions, 3);
   for (const field of [
     "requiresCallback",
+    "scope",
     "endedBy",
     "endedAt",
     "auditTruncatedAdmissions",
@@ -531,7 +613,7 @@ async function main(): Promise<void> {
     "new operator-stop state must not retain timed terminal fields",
   );
 
-  console.log("Scenario 13: terminal generations cannot be reopened as timed trials");
+  console.log("Scenario 14: terminal generations cannot be reopened as timed trials");
   status = await getProtractorOperatorStop();
   assert.equal(status.canary?.mode, "bounded");
   await assert.rejects(
@@ -544,7 +626,7 @@ async function main(): Promise<void> {
     /operator stop changed/,
   );
 
-  console.log("Scenario 14: safety record updates carry no physical-record TTL");
+  console.log("Scenario 15: safety record updates carry no physical-record TTL");
   const physicalUpdates = collection.calls.filter(call =>
     call.filter?._id === "protractor-physical-transport-v1" && call.update
   );
@@ -556,7 +638,7 @@ async function main(): Promise<void> {
     "the permanent physical safety record must not receive collection TTL expiresAt",
   );
 
-  console.log("Scenario 15: activation uses the Mongo server clock outside the test seam");
+  console.log("Scenario 16: activation uses the Mongo server clock outside the test seam");
   await activateProtractorOperatorStop({
     changedBy: "server-clock-operator",
     reason: "server-clock containment",
@@ -573,7 +655,7 @@ async function main(): Promise<void> {
     "operator-stop audit timestamps must use the Mongo server clock",
   );
 
-  console.log("Scenario 16: production log fixture excludes build-service contamination");
+  console.log("Scenario 17: production log fixture excludes build-service contamination");
   const runbook = readFileSync("docs/runbooks/protractor-storm-recovery.md", "utf8");
   const sql = runbook.match(/```sql\s+([\s\S]*?)```/)?.[1] ?? "";
   const rows = [

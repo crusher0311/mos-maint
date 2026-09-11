@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { createContact } from "@/lib/integrations/protractor";
+import { runWithProtractorInteractiveTransport } from "@/lib/integrations/protractor/interactive-context";
 import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
 import { resolveClientRequestId } from "@/lib/idempotent-create-id";
 
@@ -28,36 +29,39 @@ export async function POST(req: NextRequest) {
     // Interactive lane (priority pool, 1 retry) + a client-pinned contact ID so
     // a wizard retry after a timeout upserts the SAME contact (no duplicates —
     // Protractor's POST /Contact/{id} is an upsert by ID).
-    const result = await withUpstreamTimeout(
-      createContact(
-        shopId,
-        {
-          firstName,
-          lastName,
-          phone1: phone1 || undefined,
-          phone2: phone2 || undefined,
-          email: email || undefined,
-          company: company || undefined,
-          street: street || undefined,
-          city: city || undefined,
-          province: province || undefined,
-          postalCode: postalCode || undefined,
-          country: country || undefined,
-          marketingSource: marketingSource || undefined,
-          note: note || undefined,
-        },
-        {
-          priority: true,
-          maxRetries: 1,
-          // Task #937: derive the upstream ID server-side (hash of
-          // kind+shop+user+key) so the wizard's retry stays duplicate-safe
-          // without letting a caller target an existing record's UUID.
-          contactId: resolveClientRequestId("contact", shopId, sess.email, clientRequestId),
-        },
+    const result = await runWithProtractorInteractiveTransport(
+      shopId,
+      () => withUpstreamTimeout(
+        createContact(
+          shopId,
+          {
+            firstName,
+            lastName,
+            phone1: phone1 || undefined,
+            phone2: phone2 || undefined,
+            email: email || undefined,
+            company: company || undefined,
+            street: street || undefined,
+            city: city || undefined,
+            province: province || undefined,
+            postalCode: postalCode || undefined,
+            country: country || undefined,
+            marketingSource: marketingSource || undefined,
+            note: note || undefined,
+          },
+          {
+            priority: true,
+            maxRetries: 1,
+            // Task #937: derive the upstream ID server-side (hash of
+            // kind+shop+user+key) so the wizard's retry stays duplicate-safe
+            // without letting a caller target an existing record's UUID.
+            contactId: resolveClientRequestId("contact", shopId, sess.email, clientRequestId),
+          },
+        ),
+        UPSTREAM_DEADLINE_MS,
+        `wizard-create-contact shop=${shopId}`,
+        { ok: false, error: SLOW_UPSTREAM_MSG, timedOut: true } as any,
       ),
-      UPSTREAM_DEADLINE_MS,
-      `wizard-create-contact shop=${shopId}`,
-      { ok: false, error: SLOW_UPSTREAM_MSG, timedOut: true } as any,
     );
 
     if (!result.ok) {

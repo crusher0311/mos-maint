@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getDb } from "@/lib/mongo";
 import { fetchDeferredWorkWithCache } from "@/lib/integrations/protractor";
+import { runWithProtractorInteractiveTransport } from "@/lib/integrations/protractor/interactive-context";
 
 export async function GET(req: NextRequest) {
   try {
@@ -30,7 +31,10 @@ export async function GET(req: NextRequest) {
     }
 
     const shopId = Number(sess.shopId);
-    const result = await fetchDeferredWorkWithCache(shopId, vin, serviceItemId);
+    const result = await runWithProtractorInteractiveTransport(
+      shopId,
+      () => fetchDeferredWorkWithCache(shopId, vin, serviceItemId),
+    );
 
     if (!result.ok || !result.deferredWork) {
       return NextResponse.json({ error: result.error || "Failed to fetch deferred work" }, { status: 500 });

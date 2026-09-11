@@ -9,6 +9,7 @@ import {
   protractorFetch,
   createProtractorWorkOrder
 } from "@/lib/integrations/protractor";
+import { runWithProtractorInteractiveTransport } from "@/lib/integrations/protractor/interactive-context";
 import {
   getShopPartCostRatio,
   resolvePartLineCost,
@@ -168,7 +169,10 @@ export async function POST(req: NextRequest) {
 
   console.log(`[Add-to-RO:${requestId}] Fetching WO ${workOrderGuid} for shop ${shopId}...`);
   const fetchWOStart = Date.now();
-  const existingWOResult = await fetchWorkOrderById(shopId, workOrderGuid, { priority: true });
+  const existingWOResult = await runWithProtractorInteractiveTransport(
+    shopId,
+    () => fetchWorkOrderById(shopId, workOrderGuid, { priority: true }),
+  );
   console.log(`[Add-to-RO:${requestId}] WO fetch took ${Date.now() - fetchWOStart}ms`);
   if (!existingWOResult.ok || !existingWOResult.workOrder) {
     return NextResponse.json(
@@ -373,16 +377,19 @@ export async function POST(req: NextRequest) {
   console.log(`[Add-to-RO:${requestId}] Full payload: ${JSON.stringify(updatedWorkOrder).substring(0, 2000)}`);
   const postStart = Date.now();
 
-  const updateResult = await protractorFetch<any>(
-    `/WorkOrder/${workOrderGuid}`,
-    config,
-    {
-      method: "POST",
-      body: JSON.stringify(updatedWorkOrder),
-    },
-    0,
+  const updateResult = await runWithProtractorInteractiveTransport(
     shopId,
-    { priority: true, maxRetries: 1 }
+    () => protractorFetch<any>(
+      `/WorkOrder/${workOrderGuid}`,
+      config,
+      {
+        method: "POST",
+        body: JSON.stringify(updatedWorkOrder),
+      },
+      0,
+      shopId,
+      { priority: true, maxRetries: 1 },
+    ),
   );
   
   console.log(`[Add-to-RO:${requestId}] POST took ${Date.now() - postStart}ms, ok=${updateResult.ok}`);
@@ -398,9 +405,12 @@ export async function POST(req: NextRequest) {
   };
   const verifyPinnedPackage = async (transportLabel: "REST" | "SOAP"): Promise<boolean> => {
     await new Promise(resolve => setTimeout(resolve, 1000));
-    const verifyResult = await fetchWorkOrderById(shopId, workOrderGuid, {
-      priority: true,
-    });
+    const verifyResult = await runWithProtractorInteractiveTransport(
+      shopId,
+      () => fetchWorkOrderById(shopId, workOrderGuid, {
+        priority: true,
+      }),
+    );
     if (!verifyResult.ok || !verifyResult.workOrder) {
       console.log(
         `[Add-to-RO:${requestId}] ${transportLabel} verification GET failed: ${verifyResult.error || "work order missing"}`,
@@ -421,7 +431,10 @@ export async function POST(req: NextRequest) {
     if (isStatusColumnError) {
       console.log(`[Add-to-RO:${requestId}] REST failed with Status column SQL error — trying SOAP fallback...`);
       const soapStart = Date.now();
-      const soapResult = await soapAddServicePackage(shopId, workOrderGuid, updatedWorkOrder);
+      const soapResult = await runWithProtractorInteractiveTransport(
+        shopId,
+        () => soapAddServicePackage(shopId, workOrderGuid, updatedWorkOrder),
+      );
       console.log(`[Add-to-RO:${requestId}] SOAP took ${Date.now() - soapStart}ms, ok=${soapResult.ok}`);
       
       if (soapResult.ok) {
