@@ -64,6 +64,7 @@ interface Ev {
   operation?: string | null;
   priority?: number;
   attempts?: number; // undefined = missing (Mongo) / NULL (PG)
+  historyOutcomeReason?: string;
   processed: boolean;
   processedAt?: Date;
 }
@@ -83,6 +84,11 @@ const EVENTS: Ev[] = [
   { label: "pend-missing-attempts-pri0", method: "GET", receivedAt: T5, connectionId: "c2", shopId: 2, objectType: "WorkOrder", objectId: "P2", operation: null, priority: 0, attempts: undefined, processed: false },
   { label: "pend-at-cap", method: "GET", receivedAt: T1, connectionId: "c2", shopId: 2, objectType: "WorkOrder", objectId: "P3", operation: "Modified", priority: 1, attempts: 5, processed: false },
   { label: "pend-attempts0", method: "GET", receivedAt: T2, connectionId: "c2", shopId: 2, objectType: "WorkOrder", objectId: "P4", operation: "Created", priority: 1, attempts: 0, processed: false },
+  { label: "pend-safety-boundary", method: "GET", receivedAt: T3, connectionId: "c4", shopId: 4, objectType: "ServiceItem", objectId: "P5", operation: "Modified", priority: 1, attempts: 2, historyOutcomeReason: "safety_boundary", processed: false },
+  { label: "pend-missing-vin", method: "GET", receivedAt: T2, connectionId: "c4", shopId: 4, objectType: "ServiceItem", objectId: "P6", operation: "Modified", priority: 1, attempts: 2, historyOutcomeReason: "missing_vin", processed: false },
+  // Contact callbacks are claimed for safety, but their unsupported-contact
+  // evidence must not re-enter the ordinary callback queue.
+  { label: "contact-unsupported", method: "GET", receivedAt: T5, connectionId: "c3", shopId: 3, objectType: "Contact", objectId: "C1", operation: "Modified", priority: 0, attempts: 0, historyOutcomeReason: "unsupported_contact", processed: false },
 ];
 
 /* ---- fake Mongo store (legacy doc shape + real query semantics) ----------- */
@@ -102,6 +108,9 @@ const mongoDocs: Doc[] = EVENTS.map((e) => {
     d.operation = e.operation ?? null;
     d.priority = e.priority;
     if (e.attempts !== undefined) d.attempts = e.attempts; // missing when undefined
+    if (e.historyOutcomeReason) {
+      d.historyOutcome = { category: "deferred", reason: e.historyOutcomeReason };
+    }
   }
   if (e.processedAt) d.processedAt = e.processedAt;
   return d;
@@ -115,11 +124,20 @@ function eqVal(a: unknown, b: unknown): boolean {
 /** Mongo matching semantics for the filter shapes the repo uses. */
 function mongoMatch(doc: Doc, filter: Doc): boolean {
   for (const [k, v] of Object.entries(filter)) {
+    if (k === "$and") {
+      if (!(v as Doc[]).every((sub) => mongoMatch(doc, sub))) return false;
+      continue;
+    }
     if (k === "$or") {
       if (!(v as Doc[]).some((sub) => mongoMatch(doc, sub))) return false;
       continue;
     }
-    const dv = doc[k];
+    const dv = k.split(".").reduce<unknown>(
+      (value, part) => value && typeof value === "object"
+        ? (value as Doc)[part]
+        : undefined,
+      doc,
+    );
     if (v === null) {
       // Mongo: {field: null} matches null OR missing
       if (dv !== null && dv !== undefined) return false;
@@ -132,6 +150,9 @@ function mongoMatch(doc: Doc, filter: Doc): boolean {
           if (typeof dv !== "number" || !(dv < (cv as number))) return false;
         } else if (op === "$exists") {
           if (cv ? dv === undefined : dv !== undefined) return false;
+        } else if (op === "$ne") {
+          // Mongo's $ne includes documents where the field is absent.
+          if (dv !== undefined && eqVal(dv, cv)) return false;
         } else if (op === "$in") {
           if (!(cv as unknown[]).some((x) => eqVal(dv, x))) return false;
         } else {
@@ -195,6 +216,7 @@ interface PgRow {
   attempts: number | null;
   processed: boolean;
   processedAt: Date | null;
+  historyOutcomeReason: string | null;
 }
 
 const pgRows: PgRow[] = EVENTS.map((e, i) => ({
@@ -212,6 +234,7 @@ const pgRows: PgRow[] = EVENTS.map((e, i) => ({
   attempts: e.attempts ?? null, // NULL in PG for the missing case
   processed: e.processed,
   processedAt: e.processedAt ?? null,
+  historyOutcomeReason: e.historyOutcomeReason ?? null,
 }));
 
 // SQL semantics: NULL comparisons are never true; explicit IS NULL branches
@@ -248,6 +271,7 @@ const pgStub = {
           r.processed === false &&
           r.eventKey !== null &&
           (!receivedNotBefore || r.receivedAt >= receivedNotBefore) &&
+           r.historyOutcomeReason !== "unsupported_contact" &&
           (r.attempts === null || r.attempts < maxAttempts),
       )
       .sort((a, b) =>
@@ -353,12 +377,26 @@ async function main() {
     const mOrder = res.mongo.map((e) => e.objectId);
     const pOrder = res.pg.map((e) => e.objectId);
     ok(
-      "queue order identical: priority asc then receivedAt desc (P2,P1,P4)",
-      JSON.stringify(mOrder) === JSON.stringify(["P2", "P1", "P4"]) && JSON.stringify(pOrder) === JSON.stringify(mOrder),
+      "queue order identical: priority asc then fleet cursor (P2,P1,P4,P5,P6)",
+      JSON.stringify(mOrder) === JSON.stringify(["P2", "P1", "P4", "P5", "P6"]) && JSON.stringify(pOrder) === JSON.stringify(mOrder),
       `mongo=${mOrder.join(",")} pg=${pOrder.join(",")}`,
     );
     ok("at-cap (attempts=5) excluded in both arms", !mOrder.includes("P3") && !pOrder.includes("P3"));
     ok("missing-attempts doc included in both arms", mOrder.includes("P2") && pOrder.includes("P2"));
+    ok(
+      "unsupported Contact outcome excluded before the queue limit in both arms",
+      !mOrder.includes("C1") && !pOrder.includes("C1"),
+      `mongo=${mOrder.join(",")} pg=${pOrder.join(",")}`,
+    );
+    const replayCap = await bothArms(repo, (r) => r.findPendingGetEvents(10, 3));
+    const replayMongo = replayCap.mongo.map((e) => e.objectId);
+    const replayPg = replayCap.pg.map((e) => e.objectId);
+    ok(
+      "safety deferrals and missing_vin failures remain pending under maxAttempts=3",
+      replayMongo.includes("P5") && replayMongo.includes("P6") &&
+        JSON.stringify(replayMongo) === JSON.stringify(replayPg),
+      `mongo=${replayMongo.join(",")} pg=${replayPg.join(",")}`,
+    );
     ok(
       "processed GETs excluded in both arms",
       !mOrder.some((o) => ["O1", "O2", "O3"].includes(o!)) && !pOrder.some((o) => ["O1", "O2", "O3"].includes(o!)),
@@ -394,9 +432,10 @@ async function main() {
   /* ============ countGetSince (webhook-health lag) ============ */
   console.log("\ncountGetSince — webhook-health lag windows");
   {
-    // GET events with receivedAt >= SINCE: O1, O2, P1, P2, P4 (not O3@BEFORE, not P3? P3 is T1 >= SINCE) => O1,O2,P1,P2,P3,P4 = 6
+    // GET events with receivedAt >= SINCE includes the unsupported Contact;
+    // webhook-health counts received callbacks even when queue replay omits it.
     const recv = await bothArms(repo, (r) => r.countGetSince("receivedAt", SINCE));
-    ok("receivedAt window counts match", recv.mongo === recv.pg && recv.mongo === 6, JSON.stringify(recv));
+    ok("receivedAt window counts match", recv.mongo === recv.pg && recv.mongo === 9, JSON.stringify(recv));
 
     // GET events processed within window: O1, O2 (O3 processed BEFORE; pendings have no processedAt)
     const proc = await bothArms(repo, (r) => r.countGetSince("processedAt", SINCE));
@@ -404,7 +443,7 @@ async function main() {
 
     // POST docs (no method field / NULL method) never counted
     const all = await bothArms(repo, (r) => r.countGetSince("receivedAt", BEFORE));
-    ok("POST events never counted as GET in either arm", all.mongo === all.pg && all.mongo === 7, JSON.stringify(all));
+    ok("POST events never counted as GET in either arm", all.mongo === all.pg && all.mongo === 10, JSON.stringify(all));
   }
 
   /* ============ countRecentByConnection (rate limit) ============ */

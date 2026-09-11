@@ -22,6 +22,8 @@ export type CallbackHistoryOutcomeReason =
   | "pending_replay"
   | "superseded"
   | "ineligible"
+  | "unsupported_contact"
+  | "safety_boundary"
   | "unverified";
 
 /** Short aliases for callers that do not need the storage-oriented name. */
@@ -60,8 +62,47 @@ const REASONS = new Set<CallbackHistoryOutcomeReason>([
   "pending_replay",
   "superseded",
   "ineligible",
+  "unsupported_contact",
+  "safety_boundary",
   "unverified",
 ]);
+
+// These are local client admission guards, not provider/relay failures. Keep
+// this exact allowlist in sync with client.ts; never match generic timeout,
+// deadline, HTTP, or connection-error substrings here.
+const SAFETY_BOUNDARY_MESSAGES = new Set([
+  "callback deadline expired before transport lease",
+  "callback transport deadline expired",
+  "callback transport deadline expired during retry backoff",
+  "callback transport blocked: callback_canary_expired",
+  "callback transport blocked: timed_trial_not_active",
+  "callback transport blocked: service_disabled",
+  "callback transport blocked: denied_instance",
+  "Protractor callback deadline expired before admission",
+  "Protractor fleet transport admission deadline expired",
+  "Protractor fleet transport pacer deadline expired",
+  "Protractor rate-limit admission deadline expired",
+  "Protractor callback deadline expired before transport",
+  "Protractor circuit-breaker admission deadline expired",
+  "Protractor fleet lease confirmation deadline expired",
+  "Protractor fleet transport lease lost before dispatch",
+  "Protractor callback deadline expired before dispatch",
+  "Protractor outbound trial policy is not active",
+  "Protractor outbound API calls are temporarily disabled",
+  "Protractor outbound denied by local instance policy",
+  "Protractor outbound is restricted to the callback canary",
+]);
+
+export function isCallbackSafetyBoundary(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : error;
+  if (typeof message !== "string") return false;
+  // Drain adds context to the client's result.error without changing its value.
+  const localMessage = message.replace(
+    /^(Vehicle|Work-order) callback replay failed: /,
+    "",
+  );
+  return SAFETY_BOUNDARY_MESSAGES.has(localMessage);
+}
 
 function boundedCount(value: unknown): number | undefined {
   if (

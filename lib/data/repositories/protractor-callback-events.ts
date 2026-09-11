@@ -37,6 +37,7 @@ import * as pg from "./pg/protractor-callback-events";
 
 const COLLECTION = "protractor_callback_events";
 const ADMISSION_COLLECTION = "protractor_callback_admissions";
+const UNSUPPORTED_CONTACT_REASON = "unsupported_contact";
 
 /** Queue-owned DB accessor for the dedicated callback drain worker. */
 export async function getCallbackQueueDb() {
@@ -95,6 +96,10 @@ function mongoKeyExclusion(key: CallbackEventKey): Document {
     : { eventKey: { $ne: key } };
 }
 
+function mongoReplayCandidateFilter(): Document {
+  return { "historyOutcome.reason": { $ne: UNSUPPORTED_CONTACT_REASON } };
+}
+
 function admissionId(identity: CallbackAdmissionIdentity): string {
   return JSON.stringify([
     identity.shopId,
@@ -108,7 +113,23 @@ async function coalesceMongoEvent(
   outcome: CallbackHistoryOutcome = { category: "coalesced", reason: "superseded" },
 ): Promise<void> {
   if (typeof key !== "string") return;
-  await markProcessedMongo(key, { noAction: true, historyOutcome: outcome });
+  const col = await collection();
+  await col.updateOne(
+    {
+      ...mongoKeyFilter(key),
+      processed: false,
+      ...mongoReplayCandidateFilter(),
+    } as Document,
+    {
+      $set: {
+        processed: true,
+        processedAt: new Date(),
+        noAction: true,
+        historyOutcome: normalizeCallbackHistoryOutcome(outcome),
+      },
+      $unset: { processingOwnerToken: "", processingStartedAt: "" },
+    },
+  );
 }
 
 /**
@@ -127,6 +148,13 @@ export async function admitCallbackEvent(
 
   const db = await getDb();
   const col = db.collection<Document>(ADMISSION_COLLECTION);
+  const eventCol = await collection();
+  const candidate = await eventCol.findOne({
+    ...mongoKeyFilter(key),
+    processed: false,
+    ...mongoReplayCandidateFilter(),
+  } as Document);
+  if (!candidate) return false;
   const now = new Date();
   const staleBefore = new Date(now.getTime() - ADMISSION_LEASE_MS);
   const prior = await col.findOneAndUpdate(
@@ -223,9 +251,12 @@ export async function admitCallbackEvent(
   if (hadFreshWorker) {
     return false;
   }
-  const eventCol = await collection();
   const owned = await eventCol.updateOne(
-    { ...mongoKeyFilter(key), processed: false } as Document,
+    {
+      ...mongoKeyFilter(key),
+      processed: false,
+      ...mongoReplayCandidateFilter(),
+    } as Document,
     { $set: { processingStartedAt: now } },
   );
   if (owned.matchedCount !== 1) {
@@ -255,6 +286,7 @@ export async function claimCallbackEvent(
     objectType: identity.objectType,
     objectId: identity.objectId,
     processed: false,
+    ...mongoReplayCandidateFilter(),
   };
   const terminal = /^(DELETE|INVOICED|INVOICE|CLOSED|VOID)$/i;
   const terminalWinner = await events.find({
@@ -283,7 +315,11 @@ export async function claimCallbackEvent(
     { $set: { activeOwnerToken: token } },
   );
   const event = await (await collection()).updateOne(
-    { ...mongoKeyFilter(key), processed: false } as Document,
+    {
+      ...mongoKeyFilter(key),
+      processed: false,
+      ...mongoReplayCandidateFilter(),
+    } as Document,
     { $set: { processingOwnerToken: token } },
   );
   if (coordinator.matchedCount !== 1 || event.matchedCount !== 1) return null;
@@ -465,7 +501,12 @@ export async function completeCallbackGeneration(
         { session },
       );
       const owner = await db.collection<Document>(COLLECTION).findOne(
-        { ...mongoKeyFilter(key), processed: false, processingOwnerToken: ownerToken } as Document,
+        {
+          ...mongoKeyFilter(key),
+          processed: false,
+          processingOwnerToken: ownerToken,
+          ...mongoReplayCandidateFilter(),
+        } as Document,
         { session },
       );
       if (!coordinator || !owner) return;
@@ -474,6 +515,7 @@ export async function completeCallbackGeneration(
           ...mongoKeyFilter(key),
           processed: false,
           processingOwnerToken: ownerToken,
+          ...mongoReplayCandidateFilter(),
         } as Document,
         {
           $set: {
@@ -491,6 +533,7 @@ export async function completeCallbackGeneration(
         {
           ...mongoKeyExclusion(key),
           processed: false,
+          ...mongoReplayCandidateFilter(),
           $or: [sibling],
         } as Document,
         {
@@ -868,15 +911,27 @@ export async function recordProcessingStarted(key: CallbackEventKey): Promise<vo
 }
 
 /** `$set lastError, lastErrorAt` (queue-drain failure stamp; no attempt inc). */
-export async function recordError(key: CallbackEventKey, message: string): Promise<void> {
+export async function recordError(
+  key: CallbackEventKey,
+  message: string,
+  ownerToken?: string,
+): Promise<void> {
   const doMongo = async () => {
     const col = await collection();
-    await col.updateOne(mongoKeyFilter(key), {
+    await col.updateOne({
+      ...mongoKeyFilter(key),
+      ...(ownerToken
+        ? {
+            processed: false,
+            processingOwnerToken: ownerToken,
+          }
+        : {}),
+    } as Document, {
       $set: { lastError: message, lastErrorAt: new Date() },
     });
   };
   if (isProtractorOpsPgCanonical()) {
-    await pg.recordError(key, message);
+    await pg.recordError(key, message, ownerToken);
     await shadowWriteMongoIntegrationOps(
       shouldShadowWriteMongoProtractorOps,
       "protractor.callback_events.recordError",
@@ -917,6 +972,61 @@ export async function recordCallbackOutcome(
     await shadowWriteMongoIntegrationOps(
       shouldShadowWriteMongoProtractorOps,
       "protractor.callback_events.recordOutcome",
+      doMongo,
+    );
+    return;
+  }
+  await doMongo();
+}
+
+/**
+ * Leave a safety-boundary callback replayable without charging the queue
+ * attempt that was only spent reaching the boundary.  This is deliberately
+ * separate from `recordCallbackOutcome`: callers use it only after
+ * `recordProcessingStarted`, and the admission claim remains owned until the
+ * normal release path runs.  In particular, this does not refund admission.
+ */
+export async function recordCallbackDeferral(
+  key: CallbackEventKey,
+  ownerToken: string,
+  outcome: CallbackHistoryOutcome,
+): Promise<void> {
+  const safeOutcome = normalizeCallbackHistoryOutcome(outcome);
+  const doMongo = async () => {
+    const col = await collection();
+    await col.updateOne(
+      {
+        ...mongoKeyFilter(key),
+        processed: false,
+        processingOwnerToken: ownerToken,
+        callbackDeferralOwnerToken: { $ne: ownerToken },
+      } as Document,
+      [
+        {
+          $set: {
+            historyOutcome: safeOutcome,
+            callbackDeferralOwnerToken: ownerToken,
+            attempts: {
+              $max: [
+                {
+                  $subtract: [
+                    { $ifNull: ["$attempts", 0] },
+                    1,
+                  ],
+                },
+                0,
+              ],
+            },
+          },
+        },
+      ],
+    );
+  };
+  if (isProtractorOpsPgCanonical()) {
+    await pg.recordCallbackDeferral(key, ownerToken, safeOutcome);
+    await shadowWriteMongoIntegrationOps(
+      shouldShadowWriteMongoProtractorOps,
+      "protractor.callback_events.recordDeferral",
       doMongo,
     );
     return;
@@ -1005,7 +1115,12 @@ export async function findPendingGetEvents(
     method: { $in: ["GET", "POST"] },
     processed: false,
     ...(receivedNotBefore ? { receivedAt: { $gte: receivedNotBefore } } : {}),
-    $or: [{ attempts: { $exists: false } }, { attempts: { $lt: maxAttempts } }],
+    $and: [
+      {
+        $or: [{ attempts: { $exists: false } }, { attempts: { $lt: maxAttempts } }],
+      },
+      { "historyOutcome.reason": { $ne: "unsupported_contact" } },
+    ],
   };
   // Keep retrieval bounded to the newest indexed callback window. Fleet
   // fairness and generation coalescing happen in memory over this oversized

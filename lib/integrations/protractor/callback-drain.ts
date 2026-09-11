@@ -48,7 +48,8 @@ export async function processProtractorCallbackDrain(db?: Db, options: { budgetM
       const result = await fetchVehicleById(item.shopId, item.objectId, {
         ...CALLBACK_REPLAY_FETCH_OPTIONS,
       });
-      if (!result.ok || !result.vehicle?.VIN) throw new Error(`Vehicle callback replay failed: ${result.error || "missing data"}`);
+      if (!result.ok || !result.vehicle) throw new Error(`Vehicle callback replay failed: ${result.error || "missing data"}`);
+      if (!result.vehicle.VIN) return { category: "failed", reason: "missing_vin" };
       await upsertProtractorVehicleSnapshot(item.shopId, result.vehicle.VIN, result.vehicle);
       return { category: "terminal_no_history", reason: "vehicle_snapshot" };
     }

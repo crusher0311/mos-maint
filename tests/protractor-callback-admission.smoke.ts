@@ -10,17 +10,92 @@ import { ObjectId } from "mongodb";
 type Doc = Record<string, any>;
 const coordinators = new Map<string, Doc>();
 const eventUpdates: Array<{ filter: Doc; update: Doc }> = [];
+const callbackEvents = new Map<string, Doc>();
 const quarantine = new Map<string, Doc>();
+
+function eventKeyFromFilter(filter: Doc): string | null {
+  if (filter._id instanceof ObjectId) return filter._id.toHexString();
+  return typeof filter.eventKey === "string" ? filter.eventKey : null;
+}
+
+function matchesEvent(event: Doc, filter: Doc): boolean {
+  for (const [key, expected] of Object.entries(filter)) {
+    if (key === "$or") {
+      if (!(expected as Doc[]).some((part) => matchesEvent(event, part))) return false;
+      continue;
+    }
+    if (key === "historyOutcome.reason") {
+      const actual = event.historyOutcome?.reason;
+      if (expected?.$ne !== undefined && actual === expected.$ne) return false;
+      continue;
+    }
+    const actual = event[key];
+    if (expected?.$in && !(expected.$in as unknown[]).includes(actual)) return false;
+    if (expected instanceof RegExp && !expected.test(String(actual ?? ""))) return false;
+    if (expected !== null && typeof expected !== "object" && actual !== expected) return false;
+    if (expected === false && actual !== false) return false;
+  }
+  return true;
+}
 
 const eventCollection = {
   insertOne: async () => ({ insertedId: new ObjectId() }),
+  findOne: async (filter: Doc) => {
+    const key = eventKeyFromFilter(filter);
+    const event = key ? callbackEvents.get(key) : undefined;
+    if (event) return matchesEvent(event, filter) ? event : null;
+    // Existing admission assertions exercise the coordinator with synthetic
+    // keys and do not seed event documents.
+    return key ? { _id: new ObjectId(key), processed: false } : null;
+  },
+  find: (filter: Doc) => {
+    let rows = [...callbackEvents.values()].filter((event) => matchesEvent(event, filter));
+    return {
+      sort(spec: Doc) {
+        rows = rows.slice().sort((a, b) => {
+          for (const [field, direction] of Object.entries(spec)) {
+            const av = a[field] instanceof Date ? a[field].getTime() : String(a[field] ?? "");
+            const bv = b[field] instanceof Date ? b[field].getTime() : String(b[field] ?? "");
+            if (av < bv) return -1 * Number(direction);
+            if (av > bv) return 1 * Number(direction);
+          }
+          return 0;
+        });
+        return this;
+      },
+      limit(limit: number) {
+        rows = rows.slice(0, limit);
+        return this;
+      },
+      async next() {
+        return rows[0] ?? null;
+      },
+    };
+  },
   updateOne: async (filter: Doc, update: Doc) => {
     eventUpdates.push({ filter, update });
+    const key = eventKeyFromFilter(filter);
+    const event = key ? callbackEvents.get(key) : undefined;
+    if (!event) return { matchedCount: 1 };
+    if (!matchesEvent(event, filter)) return { matchedCount: 0 };
+    if (update.$set) Object.assign(event, update.$set);
     return { matchedCount: 1 };
+  },
+  updateMany: async () => {
+    return { matchedCount: 0 };
   },
 };
 
 const admissionCollection = {
+  updateOne: async (filter: Doc, update: Doc) => {
+    const id = String(filter._id);
+    const current = coordinators.get(id);
+    if (!current || current.activeEventKey !== filter.activeEventKey) {
+      return { matchedCount: 0 };
+    }
+    coordinators.set(id, { ...current, ...update.$set });
+    return { matchedCount: 1 };
+  },
   findOneAndUpdate: async (filter: Doc, update: any, options: Doc) => {
     const id = String(filter._id);
     const prior = coordinators.get(id);
@@ -225,6 +300,85 @@ async function main() {
     "terminal callback cannot execute concurrently across methods",
   );
 
+  coordinators.clear();
+  callbackEvents.clear();
+  eventUpdates.length = 0;
+  const contactIdentity = {
+    shopId: 42,
+    method: "GET" as const,
+    objectType: "Contact",
+    objectId: "contact-1",
+    operation: "Update",
+  };
+  const contactKeys = [new ObjectId(), new ObjectId(), new ObjectId()].map((id) =>
+    id.toHexString(),
+  );
+  const contactReceivedAt = new Date("2026-06-01T00:00:00Z");
+  callbackEvents.set(contactKeys[0], {
+    _id: new ObjectId(contactKeys[0]),
+    shopId: 42,
+    objectType: "Contact",
+    objectId: "contact-1",
+    operation: "Update",
+    receivedAt: contactReceivedAt,
+    processed: false,
+  });
+  for (const [index, key] of contactKeys.slice(1).entries()) {
+    callbackEvents.set(key, {
+      _id: new ObjectId(key),
+      shopId: 42,
+      objectType: "Contact",
+      objectId: "contact-1",
+      operation: "Update",
+      receivedAt: new Date(contactReceivedAt.getTime() + (index + 1) * 1_000),
+      processed: false,
+      historyOutcome: { category: "deferred", reason: "unsupported_contact" },
+    });
+  }
+  const contactAdmissionCount = coordinators.size;
+  assert.equal(
+    await repo.admitCallbackEvent(contactKeys[2], contactIdentity),
+    false,
+    "Mongo admission rejects an already-held unsupported Contact generation",
+  );
+  assert.equal(
+    coordinators.size,
+    contactAdmissionCount,
+    "Mongo unsupported Contact admission does not create a coordinator slot",
+  );
+  assert.equal(
+    await repo.claimCallbackEvent(contactKeys[2], contactIdentity),
+    null,
+    "newer unsupported Contact generations never consume an admission slot",
+  );
+  assert.equal(
+    coordinators.size,
+    contactAdmissionCount,
+    "unsupported Contact winner is ignored rather than blocking older work",
+  );
+  const olderContactOwner = await repo.claimCallbackEvent(contactKeys[0], contactIdentity);
+  assert.equal(
+    typeof olderContactOwner,
+    "string",
+    "older pending Contact remains claimable when newer rows are held",
+  );
+  assert.equal(
+    callbackEvents.get(contactKeys[0])?.processingStartedAt instanceof Date,
+    true,
+    "older Contact receives the admission claim",
+  );
+  await repo.recordCallbackOutcome(
+    contactKeys[0],
+    olderContactOwner!,
+    { category: "deferred", reason: "unsupported_contact" },
+  );
+  await repo.releaseCallbackEventAdmission(contactKeys[0], contactIdentity, olderContactOwner!);
+  assert.equal(
+    [...callbackEvents.values()].every((event) => event.processed === false),
+    true,
+    "Contact generations remain retained and unprocessed",
+  );
+
   const quarantineRepo = await import(
     "../lib/data/repositories/protractor-callback-quarantine"
   );
@@ -298,6 +452,12 @@ async function main() {
   assert.match(pgSource, /pg_advisory_xact_lock/, "PG serializes admission across instances");
   assert.match(pgSource, /\.transaction\(async \(tx\)/, "PG claim and coalesce share a transaction");
   assert.match(pgSource, /processingStartedAt/, "PG reuses existing runtime columns");
+  assert.match(
+    pgSource,
+    /function replayCandidateWhere[\s\S]*\n\}/,
+    "PG admission predicates exclude unsupported Contact generations",
+  );
+  assert.match(pgSource, /UNSUPPORTED_CONTACT_REASON = "unsupported_contact"/);
 
   console.log("protractor callback admission smoke: all checks passed");
 }

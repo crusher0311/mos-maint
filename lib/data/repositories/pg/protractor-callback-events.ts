@@ -29,6 +29,7 @@ const CALLBACK_OUTCOME_COALESCED: CallbackHistoryOutcome = {
   category: "coalesced",
   reason: "superseded",
 };
+const UNSUPPORTED_CONTACT_REASON = "unsupported_contact";
 
 export interface InsertPostEventFields {
   eventKey: string;
@@ -147,6 +148,27 @@ function setOutcomeSql(outcome: CallbackHistoryOutcome) {
   `;
 }
 
+function setOutcomeAndDeferralOwnerSql(
+  outcome: CallbackHistoryOutcome,
+  ownerToken: string,
+) {
+  return sql`
+    jsonb_set(
+      ${setOutcomeSql(outcome)},
+      '{callbackDeferralOwnerToken}',
+      ${JSON.stringify(ownerToken)}::jsonb,
+      true
+    )
+  `;
+}
+
+function replayCandidateWhere() {
+  return or(
+    sql`(${t.payload} -> 'historyOutcome' ->> 'reason') IS NULL`,
+    sql`(${t.payload} -> 'historyOutcome' ->> 'reason') <> ${UNSUPPORTED_CONTACT_REASON}`,
+  );
+}
+
 export async function admitCallbackEvent(
   eventKey: string,
   identity: CallbackAdmissionIdentity,
@@ -161,7 +183,11 @@ export async function admitCallbackEvent(
     const winner = await tx
       .select({ eventKey: t.eventKey })
       .from(t)
-      .where(and(identityWhere(identity), eq(t.processed, false)))
+      .where(and(
+        identityWhere(identity),
+        eq(t.processed, false),
+        replayCandidateWhere(),
+      ))
       .orderBy(
         desc(sql`CASE WHEN upper(coalesce(${t.operation}, ${t.status}, '')) IN ('DELETE','INVOICED','INVOICE','CLOSED','VOID') THEN 1 ELSE 0 END`),
         desc(t.receivedAt),
@@ -175,6 +201,7 @@ export async function admitCallbackEvent(
       .where(
         and(
           identityWhere(identity),
+          replayCandidateWhere(),
           isNotNull(t.processingStartedAt),
           gte(t.processingStartedAt, staleBefore),
         ),
@@ -187,7 +214,11 @@ export async function admitCallbackEvent(
     const claimed = await tx
       .update(t)
       .set({ processingStartedAt: now })
-      .where(and(eq(t.eventKey, eventKey), eq(t.processed, false)))
+      .where(and(
+        eq(t.eventKey, eventKey),
+        eq(t.processed, false),
+        replayCandidateWhere(),
+      ))
       .returning({ eventKey: t.eventKey });
     if (claimed.length === 0) return false;
     return true;
@@ -202,7 +233,11 @@ export async function claimCallbackEvent(
   const winner = await getDb()
     .select({ eventKey: t.eventKey })
     .from(t)
-    .where(and(identityWhere(identity), eq(t.processed, false)))
+    .where(and(
+      identityWhere(identity),
+      eq(t.processed, false),
+      replayCandidateWhere(),
+    ))
     .orderBy(
       desc(sql`CASE WHEN upper(coalesce(${t.operation}, ${t.status}, '')) IN ('DELETE','INVOICED','INVOICE','CLOSED','VOID') THEN 1 ELSE 0 END`),
       desc(t.receivedAt),
@@ -214,7 +249,11 @@ export async function claimCallbackEvent(
   const rows = await getDb()
     .select({ processingStartedAt: t.processingStartedAt })
     .from(t)
-    .where(and(eq(t.eventKey, eventKey), eq(t.processed, false)))
+    .where(and(
+      eq(t.eventKey, eventKey),
+      eq(t.processed, false),
+      replayCandidateWhere(),
+    ))
     .limit(1);
   return rows[0]?.processingStartedAt?.toISOString() ?? null;
 }
@@ -232,7 +271,11 @@ export async function finishCallbackEventAdmission(
     await tx
       .update(t)
       .set({ processingStartedAt: null })
-      .where(and(eq(t.eventKey, eventKey), isNotNull(t.processingStartedAt)));
+      .where(and(
+        eq(t.eventKey, eventKey),
+        isNotNull(t.processingStartedAt),
+        replayCandidateWhere(),
+      ));
 
     const pending = claimFollowUp
       ? await tx
@@ -242,6 +285,7 @@ export async function finishCallbackEventAdmission(
             and(
               identityWhere(identity),
               eq(t.processed, false),
+              replayCandidateWhere(),
               sql`${t.eventKey} <> ${eventKey}`,
             ),
           )
@@ -263,6 +307,7 @@ export async function finishCallbackEventAdmission(
         and(
           identityWhere(identity),
           eq(t.processed, false),
+          replayCandidateWhere(),
           sql`${t.eventKey} <> ${eventKey}`,
           ...(pendingKey ? [sql`${t.eventKey} <> ${pendingKey}`] : []),
         ),
@@ -320,6 +365,7 @@ export async function completeCallbackGeneration(
         eq(t.eventKey, eventKey),
         eq(t.processed, false),
         eq(t.processingStartedAt, new Date(ownerToken)),
+        replayCandidateWhere(),
       ))
       .limit(1);
     if (owner.length !== 1) return false;
@@ -336,6 +382,7 @@ export async function completeCallbackGeneration(
         eq(t.eventKey, eventKey),
         eq(t.processed, false),
         eq(t.processingStartedAt, new Date(ownerToken)),
+        replayCandidateWhere(),
       ))
       .returning({ eventKey: t.eventKey });
     if (completedOwner.length !== 1) return false;
@@ -351,6 +398,7 @@ export async function completeCallbackGeneration(
       .where(and(
         identityWhere(identity),
         eq(t.processed, false),
+        replayCandidateWhere(),
         sql`${t.eventKey} <> ${eventKey}`,
         sql`${t.receivedAt} <= ${ownerReceivedAt}`,
         ...(identity.terminal ? [] : [sql`NOT (${terminalPredicate})`]),
@@ -576,11 +624,22 @@ export async function recordProcessingStarted(eventKey: string): Promise<void> {
 }
 
 /** `$set lastError, lastErrorAt` (queue-drain failure stamp; no $inc). */
-export async function recordError(eventKey: string, message: string): Promise<void> {
+export async function recordError(
+  eventKey: string,
+  message: string,
+  ownerToken?: string,
+): Promise<void> {
+  const ownerStartedAt = ownerToken ? new Date(ownerToken) : null;
+  if (ownerToken && Number.isNaN(ownerStartedAt!.getTime())) return;
   await getDb()
     .update(t)
     .set({ lastError: message, lastErrorAt: new Date() })
-    .where(eq(t.eventKey, eventKey));
+    .where(and(
+      eq(t.eventKey, eventKey),
+      ...(ownerStartedAt
+        ? [eq(t.processed, false), eq(t.processingStartedAt, ownerStartedAt)]
+        : []),
+    ));
 }
 
 /** Persist queue-failure evidence only while this owner still holds the fence. */
@@ -601,6 +660,39 @@ export async function recordCallbackOutcome(
       eq(t.eventKey, eventKey),
       eq(t.processed, false),
       eq(t.processingStartedAt, ownerStartedAt),
+    ));
+}
+
+/**
+ * Leave a safety-boundary callback replayable without charging the queue
+ * attempt spent reaching that boundary.  The processing timestamp is the PG
+ * owner fence established by claimCallbackEvent; no admission state is
+ * changed here.
+ */
+export async function recordCallbackDeferral(
+  eventKey: string,
+  ownerToken: string,
+  outcome: CallbackHistoryOutcome,
+): Promise<void> {
+  const ownerStartedAt = new Date(ownerToken);
+  if (Number.isNaN(ownerStartedAt.getTime())) return;
+  await getDb()
+    .update(t)
+    .set({
+      payload: setOutcomeAndDeferralOwnerSql(
+        normalizeCallbackHistoryOutcome(outcome),
+        ownerToken,
+      ),
+      attempts: sql`GREATEST(COALESCE(${t.attempts}, 0) - 1, 0)`,
+    })
+    .where(and(
+      eq(t.eventKey, eventKey),
+      eq(t.processed, false),
+      eq(t.processingStartedAt, ownerStartedAt),
+      or(
+        sql`${t.payload} ->> 'callbackDeferralOwnerToken' IS NULL`,
+        sql`${t.payload} ->> 'callbackDeferralOwnerToken' <> ${ownerToken}`,
+      ),
     ));
 }
 
@@ -638,6 +730,7 @@ export async function findPendingGetEvents(
         eq(t.processed, false),
         isNotNull(t.eventKey),
         or(sql`${t.attempts} IS NULL`, lt(t.attempts, maxAttempts)),
+        replayCandidateWhere(),
         receivedNotBefore ? gte(t.receivedAt, receivedNotBefore) : undefined,
       ),
     )

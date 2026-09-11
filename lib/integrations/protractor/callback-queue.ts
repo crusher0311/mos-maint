@@ -5,7 +5,7 @@ import {
   runWithProtractorCallbackTransport,
 } from "./client";
 import { logProtractorPolicyDenial } from "./outbound-policy.cjs";
-import type { CallbackHistoryOutcome } from "./callback-outcomes";
+import { isCallbackSafetyBoundary, type CallbackHistoryOutcome } from "./callback-outcomes";
 
 const CALLBACK_CANDIDATE_MULTIPLIER = 10;
 const TERMINAL_OPERATIONS = new Set([
@@ -151,14 +151,27 @@ export async function processProtractorCallbackQueue(
     } : null;
     let admitted = false;
     let ownerToken: string | null = null;
+    let attemptStarted = false;
+    let returnedOutcome: CallbackHistoryOutcome | void = undefined;
     try {
       if (identity) {
         ownerToken = await callbackEvents.claimCallbackEvent(item.key, identity);
         admitted = ownerToken !== null;
         if (!admitted) continue;
       }
+      if (item.objectType === "Contact" && ownerToken) {
+        // Retain the notification as unresolved customer-sync work. No Contact
+        // replay handler exists: do not burn three attempts, coalesce it as
+        // applied history, or discard its payload. Repository selection holds
+        // this explicit reason until a future customer-sync handler is approved.
+        await callbackEvents.recordCallbackOutcome(item.key, ownerToken, {
+          category: "deferred", reason: "unsupported_contact",
+        });
+        continue;
+      }
       await callbackEvents.recordProcessingStarted(item.key);
-      const outcome = await runWithProtractorCallbackTransport(
+      attemptStarted = true;
+      returnedOutcome = await runWithProtractorCallbackTransport(
         deadlineMs,
         () => dispatch(item),
         // This is the timestamp persisted by insertGetEvent. Never replace it
@@ -169,8 +182,19 @@ export async function processProtractorCallbackQueue(
           requireTimedTrial: outboundPolicy.requireTimedTrial === true,
         },
       );
-      if (Date.now() >= deadlineMs) throw new Error("Callback deadline elapsed before completion");
+      // The batch deadline stops new provider work, not durable evidence of
+      // work already performed. Completion still requires both owner fences.
       if (!ownerToken) throw new Error("Callback completion missing owner token");
+      // A vehicle without a VIN used to throw "missing data"; keep its three
+      // attempts and replay eligibility while recording the specific cause.
+      // Do not change the historical non-critical indexing failure behavior.
+      if (item.objectType === "ServiceItem" &&
+          returnedOutcome?.category === "failed" && returnedOutcome.reason === "missing_vin") {
+        await callbackEvents.recordCallbackOutcome(item.key, ownerToken, returnedOutcome);
+        await callbackEvents.recordError(item.key, `Callback replay failed: ${returnedOutcome.reason}`, ownerToken);
+        failed++;
+        continue;
+      }
       const completed = await callbackEvents.completeCallbackGeneration(item.key, identity ?? {
         shopId,
         method: item.method,
@@ -178,19 +202,27 @@ export async function processProtractorCallbackQueue(
         objectId: item.objectId!,
         operation: "*",
         terminal: isTerminal(item),
-      }, ownerToken, item.receivedAt ?? new Date(0), outcome || {
+      }, ownerToken, item.receivedAt ?? new Date(0), returnedOutcome || {
         category: "deferred", reason: "unverified",
       });
       if (!completed) throw new Error("Callback completion fence rejected stale owner");
       await callbackEvents.markCallbackShopSuccessfullyServed(shopId, item.key);
       processed++;
     } catch (error: any) {
+      if (ownerToken && attemptStarted && isCallbackSafetyBoundary(error)) {
+        await callbackEvents.recordCallbackDeferral(item.key, ownerToken, {
+          category: "deferred", reason: "safety_boundary",
+        });
+        continue;
+      }
       if (ownerToken) {
-        await callbackEvents.recordCallbackOutcome(item.key, ownerToken, {
+        // If durable completion fails, retain actual dispatch evidence when
+        // this generation is still ours. Never replace it with dispatch_failed.
+        await callbackEvents.recordCallbackOutcome(item.key, ownerToken, returnedOutcome || {
           category: "failed", reason: "dispatch_failed",
         });
       }
-      await callbackEvents.recordError(item.key, error?.message || String(error));
+      await callbackEvents.recordError(item.key, error?.message || String(error), ownerToken ?? undefined);
       failed++;
     } finally {
       if (admitted && identity) {

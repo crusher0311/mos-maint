@@ -41,7 +41,11 @@ export async function replayDeferredTerminalPost(
     event.objectId,
     CALLBACK_REPLAY_FETCH_OPTIONS,
   );
-  if (!result.ok || !result.workOrder) return false;
+  if (!result.ok || !result.workOrder) {
+    // Preserve local admission/expiry evidence for the queue's narrow safety
+    // classifier. Returning false here erased it and consumed failure retries.
+    throw new Error(`Work-order callback replay failed: ${result.error || "missing data"}`);
+  }
   await deps.upsertProtractorWorkOrderSnapshot(event.shopId, result.workOrder);
   const applied = await deps.applyProtractorTerminalCallback(db, {
     shopId: event.shopId,

@@ -26,6 +26,8 @@ const pgExecutions: any[] = [];
 let pgOwnerRows: Doc[] = [];
 let pgReportRows: Doc[] = [];
 let pgReportSelectCalls = 0;
+let pgAdmissionMode = false;
+let pgAdmissionSelectCalls = 0;
 
 function idString(value: unknown): string {
   return value instanceof ObjectId ? value.toHexString() : String(value);
@@ -65,6 +67,16 @@ function matchesMongoFilter(doc: Doc, filter: Doc): boolean {
 }
 
 function applyMongoUpdate(doc: Doc, update: Doc): void {
+  if (Array.isArray(update)) {
+    const set = update[0]?.$set ?? {};
+    Object.assign(doc, {
+      ...set,
+      ...(set.attempts
+        ? { attempts: Math.max(Number(doc.attempts ?? 0) - 1, 0) }
+        : {}),
+    });
+    return;
+  }
   Object.assign(doc, update.$set ?? {});
   for (const key of Object.keys(update.$unset ?? {})) delete doc[key];
 }
@@ -164,6 +176,17 @@ const columns = new Proxy({}, {
 }) as any;
 
 function pgSelectionRows(selection: Doc, limit?: number): Doc[] {
+  if (pgAdmissionMode && "eventKey" in selection) {
+    pgAdmissionSelectCalls += 1;
+    // The fake candidate query exposes only the older supported generation.
+    // The real predicate under test is asserted from the captured where tree.
+    return pgAdmissionSelectCalls === 4
+      ? []
+      : pgOwnerRows.slice(0, limit ?? pgOwnerRows.length);
+  }
+  if (pgAdmissionMode && "processingStartedAt" in selection) {
+    return pgOwnerRows.slice(0, limit ?? pgOwnerRows.length);
+  }
   if ("eventKey" in selection) return pgOwnerRows.slice(0, limit ?? pgOwnerRows.length);
   const method = pgReportSelectCalls++ === 0 ? "GET" : "POST";
   const offset = method === "GET" ? 0 : 1;
@@ -446,6 +469,90 @@ async function main() {
   }
 
   {
+    const fixture = seedMongoGeneration();
+    mongoEvents.get(fixture.ownerKey)!.attempts = 1;
+    await repo.recordCallbackDeferral(
+      fixture.ownerKey,
+      "owner-token",
+      { category: "deferred", reason: "safety_boundary" } as any,
+    );
+    assert.equal(
+      mongoEvents.get(fixture.ownerKey)!.processed,
+      false,
+      "Mongo safety deferral remains replayable",
+    );
+    assert.equal(
+      mongoEvents.get(fixture.ownerKey)!.attempts,
+      0,
+      "Mongo safety deferral refunds only the queue attempt",
+    );
+    assert.deepEqual(
+      mongoEvents.get(fixture.ownerKey)!.historyOutcome,
+      { category: "deferred", reason: "safety_boundary" },
+      "Mongo safety deferral stores its bounded outcome",
+    );
+    await repo.recordCallbackDeferral(
+      fixture.ownerKey,
+      "owner-token",
+      { category: "deferred", reason: "safety_boundary" } as any,
+    );
+    assert.equal(
+      mongoEvents.get(fixture.ownerKey)!.attempts,
+      0,
+      "Mongo repeated safety deferral is idempotent for the owner attempt",
+    );
+    await repo.recordCallbackOutcome(
+      fixture.ownerKey,
+      "owner-token",
+      { category: "failed", reason: "dispatch_failed" },
+    );
+    await repo.recordCallbackDeferral(
+      fixture.ownerKey,
+      "owner-token",
+      { category: "deferred", reason: "safety_boundary" } as any,
+    );
+    assert.equal(
+      mongoEvents.get(fixture.ownerKey)!.attempts,
+      0,
+      "Mongo deferral cannot decrement after a real failure on that attempt",
+    );
+
+    const stale = seedMongoGeneration(true);
+    mongoEvents.get(stale.ownerKey)!.attempts = 1;
+    await repo.recordCallbackDeferral(
+      stale.ownerKey,
+      "owner-token",
+      { category: "deferred", reason: "safety_boundary" } as any,
+    );
+    assert.equal(
+      mongoEvents.get(stale.ownerKey)!.attempts,
+      1,
+      "Mongo stale owner cannot decrement attempts",
+    );
+    assert.equal(
+      mongoEvents.get(stale.ownerKey)!.historyOutcome,
+      undefined,
+      "Mongo stale owner cannot overwrite the outcome",
+    );
+  }
+
+  {
+    const fixture = seedMongoGeneration();
+    await repo.recordError(fixture.ownerKey, "stale error", "wrong-owner");
+    assert.equal(
+      mongoEvents.get(fixture.ownerKey)!.lastError,
+      undefined,
+      "Mongo optional error fence rejects stale owners",
+    );
+    await repo.recordError(fixture.ownerKey, "owner error", "owner-token");
+    assert.equal(
+      mongoEvents.get(fixture.ownerKey)!.lastError,
+      "owner error",
+      "Mongo optional error fence preserves the owner call",
+    );
+  }
+
+  {
     process.env.PROTRACTOR_OPS_PG_CANONICAL = "1";
     pgUpdates.length = 0;
     pgSelects.length = 0;
@@ -483,6 +590,42 @@ async function main() {
       { category: "deferred", reason: "pending_replay" },
       "PG GET insertion records deferred evidence",
     );
+    pgAdmissionMode = true;
+    pgAdmissionSelectCalls = 0;
+    pgOwnerRows = [{
+      eventKey: "contact-old",
+      processingStartedAt: new Date("2026-06-01T00:00:00.000Z"),
+    }];
+    const contactIdentity = {
+      shopId: 42,
+      method: "GET" as const,
+      objectType: "Contact",
+      objectId: "contact-1",
+      operation: "*",
+      terminal: false,
+    };
+    assert.equal(
+      await pgRepo.claimCallbackEvent("contact-new", contactIdentity, 600_000),
+      null,
+      "PG newer unsupported Contact generation is not the candidate winner",
+    );
+    const olderContactOwner = await pgRepo.claimCallbackEvent(
+      "contact-old",
+      contactIdentity,
+      600_000,
+    );
+    assert.equal(
+      olderContactOwner,
+      "2026-06-01T00:00:00.000Z",
+      "PG older Contact generation remains claimable",
+    );
+    assert.match(
+      JSON.stringify(pgSelects.map((select) => select.where)),
+      /unsupported_contact/,
+      "PG winner/admission predicates carry the unsupported Contact exclusion",
+    );
+    pgAdmissionMode = false;
+    pgUpdates.length = 0;
     const identity = {
       shopId: 42,
       method: "GET" as const,
@@ -536,6 +679,33 @@ async function main() {
       JSON.stringify(pgUpdates[0].where),
       /processingStartedAt|processing_started_at/,
       "PG failure outcome is owner fenced",
+    );
+
+    pgUpdates.length = 0;
+    await pgRepo.recordCallbackDeferral(
+      "owner",
+      receivedAt.toISOString(),
+      { category: "deferred", reason: "safety_boundary" } as any,
+    );
+    assert.equal(pgUpdates.length, 1, "PG safety deferral performs one update");
+    assert.match(
+      JSON.stringify(pgUpdates[0].set),
+      /GREATEST|attempts/,
+      "PG safety deferral floors the queue attempt decrement",
+    );
+    assert.match(
+      JSON.stringify(pgUpdates[0].where),
+      /processingStartedAt|processing_started_at/,
+      "PG safety deferral is owner fenced",
+    );
+
+    pgUpdates.length = 0;
+    await pgRepo.recordError("owner", "owner error", receivedAt.toISOString());
+    assert.equal(pgUpdates.length, 1, "PG optional error fence performs one update");
+    assert.match(
+      JSON.stringify(pgUpdates[0].where),
+      /processed|processingStartedAt|processing_started_at/,
+      "PG optional error fence includes processed and owner predicates",
     );
 
     pgOwnerRows = [];
