@@ -1,0 +1,39 @@
+~/workspace$ git fetch origin
+git switch -c qa-sync-protractor origin/qa
+git merge origin/main
+Updating files: 100% (264/264), done.
+branch 'qa-sync-protractor' set up to track 'origin/qa'.
+Switched to a new branch 'qa-sync-protractor'
+Auto-merging .agents/memory/MEMORY.md
+CONFLICT (content): Merge conflict in .agents/memory/MEMORY.md
+Auto-merging app/api/plan-build/route.ts
+CONFLICT (content): Merge conflict in app/api/plan-build/route.ts
+Auto-merging components/ui/PlatformAdminSidebar.tsx
+Auto-merging lib/cron/jobs.cjs
+Auto-merging lib/integrations/protractor/client.ts
+CONFLICT (content): Merge conflict in lib/integrations/protractor/client.ts
+Auto-merging lib/integrations/protractor/relay-config.ts
+CONFLICT (add/add): Merge conflict in lib/integrations/protractor/relay-config.ts
+Auto-merging lib/integrations/protractor/relay-transport.ts
+CONFLICT (add/add): Merge conflict in lib/integrations/protractor/relay-transport.ts
+Auto-merging mos-tools-extension/background.js
+CONFLICT (content): Merge conflict in mos-tools-extension/background.js
+Auto-merging package.json
+CONFLICT (content): Merge conflict in package.json
+Auto-merging scripts/check-direct-db.cjs
+Auto-merging services/protractor-relay/README.md
+CONFLICT (add/add): Merge conflict in services/protractor-relay/README.md
+Auto-merging services/protractor-relay/compose.example.yml
+CONFLICT (add/add): Merge conflict in services/protractor-relay/compose.example.yml
+Auto-merging services/protractor-relay/src/app.js
+CONFLICT (add/add): Merge conflict in services/protractor-relay/src/app.js
+Auto-merging services/protractor-relay/src/config.js
+CONFLICT (add/add): Merge conflict in services/protractor-relay/src/config.js
+Auto-merging services/protractor-relay/src/server.js
+CONFLICT (add/add): Merge conflict in services/protractor-relay/src/server.js
+Auto-merging services/protractor-relay/test/relay.test.js
+CONFLICT (add/add): Merge conflict in services/protractor-relay/test/relay.test.js
+Auto-merging src/instrumentation.ts
+Auto-merging tests/protractor-relay-transport.smoke.ts
+CONFLICT (add/add): Merge conflict in tests/protractor-relay-transport.smoke.ts
+Automatic merge failed; fix conflicts and then commit the result.
