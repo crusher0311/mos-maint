@@ -31,6 +31,11 @@ type RuntimeMode = {
   failure?: FailureMode;
   childDelays?: boolean;
   ingestionVia?: string;
+  sourceSystem?: string;
+  sourceId?: unknown;
+  forceUpdate?: boolean;
+  pgWorkOrderHit?: AnyDoc | null;
+  mongoWorkOrderCandidates?: AnyDoc[];
 };
 
 const originalModuleLoad = (Module as any)._load;
@@ -62,7 +67,7 @@ function sourceId(data: AnyDoc): string {
   return String(data.id || data.ID || data.kind || "unknown");
 }
 
-function createAdapter(): AnyDoc {
+function createAdapter(sourceSystem = "protractor", sourceIdOverride?: unknown): AnyDoc {
   const vehicle = {
     year: 2020,
     make: "FORD",
@@ -75,7 +80,7 @@ function createAdapter(): AnyDoc {
     fullName: "Test Customer",
   };
   return {
-    sourceSystem: "protractor",
+    sourceSystem,
     mapVehicle: () => vehicle,
     mapCustomer: () => customer,
     mapWorkOrder: () => ({
@@ -111,9 +116,9 @@ function createAdapter(): AnyDoc {
     mapInspection: () => ({ inspectionType: "multi_point", status: "completed" }),
     mapRecommendation: () => ({ title: "Test recommendation", status: "declined" }),
     getSourceIds: (data: AnyDoc) => [{
-      system: "protractor",
+      system: sourceSystem,
       idType: `${data.kind || "source"}_id`,
-      idValue: sourceId(data),
+      idValue: sourceIdOverride === undefined ? sourceId(data) : sourceIdOverride,
       isPrimary: true,
     }],
     extractVehicleFromWorkOrder: () => vehicle,
@@ -133,12 +138,16 @@ function makeRuntime(
 ): {
   service: any;
   calls: IoCall[];
+  workOrderQueries: AnyDoc[];
+  workOrderFindOneArgCounts: number[];
   records: NormalizationTimingRecord[];
   activeServiceJobs: () => number;
   maxServiceJobs: () => number;
 } {
   const calls: IoCall[] = [];
   const records: NormalizationTimingRecord[] = [];
+  const workOrderQueries: AnyDoc[] = [];
+  const workOrderFindOneArgCounts: number[] = [];
   let activeServiceJobs = 0;
   let maxServiceJobs = 0;
   const collections = new Map<string, AnyDoc>();
@@ -147,8 +156,17 @@ function makeRuntime(
     const existing = collections.get(name);
     if (existing) return existing;
     const collection = {
-      findOne: async (): Promise<null> => {
+      findOne: async (...args: unknown[]): Promise<AnyDoc | null> => {
+        const query = args[0] as AnyDoc | undefined;
         calls.push({ kind: `mongo.read.${name}` });
+        if (name === "normalized_work_orders") {
+          workOrderQueries.push(query || {});
+          workOrderFindOneArgCounts.push(args.length);
+          const candidate = (mode.mongoWorkOrderCandidates || []).find((doc) =>
+            matchesCapturedMongoQuery(doc, query || {}),
+          );
+          return candidate || null;
+        }
         return null;
       },
       insertOne: async (): Promise<void> => {
@@ -182,7 +200,7 @@ function makeRuntime(
     },
     findWorkOrderByNaturalKey: async () => {
       calls.push({ kind: "pg.read.work_order" });
-      return null;
+      return mode.pgWorkOrderHit ?? null;
     },
     findServiceJobByNaturalKey: async () => {
       calls.push({ kind: "pg.read.service_job" });
@@ -222,7 +240,7 @@ function makeRuntime(
     : undefined;
   const service = new NormalizedIngestionService(
     db,
-    "protractor",
+    (mode.sourceSystem || "protractor") as any,
     7,
     undefined,
     {
@@ -231,19 +249,36 @@ function makeRuntime(
       dualWriteToRepairPatterns: false,
       dualWriteToSupabase: false,
       ingestionVia: mode.ingestionVia,
+      forceUpdate: mode.forceUpdate,
       callbackNormalizationTiming: timing,
     },
-    createAdapter(),
+    createAdapter(mode.sourceSystem || "protractor", mode.sourceId),
   );
   (service as any).supabaseDualWriter = writer;
 
   return {
     service,
     calls,
+    workOrderQueries,
+    workOrderFindOneArgCounts,
     records,
     activeServiceJobs: () => activeServiceJobs,
     maxServiceJobs: () => maxServiceJobs,
   };
+}
+
+function matchesCapturedMongoQuery(doc: AnyDoc, query: AnyDoc): boolean {
+  if (doc.shopId !== query.shopId) return false;
+  const sourceIds = doc.provenance?.sourceIds;
+  const elemMatch = query["provenance.sourceIds"]?.$elemMatch;
+  if (!Array.isArray(sourceIds) || !elemMatch) return false;
+  const hasFullIdentity = sourceIds.some((candidate: AnyDoc) =>
+    Object.entries(elemMatch).every(([key, value]) => candidate[key] === value),
+  );
+  const dottedIdValue = query["provenance.sourceIds.idValue"];
+  return hasFullIdentity &&
+    (dottedIdValue === undefined ||
+      sourceIds.some((candidate: AnyDoc) => candidate.idValue === dottedIdValue));
 }
 
 function resultShape(value: unknown): unknown {
@@ -310,6 +345,35 @@ function operationRecord(
   );
 }
 
+function existingWorkOrder(sourceIdValue: string): AnyDoc {
+  return {
+    _id: "existing-work-order",
+    shopId: 7,
+    vehicleId: "",
+    customerId: "",
+    version: 1,
+    createdAt: new Date("2025-01-01T00:00:00.000Z"),
+    provenance: {
+      contentHash: "old-content",
+      sourceIds: [{
+        system: "protractor",
+        idType: "work_order_id",
+        idValue: sourceIdValue,
+        isPrimary: true,
+      }],
+    },
+  };
+}
+
+async function runWorkOrder(
+  mode: RuntimeMode = {},
+  id = "callback-ro-1",
+): Promise<{ runtime: ReturnType<typeof makeRuntime>; result: any }> {
+  const runtime = makeRuntime(false, mode);
+  const result = await runtime.service.ingestWorkOrder({ kind: "work_order", id });
+  return { runtime, result };
+}
+
 async function main(): Promise<void> {
   ({ NormalizedIngestionService } = await import(
     "../lib/integrations/core/normalized-ingestion"
@@ -360,6 +424,119 @@ async function main(): Promise<void> {
     assert.equal(operations.get("job_index_write"), undefined);
     assert(operations.get("inspection")?.count);
     assert(operations.get("recommendation")?.count);
+
+    const callbackPath = await runWorkOrder({ ingestionVia: "webhook-queue-replay" });
+    const callbackQuery = callbackPath.runtime.workOrderQueries[0];
+    const callbackIdentity = {
+      system: "protractor",
+      idType: "work_order_id",
+      idValue: "callback-ro-1",
+      isPrimary: true,
+    };
+    assert.equal(callbackPath.result.success, true);
+    assert.deepEqual(callbackQuery, {
+      shopId: 7,
+      "provenance.sourceIds": { $elemMatch: callbackIdentity },
+      "provenance.sourceIds.idValue": "callback-ro-1",
+    }, "callback replay captures the dotted source-id predicate");
+    assert.deepEqual(callbackPath.runtime.workOrderFindOneArgCounts, [1], "no Mongo hint is passed");
+    assert.equal(
+      (callbackQuery as AnyDoc)["provenance.sourceSystem"],
+      undefined,
+      "no source-system filter",
+    );
+
+    const legacyRow = existingWorkOrder("callback-ro-1");
+    const legacyPath = await runWorkOrder({
+      ingestionVia: "webhook-queue-replay",
+      forceUpdate: true,
+      mongoWorkOrderCandidates: [legacyRow],
+    });
+    assert.equal(
+      legacyPath.result.action,
+      "updated",
+      "a legacy row without top-level provenance.sourceSystem remains eligible",
+    );
+    assert.equal(
+      matchesCapturedMongoQuery(legacyRow, callbackQuery),
+      true,
+      "full identity matches a legacy sourceIds element",
+    );
+    const crossedElements = {
+      shopId: 7,
+      provenance: {
+        sourceIds: [
+          { ...callbackIdentity, idValue: "different-ro" },
+          { ...callbackIdentity, system: "tekmetric", idType: "vehicle_id", isPrimary: false },
+        ],
+      },
+    };
+    assert.equal(
+      matchesCapturedMongoQuery(crossedElements, callbackQuery),
+      false,
+      "dotted id plus elemMatch cannot cross array elements",
+    );
+    for (const [field, wrongValue] of [
+      ["system", "tekmetric"],
+      ["idType", "vehicle_id"],
+      ["isPrimary", false],
+    ] as const) {
+      assert.equal(
+        matchesCapturedMongoQuery({
+          shopId: 7,
+          provenance: { sourceIds: [{ ...callbackIdentity, [field]: wrongValue }] },
+        }, callbackQuery),
+        false,
+        `wrong ${field} does not match the full elemMatch`,
+      );
+    }
+    assert.equal(
+      matchesCapturedMongoQuery({ ...legacyRow, shopId: 8 }, callbackQuery),
+      false,
+      "shopId remains part of the existing identity query",
+    );
+
+    for (const [label, mode] of [
+      ["poll", { ingestionVia: "poll" }],
+      ["unset", {}],
+      ["other provider", { sourceSystem: "tekmetric", ingestionVia: "webhook-queue-replay" }],
+      ["empty id", { ingestionVia: "webhook-queue-replay", sourceId: "" }],
+      ["non-string id", { ingestionVia: "webhook-queue-replay", sourceId: 42 }],
+    ] as const) {
+      const unaffected = await runWorkOrder(mode);
+      assert.equal(unaffected.runtime.workOrderQueries.length, 1, `${label} still uses Mongo fallback`);
+      assert.equal(
+        unaffected.runtime.workOrderQueries[0]["provenance.sourceIds.idValue"],
+        undefined,
+        `${label} does not add the callback-only predicate`,
+      );
+      assert.deepEqual(unaffected.runtime.workOrderFindOneArgCounts, [1], `${label} has no hint`);
+    }
+
+    const pgHit = await runWorkOrder({
+      ingestionVia: "webhook-queue-replay",
+      pgWorkOrderHit: existingWorkOrder("callback-ro-1"),
+    });
+    assert.equal(pgHit.result.success, true);
+    assert.equal(pgHit.runtime.workOrderQueries.length, 0, "PG hit skips Mongo fallback");
+    assert.equal(
+      pgHit.runtime.calls.some((call) => call.kind === "mongo.read.normalized_work_orders"),
+      false,
+      "PG hit avoids the Mongo natural-key read",
+    );
+
+    process.env.WRITE_MONGO_NORMALIZED = "0";
+    try {
+      const mirrorsOff = await runWorkOrder({ ingestionVia: "webhook-queue-replay" });
+      assert.equal(mirrorsOff.runtime.workOrderQueries.length, 0, "mirror-off skips Mongo fallback");
+      assert.equal(
+        mirrorsOff.runtime.calls.some((call) => call.kind.startsWith("mongo.")),
+        false,
+        "mirror-off performs no Mongo I/O",
+      );
+    } finally {
+      process.env.WRITE_MONGO_NORMALIZED = "1";
+    }
 
     const failedReadRuntime = makeRuntime(true, { failure: "canonical_read" });
     const failedRead = await failedReadRuntime.service.ingestVehicle({

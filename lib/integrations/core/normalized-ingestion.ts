@@ -556,6 +556,17 @@ export class NormalizedIngestionService {
         shopId: this.shopId,
         'provenance.sourceIds': { $elemMatch: sourceIds[0] },
       };
+      if (
+        this.adapter.sourceSystem === 'protractor' &&
+        this.options.ingestionVia === 'webhook-queue-replay' &&
+        typeof sourceIds[0]?.idValue === 'string' &&
+        sourceIds[0].idValue.length > 0
+      ) {
+        // Expose the indexed leaf without weakening the full same-element
+        // identity match above. Do not require provenance.sourceSystem:
+        // legacy rows can omit it. No hint ties this path to an index name.
+        existingQuery['provenance.sourceIds.idValue'] = sourceIds[0].idValue;
+      }
       
       // task #552 (W3a cutover): PG-canonical change-detection, Mongo fallback
       // only while shadow writes are on.

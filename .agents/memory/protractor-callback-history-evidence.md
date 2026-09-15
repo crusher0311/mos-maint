@@ -62,3 +62,15 @@ existing compound provider-identity index.
 **How to apply:** Compare creation times and matching keys before scheduling a
 backfill. Inspect the actual fallback query plan and all compound-index
 prefix predicates before adding an index or retiring recovery behavior.
+
+Prefer the redundant dotted provider-ID predicate plus the original full
+`$elemMatch` over a hard index hint for callback work-order recovery.
+
+**Why:** Bounded production hit/miss explains selected the existing compound
+provider index naturally with only two keys examined. A forced hint adds
+availability risk where that index is absent, while filtering on top-level
+sourceSystem would exclude legacy records that omit it.
+
+**How to apply:** Preserve the complete same-element identity match and monitor
+the existing operation timing after rollout. Revisit planning only on measured
+regression; do not remove legacy recovery based on this optimization.
