@@ -7,6 +7,8 @@
     "npm": ">=10.0.0 <11.0.0"
   },
   "scripts": {
+    "test:protractor-callback-normalization-timing": "NODE_OPTIONS='--require ./tests/helpers/deny-network-egress.cjs' PROTRACTOR_OFFLINE_ALLOW_LOOPBACK=true tsx tests/protractor-callback-normalization-timing.smoke.ts",
+    "test:protractor-callback-normalization-runtime": "NODE_OPTIONS='--require ./tests/helpers/deny-network-egress.cjs' PROTRACTOR_OFFLINE_ALLOW_LOOPBACK=true tsx tests/protractor-callback-normalization-runtime.smoke.ts",
     "test:platform-admin-notifications": "NODE_OPTIONS='--require ./scripts/_stubs/server-only-stub.cjs' tsx tests/platform-admin-notifications.smoke.ts",
     "predev": "node scripts/dev-cache-guard.cjs",
     "dev": "next dev -p 5000 -H 0.0.0.0",

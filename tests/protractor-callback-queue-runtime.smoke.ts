@@ -28,12 +28,21 @@ type Doc = Record<string, any>;
 const originalLoad = (Module as any)._load;
 const originalConsoleInfo = console.info;
 const timingRecords: Array<Record<string, any>> = [];
+const normalizationTimingRecords: Array<Record<string, any>> = [];
 console.info = ((prefix: unknown, payload?: unknown, ...rest: unknown[]) => {
   if (prefix === "[ProtractorCallbackTiming]") {
     try {
       timingRecords.push(JSON.parse(String(payload)));
     } catch {
       throw new Error("callback timing telemetry was not valid JSON");
+    }
+    return;
+  }
+  if (prefix === "[ProtractorCallbackNormalizationTiming]") {
+    try {
+      normalizationTimingRecords.push(JSON.parse(String(payload)));
+    } catch {
+      throw new Error("normalization timing telemetry was not valid JSON");
     }
     return;
   }
@@ -76,6 +85,8 @@ const vehicleFetches: string[] = [];
 const workOrderSnapshots: Array<{ shopId: number; workOrder: Doc }> = [];
 const normalizedWorkOrders: Doc[] = [];
 const normalizedEnterpriseIds: Array<string | undefined> = [];
+const normalizationTimingRecorders: unknown[] = [];
+const normalizationThrows = new Set<string>();
 const indexCalls: Doc[] = [];
 const vehicleReplayResults = new Map<string, any[]>();
 const workOrderReplayResults = new Map<string, any[]>();
@@ -128,6 +139,8 @@ function resetQueueState(events: CallbackEvent[]): void {
   errors.length = 0;
   attempts.clear();
   timingRecords.length = 0;
+  normalizationTimingRecords.length = 0;
+  normalizationTimingRecorders.length = 0;
 }
 
 const callbackEventsMock = {
@@ -264,10 +277,14 @@ const integrationMock = {
 class MockNormalizedIngestionService {
   constructor(...args: any[]) {
     normalizedEnterpriseIds.push(args[3] as string | undefined);
+    normalizationTimingRecorders.push(args[4]?.callbackNormalizationTiming);
   }
 
   async ingestWorkOrderWithAllEntities(workOrder: Doc): Promise<void> {
     normalizedWorkOrders.push(workOrder);
+    if (normalizationThrows.has(String(workOrder.ID))) {
+      throw new Error("normalization failure");
+    }
   }
 }
 
@@ -799,6 +816,27 @@ async function runDrainAssertions(
   );
   assert.equal(workOrderSnapshots.length, 2);
   assert.equal(normalizedWorkOrders.length, 2);
+  assert.equal(
+    normalizationTimingRecorders.length,
+    2,
+    "the drain passes one normalization recorder to each work-order normalization",
+  );
+  assert(
+    normalizationTimingRecorders.every(Boolean),
+    "normalization recorder ownership is runtime-visible, not source-only",
+  );
+  assert.equal(
+    normalizationTimingRecords.length,
+    2,
+    "normalization timing finalizes for every completed normalization path",
+  );
+  assert(
+    normalizationTimingRecords.every(
+      (record) => record.kind === "callback_normalization_timing" &&
+        record.outcome === "success",
+    ),
+    "successful callback normalizations emit finalized summaries",
+  );
   assert.deepEqual(
     normalizedEnterpriseIds,
     ["enterprise-42", "enterprise-42"],
@@ -830,6 +868,32 @@ async function runDrainAssertions(
     [terminal.key, open.key, missingVin.key].sort(),
     "historical noncritical failure completion still marks work served",
   );
+
+  const normalizationFailure = event(
+    "normalization-failure",
+    "wo-normalization-failure",
+    "Update",
+  );
+  resetQueueState([normalizationFailure]);
+  ownerTokens.set(normalizationFailure.key, "owner-normalization-failure");
+  workOrderReplayResults.set(normalizationFailure.objectId!, [{
+    ok: true,
+    workOrder: {
+      ID: normalizationFailure.objectId,
+      WorkflowStage: "CLOSED",
+      Completed: true,
+      ServiceItem: { VIN: "NORMALIZATION-FAILURE-VIN" },
+    },
+  }]);
+  normalizationThrows.add(normalizationFailure.objectId!);
+  assert.deepEqual(
+    await processProtractorCallbackDrain(queueDb, { budgetMs: 60_000 }),
+    { processed: 1, failed: 0 },
+    "normalization exceptions remain isolated from callback completion",
+  );
+  normalizationThrows.delete(normalizationFailure.objectId!);
+  assert.equal(normalizationTimingRecords.length, 1);
+  assert.equal(normalizationTimingRecords[0]?.outcome, "failed");
 
   resetQueueState([vehicleMissingData, vehicleMissingVin]);
   ownerTokens.set(vehicleMissingData.key, "owner-vehicle-missing-data-replay");

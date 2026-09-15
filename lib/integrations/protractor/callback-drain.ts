@@ -9,6 +9,7 @@ import {
   replayDeferredTerminalPost,
 } from "./callback-replay";
 import { NormalizedIngestionService } from "@/lib/integrations/core/normalized-ingestion";
+import { createNormalizationTimingRecorder } from "@/lib/integrations/core/normalization-timing";
 import { attributeRevenueFromWorkOrder } from "@/lib/enterprise";
 import { indexCallbackHistory } from "./callback-history-index";
 import type { CallbackHistoryOutcome } from "./callback-outcomes";
@@ -20,6 +21,21 @@ import type {
 
 const TERMINAL = new Set(["DELETE", "INVOICED", "INVOICE", "CLOSED", "VOID"]);
 const CALLBACK_DRAIN_BUDGET_MS = 15_000;
+
+function normalizationCallbackOutcome(
+  value: unknown,
+): "success" | "failed" | "skipped" {
+  try {
+    const result = value as {
+      workOrder?: { success?: unknown; action?: unknown };
+    } | null | undefined;
+    if (result?.workOrder?.success === false) return "failed";
+    if (result?.workOrder?.action === "skipped") return "skipped";
+  } catch {
+    // Result inspection is telemetry-only; a malformed shape remains success.
+  }
+  return "success";
+}
 
 /**
  * Library-owned callback replay. Keeping this out of route modules lets the
@@ -113,8 +129,12 @@ export async function processProtractorCallbackDrain(db?: Db, options: { budgetM
         "snapshot",
         () => upsertProtractorWorkOrderSnapshot(item.shopId, result.workOrder!),
       );
+      const normalizationTiming = timing
+        ? createNormalizationTimingRecorder()
+        : undefined;
+      let normalizationOutcome: CallbackTimingOutcome = "failed";
       try {
-        await timedStage(
+        const normalizationResult = await timedStage(
           timing,
           "normalization",
           () => new NormalizedIngestionService(
@@ -122,12 +142,25 @@ export async function processProtractorCallbackDrain(db?: Db, options: { budgetM
             "protractor",
             item.shopId,
             eligibleShopMetadata.get(Number(item.shopId))?.enterpriseId,
-            { dualWriteToJobIndex: false, dualWriteToRepairPatterns: true, ingestionVia: "webhook-queue-replay" },
+            {
+              // The callback replay keeps job-index dual-write disabled.
+              // Consequently job_index_lookup/job_index_write and their ACES
+              // decode timing labels are intentionally absent here.
+              dualWriteToJobIndex: false,
+              dualWriteToRepairPatterns: true,
+              ingestionVia: "webhook-queue-replay",
+              callbackNormalizationTiming: normalizationTiming,
+            },
           ).ingestWorkOrderWithAllEntities(result.workOrder!),
+          normalizationCallbackOutcome,
         );
+        normalizationOutcome = normalizationCallbackOutcome(normalizationResult);
       } catch {
         // Do not include object identifiers or provider error text in logs.
         console.error("[Queue] Callback normalization failed");
+        normalizationOutcome = "failed";
+      } finally {
+        normalizationTiming?.finalize(normalizationOutcome);
       }
       const stage = String(result.workOrder.WorkflowStage || "").toLowerCase();
       const completed = result.workOrder.Completed ||
