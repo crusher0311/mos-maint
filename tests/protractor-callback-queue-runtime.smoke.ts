@@ -26,6 +26,19 @@ type CallbackEvent = {
 type Doc = Record<string, any>;
 
 const originalLoad = (Module as any)._load;
+const originalConsoleInfo = console.info;
+const timingRecords: Array<Record<string, any>> = [];
+console.info = ((prefix: unknown, payload?: unknown, ...rest: unknown[]) => {
+  if (prefix === "[ProtractorCallbackTiming]") {
+    try {
+      timingRecords.push(JSON.parse(String(payload)));
+    } catch {
+      throw new Error("callback timing telemetry was not valid JSON");
+    }
+    return;
+  }
+  originalConsoleInfo(prefix, payload, ...rest);
+}) as typeof console.info;
 
 const pending: CallbackEvent[] = [];
 const ownerTokens = new Map<string, string | null>();
@@ -62,6 +75,7 @@ const workOrderFetches: string[] = [];
 const vehicleFetches: string[] = [];
 const workOrderSnapshots: Array<{ shopId: number; workOrder: Doc }> = [];
 const normalizedWorkOrders: Doc[] = [];
+const normalizedEnterpriseIds: Array<string | undefined> = [];
 const indexCalls: Doc[] = [];
 const vehicleReplayResults = new Map<string, any[]>();
 const workOrderReplayResults = new Map<string, any[]>();
@@ -113,6 +127,7 @@ function resetQueueState(events: CallbackEvent[]): void {
   callbackDeferralWrites.length = 0;
   errors.length = 0;
   attempts.clear();
+  timingRecords.length = 0;
 }
 
 const callbackEventsMock = {
@@ -216,10 +231,13 @@ const queueDb = {
   collection: (name: string) => {
     if (name === "shops") {
       return {
-        findOne: async () => ({
-          enterpriseId: "enterprise-42",
-          integrationProvider: "protractor",
-        }),
+        findOne: async () => {
+          shopLookupCount++;
+          return {
+            enterpriseId: "enterprise-42",
+            integrationProvider: "protractor",
+          };
+        },
       };
     }
     if (name === "protractor_work_orders") {
@@ -231,6 +249,7 @@ const queueDb = {
     throw new Error(`unexpected collection ${name}`);
   },
 };
+let shopLookupCount = 0;
 
 const integrationMock = {
   __esModule: true,
@@ -243,7 +262,9 @@ const integrationMock = {
 };
 
 class MockNormalizedIngestionService {
-  constructor(..._args: any[]) {}
+  constructor(...args: any[]) {
+    normalizedEnterpriseIds.push(args[3] as string | undefined);
+  }
 
   async ingestWorkOrderWithAllEntities(workOrder: Doc): Promise<void> {
     normalizedWorkOrders.push(workOrder);
@@ -355,6 +376,24 @@ async function runQueueAssertions(
     await processProtractorCallbackQueue({}, dispatch, queueOptions()),
     { processed: 1, failed: 0 },
   );
+  assert.equal(
+    timingRecords.some((record) =>
+      record.kind === "callback_stage_timing" &&
+      record.stage === "total" &&
+      record.outcome === "success"
+    ),
+    true,
+    "successful callbacks emit a total timing outcome",
+  );
+  assert.equal(
+    timingRecords.some((record) =>
+      JSON.stringify(record).includes("wo-applied") ||
+      JSON.stringify(record).includes("shop") ||
+      JSON.stringify(record).includes("VIN")
+    ),
+    false,
+    "callback timing telemetry contains no callback identity",
+  );
   assert.equal(dispatches.length, 1, "claimed event is dispatched");
   assert.equal(completionCalls.length, 1);
   assert.equal(
@@ -399,6 +438,29 @@ async function runQueueAssertions(
   assert.deepEqual(
     await processProtractorCallbackQueue({}, dispatch, queueOptions()),
     { processed: 0, failed: 1 },
+  );
+  assert.equal(
+    timingRecords.some((record) =>
+      record.kind === "callback_stage_timing" &&
+      record.stage === "dispatch" &&
+      record.outcome === "failed"
+    ),
+    true,
+    "dispatch failures emit a failed dispatch timing outcome",
+  );
+  assert.equal(
+    timingRecords.some((record) =>
+      record.kind === "callback_stage_timing" &&
+      record.stage === "total" &&
+      record.outcome === "failed"
+    ),
+    true,
+    "dispatch failures emit a failed total timing outcome",
+  );
+  assert.equal(
+    timingRecords.some((record) => JSON.stringify(record).includes("provider dispatch exploded")),
+    false,
+    "timing telemetry does not include error text",
   );
   assert.deepEqual(
     callbackOutcomeWrites,
@@ -694,7 +756,9 @@ async function runDrainAssertions(
   vehicleFetches.length = 0;
   workOrderSnapshots.length = 0;
   normalizedWorkOrders.length = 0;
+  normalizedEnterpriseIds.length = 0;
   indexCalls.length = 0;
+  shopLookupCount = 0;
 
   assert.deepEqual(
     await processProtractorCallbackDrain(queueDb, { budgetMs: 60_000 }),
@@ -735,6 +799,16 @@ async function runDrainAssertions(
   );
   assert.equal(workOrderSnapshots.length, 2);
   assert.equal(normalizedWorkOrders.length, 2);
+  assert.deepEqual(
+    normalizedEnterpriseIds,
+    ["enterprise-42", "enterprise-42"],
+    "normalization reuses enterprise metadata from the eligibility lookup",
+  );
+  assert.equal(
+    shopLookupCount,
+    5,
+    "each selected callback performs one eligibility lookup, not a second normalization lookup",
+  );
   assert.deepEqual(indexCalls, [], "failed and open branches do not claim indexed evidence");
   assert.deepEqual(
     new Map(callbackOutcomeWrites.map((write) => [write.key, write.outcome])),
@@ -765,7 +839,9 @@ async function runDrainAssertions(
   vehicleFetches.length = 0;
   workOrderSnapshots.length = 0;
   normalizedWorkOrders.length = 0;
+  normalizedEnterpriseIds.length = 0;
   indexCalls.length = 0;
+  shopLookupCount = 0;
 
   assert.deepEqual(
     await processProtractorCallbackDrain(queueDb, { budgetMs: 60_000 }),
@@ -785,11 +861,13 @@ async function runDrainAssertions(
   });
   assert.equal(workOrderSnapshots.length, 0);
   assert.equal(normalizedWorkOrders.length, 0);
+  assert.deepEqual(normalizedEnterpriseIds, []);
   assert.deepEqual(indexCalls, []);
   assert.deepEqual(
     vehicleFetches.sort(),
     ["vehicle-missing-data", "vehicle-missing-vin"],
   );
+  assert.equal(shopLookupCount, 2, "replay retries still perform one eligibility lookup per callback");
   assert.deepEqual(callbackOutcomeWrites, []);
   assert.deepEqual(callbackDeferralWrites, []);
   assert.deepEqual(errors, []);
@@ -937,10 +1015,14 @@ async function main(): Promise<void> {
     "../lib/integrations/protractor/callback-drain"
   );
 
-  await runQueueAssertions(processProtractorCallbackQueue);
-  await runDrainAssertions(processProtractorCallbackDrain);
-  await runTerminalPostAssertions(processProtractorCallbackDrain);
-  Date.now = originalDateNow;
+  try {
+    await runQueueAssertions(processProtractorCallbackQueue);
+    await runDrainAssertions(processProtractorCallbackDrain);
+    await runTerminalPostAssertions(processProtractorCallbackDrain);
+  } finally {
+    Date.now = originalDateNow;
+    console.info = originalConsoleInfo;
+  }
   console.log("protractor callback queue runtime: all checks passed");
 }
 

@@ -13,6 +13,10 @@ import { attributeRevenueFromWorkOrder } from "@/lib/enterprise";
 import { indexCallbackHistory } from "./callback-history-index";
 import type { CallbackHistoryOutcome } from "./callback-outcomes";
 import { isProtractorShopRecord } from "./shop-eligibility";
+import type {
+  CallbackTimingOutcome,
+  CallbackTimingRecorder,
+} from "./callback-timing";
 
 const TERMINAL = new Set(["DELETE", "INVOICED", "INVOICE", "CLOSED", "VOID"]);
 const CALLBACK_DRAIN_BUDGET_MS = 15_000;
@@ -23,7 +27,34 @@ const CALLBACK_DRAIN_BUDGET_MS = 15_000;
  */
 export async function processProtractorCallbackDrain(db?: Db, options: { budgetMs?: number } = {}) {
   const queueDb = db ?? await callbackEvents.getCallbackQueueDb();
-  return processProtractorCallbackQueue(queueDb, async (item): Promise<CallbackHistoryOutcome> => {
+  // Eligibility is resolved once per queue invocation.  Keep only the
+  // allowlisted enterprise identifier needed by normalized ingestion; this is
+  // intentionally not a cross-request cache.
+  const eligibleShopMetadata = new Map<number, { enterpriseId?: string }>();
+  const timedStage = async <T>(
+    timing: CallbackTimingRecorder | undefined,
+    stage: Exclude<"fetch" | "snapshot" | "normalization" | "indexing" | "attribution" | "secondary_work", "total">,
+    work: () => Promise<T>,
+    outcomeForResult?: (value: T) => CallbackTimingOutcome,
+  ): Promise<T> => {
+    if (!timing) return work();
+    const startedAt = timing.start(stage);
+    try {
+      const result = await work();
+      timing.finish(stage, startedAt, outcomeForResult?.(result) ?? "success");
+      return result;
+    } catch (error) {
+      timing.finish(stage, startedAt, "failed");
+      throw error;
+    }
+  };
+
+  // Fetch timing covers the client request helper, including its admission
+  // wait; it is nested inside the queue's dispatch timing.
+  return processProtractorCallbackQueue(queueDb, async (
+    item,
+    timing,
+  ): Promise<CallbackHistoryOutcome> => {
     const operation = String(item.operation || "").toUpperCase();
     if (item.objectType === "WorkOrder" && item.objectId && operation === "DELETE") {
       const applied = await applyProtractorTerminalCallback(queueDb, {
@@ -35,68 +66,118 @@ export async function processProtractorCallbackDrain(db?: Db, options: { budgetM
       return { category: "terminal_no_history", reason: "terminal_applied" };
     }
     if (item.method === "POST" && item.objectId && TERMINAL.has(operation)) {
-      const replayed = await replayDeferredTerminalPost(queueDb, {
-        key: item.key,
-        shopId: item.shopId,
-        objectId: item.objectId,
-        operation,
-      });
+      const replayed = await timedStage(
+        timing,
+        "fetch",
+        () => replayDeferredTerminalPost(queueDb, {
+          key: item.key,
+          shopId: item.shopId,
+          objectId: item.objectId!,
+          operation,
+        }),
+        (value) => value ? "success" : "failed",
+      );
       if (!replayed) throw new Error("Deferred terminal POST replay failed");
       return { category: "terminal_no_history", reason: "terminal_applied" };
     }
     if (item.objectType === "ServiceItem" && item.objectId) {
-      const result = await fetchVehicleById(item.shopId, item.objectId, {
-        ...CALLBACK_REPLAY_FETCH_OPTIONS,
-      });
+      const result = await timedStage(
+        timing,
+        "fetch",
+        () => fetchVehicleById(item.shopId, item.objectId!, {
+          ...CALLBACK_REPLAY_FETCH_OPTIONS,
+        }),
+        (value) => value.ok && Boolean(value.vehicle) ? "success" : "failed",
+      );
       if (!result.ok || !result.vehicle) throw new Error(`Vehicle callback replay failed: ${result.error || "missing data"}`);
       if (!result.vehicle.VIN) return { category: "failed", reason: "missing_vin" };
-      await upsertProtractorVehicleSnapshot(item.shopId, result.vehicle.VIN, result.vehicle);
+      await timedStage(
+        timing,
+        "snapshot",
+        () => upsertProtractorVehicleSnapshot(item.shopId, result.vehicle!.VIN!, result.vehicle!),
+      );
       return { category: "terminal_no_history", reason: "vehicle_snapshot" };
     }
     if (item.objectType === "WorkOrder" && item.objectId) {
-      const result = await fetchWorkOrderById(item.shopId, item.objectId, {
-        ...CALLBACK_REPLAY_FETCH_OPTIONS,
-      });
+      const result = await timedStage(
+        timing,
+        "fetch",
+        () => fetchWorkOrderById(item.shopId, item.objectId!, {
+          ...CALLBACK_REPLAY_FETCH_OPTIONS,
+        }),
+        (value) => value.ok && Boolean(value.workOrder) ? "success" : "failed",
+      );
       if (!result.ok || !result.workOrder) throw new Error(`Work-order callback replay failed: ${result.error || "missing data"}`);
-      await upsertProtractorWorkOrderSnapshot(item.shopId, result.workOrder);
+      await timedStage(
+        timing,
+        "snapshot",
+        () => upsertProtractorWorkOrderSnapshot(item.shopId, result.workOrder!),
+      );
       try {
-        const shop = await queueDb.collection("shops").findOne(
-          { shopId: { $in: [String(item.shopId), Number(item.shopId)] } },
-          { projection: { enterpriseId: 1 } },
+        await timedStage(
+          timing,
+          "normalization",
+          () => new NormalizedIngestionService(
+            queueDb,
+            "protractor",
+            item.shopId,
+            eligibleShopMetadata.get(Number(item.shopId))?.enterpriseId,
+            { dualWriteToJobIndex: false, dualWriteToRepairPatterns: true, ingestionVia: "webhook-queue-replay" },
+          ).ingestWorkOrderWithAllEntities(result.workOrder!),
         );
-        await new NormalizedIngestionService(
-          queueDb,
-          "protractor",
-          item.shopId,
-          shop?.enterpriseId as string | undefined,
-          { dualWriteToJobIndex: false, dualWriteToRepairPatterns: true, ingestionVia: "webhook-queue-replay" },
-        ).ingestWorkOrderWithAllEntities(result.workOrder);
-      } catch (error: any) {
-        console.error(`[Queue] Normalization error for WO ${item.objectId}:`, error?.message || error);
+      } catch {
+        // Do not include object identifiers or provider error text in logs.
+        console.error("[Queue] Callback normalization failed");
       }
       const stage = String(result.workOrder.WorkflowStage || "").toLowerCase();
       const completed = result.workOrder.Completed ||
         ["invoiced", "invoice", "posted", "completed", "closed"].some((value) => stage.includes(value));
       const vin = String(result.workOrder.ServiceItem?.VIN || result.workOrder.ServiceItem?.Lookup || "").toUpperCase();
       if (completed && vin) {
-        const saved = await queueDb.collection("protractor_work_orders").findOne({
-          shopId: item.shopId,
-          workOrderId: item.objectId,
-        });
-        if (saved?.packageSummaries?.length) {
-          try {
-            await attributeRevenueFromWorkOrder(
-              item.shopId,
-              item.objectId,
-              vin,
-              saved.packageSummaries,
-              "protractor",
-            );
-          } catch {
-            // Revenue attribution remains non-critical.
+        const attributionStartedAt = timing?.start("attribution");
+        let attributionOutcome: CallbackTimingOutcome = "success";
+        try {
+          const saved = await queueDb.collection("protractor_work_orders").findOne({
+            shopId: item.shopId,
+            workOrderId: item.objectId,
+          });
+          if (saved?.packageSummaries?.length) {
+            try {
+              await attributeRevenueFromWorkOrder(
+                item.shopId,
+                item.objectId,
+                vin,
+                saved.packageSummaries,
+                "protractor",
+              );
+            } catch {
+              // Revenue attribution remains non-critical.
+              attributionOutcome = "failed";
+            }
           }
+          if (timing && attributionStartedAt !== undefined) {
+            timing.finish("attribution", attributionStartedAt, attributionOutcome);
+          }
+        } catch (error) {
+          if (timing && attributionStartedAt !== undefined) {
+            timing.finish("attribution", attributionStartedAt, "failed");
+          }
+          throw error;
         }
-        const outcome = await indexCallbackHistory(queueDb, item.shopId, result.workOrder);
+        const indexingStartedAt = timing?.start("indexing");
+        let outcome: CallbackHistoryOutcome;
+        try {
+          outcome = await indexCallbackHistory(queueDb, item.shopId, result.workOrder);
+          if (timing && indexingStartedAt !== undefined) {
+            timing.finish("indexing", indexingStartedAt, outcome.category === "failed" ? "failed" : "success");
+          }
+        } catch (error) {
+          if (timing && indexingStartedAt !== undefined) {
+            timing.finish("indexing", indexingStartedAt, "failed");
+          }
+          throw error;
+        }
+        const secondaryStartedAt = timing?.start("secondary_work");
         try {
           if (outcome.category !== "failed") {
             await queueDb.collection("protractor_work_orders").updateMany(
@@ -104,7 +185,13 @@ export async function processProtractorCallbackDrain(db?: Db, options: { budgetM
               { $set: { jobsIndexed: true, jobsIndexedAt: new Date() } },
             );
           }
+          if (timing && secondaryStartedAt !== undefined) {
+            timing.finish("secondary_work", secondaryStartedAt, "success");
+          }
         } catch {
+          if (timing && secondaryStartedAt !== undefined) {
+            timing.finish("secondary_work", secondaryStartedAt, "failed");
+          }
           // Snapshot bookkeeping is not evidence of job-index application.
           console.error("[Queue] Callback index marker update failed");
         }
@@ -121,10 +208,17 @@ export async function processProtractorCallbackDrain(db?: Db, options: { budgetM
     // Leave ample room under the scheduler's 50s request timeout for the
     // final provider response and local persistence to finish cleanly.
     budgetMs: options.budgetMs ?? CALLBACK_DRAIN_BUDGET_MS,
-    isShopEligible: async (shopId) => isProtractorShopRecord(
-      await queueDb.collection("shops").findOne({
+    isShopEligible: async (shopId) => {
+      const shop = await queueDb.collection("shops").findOne({
         shopId: { $in: [shopId, String(shopId)] },
-      }),
-    ),
+      });
+      const eligible = isProtractorShopRecord(shop);
+      if (eligible) {
+        eligibleShopMetadata.set(shopId, {
+          enterpriseId: shop?.enterpriseId as string | undefined,
+        });
+      }
+      return eligible;
+    },
   });
 }

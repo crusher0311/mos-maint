@@ -29,7 +29,10 @@ import {
   createSoftDelete,
   INormalizedAdapter,
 } from './normalized-adapter';
-import { updateRepairPattern } from '@/lib/repair-patterns';
+import {
+  updateRepairPattern,
+  updateRepairPatternsForIngestion,
+} from '@/lib/repair-patterns';
 import pLimit from 'p-limit';
 import { SupabaseDualWriter } from '@/lib/supabase-dual-writer';
 import { shouldShadowWriteMongo } from './normalized-write-mode';
@@ -1923,6 +1926,22 @@ export class NormalizedIngestionService {
                        sourceData.postedDate || sourceData.completedDate;
     const performedDate = closedDate ? new Date(closedDate) : new Date();
     
+    const repairPatternJobs: Array<{
+      shopId: number;
+      enterpriseId?: string;
+      year: number;
+      make: string;
+      model: string;
+      mileage: number;
+      jobTitle: string;
+      laborAmount: number;
+      partsAmount: number;
+      totalAmount: number;
+      laborHours: number;
+      vin?: string;
+      performedDate: Date;
+    }> = [];
+
     for (const job of serviceJobs) {
       if (!job.title || job.title.length < 3) continue;
       
@@ -1932,25 +1951,48 @@ export class NormalizedIngestionService {
         continue;
       }
       
+      repairPatternJobs.push({
+        shopId: this.shopId,
+        enterpriseId: this.enterpriseId,
+        year: vehicle.year,
+        make: vehicle.make,
+        model: vehicle.model,
+        mileage,
+        jobTitle: job.title,
+        laborAmount: job.laborTotal || 0,
+        partsAmount: job.partsTotal || 0,
+        totalAmount: job.total || 0,
+        laborHours: job.laborHoursBilled || job.laborHoursActual || 0,
+        vin: vehicle.vin,
+        performedDate,
+      });
+    }
+
+    if (repairPatternJobs.length === 0) return;
+
+    const useIngestionBatch =
+      this.options.ingestionVia === 'webhook-queue-replay' &&
+      this.adapter.sourceSystem === 'protractor';
+
+    if (useIngestionBatch) {
       try {
-        await updateRepairPattern({
-          shopId: this.shopId,
-          enterpriseId: this.enterpriseId,
-          year: vehicle.year,
-          make: vehicle.make,
-          model: vehicle.model,
-          mileage,
-          jobTitle: job.title,
-          laborAmount: job.laborTotal || 0,
-          partsAmount: job.partsTotal || 0,
-          totalAmount: job.total || 0,
-          laborHours: job.laborHoursBilled || job.laborHoursActual || 0,
-          vin: vehicle.vin,
-          performedDate,
-        });
+        await updateRepairPatternsForIngestion(repairPatternJobs);
       } catch (err) {
-        // Log but don't fail the main ingestion
-        console.error('Failed to update repair pattern:', err);
+        // Keep the callback replay non-fatal if batching itself fails before
+        // the helper can isolate a key.
+        console.error('Failed to update repair patterns:', 1);
+      }
+      return;
+    }
+
+    // Preserve the existing per-job behavior for every provider and every
+    // non-replay path. The optimization is intentionally opt-in to the
+    // Protractor callback replay only.
+    for (const repairPatternJob of repairPatternJobs) {
+      try {
+        await updateRepairPattern(repairPatternJob);
+      } catch (err) {
+        console.error('Failed to update repair pattern:', 1);
       }
     }
   }
