@@ -35,3 +35,18 @@ refunding ambiguous physical admissions would undermine the trial budget.
 **How to apply:** Keep deferrals owner-fenced and idempotent. A batch deadline
 must stop new provider work without suppressing real evidence returned by
 already-admitted work; durable completion still needs the existing owner fences.
+
+Diagnose growing callback queues using full callback completion time, not only
+relay latency, and compare work-order callbacks with vehicle callbacks.
+
+**Why:** Production work-order callbacks were substantially slower end-to-end
+than their successful relay attempts, while vehicle callbacks stayed fast.
+Increasing outbound concurrency without separating these stages would also
+multiply local ingestion load. Some old callbacks still progressed even while
+the overall actionable queue grew, so growth did not establish a global lockup.
+
+**How to apply:** Compare several activation-scoped snapshots, excluding retained
+Contacts and exhausted retries from actionable work. Count unique objects as
+well as notifications, and distinguish owner completion from coalesced siblings.
+Use stage timing to establish the expensive operation before tuning capacity;
+source-code fanout alone is a hypothesis, not measured causation.
