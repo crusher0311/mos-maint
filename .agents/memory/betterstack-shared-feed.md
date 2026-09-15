@@ -5,6 +5,16 @@ description: Why the production log feed contains errors from apps other than MO
 
 # Better Stack shared log feed
 
+## MCP query-help parameter mismatch
+
+Use `source_id` (not `id`) for the live `queryHelp` callback.
+
+**Why:** The generated skill documents `id`, but the live server rejects it and
+explicitly lists `source_id, source_type` as its allowed parameters.
+
+**How to apply:** Follow the live server's parameter validation when the generated
+skill schema disagrees. No credential changes are needed for this error.
+
 The production Better Stack source `t500063_mos_production_logs` (`_app: mos_production`)
 is shared by MULTIPLE unrelated Render apps, not just MOS Maintenance.
 
