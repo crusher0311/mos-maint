@@ -17,7 +17,7 @@ type AuditEntry = {
 };
 
 type Canary = {
-  mode?: "bounded" | "timed_trial" | string;
+  mode?: "bounded" | "timed_trial" | "live" | string;
   scope?: TrialScope | string | null;
   generation?: string;
   startedAt?: string | Date | null;
@@ -26,6 +26,7 @@ type Canary = {
   consumedAdmissions?: number;
   remainingAdmissions?: number | null;
   endedBy?: string | null;
+  workersSuspendedConfirmed?: boolean;
   audit?: AuditEntry[];
 };
 
@@ -42,6 +43,8 @@ type StatusPayload = {
   state?: OperatorStopState;
   trialReady?: boolean;
   trialUnavailableReason?: string;
+  liveReady?: boolean;
+  liveUnavailableReason?: string;
   error?: string;
 };
 
@@ -85,6 +88,7 @@ function parsePayload(raw: unknown): StatusPayload {
 function canaryLabel(canary: Canary | null | undefined): string {
   if (!canary) return "No generation";
   if (canary.mode === "timed_trial") return "Timed trial";
+  if (canary.mode === "live") return "Continuous live generation";
   if (canary.mode === "bounded") return "Bounded generation";
   return canary.mode || "Generation";
 }
@@ -110,10 +114,13 @@ export default function ProtractorOperatorStopClient() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [trialReason, setTrialReason] = useState("");
+  const [liveReason, setLiveReason] = useState("");
   const [trialScope, setTrialScope] = useState<TrialScope>(DEFAULT_TRIAL_SCOPE);
   const [emergencyReason, setEmergencyReason] = useState("");
   const [workersSuspendedConfirmed, setWorkersSuspendedConfirmed] = useState(false);
+  const [continuousConfirmed, setContinuousConfirmed] = useState(false);
   const [startingTrial, setStartingTrial] = useState(false);
+  const [startingLive, setStartingLive] = useState(false);
   const [activatingEmergency, setActivatingEmergency] = useState(false);
 
   const invalidateReadiness = useCallback((reason: string) => {
@@ -123,12 +130,16 @@ export default function ProtractorOperatorStopClient() {
 
   const applyStatus = useCallback((payload: StatusPayload, requireReadiness = false) => {
     if (payload.state) setState(payload.state);
-    if (typeof payload.trialReady === "boolean") {
+    if (typeof payload.liveReady === "boolean") {
+      setTrialReady(payload.liveReady);
+    } else if (typeof payload.trialReady === "boolean") {
       setTrialReady(payload.trialReady);
     } else if (requireReadiness) {
       invalidateReadiness("Status response did not include trial readiness.");
     }
-    if (payload.trialUnavailableReason !== undefined) {
+    if (payload.liveUnavailableReason !== undefined) {
+      setTrialUnavailableReason(payload.liveUnavailableReason || null);
+    } else if (payload.trialUnavailableReason !== undefined) {
       setTrialUnavailableReason(payload.trialUnavailableReason || null);
     } else if (payload.trialReady === true) {
       setTrialUnavailableReason(null);
@@ -190,9 +201,21 @@ export default function ProtractorOperatorStopClient() {
     state?.active === true &&
     trialReady === true &&
     Boolean(stopId) &&
+    state?.physicalAdmissionInFlight !== true &&
     Boolean(trialReason.trim()) &&
     workersSuspendedConfirmed &&
     !startingTrial &&
+    !startingLive &&
+    !activatingEmergency;
+  const canStartLive =
+    state?.active === true &&
+    trialReady === true &&
+    Boolean(stopId) &&
+    Boolean(liveReason.trim()) &&
+    workersSuspendedConfirmed &&
+    continuousConfirmed &&
+    !startingTrial &&
+    !startingLive &&
     !activatingEmergency;
 
   const readinessText = trialReady === true ? "Ready" : trialReady === false ? "Not ready" : "Unavailable";
@@ -215,6 +238,9 @@ export default function ProtractorOperatorStopClient() {
     }
     if (state?.active) return "Operator stop is active; timed trial is contained and not live.";
     if (currentCanary.mode === "timed_trial") return "Timed trial is live.";
+    if (currentCanary.mode === "live") {
+      return "Continuous relay-only callbacks and authenticated customer-facing activity are live.";
+    }
     if (currentCanary.mode === "bounded") return "An existing bounded generation is visible.";
     return "A generation is visible.";
   }, [currentCanary, remaining, state?.active]);
@@ -294,6 +320,61 @@ export default function ProtractorOperatorStopClient() {
     }
   }
 
+  async function startLive(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    if (!canStartLive) {
+      setError("Continuous live mode requires an active stop, readiness, reason, worker attestation, and explicit confirmation.");
+      return;
+    }
+    setStartingLive(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const response = await fetch(ENDPOINT, {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json" },
+        body: JSON.stringify({
+          action: "start_live",
+          reason: liveReason.trim(),
+          expectedStopId: stopId,
+          workersSuspendedConfirmed: true,
+        }),
+      });
+      let payload: StatusPayload;
+      try {
+        payload = parsePayload(await response.json());
+      } catch {
+        await uncertainAction("The continuous live response could not be read; its outcome is uncertain.");
+        return;
+      }
+      if (response.status === 409) {
+        await freshStatusAfterConflict(payload.error || "The stop changed while starting continuous live mode.");
+        return;
+      }
+      if (!response.ok || payload.ok === false) {
+        throw new Error(payload.error || `Continuous live activation failed (HTTP ${response.status}).`);
+      }
+      if (!payload.state) {
+        await uncertainAction("The continuous live response did not include fresh state; its outcome is uncertain.");
+        return;
+      }
+      applyStatus(payload);
+      setLiveReason("");
+      setWorkersSuspendedConfirmed(false);
+      setContinuousConfirmed(false);
+      setNotice("Continuous live mode started. Relay-only callbacks and authenticated customer-facing activity remain paced and breaker-protected.");
+    } catch (caught) {
+      if (caught instanceof TypeError) {
+        await uncertainAction("The continuous live request may have reached the server, but the network outcome is uncertain.");
+      } else {
+        invalidateReadiness("Readiness is unknown until a fresh status response succeeds.");
+        setError(errorMessage(caught));
+      }
+    } finally {
+      setStartingLive(false);
+    }
+  }
+
   async function activateEmergency(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     const reason = emergencyReason.trim();
@@ -347,7 +428,7 @@ export default function ProtractorOperatorStopClient() {
   if (loading && !state) {
     return (
       <div className="p-6">
-        <h1 className="text-2xl font-bold text-gray-900">Protractor Timed Live Trial</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Protractor Live Controls</h1>
         <p className="mt-2 text-sm text-gray-600">Loading operator-stop status…</p>
         {error && <ErrorNotice message={error} />}
       </div>
@@ -359,16 +440,16 @@ export default function ProtractorOperatorStopClient() {
       <header>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Protractor Timed Live Trial</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Protractor Live Controls</h1>
             <p className="mt-1 max-w-3xl text-sm text-gray-600">
-              Production-only operator control. The trial always runs for exactly 30 minutes after
-              Mongo activation; the operator cannot select a duration or request cap.
+              Production-only control for continuous relay-only operation, a 30-minute trial,
+              and the emergency stop. Continuous mode stays active until stopped.
             </p>
           </div>
           <button
             type="button"
             onClick={() => void refreshStatus()}
-            disabled={refreshing || startingTrial || activatingEmergency}
+            disabled={refreshing || startingTrial || startingLive || activatingEmergency}
             className="rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {refreshing ? "Refreshing…" : "Refresh status"}
@@ -383,7 +464,8 @@ export default function ProtractorOperatorStopClient() {
         <p className="font-semibold">Production-only control</p>
         <p className="mt-1">
           Do not use this page for synthetic traffic or experimentation. Keep both workers suspended
-          and historical backfill off for the complete trial. Expired generations are terminal.
+          and historical backfill off during both continuous operation and trials.
+          Expired or stopped generations cannot be reopened.
         </p>
       </div>
 
@@ -409,7 +491,7 @@ export default function ProtractorOperatorStopClient() {
         <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
           <StatusField label="Stop ID" value={stopId || "Not reported"} mono />
           <StatusField label="Physical admission in flight" value={state?.physicalAdmissionInFlight === undefined ? "Not reported" : state.physicalAdmissionInFlight ? "Yes" : "No"} />
-          <StatusField label="Trial readiness" value={readinessText} valueClass={trialReady === true ? "text-green-700" : trialReady === false ? "text-red-700" : "text-gray-700"} />
+          <StatusField label="Activation readiness" value={readinessText} valueClass={trialReady === true ? "text-green-700" : trialReady === false ? "text-red-700" : "text-gray-700"} />
           <StatusField label="Current generation" value={canaryLabel(currentCanary)} />
         </dl>
         <div className="mt-4 rounded border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
@@ -417,6 +499,78 @@ export default function ProtractorOperatorStopClient() {
           Readiness is configuration-only. This page does not independently verify worker state or historical backfill state.
           {trialUnavailableReason && <span className="ml-1 font-medium">Reason: {trialUnavailableReason}</span>}
         </div>
+      </section>
+
+      <section className="rounded-lg border border-emerald-300 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Activate continuous live mode</h2>
+            <p className="mt-1 text-sm text-gray-600">
+              Starts a new, continuous generation for relay-only provider callbacks and authenticated
+              customer-facing staff activity. This is not a bulk restore: unattended sync, workers,
+              backfill, enrichment, and detached work remain excluded.
+            </p>
+          </div>
+          <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">Continuous · relay-only</span>
+        </div>
+        <form onSubmit={startLive} className="mt-5 space-y-4">
+          <div>
+            <label htmlFor="live-reason" className="block text-sm font-medium text-gray-800">
+              Continuous activation reason
+            </label>
+            <textarea
+              id="live-reason"
+              value={liveReason}
+              onChange={(event) => setLiveReason(event.target.value)}
+              rows={3}
+              maxLength={1_000}
+              placeholder="Record the approved owner and reason for continuous customer-facing relay traffic."
+              className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            />
+          </div>
+          <label className="flex items-start gap-3 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+            <input
+              type="checkbox"
+              checked={workersSuspendedConfirmed}
+              onChange={(event) => setWorkersSuspendedConfirmed(event.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-gray-400"
+            />
+            <span>
+              I manually confirm that <strong>both Protractor workers are suspended</strong> and
+              <strong> historical backfill is off</strong>.
+            </span>
+          </label>
+          <label className="flex items-start gap-3 rounded border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-900">
+            <input
+              type="checkbox"
+              checked={continuousConfirmed}
+              onChange={(event) => setContinuousConfirmed(event.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-gray-400"
+            />
+            <span>
+              I confirm this enables only normal customer-facing activity plus new callbacks through
+              the authenticated relay. I understand it does not restore bulk or background traffic.
+            </span>
+          </label>
+          <button
+            type="submit"
+            disabled={!canStartLive}
+            className="rounded bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {startingLive ? "Activating continuous live mode…" : "Activate continuous relay-only live mode"}
+          </button>
+          {state?.active !== true && (
+            <p className="text-xs text-gray-600">An active operator stop is required before this action is enabled.</p>
+          )}
+          {state?.physicalAdmissionInFlight === true && (
+            <p className="text-xs font-medium text-amber-800">
+              Waiting for the physical admission already in flight to finish before live mode can be activated.
+            </p>
+          )}
+          {trialReady !== true && (
+            <p className="text-xs text-gray-600">The action stays disabled until the API reports relay readiness.</p>
+          )}
+        </form>
       </section>
 
       <section className="rounded-lg border border-blue-200 bg-white p-5 shadow-sm">
@@ -545,7 +699,7 @@ export default function ProtractorOperatorStopClient() {
           />
           <button
             type="submit"
-            disabled={activatingEmergency || startingTrial || !emergencyReason.trim()}
+            disabled={activatingEmergency || startingTrial || startingLive || !emergencyReason.trim()}
             className="rounded bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {activatingEmergency ? "Activating stop…" : "Activate emergency operator stop"}
@@ -556,7 +710,7 @@ export default function ProtractorOperatorStopClient() {
       <section className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">Current trial telemetry</h2>
+            <h2 className="text-lg font-semibold text-gray-900">Current activation telemetry</h2>
             <p className="mt-1 text-sm text-gray-600">{trialStateText}</p>
           </div>
           {currentCanary?.mode === "timed_trial" && (
@@ -571,15 +725,19 @@ export default function ProtractorOperatorStopClient() {
         <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
           <StatusField label="Mode" value={canaryLabel(currentCanary)} />
           <StatusField label="Started" value={timestamp(currentCanary?.startedAt)} />
-          <StatusField label="Expires" value={timestamp(currentCanary?.expiresAt)} />
+          <StatusField
+            label="Expiry"
+            value={currentCanary?.mode === "live" ? "None (operator stop only)" : timestamp(currentCanary?.expiresAt)}
+          />
           <StatusField label="Terminal reason" value={terminalReason || "Still live / not reported"} />
           <StatusField label="Consumed requests" value={currentCanary?.consumedAdmissions === undefined ? "Not reported" : String(currentCanary.consumedAdmissions)} />
            <StatusField label="Scope" value={currentCanary ? scopeLabel(currentCanary.scope) : "No generation"} />
           <StatusField
             label="Remaining requests"
             value={
-              currentCanary?.mode === "timed_trial" && currentCanary.maxAdmissions == null
-                ? "No cap (time-limited)"
+              (currentCanary?.mode === "timed_trial" || currentCanary?.mode === "live") &&
+                currentCanary.maxAdmissions == null
+                ? currentCanary.mode === "live" ? "No cap (continuous)" : "No cap (time-limited)"
                 : currentCanary?.remainingAdmissions === undefined || currentCanary.remainingAdmissions === null
                   ? "Not reported"
                   : String(currentCanary.remainingAdmissions)
@@ -587,11 +745,23 @@ export default function ProtractorOperatorStopClient() {
           />
           <StatusField label="Max requests" value={currentCanary?.maxAdmissions === undefined ? "Not reported" : currentCanary.maxAdmissions === null ? "No cap" : String(currentCanary.maxAdmissions)} />
           <StatusField label="Generation" value={currentCanary?.generation || "Not reported"} mono />
+          <StatusField
+            label="Worker suspension attestation"
+            value={currentCanary?.mode === "live"
+              ? currentCanary.workersSuspendedConfirmed === true ? "Recorded" : "Missing (invalid)"
+              : "Not applicable"}
+          />
         </dl>
         {currentCanary?.mode === "timed_trial" && currentCanary.maxAdmissions == null && (
           <p className="mt-4 rounded border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
             Timed mode has no request cap, but it is strictly time-limited—not unguarded. Production pacers and
             circuit breakers remain in force.
+          </p>
+        )}
+        {currentCanary?.mode === "live" && (
+          <p className="mt-4 rounded border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+            Continuous mode has no expiry or request cap. It remains relay-only, physically paced, and
+            breaker-protected; the operator stop is its terminal control.
           </p>
         )}
         {currentCanary?.mode === "bounded" && (
@@ -613,7 +783,7 @@ export default function ProtractorOperatorStopClient() {
                 <th className="px-2 py-2">Mode</th>
                 <th className="px-2 py-2">Scope</th>
                 <th className="px-2 py-2">Started</th>
-                <th className="px-2 py-2">Expired</th>
+                <th className="px-2 py-2">Expiry</th>
                 <th className="px-2 py-2">Requests</th>
                 <th className="px-2 py-2">Ended by</th>
                 <th className="px-2 py-2">Generation</th>

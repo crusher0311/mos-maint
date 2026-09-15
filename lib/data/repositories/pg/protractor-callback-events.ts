@@ -173,9 +173,14 @@ export async function admitCallbackEvent(
   eventKey: string,
   identity: CallbackAdmissionIdentity,
   leaseMs: number,
+  receivedNotBefore?: Date,
 ): Promise<boolean> {
   const now = new Date();
   const staleBefore = new Date(now.getTime() - leaseMs);
+  const validReceivedNotBefore =
+    receivedNotBefore instanceof Date && Number.isFinite(receivedNotBefore.getTime())
+      ? receivedNotBefore
+      : undefined;
   return getDb().transaction(async (tx) => {
     await tx.execute(
       sql`SELECT pg_advisory_xact_lock(hashtextextended(${identityLockKey(identity)}, 0))`,
@@ -187,6 +192,7 @@ export async function admitCallbackEvent(
         identityWhere(identity),
         eq(t.processed, false),
         replayCandidateWhere(),
+        ...(validReceivedNotBefore ? [gte(t.receivedAt, validReceivedNotBefore)] : []),
       ))
       .orderBy(
         desc(sql`CASE WHEN upper(coalesce(${t.operation}, ${t.status}, '')) IN ('DELETE','INVOICED','INVOICE','CLOSED','VOID') THEN 1 ELSE 0 END`),
@@ -202,6 +208,7 @@ export async function admitCallbackEvent(
         and(
           identityWhere(identity),
           replayCandidateWhere(),
+          ...(validReceivedNotBefore ? [gte(t.receivedAt, validReceivedNotBefore)] : []),
           isNotNull(t.processingStartedAt),
           gte(t.processingStartedAt, staleBefore),
         ),
@@ -218,6 +225,7 @@ export async function admitCallbackEvent(
         eq(t.eventKey, eventKey),
         eq(t.processed, false),
         replayCandidateWhere(),
+        ...(validReceivedNotBefore ? [gte(t.receivedAt, validReceivedNotBefore)] : []),
       ))
       .returning({ eventKey: t.eventKey });
     if (claimed.length === 0) return false;
@@ -229,7 +237,12 @@ export async function claimCallbackEvent(
   eventKey: string,
   identity: CallbackAdmissionIdentity,
   leaseMs: number,
+  receivedNotBefore?: Date,
 ): Promise<string | null> {
+  const validReceivedNotBefore =
+    receivedNotBefore instanceof Date && Number.isFinite(receivedNotBefore.getTime())
+      ? receivedNotBefore
+      : undefined;
   const winner = await getDb()
     .select({ eventKey: t.eventKey })
     .from(t)
@@ -237,6 +250,7 @@ export async function claimCallbackEvent(
       identityWhere(identity),
       eq(t.processed, false),
       replayCandidateWhere(),
+      ...(validReceivedNotBefore ? [gte(t.receivedAt, validReceivedNotBefore)] : []),
     ))
     .orderBy(
       desc(sql`CASE WHEN upper(coalesce(${t.operation}, ${t.status}, '')) IN ('DELETE','INVOICED','INVOICE','CLOSED','VOID') THEN 1 ELSE 0 END`),
@@ -245,7 +259,9 @@ export async function claimCallbackEvent(
     )
     .limit(1);
   if (winner[0]?.eventKey !== eventKey) return null;
-  if (!(await admitCallbackEvent(eventKey, identity, leaseMs))) return null;
+  if (!(await admitCallbackEvent(
+    eventKey, identity, leaseMs, validReceivedNotBefore,
+  ))) return null;
   const rows = await getDb()
     .select({ processingStartedAt: t.processingStartedAt })
     .from(t)
@@ -253,6 +269,7 @@ export async function claimCallbackEvent(
       eq(t.eventKey, eventKey),
       eq(t.processed, false),
       replayCandidateWhere(),
+      ...(validReceivedNotBefore ? [gte(t.receivedAt, validReceivedNotBefore)] : []),
     ))
     .limit(1);
   return rows[0]?.processingStartedAt?.toISOString() ?? null;
@@ -347,6 +364,7 @@ export async function completeCallbackGeneration(
   ownerToken: string,
   ownerReceivedAt: Date,
   outcome: CallbackHistoryOutcome = DEFAULT_CALLBACK_HISTORY_OUTCOME,
+  coalesceNotBefore?: Date,
 ): Promise<boolean> {
   const db = getDb();
   const ownerOutcome = normalizeCallbackHistoryOutcome(outcome);
@@ -401,6 +419,9 @@ export async function completeCallbackGeneration(
         replayCandidateWhere(),
         sql`${t.eventKey} <> ${eventKey}`,
         sql`${t.receivedAt} <= ${ownerReceivedAt}`,
+        ...(coalesceNotBefore instanceof Date && Number.isFinite(coalesceNotBefore.getTime())
+          ? [sql`${t.receivedAt} >= ${coalesceNotBefore}`]
+          : []),
         ...(identity.terminal ? [] : [sql`NOT (${terminalPredicate})`]),
       ));
     return true;

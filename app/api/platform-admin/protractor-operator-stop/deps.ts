@@ -5,6 +5,7 @@ import {
   activateProtractorOperatorStop,
   clearProtractorOperatorStop,
   getProtractorOperatorStop,
+  startProtractorLive,
   startProtractorTimedTrial,
 } from "@/lib/data/repositories/api-usage";
 
@@ -13,6 +14,7 @@ export const deps = {
   activateProtractorOperatorStop,
   clearProtractorOperatorStop,
   getProtractorOperatorStop,
+  startProtractorLive,
   startProtractorTimedTrial,
   logAdminAction,
   sendOpsAlert,

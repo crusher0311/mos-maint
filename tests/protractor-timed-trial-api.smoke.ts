@@ -80,6 +80,7 @@ async function main(): Promise<void> {
   let authenticated = false;
   let currentState = state();
   let startCalls: Doc[] = [];
+  let liveStartCalls: Doc[] = [];
   let auditCalls: Doc[] = [];
   let alertCalls: Doc[] = [];
   let startError: Error | null = null;
@@ -103,6 +104,26 @@ async function main(): Promise<void> {
           requiresRelay: input.requiresRelay === true,
           startedAt: new Date("2026-09-11T12:00:00.000Z"),
           expiresAt: new Date("2026-09-11T12:30:00.000Z"),
+          maxAdmissions: null,
+          consumedAdmissions: 0,
+          remainingAdmissions: null,
+          audit: [],
+        },
+      });
+      return currentState;
+    },
+    startProtractorLive: async (input: Doc) => {
+      liveStartCalls.push(input);
+      if (startError) throw startError;
+      currentState = state({
+        active: false,
+        canary: {
+          mode: "live",
+          scope: "callbacks_and_interactive",
+          requiresCallback: false,
+          requiresRelay: true,
+          workersSuspendedConfirmed: true,
+          startedAt: new Date("2026-09-11T12:00:00.000Z"),
           maxAdmissions: null,
           consumedAdmissions: 0,
           remainingAdmissions: null,
@@ -244,6 +265,23 @@ async function main(): Promise<void> {
       assert.equal(response.status, 400, "custom trial timing/budget must be rejected");
     }
     assert.equal(startCalls.length, 0, "invalid payloads must not invoke the repository");
+    for (const body of [
+      { action: "start_live", expectedStopId: "stop-current", workersSuspendedConfirmed: true },
+      { action: "start_live", reason: "missing attestation", expectedStopId: "stop-current" },
+      { action: "start_live", reason: "missing stop id", workersSuspendedConfirmed: true },
+      {
+        action: "start_live", reason: "continuous fields are fixed", expectedStopId: "stop-current",
+        workersSuspendedConfirmed: true, expiresAt: "2026-09-11T12:30:00.000Z",
+      },
+      {
+        action: "start_live", reason: "continuous fields are fixed", expectedStopId: "stop-current",
+        workersSuspendedConfirmed: true, scope: "callbacks",
+      },
+    ]) {
+      response = await POST(post(body));
+      assert.equal(response.status, 400, "continuous activation requires attestation and accepts no timing/scope input");
+    }
+    assert.equal(liveStartCalls.length, 0, "invalid continuous payloads must not invoke the repository");
 
     response = await POST(post({
       action: "start_trial",
@@ -269,6 +307,22 @@ async function main(): Promise<void> {
     assert.equal(alertCalls.length, 0, "starting a trial must not send emergency-stop alert");
 
     response = await POST(post({
+      action: "start_live",
+      reason: "approved continuous customer traffic",
+      expectedStopId: "stop-current",
+      workersSuspendedConfirmed: true,
+    }));
+    assert.equal(response.status, 200, "valid continuous activation should succeed");
+    assert.deepEqual(liveStartCalls, [{
+      changedBy: "operator@example.com",
+      reason: "approved continuous customer traffic",
+      expectedStopId: "stop-current",
+      workersSuspendedConfirmed: true,
+    }]);
+    assert.equal((await responseBody(response)).state.canary.mode, "live");
+    assert.equal(auditCalls.at(-1)?.action, "protractor_continuous_live_started");
+
+    response = await POST(post({
       action: "start_trial",
       scope: "callbacks_and_interactive",
       reason: "approved broad trial",
@@ -287,9 +341,9 @@ async function main(): Promise<void> {
       (await responseBody(response)).state.canary.requiresCallback,
       false,
     );
-    assert.equal(auditCalls.length, 2);
+    assert.equal(auditCalls.length, 3);
     assert.equal(
-      auditCalls[1].details.canary.scope,
+      auditCalls[2].details.canary.scope,
       "callbacks_and_interactive",
       "the existing full-state audit must retain the selected scope",
     );
@@ -302,7 +356,7 @@ async function main(): Promise<void> {
       workersSuspendedConfirmed: true,
     }));
     assert.equal(response.status, 409, "stale current stop ID must be a conflict");
-    assert.equal(auditCalls.length, 2, "stale mutation must not be audited as successful");
+    assert.equal(auditCalls.length, 3, "stale mutation must not be audited as successful");
 
     currentState = state({ active: false });
     const getResponse = await GET(new NextRequest(
@@ -312,6 +366,7 @@ async function main(): Promise<void> {
     assert.equal(getResponse.status, 200);
     assert.equal(getBody.ok, true);
     assert.equal(getBody.trialReady, true);
+    assert.equal(getBody.liveReady, true);
     assert.equal(getBody.trialUnavailableReason, null);
     assert.deepEqual(getBody.state, currentState);
 
@@ -321,6 +376,7 @@ async function main(): Promise<void> {
     ));
     const unavailableBody = await responseBody(unavailableResponse);
     assert.equal(unavailableBody.trialReady, false);
+    assert.equal(unavailableBody.liveReady, false);
     assert.equal(
       unavailableBody.trialUnavailableReason,
       "Protractor outbound policy denied: service_disabled",

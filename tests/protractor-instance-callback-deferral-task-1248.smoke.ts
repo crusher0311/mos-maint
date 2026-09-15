@@ -380,6 +380,17 @@ async function main() {
   const terminalHelper = (
     await import("../lib/integrations/protractor/callback-terminal")
   ).applyProtractorTerminalCallback;
+  // Queue admission now resolves the shared physical activation record on a
+  // replica without a local staged flag, so an independently configured
+  // replica cannot bypass a live relay-only generation. Keep this offline
+  // fixture self-contained rather than falling through to Mongo.
+  const clientHooks = (
+    await import("../lib/integrations/protractor/client")
+  ).__protractorClientTestHooks;
+  clientHooks.getOperatorStop = async () => ({
+    active: false,
+    canary: undefined,
+  } as any);
   const { processProtractorCallbackQueue, selectFairCallbackBatch } = await import(
     "../lib/integrations/protractor/callback-queue"
   );

@@ -9,6 +9,7 @@ import {
   confirmProtractorPhysicalTransportLease,
   getProtractorOperatorStop,
   releaseProtractorPhysicalTransportLease,
+  startProtractorLive,
   startProtractorTimedTrial,
 } from "../lib/data/repositories/api-usage";
 import { createMongoExpressionCollection } from "./helpers/mongo-expression-collection";
@@ -451,7 +452,7 @@ async function main(): Promise<void> {
   assert.equal(timedTrial.canary?.maxAdmissions, null);
   assert.equal(timedTrial.canary?.remainingAdmissions, null);
   assert.equal(
-    timedTrial.canary!.expiresAt.getTime() - timedTrial.canary!.startedAt!.getTime(),
+    timedTrial.canary!.expiresAt!.getTime() - timedTrial.canary!.startedAt!.getTime(),
     1_800_000,
     "timed trials use an exact thirty-minute Mongo clock duration",
   );
@@ -505,7 +506,7 @@ async function main(): Promise<void> {
   status = await getProtractorOperatorStop();
   assert.equal(status.canary?.consumedAdmissions, 5);
   assert.equal(status.canary?.audit.filter(event => event.event === "admitted").length, 5);
-  now = new Date(timedTrial.canary!.expiresAt.getTime());
+  now = new Date(timedTrial.canary!.expiresAt!.getTime());
   assert.equal(
     await acquireProtractorPhysicalTransportLease(Date.now() + 20),
     null,
@@ -513,7 +514,7 @@ async function main(): Promise<void> {
   );
   status = await getProtractorOperatorStop();
   assert.equal(status.canary?.endedBy, "time");
-  assert.equal(status.canary?.endedAt?.getTime(), timedTrial.canary!.expiresAt.getTime());
+  assert.equal(status.canary?.endedAt?.getTime(), timedTrial.canary!.expiresAt!.getTime());
 
   console.log("Scenario 12: broad timed trials admit positive interactive targets only");
   await activateProtractorOperatorStop({
@@ -558,7 +559,7 @@ async function main(): Promise<void> {
     "broad trials admit a positive interactive target",
   );
   await releaseProtractorPhysicalTransportLease(broadLease!);
-  now = new Date(broadTrial.canary!.expiresAt.getTime());
+  now = new Date(broadTrial.canary!.expiresAt!.getTime());
   assert.equal(
     await acquireProtractorPhysicalTransportLease(Date.now() + 20),
     null,
@@ -668,7 +669,92 @@ async function main(): Promise<void> {
     "operator-stop audit timestamps must use the Mongo server clock",
   );
 
-  console.log("Scenario 17: production log fixture excludes build-service contamination");
+  console.log("Scenario 17: continuous live is unexpired, relay-bound, and archives terminal history");
+  const liveStopId = collection.row.operatorStop.stopId;
+  const live = await startProtractorLive({
+    changedBy: "continuous-operator",
+    reason: "approved normal customer traffic",
+    expectedStopId: liveStopId,
+    workersSuspendedConfirmed: true,
+    now,
+  });
+  assert.equal(live.active, false);
+  assert.equal(live.canary?.mode, "live");
+  assert.equal(live.canary?.expiresAt, undefined, "continuous mode must not inherit a timed expiry");
+  assert.equal(live.canary?.requiresRelay, true);
+  assert.equal(live.canary?.workersSuspendedConfirmed, true);
+  assert.equal(collection.row.canaryHistory.at(-1)?.mode, "bounded");
+  const pristineLiveCanary = structuredClone(collection.row.canary);
+  for (const mutate of [
+    (canary: any) => { canary.audit = undefined; },
+    (canary: any) => { canary.generation = ""; },
+    (canary: any) => { canary.endedAt = new Date(now); },
+    (canary: any) => { canary.workersSuspendedConfirmed = false; },
+  ]) {
+    collection.row.canary = structuredClone(pristineLiveCanary);
+    mutate(collection.row.canary);
+    assert.equal(
+      await acquireProtractorPhysicalTransportLease(Date.now() + 20),
+      null,
+      "malformed continuous state fails closed in the JavaScript post-CAS fallback",
+    );
+  }
+  collection.row.canary = pristineLiveCanary;
+  const pristineLiveStop = structuredClone(collection.row.operatorStop);
+  collection.row.operatorStop = {};
+  assert.equal(
+    await acquireProtractorPhysicalTransportLease(Date.now() + 20),
+    null,
+    "live physical admission requires operatorStop.active to be exactly false",
+  );
+  collection.row.operatorStop = pristineLiveStop;
+  now = new Date(now.getTime() + 1_001);
+  const liveLease = await acquireProtractorPhysicalTransportLease(Date.now() + 20);
+  assert.ok(liveLease);
+  const liveLeaseFilter = collection.calls.at(-1)?.filter;
+  assert.match(
+    JSON.stringify(liveLeaseFilter?.$expr),
+    /operatorStop\.active/,
+    "live physical CAS requires an explicit inactive operator stop",
+  );
+  assert.equal(
+    await confirmProtractorPhysicalTransportLease(liveLease!, {
+      callbackReceivedAt: new Date(live.canary!.startedAt!.getTime() - 1),
+      transport: "relay",
+      environment: "test",
+    }),
+    false,
+    "pre-activation callbacks must not cross the fresh continuous callback floor",
+  );
+  assert.equal(
+    await confirmProtractorPhysicalTransportLease(liveLease!, {
+      interactiveShopId: 42,
+      transport: "direct",
+      environment: "test",
+    }),
+    false,
+    "continuous mode must not accept direct physical transport",
+  );
+  assert.equal(
+    await confirmProtractorPhysicalTransportLease(liveLease!, {
+      interactiveShopId: 42,
+      transport: "relay",
+      environment: "test",
+    }),
+    true,
+    "continuous mode admits only an authenticated interactive target through relay",
+  );
+  await releaseProtractorPhysicalTransportLease(liveLease!);
+  await activateProtractorOperatorStop({
+    changedBy: "continuous-operator",
+    reason: "stop continuous mode",
+    now,
+  });
+  status = await getProtractorOperatorStop();
+  assert.equal(status.canary?.endedBy, "operator");
+  assert.equal(status.canary?.mode, "live");
+
+  console.log("Scenario 18: production log fixture excludes build-service contamination");
   const runbook = readFileSync("docs/runbooks/protractor-storm-recovery.md", "utf8");
   const sql = runbook.match(/```sql\s+([\s\S]*?)```/)?.[1] ?? "";
   const rows = [

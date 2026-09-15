@@ -73,6 +73,10 @@ export async function GET(req: NextRequest) {
     ok: true,
     state: await deps.getProtractorOperatorStop(),
     ...trialConfigReadiness(),
+    // Continuous activation uses the same deliberately restrictive staging
+    // prerequisites. Keep the timed fields for existing clients.
+    liveReady: trialConfigReadiness().trialReady,
+    liveUnavailableReason: trialConfigReadiness().trialUnavailableReason,
   });
 }
 
@@ -125,9 +129,9 @@ export async function POST(req: NextRequest) {
     scope === "callbacks" || scope === "callbacks_and_interactive"
       ? scope
       : undefined;
-  if (action !== "activate" && action !== "clear" && action !== "start_trial") {
+  if (action !== "activate" && action !== "clear" && action !== "start_trial" && action !== "start_live") {
     return NextResponse.json(
-      { ok: false, error: "action must be activate, clear, or start_trial" },
+      { ok: false, error: "action must be activate, clear, start_trial, or start_live" },
       { status: 400 },
     );
   }
@@ -142,17 +146,19 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   }
-  if ((action === "activate" || action === "start_trial") && !reason?.trim()) {
+  if ((action === "activate" || action === "start_trial" || action === "start_live") && !reason?.trim()) {
     return NextResponse.json({ ok: false, error: "reason is required when activating" }, { status: 400 });
   }
-  if (action === "start_trial" && (
+  if ((action === "start_trial" || action === "start_live") && (
     !expectedStopId?.trim() ||
     workersSuspendedConfirmed !== true
   )) {
     return NextResponse.json(
       {
         ok: false,
-        error: "reason, expectedStopId, and workersSuspendedConfirmed=true are required when starting a trial",
+        error: `reason, expectedStopId, and workersSuspendedConfirmed=true are required when starting ${
+          action === "start_live" ? "continuous live mode" : "a timed trial"
+        }`,
       },
       { status: 400 },
     );
@@ -172,7 +178,29 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   }
+  if (action === "start_live" && (
+    body && typeof body === "object" && (
+      "expiresAt" in body ||
+      "maxAdmissions" in body ||
+      "duration" in body ||
+      "durationMs" in body ||
+      "durationMinutes" in body ||
+      "expiresInMs" in body ||
+      "scope" in body
+    )
+  )) {
+    return NextResponse.json(
+      { ok: false, error: "continuous live mode has a fixed callback + authenticated-interactive scope and no duration or cap input" },
+      { status: 400 },
+    );
+  }
   if (action === "start_trial" && !trialConfigReadiness().trialReady) {
+    return NextResponse.json(
+      { ok: false, error: trialConfigReadiness().trialUnavailableReason },
+      { status: 409 },
+    );
+  }
+  if (action === "start_live" && !trialConfigReadiness().trialReady) {
     return NextResponse.json(
       { ok: false, error: trialConfigReadiness().trialUnavailableReason },
       { status: 409 },
@@ -200,6 +228,13 @@ export async function POST(req: NextRequest) {
             requiresRelay: true,
              ...(requestedScope !== undefined ? { scope: requestedScope } : {}),
           })
+        : action === "start_live"
+          ? await deps.startProtractorLive({
+              changedBy: operator,
+              reason: reason!,
+              expectedStopId: expectedStopId!,
+              workersSuspendedConfirmed: true,
+            })
       : await deps.clearProtractorOperatorStop({
           changedBy: operator,
           reason: reason!,
@@ -219,6 +254,8 @@ export async function POST(req: NextRequest) {
       ? "protractor_operator_stop_activated"
       : action === "start_trial"
         ? "protractor_timed_trial_started"
+        : action === "start_live"
+          ? "protractor_continuous_live_started"
         : "protractor_operator_stop_cleared",
     adminEmail: operator,
     details: {
@@ -226,7 +263,7 @@ export async function POST(req: NextRequest) {
       via: "platform_admin_session",
       state,
       canary: state.canary,
-      ...(action === "start_trial" ? { workersSuspendedConfirmed: true } : {}),
+      ...((action === "start_trial" || action === "start_live") ? { workersSuspendedConfirmed: true } : {}),
     },
     ipAddress: req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || undefined,
     userAgent: req.headers.get("user-agent") || undefined,

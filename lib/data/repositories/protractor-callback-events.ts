@@ -276,17 +276,23 @@ export async function admitGetEvent(
 export async function claimCallbackEvent(
   key: CallbackEventKey,
   identity: CallbackAdmissionIdentity,
+  receivedNotBefore?: Date,
 ): Promise<string | null> {
   if (isProtractorOpsPgCanonical()) {
-    return pg.claimCallbackEvent(key, identity, ADMISSION_LEASE_MS);
+    return pg.claimCallbackEvent(key, identity, ADMISSION_LEASE_MS, receivedNotBefore);
   }
   const events = await collection();
+  const validReceivedNotBefore =
+    receivedNotBefore instanceof Date && Number.isFinite(receivedNotBefore.getTime())
+      ? receivedNotBefore
+      : undefined;
   const objectFilter = {
     shopId: { $in: [identity.shopId, String(identity.shopId)] },
     objectType: identity.objectType,
     objectId: identity.objectId,
     processed: false,
     ...mongoReplayCandidateFilter(),
+    ...(validReceivedNotBefore ? { receivedAt: { $gte: validReceivedNotBefore } } : {}),
   };
   const terminal = /^(DELETE|INVOICED|INVOICE|CLOSED|VOID)$/i;
   const terminalWinner = await events.find({
@@ -468,9 +474,17 @@ export async function completeCallbackGeneration(
   ownerToken: string,
   ownerReceivedAt: Date,
   outcome: CallbackHistoryOutcome = DEFAULT_CALLBACK_HISTORY_OUTCOME,
+  /**
+   * An activation's persisted callback floor.  A winner from a new
+   * generation must never mark older, deliberately-held callbacks completed
+   * merely because they share the same object identity.
+   */
+  coalesceNotBefore?: Date,
 ): Promise<boolean> {
   if (isProtractorOpsPgCanonical()) {
-    return pg.completeCallbackGeneration(key, identity, ownerToken, ownerReceivedAt, outcome);
+    return pg.completeCallbackGeneration(
+      key, identity, ownerToken, ownerReceivedAt, outcome, coalesceNotBefore,
+    );
   }
   const ownerOutcome = normalizeCallbackHistoryOutcome(outcome);
   const coalescedOutcome: CallbackHistoryOutcome = {
@@ -478,11 +492,18 @@ export async function completeCallbackGeneration(
     reason: "superseded",
   };
   const terminalOps = /^(DELETE|INVOICED|INVOICE|CLOSED|VOID)$/i;
+  const validCoalesceNotBefore =
+    coalesceNotBefore instanceof Date && Number.isFinite(coalesceNotBefore.getTime())
+      ? coalesceNotBefore
+      : undefined;
   const sibling = {
     shopId: { $in: [identity.shopId, String(identity.shopId)] },
     objectType: identity.objectType,
     objectId: identity.objectId,
-    receivedAt: { $lte: ownerReceivedAt },
+    receivedAt: {
+      $lte: ownerReceivedAt,
+      ...(validCoalesceNotBefore ? { $gte: validCoalesceNotBefore } : {}),
+    },
     ...(identity.terminal ? {} : {
       $nor: [
         { operation: { $regex: terminalOps } },

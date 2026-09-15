@@ -825,6 +825,16 @@ export function getProtractorOutboundPolicy() {
   return evaluateProtractorOutboundPolicy(process.env, __protractorClientTestHooks.now());
 }
 
+/** Queue admission uses this before it claims durable callback work. */
+export function isProtractorRelayTransportConfigured(): boolean {
+  try {
+    assertProtractorRelayConfigured(readProtractorRelayConfig());
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function asFiniteDate(value: unknown): Date | null {
   if (!(value instanceof Date) || !Number.isFinite(value.getTime())) return null;
   return new Date(value.getTime());
@@ -837,21 +847,24 @@ function asFiniteDate(value: unknown): Date | null {
  * lives in Mongo and the physical lease confirmation is the final, atomic
  * authority. The queue still needs the persisted activation timestamp to
  * exclude events that predate the trial, so only this mode performs the
- * operator-stop read.
+ * operator-stop read. A persisted continuous generation uses the same staged
+ * safety flags as a timed trial, but intentionally has no wall-clock expiry.
  */
 export async function getEffectiveProtractorOutboundPolicy(): Promise<EffectiveProtractorOutboundPolicy> {
   const policy = getProtractorOutboundPolicy();
   if (!policy.allowed) return policy;
 
-  // A shared Mongo trial is authoritative even when this process did not
-  // receive the corresponding staging env flag.  Avoid a read for ordinary
-  // unscoped traffic (which preserves the legacy hot path), but always resolve
-  // it for callback/interactive admissions where a timed trial could consume
-  // the shared physical budget.
+  // A shared activation is authoritative even when a replica did not receive
+  // the corresponding staging flag. Callback-queue admission must therefore
+  // resolve the record on an otherwise unconfigured replica; otherwise it
+  // could accidentally dispatch direct traffic while another replica has a
+  // relay-only live generation. A legacy explicit replay floor remains a
+  // self-contained local safety policy and does not need this new state read.
+  const hasStandaloneReplayFloor =
+    policy.requireTimedTrial !== true &&
+    policy.callbackNotBeforeMs != null;
   const shouldReadSharedTrial =
-    policy.requireTimedTrial === true ||
-    callbackTransportStorage.getStore() !== undefined ||
-    getProtractorInteractiveTransportContext() !== undefined;
+    !hasStandaloneReplayFloor;
   if (!shouldReadSharedTrial) return policy;
 
   let stop: any;
@@ -869,7 +882,7 @@ export async function getEffectiveProtractorOutboundPolicy(): Promise<EffectiveP
   const startedAt = asFiniteDate(trial?.startedAt);
   const expiresAt = asFiniteDate(trial?.expiresAt);
   const nowMs = __protractorClientTestHooks.now();
-  const live =
+  const timedTrialLive =
     stop?.active !== true &&
     trial?.mode === "timed_trial" &&
     typeof trial?.generation === "string" &&
@@ -882,12 +895,39 @@ export async function getEffectiveProtractorOutboundPolicy(): Promise<EffectiveP
     trial?.endedAt == null &&
     trial?.maxAdmissions === null &&
     trial?.remainingAdmissions === null;
+  const continuousLive =
+    stop?.active === false &&
+    trial?.mode === "live" &&
+    typeof trial?.generation === "string" &&
+    trial.generation.trim().length > 0 &&
+    startedAt !== null &&
+    startedAt.getTime() <= nowMs &&
+    // Continuous mode must not accept an inherited/stale timed expiry.
+    trial?.expiresAt === undefined &&
+    trial?.endedBy === undefined &&
+    trial?.endedAt === undefined &&
+    trial?.maxAdmissions === null &&
+    trial?.remainingAdmissions === null &&
+    typeof trial?.consumedAdmissions === "number" &&
+    Number.isSafeInteger(trial.consumedAdmissions) &&
+    trial.consumedAdmissions >= 0 &&
+    Array.isArray(trial?.audit) &&
+    (trial?.auditTruncatedAdmissions === undefined || (
+      typeof trial.auditTruncatedAdmissions === "number" &&
+      Number.isSafeInteger(trial.auditTruncatedAdmissions) &&
+      trial.auditTruncatedAdmissions >= 0
+    )) &&
+    trial?.scope === "callbacks_and_interactive" &&
+    trial?.requiresCallback === false &&
+    trial?.requiresRelay === true &&
+    trial?.workersSuspendedConfirmed === true;
+  const live = timedTrialLive || continuousLive;
 
   if (!live) {
-    // An invalid/expired timed-trial generation must not be reinterpreted as
-    // unrestricted local traffic. Timed trials are relay-only even when this
-    // record predates the requiresRelay field.
-    if (trial?.mode === "timed_trial") {
+    // Invalid/terminal staged generations must not be reinterpreted as
+    // unrestricted local traffic. Timed trials and continuous live mode are
+    // relay-only, and an absent expiry is valid only for the exact live shape.
+    if (trial?.mode === "timed_trial" || trial?.mode === "live") {
       return {
         ...policy,
         allowed: false,
@@ -910,9 +950,11 @@ export async function getEffectiveProtractorOutboundPolicy(): Promise<EffectiveP
   const scope = trial?.scope === undefined ? "callbacks" : trial.scope;
   const requiresCallback =
     trial?.requiresCallback === undefined ? true : trial.requiresCallback;
-  const validScope =
-    (scope === "callbacks" && requiresCallback === true) ||
-    (scope === "callbacks_and_interactive" && requiresCallback === false);
+  const validScope = trial?.mode === "live"
+    ? scope === "callbacks_and_interactive" && requiresCallback === false &&
+      trial?.requiresRelay === true && trial?.workersSuspendedConfirmed === true
+    : (scope === "callbacks" && requiresCallback === true) ||
+      (scope === "callbacks_and_interactive" && requiresCallback === false);
   if (!validScope) {
     return {
       ...policy,
@@ -925,7 +967,8 @@ export async function getEffectiveProtractorOutboundPolicy(): Promise<EffectiveP
     ...policy,
     callbackNotBeforeMs: startedAt!.getTime(),
     relayRequired: policy.requireTimedTrial === true ||
-      trial?.mode === "timed_trial",
+      trial?.mode === "timed_trial" ||
+      trial?.mode === "live",
     // callbackOnly intentionally remains true in the broad mode: interactive
     // transport is admitted only from the dedicated shop-bound ALS context.
     allowInteractive: scope === "callbacks_and_interactive" &&

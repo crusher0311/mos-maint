@@ -43,6 +43,19 @@ floor from activation and never extend or reopen a terminal generation.
 Worker suspension is an operator attestation in the UI, not an independently
 verified service-state check.
 
+Continuous reopening is deliberately limited to new callbacks and authenticated
+customer-facing activity, not bulk recovery or unattended synchronization.
+
+**Why:** The relay trial established transport viability but left substantial
+untouched callback history. Combining the transition to continuous service with
+historical replay or worker resumption would introduce unmeasured load and obscure
+whether everyday traffic is healthy.
+
+**How to apply:** Require a new, explicitly approved generation from an armed stop
+and preserve earlier audit history. Treat old-backlog recovery and worker resumption
+as separate operational decisions. Apply the activation floor throughout callback
+selection, claiming, and sibling completion—not just initial selection.
+
 Foreground admission must be bound to the authenticated target shop and close
 when the awaited request ends. Priority/retry flags are not proof of foreground
 activity; helpers using them may also be invoked by cron jobs.

@@ -2,6 +2,7 @@ import type { Db } from "mongodb";
 import * as callbackEvents from "@/lib/data/repositories/protractor-callback-events";
 import {
   getEffectiveProtractorOutboundPolicy,
+  isProtractorRelayTransportConfigured,
   runWithProtractorCallbackTransport,
 } from "./client";
 import { logProtractorPolicyDenial } from "./outbound-policy.cjs";
@@ -102,6 +103,17 @@ export async function processProtractorCallbackQueue(
     logProtractorPolicyDenial(outboundPolicy, "protractor_callback_queue");
     return { processed: 0, failed: 0 };
   }
+  // Do not claim/retry callback rows on a replica that cannot satisfy a
+  // shared relay-only generation. Physical dispatch independently verifies
+  // the same invariant, but queue admission must not create partial durable
+  // work while another replica is live.
+  if (outboundPolicy.relayRequired === true && !isProtractorRelayTransportConfigured()) {
+    logProtractorPolicyDenial(
+      { ...outboundPolicy, allowed: false, reason: "relay_required_unavailable" },
+      "protractor_callback_queue",
+    );
+    return { processed: 0, failed: 0 };
+  }
   const limit = Math.min(options.limit ?? 45, 45);
   const candidates = await callbackEvents.findPendingGetEvents(
     Math.min(5000, Math.max(limit * CALLBACK_CANDIDATE_MULTIPLIER, limit * 100)),
@@ -155,7 +167,13 @@ export async function processProtractorCallbackQueue(
     let returnedOutcome: CallbackHistoryOutcome | void = undefined;
     try {
       if (identity) {
-        ownerToken = await callbackEvents.claimCallbackEvent(item.key, identity);
+        ownerToken = await callbackEvents.claimCallbackEvent(
+          item.key,
+          identity,
+          outboundPolicy.callbackNotBeforeMs != null
+            ? new Date(outboundPolicy.callbackNotBeforeMs)
+            : undefined,
+        );
         admitted = ownerToken !== null;
         if (!admitted) continue;
       }
@@ -204,7 +222,9 @@ export async function processProtractorCallbackQueue(
         terminal: isTerminal(item),
       }, ownerToken, item.receivedAt ?? new Date(0), returnedOutcome || {
         category: "deferred", reason: "unverified",
-      });
+      }, outboundPolicy.callbackNotBeforeMs != null
+        ? new Date(outboundPolicy.callbackNotBeforeMs)
+        : undefined);
       if (!completed) throw new Error("Callback completion fence rejected stale owner");
       await callbackEvents.markCallbackShopSuccessfullyServed(shopId, item.key);
       processed++;
