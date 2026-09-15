@@ -50,3 +50,15 @@ Contacts and exhausted retries from actionable work. Count unique objects as
 well as notifications, and distinguish owner completion from coalesced siblings.
 Use stage timing to establish the expensive operation before tuning capacity;
 source-code fanout alone is a hypothesis, not measured causation.
+
+Do not interpret a PG miss followed by Mongo fallback as proof of migration
+drift. First-time normalization also misses both stores before creating both.
+
+**Why:** A bounded production comparison found matching PG/Mongo identities,
+with many rows created during callback processing. The Mongo fallback's
+query planner chose a shop/vehicle index bounded only by shop, despite an
+existing compound provider-identity index.
+
+**How to apply:** Compare creation times and matching keys before scheduling a
+backfill. Inspect the actual fallback query plan and all compound-index
+prefix predicates before adding an index or retiring recovery behavior.
