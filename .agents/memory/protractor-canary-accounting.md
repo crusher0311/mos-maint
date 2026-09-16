@@ -26,6 +26,18 @@ Count physical admission at the Mongo confirmation, never from runtime logs. Do 
 
 **How to apply:** Preserve conservative accounting across retries and failures. Keep terminal causes immutable, use Mongo time at the write boundary, and keep the physical safety record outside rate-limit TTL deletion. Legacy traffic without a canary remains compatible; a completed canary never silently becomes unrestricted traffic.
 
+Do not use successful HTTP-response telemetry as a complete transport-error
+census. Reconcile it with no-response relay errors and local admission failures.
+
+**Why:** A production audit found relay `upstream_error` events after the live
+deployment that were absent from the response-based API usage totals. Build
+smoke tests also emitted realistic error markers without reliable build labels.
+
+**How to apply:** Report completed HTTP responses, relay transport errors, and
+local pacer deferrals separately; never add them as independent requests without
+correlation. Isolate deployment-window test noise before reporting provider
+failures, and do not equate `upstream_error` with a proven provider outage.
+
 Treat a timed live trial as distinct from a small request-budget canary. Its
 observation clock starts at the operator's activation, not at build/deploy time,
 and it deliberately tests sustained organic callbacks without a request cap.
