@@ -57,6 +57,74 @@ export async function getCallbackQueueDb() {
   return getDb();
 }
 const ADMISSION_LEASE_MS = 10 * 60 * 1000;
+const RECOVERY_PRIORITIES = [0, 1] as const;
+const RECOVERY_METHODS = ["GET", "POST"] as const;
+const RECOVERY_CURSOR_PREFIX = "protractor_callback_recovery_cursor";
+type MongoRecoveryCursor = {
+  method: "GET" | "POST";
+  priority: 0 | 1;
+  receivedAt: Date;
+  id: ObjectId;
+  floorMs: number | null;
+};
+type MongoRecoveryCursorState = { cursor: MongoRecoveryCursor | null; revision: number };
+
+function recoveryCursorDocumentId(store: "mongo" | "pg", floorMs: number | null): string {
+  return `${RECOVERY_CURSOR_PREFIX}:${store}:${floorMs ?? "none"}`;
+}
+
+async function readMongoRecoveryCursor(floorMs: number | null): Promise<MongoRecoveryCursorState> {
+  const db = await getDb();
+  const doc = await db.collection<Document>("protractor_callback_fairness").findOne({
+    _id: recoveryCursorDocumentId("mongo", floorMs),
+  } as Document);
+  const cursor = doc?.callbackRecoveryCursor as Partial<MongoRecoveryCursor> | undefined;
+  const validCursor = cursor?.id instanceof ObjectId &&
+    (cursor.method === "GET" || cursor.method === "POST") &&
+    (cursor.priority === 0 || cursor.priority === 1) &&
+    cursor.receivedAt instanceof Date &&
+    cursor.floorMs === floorMs
+    ? cursor as MongoRecoveryCursor
+    : null;
+  return {
+    cursor: validCursor,
+    revision: typeof doc?.callbackRecoveryCursorRevision === "number"
+      ? doc.callbackRecoveryCursorRevision
+      : 0,
+  };
+}
+
+async function writeMongoRecoveryCursor(
+  cursor: MongoRecoveryCursor | null,
+  floorMs: number | null,
+  revision: number,
+): Promise<boolean> {
+  const db = await getDb();
+  try {
+    const result = await db.collection<Document>("protractor_callback_fairness").updateOne(
+      {
+        _id: recoveryCursorDocumentId("mongo", floorMs),
+        ...(revision === 0
+          ? { $or: [
+              { callbackRecoveryCursorRevision: { $exists: false } },
+              { callbackRecoveryCursorRevision: 0 },
+            ] }
+          : { callbackRecoveryCursorRevision: revision }),
+      } as Document,
+      {
+        $set: { callbackRecoveryCursor: cursor, updatedAt: new Date() },
+        $inc: { callbackRecoveryCursorRevision: 1 },
+      },
+      { upsert: revision === 0 },
+    );
+    return result.matchedCount === 1 || result.upsertedCount === 1;
+  } catch (error: any) {
+    // A simultaneous missing-document initializer can raise duplicate _id.
+    // Treat it exactly as a CAS loss; fresh work must continue.
+    if (error?.code === 11000 || /duplicate key/i.test(String(error?.message))) return false;
+    throw error;
+  }
+}
 
 /** Opaque per-event key: ObjectId hex (Mongo mode) or UUID (PG mode). */
 export type CallbackEventKey = string;
@@ -1158,6 +1226,11 @@ export interface PendingGetEvent {
   terminalFromCoalesce?: boolean;
   /** Raw Mongo terminal classification retained through POST normalization. */
   terminalRank?: 0 | 1;
+  /**
+   * A bounded oldest-first read kept separately from the normal newest window.
+   * This is advisory scheduling metadata only; durable claim remains authority.
+   */
+  selectionLane?: "fresh" | "recovery";
 }
 
 async function rotatePendingByFleetCursor(
@@ -1207,9 +1280,15 @@ export async function findPendingGetEvents(
   maxAttempts: number,
   servedShopBudget = limit,
   receivedNotBefore?: Date,
+  recoveryLimit = 0,
 ): Promise<PendingGetEvent[]> {
   if (isProtractorOpsPgCanonical()) {
-    const rows = await pg.findPendingGetEvents(limit, maxAttempts, receivedNotBefore);
+    const rows = await pg.findPendingGetEvents(
+      limit,
+      maxAttempts,
+      receivedNotBefore,
+      recoveryLimit,
+    );
     return rotatePendingByFleetCursor(rows.map((r) => ({
       key: r.eventKey,
       method: r.method,
@@ -1224,13 +1303,18 @@ export async function findPendingGetEvents(
       winnerTieBreaker: r.winnerTieBreaker,
       terminalFromCoalesce: r.terminalFromCoalesce,
       terminalRank: r.terminalRank,
+      ...(recoveryLimit > 0 && r.selectionLane ? { selectionLane: r.selectionLane } : {}),
     })), servedShopBudget);
   }
   const col = await collection();
+  const validReceivedNotBefore =
+    receivedNotBefore instanceof Date && Number.isFinite(receivedNotBefore.getTime())
+      ? receivedNotBefore
+      : undefined;
   const matchBase = {
     method: { $in: ["GET", "POST"] },
     processed: false,
-    ...(receivedNotBefore ? { receivedAt: { $gte: receivedNotBefore } } : {}),
+    ...(validReceivedNotBefore ? { receivedAt: { $gte: validReceivedNotBefore } } : {}),
     $and: [
       {
         $or: [{ attempts: { $exists: false } }, { attempts: { $lt: maxAttempts } }],
@@ -1241,20 +1325,113 @@ export async function findPendingGetEvents(
   // Keep retrieval bounded to the newest indexed callback window. Fleet
   // fairness and generation coalescing happen in memory over this oversized
   // window; do not rank the entire historical queue on every minute tick.
-  const fetchPriority = (priority: number, rowLimit: number) => col.find(
+  const fetchPriority = (
+    priority: number,
+    rowLimit: number,
+    direction: 1 | -1 = -1,
+  ) => col.find(
     { ...matchBase, priority },
     {
       hint: "method_1_processed_1_priority_1_receivedAt_1",
       maxTimeMS: 5_000,
     },
-  ).sort({ receivedAt: -1 }).limit(rowLimit).toArray();
+  ).sort({ receivedAt: direction }).limit(rowLimit).toArray();
   // Callback writers use priority 1; priority 0 is the supported urgent lane.
   // Missing or unknown priorities are intentionally not replayed by this
   // rollout path because they do not satisfy the current queue contract.
   const urgent = await fetchPriority(0, limit);
   const normal = urgent.length >= limit ? [] : await fetchPriority(1, limit - urgent.length);
-  const docs = [...urgent, ...normal];
-  return rotatePendingByFleetCursor(docs.map((d) => ({
+  const freshKeys = new Set([...urgent, ...normal].map((d) => String(d._id)));
+  /*
+   * The live queue index orders the equality prefix
+   * (method, processed, priority) by receivedAt. Exact method/priority
+   * streams traverse that same index oldest-first; do not predicate on
+   * attempts/processingStartedAt, for which production has no queue index.
+   * It intentionally includes safety-boundary rows as well as ordinary
+   * failed attempts and is filtered by the normal retry/contact/floor guards.
+   */
+  const recoveryFloorMs = validReceivedNotBefore?.getTime() ?? null;
+  const fetchRecoveryPage = async (): Promise<Document[]> => {
+    if (recoveryLimit <= 0) return [];
+    const cursorState = await readMongoRecoveryCursor(recoveryFloorMs);
+    let cursor = cursorState.cursor;
+    let revision = cursorState.revision;
+    const rawBase = {
+      method: { $in: RECOVERY_METHODS },
+      processed: false,
+      ...(validReceivedNotBefore ? { receivedAt: { $gte: validReceivedNotBefore } } : {}),
+    };
+    const replayableRaw = (doc: Document): boolean =>
+      (doc.attempts === undefined || (typeof doc.attempts === "number" && doc.attempts < maxAttempts)) &&
+      doc.historyOutcome?.reason !== UNSUPPORTED_CONTACT_REASON;
+    // Four raw pages is a fixed per-invocation bound. Keep reading the same
+    // stream after a rejected page so its cursor advances before moving on.
+    const streams = RECOVERY_PRIORITIES.flatMap((priority) =>
+      RECOVERY_METHODS.map((method) => ({ priority, method })));
+    let index = cursor
+      ? streams.findIndex((stream) =>
+          stream.priority === cursor!.priority && stream.method === cursor!.method)
+      : 0;
+    for (let reads = 0; reads < 4 && index >= 0 && index < streams.length;) {
+      const { priority, method } = streams[index];
+        const after = cursor?.priority === priority && cursor.method === method
+          ? {
+              $or: [
+                { receivedAt: { $gt: cursor.receivedAt } },
+                { receivedAt: cursor.receivedAt, _id: { $gt: cursor.id } },
+              ],
+            }
+          : {};
+        const page = await col.find(
+          { ...rawBase, method, priority, ...after },
+          {
+            hint: "method_1_processed_1_priority_1_receivedAt_1",
+            maxTimeMS: 5_000,
+          },
+        /*
+         * `_id` makes the persisted keyset total. The deployed index ends at
+         * receivedAt, so this bounded 270-result tie sort may need an
+         * in-memory DB sort; maxTimeMS keeps that index gap fail-closed.
+         */
+        ).sort({ receivedAt: 1, _id: 1 }).limit(recoveryLimit).toArray();
+      reads += 1;
+      if (page.length === 0) {
+        index += 1;
+        continue;
+      }
+        const last = page.at(-1)!;
+        cursor = {
+          method,
+          priority,
+          receivedAt: last.receivedAt as Date,
+          id: last._id as ObjectId,
+          floorMs: recoveryFloorMs,
+        };
+        if (!(await writeMongoRecoveryCursor(cursor, recoveryFloorMs, revision))) return [];
+        revision += 1;
+        const outsideFreshWindow = page.filter((doc) =>
+          replayableRaw(doc) && !freshKeys.has(String(doc._id)));
+      if (outsideFreshWindow.length > 0) return outsideFreshWindow;
+    }
+    if (index >= streams.length &&
+        !(await writeMongoRecoveryCursor(null, recoveryFloorMs, revision))) return [];
+    return [];
+  };
+  let recoveryDocs: Document[] = [];
+  try {
+    recoveryDocs = await fetchRecoveryPage();
+  } catch {
+    // Recovery is advisory. Preserve the already-bounded fresh window when
+    // its cursor metadata/read times out; do not emit callback identifiers.
+    console.warn("[ProtractorCallbackQueue] recovery lane unavailable");
+  }
+  const docs = [
+    ...[...urgent, ...normal].map((d) => ({ doc: d, selectionLane: "fresh" as const })),
+    ...recoveryDocs
+      .filter((d) => !freshKeys.has(String(d._id)))
+      .map((d) => ({ doc: d, selectionLane: "recovery" as const })),
+  ];
+  return rotatePendingByFleetCursor(docs.map(({ doc: d, selectionLane }) => ({
     key: (d._id as ObjectId).toHexString(),
     method: d.method as "GET" | "POST",
     shopId: d.shopId as number,
@@ -1267,6 +1444,7 @@ export async function findPendingGetEvents(
     receivedAt: d.receivedAt as Date | undefined,
     winnerTieBreaker: (d._id as ObjectId).toHexString(),
     terminalRank: mongoTerminalRank(d),
+    ...(recoveryLimit > 0 ? { selectionLane } : {}),
   })), servedShopBudget);
 }
 

@@ -21,6 +21,7 @@ type CallbackEvent = {
   objectId: string | null;
   operation: string | null;
   receivedAt: Date;
+  selectionLane?: "fresh" | "recovery";
 };
 
 type Doc = Record<string, any>;
@@ -751,6 +752,57 @@ async function runQueueAssertions(
   assert.deepEqual(releases, []);
 }
 
+async function runRecoveryLaneAssertions(
+  processProtractorCallbackQueue: (
+    db: any,
+    dispatch: (item: any) => Promise<any>,
+    options: any,
+  ) => Promise<{ processed: number; failed: number }>,
+): Promise<void> {
+  const recovery = {
+    ...event("recovery-expired-attempt", "wo-recovery"),
+    selectionLane: "recovery" as const,
+  };
+  const fresh = Array.from({ length: 45 }, (_, index) => ({
+    ...event(`fresh-${index}`, `wo-fresh-${index}`),
+    selectionLane: "fresh" as const,
+  }));
+  resetQueueState([recovery, ...fresh]);
+  for (const item of [recovery, ...fresh]) {
+    ownerTokens.set(item.key, `owner-${item.key}`);
+  }
+
+  assert.deepEqual(
+    await processProtractorCallbackQueue({}, dispatch, {
+      ...queueOptions(),
+      limit: 45,
+    }),
+    { processed: 45, failed: 0 },
+    "one recovery candidate and forty-four fresh candidates fit the hard cap",
+  );
+  assert.equal(
+    dispatches.some((item) => item.key === recovery.key),
+    true,
+    "the reserved recovery candidate survives fair preselection and final ordering",
+  );
+  assert.equal(
+    dispatches.filter((item) => item.selectionLane === "fresh").length,
+    44,
+    "recovery reserves one slot without consuming the fresh batch",
+  );
+  assert.equal(
+    dispatches.some((item) => item.key === fresh.at(-1)?.key),
+    false,
+    "the hard maximum remains forty-five physical callback admissions",
+  );
+  assert.equal(
+    claims[0]?.key,
+    recovery.key,
+    "recovery is admitted before fresh work so it cannot age out at the deadline",
+  );
+  assert.equal(selectionCalls[0]?.[4], 270, "queue requests one bounded recovery lane");
+}
+
 async function runPreAdmissionDeadlineAssertions(
   processProtractorCallbackQueue: (
     db: any,
@@ -1321,6 +1373,7 @@ async function main(): Promise<void> {
 
   try {
     await runQueueAssertions(processProtractorCallbackQueue);
+    await runRecoveryLaneAssertions(processProtractorCallbackQueue);
     await runPreAdmissionDeadlineAssertions(processProtractorCallbackQueue);
     await runDrainDeadlineAssertions(processProtractorCallbackDrain);
     await runDrainAssertions(processProtractorCallbackDrain);

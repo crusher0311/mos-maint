@@ -15,7 +15,9 @@
  * kill-switch flag.
  */
 import { and, asc, count, desc, eq, gte, inArray, isNotNull, lt, max, or, sql } from "drizzle-orm";
+import type { Document } from "mongodb";
 import { getDb } from "@/lib/db/drizzle";
+import { getDb as getMongoDb } from "@/lib/data/db";
 import { protractorCallbackEvents as t } from "@/lib/db/schema/wave3";
 import {
   DEFAULT_CALLBACK_HISTORY_OUTCOME,
@@ -34,6 +36,70 @@ const CALLBACK_OUTCOME_COALESCED: CallbackHistoryOutcome = {
   reason: "superseded",
 };
 const UNSUPPORTED_CONTACT_REASON = "unsupported_contact";
+const RECOVERY_PRIORITIES = [0, 1] as const;
+const RECOVERY_METHODS = ["GET", "POST"] as const;
+const RECOVERY_CURSOR_PREFIX = "protractor_callback_recovery_cursor";
+type PgRecoveryCursor = {
+  method: "GET" | "POST";
+  priority: 0 | 1;
+  receivedAt: Date;
+  id: number;
+  floorMs: number | null;
+};
+type PgRecoveryCursorState = { cursor: PgRecoveryCursor | null; revision: number };
+
+function recoveryCursorDocumentId(floorMs: number | null): string {
+  return `${RECOVERY_CURSOR_PREFIX}:pg:${floorMs ?? "none"}`;
+}
+
+async function readPgRecoveryCursor(floorMs: number | null): Promise<PgRecoveryCursorState> {
+  const doc = await (await getMongoDb()).collection<Document>("protractor_callback_fairness").findOne({
+    _id: recoveryCursorDocumentId(floorMs),
+  } as Document);
+  const cursor = doc?.callbackRecoveryCursor as Partial<PgRecoveryCursor> | undefined;
+  const validCursor = typeof cursor?.id === "number" &&
+    (cursor.method === "GET" || cursor.method === "POST") &&
+    (cursor.priority === 0 || cursor.priority === 1) &&
+    cursor.receivedAt instanceof Date &&
+    cursor.floorMs === floorMs
+    ? cursor as PgRecoveryCursor
+    : null;
+  return {
+    cursor: validCursor,
+    revision: typeof doc?.callbackRecoveryCursorRevision === "number"
+      ? doc.callbackRecoveryCursorRevision
+      : 0,
+  };
+}
+
+async function writePgRecoveryCursor(
+  cursor: PgRecoveryCursor | null,
+  floorMs: number | null,
+  revision: number,
+): Promise<boolean> {
+  try {
+    const result = await (await getMongoDb()).collection<Document>("protractor_callback_fairness").updateOne(
+      {
+        _id: recoveryCursorDocumentId(floorMs),
+        ...(revision === 0
+          ? { $or: [
+              { callbackRecoveryCursorRevision: { $exists: false } },
+              { callbackRecoveryCursorRevision: 0 },
+            ] }
+          : { callbackRecoveryCursorRevision: revision }),
+      } as Document,
+      {
+        $set: { callbackRecoveryCursor: cursor, updatedAt: new Date() },
+        $inc: { callbackRecoveryCursorRevision: 1 },
+      },
+      { upsert: revision === 0 },
+    );
+    return result.matchedCount === 1 || result.upsertedCount === 1;
+  } catch (error: any) {
+    if (error?.code === 11000 || /duplicate key/i.test(String(error?.message))) return false;
+    throw error;
+  }
+}
 
 export interface InsertPostEventFields {
   eventKey: string;
@@ -774,6 +840,7 @@ export interface PendingGetEvent {
   terminalFromCoalesce?: boolean;
   receivedAt: Date;
   winnerTieBreaker?: number;
+  selectionLane?: "fresh" | "recovery";
 }
 
 /** protractor-sync pre-sweep queue: unprocessed callback events under the attempt cap. */
@@ -781,43 +848,146 @@ export async function findPendingGetEvents(
   limit: number,
   maxAttempts: number,
   receivedNotBefore?: Date,
+  recoveryLimit = 0,
 ): Promise<PendingGetEvent[]> {
   const db = getDb();
-  const rows = await db
-    .select({
-      id: t.id,
-      eventKey: t.eventKey,
-      method: t.method,
-      shopId: t.shopId,
-      objectType: t.objectType,
-      objectId: t.objectId,
-      operation: t.operation,
-      status: t.status,
-      terminalRank: sql<number>`
-        CASE WHEN upper(coalesce(${t.operation}, ${t.status}, ''))
-          IN ('DELETE','INVOICED','INVOICE','CLOSED','VOID')
-        THEN 1 ELSE 0 END
-      `,
-      receivedAt: t.receivedAt,
-    })
+  const queueWhere = and(
+    or(eq(t.method, "GET"), eq(t.method, "POST")),
+    eq(t.processed, false),
+    isNotNull(t.eventKey),
+    or(sql`${t.attempts} IS NULL`, lt(t.attempts, maxAttempts)),
+    replayCandidateWhere(),
+    receivedNotBefore ? gte(t.receivedAt, receivedNotBefore) : undefined,
+  );
+  const fields = {
+    id: t.id,
+    eventKey: t.eventKey,
+    method: t.method,
+    shopId: t.shopId,
+    objectType: t.objectType,
+    objectId: t.objectId,
+    operation: t.operation,
+    status: t.status,
+    terminalRank: sql<number>`
+      CASE WHEN upper(coalesce(${t.operation}, ${t.status}, ''))
+        IN ('DELETE','INVOICED','INVOICE','CLOSED','VOID')
+      THEN 1 ELSE 0 END
+    `,
+    receivedAt: t.receivedAt,
+    attempts: t.attempts,
+    recoveryOutcomeReason: sql<string | null>`${t.payload} -> 'historyOutcome' ->> 'reason'`,
+  };
+  const freshRows = await db
+    .select(fields)
     .from(t)
-    .where(
-      and(
-        or(eq(t.method, "GET"), eq(t.method, "POST")),
-        eq(t.processed, false),
-        isNotNull(t.eventKey),
-        or(sql`${t.attempts} IS NULL`, lt(t.attempts, maxAttempts)),
-        replayCandidateWhere(),
-        receivedNotBefore ? gte(t.receivedAt, receivedNotBefore) : undefined,
-      ),
-    )
+    .where(queueWhere)
     .orderBy(
       asc(t.priority),
       desc(t.receivedAt),
       desc(t.id),
     )
     .limit(limit);
-  return rows.map((r) => ({
+  const freshKeys = new Set(freshRows.map((r) => r.eventKey));
+  const recoveryRawWhere = and(
+    or(eq(t.method, "GET"), eq(t.method, "POST")),
+    eq(t.processed, false),
+    isNotNull(t.eventKey),
+    receivedNotBefore ? gte(t.receivedAt, receivedNotBefore) : undefined,
+  );
+  const readRecoveryStream = async (
+    method: "GET" | "POST",
+    priority: 0 | 1,
+    cursor: PgRecoveryCursor | null,
+  ) => db.transaction(async (tx) => {
+    // Recovery is advisory; do not let a missing receivedAt/id tie index
+    // consume the callback drain's 40-second admission budget.
+    await tx.execute(sql`SET LOCAL statement_timeout = '5000ms'`);
+    return tx
+      .select(fields)
+      .from(t)
+      .where(and(
+        recoveryRawWhere,
+        eq(t.method, method),
+        eq(t.priority, priority),
+        cursor?.priority === priority && cursor.method === method
+          ? or(
+              sql`${t.receivedAt} > ${cursor.receivedAt}`,
+              and(eq(t.receivedAt, cursor.receivedAt), sql`${t.id} > ${cursor.id}`),
+            )
+          : undefined,
+      ))
+      .orderBy(asc(t.receivedAt), asc(t.id))
+      .limit(recoveryLimit);
+  });
+  /*
+   * Exact method/priority streams use the existing pending queue index
+   * oldest-first. There is intentionally no attempts/stale-lease predicate:
+   * no such production index exists. Retry/contact eligibility is applied
+   * only after each raw page advances the persisted cursor.
+   */
+  const recoveryFloorMs = receivedNotBefore instanceof Date &&
+    Number.isFinite(receivedNotBefore.getTime())
+    ? receivedNotBefore.getTime()
+    : null;
+  const fetchRecoveryPage = async () => {
+    if (recoveryLimit <= 0) return [] as typeof freshRows;
+    const cursorState = await readPgRecoveryCursor(recoveryFloorMs);
+    let cursor = cursorState.cursor;
+    let revision = cursorState.revision;
+    // Match Mongo's fixed raw-page bound and consume rejected pages from the
+    // same stream before moving to the next method/priority stream.
+    const streams = RECOVERY_PRIORITIES.flatMap((priority) =>
+      RECOVERY_METHODS.map((method) => ({ priority, method })));
+    let index = cursor
+      ? streams.findIndex((stream) =>
+          stream.priority === cursor!.priority && stream.method === cursor!.method)
+      : 0;
+    for (let reads = 0; reads < 4 && index >= 0 && index < streams.length;) {
+      const { priority, method } = streams[index];
+        const page = await readRecoveryStream(method, priority, cursor);
+      reads += 1;
+      if (page.length === 0) {
+        index += 1;
+        continue;
+      }
+        const last = page.at(-1)!;
+        cursor = {
+          method,
+          priority,
+          receivedAt: last.receivedAt,
+          id: last.id,
+          floorMs: recoveryFloorMs,
+        };
+        if (!(await writePgRecoveryCursor(cursor, recoveryFloorMs, revision))) return [] as typeof freshRows;
+        revision += 1;
+        const outsideFreshWindow = page.filter((row) =>
+          (row.attempts == null || row.attempts < maxAttempts) &&
+          row.recoveryOutcomeReason !== UNSUPPORTED_CONTACT_REASON &&
+          !freshKeys.has(row.eventKey));
+      if (outsideFreshWindow.length > 0) return outsideFreshWindow;
+    }
+    if (index >= streams.length &&
+        !(await writePgRecoveryCursor(null, recoveryFloorMs, revision))) return [] as typeof freshRows;
+    return [] as typeof freshRows;
+  };
+  let recoveryRows: typeof freshRows = [];
+  try {
+    recoveryRows = await fetchRecoveryPage();
+  } catch {
+    // The fresh bounded query has already completed. Recovery metadata/read
+    // failure must not abort provider work or expose a callback identifier.
+    console.warn("[ProtractorCallbackQueue] recovery lane unavailable");
+  }
+  const rows = [
+    ...freshRows.map((row) => ({
+      ...row,
+      ...(recoveryLimit > 0 ? { selectionLane: "fresh" as const } : {}),
+    })),
+    ...recoveryRows
+      .filter((row) => !freshKeys.has(row.eventKey))
+      .map((row) => ({ ...row, selectionLane: "recovery" as const })),
+  ];
+  return rows.map(({ attempts: _attempts, recoveryOutcomeReason: _reason, ...r }) => ({
     ...r,
     eventKey: r.eventKey as string,
     method: r.method as "GET" | "POST",

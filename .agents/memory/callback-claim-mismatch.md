@@ -52,3 +52,15 @@ admission blocker; candidate starvation prevented another attempt.
 older-work recovery proposal must retain the activation floor, retry limits,
 terminal precedence, and physical request budget rather than simply clearing
 leases or increasing runtime.
+
+Older-work recovery must advance through raw pages before eligibility/authority
+filtering, and preserve its position across deployments with fenced cursor writes.
+
+**Why:** A fixed oldest page can be filled by siblings blocked by exhausted
+terminal winners, while a process-local cursor restarts at that prefix on every
+deploy. Unconditional shared-cursor updates let a delayed worker overwrite newer
+progress. None of these problems is fixed by the callback's provider-work lease.
+
+**How to apply:** Keep recovery scheduling separate from callback state. Scope
+cursor metadata to the backend and activation floor, use compare-and-set for
+advancement and wrap, and retain exact terminal-authority checks at claim time.

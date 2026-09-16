@@ -18,6 +18,8 @@ import {
 } from "./callback-timing";
 
 const CALLBACK_CANDIDATE_MULTIPLIER = 10;
+const CALLBACK_RECOVERY_CANDIDATE_LIMIT = 270;
+const CALLBACK_RECOVERY_RESERVED_SLOTS = 1;
 function eventTime(item: callbackEvents.PendingGetEvent): number {
   return item.receivedAt?.getTime() ?? 0;
 }
@@ -143,26 +145,54 @@ export async function processProtractorCallbackQueue(
         outboundPolicy.callbackNotBeforeMs != null
           ? new Date(outboundPolicy.callbackNotBeforeMs)
           : undefined,
+        CALLBACK_RECOVERY_CANDIDATE_LIMIT,
       );
       // Query exact authoritative winners only for a fixed fair subset, not
       // for all 4,500 candidates. A rejected/exhausted winner is removed
       // before the final 45 are chosen; no callback row is changed here.
-      const preselection = selectFairCallbackBatch(
-        candidates,
-        Math.min(candidates.length, limit * 6),
+      const freshCandidates = candidates.filter((item) => item.selectionLane !== "recovery");
+      const recoveryCandidates = candidates.filter((item) => item.selectionLane === "recovery");
+      // Keep the oldest-first lane distinct through both fair selections. A
+      // single reserved slot gives an expired/previously-attempted callback a
+      // bounded path to durable admission while retaining forty-four of forty-
+      // five slots for fresh work.
+      const freshPreselection = selectFairCallbackBatch(
+        freshCandidates,
+        Math.min(freshCandidates.length, limit * 6),
+      );
+      const recoveryPreselection = selectFairCallbackBatch(
+        recoveryCandidates,
+        Math.min(recoveryCandidates.length, CALLBACK_RECOVERY_CANDIDATE_LIMIT),
       );
       const authorityFiltered = await callbackEvents.filterPendingCallbackCandidatesByAuthority(
-        preselection.selected,
+        [...freshPreselection.selected, ...recoveryPreselection.selected],
         outboundPolicy.callbackNotBeforeMs != null
           ? new Date(outboundPolicy.callbackNotBeforeMs)
           : undefined,
       );
-      const selection = selectFairCallbackBatch(authorityFiltered, limit);
+      const recoveredKeys = new Set(recoveryPreselection.selected.map((item) => item.key));
+      const recoveryAuthority = authorityFiltered.filter((item) => recoveredKeys.has(item.key));
+      const freshAuthority = authorityFiltered.filter((item) => !recoveredKeys.has(item.key));
+      const recoverySelection = selectFairCallbackBatch(
+        recoveryAuthority,
+        Math.min(CALLBACK_RECOVERY_RESERVED_SLOTS, limit),
+      );
+      const freshSelection = selectFairCallbackBatch(
+        freshAuthority,
+        limit - recoverySelection.selected.length,
+      );
+      const selection = {
+        selected: [...recoverySelection.selected, ...freshSelection.selected],
+        coalesced: [...recoverySelection.coalesced, ...freshSelection.coalesced],
+      };
       candidateCount = candidates.length;
       selectedCount = selection.selected.length;
       // This is only the in-memory duplicate collapse performed while
       // selecting the batch; it is not durable coalescing.
-      selectionCollapsedCount = preselection.coalesced.length + selection.coalesced.length;
+      selectionCollapsedCount =
+        freshPreselection.coalesced.length +
+        recoveryPreselection.coalesced.length +
+        selection.coalesced.length;
       emitCallbackStageTiming(
         "selection",
         Date.now() - selectionStartedAt,
