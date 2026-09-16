@@ -64,3 +64,27 @@ progress. None of these problems is fixed by the callback's provider-work lease.
 **How to apply:** Keep recovery scheduling separate from callback state. Scope
 cursor metadata to the backend and activation floor, use compare-and-set for
 advancement and wrap, and retain exact terminal-authority checks at claim time.
+
+Judge recovery progress against the cursor's position, not just a fixed
+post-deployment observation window.
+
+**Why:** Thirty minutes of unchanged target callbacks initially looked like a
+failed fix, but the durable cursor had advanced through older notifications and
+had not yet reached those targets. Recovery reads were succeeding.
+
+**How to apply:** Compare cursor method/priority and received-time position with
+the target's stream and timestamp; check recovery warnings before concluding
+the lane is stuck. Cursor advancement alone does not prove a target was retried.
+
+Recovery pagination must retain eligible work that exceeds the dispatch quota;
+advancing a raw page is not equivalent to offering all of its winners for retry.
+
+**Why:** Production advanced beyond two eligible, expired-lease updates without
+retrying either. Reading 270 rows while reserving only one recovery slot left
+unselected winners behind the persisted cursor for another full traversal.
+Earlier checks proved cursor progress, not successful recovery.
+
+**How to apply:** Carry unselected eligible winners forward separately from raw
+scan progress, with bounded storage and concurrency fencing. Still advance past
+ineligible or authority-blocked rows, and test more eligible winners than the
+per-batch recovery quota across successive invocations.
