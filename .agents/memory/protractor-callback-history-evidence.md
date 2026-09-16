@@ -74,3 +74,15 @@ sourceSystem would exclude legacy records that omit it.
 **How to apply:** Preserve the complete same-element identity match and monitor
 the existing operation timing after rollout. Revisit planning only on measured
 regression; do not remove legacy recovery based on this optimization.
+
+Increase callback processing opportunity separately from provider pacing and
+historical/background admission.
+
+**Why:** The daytime queue accumulated mostly unattempted notifications despite
+successful retrievals. Enabling unrelated background work would add competition
+without increasing the callback worker's execution window.
+
+**How to apply:** Prefer an isolated worker-budget change first. Include setup
+and pre-admission waits in short scheduler deadlines; retain durable completion
+for already-admitted work. Scheduler headroom is nominal, not a hard guarantee
+when database persistence stalls.

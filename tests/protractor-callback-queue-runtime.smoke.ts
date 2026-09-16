@@ -64,8 +64,12 @@ const dispatches: CallbackEvent[] = [];
 const processingStarts: string[] = [];
 const claims: Array<{ key: string; ownerToken: string | null }> = [];
 const completionCalls: any[][] = [];
+const processedMarks: Array<{ key: string; details: any }> = [];
 const served: Array<{ shopId: number; key: string }> = [];
 const releases: Array<{ key: string; ownerToken?: string }> = [];
+const selectionCalls: any[][] = [];
+const transportDeadlines: number[] = [];
+const dispatchClockAdvances = new Map<string, number>();
 const callbackOutcomeWrites: Array<{
   key: string;
   ownerToken: string;
@@ -90,6 +94,8 @@ const normalizationThrows = new Set<string>();
 const indexCalls: Doc[] = [];
 const vehicleReplayResults = new Map<string, any[]>();
 const workOrderReplayResults = new Map<string, any[]>();
+let drainSetupAdvanceMs = 0;
+let selectionAdvanceMs = 0;
 
 function event(
   key: string,
@@ -132,8 +138,12 @@ function resetQueueState(events: CallbackEvent[]): void {
   processingStarts.length = 0;
   claims.length = 0;
   completionCalls.length = 0;
+  processedMarks.length = 0;
   served.length = 0;
   releases.length = 0;
+  selectionCalls.length = 0;
+  transportDeadlines.length = 0;
+  dispatchClockAdvances.clear();
   callbackOutcomeWrites.length = 0;
   callbackDeferralWrites.length = 0;
   errors.length = 0;
@@ -141,11 +151,18 @@ function resetQueueState(events: CallbackEvent[]): void {
   timingRecords.length = 0;
   normalizationTimingRecords.length = 0;
   normalizationTimingRecorders.length = 0;
+  drainSetupAdvanceMs = 0;
+  selectionAdvanceMs = 0;
 }
 
 const callbackEventsMock = {
   __esModule: true,
   findPendingGetEvents: async (...args: any[]) => {
+    selectionCalls.push(args);
+    if (selectionAdvanceMs) {
+      clockOffsetMs += selectionAdvanceMs;
+      selectionAdvanceMs = 0;
+    }
     const requestedLimit = Number(args[2] ?? args[0] ?? pending.length);
     return pending.slice(0, requestedLimit);
   },
@@ -163,6 +180,9 @@ const callbackEventsMock = {
     const thrown = completionErrors.get(String(args[0]));
     if (thrown) throw thrown;
     return completionResults.get(String(args[0])) ?? true;
+  },
+  markProcessed: async (key: string, details: any) => {
+    processedMarks.push({ key, details });
   },
   markCallbackShopSuccessfullyServed: async (shopId: number, key: string) => {
     served.push({ shopId, key });
@@ -184,7 +204,13 @@ const callbackEventsMock = {
   ) => {
     releases.push({ key, ownerToken });
   },
-  getCallbackQueueDb: async () => queueDb,
+  getCallbackQueueDb: async () => {
+    if (drainSetupAdvanceMs) {
+      clockOffsetMs += drainSetupAdvanceMs;
+      drainSetupAdvanceMs = 0;
+    }
+    return queueDb;
+  },
 };
 
 const clientMock = {
@@ -195,9 +221,10 @@ const clientMock = {
     requireTimedTrial: false,
   }),
   runWithProtractorCallbackTransport: async (
-    _deadlineMs: number,
+    deadlineMs: number,
     callback: () => Promise<unknown>,
   ) => {
+    transportDeadlines.push(deadlineMs);
     const transportError = transportErrors.shift();
     if (transportError) throw transportError;
     return callback();
@@ -292,6 +319,14 @@ const terminalMock = {
   __esModule: true,
   applyProtractorTerminalCallback: async (db: unknown, args: Doc) => {
     terminalApplications.push({ db, args });
+    const admitted = pending.find((item) => item.objectId === args.workOrderId);
+    if (admitted) {
+      const clockAdvance = dispatchClockAdvances.get(admitted.key);
+      if (clockAdvance !== undefined) {
+        clockOffsetMs += clockAdvance;
+        dispatchClockAdvances.delete(admitted.key);
+      }
+    }
     return true;
   },
 };
@@ -358,6 +393,8 @@ const dispatch = async (item: CallbackEvent): Promise<any> => {
   const thrown = dispatchErrors.get(item.key);
   if (thrown) throw thrown;
   if (lateCompletionKeys.has(item.key)) clockOffsetMs = 61_000;
+  const clockAdvance = dispatchClockAdvances.get(item.key);
+  if (clockAdvance !== undefined) clockOffsetMs += clockAdvance;
   return dispatchOutcomes.get(item.key);
 };
 
@@ -711,6 +748,196 @@ async function runQueueAssertions(
   assert.deepEqual(completionCalls, []);
   assert.deepEqual(served, []);
   assert.deepEqual(releases, []);
+}
+
+async function runPreAdmissionDeadlineAssertions(
+  processProtractorCallbackQueue: (
+    db: any,
+    dispatch: (item: any) => Promise<any>,
+    options: any,
+  ) => Promise<{ processed: number; failed: number }>,
+): Promise<void> {
+  const assertUnclaimed = (key: string, label: string): void => {
+    assert.deepEqual(dispatches, [], `${label}: no dispatch`);
+    assert.deepEqual(claims, [], `${label}: no claim`);
+    assert.deepEqual(processedMarks, [], `${label}: no markProcessed`);
+    assert.deepEqual(processingStarts, [], `${label}: no processing attempt`);
+    assert.equal(attempts.get(key) ?? 0, 0, `${label}: no attempt charge`);
+    assert.deepEqual(releases, [], `${label}: no admission release`);
+    assert.deepEqual(completionCalls, [], `${label}: no completion`);
+    assert.deepEqual(served, [], `${label}: no served mutation`);
+  };
+
+  const lateAcquire = event(
+    "late-budget-acquire",
+    "wo-late-budget-acquire",
+    "DELETE",
+  );
+  resetQueueState([lateAcquire]);
+  const lateAcquireDeadline = Date.now() + 10_000;
+  let lateAcquireEligibilityCalls = 0;
+
+  assert.deepEqual(
+    await processProtractorCallbackQueue({}, dispatch, {
+      ...queueOptions(),
+      deadlineAtMs: lateAcquireDeadline,
+      isShopEligible: async () => {
+        lateAcquireEligibilityCalls++;
+        return true;
+      },
+      acquireBudgetSlot: async () => {
+        clockOffsetMs += 10_001;
+        return true;
+      },
+    }),
+    { processed: 0, failed: 0 },
+    "late budget-slot wait exits at the absolute deadline",
+  );
+  assert.equal(
+    lateAcquireEligibilityCalls,
+    0,
+    "late budget-slot wait does not reach eligibility",
+  );
+  assertUnclaimed(lateAcquire.key, "late budget-slot wait");
+  assert.equal(
+    timingRecords.some(
+      (record) => record.kind === "callback_batch_timing" &&
+        record.exitReason === "deadline",
+    ),
+    true,
+    "late budget-slot wait records a deadline exit",
+  );
+
+  const lateEligibility = event(
+    "late-eligibility",
+    "wo-late-eligibility",
+    "DELETE",
+  );
+  resetQueueState([lateEligibility]);
+  const lateEligibilityDeadline = Date.now() + 10_000;
+
+  assert.deepEqual(
+    await processProtractorCallbackQueue({}, dispatch, {
+      ...queueOptions(),
+      deadlineAtMs: lateEligibilityDeadline,
+      isShopEligible: async () => {
+        clockOffsetMs += 10_001;
+        return false;
+      },
+      acquireBudgetSlot: async () => true,
+    }),
+    { processed: 0, failed: 0 },
+    "late ineligible-shop wait exits at the absolute deadline",
+  );
+  assertUnclaimed(lateEligibility.key, "late eligibility wait");
+  assert.equal(
+    timingRecords.some(
+      (record) => record.kind === "callback_batch_timing" &&
+        record.exitReason === "deadline",
+    ),
+    true,
+    "late eligibility wait records a deadline exit",
+  );
+}
+
+async function runDrainDeadlineAssertions(
+  processProtractorCallbackDrain: (
+    db: any,
+    options?: { budgetMs?: number },
+  ) => Promise<{ processed: number; failed: number }>,
+): Promise<void> {
+  const admission = event("default-admission", "wo-default-admission", "DELETE");
+  resetQueueState([admission]);
+  ownerTokens.set(admission.key, "owner-default-admission");
+
+  const defaultInvocationStartedAt = Date.now();
+  assert.deepEqual(
+    await processProtractorCallbackDrain(queueDb),
+    { processed: 1, failed: 0 },
+  );
+  const defaultDeadline = transportDeadlines[0];
+  assert.ok(defaultDeadline, "default drain passes an admission deadline to transport");
+  assert.ok(
+    defaultDeadline - defaultInvocationStartedAt >= 29_500 &&
+      defaultDeadline - defaultInvocationStartedAt < 31_000,
+    "default drain admission deadline stays near 30 seconds from invocation",
+  );
+  const defaultSelection = selectionCalls[0];
+  assert.equal(defaultSelection?.[1], 3, "drain keeps the callback max-attempt limit");
+  assert.equal(defaultSelection?.[2], 45, "drain keeps the bounded selection limit");
+
+  const setupAndSelection = event(
+    "default-setup-selection-budget",
+    "wo-default-setup-selection-budget",
+    "DELETE",
+  );
+  resetQueueState([setupAndSelection]);
+  ownerTokens.set(setupAndSelection.key, "owner-default-setup-selection-budget");
+  drainSetupAdvanceMs = 20_000;
+  selectionAdvanceMs = 10_001;
+
+  assert.deepEqual(
+    await processProtractorCallbackDrain(undefined),
+    { processed: 0, failed: 0 },
+    "default drain charges database setup and selection against its invocation budget",
+  );
+  assert.deepEqual(dispatches, [], "an exhausted default budget admits no callback");
+  assert.deepEqual(processingStarts, [], "an exhausted default budget starts no callback");
+  assert.deepEqual(completionCalls, [], "an unadmitted callback has no completion");
+
+  const admitted = event("admitted-before-deadline", "wo-admitted-before-deadline", "DELETE");
+  const notAdmitted = event("after-deadline", "wo-after-deadline", "DELETE");
+  resetQueueState([admitted, notAdmitted]);
+  ownerTokens.set(admitted.key, "owner-admitted-before-deadline");
+  ownerTokens.set(notAdmitted.key, "owner-after-deadline");
+  dispatchClockAdvances.set(admitted.key, 30_001);
+  terminalApplications.length = 0;
+
+  assert.deepEqual(
+    await processProtractorCallbackDrain(queueDb),
+    { processed: 1, failed: 0 },
+    "admitted callback completion remains durable after the deadline",
+  );
+  assert.deepEqual(
+    processingStarts,
+    [admitted.key],
+    "deadline exhaustion stops the next dispatch",
+  );
+  assert.deepEqual(
+    terminalApplications.map(({ args }) => args.workOrderId),
+    [admitted.objectId],
+    "deadline exhaustion stops the next provider replay",
+  );
+  assert.deepEqual(
+    completionCalls.map((args) => args[0]),
+    [admitted.key],
+    "the callback admitted before exhaustion still completes",
+  );
+  assert.ok(
+    Date.now() >= transportDeadlines[0],
+    "the admitted completion runs after the admission deadline",
+  );
+
+  const explicit = event(
+    "explicit-relative-budget",
+    "wo-explicit-relative-budget",
+    "DELETE",
+  );
+  resetQueueState([explicit]);
+  ownerTokens.set(explicit.key, "owner-explicit-relative-budget");
+  drainSetupAdvanceMs = 20_000;
+  selectionAdvanceMs = 10_001;
+  const explicitInvocationStartedAt = Date.now();
+
+  assert.deepEqual(
+    await processProtractorCallbackDrain(undefined, { budgetMs: 60_000 }),
+    { processed: 1, failed: 0 },
+    "explicit 60-second drain budgets retain relative deadline semantics",
+  );
+  assert.ok(
+    transportDeadlines[0] - explicitInvocationStartedAt >= 89_000,
+    "explicit budget starts after setup and selection rather than invocation",
+  );
 }
 
 async function runDrainAssertions(
@@ -1081,6 +1308,8 @@ async function main(): Promise<void> {
 
   try {
     await runQueueAssertions(processProtractorCallbackQueue);
+    await runPreAdmissionDeadlineAssertions(processProtractorCallbackQueue);
+    await runDrainDeadlineAssertions(processProtractorCallbackDrain);
     await runDrainAssertions(processProtractorCallbackDrain);
     await runTerminalPostAssertions(processProtractorCallbackDrain);
   } finally {

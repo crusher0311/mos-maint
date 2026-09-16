@@ -20,7 +20,7 @@ import type {
 } from "./callback-timing";
 
 const TERMINAL = new Set(["DELETE", "INVOICED", "INVOICE", "CLOSED", "VOID"]);
-const CALLBACK_DRAIN_BUDGET_MS = 15_000;
+const CALLBACK_DRAIN_BUDGET_MS = 30_000;
 
 function normalizationCallbackOutcome(
   value: unknown,
@@ -42,6 +42,7 @@ function normalizationCallbackOutcome(
  * minute scheduler and tests use exactly the same durable worker.
  */
 export async function processProtractorCallbackDrain(db?: Db, options: { budgetMs?: number } = {}) {
+  const invocationStartedAt = Date.now();
   const queueDb = db ?? await callbackEvents.getCallbackQueueDb();
   // Eligibility is resolved once per queue invocation.  Keep only the
   // allowlisted enterprise identifier needed by normalized ingestion; this is
@@ -238,9 +239,15 @@ export async function processProtractorCallbackDrain(db?: Db, options: { budgetM
   }, {
     limit: 45,
     maxAttempts: 3,
-    // Leave ample room under the scheduler's 50s request timeout for the
-    // final provider response and local persistence to finish cleanly.
+    // Stop starting work at 30s, including setup/selection time, leaving
+    // nominal 20s headroom under the minute scheduler's 50s timeout.
+    // Already-admitted work still finishes durably; this is not an abort.
+    // Explicit budgets belong to callers with a different timeout envelope
+    // (the full sync route) and retain their existing relative semantics.
     budgetMs: options.budgetMs ?? CALLBACK_DRAIN_BUDGET_MS,
+    deadlineAtMs: options.budgetMs === undefined
+      ? invocationStartedAt + CALLBACK_DRAIN_BUDGET_MS
+      : undefined,
     isShopEligible: async (shopId) => {
       const shop = await queueDb.collection("shops").findOne({
         shopId: { $in: [shopId, String(shopId)] },

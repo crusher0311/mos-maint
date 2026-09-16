@@ -105,6 +105,8 @@ export async function processProtractorCallbackQueue(
     limit?: number;
     maxAttempts?: number;
     budgetMs?: number;
+    /** Optional invocation deadline so setup/selection cannot extend a short cron budget. */
+    deadlineAtMs?: number;
     isShopEligible: (shopId: number) => Promise<boolean>;
     acquireBudgetSlot?: () => Promise<boolean>;
   },
@@ -164,12 +166,15 @@ export async function processProtractorCallbackQueue(
       );
       selectionSucceeded = true;
       const { selected: pending } = selection;
-      // Preserve the existing deadline origin: it starts after candidate
-      // selection, rather than including policy/repository selection time.
+      // Preserve relative budgets for existing callers. Short cron callers
+      // can additionally cap the deadline from the start of their invocation.
       const started = Date.now();
-      const deadlineMs = started + (options.budgetMs ?? 180_000);
+      const deadlineMs = Math.min(
+        started + (options.budgetMs ?? 180_000),
+        options.deadlineAtMs ?? Infinity,
+      );
       for (const item of pending) {
-        if (Date.now() - started > (options.budgetMs ?? 180_000)) {
+        if (Date.now() >= deadlineMs) {
           exitReason = "deadline";
           break;
         }
@@ -183,6 +188,12 @@ export async function processProtractorCallbackQueue(
           // seams retain their one-shot semantics for deterministic exhaustion
           // tests.
           const budgetClaimed = await acquire();
+          if (Date.now() >= deadlineMs) {
+            exitReason = "deadline";
+            timingOutcome = "skipped";
+            timing.mark("claim", 0, "skipped");
+            break;
+          }
           if (!budgetClaimed) {
             exitReason = "budget_unavailable";
             timingOutcome = "skipped";
@@ -200,6 +211,14 @@ export async function processProtractorCallbackQueue(
           } catch (error) {
             timing.finish("eligibility", eligibilityStartedAt, "failed");
             throw error;
+          }
+          // Pre-admission waits must not start an event after the deadline.
+          // Once claimed below, retain the existing durable completion path.
+          if (Date.now() >= deadlineMs) {
+            exitReason = "deadline";
+            timingOutcome = "skipped";
+            timing.mark("claim", 0, "skipped");
+            break;
           }
           if (!eligible) {
             await callbackEvents.markProcessed(item.key, {
