@@ -859,13 +859,25 @@ async function runDrainDeadlineAssertions(
   const defaultDeadline = transportDeadlines[0];
   assert.ok(defaultDeadline, "default drain passes an admission deadline to transport");
   assert.ok(
-    defaultDeadline - defaultInvocationStartedAt >= 29_500 &&
-      defaultDeadline - defaultInvocationStartedAt < 31_000,
-    "default drain admission deadline stays near 30 seconds from invocation",
+    defaultDeadline - defaultInvocationStartedAt >= 39_500 &&
+      defaultDeadline - defaultInvocationStartedAt < 41_000,
+    "default drain admission deadline stays near 40 seconds from invocation",
   );
   const defaultSelection = selectionCalls[0];
   assert.equal(defaultSelection?.[1], 3, "drain keeps the callback max-attempt limit");
   assert.equal(defaultSelection?.[2], 45, "drain keeps the bounded selection limit");
+
+  const extendedWindow = event("extended-window", "wo-extended-window", "DELETE");
+  resetQueueState([extendedWindow]);
+  ownerTokens.set(extendedWindow.key, "owner-extended-window");
+  drainSetupAdvanceMs = 20_000;
+  selectionAdvanceMs = 15_000;
+  assert.deepEqual(
+    await processProtractorCallbackDrain(undefined),
+    { processed: 1, failed: 0 },
+    "default drain can admit work after 30 seconds but before 40 seconds",
+  );
+  assert.deepEqual(processingStarts, [extendedWindow.key]);
 
   const setupAndSelection = event(
     "default-setup-selection-budget",
@@ -875,7 +887,7 @@ async function runDrainDeadlineAssertions(
   resetQueueState([setupAndSelection]);
   ownerTokens.set(setupAndSelection.key, "owner-default-setup-selection-budget");
   drainSetupAdvanceMs = 20_000;
-  selectionAdvanceMs = 10_001;
+  selectionAdvanceMs = 20_001;
 
   assert.deepEqual(
     await processProtractorCallbackDrain(undefined),
@@ -891,7 +903,7 @@ async function runDrainDeadlineAssertions(
   resetQueueState([admitted, notAdmitted]);
   ownerTokens.set(admitted.key, "owner-admitted-before-deadline");
   ownerTokens.set(notAdmitted.key, "owner-after-deadline");
-  dispatchClockAdvances.set(admitted.key, 30_001);
+  dispatchClockAdvances.set(admitted.key, 40_001);
   terminalApplications.length = 0;
 
   assert.deepEqual(

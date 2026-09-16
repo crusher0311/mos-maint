@@ -20,7 +20,7 @@ import type {
 } from "./callback-timing";
 
 const TERMINAL = new Set(["DELETE", "INVOICED", "INVOICE", "CLOSED", "VOID"]);
-const CALLBACK_DRAIN_BUDGET_MS = 30_000;
+const CALLBACK_DRAIN_BUDGET_MS = 40_000;
 
 function normalizationCallbackOutcome(
   value: unknown,
@@ -239,8 +239,8 @@ export async function processProtractorCallbackDrain(db?: Db, options: { budgetM
   }, {
     limit: 45,
     maxAttempts: 3,
-    // Stop starting work at 30s, including setup/selection time, leaving
-    // nominal 20s headroom under the minute scheduler's 50s timeout.
+    // Stop starting work at 40s, including setup/selection time, leaving
+    // nominal 10s headroom under the minute scheduler's 50s timeout.
     // Already-admitted work still finishes durably; this is not an abort.
     // Explicit budgets belong to callers with a different timeout envelope
     // (the full sync route) and retain their existing relative semantics.
