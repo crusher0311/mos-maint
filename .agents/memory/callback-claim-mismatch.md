@@ -39,3 +39,16 @@ happened during an earlier claim; more query load would also perturb timing.
 **How to apply:** Keep telemetry observational and fail-safe. Label guarded
 candidate failures as unavailable unless the existing evidence distinguishes
 retry exhaustion from completion or removal; do not invent a specific cause.
+
+Lease expiry alone does not guarantee that interrupted work will be retried.
+Check whether the affected identity still appears in the bounded candidate window.
+
+**Why:** A production follow-up found expired, unfinished claims whose entire
+object histories had fallen behind the newest-candidate cutoff. Other rejected
+claims recovered normally. The remaining expired leases were no longer the
+admission blocker; candidate starvation prevented another attempt.
+
+**How to apply:** Separate ownership conflicts from selection starvation. Any
+older-work recovery proposal must retain the activation floor, retry limits,
+terminal precedence, and physical request budget rather than simply clearing
+leases or increasing runtime.
