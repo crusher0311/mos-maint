@@ -7,6 +7,7 @@ import {
 } from "./client";
 import { logProtractorPolicyDenial } from "./outbound-policy.cjs";
 import { isCallbackSafetyBoundary, type CallbackHistoryOutcome } from "./callback-outcomes";
+import { callbackEventWins, isTerminalCallbackEvent } from "./callback-selection";
 import {
   createCallbackTimingRecorder,
   emitCallbackBatchTiming,
@@ -17,20 +18,12 @@ import {
 } from "./callback-timing";
 
 const CALLBACK_CANDIDATE_MULTIPLIER = 10;
-const TERMINAL_OPERATIONS = new Set([
-  "DELETE",
-  "INVOICED",
-  "INVOICE",
-  "CLOSED",
-  "VOID",
-]);
-
 function eventTime(item: callbackEvents.PendingGetEvent): number {
   return item.receivedAt?.getTime() ?? 0;
 }
 
 function isTerminal(item: callbackEvents.PendingGetEvent): boolean {
-  return TERMINAL_OPERATIONS.has(String(item.operation || "").trim().toUpperCase());
+  return isTerminalCallbackEvent(item);
 }
 
 /**
@@ -57,9 +50,7 @@ export function selectFairCallbackBatch(
       winners.set(identity, item);
       continue;
     }
-    const itemWins =
-      (isTerminal(item) && !isTerminal(prior)) ||
-      (isTerminal(item) === isTerminal(prior) && eventTime(item) >= eventTime(prior));
+    const itemWins = callbackEventWins(item, prior);
     if (itemWins) {
       coalesced.push(prior);
       winners.set(identity, item);
@@ -153,12 +144,25 @@ export async function processProtractorCallbackQueue(
           ? new Date(outboundPolicy.callbackNotBeforeMs)
           : undefined,
       );
-      const selection = selectFairCallbackBatch(candidates, limit);
+      // Query exact authoritative winners only for a fixed fair subset, not
+      // for all 4,500 candidates. A rejected/exhausted winner is removed
+      // before the final 45 are chosen; no callback row is changed here.
+      const preselection = selectFairCallbackBatch(
+        candidates,
+        Math.min(candidates.length, limit * 6),
+      );
+      const authorityFiltered = await callbackEvents.filterPendingCallbackCandidatesByAuthority(
+        preselection.selected,
+        outboundPolicy.callbackNotBeforeMs != null
+          ? new Date(outboundPolicy.callbackNotBeforeMs)
+          : undefined,
+      );
+      const selection = selectFairCallbackBatch(authorityFiltered, limit);
       candidateCount = candidates.length;
       selectedCount = selection.selected.length;
       // This is only the in-memory duplicate collapse performed while
       // selecting the batch; it is not durable coalescing.
-      selectionCollapsedCount = selection.coalesced.length;
+      selectionCollapsedCount = preselection.coalesced.length + selection.coalesced.length;
       emitCallbackStageTiming(
         "selection",
         Date.now() - selectionStartedAt,
@@ -173,7 +177,9 @@ export async function processProtractorCallbackQueue(
         started + (options.budgetMs ?? 180_000),
         options.deadlineAtMs ?? Infinity,
       );
+      let admittedWork = 0;
       for (const item of pending) {
+        if (admittedWork >= limit) break;
         if (Date.now() >= deadlineMs) {
           exitReason = "deadline";
           break;
@@ -254,6 +260,7 @@ export async function processProtractorCallbackQueue(
                   outboundPolicy.callbackNotBeforeMs != null
                     ? new Date(outboundPolicy.callbackNotBeforeMs)
                     : undefined,
+                  options.maxAttempts ?? 3,
                 );
                 admitted = ownerToken !== null;
                 timing.finish("claim", claimStartedAt, admitted ? "success" : "skipped");
@@ -261,8 +268,10 @@ export async function processProtractorCallbackQueue(
                   timingOutcome = "skipped";
                   continue;
                 }
+                admittedWork++;
               } else {
                 timing.mark("claim", 0, "skipped");
+                admittedWork++;
               }
             } catch (error) {
               timing.finish("claim", claimStartedAt, "failed");

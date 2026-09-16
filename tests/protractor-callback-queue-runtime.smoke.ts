@@ -166,6 +166,7 @@ const callbackEventsMock = {
     const requestedLimit = Number(args[2] ?? args[0] ?? pending.length);
     return pending.slice(0, requestedLimit);
   },
+  filterPendingCallbackCandidatesByAuthority: async (items: CallbackEvent[]) => items,
   claimCallbackEvent: async (key: string) => {
     const ownerToken = ownerTokens.has(key) ? ownerTokens.get(key)! : null;
     claims.push({ key, ownerToken });

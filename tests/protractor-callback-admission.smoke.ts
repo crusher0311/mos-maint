@@ -12,6 +12,7 @@ const coordinators = new Map<string, Doc>();
 const eventUpdates: Array<{ filter: Doc; update: Doc }> = [];
 const callbackEvents = new Map<string, Doc>();
 const quarantine = new Map<string, Doc>();
+let capRaceKey: string | null = null;
 
 function eventKeyFromFilter(filter: Doc): string | null {
   if (filter._id instanceof ObjectId) return filter._id.toHexString();
@@ -31,6 +32,8 @@ function matchesEvent(event: Doc, filter: Doc): boolean {
     }
     const actual = event[key];
     if (expected?.$in && !(expected.$in as unknown[]).includes(actual)) return false;
+    if (expected?.$exists !== undefined && (expected.$exists ? actual === undefined : actual !== undefined)) return false;
+    if (expected?.$lt !== undefined && !(typeof actual === "number" && actual < expected.$lt)) return false;
     if (expected instanceof RegExp && !expected.test(String(actual ?? ""))) return false;
     if (expected !== null && typeof expected !== "object" && actual !== expected) return false;
     if (expected === false && actual !== false) return false;
@@ -79,6 +82,7 @@ const eventCollection = {
     if (!event) return { matchedCount: 1 };
     if (!matchesEvent(event, filter)) return { matchedCount: 0 };
     if (update.$set) Object.assign(event, update.$set);
+    for (const field of Object.keys(update.$unset ?? {})) delete event[field];
     return { matchedCount: 1 };
   },
   updateMany: async () => {
@@ -94,6 +98,11 @@ const admissionCollection = {
       return { matchedCount: 0 };
     }
     coordinators.set(id, { ...current, ...update.$set });
+    if (update.$set?.activeOwnerToken && capRaceKey) {
+      const event = callbackEvents.get(capRaceKey);
+      if (event) event.attempts = 3;
+      capRaceKey = null;
+    }
     return { matchedCount: 1 };
   },
   findOneAndUpdate: async (filter: Doc, update: any, options: Doc) => {
@@ -378,6 +387,39 @@ async function main() {
     true,
     "Contact generations remain retained and unprocessed",
   );
+
+  coordinators.clear();
+  callbackEvents.clear();
+  const capRaceId = new ObjectId();
+  const capRaceHex = capRaceId.toHexString();
+  callbackEvents.set(capRaceHex, {
+    _id: capRaceId,
+    shopId: 42,
+    objectType: "WorkOrder",
+    objectId: "cap-race",
+    operation: "Update",
+    receivedAt: new Date("2026-06-01T00:00:10Z"),
+    processed: false,
+    attempts: 2,
+  });
+  capRaceKey = capRaceHex;
+  const capRaceIdentity = {
+    shopId: 42,
+    method: "GET" as const,
+    objectType: "WorkOrder",
+    objectId: "cap-race",
+    operation: "*",
+  };
+  assert.equal(
+    await repo.claimCallbackEvent(capRaceHex, capRaceIdentity, undefined, 3),
+    null,
+    "cap crossing after admission cannot receive an owner token",
+  );
+  const capRaceEvent = callbackEvents.get(capRaceHex)!;
+  assert.equal(capRaceEvent.attempts, 3, "cap race preserves the observed attempt count");
+  assert.equal(capRaceEvent.processingStartedAt, undefined, "cap-race cleanup removes admission timestamp");
+  assert.equal(capRaceEvent.processingOwnerToken, undefined, "cap-race cleanup removes owner token");
+  assert.equal(coordinators.size, 0, "cap-race cleanup releases its coordinator lease");
 
   const quarantineRepo = await import(
     "../lib/data/repositories/protractor-callback-quarantine"

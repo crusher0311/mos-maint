@@ -33,11 +33,20 @@ import {
   parseCallbackHistoryOutcome,
   type CallbackHistoryOutcome,
 } from "@/lib/integrations/protractor/callback-outcomes";
+import { callbackWindowWinners } from "@/lib/integrations/protractor/callback-selection";
 import * as pg from "./pg/protractor-callback-events";
 
 const COLLECTION = "protractor_callback_events";
 const ADMISSION_COLLECTION = "protractor_callback_admissions";
 const UNSUPPORTED_CONTACT_REASON = "unsupported_contact";
+const TERMINAL_OPERATION = /^(DELETE|INVOICED|INVOICE|CLOSED|VOID)$/i;
+
+function mongoTerminalRank(doc: Document): 0 | 1 {
+  return TERMINAL_OPERATION.test(String(doc.operation ?? "")) ||
+    TERMINAL_OPERATION.test(String(doc.status ?? ""))
+    ? 1
+    : 0;
+}
 
 /** Queue-owned DB accessor for the dedicated callback drain worker. */
 export async function getCallbackQueueDb() {
@@ -141,9 +150,10 @@ async function coalesceMongoEvent(
 export async function admitCallbackEvent(
   key: CallbackEventKey,
   identity: CallbackAdmissionIdentity,
+  maxAttempts = 3,
 ): Promise<boolean> {
   if (isProtractorOpsPgCanonical()) {
-    return pg.admitCallbackEvent(key, identity, ADMISSION_LEASE_MS);
+    return pg.admitCallbackEvent(key, identity, ADMISSION_LEASE_MS, undefined, maxAttempts);
   }
 
   const db = await getDb();
@@ -153,6 +163,7 @@ export async function admitCallbackEvent(
     ...mongoKeyFilter(key),
     processed: false,
     ...mongoReplayCandidateFilter(),
+    $or: [{ attempts: { $exists: false } }, { attempts: { $lt: maxAttempts } }],
   } as Document);
   if (!candidate) return false;
   const now = new Date();
@@ -256,6 +267,7 @@ export async function admitCallbackEvent(
       ...mongoKeyFilter(key),
       processed: false,
       ...mongoReplayCandidateFilter(),
+      $or: [{ attempts: { $exists: false } }, { attempts: { $lt: maxAttempts } }],
     } as Document,
     { $set: { processingStartedAt: now } },
   );
@@ -277,9 +289,12 @@ export async function claimCallbackEvent(
   key: CallbackEventKey,
   identity: CallbackAdmissionIdentity,
   receivedNotBefore?: Date,
+  maxAttempts = 3,
 ): Promise<string | null> {
   if (isProtractorOpsPgCanonical()) {
-    return pg.claimCallbackEvent(key, identity, ADMISSION_LEASE_MS, receivedNotBefore);
+    return pg.claimCallbackEvent(
+      key, identity, ADMISSION_LEASE_MS, receivedNotBefore, maxAttempts,
+    );
   }
   const events = await collection();
   const validReceivedNotBefore =
@@ -294,7 +309,7 @@ export async function claimCallbackEvent(
     ...mongoReplayCandidateFilter(),
     ...(validReceivedNotBefore ? { receivedAt: { $gte: validReceivedNotBefore } } : {}),
   };
-  const terminal = /^(DELETE|INVOICED|INVOICE|CLOSED|VOID)$/i;
+  const terminal = TERMINAL_OPERATION;
   const terminalWinner = await events.find({
     ...objectFilter,
     $or: [{ operation: { $regex: terminal } }, { status: { $regex: terminal } }],
@@ -303,7 +318,7 @@ export async function claimCallbackEvent(
     .sort({ receivedAt: -1, _id: -1 }).limit(1).next();
   if (!winner || !mongoKeyFilter(key)._id ||
       String(winner._id) !== String(mongoKeyFilter(key)._id)) return null;
-  if (!(await admitCallbackEvent(key, identity))) return null;
+  if (!(await admitCallbackEvent(key, identity, maxAttempts))) return null;
   const claimedWinner = await events.find({
     ...objectFilter,
     ...(terminalWinner ? {
@@ -311,6 +326,13 @@ export async function claimCallbackEvent(
     } : {}),
   } as Document).sort({ receivedAt: -1, _id: -1 }).limit(1).next();
   if (!claimedWinner || String(claimedWinner._id) !== String(mongoKeyFilter(key)._id)) {
+    await events.updateOne(
+      {
+        ...mongoKeyFilter(key),
+        processed: false,
+      } as Document,
+      { $unset: { processingStartedAt: "", processingOwnerToken: "" } },
+    );
     await releaseCallbackEventAdmission(key, identity);
     return null;
   }
@@ -325,10 +347,25 @@ export async function claimCallbackEvent(
       ...mongoKeyFilter(key),
       processed: false,
       ...mongoReplayCandidateFilter(),
+      $or: [{ attempts: { $exists: false } }, { attempts: { $lt: maxAttempts } }],
     } as Document,
     { $set: { processingOwnerToken: token } },
   );
-  if (coordinator.matchedCount !== 1 || event.matchedCount !== 1) return null;
+  if (coordinator.matchedCount !== 1) {
+    await releaseCallbackEventAdmission(key, identity);
+    return null;
+  }
+  if (event.matchedCount !== 1) {
+    await events.updateOne(
+      {
+        ...mongoKeyFilter(key),
+        processed: false,
+      } as Document,
+      { $unset: { processingStartedAt: "", processingOwnerToken: "" } },
+    );
+    await releaseCallbackEventAdmission(key, identity);
+    return null;
+  }
   return token;
 }
 
@@ -1066,7 +1103,16 @@ export interface PendingGetEvent {
   objectType: string | null;
   objectId: string | null;
   operation: string | null;
+  status?: string | null;
   receivedAt?: Date;
+  /** Internal bounded-window authority marker; never true for exhausted rows. */
+  replayEligible?: boolean;
+  /** Store-local deterministic final winner ordering. */
+  winnerTieBreaker?: string | number;
+  /** PG claim's terminal expression is coalesce(operation, status). */
+  terminalFromCoalesce?: boolean;
+  /** Raw Mongo terminal classification retained through POST normalization. */
+  terminalRank?: 0 | 1;
 }
 
 async function rotatePendingByFleetCursor(
@@ -1128,7 +1174,11 @@ export async function findPendingGetEvents(
       operation: r.method === "POST"
         ? String(r.operation || "").trim().toUpperCase()
         : r.operation,
+      status: r.status,
       receivedAt: r.receivedAt,
+      winnerTieBreaker: r.winnerTieBreaker,
+      terminalFromCoalesce: r.terminalFromCoalesce,
+      terminalRank: r.terminalRank,
     })), servedShopBudget);
   }
   const col = await collection();
@@ -1168,8 +1218,127 @@ export async function findPendingGetEvents(
     operation: d.method === "POST"
       ? String(d.operation || "").trim().toUpperCase()
       : ((d.operation as string) ?? null),
+    status: (d.status as string) ?? null,
     receivedAt: d.receivedAt as Date | undefined,
+    winnerTieBreaker: (d._id as ObjectId).toHexString(),
+    terminalRank: mongoTerminalRank(d),
   })), servedShopBudget);
+}
+
+/**
+ * Read exact authoritative histories for a bounded fair candidate subset.
+ * This intentionally has no writes: exhausted notifications and rejected
+ * siblings remain unresolved exactly as before. The final durable claim still
+ * fences arrivals and recovery races after this advisory read.
+ */
+export async function filterPendingCallbackCandidatesByAuthority(
+  candidates: PendingGetEvent[],
+  receivedNotBefore?: Date,
+): Promise<PendingGetEvent[]> {
+  if (isProtractorOpsPgCanonical()) {
+    return pg.filterPendingCallbackCandidatesByAuthority(candidates, receivedNotBefore);
+  }
+  if (candidates.length === 0) return [];
+  const col = await collection();
+  const validReceivedNotBefore =
+    receivedNotBefore instanceof Date && Number.isFinite(receivedNotBefore.getTime())
+      ? receivedNotBefore
+      : undefined;
+  const chunks: PendingGetEvent[][] = [];
+  for (let index = 0; index < candidates.length; index += 90) {
+    chunks.push(candidates.slice(index, index + 90));
+  }
+  const authoritative: PendingGetEvent[] = [];
+  for (const chunk of chunks) {
+    const uniqueItems = new Map<string, PendingGetEvent>();
+    for (const item of chunk) {
+      if (item.objectType && item.objectId) {
+        uniqueItems.set(JSON.stringify([
+          Number(item.shopId), item.objectType, item.objectId,
+        ]), item);
+      }
+    }
+    const identities = [...uniqueItems.values()].map((item) => ({
+        shopId: { $in: [Number(item.shopId), String(Number(item.shopId))] },
+        objectType: item.objectType,
+        objectId: item.objectId,
+      }));
+    if (identities.length === 0) continue;
+    const docs = await col.aggregate([
+      {
+        $match: {
+          processed: false,
+          ...mongoReplayCandidateFilter(),
+          ...(validReceivedNotBefore ? { receivedAt: { $gte: validReceivedNotBefore } } : {}),
+          $or: identities,
+        } as Document,
+      },
+      {
+        $set: {
+          _callbackTerminal: {
+            $or: [
+              {
+                $regexMatch: {
+                  input: { $convert: { input: "$operation", to: "string", onNull: "", onError: "" } },
+                  regex: "^(DELETE|INVOICED|INVOICE|CLOSED|VOID)$",
+                  options: "i",
+                },
+              },
+              {
+                $regexMatch: {
+                  input: { $convert: { input: "$status", to: "string", onNull: "", onError: "" } },
+                  regex: "^(DELETE|INVOICED|INVOICE|CLOSED|VOID)$",
+                  options: "i",
+                },
+              },
+            ],
+          },
+        },
+      },
+      { $sort: { _callbackTerminal: -1, receivedAt: -1, _id: -1 } },
+      {
+        $group: {
+          _id: {
+            shopId: { $convert: { input: "$shopId", to: "string", onNull: "", onError: "" } },
+            objectType: "$objectType",
+            objectId: "$objectId",
+          },
+          winner: { $first: "$$ROOT" },
+        },
+      },
+      { $replaceRoot: { newRoot: "$winner" } },
+      {
+        $project: {
+          _id: 1, method: 1, shopId: 1, objectType: 1, objectId: 1,
+          operation: 1, status: 1, receivedAt: 1, _callbackTerminal: 1,
+        },
+      },
+    ], {
+      hint: "dedup_lookup",
+      maxTimeMS: 5_000,
+    }).toArray();
+    authoritative.push(...docs.map((d) => {
+      const key = (d._id as ObjectId).toHexString();
+      return {
+      key,
+      method: d.method as "GET" | "POST",
+      shopId: Number(d.shopId),
+      objectType: (d.objectType as string) ?? null,
+      objectId: (d.objectId as string) ?? null,
+      operation: (d.operation as string) ?? null,
+      status: (d.status as string) ?? null,
+      receivedAt: d.receivedAt as Date | undefined,
+      winnerTieBreaker: key,
+      terminalRank: d._callbackTerminal ? 1 as const : 0 as const,
+    };
+    }));
+  }
+  const winners = callbackWindowWinners(
+    authoritative,
+    validReceivedNotBefore,
+  );
+  const winningKeys = new Set(winners.map((item) => item.key));
+  return candidates.filter((item) => winningKeys.has(item.key));
 }
 
 /**

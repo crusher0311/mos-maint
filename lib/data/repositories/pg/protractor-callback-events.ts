@@ -174,6 +174,7 @@ export async function admitCallbackEvent(
   identity: CallbackAdmissionIdentity,
   leaseMs: number,
   receivedNotBefore?: Date,
+  maxAttempts = 3,
 ): Promise<boolean> {
   const now = new Date();
   const staleBefore = new Date(now.getTime() - leaseMs);
@@ -225,6 +226,7 @@ export async function admitCallbackEvent(
         eq(t.eventKey, eventKey),
         eq(t.processed, false),
         replayCandidateWhere(),
+        or(sql`${t.attempts} IS NULL`, lt(t.attempts, maxAttempts)),
         ...(validReceivedNotBefore ? [gte(t.receivedAt, validReceivedNotBefore)] : []),
       ))
       .returning({ eventKey: t.eventKey });
@@ -238,6 +240,7 @@ export async function claimCallbackEvent(
   identity: CallbackAdmissionIdentity,
   leaseMs: number,
   receivedNotBefore?: Date,
+  maxAttempts = 3,
 ): Promise<string | null> {
   const validReceivedNotBefore =
     receivedNotBefore instanceof Date && Number.isFinite(receivedNotBefore.getTime())
@@ -260,7 +263,7 @@ export async function claimCallbackEvent(
     .limit(1);
   if (winner[0]?.eventKey !== eventKey) return null;
   if (!(await admitCallbackEvent(
-    eventKey, identity, leaseMs, validReceivedNotBefore,
+    eventKey, identity, leaseMs, validReceivedNotBefore, maxAttempts,
   ))) return null;
   const rows = await getDb()
     .select({ processingStartedAt: t.processingStartedAt })
@@ -724,7 +727,11 @@ export interface PendingGetEvent {
   objectType: string | null;
   objectId: string | null;
   operation: string | null;
+  status?: string | null;
+  terminalRank?: 0 | 1;
+  terminalFromCoalesce?: boolean;
   receivedAt: Date;
+  winnerTieBreaker?: number;
 }
 
 /** protractor-sync pre-sweep queue: unprocessed callback events under the attempt cap. */
@@ -736,12 +743,19 @@ export async function findPendingGetEvents(
   const db = getDb();
   const rows = await db
     .select({
+      id: t.id,
       eventKey: t.eventKey,
       method: t.method,
       shopId: t.shopId,
       objectType: t.objectType,
       objectId: t.objectId,
       operation: t.operation,
+      status: t.status,
+      terminalRank: sql<number>`
+        CASE WHEN upper(coalesce(${t.operation}, ${t.status}, ''))
+          IN ('DELETE','INVOICED','INVOICE','CLOSED','VOID')
+        THEN 1 ELSE 0 END
+      `,
       receivedAt: t.receivedAt,
     })
     .from(t)
@@ -765,7 +779,164 @@ export async function findPendingGetEvents(
     ...r,
     eventKey: r.eventKey as string,
     method: r.method as "GET" | "POST",
+    terminalFromCoalesce: true,
+    terminalRank: Number(r.terminalRank) === 1 ? 1 : 0,
+    winnerTieBreaker: r.id,
   }));
+}
+
+/**
+ * PG counterpart to Mongo's bounded exact-identity authority prefilter.
+ * Querying is chunked so a queue tick never creates one predicate per member
+ * of the 4,500-row candidate window.
+ */
+export async function filterPendingCallbackCandidatesByAuthority(
+  candidates: Array<{
+    key: string;
+    method: "GET" | "POST";
+    shopId: number;
+    objectType: string | null;
+    objectId: string | null;
+    operation: string | null;
+    status?: string | null;
+    receivedAt?: Date;
+    winnerTieBreaker?: string | number;
+    terminalRank?: 0 | 1;
+  }>,
+  receivedNotBefore?: Date,
+): Promise<typeof candidates> {
+  if (candidates.length === 0) return [];
+  const validReceivedNotBefore =
+    receivedNotBefore instanceof Date && Number.isFinite(receivedNotBefore.getTime())
+      ? receivedNotBefore
+      : undefined;
+  type RequestedIdentity = {
+    method: "GET" | "POST";
+    shopId: number;
+    objectType: string;
+    objectId: string;
+  };
+  type AuthorityRow = { eventKey?: string | null; event_key?: string | null };
+
+  /*
+   * Keep the method in this key.  The claim is object-scoped for locking, but
+   * its identity predicate still distinguishes GET from POST (and accepts
+   * method=NULL only for the legacy POST shape).
+   */
+  const requestedByIdentity = new Map<string, RequestedIdentity>();
+  for (const item of candidates) {
+    if (item.objectType == null || item.objectId == null) continue;
+    const identity = {
+      method: item.method,
+      shopId: Number(item.shopId),
+      objectType: item.objectType,
+      objectId: item.objectId,
+    };
+    requestedByIdentity.set(JSON.stringify([
+      identity.method,
+      identity.shopId,
+      identity.objectType,
+      identity.objectId,
+    ]), identity);
+  }
+
+  const authoritativeKeys = new Set<string>();
+  const identities = [...requestedByIdentity.values()];
+  const db = getDb();
+  for (let offset = 0; offset < identities.length; offset += 90) {
+    const chunk = identities.slice(offset, offset + 90);
+    if (chunk.length === 0) continue;
+    const requestedValues = sql.join(
+      chunk.map((identity) => sql`(
+        ${identity.method},
+        ${identity.shopId},
+        ${identity.objectType},
+        ${identity.objectId}
+      )`),
+      sql`,`,
+    );
+    const floorPredicate = validReceivedNotBefore
+      ? sql`AND e.received_at >= ${validReceivedNotBefore}`
+      : sql``;
+    /*
+     * This is deliberately one VALUES/LATERAL read for the whole chunk.
+     * Each lateral subquery has its own LIMIT 1, so PostgreSQL returns the
+     * same top row that claimCallbackEvent would choose for that identity.
+     * Every dynamic value is a bound parameter; no callback history is
+     * materialized or ranked in Node.
+     */
+    const statement = sql`
+      WITH requested(method, shop_id, object_type, object_id) AS (
+        VALUES ${requestedValues}
+      )
+      SELECT winner.event_key AS "eventKey"
+      FROM requested
+      CROSS JOIN LATERAL (
+        SELECT e.event_key
+        FROM protractor_callback_events AS e
+        WHERE e.event_key IS NOT NULL
+          AND e.processed = false
+          AND (
+            (
+              requested.object_type = 'WorkOrder'
+              AND (
+                e.work_order_id = requested.object_id
+                OR (
+                  e.object_type = 'WorkOrder'
+                  AND e.object_id = requested.object_id
+                )
+              )
+            )
+            OR (
+              requested.object_type <> 'WorkOrder'
+              AND requested.method = 'POST'
+              AND e.work_order_id = requested.object_id
+            )
+            OR (
+              requested.object_type <> 'WorkOrder'
+              AND requested.method = 'GET'
+              AND e.object_type = requested.object_type
+              AND e.object_id = requested.object_id
+            )
+          )
+          AND (
+            (e.payload -> 'historyOutcome' ->> 'reason') IS NULL
+            OR (e.payload -> 'historyOutcome' ->> 'reason') <> ${UNSUPPORTED_CONTACT_REASON}
+          )
+          ${floorPredicate}
+        ORDER BY
+          CASE WHEN upper(coalesce(e.operation, e.status, ''))
+            IN ('DELETE','INVOICED','INVOICE','CLOSED','VOID')
+            THEN 1 ELSE 0 END DESC,
+          e.received_at DESC,
+          e.id DESC
+        LIMIT 1
+      ) AS winner
+    `;
+    const rowsResult = await db.transaction(async (tx) => {
+      await tx.execute(sql`SET LOCAL statement_timeout = '5000ms'`);
+      return tx.execute(statement);
+    }) as unknown;
+    const rows = Array.isArray(rowsResult)
+      ? rowsResult
+      : (rowsResult as { rows?: unknown[] } | null)?.rows ?? [];
+    for (const row of rows as AuthorityRow[]) {
+      const eventKey = row.eventKey ?? row.event_key;
+      if (typeof eventKey === "string") authoritativeKeys.add(eventKey);
+    }
+  }
+
+  /*
+   * Candidates without an object identity intentionally bypass authority
+   * lookup: the queue's direct (non-claiming) path owns those legacy rows.
+   * Identity-bearing candidates survive only when their exact DB top-1 key
+   * was returned.  In particular, do not normalize DB fields and run a
+   * second in-memory winner pass; claim's wildcard WorkOrder fallback is
+   * encoded entirely in the lateral predicate above.
+   */
+  return candidates.filter((item) =>
+    item.objectType == null || item.objectId == null || authoritativeKeys.has(item.key),
+  );
 }
 
 /** Webhook-health: per-shop received counts since `since`, shopId ∈ shopIds. */

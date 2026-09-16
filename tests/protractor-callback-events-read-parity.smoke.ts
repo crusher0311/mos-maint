@@ -25,6 +25,7 @@
  */
 import Module from "node:module";
 import { ObjectId } from "mongodb";
+import { replayableCallbackWindowWinners } from "../lib/integrations/protractor/callback-selection";
 
 let failed = 0;
 function ok(name: string, cond: boolean, detail?: string) {
@@ -323,6 +324,28 @@ async function main() {
   delete process.env.PROTRACTOR_OPS_PG_CANONICAL;
   delete process.env.WRITE_MONGO_PROTRACTOR_OPS;
   const repo: Repo = await import("../lib/data/repositories/protractor-callback-events");
+  // Exercise PG -> public repository -> shared selection, including POST
+  // formatting, so dropping the raw rank at the wrapper boundary is caught.
+  const originalPendingRead = pgStub.findPendingGetEvents;
+  try {
+    (pgStub as any).findPendingGetEvents = async () => [
+      { eventKey: "raw-older", method: "POST", shopId: 1, objectType: "WorkOrder",
+        objectId: "rank-parity", operation: " CLOSED ", receivedAt: new Date(1000),
+        terminalRank: 0, winnerTieBreaker: 1, terminalFromCoalesce: true },
+      { eventKey: "raw-newer", method: "GET", shopId: 1, objectType: "WorkOrder",
+        objectId: "rank-parity", operation: "Update", receivedAt: new Date(2000),
+        terminalRank: 0, winnerTieBreaker: 2, terminalFromCoalesce: true },
+    ];
+    process.env.PROTRACTOR_OPS_PG_CANONICAL = "1";
+    const mapped = await repo.findPendingGetEvents(10, 3);
+    const chosen = replayableCallbackWindowWinners(mapped).winners;
+    ok("PG raw terminal rank survives wrapper formatting and selection",
+      mapped.every((row) => row.terminalRank === 0) &&
+      chosen.length === 1 && chosen[0].key === "raw-newer");
+  } finally {
+    pgStub.findPendingGetEvents = originalPendingRead;
+    delete process.env.PROTRACTOR_OPS_PG_CANONICAL;
+  }
 
   /* ============ hasRecentProcessedPost (POST dedup) ============ */
   console.log("\nhasRecentProcessedPost — POST dedup");
@@ -402,8 +425,15 @@ async function main() {
       !mOrder.some((o) => ["O1", "O2", "O3"].includes(o!)) && !pOrder.some((o) => ["O1", "O2", "O3"].includes(o!)),
     );
     ok(
-      "row fields identical across arms (shopId/objectType/operation)",
-      JSON.stringify(res.mongo.map(({ key, ...rest }) => rest)) === JSON.stringify(res.pg.map(({ key, ...rest }) => rest)),
+      "logical row fields identical across arms (store-local winner metadata ignored)",
+      JSON.stringify(res.mongo.map(({ key, status: _status, winnerTieBreaker: _tie, terminalFromCoalesce: _terminal, ...rest }) => {
+        delete (rest as Record<string, unknown>).terminalRank;
+        return rest;
+      })) ===
+        JSON.stringify(res.pg.map(({ key, status: _status, winnerTieBreaker: _tie, terminalFromCoalesce: _terminal, ...rest }) => {
+          delete (rest as Record<string, unknown>).terminalRank;
+          return rest;
+        })),
       JSON.stringify(res),
     );
     ok(

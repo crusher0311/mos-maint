@@ -262,6 +262,7 @@ const pgStub = {
     return true;
   },
   findPendingGetEvents: async () => pgRows.filter((r) => !r.processed),
+  filterPendingCallbackCandidatesByAuthority: async (items: Doc[]) => items,
   recordProcessingStarted: async (key: string) => {
     const row = pgRows.find((r) => r.eventKey === key);
     if (row) row.attempts++;
