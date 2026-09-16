@@ -23,6 +23,10 @@ import {
   parseCallbackHistoryOutcome,
   type CallbackHistoryOutcome,
 } from "@/lib/integrations/protractor/callback-outcomes";
+import {
+  logCallbackClaimRejection,
+  type CallbackClaimTelemetryContext,
+} from "@/lib/integrations/protractor/callback-claim-telemetry";
 
 const CALLBACK_OUTCOME_JSON_KEY = "historyOutcome";
 const CALLBACK_OUTCOME_COALESCED: CallbackHistoryOutcome = {
@@ -175,6 +179,7 @@ export async function admitCallbackEvent(
   leaseMs: number,
   receivedNotBefore?: Date,
   maxAttempts = 3,
+  claimContext?: CallbackClaimTelemetryContext,
 ): Promise<boolean> {
   const now = new Date();
   const staleBefore = new Date(now.getTime() - leaseMs);
@@ -201,7 +206,12 @@ export async function admitCallbackEvent(
         desc(t.id),
       )
       .limit(1);
-    if (winner[0]?.eventKey !== eventKey) return false;
+    if (winner[0]?.eventKey !== eventKey) {
+      if (claimContext) {
+        logCallbackClaimRejection(claimContext, "winner_changed");
+      }
+      return false;
+    }
     const active = await tx
       .select({ eventKey: t.eventKey })
       .from(t)
@@ -216,6 +226,9 @@ export async function admitCallbackEvent(
       )
       .limit(1);
     if (active.length > 0) {
+      if (claimContext) {
+        logCallbackClaimRejection(claimContext, "fresh_ownership");
+      }
       return false;
     }
 
@@ -230,7 +243,12 @@ export async function admitCallbackEvent(
         ...(validReceivedNotBefore ? [gte(t.receivedAt, validReceivedNotBefore)] : []),
       ))
       .returning({ eventKey: t.eventKey });
-    if (claimed.length === 0) return false;
+    if (claimed.length === 0) {
+      if (claimContext) {
+        logCallbackClaimRejection(claimContext, "candidate_unavailable");
+      }
+      return false;
+    }
     return true;
   });
 }
@@ -241,7 +259,15 @@ export async function claimCallbackEvent(
   leaseMs: number,
   receivedNotBefore?: Date,
   maxAttempts = 3,
+  claimContext?: CallbackClaimTelemetryContext,
 ): Promise<string | null> {
+  const telemetryContext: CallbackClaimTelemetryContext = claimContext ?? {
+    store: "pg",
+    eventKey,
+    shopId: identity.shopId,
+    objectType: identity.objectType,
+    objectId: identity.objectId,
+  };
   const validReceivedNotBefore =
     receivedNotBefore instanceof Date && Number.isFinite(receivedNotBefore.getTime())
       ? receivedNotBefore
@@ -261,9 +287,21 @@ export async function claimCallbackEvent(
       desc(t.id),
     )
     .limit(1);
-  if (winner[0]?.eventKey !== eventKey) return null;
+  if (!winner[0]) {
+    logCallbackClaimRejection(telemetryContext, "winner_absent");
+    return null;
+  }
+  if (winner[0].eventKey !== eventKey) {
+    logCallbackClaimRejection(telemetryContext, "winner_mismatch");
+    return null;
+  }
   if (!(await admitCallbackEvent(
-    eventKey, identity, leaseMs, validReceivedNotBefore, maxAttempts,
+    eventKey,
+    identity,
+    leaseMs,
+    validReceivedNotBefore,
+    maxAttempts,
+    telemetryContext,
   ))) return null;
   const rows = await getDb()
     .select({ processingStartedAt: t.processingStartedAt })
@@ -275,7 +313,11 @@ export async function claimCallbackEvent(
       ...(validReceivedNotBefore ? [gte(t.receivedAt, validReceivedNotBefore)] : []),
     ))
     .limit(1);
-  return rows[0]?.processingStartedAt?.toISOString() ?? null;
+  if (!rows[0]?.processingStartedAt) {
+    logCallbackClaimRejection(telemetryContext, "event_fence");
+    return null;
+  }
+  return rows[0].processingStartedAt.toISOString();
 }
 
 export async function finishCallbackEventAdmission(

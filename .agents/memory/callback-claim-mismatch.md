@@ -28,3 +28,14 @@ chosen correction intentionally leaves unresolved notifications unchanged.
 Measure selection overhead after deployment; fewer skipped claims alone is not
 proof of better throughput. Do not interpret filtered events as completed or
 recovered history.
+
+Use bounded rejection reasons plus stable hashed event/object fingerprints for
+claim investigations, rather than adding raw identifiers or extra database reads.
+
+**Why:** Repeated start-of-batch skips could not be attributed retrospectively
+from stage-only timing logs. A later matching-winner snapshot cannot prove what
+happened during an earlier claim; more query load would also perturb timing.
+
+**How to apply:** Keep telemetry observational and fail-safe. Label guarded
+candidate failures as unavailable unless the existing evidence distinguishes
+retry exhaustion from completion or removal; do not invent a specific cause.

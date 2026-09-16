@@ -34,6 +34,10 @@ import {
   type CallbackHistoryOutcome,
 } from "@/lib/integrations/protractor/callback-outcomes";
 import { callbackWindowWinners } from "@/lib/integrations/protractor/callback-selection";
+import {
+  logCallbackClaimRejection,
+  type CallbackClaimTelemetryContext,
+} from "@/lib/integrations/protractor/callback-claim-telemetry";
 import * as pg from "./pg/protractor-callback-events";
 
 const COLLECTION = "protractor_callback_events";
@@ -151,9 +155,17 @@ export async function admitCallbackEvent(
   key: CallbackEventKey,
   identity: CallbackAdmissionIdentity,
   maxAttempts = 3,
+  claimContext?: CallbackClaimTelemetryContext,
 ): Promise<boolean> {
   if (isProtractorOpsPgCanonical()) {
-    return pg.admitCallbackEvent(key, identity, ADMISSION_LEASE_MS, undefined, maxAttempts);
+    return pg.admitCallbackEvent(
+      key,
+      identity,
+      ADMISSION_LEASE_MS,
+      undefined,
+      maxAttempts,
+      claimContext,
+    );
   }
 
   const db = await getDb();
@@ -165,7 +177,12 @@ export async function admitCallbackEvent(
     ...mongoReplayCandidateFilter(),
     $or: [{ attempts: { $exists: false } }, { attempts: { $lt: maxAttempts } }],
   } as Document);
-  if (!candidate) return false;
+  if (!candidate) {
+    if (claimContext) {
+      logCallbackClaimRejection(claimContext, "candidate_unavailable");
+    }
+    return false;
+  }
   const now = new Date();
   const staleBefore = new Date(now.getTime() - ADMISSION_LEASE_MS);
   const prior = await col.findOneAndUpdate(
@@ -260,6 +277,9 @@ export async function admitCallbackEvent(
     previous.activeStartedAt instanceof Date &&
     previous.activeStartedAt >= staleBefore;
   if (hadFreshWorker) {
+    if (claimContext) {
+      logCallbackClaimRejection(claimContext, "fresh_ownership");
+    }
     return false;
   }
   const owned = await eventCol.updateOne(
@@ -272,6 +292,9 @@ export async function admitCallbackEvent(
     { $set: { processingStartedAt: now } },
   );
   if (owned.matchedCount !== 1) {
+    if (claimContext) {
+      logCallbackClaimRejection(claimContext, "event_fence");
+    }
     await col.deleteOne({ _id: admissionId(identity), activeEventKey: key } as Document);
     return false;
   }
@@ -291,9 +314,21 @@ export async function claimCallbackEvent(
   receivedNotBefore?: Date,
   maxAttempts = 3,
 ): Promise<string | null> {
+  const claimContext: CallbackClaimTelemetryContext = {
+    store: "mongo",
+    eventKey: key,
+    shopId: identity.shopId,
+    objectType: identity.objectType,
+    objectId: identity.objectId,
+  };
   if (isProtractorOpsPgCanonical()) {
     return pg.claimCallbackEvent(
-      key, identity, ADMISSION_LEASE_MS, receivedNotBefore, maxAttempts,
+      key,
+      identity,
+      ADMISSION_LEASE_MS,
+      receivedNotBefore,
+      maxAttempts,
+      { ...claimContext, store: "pg" },
     );
   }
   const events = await collection();
@@ -316,9 +351,16 @@ export async function claimCallbackEvent(
   } as Document).sort({ receivedAt: -1, _id: -1 }).limit(1).next();
   const winner = terminalWinner ?? await events.find(objectFilter as Document)
     .sort({ receivedAt: -1, _id: -1 }).limit(1).next();
-  if (!winner || !mongoKeyFilter(key)._id ||
-      String(winner._id) !== String(mongoKeyFilter(key)._id)) return null;
-  if (!(await admitCallbackEvent(key, identity, maxAttempts))) return null;
+  if (!winner) {
+    logCallbackClaimRejection(claimContext, "winner_absent");
+    return null;
+  }
+  if (!mongoKeyFilter(key)._id ||
+      String(winner._id) !== String(mongoKeyFilter(key)._id)) {
+    logCallbackClaimRejection(claimContext, "winner_mismatch");
+    return null;
+  }
+  if (!(await admitCallbackEvent(key, identity, maxAttempts, claimContext))) return null;
   const claimedWinner = await events.find({
     ...objectFilter,
     ...(terminalWinner ? {
@@ -326,6 +368,7 @@ export async function claimCallbackEvent(
     } : {}),
   } as Document).sort({ receivedAt: -1, _id: -1 }).limit(1).next();
   if (!claimedWinner || String(claimedWinner._id) !== String(mongoKeyFilter(key)._id)) {
+    logCallbackClaimRejection(claimContext, "winner_changed");
     await events.updateOne(
       {
         ...mongoKeyFilter(key),
@@ -352,10 +395,12 @@ export async function claimCallbackEvent(
     { $set: { processingOwnerToken: token } },
   );
   if (coordinator.matchedCount !== 1) {
+    logCallbackClaimRejection(claimContext, "coordinator_fence");
     await releaseCallbackEventAdmission(key, identity);
     return null;
   }
   if (event.matchedCount !== 1) {
+    logCallbackClaimRejection(claimContext, "event_fence");
     await events.updateOne(
       {
         ...mongoKeyFilter(key),
