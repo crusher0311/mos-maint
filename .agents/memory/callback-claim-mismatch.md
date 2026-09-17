@@ -88,3 +88,15 @@ Earlier checks proved cursor progress, not successful recovery.
 scan progress, with bounded storage and concurrency fencing. Still advance past
 ineligible or authority-blocked rows, and test more eligible winners than the
 per-batch recovery quota across successive invocations.
+
+Validate carry-over through the actual repository against a persisted fake
+store, not only queue mocks that return a preselected array.
+
+**Why:** Queue assertions and a parity test with a stubbed PG arm passed while
+the scheduling gap remained. They did not exercise persistence between reads.
+An additional overlap bug also removed a buffered/fresh event from both lists.
+
+**How to apply:** Exercise each backend's real read/ack paths offline, reload
+from the same saved state, and offer more distinct eligible objects than the
+dispatch quota across successive invocations. Cover overlapping fresh rows and
+stale acknowledgements as well as candidate ordering.

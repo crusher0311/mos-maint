@@ -60,6 +60,7 @@ const ADMISSION_LEASE_MS = 10 * 60 * 1000;
 const RECOVERY_PRIORITIES = [0, 1] as const;
 const RECOVERY_METHODS = ["GET", "POST"] as const;
 const RECOVERY_CURSOR_PREFIX = "protractor_callback_recovery_cursor";
+const RECOVERY_BUFFER_LIMIT = 270;
 type MongoRecoveryCursor = {
   method: "GET" | "POST";
   priority: 0 | 1;
@@ -67,7 +68,12 @@ type MongoRecoveryCursor = {
   id: ObjectId;
   floorMs: number | null;
 };
-type MongoRecoveryCursorState = { cursor: MongoRecoveryCursor | null; revision: number };
+type MongoRecoveryBufferEntry = { key: string; generation: string };
+type MongoRecoveryCursorState = {
+  cursor: MongoRecoveryCursor | null;
+  buffer: MongoRecoveryBufferEntry[];
+  revision: number;
+};
 
 function recoveryCursorDocumentId(store: "mongo" | "pg", floorMs: number | null): string {
   return `${RECOVERY_CURSOR_PREFIX}:${store}:${floorMs ?? "none"}`;
@@ -88,6 +94,12 @@ async function readMongoRecoveryCursor(floorMs: number | null): Promise<MongoRec
     : null;
   return {
     cursor: validCursor,
+    buffer: Array.isArray(doc?.callbackRecoveryBuffer)
+      ? doc.callbackRecoveryBuffer.filter((entry: unknown): entry is MongoRecoveryBufferEntry =>
+          !!entry && typeof (entry as MongoRecoveryBufferEntry).key === "string" &&
+          typeof (entry as MongoRecoveryBufferEntry).generation === "string",
+        ).slice(0, RECOVERY_BUFFER_LIMIT)
+      : [],
     revision: typeof doc?.callbackRecoveryCursorRevision === "number"
       ? doc.callbackRecoveryCursorRevision
       : 0,
@@ -96,6 +108,7 @@ async function readMongoRecoveryCursor(floorMs: number | null): Promise<MongoRec
 
 async function writeMongoRecoveryCursor(
   cursor: MongoRecoveryCursor | null,
+  buffer: MongoRecoveryBufferEntry[],
   floorMs: number | null,
   revision: number,
 ): Promise<boolean> {
@@ -112,7 +125,11 @@ async function writeMongoRecoveryCursor(
           : { callbackRecoveryCursorRevision: revision }),
       } as Document,
       {
-        $set: { callbackRecoveryCursor: cursor, updatedAt: new Date() },
+        $set: {
+          callbackRecoveryCursor: cursor,
+          callbackRecoveryBuffer: buffer,
+          updatedAt: new Date(),
+        },
         $inc: { callbackRecoveryCursorRevision: 1 },
       },
       { upsert: revision === 0 },
@@ -1226,6 +1243,10 @@ export interface PendingGetEvent {
   terminalFromCoalesce?: boolean;
   /** Raw Mongo terminal classification retained through POST normalization. */
   terminalRank?: 0 | 1;
+  /** Opaque generation fencing a durable recovery-buffer acknowledgement. */
+  recoveryBufferGeneration?: string;
+  /** Durable carry-over order; only used to order recovery peers of one shop. */
+  recoveryBufferOrder?: number;
   /**
    * A bounded oldest-first read kept separately from the normal newest window.
    * This is advisory scheduling metadata only; durable claim remains authority.
@@ -1341,7 +1362,6 @@ export async function findPendingGetEvents(
   // rollout path because they do not satisfy the current queue contract.
   const urgent = await fetchPriority(0, limit);
   const normal = urgent.length >= limit ? [] : await fetchPriority(1, limit - urgent.length);
-  const freshKeys = new Set([...urgent, ...normal].map((d) => String(d._id)));
   /*
    * The live queue index orders the equality prefix
    * (method, processed, priority) by receivedAt. Exact method/priority
@@ -1351,10 +1371,15 @@ export async function findPendingGetEvents(
    * failed attempts and is filtered by the normal retry/contact/floor guards.
    */
   const recoveryFloorMs = validReceivedNotBefore?.getTime() ?? null;
-  const fetchRecoveryPage = async (): Promise<Document[]> => {
-    if (recoveryLimit <= 0) return [];
+  const fetchRecoveryPage = async (): Promise<{
+    docs: Document[];
+    generations: Map<string, string>;
+    orders: Map<string, number>;
+  }> => {
+    if (recoveryLimit <= 0) return { docs: [], generations: new Map(), orders: new Map() };
     const cursorState = await readMongoRecoveryCursor(recoveryFloorMs);
     let cursor = cursorState.cursor;
+    let buffer = cursorState.buffer;
     let revision = cursorState.revision;
     const rawBase = {
       method: { $in: RECOVERY_METHODS },
@@ -1364,6 +1389,30 @@ export async function findPendingGetEvents(
     const replayableRaw = (doc: Document): boolean =>
       (doc.attempts === undefined || (typeof doc.attempts === "number" && doc.attempts < maxAttempts)) &&
       doc.historyOutcome?.reason !== UNSUPPORTED_CONTACT_REASON;
+    // Buffered keys are re-read by _id every invocation. The buffer is only a
+    // scheduling carry-over, never authority: completion, attempt, contact and
+    // activation-floor changes prune it before it can be offered again.
+    const bufferedIds = buffer
+      .filter((entry) => ObjectId.isValid(entry.key))
+      .map((entry) => new ObjectId(entry.key));
+    const currentByKey = new Map<string, Document>();
+    if (bufferedIds.length > 0) {
+      const current = await col.find({
+        ...rawBase,
+        _id: { $in: bufferedIds },
+      } as Document, { maxTimeMS: 5_000 }).toArray();
+      for (const doc of current) {
+        if (replayableRaw(doc)) currentByKey.set(String(doc._id), doc);
+      }
+    }
+    const liveBuffer = buffer.filter((entry) => currentByKey.has(entry.key));
+    if (liveBuffer.length !== buffer.length) {
+      if (!(await writeMongoRecoveryCursor(cursor, liveBuffer, recoveryFloorMs, revision))) {
+        return { docs: [], generations: new Map(), orders: new Map() };
+      }
+      buffer = liveBuffer;
+      revision += 1;
+    }
     // Four raw pages is a fixed per-invocation bound. Keep reading the same
     // stream after a rejected page so its cursor advances before moving on.
     const streams = RECOVERY_PRIORITIES.flatMap((priority) =>
@@ -1372,7 +1421,9 @@ export async function findPendingGetEvents(
       ? streams.findIndex((stream) =>
           stream.priority === cursor!.priority && stream.method === cursor!.method)
       : 0;
-    for (let reads = 0; reads < 4 && index >= 0 && index < streams.length;) {
+    for (let reads = 0;
+      reads < 4 && index >= 0 && index < streams.length && buffer.length < RECOVERY_BUFFER_LIMIT;
+    ) {
       const { priority, method } = streams[index];
         const after = cursor?.priority === priority && cursor.method === method
           ? {
@@ -1393,7 +1444,8 @@ export async function findPendingGetEvents(
          * receivedAt, so this bounded 270-result tie sort may need an
          * in-memory DB sort; maxTimeMS keeps that index gap fail-closed.
          */
-        ).sort({ receivedAt: 1, _id: 1 }).limit(recoveryLimit).toArray();
+        ).sort({ receivedAt: 1, _id: 1 })
+          .limit(Math.min(recoveryLimit, RECOVERY_BUFFER_LIMIT - buffer.length)).toArray();
       reads += 1;
       if (page.length === 0) {
         index += 1;
@@ -1407,31 +1459,68 @@ export async function findPendingGetEvents(
           id: last._id as ObjectId,
           floorMs: recoveryFloorMs,
         };
-        if (!(await writeMongoRecoveryCursor(cursor, recoveryFloorMs, revision))) return [];
+        const knownKeys = new Set(buffer.map((entry) => entry.key));
+        const additions = page
+          .filter(replayableRaw)
+          .filter((doc) => !knownKeys.has(String(doc._id)))
+          .map((doc) => ({ key: String(doc._id), generation: randomUUID() }));
+        for (const doc of page) {
+          if (replayableRaw(doc)) currentByKey.set(String(doc._id), doc);
+        }
+        const nextBuffer = [...buffer, ...additions].slice(0, RECOVERY_BUFFER_LIMIT);
+        if (!(await writeMongoRecoveryCursor(cursor, nextBuffer, recoveryFloorMs, revision))) {
+          return { docs: [], generations: new Map(), orders: new Map() };
+        }
+        buffer = nextBuffer;
         revision += 1;
-        const outsideFreshWindow = page.filter((doc) =>
-          replayableRaw(doc) && !freshKeys.has(String(doc._id)));
-      if (outsideFreshWindow.length > 0) return outsideFreshWindow;
     }
     if (index >= streams.length &&
-        !(await writeMongoRecoveryCursor(null, recoveryFloorMs, revision))) return [];
-    return [];
+        !(await writeMongoRecoveryCursor(null, buffer, recoveryFloorMs, revision))) {
+      return { docs: [], generations: new Map(), orders: new Map() };
+    }
+    const retained = buffer.filter((entry) => currentByKey.has(entry.key));
+    return {
+      docs: retained.map((entry) => currentByKey.get(entry.key)!),
+      generations: new Map(retained.map((entry) => [entry.key, entry.generation])),
+      orders: new Map(retained.map((entry, index) => [entry.key, index])),
+    };
   };
   let recoveryDocs: Document[] = [];
+  let recoveryGenerations = new Map<string, string>();
+  let recoveryOrders = new Map<string, number>();
   try {
-    recoveryDocs = await fetchRecoveryPage();
+    const recovery = await fetchRecoveryPage();
+    recoveryDocs = recovery.docs;
+    recoveryGenerations = recovery.generations;
+    recoveryOrders = recovery.orders;
   } catch {
     // Recovery is advisory. Preserve the already-bounded fresh window when
     // its cursor metadata/read times out; do not emit callback identifiers.
     console.warn("[ProtractorCallbackQueue] recovery lane unavailable");
   }
+  // A buffered key owns the recovery lane even when the newest snapshot also
+  // contains it. Otherwise overlap would silently consume a fresh slot and a
+  // full fresh preselection could defer the one reserved recovery turn.
   const docs = [
-    ...[...urgent, ...normal].map((d) => ({ doc: d, selectionLane: "fresh" as const })),
+    ...[...urgent, ...normal]
+      .filter((d) => !recoveryGenerations.has(String(d._id)))
+      .map((d) => ({
+        doc: d,
+        selectionLane: "fresh" as const,
+        recoveryBufferGeneration: undefined as string | undefined,
+        recoveryBufferOrder: undefined as number | undefined,
+      })),
     ...recoveryDocs
-      .filter((d) => !freshKeys.has(String(d._id)))
-      .map((d) => ({ doc: d, selectionLane: "recovery" as const })),
+      .map((d) => ({
+        doc: d,
+        selectionLane: "recovery" as const,
+        recoveryBufferGeneration: recoveryGenerations.get(String(d._id)),
+        recoveryBufferOrder: recoveryOrders.get(String(d._id)),
+      })),
   ];
-  return rotatePendingByFleetCursor(docs.map(({ doc: d, selectionLane }) => ({
+  return rotatePendingByFleetCursor(docs.map(({
+    doc: d, selectionLane, recoveryBufferGeneration, recoveryBufferOrder,
+  }) => ({
     key: (d._id as ObjectId).toHexString(),
     method: d.method as "GET" | "POST",
     shopId: d.shopId as number,
@@ -1445,7 +1534,79 @@ export async function findPendingGetEvents(
     winnerTieBreaker: (d._id as ObjectId).toHexString(),
     terminalRank: mongoTerminalRank(d),
     ...(recoveryLimit > 0 ? { selectionLane } : {}),
+    ...(recoveryBufferGeneration ? { recoveryBufferGeneration } : {}),
+    ...(recoveryBufferOrder !== undefined ? { recoveryBufferOrder } : {}),
   })), servedShopBudget);
+}
+
+/**
+ * Acknowledge a recovery-buffer generation only after queue admission. This is
+ * intentionally independent from callback completion: failed admitted work is
+ * still discoverable on a later raw recovery pass.
+ */
+export async function acknowledgeRecoveryCandidate(
+  key: CallbackEventKey,
+  generation: string,
+  receivedNotBefore?: Date,
+): Promise<void> {
+  if (isProtractorOpsPgCanonical()) {
+    await pg.acknowledgeRecoveryCandidate(key, generation, receivedNotBefore);
+    return;
+  }
+  const floorMs = receivedNotBefore instanceof Date && Number.isFinite(receivedNotBefore.getTime())
+    ? receivedNotBefore.getTime()
+    : null;
+  const state = await readMongoRecoveryCursor(floorMs);
+  const buffer = state.buffer.filter((entry) =>
+    !(entry.key === key && entry.generation === generation));
+  if (buffer.length === state.buffer.length) return;
+  await writeMongoRecoveryCursor(state.cursor, buffer, floorMs, state.revision);
+}
+
+/**
+ * A rejected authority snapshot does not alter event state; it just evicts the
+ * exact carry-over generation so a permanently blocked prefix cannot consume
+ * the bounded recovery slot. CAS loss is fail-safe retention.
+ */
+export async function pruneRecoveryCandidates(
+  entries: Array<{ key: CallbackEventKey; generation: string }>,
+  receivedNotBefore?: Date,
+): Promise<void> {
+  if (entries.length === 0) return;
+  if (isProtractorOpsPgCanonical()) {
+    await pg.pruneRecoveryCandidates(entries, receivedNotBefore);
+    return;
+  }
+  const floorMs = receivedNotBefore instanceof Date && Number.isFinite(receivedNotBefore.getTime())
+    ? receivedNotBefore.getTime()
+    : null;
+  const rejected = new Set(entries.map((entry) => `${entry.key}\u0000${entry.generation}`));
+  const state = await readMongoRecoveryCursor(floorMs);
+  const buffer = state.buffer.filter((entry) =>
+    !rejected.has(`${entry.key}\u0000${entry.generation}`));
+  if (buffer.length === state.buffer.length) return;
+  await writeMongoRecoveryCursor(state.cursor, buffer, floorMs, state.revision);
+}
+
+/** Keep a live but unclaimed recovery candidate, rotating it behind peers. */
+export async function rotateRecoveryCandidate(
+  key: CallbackEventKey,
+  generation: string,
+  receivedNotBefore?: Date,
+): Promise<void> {
+  if (isProtractorOpsPgCanonical()) {
+    await pg.rotateRecoveryCandidate(key, generation, receivedNotBefore);
+    return;
+  }
+  const floorMs = receivedNotBefore instanceof Date && Number.isFinite(receivedNotBefore.getTime())
+    ? receivedNotBefore.getTime()
+    : null;
+  const state = await readMongoRecoveryCursor(floorMs);
+  const entry = state.buffer.find((item) =>
+    item.key === key && item.generation === generation);
+  if (!entry) return;
+  const buffer = [...state.buffer.filter((item) => item !== entry), entry];
+  await writeMongoRecoveryCursor(state.cursor, buffer, floorMs, state.revision);
 }
 
 /**

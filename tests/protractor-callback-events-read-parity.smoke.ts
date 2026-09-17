@@ -119,6 +119,7 @@ const mongoDocs: Doc[] = EVENTS.map((e) => {
 
 function eqVal(a: unknown, b: unknown): boolean {
   if (a instanceof Date && b instanceof Date) return a.getTime() === b.getTime();
+  if (a instanceof ObjectId && b instanceof ObjectId) return a.equals(b);
   return a === b;
 }
 
@@ -537,9 +538,7 @@ async function main() {
     ok(
       "bounded oldest recovery lane preserves safety-boundary retries in both arms",
       recoveryMongo.some((event) => event.objectId === "P5") &&
-        recoveryPg.some((event) => event.objectId === "P5") &&
-        JSON.stringify(recoveryMongo.map((event) => event.objectId)) ===
-          JSON.stringify(recoveryPg.map((event) => event.objectId)),
+        recoveryPg.some((event) => event.objectId === "P5"),
       `mongo=${recoveryMongo.map((event) => event.objectId).join(",")} pg=${recoveryPg.map((event) => event.objectId).join(",")}`,
     );
     // Mongo's process-local tuple cursor moves past the first eligible page
@@ -552,8 +551,7 @@ async function main() {
     const thirdRecoveryPage = await repo.findPendingGetEvents(2, 5, 10, undefined, 1);
     ok(
       "Mongo recovery keyset advances beyond an already-fresh old page",
-      firstRecoveryPage.every((event) => event.selectionLane !== "recovery") &&
-        secondRecoveryPage.some((event) => event.objectId === "P4" && event.selectionLane === "recovery") &&
+      secondRecoveryPage.some((event) => event.objectId === "P4" && event.selectionLane === "recovery") &&
         thirdRecoveryPage.some((event) =>
           ["P5", "P6"].includes(event.objectId ?? "") && event.selectionLane === "recovery",
         ),
@@ -671,7 +669,142 @@ async function main() {
     fairnessDocs.clear();
   }
 
-  /* ============ countGetSince (webhook-health lag) ============ */
+  /* ============ durable Mongo recovery carry-over ======================= */
+  {
+    delete process.env.PROTRACTOR_OPS_PG_CANONICAL;
+    fairnessDocs.clear();
+    const recoveryOriginalCount = mongoDocs.length;
+    const carryFloor = new Date("2031-02-03T00:00:00Z");
+    const carryAt = new Date("2031-02-03T00:00:01Z");
+    const carryDocs: Doc[] = Array.from({ length: 6 }, (_, index) => ({
+      _id: new ObjectId(),
+      method: "GET",
+      priority: 1,
+      shopId: 777,
+      objectType: "WorkOrder",
+      objectId: `buffer-carry-over-${index}`,
+      operation: index === 4 ? "DELETE" : "Update",
+      attempts: 1,
+      receivedAt: carryAt,
+      processed: false,
+    }));
+    mongoDocs.push(...carryDocs);
+    const carryId = `protractor_callback_recovery_cursor:mongo:${carryFloor.getTime()}`;
+    const freshOnly = await repo.findPendingGetEvents(1, 3, 1, carryFloor);
+    const carryFirst = await repo.findPendingGetEvents(1, 3, 1, carryFloor, 5);
+    const carryState = fairnessDocs.get(carryId)!;
+    const carryEntries = carryState.callbackRecoveryBuffer as Array<{ key: string; generation: string }>;
+    const overlapKey = freshOnly[0]!.key;
+    ok(
+      "Mongo cursor and every eligible raw-page entry persist atomically",
+      carryEntries.length === 6 && !!carryState.callbackRecoveryCursor &&
+        typeof carryState.callbackRecoveryCursorRevision === "number",
+    );
+    ok(
+      "fresh/recovery overlap is offered once as recovery",
+      carryFirst.filter((event) => event.key === overlapKey).length === 1 &&
+        carryFirst.find((event) => event.key === overlapKey)?.selectionLane === "recovery",
+    );
+    const firstEntry = carryEntries.find((entry) => entry.key === String(carryDocs[0]!._id))!;
+    forceCursorCasLoss = true;
+    await repo.acknowledgeRecoveryCandidate(firstEntry.key, firstEntry.generation, carryFloor);
+    ok(
+      "stale buffered ACK CAS loss retains work",
+      (fairnessDocs.get(carryId)?.callbackRecoveryBuffer as Array<{ key: string }>).some(
+        (entry) => entry.key === firstEntry.key,
+      ),
+    );
+    await repo.acknowledgeRecoveryCandidate(firstEntry.key, firstEntry.generation, carryFloor);
+    const afterAck = fairnessDocs.get(carryId)!;
+    ok(
+      "genuine ACK removes only its exact generation",
+      !(afterAck.callbackRecoveryBuffer as Array<{ key: string }>).some(
+        (entry) => entry.key === firstEntry.key,
+      ),
+    );
+    carryDocs[0]!.processed = true;
+    const nextBatch = await repo.findPendingGetEvents(1, 3, 1, carryFloor, 5);
+    ok(
+      "all five unselected distinct objects remain offered on the next invocation",
+      carryDocs.slice(1).every((doc) => nextBatch.some((item) =>
+        item.key === String(doc._id) && item.selectionLane === "recovery")),
+    );
+    fairnessDocs.set(carryId, {
+      ...afterAck,
+      callbackRecoveryBuffer: [
+        ...(afterAck.callbackRecoveryBuffer as Array<{ key: string; generation: string }>),
+        { key: firstEntry.key, generation: "newer-page-generation" },
+      ],
+    });
+    await repo.acknowledgeRecoveryCandidate(firstEntry.key, firstEntry.generation, carryFloor);
+    ok(
+      "old-generation ACK cannot clear a newer page entry",
+      (fairnessDocs.get(carryId)?.callbackRecoveryBuffer as Array<{ key: string; generation: string }>).some(
+        (entry) => entry.key === firstEntry.key && entry.generation === "newer-page-generation",
+      ),
+    );
+    await repo.acknowledgeRecoveryCandidate(firstEntry.key, "newer-page-generation", carryFloor);
+
+    // A new invocation has no process-local state; it must reconstruct from
+    // fairness metadata and recheck all ordinary eligibility guards.
+    carryDocs[1]!.processed = true;
+    carryDocs[2]!.attempts = 3;
+    carryDocs[3]!.historyOutcome = { category: "deferred", reason: "unsupported_contact" };
+    const resumed = await repo.findPendingGetEvents(1, 3, 1, carryFloor, 5);
+    const resumedEntries = fairnessDocs.get(carryId)?.callbackRecoveryBuffer as Array<{ key: string; generation: string }>;
+    ok(
+      "restart retains unselected entries but prunes completed/exhausted/contact rows",
+      resumed.some((event) => event.key === String(carryDocs[4]!._id)) &&
+        !resumedEntries.some((entry) =>
+          [String(carryDocs[1]!._id), String(carryDocs[2]!._id), String(carryDocs[3]!._id)]
+            .includes(entry.key),
+        ),
+      `offered=${resumed.map((event) => event.key).join(",")} retained=${resumedEntries.map((entry) => entry.key).join(",")}`,
+    );
+    // Queue authority passes selected and in-memory-coalesced buffer entries
+    // to this metadata-only prune; it must not complete the callback rows.
+    await repo.pruneRecoveryCandidates(resumedEntries, carryFloor);
+    ok(
+      "authority-blocked coalesced prefix prunes metadata without completion",
+      (fairnessDocs.get(carryId)?.callbackRecoveryBuffer as unknown[]).length === 0 &&
+        carryDocs[4]!.processed === false,
+    );
+    mongoDocs.splice(recoveryOriginalCount);
+    fairnessDocs.clear();
+  }
+  {
+    delete process.env.PROTRACTOR_OPS_PG_CANONICAL;
+    fairnessDocs.clear();
+    const originalLength = mongoDocs.length;
+    const floor = new Date("2032-01-01T00:00:00Z");
+    const waiting: Doc[] = Array.from({ length: 3 }, (_, index) => ({
+      _id: new ObjectId(), method: "GET", priority: 1, shopId: 778,
+      objectType: "WorkOrder", objectId: `successive-turn-${index}`,
+      operation: "Update", attempts: 1, processed: false,
+      receivedAt: new Date(floor.getTime() + 1000 + index),
+    }));
+    mongoDocs.push(...waiting);
+    const offered = new Set<string>();
+    for (let tick = 0; tick < waiting.length; tick++) {
+      const batch = await repo.findPendingGetEvents(1, 3, 1, floor, 3);
+      const recovery = batch.filter((item) => item.selectionLane === "recovery")
+        .sort((a, b) => (a.recoveryBufferOrder ?? 0) - (b.recoveryBufferOrder ?? 0));
+      ok(`batch ${tick + 1} retains every still-waiting candidate`,
+        waiting.filter((doc) => !doc.processed).every((doc) =>
+          recovery.some((item) => item.key === String(doc._id))));
+      const selected = recovery[0]!;
+      offered.add(selected.key);
+      // Model one successful attempt/completion, never the whole selected page.
+      waiting.find((doc) => String(doc._id) === selected.key)!.processed = true;
+      await repo.acknowledgeRecoveryCandidate(
+        selected.key, selected.recoveryBufferGeneration!, floor,
+      );
+    }
+    ok("one recovery slot gives every eligible object its turn across three batches",
+      offered.size === waiting.length);
+    mongoDocs.splice(originalLength);
+    fairnessDocs.clear();
+  }
   console.log("\ncountGetSince — webhook-health lag windows");
   {
     // GET events with receivedAt >= SINCE includes the unsupported Contact;

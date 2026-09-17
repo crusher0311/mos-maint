@@ -69,7 +69,16 @@ export function selectFairCallbackBatch(
     byShop.set(shopId, queue);
   }
   for (const queue of byShop.values()) {
-    queue.sort((a, b) => eventTime(a) - eventTime(b));
+    queue.sort((a, b) => {
+      // Recovery rotation is persisted specifically to avoid a repeatedly
+      // unclaimable oldest same-shop event monopolizing its reserved slot.
+      // Fresh ordering and cross-shop fairness remain unchanged.
+      if (a.selectionLane === "recovery" && b.selectionLane === "recovery" &&
+          a.recoveryBufferOrder !== undefined && b.recoveryBufferOrder !== undefined) {
+        return a.recoveryBufferOrder - b.recoveryBufferOrder;
+      }
+      return eventTime(a) - eventTime(b);
+    });
   }
 
   const selected: callbackEvents.PendingGetEvent[] = [];
@@ -170,6 +179,40 @@ export async function processProtractorCallbackQueue(
           ? new Date(outboundPolicy.callbackNotBeforeMs)
           : undefined,
       );
+      // Authority is a read-only scheduling check. Buffered entries that are
+      // no longer winners must not occupy the single recovery slot forever
+      // (for example behind an exhausted terminal), but this never completes
+      // or otherwise mutates their callback rows. A metadata CAS loss retains
+      // the entry and is safe to retry on the next invocation.
+      const authorityKeys = new Set(authorityFiltered.map((item) => item.key));
+      const authorityReviewed = [
+        ...freshPreselection.selected,
+        ...freshPreselection.coalesced,
+        ...recoveryPreselection.selected,
+        ...recoveryPreselection.coalesced,
+      ];
+      const rejectedBufferGenerations = new Set<string>();
+      const authorityRejectedBuffered = authorityReviewed.flatMap((item) => {
+        if (!item.recoveryBufferGeneration || authorityKeys.has(item.key)) return [];
+        const fingerprint = `${item.key}\u0000${item.recoveryBufferGeneration}`;
+        if (rejectedBufferGenerations.has(fingerprint)) return [];
+        rejectedBufferGenerations.add(fingerprint);
+        return [{ key: item.key, generation: item.recoveryBufferGeneration }];
+      });
+      if (authorityRejectedBuffered.length > 0) {
+        try {
+          await callbackEvents.pruneRecoveryCandidates(
+            authorityRejectedBuffered,
+            outboundPolicy.callbackNotBeforeMs != null
+              ? new Date(outboundPolicy.callbackNotBeforeMs)
+              : undefined,
+          );
+        } catch {
+          // Scheduler metadata is advisory; a pruning failure must retain the
+          // candidate, not block fresh callback admission.
+          console.warn("[ProtractorCallbackQueue] recovery buffer prune unavailable");
+        }
+      }
       const recoveredKeys = new Set(recoveryPreselection.selected.map((item) => item.key));
       const recoveryAuthority = authorityFiltered.filter((item) => recoveredKeys.has(item.key));
       const freshAuthority = authorityFiltered.filter((item) => !recoveredKeys.has(item.key));
@@ -295,6 +338,24 @@ export async function processProtractorCallbackQueue(
                 admitted = ownerToken !== null;
                 timing.finish("claim", claimStartedAt, admitted ? "success" : "skipped");
                 if (!admitted) {
+                  // A transient ownership race must not let the oldest buffered
+                  // candidate monopolize the only recovery slot. Keep it
+                  // durable but rotate its exact generation behind its peers.
+                  if (item.recoveryBufferGeneration) {
+                    try {
+                      await callbackEvents.rotateRecoveryCandidate(
+                        item.key,
+                        item.recoveryBufferGeneration,
+                        outboundPolicy.callbackNotBeforeMs != null
+                          ? new Date(outboundPolicy.callbackNotBeforeMs)
+                          : undefined,
+                      );
+                    } catch {
+                      // CAS loss/failure retains the entry, which is safer than
+                      // dropping it; a later invocation can rotate it again.
+                      console.warn("[ProtractorCallbackQueue] recovery buffer rotation unavailable");
+                    }
+                  }
                   timingOutcome = "skipped";
                   continue;
                 }
@@ -306,6 +367,14 @@ export async function processProtractorCallbackQueue(
             } catch (error) {
               timing.finish("claim", claimStartedAt, "failed");
               throw error;
+            }
+            // Claim/admission itself is asynchronous. It may cross the
+            // invocation deadline even though the pre-claim guard passed;
+            // release the fence in finally, but never begin provider work.
+            if (Date.now() >= deadlineMs) {
+              exitReason = "deadline";
+              timingOutcome = "skipped";
+              break;
             }
             if (item.objectType === "Contact" && ownerToken) {
               // Retain the notification as unresolved customer-sync work. No
@@ -319,6 +388,22 @@ export async function processProtractorCallbackQueue(
             }
             await callbackEvents.recordProcessingStarted(item.key);
             attemptStarted = true;
+            // The durable attempt is the acknowledgement point. In particular,
+            // a slow claim that crosses the deadline releases its fence above
+            // without losing buffered work before provider admission.
+            if (item.recoveryBufferGeneration) {
+              try {
+                await callbackEvents.acknowledgeRecoveryCandidate(
+                  item.key,
+                  item.recoveryBufferGeneration,
+                  outboundPolicy.callbackNotBeforeMs != null
+                    ? new Date(outboundPolicy.callbackNotBeforeMs)
+                    : undefined,
+                );
+              } catch {
+                console.warn("[ProtractorCallbackQueue] recovery buffer acknowledgement unavailable");
+              }
+            }
             // This stage includes callback transport admission and the
             // callback dispatch function. Nested fetch/snapshot/normalization
             // stages are intentionally non-additive with dispatch.

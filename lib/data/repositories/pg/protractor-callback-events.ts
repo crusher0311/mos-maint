@@ -14,6 +14,7 @@
  * next to the call sites — this file has no knowledge of the
  * kill-switch flag.
  */
+import { randomUUID } from "node:crypto";
 import { and, asc, count, desc, eq, gte, inArray, isNotNull, lt, max, or, sql } from "drizzle-orm";
 import type { Document } from "mongodb";
 import { getDb } from "@/lib/db/drizzle";
@@ -39,6 +40,7 @@ const UNSUPPORTED_CONTACT_REASON = "unsupported_contact";
 const RECOVERY_PRIORITIES = [0, 1] as const;
 const RECOVERY_METHODS = ["GET", "POST"] as const;
 const RECOVERY_CURSOR_PREFIX = "protractor_callback_recovery_cursor";
+const RECOVERY_BUFFER_LIMIT = 270;
 type PgRecoveryCursor = {
   method: "GET" | "POST";
   priority: 0 | 1;
@@ -46,7 +48,12 @@ type PgRecoveryCursor = {
   id: number;
   floorMs: number | null;
 };
-type PgRecoveryCursorState = { cursor: PgRecoveryCursor | null; revision: number };
+type PgRecoveryBufferEntry = { key: string; generation: string };
+type PgRecoveryCursorState = {
+  cursor: PgRecoveryCursor | null;
+  buffer: PgRecoveryBufferEntry[];
+  revision: number;
+};
 
 function recoveryCursorDocumentId(floorMs: number | null): string {
   return `${RECOVERY_CURSOR_PREFIX}:pg:${floorMs ?? "none"}`;
@@ -66,6 +73,12 @@ async function readPgRecoveryCursor(floorMs: number | null): Promise<PgRecoveryC
     : null;
   return {
     cursor: validCursor,
+    buffer: Array.isArray(doc?.callbackRecoveryBuffer)
+      ? doc.callbackRecoveryBuffer.filter((entry: unknown): entry is PgRecoveryBufferEntry =>
+          !!entry && typeof (entry as PgRecoveryBufferEntry).key === "string" &&
+          typeof (entry as PgRecoveryBufferEntry).generation === "string",
+        ).slice(0, RECOVERY_BUFFER_LIMIT)
+      : [],
     revision: typeof doc?.callbackRecoveryCursorRevision === "number"
       ? doc.callbackRecoveryCursorRevision
       : 0,
@@ -74,6 +87,7 @@ async function readPgRecoveryCursor(floorMs: number | null): Promise<PgRecoveryC
 
 async function writePgRecoveryCursor(
   cursor: PgRecoveryCursor | null,
+  buffer: PgRecoveryBufferEntry[],
   floorMs: number | null,
   revision: number,
 ): Promise<boolean> {
@@ -89,7 +103,11 @@ async function writePgRecoveryCursor(
           : { callbackRecoveryCursorRevision: revision }),
       } as Document,
       {
-        $set: { callbackRecoveryCursor: cursor, updatedAt: new Date() },
+        $set: {
+          callbackRecoveryCursor: cursor,
+          callbackRecoveryBuffer: buffer,
+          updatedAt: new Date(),
+        },
         $inc: { callbackRecoveryCursorRevision: 1 },
       },
       { upsert: revision === 0 },
@@ -841,6 +859,8 @@ export interface PendingGetEvent {
   receivedAt: Date;
   winnerTieBreaker?: number;
   selectionLane?: "fresh" | "recovery";
+  recoveryBufferGeneration?: string;
+  recoveryBufferOrder?: number;
 }
 
 /** protractor-sync pre-sweep queue: unprocessed callback events under the attempt cap. */
@@ -887,7 +907,6 @@ export async function findPendingGetEvents(
       desc(t.id),
     )
     .limit(limit);
-  const freshKeys = new Set(freshRows.map((r) => r.eventKey));
   const recoveryRawWhere = and(
     or(eq(t.method, "GET"), eq(t.method, "POST")),
     eq(t.processed, false),
@@ -898,6 +917,7 @@ export async function findPendingGetEvents(
     method: "GET" | "POST",
     priority: 0 | 1,
     cursor: PgRecoveryCursor | null,
+    pageLimit: number,
   ) => db.transaction(async (tx) => {
     // Recovery is advisory; do not let a missing receivedAt/id tie index
     // consume the callback drain's 40-second admission budget.
@@ -917,7 +937,7 @@ export async function findPendingGetEvents(
           : undefined,
       ))
       .orderBy(asc(t.receivedAt), asc(t.id))
-      .limit(recoveryLimit);
+      .limit(pageLimit);
   });
   /*
    * Exact method/priority streams use the existing pending queue index
@@ -929,11 +949,39 @@ export async function findPendingGetEvents(
     Number.isFinite(receivedNotBefore.getTime())
     ? receivedNotBefore.getTime()
     : null;
-  const fetchRecoveryPage = async () => {
-    if (recoveryLimit <= 0) return [] as typeof freshRows;
+  const fetchRecoveryPage = async (): Promise<{
+    rows: typeof freshRows;
+    generations: Map<string, string>;
+    orders: Map<string, number>;
+  }> => {
+    if (recoveryLimit <= 0) return { rows: [], generations: new Map(), orders: new Map() };
     const cursorState = await readPgRecoveryCursor(recoveryFloorMs);
     let cursor = cursorState.cursor;
+    let buffer = cursorState.buffer;
     let revision = cursorState.revision;
+    // Every carry-over item is checked against the live row on every
+    // invocation. The buffer is not callback state and never overrides the
+    // retry/contact/floor guards.
+    const bufferedKeys = buffer.map((entry) => entry.key);
+    const liveRows = bufferedKeys.length === 0 ? [] : await db
+      .select(fields)
+      .from(t)
+      .where(and(
+        recoveryRawWhere,
+        inArray(t.eventKey, bufferedKeys),
+        or(sql`${t.attempts} IS NULL`, lt(t.attempts, maxAttempts)),
+        replayCandidateWhere(),
+      ));
+    const liveByKey = new Map(liveRows.map((row) => [row.eventKey as string, row]));
+    const liveKeys = new Set(liveByKey.keys());
+    const liveBuffer = buffer.filter((entry) => liveKeys.has(entry.key));
+    if (liveBuffer.length !== buffer.length) {
+      if (!(await writePgRecoveryCursor(cursor, liveBuffer, recoveryFloorMs, revision))) {
+        return { rows: [], generations: new Map(), orders: new Map() };
+      }
+      buffer = liveBuffer;
+      revision += 1;
+    }
     // Match Mongo's fixed raw-page bound and consume rejected pages from the
     // same stream before moving to the next method/priority stream.
     const streams = RECOVERY_PRIORITIES.flatMap((priority) =>
@@ -942,9 +990,16 @@ export async function findPendingGetEvents(
       ? streams.findIndex((stream) =>
           stream.priority === cursor!.priority && stream.method === cursor!.method)
       : 0;
-    for (let reads = 0; reads < 4 && index >= 0 && index < streams.length;) {
+    for (let reads = 0;
+      reads < 4 && index >= 0 && index < streams.length && buffer.length < RECOVERY_BUFFER_LIMIT;
+    ) {
       const { priority, method } = streams[index];
-        const page = await readRecoveryStream(method, priority, cursor);
+        const page = await readRecoveryStream(
+          method,
+          priority,
+          cursor,
+          Math.min(recoveryLimit, RECOVERY_BUFFER_LIMIT - buffer.length),
+        );
       reads += 1;
       if (page.length === 0) {
         index += 1;
@@ -958,34 +1013,68 @@ export async function findPendingGetEvents(
           id: last.id,
           floorMs: recoveryFloorMs,
         };
-        if (!(await writePgRecoveryCursor(cursor, recoveryFloorMs, revision))) return [] as typeof freshRows;
+        const knownKeys = new Set(buffer.map((entry) => entry.key));
+        const additions = page
+          .filter((row) =>
+            (row.attempts == null || row.attempts < maxAttempts) &&
+            row.recoveryOutcomeReason !== UNSUPPORTED_CONTACT_REASON,
+          )
+          .filter((row) => !knownKeys.has(row.eventKey as string))
+          .slice(0, RECOVERY_BUFFER_LIMIT - buffer.length)
+          .map((row) => ({ key: row.eventKey as string, generation: randomUUID() }));
+        for (const row of page) {
+          if ((row.attempts == null || row.attempts < maxAttempts) &&
+              row.recoveryOutcomeReason !== UNSUPPORTED_CONTACT_REASON) {
+            liveByKey.set(row.eventKey as string, row);
+          }
+        }
+        const nextBuffer = [...buffer, ...additions];
+        if (!(await writePgRecoveryCursor(cursor, nextBuffer, recoveryFloorMs, revision))) {
+          return { rows: [], generations: new Map(), orders: new Map() };
+        }
+        buffer = nextBuffer;
         revision += 1;
-        const outsideFreshWindow = page.filter((row) =>
-          (row.attempts == null || row.attempts < maxAttempts) &&
-          row.recoveryOutcomeReason !== UNSUPPORTED_CONTACT_REASON &&
-          !freshKeys.has(row.eventKey));
-      if (outsideFreshWindow.length > 0) return outsideFreshWindow;
     }
     if (index >= streams.length &&
-        !(await writePgRecoveryCursor(null, recoveryFloorMs, revision))) return [] as typeof freshRows;
-    return [] as typeof freshRows;
+        !(await writePgRecoveryCursor(null, buffer, recoveryFloorMs, revision))) {
+      return { rows: [], generations: new Map(), orders: new Map() };
+    }
+    const retained = buffer.filter((entry) => liveByKey.has(entry.key));
+    return {
+      rows: retained.map((entry) => liveByKey.get(entry.key)!),
+      generations: new Map(retained.map((entry) => [entry.key, entry.generation])),
+      orders: new Map(retained.map((entry, index) => [entry.key, index])),
+    };
   };
   let recoveryRows: typeof freshRows = [];
+  let recoveryGenerations = new Map<string, string>();
+  let recoveryOrders = new Map<string, number>();
   try {
-    recoveryRows = await fetchRecoveryPage();
+    const recovery = await fetchRecoveryPage();
+    recoveryRows = recovery.rows;
+    recoveryGenerations = recovery.generations;
+    recoveryOrders = recovery.orders;
   } catch {
     // The fresh bounded query has already completed. Recovery metadata/read
     // failure must not abort provider work or expose a callback identifier.
     console.warn("[ProtractorCallbackQueue] recovery lane unavailable");
   }
   const rows = [
-    ...freshRows.map((row) => ({
-      ...row,
-      ...(recoveryLimit > 0 ? { selectionLane: "fresh" as const } : {}),
-    })),
+    // Buffered keys deliberately own recovery, even if present in fresh. This
+    // preserves the reserved turn and avoids duplicate quota consumption.
+    ...freshRows
+      .filter((row) => !recoveryGenerations.has(row.eventKey as string))
+      .map((row) => ({
+        ...row,
+        ...(recoveryLimit > 0 ? { selectionLane: "fresh" as const } : {}),
+      })),
     ...recoveryRows
-      .filter((row) => !freshKeys.has(row.eventKey))
-      .map((row) => ({ ...row, selectionLane: "recovery" as const })),
+      .map((row) => ({
+        ...row,
+        selectionLane: "recovery" as const,
+        recoveryBufferGeneration: recoveryGenerations.get(row.eventKey as string),
+        recoveryBufferOrder: recoveryOrders.get(row.eventKey as string),
+      })),
   ];
   return rows.map(({ attempts: _attempts, recoveryOutcomeReason: _reason, ...r }) => ({
     ...r,
@@ -995,6 +1084,64 @@ export async function findPendingGetEvents(
     terminalRank: Number(r.terminalRank) === 1 ? 1 : 0,
     winnerTieBreaker: r.id,
   }));
+}
+
+/**
+ * Remove only the exact buffered generation that was genuinely admitted.
+ * A delayed worker cannot acknowledge a later re-buffer of the same event key:
+ * the generation and fairness revision must both still match.
+ */
+export async function acknowledgeRecoveryCandidate(
+  eventKey: string,
+  generation: string,
+  receivedNotBefore?: Date,
+): Promise<void> {
+  const floorMs = receivedNotBefore instanceof Date && Number.isFinite(receivedNotBefore.getTime())
+    ? receivedNotBefore.getTime()
+    : null;
+  const state = await readPgRecoveryCursor(floorMs);
+  const buffer = state.buffer.filter((entry) =>
+    !(entry.key === eventKey && entry.generation === generation));
+  if (buffer.length === state.buffer.length) return;
+  await writePgRecoveryCursor(state.cursor, buffer, floorMs, state.revision);
+}
+
+/**
+ * Authority rejection is not callback completion. It merely frees the bounded
+ * scheduler carry-over so an exhausted/terminal prefix cannot reserve the one
+ * recovery slot forever. A CAS loss retains work rather than deleting it.
+ */
+export async function pruneRecoveryCandidates(
+  entries: Array<{ key: string; generation: string }>,
+  receivedNotBefore?: Date,
+): Promise<void> {
+  if (entries.length === 0) return;
+  const floorMs = receivedNotBefore instanceof Date && Number.isFinite(receivedNotBefore.getTime())
+    ? receivedNotBefore.getTime()
+    : null;
+  const rejected = new Set(entries.map((entry) => `${entry.key}\u0000${entry.generation}`));
+  const state = await readPgRecoveryCursor(floorMs);
+  const buffer = state.buffer.filter((entry) =>
+    !rejected.has(`${entry.key}\u0000${entry.generation}`));
+  if (buffer.length === state.buffer.length) return;
+  await writePgRecoveryCursor(state.cursor, buffer, floorMs, state.revision);
+}
+
+/** Keep an unclaimed live candidate durable, but move it behind its peers. */
+export async function rotateRecoveryCandidate(
+  eventKey: string,
+  generation: string,
+  receivedNotBefore?: Date,
+): Promise<void> {
+  const floorMs = receivedNotBefore instanceof Date && Number.isFinite(receivedNotBefore.getTime())
+    ? receivedNotBefore.getTime()
+    : null;
+  const state = await readPgRecoveryCursor(floorMs);
+  const entry = state.buffer.find((item) =>
+    item.key === eventKey && item.generation === generation);
+  if (!entry) return;
+  const buffer = [...state.buffer.filter((item) => item !== entry), entry];
+  await writePgRecoveryCursor(state.cursor, buffer, floorMs, state.revision);
 }
 
 /**

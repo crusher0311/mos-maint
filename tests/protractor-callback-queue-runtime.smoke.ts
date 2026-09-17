@@ -81,6 +81,8 @@ const callbackDeferralWrites: Array<{
   ownerToken: string;
   outcome: any;
 }> = [];
+const recoveryAcks: Array<{ key: string; generation: string }> = [];
+const recoveryRotations: Array<{ key: string; generation: string }> = [];
 const errors: Array<{ key: string; message: string }> = [];
 const attempts = new Map<string, number>();
 
@@ -97,6 +99,7 @@ const vehicleReplayResults = new Map<string, any[]>();
 const workOrderReplayResults = new Map<string, any[]>();
 let drainSetupAdvanceMs = 0;
 let selectionAdvanceMs = 0;
+let claimAdvanceMs = 0;
 
 function event(
   key: string,
@@ -147,6 +150,8 @@ function resetQueueState(events: CallbackEvent[]): void {
   dispatchClockAdvances.clear();
   callbackOutcomeWrites.length = 0;
   callbackDeferralWrites.length = 0;
+  recoveryAcks.length = 0;
+  recoveryRotations.length = 0;
   errors.length = 0;
   attempts.clear();
   timingRecords.length = 0;
@@ -154,6 +159,7 @@ function resetQueueState(events: CallbackEvent[]): void {
   normalizationTimingRecorders.length = 0;
   drainSetupAdvanceMs = 0;
   selectionAdvanceMs = 0;
+  claimAdvanceMs = 0;
 }
 
 const callbackEventsMock = {
@@ -171,6 +177,8 @@ const callbackEventsMock = {
   claimCallbackEvent: async (key: string) => {
     const ownerToken = ownerTokens.has(key) ? ownerTokens.get(key)! : null;
     claims.push({ key, ownerToken });
+    clockOffsetMs += claimAdvanceMs;
+    claimAdvanceMs = 0;
     return ownerToken;
   },
   recordProcessingStarted: async (key: string) => {
@@ -198,6 +206,12 @@ const callbackEventsMock = {
   },
   recordError: async (key: string, message: string) => {
     errors.push({ key, message });
+  },
+  acknowledgeRecoveryCandidate: async (key: string, generation: string) => {
+    recoveryAcks.push({ key, generation });
+  },
+  rotateRecoveryCandidate: async (key: string, generation: string) => {
+    recoveryRotations.push({ key, generation });
   },
   releaseCallbackEventAdmission: async (
     key: string,
@@ -734,6 +748,7 @@ async function runQueueAssertions(
   assert.deepEqual(served, []);
 
   const unclaimed = event("unclaimed", "wo-unclaimed");
+  (unclaimed as any).recoveryBufferGeneration = "unclaimed-generation";
   resetQueueState([unclaimed]);
   ownerTokens.set(unclaimed.key, null);
   dispatchOutcomes.set(unclaimed.key, {
@@ -750,6 +765,12 @@ async function runQueueAssertions(
   assert.deepEqual(completionCalls, []);
   assert.deepEqual(served, []);
   assert.deepEqual(releases, []);
+  assert.deepEqual(recoveryAcks, [], "rejected claims retain their buffered generation");
+  assert.deepEqual(
+    recoveryRotations,
+    [{ key: unclaimed.key, generation: "unclaimed-generation" }],
+    "rejected claims rotate rather than discard their buffered generation",
+  );
 }
 
 async function runRecoveryLaneAssertions(
@@ -762,6 +783,7 @@ async function runRecoveryLaneAssertions(
   const recovery = {
     ...event("recovery-expired-attempt", "wo-recovery"),
     selectionLane: "recovery" as const,
+    recoveryBufferGeneration: "recovery-generation",
   };
   const fresh = Array.from({ length: 45 }, (_, index) => ({
     ...event(`fresh-${index}`, `wo-fresh-${index}`),
@@ -801,6 +823,35 @@ async function runRecoveryLaneAssertions(
     "recovery is admitted before fresh work so it cannot age out at the deadline",
   );
   assert.equal(selectionCalls[0]?.[4], 270, "queue requests one bounded recovery lane");
+  assert.deepEqual(
+    recoveryAcks,
+    [{ key: recovery.key, generation: "recovery-generation" }],
+    "a recovery entry is acknowledged only after its durable attempt starts",
+  );
+}
+
+function runRecoveryBufferOrderAssertions(
+  selectFairCallbackBatch: (candidates: any[], limit: number) => { selected: any[] },
+): void {
+  const olderRejected = {
+    ...event("buffer-old", "same-shop-old"),
+    selectionLane: "recovery" as const,
+    recoveryBufferGeneration: "old-generation",
+    // This is the persisted order after an earlier unclaimed attempt rotated
+    // the old entry behind its peer.
+    recoveryBufferOrder: 1,
+  };
+  const nextPeer = {
+    ...event("buffer-next", "same-shop-next"),
+    selectionLane: "recovery" as const,
+    recoveryBufferGeneration: "next-generation",
+    recoveryBufferOrder: 0,
+  };
+  assert.equal(
+    selectFairCallbackBatch([olderRejected, nextPeer], 1).selected[0]?.key,
+    nextPeer.key,
+    "same-shop recovery rotation outranks receivedAt so a rejected claim cannot pin the slot",
+  );
 }
 
 async function runPreAdmissionDeadlineAssertions(
@@ -826,6 +877,7 @@ async function runPreAdmissionDeadlineAssertions(
     "wo-late-budget-acquire",
     "DELETE",
   );
+  (lateAcquire as any).recoveryBufferGeneration = "late-acquire-generation";
   resetQueueState([lateAcquire]);
   const lateAcquireDeadline = Date.now() + 10_000;
   let lateAcquireEligibilityCalls = 0;
@@ -852,6 +904,7 @@ async function runPreAdmissionDeadlineAssertions(
     "late budget-slot wait does not reach eligibility",
   );
   assertUnclaimed(lateAcquire.key, "late budget-slot wait");
+  assert.deepEqual(recoveryAcks, [], "pre-claim deadline retains recovery carry-over");
   assert.equal(
     timingRecords.some(
       (record) => record.kind === "callback_batch_timing" &&
@@ -891,6 +944,27 @@ async function runPreAdmissionDeadlineAssertions(
     true,
     "late eligibility wait records a deadline exit",
   );
+
+  const lateClaim = {
+    ...event("late-recovery-claim", "wo-late-recovery-claim"),
+    selectionLane: "recovery" as const,
+    recoveryBufferGeneration: "late-claim-generation",
+  };
+  resetQueueState([lateClaim]);
+  ownerTokens.set(lateClaim.key, "late-claim-owner");
+  claimAdvanceMs = 10_001;
+  assert.deepEqual(
+    await processProtractorCallbackQueue({}, dispatch, {
+      ...queueOptions(),
+      deadlineAtMs: Date.now() + 10_000,
+    }),
+    { processed: 0, failed: 0 },
+  );
+  assert.deepEqual(recoveryAcks, [], "a claim crossing the deadline must retain carry-over");
+  assert.deepEqual(processingStarts, [], "a late claim does not start an attempt");
+  assert.deepEqual(dispatches, [], "a late claim does not dispatch");
+  assert.deepEqual(releases, [{ key: lateClaim.key, ownerToken: "late-claim-owner" }],
+    "a late claim releases its ownership fence");
 }
 
 async function runDrainDeadlineAssertions(
@@ -1364,7 +1438,7 @@ async function runTerminalPostAssertions(
 }
 
 async function main(): Promise<void> {
-  const { processProtractorCallbackQueue } = await import(
+  const { processProtractorCallbackQueue, selectFairCallbackBatch } = await import(
     "../lib/integrations/protractor/callback-queue"
   );
   const { processProtractorCallbackDrain } = await import(
@@ -1374,6 +1448,7 @@ async function main(): Promise<void> {
   try {
     await runQueueAssertions(processProtractorCallbackQueue);
     await runRecoveryLaneAssertions(processProtractorCallbackQueue);
+    runRecoveryBufferOrderAssertions(selectFairCallbackBatch);
     await runPreAdmissionDeadlineAssertions(processProtractorCallbackQueue);
     await runDrainDeadlineAssertions(processProtractorCallbackDrain);
     await runDrainAssertions(processProtractorCallbackDrain);
