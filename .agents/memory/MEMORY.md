@@ -131,3 +131,4 @@
 - [Callback claim mismatch](callback-claim-mismatch.md) — skipped claims can be deterministic winner/selection disagreement, not provider congestion; preserve terminal ordering when correcting.
 - [Callback budget headroom](callback-budget-headroom.md) — admission deadlines do not abort completion; preserve measured finish-time margin under the scheduler timeout.
 - [Protractor Lookup is not VIN](protractor-lookup-not-vin.md) — nonempty Lookup and cache vin fields can contain non-VIN identifiers; validate before proposing recovery.
+- [Callback customer lookup latency](callback-customer-lookup-latency.md) — local Mongo customer fallback can dominate timeouts despite fast Protractor responses; inspect live natural-key indexes.
