@@ -100,3 +100,14 @@ An additional overlap bug also removed a buffered/fresh event from both lists.
 from the same saved state, and offer more distinct eligible objects than the
 dispatch quota across successive invocations. Cover overlapping fresh rows and
 stale acknowledgements as well as candidate ordering.
+
+Take a fresh target baseline before attributing recovery to a new deployment.
+
+**Why:** Previously stalled targets completed after a bounded watch ended but
+before the next correction went live. Their later completed state could not
+validate that correction; separate saved candidates supplied the post-deploy
+attempt evidence.
+
+**How to apply:** Compare actual attempt timestamps with the verified live time.
+Report dispatch recovery separately from history indexing and backlog clearance;
+successful no-history outcomes prove processing, not repaired service history.
