@@ -23,6 +23,10 @@ import {
 } from "@/lib/sticker-defaults";
 import { resolveVehicleFields, splitDisplayVehicle } from "@/lib/vehicle-display";
 import { hasAuditableIdentifier, pickEstimateAssistIdentifier } from "@/lib/estimate-assist-prefill";
+import {
+  dashboardMarkerAfterRefresh,
+  dashboardMarkerChanged,
+} from "@/lib/dashboard-refresh";
 
 function getRowMake(r: any): string | undefined {
   const direct = r?.vehicle?.make || r?.vehicleMake || r?.make;
@@ -68,6 +72,8 @@ type DashboardData = {
   distanceUnit?: "miles" | "kilometers";
   enabledFeatures?: FeatureId[];
   quickSpecs?: Record<string, QuickSpecs>;
+  dashboardUpdateMarker?: number;
+  dashboardUpdateToken?: string;
 };
 
 const PAGE_SIZE = 100;
@@ -104,7 +110,12 @@ function formatWorkflowStage(status: string): { label: string; color: string; ic
   return { label: safeStatus, color: "bg-gray-100 text-gray-800", icon: null };
 }
 
-async function fetchDashboardData(page: number, search: string, archived: boolean = false): Promise<DashboardData | null> {
+async function fetchDashboardData(
+  page: number,
+  search: string,
+  archived: boolean = false,
+  signal?: AbortSignal,
+): Promise<DashboardData | null> {
   try {
     const params = new URLSearchParams({
       page: page.toString(),
@@ -114,7 +125,8 @@ async function fetchDashboardData(page: number, search: string, archived: boolea
     if (archived) params.set('archived', 'true');
     
     const response = await fetch(`/api/dashboard/data?${params}`, {
-      cache: 'no-store'
+      cache: 'no-store',
+      signal,
     });
     
     if (response.ok) {
@@ -135,6 +147,14 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
   const [showArchived, setShowArchived] = useState(false);
   const [sortColumn, setSortColumn] = useState<SortColumn>('mileage');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const dataRequestRef = useRef<{
+    key: string;
+    generation: number;
+    controller: AbortController;
+    promise: Promise<DashboardData | null>;
+  } | null>(null);
+  const requestGenerationRef = useRef(0);
+  const disposedRef = useRef(false);
   
   // Load saved sort preferences after hydration to avoid SSR mismatch
   useEffect(() => {
@@ -841,15 +861,66 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     </th>
   );
 
-  const loadData = async (page: number, search: string, archived: boolean = false) => {
-    setIsRefreshing(true);
-    const newData = await fetchDashboardData(page, search, archived);
-    if (newData) {
-      setData(newData);
-      setLastUpdated(new Date());
-    }
-    setIsRefreshing(false);
+  const loadData = (
+    page: number,
+    search: string,
+    archived: boolean = false,
+  ): Promise<DashboardData | null> => {
+    const key = `${page}|${search}|${archived ? "1" : "0"}`;
+    const existing = dataRequestRef.current;
+    if (existing?.key === key && !existing.controller.signal.aborted) return existing.promise;
+
+    existing?.controller.abort();
+    const generation = ++requestGenerationRef.current;
+    const controller = new AbortController();
+    const promise = (async () => {
+      setIsRefreshing(true);
+      const newData = await fetchDashboardData(
+        page,
+        search,
+        archived,
+        controller.signal,
+      );
+      // An aborted/superseded request is not allowed to commit stale rows or
+      // markers after a query switch. Its null result also keeps poll retries
+      // pending when the request itself failed.
+      if (
+        disposedRef.current ||
+        generation !== requestGenerationRef.current ||
+        controller.signal.aborted
+      ) {
+        return null;
+      }
+      if (newData) {
+        setData(newData);
+        setLastUpdated(new Date());
+      }
+      return newData;
+    })().finally(() => {
+      if (
+        !disposedRef.current &&
+        generation === requestGenerationRef.current
+      ) {
+        setIsRefreshing(false);
+      }
+      if (dataRequestRef.current?.generation === generation) {
+        dataRequestRef.current = null;
+      }
+    });
+    dataRequestRef.current = { key, generation, controller, promise };
+    return promise;
   };
+
+  useEffect(() => {
+    // Strict Mode replays effect setup/cleanup without recreating refs.
+    disposedRef.current = false;
+    return () => {
+      disposedRef.current = true;
+      requestGenerationRef.current += 1;
+      dataRequestRef.current?.controller.abort();
+      dataRequestRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     // Always fetch fresh data on mount to ensure SSR and client are in sync
@@ -893,7 +964,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
   }, [data.rows, data.shopId, data.user?.shopId]);
 
   useEffect(() => {
-    let lastKnownUpdate = 0;
+    let lastKnownUpdate: string | null = data.dashboardUpdateToken ?? null;
     // Poll every 15s instead of the old 3s — the change-detection endpoint
     // means freshness is bounded by the poll interval, and 15s is plenty
     // for a shop-floor dashboard while cutting backend load 5x. Full
@@ -901,20 +972,42 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     // (no more unconditional 30s reloads).
     const POLL_INTERVAL = 15000;
     let inFlight = false;
+    let disposed = false;
 
     const checkForUpdates = async () => {
       // Skip entirely while the tab is hidden, and never stack requests.
-      if (document.hidden || inFlight) return;
+      if (disposed || document.hidden || inFlight) return;
       inFlight = true;
       try {
         const response = await fetch('/api/dashboard/updates');
-        if (response.ok) {
+        if (!disposed && response.ok) {
           const result = await response.json();
-          if (result.lastUpdate && result.lastUpdate > lastKnownUpdate) {
-            if (lastKnownUpdate > 0) {
-              loadData(currentPage, searchQuery, showArchived);
+          if (disposed) return;
+          const marker = String(
+            result.dashboardUpdateToken ?? result.lastUpdate ?? "0",
+          );
+          if (lastKnownUpdate === null) {
+            // Establish a baseline without reloading the SSR data. Keeping
+            // zero as a valid baseline fixes the first-change-after-install
+            // case where the old `> 0` guard skipped the first event.
+            lastKnownUpdate = marker;
+          } else if (dashboardMarkerChanged(lastKnownUpdate, marker)) {
+            const refreshed = await loadData(
+              currentPage,
+              searchQuery,
+              showArchived,
+            );
+            // Only advance after a successful data refresh. A transient API
+            // failure must leave the marker pending so the next bounded poll
+            // retries it rather than silently losing the update.
+            if (!disposed) {
+              lastKnownUpdate = dashboardMarkerAfterRefresh(
+                lastKnownUpdate,
+                marker,
+                Boolean(refreshed),
+                refreshed?.dashboardUpdateToken,
+              );
             }
-            lastKnownUpdate = result.lastUpdate;
           }
         }
       } catch (e) {
@@ -933,6 +1026,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     checkForUpdates();
     const interval = setInterval(checkForUpdates, POLL_INTERVAL);
     return () => {
+      disposed = true;
       clearInterval(interval);
       document.removeEventListener('visibilitychange', handleVisibility);
     };

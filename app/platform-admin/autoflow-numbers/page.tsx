@@ -5,7 +5,8 @@
 // extension can't always resolve. Unresolved numbers land here for a manual,
 // fail-closed attach to the right shop's autoflow.shopNumbers.
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, Building2, Link2, RefreshCw, Trash2 } from "lucide-react";
+import { AlertTriangle, Building2, Link2, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { AutoflowWorkflowMapping } from "./AutoflowWorkflowMapping";
 
 interface UnresolvedNumber {
   number: string;
@@ -47,6 +48,8 @@ export default function AutoflowNumbersPage() {
   const [shops, setShops] = useState<AutoflowShop[]>([]);
   const [conflicts, setConflicts] = useState<AutoflowConflict[]>([]);
   const [selection, setSelection] = useState<Record<string, string>>({});
+  const [manualNumber, setManualNumber] = useState("");
+  const [manualShopId, setManualShopId] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -71,12 +74,28 @@ export default function AutoflowNumbersPage() {
     load();
   }, [load]);
 
-  async function attach(number: string) {
-    const shopId = selection[number];
+  const shopDescription = (shop: AutoflowShop) =>
+    `${shop.name} · MOS ID ${shop.shopId}${shop.autoflowDomain ? ` · ${shop.autoflowDomain}` : ""}`;
+
+  async function attach(number: string, selectedShopId?: string) {
+    const shopId = selectedShopId ?? selection[number];
     if (!shopId) {
       setNotice("Pick a shop first.");
       return;
     }
+    if (!/^\d{1,64}$/.test(number)) {
+      setNotice("Enter a numeric AutoFlow number of 64 digits or fewer.");
+      return;
+    }
+    const shop = shops.find((candidate) => String(candidate.shopId) === String(shopId));
+    if (!shop) {
+      setNotice("The selected shop is no longer available. Refresh and try again.");
+      return;
+    }
+    if (!confirm(`Confirm ownership before attaching:\n\nAutoFlow number: ${number}\nShop: ${shopDescription(shop)}\n\nMOS ID is an internal identifier, not an AutoFlow provider number.`)) {
+      return;
+    }
+    if (busy === number) return;
     setBusy(number);
     setNotice(null);
     try {
@@ -87,7 +106,11 @@ export default function AutoflowNumbersPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
-      setNotice(`Attached ${number} to shop ${shopId}.`);
+      setNotice(`Attached ${number} to ${shop.name} · MOS ID ${shop.shopId}.`);
+      if (number === manualNumber) {
+        setManualNumber("");
+        setManualShopId("");
+      }
       await load();
     } catch (e: any) {
       setNotice(e?.message || "Attach failed");
@@ -119,6 +142,7 @@ export default function AutoflowNumbersPage() {
 
   const fmt = (d: string | null) => (d ? new Date(d).toLocaleString() : "—");
   const mapped = shops.filter((s) => (s.shopNumbers || []).length > 0);
+  const manualNumberIsValid = /^\d{1,64}$/.test(manualNumber);
   const conflictLabel = (reason: AutoflowConflict["reason"]) => {
     if (reason === "multiple_canonical") return "Multiple canonical owners";
     if (reason === "multiple_aliases") return "Duplicate learned aliases";
@@ -137,6 +161,7 @@ export default function AutoflowNumbersPage() {
             AutoFlow v4 pages (app.autoflow.com/shop/&lt;number&gt;/…) identify shops by a number.
             Unresolved numbers reported by the extension appear below — attach each one to the
             correct shop. The extension never guesses: until attached, those pages fail closed.
+            MOS IDs shown here are internal identifiers, never provider numbers.
           </p>
         </div>
         <button
@@ -235,13 +260,63 @@ export default function AutoflowNumbersPage() {
 
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm mb-8">
             <div className="px-5 py-4 border-b border-gray-100">
+              <h2 className="font-semibold text-gray-900">Manually attach a number</h2>
+              <p className="text-sm text-gray-500 mt-1">
+                Use this when a number has not yet been observed. Confirm the shop owns the number before attaching it.
+              </p>
+            </div>
+            <div className="px-5 py-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto] md:items-end">
+              <label className="block">
+                <span className="block text-xs font-medium text-gray-700 mb-1">AutoFlow number</span>
+                <input
+                  value={manualNumber}
+                  onChange={(event) => setManualNumber(event.target.value.replace(/\s/g, ""))}
+                  inputMode="numeric"
+                  maxLength={64}
+                  placeholder="Digits only, up to 64"
+                  aria-describedby="manual-number-help"
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 font-mono text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <span id="manual-number-help" className="block mt-1 text-xs text-gray-500">
+                  {manualNumber && !manualNumberIsValid ? "Numbers must contain 1–64 digits only." : "Provider number — not the internal MOS ID."}
+                </span>
+              </label>
+              <label className="block">
+                <span className="block text-xs font-medium text-gray-700 mb-1">Shop owner</span>
+                <select
+                  value={manualShopId}
+                  onChange={(event) => setManualShopId(event.target.value)}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm bg-white"
+                >
+                  <option value="">Select shop…</option>
+                  {shops.map((shop) => (
+                    <option key={String(shop.shopId)} value={String(shop.shopId)}>
+                      {shopDescription(shop)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                onClick={() => attach(manualNumber, manualShopId)}
+                disabled={!manualNumberIsValid || !manualShopId || busy === manualNumber}
+                className="inline-flex justify-center items-center gap-1.5 px-3 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-40"
+              >
+                <Plus className="w-4 h-4" /> Attach number
+              </button>
+            </div>
+          </div>
+
+          <AutoflowWorkflowMapping />
+
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm mb-8">
+            <div className="px-5 py-4 border-b border-gray-100">
               <h2 className="font-semibold text-gray-900">
                 Unresolved numbers <span className="text-gray-400 font-normal">({unresolved.length})</span>
               </h2>
             </div>
             {unresolved.length === 0 ? (
               <div className="px-5 py-8 text-sm text-gray-500 text-center">
-                No unresolved AutoFlow numbers. 🎉
+                No unresolved AutoFlow numbers.
               </div>
             ) : (
               <table className="w-full text-sm">
@@ -279,8 +354,7 @@ export default function AutoflowNumbersPage() {
                           <option value="">Select shop…</option>
                           {shops.map((s) => (
                             <option key={String(s.shopId)} value={String(s.shopId)}>
-                              {s.name} (#{s.shopId})
-                              {s.autoflowDomain ? ` — ${s.autoflowDomain}` : ""}
+                              {shopDescription(s)}
                             </option>
                           ))}
                         </select>

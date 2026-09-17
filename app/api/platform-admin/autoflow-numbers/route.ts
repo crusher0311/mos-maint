@@ -23,6 +23,14 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function parseShopId(value: unknown): string | number | null {
+  if (typeof value !== "string" && typeof value !== "number") return null;
+  const raw = String(value).trim();
+  if (!/^\d+$/.test(raw)) return null;
+  const id = Number(raw);
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
+}
+
 export async function GET() {
   try {
     const session = await getSession();
@@ -71,9 +79,9 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
-    const shopId = isNaN(Number(shopIdRaw)) ? shopIdRaw : Number(shopIdRaw);
-    if (shopId == null || shopId === "") {
-      return NextResponse.json({ error: "shopId required" }, { status: 400 });
+    const shopId = parseShopId(shopIdRaw);
+    if (shopId == null) {
+      return NextResponse.json({ error: "A valid internal MOS shop ID is required" }, { status: 400 });
     }
 
     const shop = await findShopByIdBasic(shopId);
@@ -93,10 +101,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    await attachAutoflowNumber(shopId, number, session.email || null);
+    await attachAutoflowNumber(shop.shopId, number, session.email || null);
 
     console.log(`[AutoFlow Numbers] ${session.email} attached AutoFlow number "${number}" to shop ${shopId}`);
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, number, shop: { shopId: shop.shopId, name: shop.name } });
   } catch (err: any) {
     if (err instanceof AutoflowIdentifierConflictError) {
       return NextResponse.json(
@@ -124,9 +132,14 @@ export async function DELETE(req: NextRequest) {
     if (!number) {
       return NextResponse.json({ error: "Invalid number" }, { status: 400 });
     }
-    const shopId = isNaN(Number(shopIdRaw)) ? shopIdRaw : Number(shopIdRaw);
+    const shopId = parseShopId(shopIdRaw);
+    if (shopId == null) {
+      return NextResponse.json({ error: "A valid internal MOS shop ID is required" }, { status: 400 });
+    }
+    const shop = await findShopByIdBasic(shopId);
+    if (!shop) return NextResponse.json({ error: "Shop not found" }, { status: 404 });
 
-    await detachAutoflowNumber(shopId, number, session.email || null);
+    await detachAutoflowNumber(shop.shopId, number, session.email || null);
 
     console.log(`[AutoFlow Numbers] ${session.email} detached AutoFlow number "${number}" from shop ${shopId}`);
     return NextResponse.json({ ok: true });

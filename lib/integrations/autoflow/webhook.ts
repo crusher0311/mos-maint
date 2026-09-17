@@ -17,6 +17,7 @@ import { fetchDviByInvoice, upsertDviSnapshot } from "@/lib/integrations/autoflo
 import { upsertCustomerFromEvent } from "@/lib/upsert-customer";
 import { insertEvent } from "@/lib/data/repositories/events";
 import { updateDviResultCrossRef } from "@/lib/data/repositories/dvi";
+import { bumpDashboardUpdate } from "@/lib/dashboard-updates";
 
 // ---- HMAC helpers --------------------------------------------------------
 
@@ -221,14 +222,13 @@ export async function processAutoflowWebhookEvent(args: {
     raw,
     receivedAt: new Date(),
   });
-
   // ---- Normalize into first-class docs so dashboards light up ---------
   try {
     const eventName = String(getEventName(payload)).toLowerCase();
 
     // AutoFlow is a DVI-only provider: it has no work-order snapshot
-    // collection, no NormalizedIngestionService adapter, and never bumps
-    // `dashboard_updates`. Its DVI snapshots are cross-referenced onto the
+    // collection or NormalizedIngestionService adapter. Its DVI snapshots are
+    // cross-referenced onto the
     // primary SMS work order (Tekmetric/Protractor/Shop-Ware) which already
     // drives dashboard visibility. The marker just lets a DVI event be traced.
     console.log(`[autoflow-webhook] received event=${eventName || "(none)"} shop=${shop.shopId}`);
@@ -386,5 +386,16 @@ export async function processAutoflowWebhookEvent(args: {
   } catch (e) {
     // Swallow normalization errors; raw event is still stored for replay
     console.error("Webhook normalization error:", e);
+  } finally {
+    // Notify only after customer/DVI presentation writes have settled. The
+    // marker is shop-scoped so an AutoFlow event does not wake every tenant.
+    try {
+      await bumpDashboardUpdate(db, "autoflow_webhook", shop.shopId);
+    } catch (error: any) {
+      console.warn(
+        `[autoflow-webhook] dashboard update marker failed for shop ${shop.shopId}:`,
+        error?.message || error,
+      );
+    }
   }
 }
