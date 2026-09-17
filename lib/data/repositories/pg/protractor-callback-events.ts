@@ -37,6 +37,8 @@ const CALLBACK_OUTCOME_COALESCED: CallbackHistoryOutcome = {
   reason: "superseded",
 };
 const UNSUPPORTED_CONTACT_REASON = "unsupported_contact";
+// Keep exact case semantics aligned with callback-queue's Contact branch.
+const UNSUPPORTED_CONTACT_OBJECT_TYPE = "Contact";
 const RECOVERY_PRIORITIES = [0, 1] as const;
 const RECOVERY_METHODS = ["GET", "POST"] as const;
 const RECOVERY_CURSOR_PREFIX = "protractor_callback_recovery_cursor";
@@ -254,6 +256,15 @@ function replayCandidateWhere() {
   return or(
     sql`(${t.payload} -> 'historyOutcome' ->> 'reason') IS NULL`,
     sql`(${t.payload} -> 'historyOutcome' ->> 'reason') <> ${UNSUPPORTED_CONTACT_REASON}`,
+  );
+}
+
+function supportedObjectTypeWhere() {
+  // SQL `<>` excludes NULL, while the Mongo `$ne` fresh/recovery filters keep
+  // legacy rows with no objectType. Spell out the NULL arm for parity.
+  return or(
+    sql`${t.objectType} IS NULL`,
+    sql`${t.objectType} <> ${UNSUPPORTED_CONTACT_OBJECT_TYPE}`,
   );
 }
 
@@ -875,6 +886,8 @@ export async function findPendingGetEvents(
     or(eq(t.method, "GET"), eq(t.method, "POST")),
     eq(t.processed, false),
     isNotNull(t.eventKey),
+    // Exclude exact-case unsupported Contacts before the fresh query limit.
+    supportedObjectTypeWhere(),
     or(sql`${t.attempts} IS NULL`, lt(t.attempts, maxAttempts)),
     replayCandidateWhere(),
     receivedNotBefore ? gte(t.receivedAt, receivedNotBefore) : undefined,
@@ -911,6 +924,9 @@ export async function findPendingGetEvents(
     or(eq(t.method, "GET"), eq(t.method, "POST")),
     eq(t.processed, false),
     isNotNull(t.eventKey),
+    // Contact records stay in the notification table, but never occupy a
+    // bounded recovery raw page or durable carry-over entry.
+    supportedObjectTypeWhere(),
     receivedNotBefore ? gte(t.receivedAt, receivedNotBefore) : undefined,
   );
   const readRecoveryStream = async (
@@ -942,8 +958,9 @@ export async function findPendingGetEvents(
   /*
    * Exact method/priority streams use the existing pending queue index
    * oldest-first. There is intentionally no attempts/stale-lease predicate:
-   * no such production index exists. Retry/contact eligibility is applied
-   * only after each raw page advances the persisted cursor.
+   * no such production index exists. Retry eligibility is applied only after
+   * each raw page advances the persisted cursor; exact-case Contacts are
+   * excluded up-front because no replay handler exists for them.
    */
   const recoveryFloorMs = receivedNotBefore instanceof Date &&
     Number.isFinite(receivedNotBefore.getTime())
@@ -1017,6 +1034,7 @@ export async function findPendingGetEvents(
         const additions = page
           .filter((row) =>
             (row.attempts == null || row.attempts < maxAttempts) &&
+            row.objectType !== UNSUPPORTED_CONTACT_OBJECT_TYPE &&
             row.recoveryOutcomeReason !== UNSUPPORTED_CONTACT_REASON,
           )
           .filter((row) => !knownKeys.has(row.eventKey as string))
@@ -1024,6 +1042,7 @@ export async function findPendingGetEvents(
           .map((row) => ({ key: row.eventKey as string, generation: randomUUID() }));
         for (const row of page) {
           if ((row.attempts == null || row.attempts < maxAttempts) &&
+              row.objectType !== UNSUPPORTED_CONTACT_OBJECT_TYPE &&
               row.recoveryOutcomeReason !== UNSUPPORTED_CONTACT_REASON) {
             liveByKey.set(row.eventKey as string, row);
           }

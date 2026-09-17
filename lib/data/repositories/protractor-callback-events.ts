@@ -43,6 +43,9 @@ import * as pg from "./pg/protractor-callback-events";
 const COLLECTION = "protractor_callback_events";
 const ADMISSION_COLLECTION = "protractor_callback_admissions";
 const UNSUPPORTED_CONTACT_REASON = "unsupported_contact";
+// This is deliberately case-sensitive: it must match the queue's
+// `item.objectType === "Contact"` safety boundary exactly.
+const UNSUPPORTED_CONTACT_OBJECT_TYPE = "Contact";
 const TERMINAL_OPERATION = /^(DELETE|INVOICED|INVOICE|CLOSED|VOID)$/i;
 
 function mongoTerminalRank(doc: Document): 0 | 1 {
@@ -1335,6 +1338,9 @@ export async function findPendingGetEvents(
   const matchBase = {
     method: { $in: ["GET", "POST"] },
     processed: false,
+    // Do this in the indexed fresh read rather than after its limit. Contact
+    // notifications remain unresolved records, but cannot spend a fresh slot.
+    objectType: { $ne: UNSUPPORTED_CONTACT_OBJECT_TYPE },
     ...(validReceivedNotBefore ? { receivedAt: { $gte: validReceivedNotBefore } } : {}),
     $and: [
       {
@@ -1368,7 +1374,8 @@ export async function findPendingGetEvents(
    * streams traverse that same index oldest-first; do not predicate on
    * attempts/processingStartedAt, for which production has no queue index.
    * It intentionally includes safety-boundary rows as well as ordinary
-   * failed attempts and is filtered by the normal retry/contact/floor guards.
+   * failed attempts. Exact-case unsupported Contacts are the one known
+   * non-replayable type excluded before this bounded read.
    */
   const recoveryFloorMs = validReceivedNotBefore?.getTime() ?? null;
   const fetchRecoveryPage = async (): Promise<{
@@ -1384,10 +1391,14 @@ export async function findPendingGetEvents(
     const rawBase = {
       method: { $in: RECOVERY_METHODS },
       processed: false,
+      // Contacts have no replay handler. Exclude them before the bounded raw
+      // page so they cannot fill carry-over capacity or delay older work.
+      objectType: { $ne: UNSUPPORTED_CONTACT_OBJECT_TYPE },
       ...(validReceivedNotBefore ? { receivedAt: { $gte: validReceivedNotBefore } } : {}),
     };
     const replayableRaw = (doc: Document): boolean =>
       (doc.attempts === undefined || (typeof doc.attempts === "number" && doc.attempts < maxAttempts)) &&
+      doc.objectType !== UNSUPPORTED_CONTACT_OBJECT_TYPE &&
       doc.historyOutcome?.reason !== UNSUPPORTED_CONTACT_REASON;
     // Buffered keys are re-read by _id every invocation. The buffer is only a
     // scheduling carry-over, never authority: completion, attempt, contact and

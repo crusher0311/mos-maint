@@ -120,6 +120,10 @@ function matches(row: Row, expression: Expression | undefined): boolean {
   if (statement.text.includes("historyOutcome") && statement.text.includes("<>")) {
     return row.recoveryOutcomeReason !== statement.params.at(-1);
   }
+  if (statement.text.includes("objectType IS NULL")) return row.objectType == null;
+  if (statement.text.includes("objectType <>")) {
+    return row.objectType !== statement.params.at(-1);
+  }
   if (statement.text.includes("receivedAt >") || statement.text.includes("received_at >")) {
     return row.receivedAt > (statement.params[0] as Date);
   }
@@ -304,6 +308,72 @@ async function main() {
   assert.deepEqual(fairnessDocs.get(cursorId)!.callbackRecoveryBuffer,
     [{ key: "event-8", generation: "new-generation" }],
     "a stale-generation acknowledgement cannot clear a newer reservation");
+
+  // Exact-case Contacts are excluded before a raw recovery page is limited, so
+  // a full Contact prefix cannot fill the durable 270-entry carry-over or keep
+  // older supported work out of recovery. Existing Contact entries are later
+  // removed as scheduler metadata only.
+  const originalLength = rows.length;
+  const contactPrefix = Array.from({ length: 270 }, (_, index) => 100 + index);
+  for (const id of contactPrefix) {
+    add(id, {
+      objectType: "Contact",
+      objectId: `contact-prefix-${id}`,
+      receivedAt: at(id),
+    });
+  }
+  const workId = 370;
+  add(workId, {
+    objectType: "WorkOrder",
+    objectId: "work-after-contact-prefix",
+    receivedAt: at(workId),
+  });
+  fairnessDocs.clear();
+  repo = loadRepository();
+  const afterPrefix = await repo.findPendingGetEvents(0, 3, floor, 270);
+  const prefixState = fairnessDocs.get(cursorId)!;
+  assert.ok(
+    afterPrefix.some((row) => row.eventKey === "event-370"),
+    "PG recovery offers supported work after a full Contact prefix",
+  );
+  assert.ok(
+    prefixState.callbackRecoveryBuffer.some((entry: any) => entry.key === "event-370") &&
+      !prefixState.callbackRecoveryBuffer.some((entry: any) =>
+        /^event-(?:[12]\d\d|3[0-6]\d)$/.test(entry.key)),
+    "PG Contact prefix consumes no durable recovery-buffer capacity",
+  );
+  assert.ok(
+    rows.filter((row) => row.objectType === "Contact").every((row) =>
+      row.processed === false && row.attempts === 0),
+    "PG Contact exclusion preserves notification records",
+  );
+  fairnessDocs.set(cursorId, {
+    ...prefixState,
+    callbackRecoveryBuffer: [
+      { key: "event-100", generation: "stale-contact-one" },
+      { key: "event-101", generation: "stale-contact-two" },
+      ...prefixState.callbackRecoveryBuffer,
+    ],
+  });
+  repo = loadRepository();
+  const afterBufferedContacts = await repo.findPendingGetEvents(0, 3, floor, 1);
+  assert.ok(
+    afterBufferedContacts.some((row) => row.eventKey === "event-370"),
+    "PG retains supported recovery work when persisted Contacts are encountered",
+  );
+  assert.ok(
+    fairnessDocs.get(cursorId)!.callbackRecoveryBuffer.some((entry: any) => entry.key === "event-370") &&
+      !fairnessDocs.get(cursorId)!.callbackRecoveryBuffer.some((entry: any) =>
+        entry.key === "event-100" || entry.key === "event-101"),
+    "PG prunes persisted Contact entries from scheduler metadata across reads",
+  );
+  assert.ok(
+    rows.filter((row) => row.eventKey === "event-100" || row.eventKey === "event-101")
+      .every((row) => row.processed === false && row.attempts === 0),
+    "PG metadata pruning never completes or resets Contacts",
+  );
+  rows.splice(originalLength);
+  fairnessDocs.clear();
 
   console.log("protractor PG callback recovery carry-over: all checks passed");
 }

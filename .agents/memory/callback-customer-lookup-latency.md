@@ -7,11 +7,11 @@ Trace callback normalization before blaming provider latency or increasing
 request limits. Canonical Postgres operation does not eliminate the shadow
 Mongo customer lookup on a Postgres miss.
 
-**Why:** Production timeout telemetry showed a roughly 29-second customer
-natural-key read while the provider fetch took about two seconds. Live index
-inspection and a bounded planner-only check found the lookup using only a
-shop-level index, filtering customer provenance within that shop. The shipped
-source-lookup index did not match the queried provenance fields.
+**Why:** During the 2026-09-17 incident, timeout telemetry showed a roughly
+29-second customer natural-key read while the provider fetch took about two
+seconds. Before the index correction, live inspection found the lookup using
+only a shop-level index, filtering customer provenance within that shop. The
+old source-lookup index did not match the queried provenance fields.
 
 **How to apply:** Compare nested fetch, snapshot, and normalization timings;
 inspect actual production index definitions and the exact natural-key query

@@ -83,6 +83,7 @@ const callbackDeferralWrites: Array<{
 }> = [];
 const recoveryAcks: Array<{ key: string; generation: string }> = [];
 const recoveryRotations: Array<{ key: string; generation: string }> = [];
+const recoveryPrunes: Array<{ key: string; generation: string }> = [];
 const errors: Array<{ key: string; message: string }> = [];
 const attempts = new Map<string, number>();
 
@@ -100,6 +101,7 @@ const workOrderReplayResults = new Map<string, any[]>();
 let drainSetupAdvanceMs = 0;
 let selectionAdvanceMs = 0;
 let claimAdvanceMs = 0;
+let returnAllPendingForSelection = false;
 
 function event(
   key: string,
@@ -152,6 +154,7 @@ function resetQueueState(events: CallbackEvent[]): void {
   callbackDeferralWrites.length = 0;
   recoveryAcks.length = 0;
   recoveryRotations.length = 0;
+  recoveryPrunes.length = 0;
   errors.length = 0;
   attempts.clear();
   timingRecords.length = 0;
@@ -160,6 +163,7 @@ function resetQueueState(events: CallbackEvent[]): void {
   drainSetupAdvanceMs = 0;
   selectionAdvanceMs = 0;
   claimAdvanceMs = 0;
+  returnAllPendingForSelection = false;
 }
 
 const callbackEventsMock = {
@@ -171,7 +175,7 @@ const callbackEventsMock = {
       selectionAdvanceMs = 0;
     }
     const requestedLimit = Number(args[2] ?? args[0] ?? pending.length);
-    return pending.slice(0, requestedLimit);
+    return returnAllPendingForSelection ? pending.slice() : pending.slice(0, requestedLimit);
   },
   filterPendingCallbackCandidatesByAuthority: async (items: CallbackEvent[]) => items,
   claimCallbackEvent: async (key: string) => {
@@ -212,6 +216,9 @@ const callbackEventsMock = {
   },
   rotateRecoveryCandidate: async (key: string, generation: string) => {
     recoveryRotations.push({ key, generation });
+  },
+  pruneRecoveryCandidates: async (entries: Array<{ key: string; generation: string }>) => {
+    recoveryPrunes.push(...entries);
   },
   releaseCallbackEventAdmission: async (
     key: string,
@@ -549,36 +556,43 @@ async function runQueueAssertions(
   assert.deepEqual(served, []);
   assert.deepEqual(releases, [{ key: thrown.key, ownerToken: "owner-thrown" }]);
 
-  const contact = event("contact", "contact-1");
-  contact.objectType = "Contact";
-  resetQueueState([contact]);
-  ownerTokens.set(contact.key, "owner-contact");
-  dispatchOutcomes.set(contact.key, {
-    category: "applied_indexed",
-    reason: "indexed",
-  });
+  const contactFresh = event("contact-fresh", "contact-fresh");
+  contactFresh.objectType = "Contact";
+  const contactRecovery = {
+    ...event("contact-recovery", "contact-recovery"),
+    objectType: "Contact",
+    selectionLane: "recovery" as const,
+    recoveryBufferGeneration: "contact-buffer-generation",
+  };
+  const afterContacts = event("after-contacts", "wo-after-contacts");
+  resetQueueState([contactFresh, contactRecovery, afterContacts]);
+  // Model the repository's pre-limit Contact exclusion boundary while keeping
+  // this queue-only seam able to return both rejected and supported rows.
+  returnAllPendingForSelection = true;
+  ownerTokens.set(afterContacts.key, "owner-after-contacts");
 
   assert.deepEqual(
-    await processProtractorCallbackQueue({}, dispatch, queueOptions()),
-    { processed: 0, failed: 0 },
-    "unsupported Contact callbacks are held without becoming failures",
+    await processProtractorCallbackQueue({}, dispatch, { ...queueOptions(), limit: 1 }),
+    { processed: 1, failed: 0 },
+    "unsupported Contacts cannot consume the one fresh/recovery selection slot",
   );
-  assert.deepEqual(dispatches, [], "Contact callbacks are not dispatched");
-  assert.deepEqual(processingStarts, [], "Contact callbacks do not increment attempts");
-  assert.equal(attempts.get(contact.key) ?? 0, 0);
-  assert.deepEqual(completionCalls, [], "Contact callbacks are not completed");
   assert.deepEqual(
-    callbackOutcomeWrites,
-    [{
-      key: contact.key,
-      ownerToken: "owner-contact",
-      outcome: { category: "deferred", reason: "unsupported_contact" },
-    }],
-    "Contact deferral is fenced to its admission owner",
+    dispatches.map((item) => item.key),
+    [afterContacts.key],
+    "supported work after fresh and recovery Contacts is dispatched",
   );
+  assert.deepEqual(processingStarts, [afterContacts.key]);
+  assert.equal(attempts.get(contactFresh.key) ?? 0, 0);
+  assert.equal(attempts.get(contactRecovery.key) ?? 0, 0);
+  assert.deepEqual(completionCalls.map((args) => args[0]), [afterContacts.key]);
+  assert.deepEqual(callbackOutcomeWrites, [], "selection filtering does not rewrite Contact evidence");
   assert.deepEqual(callbackDeferralWrites, []);
   assert.deepEqual(errors, []);
-  assert.deepEqual(releases, [{ key: contact.key, ownerToken: "owner-contact" }]);
+  assert.deepEqual(
+    recoveryPrunes,
+    [{ key: contactRecovery.key, generation: "contact-buffer-generation" }],
+    "an existing Contact carry-over is pruned as scheduler metadata only",
+  );
 
   const pacedExpiry = event("paced-expiry", "wo-paced-expiry");
   resetQueueState([pacedExpiry]);

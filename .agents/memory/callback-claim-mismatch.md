@@ -111,3 +111,15 @@ attempt evidence.
 **How to apply:** Compare actual attempt timestamps with the verified live time.
 Report dispatch recovery separately from history indexing and backlog clearance;
 successful no-history outcomes prove processing, not repaired service history.
+
+Unsupported Contact notifications must remain recorded without occupying fresh
+or recovery processing capacity.
+
+**Why:** The user approved excluding unsupported Contacts from selection rather
+than marking them completed or deleting them. They were consuming the scarce
+recovery allowance despite having no supported replay handler.
+
+**How to apply:** Preserve notification state and retain the defensive unsupported
+handler. Remove only fenced scheduling metadata for unsupported records; do not
+treat this exclusion as successful customer synchronization. Preserve unknown
+and missing object-type behavior when maintaining Mongo/Postgres parity.

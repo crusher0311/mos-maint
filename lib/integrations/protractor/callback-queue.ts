@@ -28,6 +28,11 @@ function isTerminal(item: callbackEvents.PendingGetEvent): boolean {
   return isTerminalCallbackEvent(item);
 }
 
+function isUnsupportedContact(item: callbackEvents.PendingGetEvent): boolean {
+  // Keep this exact-case check aligned with the retained deferral branch below.
+  return item.objectType === "Contact";
+}
+
 /**
  * Collapse a candidate window to one event per object, with terminal state
  * dominating later non-terminal noise, then interleave shops round-robin.
@@ -159,8 +164,33 @@ export async function processProtractorCallbackQueue(
       // Query exact authoritative winners only for a fixed fair subset, not
       // for all 4,500 candidates. A rejected/exhausted winner is removed
       // before the final 45 are chosen; no callback row is changed here.
-      const freshCandidates = candidates.filter((item) => item.selectionLane !== "recovery");
-      const recoveryCandidates = candidates.filter((item) => item.selectionLane === "recovery");
+      // Repository reads exclude Contact before their limits. Keep this
+      // defensive scheduler-only guard for stale carry-over metadata and
+      // alternate repository implementations: an unsupported notification
+      // must not consume either fresh or recovery selection capacity.
+      const unsupportedBufferedContacts = candidates.flatMap((item) =>
+        isUnsupportedContact(item) && item.recoveryBufferGeneration
+          ? [{ key: item.key, generation: item.recoveryBufferGeneration }]
+          : [],
+      );
+      if (unsupportedBufferedContacts.length > 0) {
+        try {
+          await callbackEvents.pruneRecoveryCandidates(
+            unsupportedBufferedContacts,
+            outboundPolicy.callbackNotBeforeMs != null
+              ? new Date(outboundPolicy.callbackNotBeforeMs)
+              : undefined,
+          );
+        } catch {
+          // This only frees scheduler metadata. On failure, retain the
+          // notification and its buffer entry rather than touching callback
+          // state or blocking supported work.
+          console.warn("[ProtractorCallbackQueue] recovery buffer prune unavailable");
+        }
+      }
+      const schedulableCandidates = candidates.filter((item) => !isUnsupportedContact(item));
+      const freshCandidates = schedulableCandidates.filter((item) => item.selectionLane !== "recovery");
+      const recoveryCandidates = schedulableCandidates.filter((item) => item.selectionLane === "recovery");
       // Keep the oldest-first lane distinct through both fair selections. A
       // single reserved slot gives an expired/previously-attempted callback a
       // bounded path to durable admission while retaining forty-four of forty-

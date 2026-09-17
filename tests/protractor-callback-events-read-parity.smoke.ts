@@ -87,9 +87,11 @@ const EVENTS: Ev[] = [
   { label: "pend-attempts0", method: "GET", receivedAt: T2, connectionId: "c2", shopId: 2, objectType: "WorkOrder", objectId: "P4", operation: "Created", priority: 1, attempts: 0, processed: false },
   { label: "pend-safety-boundary", method: "GET", receivedAt: T3, connectionId: "c4", shopId: 4, objectType: "ServiceItem", objectId: "P5", operation: "Modified", priority: 1, attempts: 2, historyOutcomeReason: "safety_boundary", processed: false },
   { label: "pend-missing-vin", method: "GET", receivedAt: T2, connectionId: "c4", shopId: 4, objectType: "ServiceItem", objectId: "P6", operation: "Modified", priority: 1, attempts: 2, historyOutcomeReason: "missing_vin", processed: false },
-  // Contact callbacks are claimed for safety, but their unsupported-contact
-  // evidence must not re-enter the ordinary callback queue.
-  { label: "contact-unsupported", method: "GET", receivedAt: T5, connectionId: "c3", shopId: 3, objectType: "Contact", objectId: "C1", operation: "Modified", priority: 0, attempts: 0, historyOutcomeReason: "unsupported_contact", processed: false },
+  // Exact-case Contacts have no replay handler even before their deferral
+  // outcome is persisted. A differently-cased provider type remains outside
+  // that exact safety boundary.
+  { label: "contact-pending", method: "GET", receivedAt: T5, connectionId: "c3", shopId: 3, objectType: "Contact", objectId: "C1", operation: "Modified", priority: 0, attempts: 0, processed: false },
+  { label: "contact-lowercase", method: "GET", receivedAt: T1, connectionId: "c3", shopId: 3, objectType: "contact", objectId: "C2", operation: "Modified", priority: 1, attempts: 0, processed: false },
 ];
 
 /* ---- fake Mongo store (legacy doc shape + real query semantics) ----------- */
@@ -329,6 +331,7 @@ const pgStub = {
           r.processed === false &&
           r.eventKey !== null &&
           (!receivedNotBefore || r.receivedAt >= receivedNotBefore) &&
+            r.objectType !== "Contact" &&
            r.historyOutcomeReason !== "unsupported_contact" &&
           (r.attempts === null || r.attempts < maxAttempts),
       );
@@ -475,15 +478,20 @@ async function main() {
     const mOrder = res.mongo.map((e) => e.objectId);
     const pOrder = res.pg.map((e) => e.objectId);
     ok(
-      "queue order identical: priority asc then fleet cursor (P2,P1,P4,P5,P6)",
-      JSON.stringify(mOrder) === JSON.stringify(["P2", "P1", "P4", "P5", "P6"]) && JSON.stringify(pOrder) === JSON.stringify(mOrder),
+       "queue order identical: priority asc then fleet cursor (P2,P1,P4,C2,P5,P6)",
+       JSON.stringify(mOrder) === JSON.stringify(["P2", "P1", "P4", "C2", "P5", "P6"]) && JSON.stringify(pOrder) === JSON.stringify(mOrder),
       `mongo=${mOrder.join(",")} pg=${pOrder.join(",")}`,
     );
     ok("at-cap (attempts=5) excluded in both arms", !mOrder.includes("P3") && !pOrder.includes("P3"));
     ok("missing-attempts doc included in both arms", mOrder.includes("P2") && pOrder.includes("P2"));
     ok(
-      "unsupported Contact outcome excluded before the queue limit in both arms",
+       "exact-case pending Contact is excluded before the queue limit in both arms",
       !mOrder.includes("C1") && !pOrder.includes("C1"),
+      `mongo=${mOrder.join(",")} pg=${pOrder.join(",")}`,
+    );
+    ok(
+      "Contact exclusion uses the queue branch's exact-case semantics in both arms",
+      mOrder.includes("C2") && pOrder.includes("C2"),
       `mongo=${mOrder.join(",")} pg=${pOrder.join(",")}`,
     );
     const replayCap = await bothArms(repo, (r) => r.findPendingGetEvents(10, 3));
@@ -529,16 +537,16 @@ async function main() {
     const pStrict = strictCap.pg.map((e) => e.objectId);
     ok(
       "tighter cap (maxAttempts=2) drops attempts>=2 but keeps missing-attempts, identically",
-      JSON.stringify(mStrict) === JSON.stringify(["P2", "P4"]) && JSON.stringify(pStrict) === JSON.stringify(mStrict),
+       JSON.stringify(mStrict) === JSON.stringify(["P2", "P4", "C2"]) && JSON.stringify(pStrict) === JSON.stringify(mStrict),
       `mongo=${mStrict.join(",")} pg=${pStrict.join(",")}`,
     );
     const recovery = await bothArms(repo, (r) => r.findPendingGetEvents(2, 5, 10, undefined, 5));
     const recoveryMongo = recovery.mongo.filter((event) => event.selectionLane === "recovery");
     const recoveryPg = recovery.pg.filter((event) => event.selectionLane === "recovery");
     ok(
-      "bounded oldest recovery lane preserves safety-boundary retries in both arms",
-      recoveryMongo.some((event) => event.objectId === "P5") &&
-        recoveryPg.some((event) => event.objectId === "P5"),
+       "bounded oldest recovery lane preserves eligible safety/failure retries in both arms",
+       recoveryMongo.some((event) => ["P5", "P6"].includes(event.objectId ?? "")) &&
+         recoveryPg.some((event) => ["P5", "P6"].includes(event.objectId ?? "")),
       `mongo=${recoveryMongo.map((event) => event.objectId).join(",")} pg=${recoveryPg.map((event) => event.objectId).join(",")}`,
     );
     // Mongo's process-local tuple cursor moves past the first eligible page
@@ -805,12 +813,78 @@ async function main() {
     mongoDocs.splice(originalLength);
     fairnessDocs.clear();
   }
+  {
+    // Contacts must not fill the fixed 270-entry carry-over. In particular,
+    // supported old work immediately following a full Contact prefix must be
+    // retained, and Contacts accidentally persisted by an older scheduler must
+    // be removed from metadata (not from callback records) on later reads.
+    delete process.env.PROTRACTOR_OPS_PG_CANONICAL;
+    fairnessDocs.clear();
+    const originalLength = mongoDocs.length;
+    const contactFloor = new Date("2033-01-01T00:00:00Z");
+    const contactAt = new Date("2033-01-01T00:00:01Z");
+    const contactPrefix: Doc[] = Array.from({ length: 270 }, (_, index) => ({
+      _id: new ObjectId(), method: "GET", priority: 1, shopId: 779,
+      objectType: "Contact", objectId: `contact-prefix-${index}`,
+      operation: "Update", attempts: 0, receivedAt: contactAt, processed: false,
+    }));
+    const workAfterContacts: Doc = {
+      _id: new ObjectId(), method: "GET", priority: 1, shopId: 779,
+      objectType: "WorkOrder", objectId: "work-after-contact-prefix",
+      operation: "Update", attempts: 1,
+      receivedAt: new Date(contactAt.getTime() + 1000), processed: false,
+    };
+    mongoDocs.push(...contactPrefix, workAfterContacts);
+    const contactCursorId =
+      `protractor_callback_recovery_cursor:mongo:${contactFloor.getTime()}`;
+    const afterPrefix = await repo.findPendingGetEvents(0, 3, 0, contactFloor, 270);
+    const afterPrefixState = fairnessDocs.get(contactCursorId)!;
+    const afterPrefixEntries =
+      afterPrefixState.callbackRecoveryBuffer as Array<{ key: string; generation: string }>;
+    ok(
+      "Mongo Contact prefix cannot consume recovery buffer capacity before supported work",
+      afterPrefix.some((item) => item.key === String(workAfterContacts._id) &&
+        item.selectionLane === "recovery") &&
+        afterPrefixEntries.length === 1 &&
+        afterPrefixEntries[0]?.key === String(workAfterContacts._id),
+      `offered=${afterPrefix.map((item) => item.objectId).join(",")} retained=${afterPrefixEntries.map((entry) => entry.key).join(",")}`,
+    );
+    ok(
+      "Mongo Contact prefix remains untouched notification records",
+      contactPrefix.every((doc) => doc.processed === false && doc.attempts === 0),
+    );
+    fairnessDocs.set(contactCursorId, {
+      ...afterPrefixState,
+      callbackRecoveryBuffer: [
+        { key: String(contactPrefix[0]!._id), generation: "stale-contact-one" },
+        { key: String(contactPrefix[1]!._id), generation: "stale-contact-two" },
+        ...afterPrefixEntries,
+      ],
+    });
+    const afterBufferedContacts = await repo.findPendingGetEvents(0, 3, 0, contactFloor, 1);
+    const afterBufferedState = fairnessDocs.get(contactCursorId)!;
+    const afterBufferedEntries =
+      afterBufferedState.callbackRecoveryBuffer as Array<{ key: string; generation: string }>;
+    ok(
+      "Mongo persisted Contact recovery entries are pruned across reads without evicting work",
+      afterBufferedContacts.some((item) => item.key === String(workAfterContacts._id)) &&
+        JSON.stringify(afterBufferedEntries.map((entry) => entry.key)) ===
+          JSON.stringify([String(workAfterContacts._id)]),
+      `offered=${afterBufferedContacts.map((item) => item.objectId).join(",")} retained=${afterBufferedEntries.map((entry) => entry.key).join(",")}`,
+    );
+    ok(
+      "Mongo buffered Contact pruning never completes or resets Contact callbacks",
+      contactPrefix.slice(0, 2).every((doc) => doc.processed === false && doc.attempts === 0),
+    );
+    mongoDocs.splice(originalLength);
+    fairnessDocs.clear();
+  }
   console.log("\ncountGetSince — webhook-health lag windows");
   {
-    // GET events with receivedAt >= SINCE includes the unsupported Contact;
+     // GET events with receivedAt >= SINCE includes both Contact notifications;
     // webhook-health counts received callbacks even when queue replay omits it.
     const recv = await bothArms(repo, (r) => r.countGetSince("receivedAt", SINCE));
-    ok("receivedAt window counts match", recv.mongo === recv.pg && recv.mongo === 9, JSON.stringify(recv));
+     ok("receivedAt window counts match", recv.mongo === recv.pg && recv.mongo === 10, JSON.stringify(recv));
 
     // GET events processed within window: O1, O2 (O3 processed BEFORE; pendings have no processedAt)
     const proc = await bothArms(repo, (r) => r.countGetSince("processedAt", SINCE));
@@ -818,7 +892,7 @@ async function main() {
 
     // POST docs (no method field / NULL method) never counted
     const all = await bothArms(repo, (r) => r.countGetSince("receivedAt", BEFORE));
-    ok("POST events never counted as GET in either arm", all.mongo === all.pg && all.mongo === 10, JSON.stringify(all));
+     ok("POST events never counted as GET in either arm", all.mongo === all.pg && all.mongo === 11, JSON.stringify(all));
   }
 
   /* ============ countRecentByConnection (rate limit) ============ */
