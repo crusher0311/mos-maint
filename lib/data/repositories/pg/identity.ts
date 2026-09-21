@@ -206,6 +206,32 @@ export async function replaceLaborRateRulesForShopIds(
   };
 }
 
+/**
+ * Atomic workflow replacement: the predicate and revision increment execute in
+ * the same UPDATE. Merge only the workflow keys, preserving integration config.
+ */
+export async function replaceAutoflowWorkflowIfRevision(
+  shopId: number | string,
+  mapping: unknown,
+  expectedRevision: number,
+): Promise<{ matchedCount: number }> {
+  const db = getDb();
+  const updated = await db.update(shops).set({
+    settings: sql`jsonb_set(
+      COALESCE(${shops.settings}, '{}'::jsonb),
+      '{autoflow}',
+      COALESCE(NULLIF(${shops.settings}->'autoflow', 'null'::jsonb), '{}'::jsonb)
+        || ${JSON.stringify({ workflowMapping: mapping, workflowRevision: expectedRevision + 1 })}::jsonb,
+      true
+    )`,
+    updatedAt: new Date(),
+  }).where(and(
+    eq(shops.mosShopId, Number(shopId)),
+    sql`COALESCE(NULLIF(${shops.settings} #> '{autoflow,workflowRevision}', 'null'::jsonb), '0'::jsonb) = ${JSON.stringify(expectedRevision)}::jsonb`,
+  )).returning({ shopId: shops.mosShopId });
+  return { matchedCount: updated.length };
+}
+
 export async function replaceLaborRateRulesForShopIdIfRevision(
   id: number,
   laborRateRules: unknown[],

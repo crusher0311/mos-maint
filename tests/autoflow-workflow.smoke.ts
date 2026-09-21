@@ -13,6 +13,7 @@ import {
 } from "../lib/autoflow-workflow";
 import {
   __deps,
+  AutoflowWorkflowRevisionConflictError,
   getAutoflowWorkflowDetails,
   InvalidAutoflowWorkflowMappingError,
   listAutoflowWorkflowShops,
@@ -73,9 +74,8 @@ async function run() {
   const original = {
     listAllShops: __deps.listAllShops,
     findShopByShopId: __deps.findShopByShopId,
-    updateShopById: __deps.updateShopById,
     isIdentityPgCanonical: __deps.isIdentityPgCanonical,
-    updatePgShopFields: __deps.updatePgShopFields,
+    replacePgWorkflowIfRevision: __deps.replacePgWorkflowIfRevision,
     listObservedAutoflowEvents: __deps.listObservedAutoflowEvents,
     listObservedAutoflowEventsMongo: __deps.listObservedAutoflowEventsMongo,
     getDb: __deps.getDb,
@@ -122,8 +122,15 @@ async function run() {
   ];
   const mongoWrites: any[] = [];
   const pgWrites: any[] = [];
-  __deps.reserveAutoflowDashboardUpdate = async () => "offline-intent";
-  __deps.finishAutoflowDashboardUpdate = async () => {};
+  let reservations = 0;
+  let finishes = 0;
+  let finishFailure: Error | null = null;
+  __deps.reserveAutoflowDashboardUpdate = async () =>
+    `offline-intent-${++reservations}`;
+  __deps.finishAutoflowDashboardUpdate = async () => {
+    finishes += 1;
+    if (finishFailure) throw finishFailure;
+  };
 
   __deps.listAllShops = async () => shops as any;
   __deps.findShopByShopId = async (shopId: any) =>
@@ -139,15 +146,26 @@ async function run() {
     metadataRows.filter((row) => String(row.shopId) === String(shopId)) as any;
   __deps.listObservedAutoflowEventsMongo = async () => [] as any;
   __deps.isIdentityPgCanonical = () => false;
-  __deps.updateShopById = async (_shopId: any, update: any) => {
-    mongoWrites.push(update);
-    return { matchedCount: 1, modifiedCount: 1 };
-  };
   __deps.getDb = async () =>
     ({
-      collection: () => ({
-        updateOne: async (...args: any[]) => {
-          mongoWrites.push({ dashboard: args });
+      collection: (name: string) => ({
+        updateOne: async (filter: any, update: any) => {
+          if (name !== "shops") throw new Error(`unexpected collection ${name}`);
+          mongoWrites.push({ filter, update });
+          const idChoices = filter.$and[0].$or.map((item: any) => item.shopId);
+          const shop = shops.find((item) => idChoices.some((id: any) => id === item.shopId));
+          const revisionClause = filter.$and[1];
+          const current = shop?.autoflow?.workflowRevision ?? 0;
+          const revisionMatches = revisionClause.$or
+            ? revisionClause.$or.some((item: any) => {
+                const wanted = item["autoflow.workflowRevision"];
+                const stored = shop?.autoflow?.workflowRevision;
+                return wanted === 0 ? stored === 0 : wanted === null ? stored == null : false;
+              })
+            : current === revisionClause["autoflow.workflowRevision"];
+          if (!shop || !revisionMatches) return { matchedCount: 0, modifiedCount: 0 };
+          shop.autoflow.workflowMapping = update.$set["autoflow.workflowMapping"];
+          shop.autoflow.workflowRevision = update.$set["autoflow.workflowRevision"];
           return { matchedCount: 1, modifiedCount: 1 };
         },
       }),
@@ -177,54 +195,152 @@ async function run() {
     try {
       await getAutoflowWorkflowDetails(432);
     } catch (error) {
-      malformedRejected = error instanceof InvalidAutoflowWorkflowMappingError;
+      malformedRejected = error instanceof InvalidAutoflowWorkflowMappingError &&
+        error.revision === 0;
     }
     delete shops[0].autoflow.workflowMapping;
     ok("malformed stored mappings fail explicitly", malformedRejected);
 
-    await saveAutoflowWorkflow(432, {
+    const firstMapping = {
       active: ["Checkin"],
       closed: ["Close"],
       excluded: ["Appointment"],
-    });
+    };
+    const [first, competing] = await Promise.allSettled([
+      saveAutoflowWorkflow(432, firstMapping, 0),
+      saveAutoflowWorkflow(432, {
+        active: ["Estimate"],
+        closed: ["Close"],
+        excluded: [],
+      }, 0),
+    ]);
     ok(
-      "Mongo-mode save writes only workflow mapping and not sibling settings",
-      mongoWrites.some(
-        (write) =>
-          write.$set?.["autoflow.workflowMapping"]?.active?.[0] === "Checkin" &&
-          !("autoflow" in (write.$set || {})),
-      ),
+      "two simultaneous Mongo saves at revision zero have exactly one winner",
+      [first, competing].filter((result) => result.status === "fulfilled").length === 1 &&
+        [first, competing].filter((result) =>
+          result.status === "rejected" &&
+          result.reason instanceof AutoflowWorkflowRevisionConflictError
+        ).length === 1 &&
+        shops[0].autoflow.workflowRevision === 1,
     );
-    await resetAutoflowWorkflow(432);
     ok(
-      "Mongo-mode reset removes only workflow mapping",
-      mongoWrites.some((write) => write.$unset?.["autoflow.workflowMapping"] === ""),
+      "Mongo CAS preserves sibling AutoFlow integration configuration",
+      shops[0].autoflow.apiKey === "redacted-test-key" &&
+        shops[0].autoflow.settingsSibling === "must-survive" &&
+        mongoWrites.some((write) =>
+          write.update.$set["autoflow.workflowRevision"] === 1 &&
+          !("autoflow" in write.update.$set)
+        ),
+    );
+    ok(
+      "stale CAS attempts still finish their write-ahead dashboard invalidations",
+      reservations === 2 && finishes === 2,
+    );
+
+    const [reset, staleReset] = await Promise.allSettled([
+      resetAutoflowWorkflow(432, 1),
+      resetAutoflowWorkflow(432, 1),
+    ]);
+    ok(
+      "reset races also have one winner and persist null at the next revision",
+      [reset, staleReset].filter((result) => result.status === "fulfilled").length === 1 &&
+        shops[0].autoflow.workflowMapping === null &&
+        shops[0].autoflow.workflowRevision === 2,
+    );
+
+    const reloaded = await getAutoflowWorkflowDetails(432);
+    const freshSave = await saveAutoflowWorkflow(
+      432,
+      firstMapping,
+      reloaded!.revision,
+    );
+    ok(
+      "reloading the fresh revision permits the next save",
+      reloaded?.revision === 2 && freshSave.revision === 3 &&
+        shops[0].autoflow.workflowRevision === 3,
+    );
+
+    const originalWarn = console.warn;
+    console.warn = () => {};
+    finishFailure = new Error("offline notification failure");
+    const committedWithWarning = await saveAutoflowWorkflow(
+      432,
+      firstMapping,
+      3,
+    );
+    finishFailure = null;
+    console.warn = originalWarn;
+    ok(
+      "post-commit notification failure still returns the new revision and warning",
+      committedWithWarning.revision === 4 &&
+        typeof committedWithWarning.warning === "string" &&
+        shops[0].autoflow.workflowRevision === 4,
+    );
+
+    finishFailure = new Error("offline notification failure after stale CAS");
+    let staleError: unknown;
+    console.warn = () => {};
+    try {
+      await saveAutoflowWorkflow(432, firstMapping, 3);
+    } catch (error) {
+      staleError = error;
+    } finally {
+      finishFailure = null;
+      console.warn = originalWarn;
+    }
+    ok(
+      "notification finish failures never swallow the original CAS conflict",
+      staleError instanceof AutoflowWorkflowRevisionConflictError,
+    );
+
+    const otherSave = await saveAutoflowWorkflow(900, firstMapping, 0);
+    ok(
+      "shop revisions are independent",
+      otherSave.revision === 1 && shops[0].autoflow.workflowRevision === 4 &&
+        shops[1].autoflow.workflowRevision === 1,
+    );
+    ok(
+      "Mongo CAS filter accepts the shop's numeric or legacy string identity",
+      mongoWrites.every((write) => {
+        const identities = write.filter.$and[0].$or.map((item: any) => item.shopId);
+        return identities.some((id: any) => typeof id === "number") &&
+          identities.some((id: any) => typeof id === "string");
+      }),
+    );
+
+    delete shops[1].autoflow.workflowRevision;
+    const absentLegacy = await getAutoflowWorkflowDetails(900);
+    shops[1].autoflow.workflowRevision = null;
+    const nullLegacy = await getAutoflowWorkflowDetails(900);
+    ok(
+      "absent and null legacy revisions read as zero",
+      absentLegacy?.revision === 0 && nullLegacy?.revision === 0,
     );
 
     __deps.isIdentityPgCanonical = () => true;
-    __deps.updatePgShopFields = async (shopId: any, fields: any) => {
-      pgWrites.push({ shopId, fields });
+    __deps.replacePgWorkflowIfRevision = async (shopId: any, mapping: any, expectedRevision: number) => {
+      pgWrites.push({ shopId, mapping, expectedRevision });
       return { matchedCount: 1, modifiedCount: 1 };
     };
     await saveAutoflowWorkflow(432, {
       active: ["Checkin"],
       closed: ["Close"],
       excluded: [],
-    });
+    }, 4);
     ok(
-      "PG-mode save uses a nested field update",
+      "PG-mode save delegates mapping and expected revision to CAS helper",
       pgWrites.some(
         (write) =>
           write.shopId === 432 &&
-          write.fields["autoflow.workflowMapping"]?.active?.[0] === "Checkin",
+          write.mapping.active?.[0] === "Checkin" &&
+          write.expectedRevision === 4,
       ),
     );
   } finally {
     __deps.listAllShops = original.listAllShops;
     __deps.findShopByShopId = original.findShopByShopId;
-    __deps.updateShopById = original.updateShopById;
     __deps.isIdentityPgCanonical = original.isIdentityPgCanonical;
-    __deps.updatePgShopFields = original.updatePgShopFields;
+    __deps.replacePgWorkflowIfRevision = original.replacePgWorkflowIfRevision;
     __deps.listObservedAutoflowEvents = original.listObservedAutoflowEvents;
     __deps.listObservedAutoflowEventsMongo = original.listObservedAutoflowEventsMongo;
     __deps.getDb = original.getDb;

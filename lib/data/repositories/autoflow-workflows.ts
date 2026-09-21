@@ -15,7 +15,6 @@ import { getDb } from "@/lib/data/db";
 import {
   findShopByShopId,
   listAllShops,
-  updateShopById,
 } from "@/lib/data/repositories/shops";
 import {
   reserveAutoflowDashboardUpdate,
@@ -51,7 +50,7 @@ export interface AutoflowWorkflowShopDetails {
 }
 
 export class InvalidAutoflowWorkflowMappingError extends Error {
-  constructor() {
+  constructor(public readonly revision?: number) {
     super(
       "Stored AutoFlow workflow mapping is invalid; reset it before saving.",
     );
@@ -59,6 +58,12 @@ export class InvalidAutoflowWorkflowMappingError extends Error {
   }
 }
 
+export class AutoflowWorkflowRevisionConflictError extends Error {
+  constructor() {
+    super("Another admin changed this shop's workflow settings. Reload the latest settings and review them alongside your edits before saving again.");
+    this.name = "AutoflowWorkflowRevisionConflictError";
+  }
+}
 /**
  * Repository seams keep the route and offline smoke tests independent of both
  * databases. In production these point at the normal storage-mode-aware shop
@@ -68,9 +73,8 @@ export const __deps = {
   getDb,
   listAllShops,
   findShopByShopId,
-  updateShopById,
   isIdentityPgCanonical,
-  updatePgShopFields: pgIdentity.updateShopFields,
+  replacePgWorkflowIfRevision: pgIdentity.replaceAutoflowWorkflowIfRevision,
   listObservedAutoflowEvents: listAutoflowObservedEventMetadata,
   listObservedAutoflowEventsMongo: listAutoflowObservedEventMetadataMongo,
   reserveAutoflowDashboardUpdate,
@@ -118,7 +122,7 @@ function mappingFor(shop: any): AutoflowWorkflowMapping | null {
   try {
     return validateAutoflowWorkflowMapping(candidate);
   } catch {
-    throw new InvalidAutoflowWorkflowMappingError();
+    throw new InvalidAutoflowWorkflowMappingError(revisionFor(shop));
   }
 }
 
@@ -231,11 +235,12 @@ export async function listAutoflowWorkflowShops(): Promise<
 
 export async function findAutoflowWorkflowShop(
   shopId: string | number,
-): Promise<(AutoflowWorkflowShopDetails & { mapping: AutoflowWorkflowMapping | null; source: any }) | null> {
+): Promise<(AutoflowWorkflowShopDetails & { mapping: AutoflowWorkflowMapping | null; revision: number; source: any }) | null> {
   const shop = await __deps.findShopByShopId(shopId);
   if (!shop || !connectedAutoflowShop(shop)) return null;
   return {
     ...toWorkflowShop(shop),
+    revision: revisionFor(shop),
     mapping: mappingFor(shop),
     source: shop,
   };
@@ -255,6 +260,7 @@ export async function getAutoflowWorkflowDetails(shopId: string | number) {
       name: shop.name,
     },
     mapping: shop.mapping,
+    revision: shop.revision,
     observed: await observedStatuses(shop.shopId),
     bounds: AUTOFLOW_WORKFLOW_BOUNDS,
   };
@@ -284,7 +290,7 @@ export async function getAutoflowWorkflowMapping(
 async function withDashboardNotification(
   shopId: string | number,
   persist: () => Promise<void>,
-): Promise<void> {
+): Promise<string | undefined> {
   // Write-ahead reservation closes the cross-store gap in BOTH identity modes.
   // If reserving fails, do not change settings; once reserved, notification
   // failure must not turn a successful save/reset into a manual-retry error.
@@ -292,62 +298,93 @@ async function withDashboardNotification(
   const notificationId = await __deps.reserveAutoflowDashboardUpdate(
     db, shopId, "autoflow_workflow",
   );
+  let warning: string | undefined;
   try {
     await persist();
   } finally {
     // Even a failed/ambiguous write may have committed; conservative
     // invalidation is safe, whereas replaying the settings mutation is not.
-    await __deps.finishAutoflowDashboardUpdate(db, notificationId);
+    try {
+      await __deps.finishAutoflowDashboardUpdate(db, notificationId);
+    } catch {
+      // Never mask a CAS conflict or report an already committed revision as
+      // a failed write. The prepared intent remains available for recovery.
+      console.warn("[AutoFlow Workflow] Dashboard notification deferred");
+      warning = "Workflow settings saved, but open dashboards could not be notified immediately. A retry is queued; refresh the dashboard to see the changes.";
+    }
   }
+  return warning;
 }
 
 export async function saveAutoflowWorkflow(
   shopId: string | number,
   value: unknown,
-): Promise<AutoflowWorkflowMapping> {
+  expectedRevision: number,
+) {
   const mapping = validateAutoflowWorkflowMapping(value);
-  const shop = await findAutoflowWorkflowShopRecord(shopId);
-  if (!shop) throw new Error("AutoFlow shop not found");
-
-  await withDashboardNotification(shop.shopId, async () => {
-    if (__deps.isIdentityPgCanonical()) {
-      const result = await __deps.updatePgShopFields(shop.shopId, {
-        "autoflow.workflowMapping": mapping,
-      });
-      if (result.matchedCount !== 1) throw new Error("AutoFlow shop not found");
-    } else {
-      const result = await __deps.updateShopById(shop.shopId, {
-        $set: {
-          "autoflow.workflowMapping": mapping,
-          updatedAt: new Date(),
-        },
-      } as any);
-      if (result.matchedCount !== 1) throw new Error("AutoFlow shop not found");
-    }
-  });
-  return mapping;
+  return replaceWorkflow(shopId, mapping, expectedRevision);
 }
-
 export async function resetAutoflowWorkflow(
   shopId: string | number,
-): Promise<void> {
+  expectedRevision: number,
+) {
+  return replaceWorkflow(shopId, null, expectedRevision);
+}
+
+async function replaceWorkflow(
+  shopId: string | number,
+  mapping: AutoflowWorkflowMapping | null,
+  expectedRevision: number,
+) {
+  if (!isValidAutoflowWorkflowRevision(expectedRevision)) {
+    throw new Error("expectedRevision must be a non-negative safe integer");
+  }
   const shop = await findAutoflowWorkflowShopRecord(shopId);
   if (!shop) throw new Error("AutoFlow shop not found");
 
-  await withDashboardNotification(shop.shopId, async () => {
+  const warning = await withDashboardNotification(shop.shopId, async () => {
+    let matchedCount: number;
     if (__deps.isIdentityPgCanonical()) {
-      const result = await __deps.updatePgShopFields(shop.shopId, {
-        "autoflow.workflowMapping": null,
-      });
-      if (result.matchedCount !== 1) throw new Error("AutoFlow shop not found");
+      ({ matchedCount } = await __deps.replacePgWorkflowIfRevision(
+        shop.shopId, mapping, expectedRevision,
+      ));
     } else {
-      const result = await __deps.updateShopById(shop.shopId, {
-        $unset: { "autoflow.workflowMapping": "" },
-        $set: { updatedAt: new Date() },
-      } as any);
-      if (result.matchedCount !== 1) throw new Error("AutoFlow shop not found");
+      const db = await __deps.getDb();
+      const revisionFilter = expectedRevision === 0
+        ? { $or: [
+            { "autoflow.workflowRevision": 0 },
+            { "autoflow.workflowRevision": null },
+          ] }
+        : { "autoflow.workflowRevision": expectedRevision };
+      ({ matchedCount } = await db.collection("shops").updateOne({
+        $and: [
+          { $or: [{ shopId: Number(shop.shopId) }, { shopId: String(shop.shopId) }] },
+          revisionFilter,
+        ],
+      }, {
+        $set: {
+          "autoflow.workflowMapping": mapping,
+          "autoflow.workflowRevision": expectedRevision + 1,
+          updatedAt: new Date(),
+        },
+      }));
     }
+    if (matchedCount !== 1) throw new AutoflowWorkflowRevisionConflictError();
   });
+  return { mapping, revision: expectedRevision + 1, ...(warning ? { warning } : {}) };
 }
 
 export { defaultAutoflowWorkflowMapping };
+
+export function isValidAutoflowWorkflowRevision(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) &&
+    value >= 0 && value < Number.MAX_SAFE_INTEGER;
+}
+
+function revisionFor(shop: any): number {
+  const revision = shop?.autoflow?.workflowRevision ?? 0;
+  if (!isValidAutoflowWorkflowRevision(revision)) {
+    throw new Error("Stored AutoFlow workflow revision is invalid");
+  }
+  return revision;
+}

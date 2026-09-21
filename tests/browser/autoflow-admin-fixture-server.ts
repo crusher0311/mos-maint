@@ -20,6 +20,7 @@ const port = Number(process.env.AUTOFLOW_FIXTURE_PORT || 5100);
 type Mapping = { active: string[]; closed: string[]; excluded: string[] };
 const state = {
   attached: false,
+  revision: 4,
   mapping: {
     active: ["Saved Active"],
     closed: ["Close"],
@@ -43,6 +44,7 @@ const shops = [
     shopNumbers: [] as string[],
   },
   { shopId: 902, name: "Unavailable fixture shop", autoflowDomain: "unavailable.autotext.me", canonicalIdentifiers: [], shopNumbers: [] as string[] },
+  { shopId: 903, name: "Malformed revision fixture shop", autoflowDomain: "malformed.autotext.me", canonicalIdentifiers: [], shopNumbers: [] as string[] },
 ];
 
 const observedByShop: Record<number, Array<{ label: string; count: number; lastSeenAt: string }>> = {
@@ -104,9 +106,19 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url || "/", `http://127.0.0.1:${port}`);
   if (url.pathname === "/__fixture__/reset" && req.method === "POST") {
     state.attached = false;
+    state.revision = 4;
     shops[0].shopNumbers = [];
     state.mapping = { active: ["Saved Active"], closed: ["Close"], excluded: ["Appointment"] };
     return json(res, { ok: true });
+  }
+  if (url.pathname === "/__fixture__/external-update" && req.method === "POST") {
+    state.revision += 1;
+    state.mapping = {
+      active: [url.searchParams.get("label") || "Externally Saved"],
+      closed: ["Externally Closed"],
+      excluded: [],
+    };
+    return json(res, { ok: true, mapping: state.mapping, revision: state.revision });
   }
   if (url.pathname === "/" || url.pathname === "/index.html") {
     res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
@@ -147,6 +159,7 @@ const server = http.createServer(async (req, res) => {
       ok: true,
       shop: { shopId, name: shops.find((shop) => shop.shopId === shopId)?.name },
       mapping: shopId === 432 ? state.mapping : null,
+      ...(shopId === 903 ? {} : { revision: shopId === 432 ? state.revision : 0 }),
       observed: observedByShop[shopId] || [],
       bounds: { lookbackDays: 90, maxEvents: 5000, maxLabels: 100 },
     });
@@ -155,12 +168,29 @@ const server = http.createServer(async (req, res) => {
     const chunks: Buffer[] = [];
     for await (const chunk of req) chunks.push(Buffer.from(chunk));
     const body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
+    if (body.expectedRevision !== state.revision) {
+      return json(res, { ok: false, code: "WORKFLOW_REVISION_CONFLICT", error: "Fixture revision conflict" }, 409);
+    }
     state.mapping = body.mapping;
-    return json(res, { ok: true, shopId: body.shopId, mapping: state.mapping });
+    state.revision += 1;
+    return json(res, {
+      ok: true,
+      shopId: body.shopId,
+      mapping: state.mapping,
+      revision: state.revision,
+      warning: "Offline fixture follow-up notification failed.",
+    });
   }
   if (url.pathname === "/api/platform-admin/autoflow-workflows" && req.method === "DELETE") {
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(Buffer.from(chunk));
+    const body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
+    if (body.expectedRevision !== state.revision) {
+      return json(res, { ok: false, code: "WORKFLOW_REVISION_CONFLICT", error: "Fixture revision conflict" }, 409);
+    }
     state.mapping = { active: [], closed: [], excluded: [] };
-    return json(res, { ok: true, mapping: null });
+    state.revision += 1;
+    return json(res, { ok: true, mapping: null, revision: state.revision });
   }
   res.writeHead(404);
   res.end("not found");

@@ -134,3 +134,4 @@
 - [Callback customer lookup latency](callback-customer-lookup-latency.md) — local Mongo customer fallback can dominate timeouts despite fast Protractor responses; inspect live natural-key indexes.
 - [AutoFlow visibility rollout](autoflow-visibility-rollout.md) — number ownership and workflow eligibility need separate live checks; isolated previews must not boot against shared production stores.
 - [AutoFlow notification recovery](autoflow-notification-retry-semantics.md) — accept bounded duplicate refreshes after ambiguous completion; never repair a missing marker by replaying upstream work.
+- [Settings save acknowledgment](settings-cas-acknowledgment.md) — committed revisioned saves return their new revision even when a downstream dashboard notification fails.

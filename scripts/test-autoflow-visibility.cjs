@@ -6,6 +6,7 @@ const tests = [
   "autoflow-workflow",
   "autoflow-dashboard-outbox",
   "autoflow-dashboard-notification-integration",
+  "autoflow-workflow-pg-concurrency",
   "autoflow-workflow-route-auth",
   "autoflow-dashboard-classification",
   "autoflow-dashboard-aggregation",

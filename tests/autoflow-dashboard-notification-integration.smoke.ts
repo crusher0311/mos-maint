@@ -17,7 +17,10 @@ outboxDeps.now = () => now;
 let inserted = 0, customers = 0, fetches = 0, snapshots = 0, settingsWrites = 0;
 let identityPg = false;
 let failBusiness = false;
-const shop = { shopId: 42, autoflow: { configured: true, sibling: "preserve" } };
+const shop: any = {
+  shopId: 42,
+  autoflow: { configured: true, sibling: "preserve", workflowRevision: 0 },
+};
 const events = {
   insertEvent: async () => {
     assert.equal(mongo.rows.length, 1, "intent exists before event persistence");
@@ -25,23 +28,46 @@ const events = {
     if (failBusiness) throw new Error("business write failed");
   },
 };
-const writeSettings = async (shopId: unknown) => {
+const replaceSettings = async (
+  shopId: unknown,
+  mapping: unknown,
+  expectedRevision: number,
+) => {
   assert.equal(shopId, 42);
   assert.equal(mongo.rows.length, 1, "intent exists before settings persistence");
   settingsWrites++;
   if (failBusiness) throw new Error("business write failed");
+  if (shop.autoflow.workflowRevision !== expectedRevision) {
+    return { matchedCount: 0, modifiedCount: 0 };
+  }
+  shop.autoflow.workflowMapping = mapping;
+  shop.autoflow.workflowRevision = expectedRevision + 1;
   return { matchedCount: 1, modifiedCount: 1 };
 };
+const workflowDb = () => ({
+  ...mongo.db,
+  collection: (name: string) => name === "shops"
+    ? {
+        updateOne: async (_filter: unknown, update: any) =>
+          replaceSettings(
+            42,
+            update.$set["autoflow.workflowMapping"],
+            update.$set["autoflow.workflowRevision"] - 1,
+          ),
+      }
+    : mongo.db.collection(name),
+});
 const originalLoad = (Module as any)._load;
 (Module as any)._load = function(request: string, parent: unknown, isMain: boolean) {
-  if (request === "@/lib/data/db") return { getDb: async () => mongo.db };
+  if (request === "@/lib/data/db") return { getDb: async () => workflowDb() };
   if (request === "@/lib/data/repositories/events") return events;
   if (request === "@/lib/data/repositories/shops") return {
     findShopByShopId: async () => shop,
-    updateShopById: writeSettings,
   };
   if (request === "@/lib/db/wave4-write-mode") return { isIdentityPgCanonical: () => identityPg };
-  if (request === "@/lib/data/repositories/pg/identity") return { updateShopFields: writeSettings };
+  if (request === "@/lib/data/repositories/pg/identity") {
+    return { replaceAutoflowWorkflowIfRevision: replaceSettings };
+  }
   if (request === "@/lib/upsert-customer") return { upsertCustomerFromEvent: async () => { customers++; } };
   if (request === "@/lib/integrations/autoflow/client") return {
     fetchDviByInvoice: async () => { fetches++; return {}; },
@@ -100,8 +126,12 @@ async function run() {
       mongo = fakeMongo();
       const before = settingsWrites;
       const mutate = () => action === "save"
-        ? saveAutoflowWorkflow(42, { active: ["Ready"], closed: [], excluded: [] })
-        : resetAutoflowWorkflow(42);
+        ? saveAutoflowWorkflow(
+            42,
+            { active: ["Ready"], closed: [], excluded: [] },
+            shop.autoflow.workflowRevision,
+          )
+        : resetAutoflowWorkflow(42, shop.autoflow.workflowRevision);
       mongo.failNextMarkerWrite();
       await mutate();
       assert.equal(settingsWrites, before + 1, `${action} commits once in PG=${identityPg}`);
@@ -137,7 +167,10 @@ async function run() {
   await assert.rejects(processEvent, /business write failed/);
   assert.equal(customers, 2, "business failure does not continue normalization");
   mongo = fakeMongo();
-  await assert.rejects(resetAutoflowWorkflow(42), /business write failed/);
+  await assert.rejects(
+    resetAutoflowWorkflow(42, shop.autoflow.workflowRevision),
+    /business write failed/,
+  );
   failBusiness = false;
 
   // Compile with a lexical synthetic environment, never read/overwrite the
@@ -159,7 +192,11 @@ async function run() {
   assert.equal((await route.GET(request("Bearer wrong"))).status, 401);
   mongo = fakeMongo();
   mongo.failNextMarkerWrite();
-  await saveAutoflowWorkflow(42, { active: ["Ready"], closed: [], excluded: [] });
+  await saveAutoflowWorkflow(
+    42,
+    { active: ["Ready"], closed: [], excluded: [] },
+    shop.autoflow.workflowRevision,
+  );
   now += 60_000;
   const response = await route.GET(request("Bearer offline-cron-test"));
   assert.equal(response.status, 200);

@@ -104,18 +104,63 @@ await selectRow("CHECKED IN", "active");
 await selectRow("Appointment", "excluded");
 await selectRow("Close", "closed");
 assert.match(await bodyText(), /Saved Active/);
+
+  // An external save advances revision 4 → 5 before this draft is submitted.
+  await fetch(`${base}/__fixture__/external-update?label=Externally%20Saved`, { method: "POST" });
 await clickButton("Save mapping");
-await page.waitForFunction(() => document.body.innerText.includes("Workflow mapping saved"));
-const savedCall = calls.findLast(call => call.method === "PUT");
-const savedRules = JSON.parse(savedCall?.body || "{}").mapping;
-assert.deepEqual(savedRules.closed, ["Close"]);
+  await page.waitForFunction(() => document.body.innerText.includes("changed after you loaded it"));
+  const staleSaveCall = calls.findLast(call => call.method === "PUT");
+  assert.equal(JSON.parse(staleSaveCall?.body || "{}").expectedRevision, 4);
+  assert.match(await bodyText(), /Needs Review/);
+
+  // Reload keeps the draft and presents it beside revision 5.
+  await clickButton("Reload latest for review");
+  await page.waitForFunction(() =>
+    document.body.innerText.includes("Latest saved · revision 5") &&
+    document.body.innerText.includes("Externally Saved") &&
+    document.body.innerText.includes("Your unsaved draft") &&
+    document.body.innerText.includes("Needs Review"),
+  );
+  await page.screenshot({ path: "screenshots/autoflow-workflow-conflict.jpg", fullPage: true });
+  await clickButton("I reviewed both mappings");
+
+  // Review unlocks the draft for a merge while the latest comparison remains.
+  await selectRow("CHECKED IN", "closed");
+  assert.match(await bodyText(), /Latest saved · revision 5/);
+  await clickButton("Overwrite with reviewed draft");
+  await page.waitForFunction(() => document.body.innerText.includes("Workflow mapping saved"));
+  assert.match(await bodyText(), /change was committed, but a follow-up action failed/i);
+  assert.match(await bodyText(), /Offline fixture follow-up notification failed/);
+  const savedCall = calls.findLast(call => call.method === "PUT");
+  const savedBody = JSON.parse(savedCall?.body || "{}");
+  assert.equal(savedBody.expectedRevision, 5);
+  const savedRules = savedBody.mapping;
+  assert.deepEqual(savedRules.closed, ["Close", "CHECKED IN"]);
 assert.deepEqual(savedRules.excluded, ["Appointment"]);
-assert.ok(savedRules.active.includes("Needs Review") && savedRules.active.includes("CHECKED IN"));
+  assert.ok(savedRules.active.includes("Needs Review") && !savedRules.active.includes("CHECKED IN"));
 assert.match(await bodyText(), /existing events will be reevaluated/i);
 await page.screenshot({ path: "screenshots/autoflow-workflow.jpg", fullPage: true });
+
+  // A stale reset also requires reload/review and sends the revised revision.
+  await fetch(`${base}/__fixture__/external-update?label=Reset%20Race`, { method: "POST" });
 page.once("dialog", (dialog) => dialog.accept());
 await clickButton("Reset");
+  await page.waitForFunction(() => document.body.innerText.includes("changed after you loaded it"));
+  const staleResetCall = calls.findLast(call => call.method === "DELETE");
+  assert.equal(JSON.parse(staleResetCall?.body || "{}").expectedRevision, 6);
+  assert.match(await bodyText(), /Needs Review/);
+  await clickButton("Reload latest for review");
+  await page.waitForFunction(() =>
+    document.body.innerText.includes("Latest saved · revision 7") &&
+    document.body.innerText.includes("Reset Race") &&
+    document.body.innerText.includes("Needs Review"),
+  );
+  await clickButton("I reviewed both mappings");
+  page.once("dialog", (dialog) => dialog.accept());
+  await clickButton("Reset");
 await page.waitForFunction(() => document.body.innerText.includes("mapping reset"));
+  const revisedResetCall = calls.findLast(call => call.method === "DELETE");
+  assert.equal(JSON.parse(revisedResetCall?.body || "{}").expectedRevision, 7);
 
 // A failed detail request must not allow another shop's mapping to be saved.
 await selectByOptionText("Grand Rapids", "902", -1);
@@ -126,9 +171,18 @@ assert.equal(await page.evaluate(() => {
 }), true);
 assert.doesNotMatch(await bodyText(), /Needs Review/);
 
+// A missing/malformed server revision fails closed and cannot enable reset.
+await selectByOptionText("Grand Rapids", "903", -1);
+await page.waitForFunction(() => document.body.innerText.includes("invalid workflow revision"));
+assert.equal(await page.evaluate(() => {
+  const reset = [...document.querySelectorAll("button")].find(item => item.textContent?.includes("Reset saved mapping"));
+  return !reset || reset.disabled;
+}), true);
+
 console.log("✓ Task1287 offline browser UI verification passed");
 console.log("  screenshots/autoflow-admin.jpg");
 console.log("  screenshots/autoflow-workflow.jpg");
+console.log("  screenshots/autoflow-workflow-conflict.jpg");
 } finally {
   await browser.close();
 }

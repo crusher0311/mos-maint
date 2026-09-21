@@ -3,6 +3,8 @@ import { getSession } from "@/lib/auth";
 import {
   getAutoflowWorkflowDetails,
   InvalidAutoflowWorkflowMappingError,
+  AutoflowWorkflowRevisionConflictError,
+  isValidAutoflowWorkflowRevision,
   listAutoflowWorkflowShops,
   resetAutoflowWorkflow,
   saveAutoflowWorkflow,
@@ -64,7 +66,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     if (error instanceof InvalidAutoflowWorkflowMappingError) {
       return NextResponse.json(
-        { ok: false, error: error.message },
+        { ok: false, error: error.message, code: "INVALID_WORKFLOW_MAPPING", revision: error.revision },
         { status: 409 },
       );
     }
@@ -93,11 +95,17 @@ export async function PUT(request: NextRequest) {
   if (body?.mapping == null) {
     return NextResponse.json({ ok: false, error: "mapping is required" }, { status: 400 });
   }
+  if (!isValidAutoflowWorkflowRevision(body?.expectedRevision)) {
+    return NextResponse.json({ ok: false, error: "expectedRevision must be a non-negative safe integer" }, { status: 400 });
+  }
 
   try {
-    const mapping = await saveAutoflowWorkflow(shopId, body.mapping);
-    return NextResponse.json({ ok: true, shopId, mapping });
+    const result = await saveAutoflowWorkflow(shopId, body.mapping, body.expectedRevision);
+    return NextResponse.json({ ok: true, shopId, ...result });
   } catch (error: any) {
+    if (error instanceof AutoflowWorkflowRevisionConflictError) {
+      return NextResponse.json({ ok: false, code: "WORKFLOW_REVISION_CONFLICT", error: error.message }, { status: 409 });
+    }
     if (error instanceof InvalidAutoflowWorkflowMappingError) {
       return NextResponse.json(
         { ok: false, error: error.message },
@@ -136,11 +144,17 @@ export async function DELETE(request: NextRequest) {
   if (shopId == null) {
     return NextResponse.json({ ok: false, error: "shopId is required" }, { status: 400 });
   }
+  if (!isValidAutoflowWorkflowRevision(body?.expectedRevision)) {
+    return NextResponse.json({ ok: false, error: "expectedRevision must be a non-negative safe integer" }, { status: 400 });
+  }
 
   try {
-    await resetAutoflowWorkflow(shopId);
-    return NextResponse.json({ ok: true, shopId, mapping: null });
+    const result = await resetAutoflowWorkflow(shopId, body.expectedRevision);
+    return NextResponse.json({ ok: true, shopId, ...result });
   } catch (error: any) {
+    if (error instanceof AutoflowWorkflowRevisionConflictError) {
+      return NextResponse.json({ ok: false, code: "WORKFLOW_REVISION_CONFLICT", error: error.message }, { status: 409 });
+    }
     const message = error?.message || "Failed to reset AutoFlow workflow mapping";
     if (message !== "AutoFlow shop not found") {
       console.error("[AutoFlow Workflow] DELETE error:", error);

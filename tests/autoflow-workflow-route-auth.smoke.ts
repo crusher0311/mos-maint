@@ -10,7 +10,13 @@
  *   npx tsx tests/autoflow-workflow-route-auth.smoke.ts
  */
 import Module from "node:module";
+import assert from "node:assert/strict";
 import { NextRequest } from "next/server";
+import {
+  AutoflowWorkflowRevisionConflictError,
+  InvalidAutoflowWorkflowMappingError,
+  isValidAutoflowWorkflowRevision,
+} from "../lib/data/repositories/autoflow-workflows";
 
 let failed = 0;
 function ok(name: string, condition: boolean, detail?: string) {
@@ -22,11 +28,20 @@ function ok(name: string, condition: boolean, detail?: string) {
 }
 
 let session: any = null;
-const repositoryStub = {
+const repositoryStub: any = {
   listAutoflowWorkflowShops: async () => [],
   getAutoflowWorkflowDetails: async () => null,
-  saveAutoflowWorkflow: async (_shopId: any, value: any) => value,
-  resetAutoflowWorkflow: async () => {},
+  isValidAutoflowWorkflowRevision,
+  InvalidAutoflowWorkflowMappingError,
+  AutoflowWorkflowRevisionConflictError,
+  saveAutoflowWorkflow: async (_shopId: any, value: any, expectedRevision: number) => ({
+    mapping: value,
+    revision: expectedRevision + 1,
+  }),
+  resetAutoflowWorkflow: async (_shopId: any, expectedRevision: number) => ({
+    mapping: null,
+    revision: expectedRevision + 1,
+  }),
 };
 const authStub = {
   getSession: async () => session,
@@ -75,7 +90,7 @@ async function main() {
             request(
               name,
               "/api/platform-admin/autoflow-workflows",
-              name === "PUT" ? { shopId: 432, mapping: {} } : {},
+              name === "PUT" ? { shopId: 432, mapping: {}, expectedRevision: 0 } : { shopId: 432, expectedRevision: 0 },
             ),
           );
     ok(`${name} rejects unauthenticated requests`, res?.status === 401, `${res?.status}`);
@@ -101,7 +116,7 @@ async function main() {
   ok("PUT rejects malformed JSON", malformedJson?.status === 400);
 
   const missingMapping = await route.PUT(
-    request("PUT", "/api/platform-admin/autoflow-workflows", { shopId: 432 }),
+    request("PUT", "/api/platform-admin/autoflow-workflows", { shopId: 432, expectedRevision: 0 }),
   );
   ok("PUT rejects a missing mapping", missingMapping?.status === 400);
 
@@ -110,6 +125,7 @@ async function main() {
       request("PUT", "/api/platform-admin/autoflow-workflows", {
         shopId,
         mapping: { active: [], closed: [], excluded: [] },
+        expectedRevision: 0,
       }),
     );
     ok(
@@ -118,13 +134,40 @@ async function main() {
     );
   }
 
+  for (const revision of [undefined, null, -1, 1.5, Number.MAX_SAFE_INTEGER, "0"]) {
+    const invalidRevision = await route.PUT(
+      request("PUT", "/api/platform-admin/autoflow-workflows", {
+        shopId: 432,
+        mapping: { active: [], closed: [], excluded: [] },
+        expectedRevision: revision,
+      }),
+    );
+    assert.ok(invalidRevision);
+    ok(`PUT rejects invalid revision ${String(revision)}`, invalidRevision.status === 400);
+    const invalidDeleteRevision = await route.DELETE(
+      request("DELETE", "/api/platform-admin/autoflow-workflows", {
+        shopId: 432,
+        expectedRevision: revision,
+      }),
+    );
+    assert.ok(invalidDeleteRevision);
+    ok(`DELETE rejects invalid revision ${String(revision)}`, invalidDeleteRevision.status === 400);
+  }
+
   const putSuccess = await route.PUT(
     request("PUT", "/api/platform-admin/autoflow-workflows", {
       shopId: 432,
       mapping: { active: ["Checkin"], closed: ["Close"], excluded: ["Appointment"] },
+      expectedRevision: 0,
     }),
   );
-  ok("PUT accepts a validated workflow mapping", putSuccess?.status === 200);
+  assert.ok(putSuccess);
+  const putBody = await putSuccess.json();
+  ok(
+    "PUT returns mapping and incremented revision",
+    putSuccess?.status === 200 && putBody.revision === 1 &&
+      putBody.mapping.active[0] === "Checkin",
+  );
 
   const invalidDelete = await route.DELETE(
     request("DELETE", "/api/platform-admin/autoflow-workflows", {}),
@@ -132,10 +175,82 @@ async function main() {
   ok("DELETE rejects a missing shop id", invalidDelete?.status === 400);
 
   const deleteSuccess = await route.DELETE(
-    request("DELETE", "/api/platform-admin/autoflow-workflows", { shopId: 432 }),
+    request("DELETE", "/api/platform-admin/autoflow-workflows", { shopId: 432, expectedRevision: 1 }),
   );
-  ok("DELETE accepts a valid shop identity and resets defaults", deleteSuccess?.status === 200);
+  assert.ok(deleteSuccess);
+  const deleteBody = await deleteSuccess.json();
+  ok(
+    "DELETE returns null mapping and incremented revision",
+    deleteSuccess?.status === 200 && deleteBody.mapping === null && deleteBody.revision === 2,
+  );
 
+  repositoryStub.saveAutoflowWorkflow = async () => {
+    throw new AutoflowWorkflowRevisionConflictError();
+  };
+  const conflict = await route.PUT(
+    request("PUT", "/api/platform-admin/autoflow-workflows", {
+      shopId: 432,
+      mapping: { active: [], closed: [], excluded: [] },
+      expectedRevision: 0,
+    }),
+  );
+  assert.ok(conflict);
+  const conflictBody = await conflict.json();
+  ok(
+    "stale PUT returns the stable conflict contract",
+    conflict.status === 409 && conflictBody.code === "WORKFLOW_REVISION_CONFLICT",
+  );
+  repositoryStub.resetAutoflowWorkflow = async () => {
+    throw new AutoflowWorkflowRevisionConflictError();
+  };
+  const resetConflict = await route.DELETE(
+    request("DELETE", "/api/platform-admin/autoflow-workflows", {
+      shopId: 432,
+      expectedRevision: 1,
+    }),
+  );
+  assert.ok(resetConflict);
+  const resetConflictBody = await resetConflict.json();
+  ok(
+    "stale DELETE returns the stable conflict contract",
+    resetConflict.status === 409 &&
+      resetConflictBody.code === "WORKFLOW_REVISION_CONFLICT",
+  );
+
+  repositoryStub.getAutoflowWorkflowDetails = async () => ({
+    shop: { shopId: 432, name: "Legacy Shop" },
+    mapping: null,
+    revision: 0,
+    observed: [],
+    bounds: { lookbackDays: 90, maxEvents: 5_000, maxLabels: 100 },
+  });
+  const legacyGet = await route.GET(
+    request("GET", "/api/platform-admin/autoflow-workflows?shopId=432"),
+  );
+  assert.ok(legacyGet);
+  const legacyGetBody = await legacyGet.json();
+  ok(
+    "GET exposes the legacy zero revision",
+    legacyGet.status === 200 && legacyGetBody.revision === 0 &&
+      legacyGetBody.mapping === null,
+  );
+
+  repositoryStub.getAutoflowWorkflowDetails = async () => {
+    throw new InvalidAutoflowWorkflowMappingError(7);
+  };
+  const malformedGet = await route.GET(
+    request("GET", "/api/platform-admin/autoflow-workflows?shopId=432"),
+  );
+  assert.ok(malformedGet);
+  const malformedGetBody = await malformedGet.json();
+  ok(
+    "malformed mapping GET supplies the revision needed to reset",
+    malformedGet.status === 409 &&
+      malformedGetBody.code === "INVALID_WORKFLOW_MAPPING" &&
+      malformedGetBody.revision === 7,
+  );
+
+  repositoryStub.getAutoflowWorkflowDetails = async () => null;
   const unknownShop = await route.GET(
     request("GET", "/api/platform-admin/autoflow-workflows?shopId=432"),
   );
