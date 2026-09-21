@@ -17,7 +17,10 @@ import { fetchDviByInvoice, upsertDviSnapshot } from "@/lib/integrations/autoflo
 import { upsertCustomerFromEvent } from "@/lib/upsert-customer";
 import { insertEvent } from "@/lib/data/repositories/events";
 import { updateDviResultCrossRef } from "@/lib/data/repositories/dvi";
-import { bumpDashboardUpdate } from "@/lib/dashboard-updates";
+import {
+  reserveAutoflowDashboardUpdate,
+  finishAutoflowDashboardUpdate,
+} from "@/lib/autoflow-dashboard-outbox";
 
 // ---- HMAC helpers --------------------------------------------------------
 
@@ -209,8 +212,26 @@ export async function processAutoflowWebhookEvent(args: {
   raw: string;
   payload: any;
 }): Promise<void> {
-  const { db, shop, token, raw, payload } = args;
+  const { db, shop } = args;
 
+  // Reserve before ANY durable business write: a marker/outbox database
+  // outage must not leave a successfully saved event with no retry intent.
+  const notificationId = await reserveAutoflowDashboardUpdate(
+    db, shop.shopId, "autoflow_webhook",
+  );
+  try {
+    await persistAutoflowWebhookEvent(args);
+  } finally {
+    // Only the notification is retried, never event/customer/DVI processing.
+    // Also invalidate on ambiguous business-write failure (it may have landed).
+    await finishAutoflowDashboardUpdate(db, notificationId);
+  }
+}
+
+async function persistAutoflowWebhookEvent(
+  args: Parameters<typeof processAutoflowWebhookEvent>[0],
+): Promise<void> {
+  const { db, shop, token, raw, payload } = args;
   // Persist raw event for audit / console.
   // events ingress is PG-canonical via the repository; Mongo `events` is
   // shadow-mirrored during soak so legacy aggregate readers still see the row.
@@ -386,16 +407,5 @@ export async function processAutoflowWebhookEvent(args: {
   } catch (e) {
     // Swallow normalization errors; raw event is still stored for replay
     console.error("Webhook normalization error:", e);
-  } finally {
-    // Notify only after customer/DVI presentation writes have settled. The
-    // marker is shop-scoped so an AutoFlow event does not wake every tenant.
-    try {
-      await bumpDashboardUpdate(db, "autoflow_webhook", shop.shopId);
-    } catch (error: any) {
-      console.warn(
-        `[autoflow-webhook] dashboard update marker failed for shop ${shop.shopId}:`,
-        error?.message || error,
-      );
-    }
   }
 }

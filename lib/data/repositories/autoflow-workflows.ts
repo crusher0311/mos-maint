@@ -17,7 +17,10 @@ import {
   listAllShops,
   updateShopById,
 } from "@/lib/data/repositories/shops";
-import { bumpDashboardUpdate } from "@/lib/dashboard-updates";
+import {
+  reserveAutoflowDashboardUpdate,
+  finishAutoflowDashboardUpdate,
+} from "@/lib/autoflow-dashboard-outbox";
 
 const OBSERVED_LOOKBACK_DAYS = 90;
 const MAX_OBSERVED_EVENTS = 5_000;
@@ -70,6 +73,8 @@ export const __deps = {
   updatePgShopFields: pgIdentity.updateShopFields,
   listObservedAutoflowEvents: listAutoflowObservedEventMetadata,
   listObservedAutoflowEventsMongo: listAutoflowObservedEventMetadataMongo,
+  reserveAutoflowDashboardUpdate,
+  finishAutoflowDashboardUpdate,
 };
 
 function sameShop(a: unknown, b: unknown): boolean {
@@ -276,16 +281,23 @@ export async function getAutoflowWorkflowMapping(
   }
 }
 
-async function notifyDashboardUpdate(shopId: string | number): Promise<void> {
+async function withDashboardNotification(
+  shopId: string | number,
+  persist: () => Promise<void>,
+): Promise<void> {
+  // Write-ahead reservation closes the cross-store gap in BOTH identity modes.
+  // If reserving fails, do not change settings; once reserved, notification
+  // failure must not turn a successful save/reset into a manual-retry error.
+  const db = await __deps.getDb();
+  const notificationId = await __deps.reserveAutoflowDashboardUpdate(
+    db, shopId, "autoflow_workflow",
+  );
   try {
-    const db = await __deps.getDb();
-    await bumpDashboardUpdate(db, "autoflow_workflow", shopId);
-  } catch (error: any) {
-    console.warn(
-      "[AutoFlow Workflow] Failed to notify dashboard update:",
-      error?.message || error,
-    );
-    throw new Error("Workflow settings saved, but dashboard notification failed. Retry saving to notify open dashboards.");
+    await persist();
+  } finally {
+    // Even a failed/ambiguous write may have committed; conservative
+    // invalidation is safe, whereas replaying the settings mutation is not.
+    await __deps.finishAutoflowDashboardUpdate(db, notificationId);
   }
 }
 
@@ -297,21 +309,22 @@ export async function saveAutoflowWorkflow(
   const shop = await findAutoflowWorkflowShopRecord(shopId);
   if (!shop) throw new Error("AutoFlow shop not found");
 
-  if (__deps.isIdentityPgCanonical()) {
-    const result = await __deps.updatePgShopFields(shop.shopId, {
-      "autoflow.workflowMapping": mapping,
-    });
-    if (result.matchedCount !== 1) throw new Error("AutoFlow shop not found");
-  } else {
-    const result = await __deps.updateShopById(shop.shopId, {
-      $set: {
+  await withDashboardNotification(shop.shopId, async () => {
+    if (__deps.isIdentityPgCanonical()) {
+      const result = await __deps.updatePgShopFields(shop.shopId, {
         "autoflow.workflowMapping": mapping,
-        updatedAt: new Date(),
-      },
-    } as any);
-    if (result.matchedCount !== 1) throw new Error("AutoFlow shop not found");
-  }
-  await notifyDashboardUpdate(shopId);
+      });
+      if (result.matchedCount !== 1) throw new Error("AutoFlow shop not found");
+    } else {
+      const result = await __deps.updateShopById(shop.shopId, {
+        $set: {
+          "autoflow.workflowMapping": mapping,
+          updatedAt: new Date(),
+        },
+      } as any);
+      if (result.matchedCount !== 1) throw new Error("AutoFlow shop not found");
+    }
+  });
   return mapping;
 }
 
@@ -321,19 +334,20 @@ export async function resetAutoflowWorkflow(
   const shop = await findAutoflowWorkflowShopRecord(shopId);
   if (!shop) throw new Error("AutoFlow shop not found");
 
-  if (__deps.isIdentityPgCanonical()) {
-    const result = await __deps.updatePgShopFields(shop.shopId, {
-      "autoflow.workflowMapping": null,
-    });
-    if (result.matchedCount !== 1) throw new Error("AutoFlow shop not found");
-  } else {
-    const result = await __deps.updateShopById(shop.shopId, {
-      $unset: { "autoflow.workflowMapping": "" },
-      $set: { updatedAt: new Date() },
-    } as any);
-    if (result.matchedCount !== 1) throw new Error("AutoFlow shop not found");
-  }
-  await notifyDashboardUpdate(shopId);
+  await withDashboardNotification(shop.shopId, async () => {
+    if (__deps.isIdentityPgCanonical()) {
+      const result = await __deps.updatePgShopFields(shop.shopId, {
+        "autoflow.workflowMapping": null,
+      });
+      if (result.matchedCount !== 1) throw new Error("AutoFlow shop not found");
+    } else {
+      const result = await __deps.updateShopById(shop.shopId, {
+        $unset: { "autoflow.workflowMapping": "" },
+        $set: { updatedAt: new Date() },
+      } as any);
+      if (result.matchedCount !== 1) throw new Error("AutoFlow shop not found");
+    }
+  });
 }
 
 export { defaultAutoflowWorkflowMapping };

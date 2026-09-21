@@ -79,6 +79,8 @@ async function run() {
     listObservedAutoflowEvents: __deps.listObservedAutoflowEvents,
     listObservedAutoflowEventsMongo: __deps.listObservedAutoflowEventsMongo,
     getDb: __deps.getDb,
+    reserveAutoflowDashboardUpdate: __deps.reserveAutoflowDashboardUpdate,
+    finishAutoflowDashboardUpdate: __deps.finishAutoflowDashboardUpdate,
   };
 
   const shops: any[] = [
@@ -120,6 +122,8 @@ async function run() {
   ];
   const mongoWrites: any[] = [];
   const pgWrites: any[] = [];
+  __deps.reserveAutoflowDashboardUpdate = async () => "offline-intent";
+  __deps.finishAutoflowDashboardUpdate = async () => {};
 
   __deps.listAllShops = async () => shops as any;
   __deps.findShopByShopId = async (shopId: any) =>
@@ -224,6 +228,8 @@ async function run() {
     __deps.listObservedAutoflowEvents = original.listObservedAutoflowEvents;
     __deps.listObservedAutoflowEventsMongo = original.listObservedAutoflowEventsMongo;
     __deps.getDb = original.getDb;
+    __deps.reserveAutoflowDashboardUpdate = original.reserveAutoflowDashboardUpdate;
+    __deps.finishAutoflowDashboardUpdate = original.finishAutoflowDashboardUpdate;
   }
 
   if (failed > 0) process.exitCode = 1;

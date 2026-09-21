@@ -11,6 +11,7 @@ export async function bumpDashboardUpdate(
   db: Db,
   _source?: string,
   shopId?: string | number,
+  options?: { maxTimeMS?: number; timeoutMS?: number },
 ): Promise<number> {
   const now = Date.now();
   const shopKey =
@@ -44,7 +45,7 @@ export async function bumpDashboardUpdate(
   await db.collection("dashboard_updates").updateOne(
     { _id: "lastUpdate" } as any,
     update as any,
-    { upsert: true },
+    { upsert: true, ...options },
   );
   return now;
 }

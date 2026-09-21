@@ -4,6 +4,8 @@ const tests = [
   "autoflow-admin-unseen-number",
   "autoflow-admin-route",
   "autoflow-workflow",
+  "autoflow-dashboard-outbox",
+  "autoflow-dashboard-notification-integration",
   "autoflow-workflow-route-auth",
   "autoflow-dashboard-classification",
   "autoflow-dashboard-aggregation",
