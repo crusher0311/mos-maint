@@ -5,6 +5,28 @@ description: How to interpret history evidence without changing callback retry s
 
 Keep history-application evidence separate from queue completion and transport success. A processed callback can have failed history indexing; coalesced siblings do not independently prove history application.
 
+Missing-VIN generations may stop automatic retries while retaining deferred
+history evidence; recovery requires a newer corrected callback, not silently
+marking the old attempt as successfully applied.
+
+**Why:** Repeating a successful fetch of unchanged missing identity wastes
+provider capacity. The approved behavior preserves the data gap without a
+mass replay or clearing existing exhausted records.
+
+**How to apply:** Keep processed/queue completion separate from data readiness.
+Validate alternate identifiers before ingestion and preserve newer-generation
+fencing when a corrected notification arrives.
+
+Deletion no-ops require absence across stores still used by active writers,
+not just the selected canonical read store.
+
+**Why:** During the migration, direct Mongo snapshot writers can coexist with
+PG-canonical repository reads. A PG miss alone can falsely acknowledge a
+deletion while leaving a live Mongo record untouched.
+
+**How to apply:** Check applicable stores, fail on read errors, and mutate
+matched identities without upserts that duplicate legacy string-shop rows.
+
 **Why:** Callback indexing failures were historically non-critical to queue completion. The outcome-reporting change deliberately preserves that retry/coalescing behavior rather than silently introducing provider replays. An applied result can also mean existing index content was hash-verified unchanged, not that a new write occurred.
 
 **How to apply:** When extending callback reporting, do not derive applied status from processed/noAction, successful relay responses, or snapshot markers. Treat historical rows without explicit evidence as unknown. Changing which indexing failures trigger retries requires a separate operational decision, not an observability-only edit.

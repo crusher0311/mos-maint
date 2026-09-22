@@ -50,6 +50,11 @@ export interface ProtractorWorkOrderCacheDoc extends Document {
   data?: { ID?: string; WorkOrderNumber?: number };
 }
 
+type TerminalWorkOrderMatch = ProtractorWorkOrderCacheDoc & {
+  __pgTerminalMatch?: ProtractorWorkOrderCacheDoc;
+  __mongoTerminalMatch?: ProtractorWorkOrderCacheDoc;
+};
+
 async function collection(): Promise<Collection<ProtractorWorkOrderCacheDoc>> {
   const db = await getDb();
   return db.collection<ProtractorWorkOrderCacheDoc>(COLLECTION);
@@ -189,6 +194,95 @@ export async function findCachedWorkOrderById(
     { shopId, workOrderId } as Filter<ProtractorWorkOrderCacheDoc>,
     { projection: { rawPayload: 0, servicePackages: 0 }, sort: { fetchedAt: -1 } },
   );
+}
+
+export async function findCachedWorkOrderByProviderIdentity(
+  shopId: number,
+  workOrderId: string,
+): Promise<ProtractorWorkOrderCacheDoc | null> {
+  if (isProtractorCachePgCanonical()) {
+    const pgMatch = (await pg.findCachedWorkOrderByProviderIdentity(
+      shopId,
+      workOrderId,
+    )) as ProtractorWorkOrderCacheDoc | null;
+    // The active client snapshot writer still writes Mongo directly. Always
+    // inspect that store as well; a PG miss alone is not absence evidence.
+    const mongoMatch = await findCachedWorkOrderByProviderIdentityMongo(shopId, workOrderId);
+    if (!pgMatch && !mongoMatch) return null;
+    return {
+      ...(pgMatch || mongoMatch)!,
+      ...(pgMatch ? { __pgTerminalMatch: pgMatch } : {}),
+      ...(mongoMatch ? { __mongoTerminalMatch: mongoMatch } : {}),
+    } as TerminalWorkOrderMatch;
+  }
+  return findCachedWorkOrderByProviderIdentityMongo(shopId, workOrderId);
+}
+
+async function findCachedWorkOrderByProviderIdentityMongo(
+  shopId: number,
+  workOrderId: string,
+): Promise<ProtractorWorkOrderCacheDoc | null> {
+  const col = await collection();
+  return col.findOne({
+    shopId: { $in: [shopId, String(shopId)] },
+    $or: [
+      { workOrderId },
+      { workOrderGuid: workOrderId },
+      { "data.ID": workOrderId },
+    ],
+  } as Filter<ProtractorWorkOrderCacheDoc>);
+}
+
+/** Terminal callback update honoring the cache's Mongo/PG canonical mode. */
+export async function markCachedWorkOrderTerminal(
+  shopId: number,
+  existing: ProtractorWorkOrderCacheDoc,
+  status: string | null,
+  now: Date,
+): Promise<void> {
+  const set = {
+    status,
+    workflowStage: status,
+    completed: true,
+    closedAt: now,
+    closedViaCallback: true,
+    updatedAt: now,
+  };
+  if (isProtractorCachePgCanonical()) {
+    const match = existing as TerminalWorkOrderMatch;
+    if (match.__pgTerminalMatch) {
+      const canonicalKey = String(match.__pgTerminalMatch.workOrderId || "");
+      if (!canonicalKey) throw new Error("Cached Protractor work order has no canonical key");
+      await pg.markCachedWorkOrderTerminal(shopId, canonicalKey, set);
+    }
+    if (match.__mongoTerminalMatch) {
+      await markCachedWorkOrderTerminalMongo(shopId, match.__mongoTerminalMatch, set);
+    }
+    if (!match.__pgTerminalMatch && !match.__mongoTerminalMatch) {
+      throw new Error("Cached Protractor work order has no routed terminal match");
+    }
+    return;
+  }
+  await markCachedWorkOrderTerminalMongo(shopId, existing, set);
+}
+
+async function markCachedWorkOrderTerminalMongo(
+  shopId: number,
+  existing: ProtractorWorkOrderCacheDoc,
+  set: ProtractorWorkOrderUpsertFields,
+): Promise<void> {
+  if (!existing._id) throw new Error("Cached Protractor work order has no Mongo identity");
+  const col = await collection();
+  const result = await col.updateOne(
+    {
+      _id: existing._id,
+      shopId: { $in: [shopId, String(shopId)] },
+    } as Filter<ProtractorWorkOrderCacheDoc>,
+    { $set: set },
+  );
+  if (result.matchedCount !== 1) {
+    throw new Error("Cached Protractor work order disappeared before terminal update");
+  }
 }
 
 /**

@@ -7,6 +7,9 @@
 import type { Collection, Document } from "mongodb";
 import { getDb } from "@/lib/data/db";
 import { prefixRegex, vinPrefix } from "@/lib/dashboard-search";
+import { shouldShadowWriteMongo } from "@/lib/integrations/core/normalized-write-mode";
+import { SupabaseDualWriter } from "@/lib/supabase-dual-writer";
+import { getDb as getPgDb } from "@/lib/db/drizzle";
 
 const COLLECTION = "normalized_work_orders";
 
@@ -24,6 +27,30 @@ export interface WorkOrderPickerItem {
   customerName: string | null;
   updatedAt: Date | null;
   closedAt: Date | null;
+}
+
+export async function findProtractorWorkOrderReference(
+  shopId: number,
+  workOrderId: string,
+): Promise<Document | null> {
+  const sourceId = {
+    system: "protractor",
+    idType: "invoice_id",
+    idValue: workOrderId,
+    isPrimary: true,
+  };
+  const pg = await new SupabaseDualWriter(getPgDb()).findWorkOrderByNaturalKey(
+    shopId,
+    sourceId,
+    null,
+  );
+  if (pg) return pg as Document;
+  if (!shouldShadowWriteMongo()) return null;
+  const col = await collection();
+  return col.findOne({
+    shopId,
+    "provenance.sourceIds": { $elemMatch: sourceId },
+  });
 }
 
 /**

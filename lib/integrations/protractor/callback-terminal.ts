@@ -1,4 +1,17 @@
 import type { Db } from "mongodb";
+import * as workOrders from "@/lib/data/repositories/protractor-work-orders";
+import * as normalizedWorkOrders from "@/lib/data/repositories/normalized-work-orders";
+import * as vehicles from "@/lib/data/repositories/vehicles";
+
+export type ProtractorTerminalResult = "applied" | "already_absent";
+
+export const __terminalCallbackDeps = {
+  findCachedWorkOrderById: workOrders.findCachedWorkOrderByProviderIdentity,
+  markCachedWorkOrderTerminal: workOrders.markCachedWorkOrderTerminal,
+  findNormalizedReference: normalizedWorkOrders.findProtractorWorkOrderReference,
+  findVehicleReference: vehicles.findVehicleByProtractorWorkOrder,
+  removeVehicleSource: vehicles.removeProtractorWorkOrderSource,
+};
 
 /**
  * Applies the durable local effects of a terminal POST callback. Kept outside
@@ -8,73 +21,40 @@ import type { Db } from "mongodb";
 export async function applyProtractorTerminalCallback(
   db: Db,
   fields: { shopId: number | string; workOrderId: string; status: string | null },
-): Promise<boolean> {
-  const existingWorkOrder = await db.collection("protractor_work_orders").findOne({
-    $and: [
-      { $or: [{ shopId: String(fields.shopId) }, { shopId: Number(fields.shopId) }] },
-      {
-        $or: [
-          { workOrderGuid: fields.workOrderId },
-          { workOrderId: fields.workOrderId },
-          { "data.ID": fields.workOrderId },
-        ],
-      },
-    ],
-  });
-  if (!existingWorkOrder) return false;
-
-  const vehicle = await db.collection("vehicles").findOne({
-    $or: [{ shopId: String(fields.shopId) }, { shopId: Number(fields.shopId) }],
-    "status.active": true,
-    "status.sources": {
-      $elemMatch: { provider: "protractor", workOrderId: fields.workOrderId },
-    },
-  });
-  if (vehicle) {
-    const updatedSources = (vehicle.status?.sources || []).filter(
-      (s: any) => !(s.provider === "protractor" && String(s.workOrderId) === String(fields.workOrderId)),
-    );
-    const hasActiveSources = updatedSources.length > 0;
-    await db.collection("vehicles").updateOne(
-      { _id: vehicle._id },
-      {
-        $set: {
-          "status.active": hasActiveSources,
-          "status.sources": updatedSources,
-          ...(hasActiveSources ? {} : { "status.lastClosedAt": new Date() }),
-          updatedAt: new Date(),
-        },
-      },
-    );
+): Promise<ProtractorTerminalResult> {
+  const shopId = Number(fields.shopId);
+  if (!Number.isFinite(shopId)) throw new Error("Invalid callback shop ID");
+  const [existingWorkOrder, normalizedReference, vehicle] = await Promise.all([
+    __terminalCallbackDeps.findCachedWorkOrderById(shopId, fields.workOrderId),
+    __terminalCallbackDeps.findNormalizedReference(shopId, fields.workOrderId),
+    __terminalCallbackDeps.findVehicleReference(shopId, fields.workOrderId),
+  ]);
+  if (!existingWorkOrder && !normalizedReference && !vehicle) return "already_absent";
+  if (!existingWorkOrder && normalizedReference) {
+    throw new Error("Terminal callback local stores are inconsistent");
   }
 
-  await db.collection("protractor_work_orders").updateMany(
-    {
-      $and: [
-        { $or: [{ shopId: String(fields.shopId) }, { shopId: Number(fields.shopId) }] },
-        {
-          $or: [
-            { workOrderGuid: fields.workOrderId },
-            { workOrderId: fields.workOrderId },
-            { "data.ID": fields.workOrderId },
-          ],
-        },
-      ],
-    },
-    {
-      $set: {
-        workflowStage: fields.status,
-        status: fields.status,
-        closedAt: new Date(),
-        closedViaCallback: true,
-        updatedAt: new Date(),
-      },
-    },
-  );
+  const now = new Date();
+  if (vehicle) {
+    await __terminalCallbackDeps.removeVehicleSource(
+      vehicle,
+      shopId,
+      fields.workOrderId,
+      now,
+    );
+  }
+  if (existingWorkOrder) {
+    await __terminalCallbackDeps.markCachedWorkOrderTerminal(
+      shopId,
+      existingWorkOrder,
+      fields.status,
+      now,
+    );
+  }
   await db.collection("dashboard_updates").updateOne(
     { _id: "lastUpdate" } as any,
     { $set: { timestamp: Date.now() } },
     { upsert: true },
   );
-  return true;
+  return "applied";
 }

@@ -271,7 +271,7 @@ const clientMock = {
           ID: objectId,
           WorkflowStage: "OPEN",
           Completed: false,
-          ServiceItem: { VIN: "OPEN-VIN" },
+          ServiceItem: { VIN: "1HGCM82633A004352" },
         },
       };
     }
@@ -350,7 +350,7 @@ const terminalMock = {
         dispatchClockAdvances.delete(admitted.key);
       }
     }
-    return true;
+    return "applied";
   },
 };
 
@@ -1129,11 +1129,11 @@ async function runDrainAssertions(
   ]);
   vehicleReplayResults.set(vehicleMissingData.objectId!, [
     { ok: false, error: "missing data" },
-    { ok: true, vehicle: { VIN: "VEHICLE-REPLAYED-VIN" } },
+    { ok: true, vehicle: { VIN: "1HGCM82633A004352" } },
   ]);
   vehicleReplayResults.set(vehicleMissingVin.objectId!, [
     { ok: true, vehicle: { Make: "NoVin" } },
-    { ok: true, vehicle: { VIN: "VIN-REPLAYED" } },
+    { ok: true, vehicle: { VIN: "1M8GDM9AXKP042788" } },
   ]);
 
   resetQueueState([
@@ -1159,7 +1159,7 @@ async function runDrainAssertions(
 
   assert.deepEqual(
     await processProtractorCallbackDrain(queueDb, { budgetMs: 60_000 }),
-    { processed: 3, failed: 2 },
+    { processed: 4, failed: 1 },
   );
 
   const outcomes = new Map(
@@ -1174,11 +1174,14 @@ async function runDrainAssertions(
     reason: "open_work_order",
   });
   assert.deepEqual(outcomes.get(missingVin.key), {
-    category: "failed",
+    category: "deferred",
     reason: "missing_vin",
   });
   assert.equal(outcomes.has(vehicleMissingData.key), false, "missing vehicle data does not complete");
-  assert.equal(outcomes.has(vehicleMissingVin.key), false, "vehicle missing VIN does not complete");
+  assert.deepEqual(outcomes.get(vehicleMissingVin.key), {
+    category: "deferred",
+    reason: "missing_vin",
+  }, "provider-data blocks complete this generation without claiming application");
   assert.equal(terminalApplications.length, 1, "terminal DELETE uses terminal application");
   assert.deepEqual(terminalApplications[0].args, {
     shopId: 42,
@@ -1194,12 +1197,22 @@ async function runDrainAssertions(
     vehicleFetches.sort(),
     ["vehicle-missing-data", "vehicle-missing-vin"],
   );
-  assert.equal(workOrderSnapshots.length, 2);
-  assert.equal(normalizedWorkOrders.length, 2);
+  assert.equal(workOrderSnapshots.length, 1);
+  assert.equal(normalizedWorkOrders.length, 1);
+  assert.equal(
+    workOrderSnapshots.some(({ workOrder }) => workOrder.ID === missingVin.objectId),
+    false,
+    "a malformed VIN is blocked before snapshot persistence",
+  );
+  assert.equal(
+    normalizedWorkOrders.some((workOrder) => workOrder.ID === missingVin.objectId),
+    false,
+    "a malformed VIN is blocked before normalized ingestion",
+  );
   assert.equal(
     normalizationTimingRecorders.length,
-    2,
-    "the drain passes one normalization recorder to each work-order normalization",
+    1,
+    "the drain passes one normalization recorder to each VIN-valid work-order normalization",
   );
   assert(
     normalizationTimingRecorders.every(Boolean),
@@ -1207,7 +1220,7 @@ async function runDrainAssertions(
   );
   assert.equal(
     normalizationTimingRecords.length,
-    2,
+    1,
     "normalization timing finalizes for every completed normalization path",
   );
   assert(
@@ -1219,7 +1232,7 @@ async function runDrainAssertions(
   );
   assert.deepEqual(
     normalizedEnterpriseIds,
-    ["enterprise-42", "enterprise-42"],
+    ["enterprise-42"],
     "normalization reuses enterprise metadata from the eligibility lookup",
   );
   assert.equal(
@@ -1232,21 +1245,19 @@ async function runDrainAssertions(
     new Map(callbackOutcomeWrites.map((write) => [write.key, write.outcome])),
     new Map([
       [vehicleMissingData.key, { category: "failed", reason: "dispatch_failed" }],
-      [vehicleMissingVin.key, { category: "failed", reason: "missing_vin" }],
     ]),
-    "failed replay outcomes stay pending with bounded evidence",
+    "true replay failures stay pending with bounded evidence",
   );
   assert.deepEqual(
     new Map(errors.map((entry) => [entry.key, entry.message])),
     new Map([
       [vehicleMissingData.key, "Vehicle callback replay failed: missing data"],
-      [vehicleMissingVin.key, "Callback replay failed: missing_vin"],
     ]),
   );
   assert.deepEqual(
     served.map(({ key }) => key).sort(),
-    [terminal.key, open.key, missingVin.key].sort(),
-    "historical noncritical failure completion still marks work served",
+    [terminal.key, open.key, missingVin.key, vehicleMissingVin.key].sort(),
+    "data-blocked generations complete with explicit non-application evidence",
   );
 
   const normalizationFailure = event(
@@ -1262,7 +1273,7 @@ async function runDrainAssertions(
       ID: normalizationFailure.objectId,
       WorkflowStage: "CLOSED",
       Completed: true,
-      ServiceItem: { VIN: "NORMALIZATION-FAILURE-VIN" },
+        ServiceItem: { VIN: "1G1JC5244R7252367" },
     },
   }]);
   normalizationThrows.add(normalizationFailure.objectId!);
@@ -1275,9 +1286,14 @@ async function runDrainAssertions(
   assert.equal(normalizationTimingRecords.length, 1);
   assert.equal(normalizationTimingRecords[0]?.outcome, "failed");
 
-  resetQueueState([vehicleMissingData, vehicleMissingVin]);
+  const correctedVehicleCallback = {
+    ...vehicleMissingVin,
+    key: `${vehicleMissingVin.key}-corrected`,
+    receivedAt: new Date(vehicleMissingVin.receivedAt!.getTime() + 1),
+  };
+  resetQueueState([vehicleMissingData, correctedVehicleCallback]);
   ownerTokens.set(vehicleMissingData.key, "owner-vehicle-missing-data-replay");
-  ownerTokens.set(vehicleMissingVin.key, "owner-vehicle-missing-vin-replay");
+  ownerTokens.set(correctedVehicleCallback.key, "owner-vehicle-missing-vin-replay");
   terminalApplications.length = 0;
   workOrderFetches.length = 0;
   vehicleFetches.length = 0;
@@ -1299,7 +1315,7 @@ async function runDrainAssertions(
     category: "terminal_no_history",
     reason: "vehicle_snapshot",
   });
-  assert.deepEqual(replayOutcomes.get(vehicleMissingVin.key), {
+  assert.deepEqual(replayOutcomes.get(correctedVehicleCallback.key), {
     category: "terminal_no_history",
     reason: "vehicle_snapshot",
   });
@@ -1317,7 +1333,7 @@ async function runDrainAssertions(
   assert.deepEqual(errors, []);
   assert.deepEqual(
     served.map(({ key }) => key).sort(),
-    [vehicleMissingData.key, vehicleMissingVin.key].sort(),
+    [vehicleMissingData.key, correctedVehicleCallback.key].sort(),
   );
 }
 

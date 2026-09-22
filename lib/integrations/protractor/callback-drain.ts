@@ -18,6 +18,10 @@ import type {
   CallbackTimingOutcome,
   CallbackTimingRecorder,
 } from "./callback-timing";
+import {
+  extractCallbackVehicleVin,
+  extractCallbackWorkOrderVin,
+} from "./callback-vin";
 
 const TERMINAL = new Set(["DELETE", "INVOICED", "INVOICE", "CLOSED", "VOID"]);
 const CALLBACK_DRAIN_BUDGET_MS = 40_000;
@@ -74,13 +78,17 @@ export async function processProtractorCallbackDrain(db?: Db, options: { budgetM
   ): Promise<CallbackHistoryOutcome> => {
     const operation = String(item.operation || "").toUpperCase();
     if (item.objectType === "WorkOrder" && item.objectId && operation === "DELETE") {
-      const applied = await applyProtractorTerminalCallback(queueDb, {
+      const terminalResult = await applyProtractorTerminalCallback(queueDb, {
         shopId: item.shopId,
         workOrderId: item.objectId,
         status: "Deleted",
       });
-      if (!applied) throw new Error("Terminal callback references an unknown work order");
-      return { category: "terminal_no_history", reason: "terminal_applied" };
+      return {
+        category: "terminal_no_history",
+        reason: terminalResult === "already_absent"
+          ? "terminal_already_absent"
+          : "terminal_applied",
+      };
     }
     if (item.method === "POST" && item.objectId && TERMINAL.has(operation)) {
       const replayed = await timedStage(
@@ -107,11 +115,15 @@ export async function processProtractorCallbackDrain(db?: Db, options: { budgetM
         (value) => value.ok && Boolean(value.vehicle) ? "success" : "failed",
       );
       if (!result.ok || !result.vehicle) throw new Error(`Vehicle callback replay failed: ${result.error || "missing data"}`);
-      if (!result.vehicle.VIN) return { category: "failed", reason: "missing_vin" };
+      const vin = extractCallbackVehicleVin(result.vehicle);
+      if (!vin) return { category: "deferred", reason: "missing_vin" };
       await timedStage(
         timing,
         "snapshot",
-        () => upsertProtractorVehicleSnapshot(item.shopId, result.vehicle!.VIN!, result.vehicle!),
+        () => upsertProtractorVehicleSnapshot(item.shopId, vin, {
+          ...result.vehicle!,
+          VIN: vin,
+        }),
       );
       return { category: "terminal_no_history", reason: "vehicle_snapshot" };
     }
@@ -125,10 +137,20 @@ export async function processProtractorCallbackDrain(db?: Db, options: { budgetM
         (value) => value.ok && Boolean(value.workOrder) ? "success" : "failed",
       );
       if (!result.ok || !result.workOrder) throw new Error(`Work-order callback replay failed: ${result.error || "missing data"}`);
+      const vin = extractCallbackWorkOrderVin(result.workOrder);
+      // Do not write provider identifiers into either cache while identity is
+      // missing or malformed. A later corrected callback is a new generation.
+      if (!vin) return { category: "deferred", reason: "missing_vin" };
+      const callbackWorkOrder = !extractCallbackVehicleVin(result.workOrder.ServiceItem)
+        ? {
+            ...result.workOrder,
+            ServiceItem: { ...(result.workOrder.ServiceItem || { ID: "" }), VIN: vin },
+          }
+        : result.workOrder;
       await timedStage(
         timing,
         "snapshot",
-        () => upsertProtractorWorkOrderSnapshot(item.shopId, result.workOrder!),
+        () => upsertProtractorWorkOrderSnapshot(item.shopId, callbackWorkOrder),
       );
       const normalizationTiming = timing
         ? createNormalizationTimingRecorder()
@@ -152,7 +174,7 @@ export async function processProtractorCallbackDrain(db?: Db, options: { budgetM
               ingestionVia: "webhook-queue-replay",
               callbackNormalizationTiming: normalizationTiming,
             },
-          ).ingestWorkOrderWithAllEntities(result.workOrder!),
+          ).ingestWorkOrderWithAllEntities(callbackWorkOrder),
           normalizationCallbackOutcome,
         );
         normalizationOutcome = normalizationCallbackOutcome(normalizationResult);
@@ -166,7 +188,6 @@ export async function processProtractorCallbackDrain(db?: Db, options: { budgetM
       const stage = String(result.workOrder.WorkflowStage || "").toLowerCase();
       const completed = result.workOrder.Completed ||
         ["invoiced", "invoice", "posted", "completed", "closed"].some((value) => stage.includes(value));
-      const vin = String(result.workOrder.ServiceItem?.VIN || result.workOrder.ServiceItem?.Lookup || "").toUpperCase();
       if (completed && vin) {
         const attributionStartedAt = timing?.start("attribution");
         let attributionOutcome: CallbackTimingOutcome = "success";
@@ -232,7 +253,7 @@ export async function processProtractorCallbackDrain(db?: Db, options: { budgetM
         return outcome;
       }
       return completed
-        ? { category: "failed", reason: "missing_vin" }
+        ? { category: "deferred", reason: "missing_vin" }
         : { category: "terminal_no_history", reason: "open_work_order" };
     }
     throw new Error("Callback event has no replayable object");

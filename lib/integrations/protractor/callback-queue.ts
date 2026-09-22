@@ -463,17 +463,6 @@ export async function processProtractorCallbackQueue(
             // of work already performed. Completion still requires both owner
             // fences.
             if (!ownerToken) throw new Error("Callback completion missing owner token");
-            // A vehicle without a VIN used to throw "missing data"; keep its
-            // three attempts and replay eligibility while recording the specific
-            // cause. Do not change historical non-critical indexing behavior.
-            if (item.objectType === "ServiceItem" &&
-                returnedOutcome?.category === "failed" && returnedOutcome.reason === "missing_vin") {
-              await callbackEvents.recordCallbackOutcome(item.key, ownerToken, returnedOutcome);
-              await callbackEvents.recordError(item.key, `Callback replay failed: ${returnedOutcome.reason}`, ownerToken);
-              failed++;
-              timingOutcome = "failed";
-              continue;
-            }
             const completionStartedAt = timing.start("completion");
             try {
               const completed = await callbackEvents.completeCallbackGeneration(item.key, identity ?? {

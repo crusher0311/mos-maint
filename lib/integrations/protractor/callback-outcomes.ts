@@ -17,6 +17,7 @@ export type CallbackHistoryOutcomeReason =
   | "missing_vin"
   | "vehicle_snapshot"
   | "terminal_applied"
+  | "terminal_already_absent"
   | "indexing_failed"
   | "dispatch_failed"
   | "pending_replay"
@@ -57,6 +58,7 @@ const REASONS = new Set<CallbackHistoryOutcomeReason>([
   "missing_vin",
   "vehicle_snapshot",
   "terminal_applied",
+  "terminal_already_absent",
   "indexing_failed",
   "dispatch_failed",
   "pending_replay",

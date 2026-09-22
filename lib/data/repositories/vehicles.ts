@@ -38,6 +38,11 @@ export interface VehicleDoc {
   [extra: string]: unknown;
 }
 
+type TerminalVehicleMatch = Document & {
+  __pgTerminalMatch?: Document;
+  __mongoTerminalMatch?: Document;
+};
+
 async function collection(): Promise<Collection<VehicleDoc>> {
   const db = await getDb();
   return db.collection<VehicleDoc>(COLLECTION);
@@ -176,6 +181,110 @@ export async function upsertVehicleByShopVin(
     { upsert: true, returnDocument: "after" },
   );
   return (res && (res as { value?: Document }).value) ?? (res as Document | null);
+}
+
+export async function findVehicleByProtractorWorkOrder(
+  shopId: number | string,
+  workOrderId: string,
+): Promise<Document | null> {
+  if (isLegacyVehiclesPgCanonical()) {
+    const pgMatch = (await pg.findVehicleByProtractorWorkOrder(
+      shopId,
+      workOrderId,
+    )) as Document | null;
+    const mongoMatch = await findVehicleByProtractorWorkOrderMongo(shopId, workOrderId);
+    if (!pgMatch && !mongoMatch) return null;
+    return {
+      ...(pgMatch || mongoMatch)!,
+      ...(pgMatch ? { __pgTerminalMatch: pgMatch } : {}),
+      ...(mongoMatch ? { __mongoTerminalMatch: mongoMatch } : {}),
+    } as TerminalVehicleMatch;
+  }
+  return findVehicleByProtractorWorkOrderMongo(shopId, workOrderId);
+}
+
+async function findVehicleByProtractorWorkOrderMongo(
+  shopId: number | string,
+  workOrderId: string,
+): Promise<Document | null> {
+  const col = await collection();
+  return col.findOne({
+    shopId: { $in: [String(shopId), Number(shopId)] },
+    "status.sources": {
+      $elemMatch: { provider: "protractor", workOrderId: String(workOrderId) },
+    },
+  } as Filter<VehicleDoc>);
+}
+
+export async function removeProtractorWorkOrderSource(
+  vehicle: Document,
+  shopId: number | string,
+  workOrderId: string,
+  now: Date,
+): Promise<void> {
+  const terminalSet = (matched: Document) => {
+    const sources = Array.isArray(matched.status?.sources)
+      ? matched.status.sources.filter(
+        (source: any) =>
+          !(source?.provider === "protractor" &&
+            String(source?.workOrderId) === String(workOrderId)),
+      )
+      : [];
+    return {
+      status: {
+        ...(matched.status || {}),
+        sources,
+        active: sources.length > 0,
+        ...(sources.length ? {} : { lastClosedAt: now }),
+      },
+      updatedAt: now,
+    };
+  };
+  if (isLegacyVehiclesPgCanonical()) {
+    const match = vehicle as TerminalVehicleMatch;
+    if (match.__pgTerminalMatch) {
+      const vin = typeof match.__pgTerminalMatch.vin === "string"
+        ? match.__pgTerminalMatch.vin
+        : "";
+      if (!vin) throw new Error("Protractor PG vehicle reference has no VIN");
+      await pg.upsertVehicleSnapshot(
+        shopId,
+        vin,
+        { ...match.__pgTerminalMatch, ...terminalSet(match.__pgTerminalMatch) },
+      );
+    }
+    if (match.__mongoTerminalMatch) {
+      await removeProtractorWorkOrderSourceMongo(
+        match.__mongoTerminalMatch,
+        shopId,
+        terminalSet(match.__mongoTerminalMatch),
+      );
+    }
+    if (!match.__pgTerminalMatch && !match.__mongoTerminalMatch) {
+      throw new Error("Protractor vehicle has no routed terminal match");
+    }
+    return;
+  }
+  await removeProtractorWorkOrderSourceMongo(vehicle, shopId, terminalSet(vehicle));
+}
+
+async function removeProtractorWorkOrderSourceMongo(
+  vehicle: Document,
+  shopId: number | string,
+  set: Document,
+): Promise<void> {
+  if (!vehicle._id) throw new Error("Protractor vehicle reference has no Mongo identity");
+  const col = await collection();
+  const result = await col.updateOne(
+    {
+      _id: vehicle._id,
+      shopId: { $in: [String(shopId), Number(shopId)] },
+    } as Filter<VehicleDoc>,
+    { $set: set } as UpdateFilter<VehicleDoc>,
+  );
+  if (result.matchedCount !== 1) {
+    throw new Error("Protractor vehicle reference disappeared before terminal update");
+  }
 }
 
 /* ------------------------------- manual_vehicles -------------------------- */
