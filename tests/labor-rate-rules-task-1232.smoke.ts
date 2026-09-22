@@ -26,6 +26,8 @@ const oldRule = {
   priority: 0,
   conditions: [],
   matchMode: "all",
+  applyToAllLabor: false,
+  repriceExistingCategoryLabor: false,
   overrideCategoryRates: false,
   createdAt: new Date("2024-01-01"),
   updatedAt: new Date("2024-01-01"),
@@ -37,6 +39,7 @@ const newRule = {
   rate: 140,
   color: "#3B82F6",
   applyToAllLabor: true,
+  repriceExistingCategoryLabor: true,
 };
 
 function matches(doc: any, query: any) {
@@ -142,6 +145,25 @@ async function run() {
   const normalizedNew = normalizeLaborRateRuleSet([newRule]);
   assert.equal(normalizedNew[0].color, "#3B82F6");
   assert.equal(normalizedNew[0].applyToAllLabor, true);
+  assert.equal(normalizedNew[0].repriceExistingCategoryLabor, true);
+  const noImplicitRepricing = normalizeLaborRateRuleSet([
+    {
+      ...oldRule,
+      id: "strict-consent",
+      applyToAllLabor: "true",
+      repriceExistingCategoryLabor: 1,
+    },
+    {
+      ...oldRule,
+      id: "missing-consent",
+      applyToAllLabor: undefined,
+      repriceExistingCategoryLabor: undefined,
+    },
+  ]);
+  assert.equal(noImplicitRepricing[0].applyToAllLabor, false);
+  assert.equal(noImplicitRepricing[0].repriceExistingCategoryLabor, false);
+  assert.equal(noImplicitRepricing[1].applyToAllLabor, false);
+  assert.equal(noImplicitRepricing[1].repriceExistingCategoryLabor, false);
   assert.equal(
     laborRateRuleSetsEqual(
       normalizedNew,
@@ -157,7 +179,10 @@ async function run() {
     "audit timestamps must not make otherwise identical location rules inconsistent",
   );
   await replaceLaborRateRuleSet(collection as any, 10, normalizedNew);
-  assert.deepEqual((await readLaborRateRuleSet(collection as any, 10)).map((r) => r.id), ["new"]);
+  const roundTrippedNew = await readLaborRateRuleSet(collection as any, 10);
+  assert.deepEqual(roundTrippedNew.map((r) => r.id), ["new"]);
+  assert.equal(roundTrippedNew[0].applyToAllLabor, true);
+  assert.equal(roundTrippedNew[0].repriceExistingCategoryLabor, true);
 
   // Empty is an intentional complete-set clear, not "no update".
   const empty = normalizeLaborRateRuleSet([]);
@@ -175,7 +200,10 @@ async function run() {
   );
   assert.equal(result.matchedCount, 3);
   for (const id of [10, 11, 12]) {
-    assert.deepEqual((await readLaborRateRuleSet(collection as any, id)).map((r) => r.id), ["new"]);
+    const copiedRules = await readLaborRateRuleSet(collection as any, id);
+    assert.deepEqual(copiedRules.map((r) => r.id), ["new"]);
+    assert.equal(copiedRules[0].applyToAllLabor, true);
+    assert.equal(copiedRules[0].repriceExistingCategoryLabor, true);
   }
   assert.deepEqual((await readLaborRateRuleSet(collection as any, 99)).map((r) => r.id), ["old"]);
 
@@ -301,6 +329,23 @@ async function run() {
   );
   assert.equal(extensionRouteSource.includes("LABOR_RATE_RULES_STALE"), true);
   assert.equal(extensionRouteSource.includes("expectedRevision"), true);
+  assert.equal(extensionRouteSource.includes("r.applyToAllLabor === true"), true);
+  assert.equal(extensionRouteSource.includes("r.repriceExistingCategoryLabor === true"), true);
+
+  const settingsRouteSource = readFileSync(
+    new URL("../app/api/settings/labor-rates/route.ts", import.meta.url),
+    "utf8",
+  );
+  assert.equal(
+    settingsRouteSource.includes(
+      'Object.prototype.hasOwnProperty.call(body, "applyToAllLabor")',
+    ),
+    true,
+  );
+  assert.equal(
+    settingsRouteSource.includes('"repriceExistingCategoryLabor"'),
+    true,
+  );
 
   const extensionBackgroundSource = readFileSync(
     new URL("../mos-tools-extension/background.js", import.meta.url),

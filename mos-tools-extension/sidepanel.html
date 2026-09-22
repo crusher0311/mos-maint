@@ -418,18 +418,26 @@
                 <input type="number" id="rate-form-priority" placeholder="0" min="0" step="1" value="0">
               </div>
               <div class="rates-form-field" id="rate-form-apply-all-wrap" style="display:none;">
+                <span class="rates-form-hint" style="color:#b45309;">RO-default updates are temporarily blocked until provider behavior is verified. Opted-in existing-job repricing still runs.</span>
                 <label class="rate-checkbox-label">
                   <input type="checkbox" id="rate-form-apply-all-labor">
-                  <span>Apply this rate to all job labor lines (not just new ones)</span>
+                  <span>Reprice labor on existing jobs</span>
                 </label>
-                <span class="rates-form-hint">When enabled, jobs without a specific category rule will also get this rate applied to their labor</span>
+                <span class="rates-form-hint">Explicitly allow this RO default rule to change labor already on the estimate during both auto-apply and Apply Now. Existing jobs are protected when this is off.</span>
+              </div>
+              <div class="rates-form-field" id="rate-form-reprice-category-wrap" style="display:none;">
+                <label class="rate-checkbox-label">
+                  <input type="checkbox" id="rate-form-reprice-category-labor">
+                  <span>Reprice existing labor in these categories</span>
+                </label>
+                <span class="rates-form-hint">Applies only to the job categories entered above, during both auto-apply and Apply Now. Changing the category scope turns this consent off.</span>
               </div>
               <div class="rates-form-field" id="rate-form-override-cat-wrap" style="display:none;">
                 <label class="rate-checkbox-label">
                   <input type="checkbox" id="rate-form-override-category-rates">
                   <span>Override per-job category rates</span>
                 </label>
-                <span class="rates-form-hint">When enabled, this rule's rate applies to ALL jobs — including those matched by Diag, Maint, or other category-specific rules. Use for fleet or wholesale accounts that get a flat rate regardless of job type.</span>
+                <span class="rates-form-hint">Gives this RO rule precedence only where repricing consent exists. It can override consenting category labor, but protected category jobs remain unchanged. This option never grants repricing permission by itself.</span>
               </div>
               <div class="rates-form-actions">
                 <button id="rate-form-cancel" class="btn-rate-cancel">Cancel</button>

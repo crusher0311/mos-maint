@@ -135,3 +135,4 @@
 - [AutoFlow visibility rollout](autoflow-visibility-rollout.md) — number ownership and workflow eligibility need separate live checks; isolated previews must not boot against shared production stores.
 - [AutoFlow notification recovery](autoflow-notification-retry-semantics.md) — accept bounded duplicate refreshes after ambiguous completion; never repair a missing marker by replaying upstream work.
 - [Settings save acknowledgment](settings-cas-acknowledgment.md) — committed revisioned saves return their new revision even when a downstream dashboard notification fails.
+- [Labor repricing consent](labor-repricing-consent.md) — category consent never authorizes unrelated labor; default-only writes need a verified provider non-cascade contract.

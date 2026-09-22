@@ -6381,13 +6381,14 @@ async function autoApplyLaborRate(context, options = {}) {
 
   // Track which jobs were handled by per-job category rules
   const jobsHandledByPerJobRules = new Set();
+  const jobsClaimedByCategory = new Set();
 
   // Apply all matching per-job rules (category-based rules)
   // Skip if the matched RO-level rule is set to override all category rates
   if (matchedRoRule?.overrideCategoryRates) {
     console.log(`[LaborRate] Rule "${matchedRoRule.name}" has overrideCategoryRates — skipping per-job category rules`);
   }
-  if (perJobRules.length > 0 && vehicleData.jobCategories.length > 0 && !matchedRoRule?.overrideCategoryRates) {
+  if (perJobRules.length > 0 && vehicleData.jobCategories.length > 0) {
     const sorted = [...perJobRules].sort((a, b) => (b.priority || 0) - (a.priority || 0));
     for (const rule of sorted) {
       const matchMode = rule.matchMode || 'all';
@@ -6409,8 +6410,22 @@ async function autoApplyLaborRate(context, options = {}) {
       const catMatch = catConditions.some(cond => matchRuleCondition(cond, vehicleData));
       if (!catMatch) continue;
 
+      // Claim the highest-priority matching scope BEFORE attempting writes.
+      // Protected and failed jobs must not fall through to another rule.
+      const scopedJobs = (roData.jobs || []).filter(job =>
+        !jobsClaimedByCategory.has(job.id) &&
+        MosLaborRateCore.categoryRuleMatchesJob(rule, job));
+      for (const job of scopedJobs) {
+        jobsClaimedByCategory.add(job.id);
+        if (!matchedRoRule?.overrideCategoryRates ||
+            !MosLaborRateCore.allowsExistingLaborRepricing(rule, true)) {
+          jobsHandledByPerJobRules.add(job.id);
+        }
+      }
+      if (matchedRoRule?.overrideCategoryRates) continue;
+
       console.log(`[LaborRate] Matched per-job rule: "${rule.name}" (priority ${rule.priority}) → $${rule.rate}/hr`);
-       const jobResult = await applyLaborRatePerJob(rule, Math.round(rule.rate * 100), roData, laborContext, options);
+       const jobResult = await applyLaborRatePerJob(rule, Math.round(rule.rate * 100), { ...roData, jobs: scopedJobs }, laborContext, options);
        recordLaborRateOutcome(rule, jobResult, { perJob: true });
        if (jobResult?.failedCount > 0 && jobResult.success) {
          recordLaborRateOutcome(rule, {
@@ -6434,7 +6449,7 @@ async function autoApplyLaborRate(context, options = {}) {
   }
 
   // Apply RO-level rate to jobs not handled by per-job rules (no category or unmatched category)
-  if (matchedRoRule && (matchedRoRule.applyToAllLabor || perJobRules.length > 0)) {
+  if (matchedRoRule && MosLaborRateCore.allowsExistingLaborRepricing(matchedRoRule)) {
     const roRateInCents = Math.round(matchedRoRule.rate * 100);
     const jobs = roData.jobs || [];
     const shopId = laborContext.shopId;
@@ -6560,6 +6575,17 @@ async function autoApplyLaborRate(context, options = {}) {
 }
 
 async function applyLaborRatePerJob(matchedRule, rateInCents, roData, context, options = {}) {
+  // All jobs in this snapshot already exist, including just-added canned jobs.
+  // Enforce consent at the sink as well as in rule orchestration.
+  if (!MosLaborRateCore.allowsExistingLaborRepricing(matchedRule, true)) {
+    return {
+      success: true, noChange: true, perJob: true, updatedCount: 0,
+      ruleName: matchedRule.name, rate: matchedRule.rate,
+      handledJobIds: (roData.jobs || [])
+        .filter(job => MosLaborRateCore.categoryRuleMatchesJob(matchedRule, job))
+        .map(job => job.id),
+    };
+  }
   const categoryValues = (matchedRule.conditions || [])
     .filter(c => c.type === 'jobCategory')
     .flatMap(c => c.values || [])
@@ -6794,98 +6820,28 @@ async function applyLaborRateToRO(matchedRule, rateInCents, roData, context, opt
     };
   }
 
-  try {
-    const summaryPayload = {
-      laborRate: rateInCents,
-      appointmentOption: roData.appointmentOption,
-      customerTimeIn: roData.customerTimeIn,
-      customerTimeOut: roData.customerTimeOut,
-      defaultTechnicianId: roData.defaultTechnicianId,
-      keytag: roData.keytag,
-      leadSource: roData.leadSource,
-      notes: roData.notes,
-      poNumber: roData.poNumber,
-      referrerId: roData.referrerId,
-      referrerName: roData.referrerName,
-      saveCustomerParts: roData.saveCustomerParts,
-      serviceWriterId: roData.serviceWriterId
-    };
-
-    console.log(`[LaborRate] Sending PUT to /api/repair-order/${context.roId}/summary with laborRate: ${rateInCents} ($${matchedRule.rate}/hr)`);
-
-    const updateRes = await tekmetricFetch(
-      `/api/repair-order/${context.roId}/summary`,
-      { method: 'PUT', body: JSON.stringify(summaryPayload) },
-      {
-        shopId: context.shopId,
-        label: 'labor-rate.put-ro-summary',
-        signalUserOnError: true,
-        context,
-      }
-    );
-
-    const updateBody = await updateRes.text();
-    console.log(`[LaborRate] RO update: ${updateRes.status}`);
-    assertCurrentLaborRateContext(context);
-
-    if (!updateRes.ok) {
-      console.error("[LaborRate] Failed to update rate:", updateRes.status, updateBody);
-      chrome.runtime.sendMessage({
-        action: "LABOR_RATE_APPLIED",
-        success: false,
-        ...laborRateBroadcastMetadata(context),
-        error: `Failed to update rate: ${updateRes.status}`,
-        tabId: context._tabId,
-        context,
-      }).catch(() => {});
-      return {
-        success: false,
-        error: `Update failed: ${updateRes.status}`,
-        ruleName: matchedRule.name,
-        rate: matchedRule.rate,
-        perJob: false,
-      };
-    }
-
-    lastAppliedRoId = context.roId;
-    lastAppliedLaborRateContextKey = laborRateContextKey(context);
-    console.log(`[LaborRate] Applied "${matchedRule.name}" - $${matchedRule.rate}/hr (${rateInCents} cents) to RO #${context.roNumber || context.roId}`);
-
-    chrome.runtime.sendMessage({
-      action: "LABOR_RATE_APPLIED",
-      success: true,
-      ...laborRateBroadcastMetadata(context),
-      ruleName: matchedRule.name,
-      rate: matchedRule.rate,
-      previousRate: currentRate / 100,
-      roNumber: context.roNumber || context.roId,
-      tabId: context._tabId,
-      context,
-    }).catch(() => {});
-
-    const softRefresh = options.softRefresh || false;
-    const toastMsg = `${matchedRule.name}: $${matchedRule.rate}/hr applied to RO`;
-    chrome.tabs.sendMessage(context._tabId, {
-      type: "REFRESH_LABOR_RATE_UI",
-      ...laborRateBroadcastMetadata(context),
-      soft: softRefresh,
-      toastMessage: toastMsg,
-      context,
-    }).catch(() => {});
-
-    return { success: true, ruleName: matchedRule.name, rate: matchedRule.rate };
-  } catch (err) {
-    console.error("[LaborRate] Error updating rate:", err);
-    if (err.code === 'STALE_LABOR_RATE_CONTEXT') throw err;
-    return {
-      success: false,
-      error: err.message,
-      code: err.code || null,
-      ruleName: matchedRule.name,
-      rate: matchedRule.rate,
-      perJob: false,
-    };
-  }
+  // The captured summary response does not establish whether Tekmetric
+  // cascades laborRate into existing job prices. Until an approved sandbox
+  // verifies a default-only contract, do not send this potentially broad write.
+  // Per-job consent is evaluated independently by the caller.
+  const error = 'RO default update blocked: Tekmetric has not been verified to preserve existing job labor prices. Only explicitly opted-in job repricing can run.';
+  chrome.runtime.sendMessage({
+    action: 'LABOR_RATE_APPLIED',
+    success: false,
+    ...laborRateBroadcastMetadata(context),
+    code: 'LABOR_RATE_DEFAULT_UPDATE_UNVERIFIED',
+    error,
+    tabId: context._tabId,
+    context,
+  }).catch(() => {});
+  return {
+    success: false,
+    code: 'LABOR_RATE_DEFAULT_UPDATE_UNVERIFIED',
+    error,
+    ruleName: matchedRule.name,
+    rate: matchedRule.rate,
+    perJob: false,
+  };
 }
 
 console.log("[MOS Tools] Background service worker loaded");

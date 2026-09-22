@@ -424,6 +424,8 @@ const elements = {
   rateFormPriority: document.getElementById('rate-form-priority'),
   rateFormApplyAllWrap: document.getElementById('rate-form-apply-all-wrap'),
   rateFormApplyAllLabor: document.getElementById('rate-form-apply-all-labor'),
+  rateFormRepriceCategoryWrap: document.getElementById('rate-form-reprice-category-wrap'),
+  rateFormRepriceCategoryLabor: document.getElementById('rate-form-reprice-category-labor'),
   rateFormOverrideCatWrap: document.getElementById('rate-form-override-cat-wrap'),
   rateFormOverrideCategoryRates: document.getElementById('rate-form-override-category-rates'),
   rateFormCancel: document.getElementById('rate-form-cancel'),
@@ -4425,6 +4427,7 @@ function renderLaborRateRules() {
     const makesText = makes.length > 0 ? makes.join(', ') : 'All vehicles';
     const modelsText = models.length > 0 ? models.join(', ') : '';
     const categoriesText = categories.length > 0 ? categories.join(', ') : '';
+    const isCategoryRule = categories.length > 0;
     const fuelText = fuelTypes.length > 0 ? fuelTypes.join(', ') : '';
     const customerTypeText = customerTypes.length > 0 ? customerTypes.join(', ') : '';
     const tagsText = tags.length > 0 ? tags.join(', ') : '';
@@ -4444,7 +4447,8 @@ function renderLaborRateRules() {
           ${customerTypeText ? `<div class="rate-group-categories"><span class="rate-group-tag">Customer:</span> ${escapeHtml(customerTypeText)}</div>` : ''}
           ${tagsText ? `<div class="rate-group-categories"><span class="rate-group-tag">Tags:</span> ${escapeHtml(tagsText)}</div>` : ''}
           ${categoriesText ? `<div class="rate-group-categories"><span class="rate-group-tag">Jobs:</span> ${escapeHtml(categoriesText)}</div>` : ''}
-          ${rule.applyToAllLabor ? `<div class="rate-group-categories"><span class="rate-group-tag" style="color:#10B981;">Applies to all job labor</span></div>` : ''}
+          ${!isCategoryRule && rule.applyToAllLabor === true ? `<div class="rate-group-categories"><span class="rate-group-tag" style="color:#10B981;">Reprices existing jobs</span></div>` : ''}
+          ${isCategoryRule && rule.repriceExistingCategoryLabor === true ? `<div class="rate-group-categories"><span class="rate-group-tag" style="color:#10B981;">Reprices existing category labor</span></div>` : ''}
           ${rule.priority ? `<div class="rate-group-priority">Priority: ${rule.priority}</div>` : ''}
           <div class="rate-group-actions">
             <button class="rate-group-edit-btn" data-rule-id="${escapeHtml(rule.id)}" title="Edit">
@@ -4477,6 +4481,17 @@ function renderLaborRateRules() {
   // login. Re-apply it here so a Basic session cannot mutate freshly loaded
   // labor-rate cards.
   applyMutationControlLock();
+}
+
+let originalRateFormCategoryScope = '';
+
+function normalizedRateFormCategoryScope() {
+  return elements.rateFormCategories.value
+    .split(',')
+    .map(category => category.trim().toLowerCase())
+    .filter(Boolean)
+    .sort()
+    .join('|');
 }
 
 function showRateForm(editRule = null) {
@@ -4514,12 +4529,14 @@ function showRateForm(editRule = null) {
     elements.rateFormPriority.value = editRule.priority || 0;
     elements.rateFormEditId.value = editRule.id;
     elements.rateFormSaveText.textContent = 'Update Group';
-    elements.rateFormApplyAllLabor.checked = !!editRule.applyToAllLabor;
-    elements.rateFormOverrideCategoryRates.checked = !!editRule.overrideCategoryRates;
+    elements.rateFormApplyAllLabor.checked = editRule.applyToAllLabor === true;
+    elements.rateFormRepriceCategoryLabor.checked = editRule.repriceExistingCategoryLabor === true;
+    elements.rateFormOverrideCategoryRates.checked = editRule.overrideCategoryRates === true;
     console.log('[LaborRate] Loading rule into form — overrideCategoryRates:', editRule.overrideCategoryRates, 'applyToAllLabor:', editRule.applyToAllLabor, 'raw rule:', JSON.stringify(editRule));
 
     const isRoLevel = categories.length === 0;
     elements.rateFormApplyAllWrap.style.display = isRoLevel ? '' : 'none';
+    elements.rateFormRepriceCategoryWrap.style.display = isRoLevel ? 'none' : '';
     elements.rateFormOverrideCatWrap.style.display = isRoLevel ? '' : 'none';
 
     const color = editRule.color || '#3B82F6';
@@ -4539,23 +4556,43 @@ function showRateForm(editRule = null) {
     elements.rateFormEditId.value = '';
     elements.rateFormSaveText.textContent = 'Add Group';
     elements.rateFormApplyAllLabor.checked = false;
+    elements.rateFormRepriceCategoryLabor.checked = false;
     elements.rateFormOverrideCategoryRates.checked = false;
     elements.rateFormApplyAllWrap.style.display = '';
+    elements.rateFormRepriceCategoryWrap.style.display = 'none';
     elements.rateFormOverrideCatWrap.style.display = '';
     document.querySelectorAll('.rate-color-swatch').forEach(s => s.classList.remove('active'));
     document.querySelector('.rate-color-swatch')?.classList.add('active');
   }
 
-  updateApplyAllVisibility();
-  elements.rateFormCategories.removeEventListener('input', updateApplyAllVisibility);
-  elements.rateFormCategories.addEventListener('input', updateApplyAllVisibility);
+  originalRateFormCategoryScope = normalizedRateFormCategoryScope();
+  updateApplyAllVisibility(false);
+  elements.rateFormCategories.removeEventListener('input', handleRateCategoryScopeInput);
+  elements.rateFormCategories.addEventListener('input', handleRateCategoryScopeInput);
   elements.rateFormName.focus();
 }
 
-function updateApplyAllVisibility() {
+function handleRateCategoryScopeInput() {
+  updateApplyAllVisibility(true);
+}
+
+function updateApplyAllVisibility(scopeMayHaveChanged = false) {
   const hasCategories = elements.rateFormCategories.value.trim().length > 0;
   elements.rateFormApplyAllWrap.style.display = hasCategories ? 'none' : '';
+  elements.rateFormRepriceCategoryWrap.style.display = hasCategories ? '' : 'none';
   elements.rateFormOverrideCatWrap.style.display = hasCategories ? 'none' : '';
+  if (hasCategories) {
+    elements.rateFormApplyAllLabor.checked = false;
+    elements.rateFormOverrideCategoryRates.checked = false;
+  } else {
+    elements.rateFormRepriceCategoryLabor.checked = false;
+  }
+  if (
+    scopeMayHaveChanged &&
+    normalizedRateFormCategoryScope() !== originalRateFormCategoryScope
+  ) {
+    elements.rateFormRepriceCategoryLabor.checked = false;
+  }
 }
 
 function hideRateForm() {
@@ -4624,8 +4661,10 @@ async function handleSaveRateGroup() {
     conditions.push({ type: 'jobCategory', label: 'Job Categories', values: categories });
   }
 
-  const applyToAllLabor = categories.length === 0 && elements.rateFormApplyAllLabor.checked;
-  const overrideCategoryRates = categories.length === 0 && elements.rateFormOverrideCategoryRates.checked;
+  const applyToAllLabor = categories.length === 0 && elements.rateFormApplyAllLabor.checked === true;
+  const repriceExistingCategoryLabor =
+    categories.length > 0 && elements.rateFormRepriceCategoryLabor.checked === true;
+  const overrideCategoryRates = categories.length === 0 && elements.rateFormOverrideCategoryRates.checked === true;
   console.log('[LaborRate] Saving rule — applyToAllLabor:', applyToAllLabor, 'overrideCategoryRates:', overrideCategoryRates, 'categories:', categories.length);
 
   const ruleData = {
@@ -4636,6 +4675,7 @@ async function handleSaveRateGroup() {
     matchMode: 'all',
     color,
     applyToAllLabor,
+    repriceExistingCategoryLabor,
     overrideCategoryRates,
   };
 
@@ -4809,6 +4849,8 @@ async function handleApplyLaborRateNow() {
         result.error || 'Some labor-rate updates failed. Review the active repair order and try again.',
         'warning',
       );
+    } else if (result.success && result.noChange) {
+      showNotification('No labor prices changed. Existing-job protection and already-matching rates were respected.', 'info');
     } else if (result.success) {
       const rate = typeof result.rate === 'number'
         ? result.rate.toFixed(2)

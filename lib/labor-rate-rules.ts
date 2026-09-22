@@ -13,7 +13,8 @@ export interface LaborRateRule {
   conditions: LaborRateCondition[];
   matchMode: "all" | "any";
   color?: string;
-  applyToAllLabor?: boolean;
+  applyToAllLabor: boolean;
+  repriceExistingCategoryLabor: boolean;
   overrideCategoryRates: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -145,9 +146,11 @@ export function normalizeLaborRateRule(
     }),
     matchMode: input.matchMode === "any" ? "any" : "all",
     ...(typeof input.color === "string" ? { color: input.color } : {}),
-    ...(input.applyToAllLabor !== undefined
-      ? { applyToAllLabor: Boolean(input.applyToAllLabor) }
-      : {}),
+    // These flags authorize repricing labor that is already on an estimate.
+    // Only a literal boolean true is consent; strings, numbers, and omitted
+    // legacy fields must fail closed.
+    applyToAllLabor: input.applyToAllLabor === true,
+    repriceExistingCategoryLabor: input.repriceExistingCategoryLabor === true,
     overrideCategoryRates: Boolean(input.overrideCategoryRates),
     createdAt: dateValue(input.createdAt, now, "createdAt"),
     updatedAt: dateValue(input.updatedAt, now, "updatedAt"),
