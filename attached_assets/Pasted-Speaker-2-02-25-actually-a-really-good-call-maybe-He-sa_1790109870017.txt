@@ -1,0 +1,45 @@
+Speaker 2: 02:25 
+ actually a really good call, maybe. He said, what I thought was an innovative idea wasn't innovative at all. He said, get in line. There's actually 6 companies right now. Of course, I could probably think who they are. Steer, Kikui, you know, list goes on. There's 6 people that have proposed to them, but they want to show the Carfax to the consumer.
+
+Speaker 3: 02:38 
+ And he goes, we know you turned that down for, or I've already brought it up under our new release and gone public, and we've been spun off as our own. He goes, now our new leadership, we're all going back to them saying, hey, you've got third parties. Ready to show this information to a consumer.
+
+Speaker 2: 02:49 
+ And he, as far as he goes, it's really up to me. I'm advocating for it. I think we should open that up to third parties.  And then I showed him the screen of the AI VHI right inside Techmetric. He said, totally fine according to 2.9A. He goes, the crux of what that is about and what it's stopping is, and here's my core question. I said, I'll give it a lead engineer and get you a reply. The core question is, are we in any way putting the Carfax data into the language learning model?  Or not?  How is it getting the score when taking into account Carfax then?
+
+Speaker 3: 03:19 
+ Because you're using an API with which one? OpenAPI?
+
+Speaker 2: 03:22 
+ Yeah, but.
+
+Speaker 3: 03:24 
+ That's, that's the part he said. And I proposed, I said, I'll play the side of the enemy. I said, so if, and I told him our eight ingredients, and I showed him the screen. I said, we have eight ingredients calculating the score. And I said, what you're saying is if, if in that moment to create the score, we're ingesting all of the data into the LLM to reveal the score? Is that inputting it? He said yes. And I said, okay, let me hypothetically do it this way. Let's say we had the LLM doing all other 7 parts to generate the score. And then we had our own calculations and algorithms, sort of our own LLM, but our own, that inserted the final Carfax into the algorithm to slightly adjust it. Would that be okay? Totally.
+
+Speaker 2: 03:55 
+ So we actually have our own LLM.
+
+Speaker 3: 03:58 
+ For all.
+
+Speaker 2: 04:00 
+ But is that okay? So is that what's responding to and using the Carfax data?
+
+Speaker 3: 04:03 
+ Yeah. OpenAI is not ingesting much. Like, I seriously paid $5 for our OpenAI build.  Like, back in January, and we still haven't hit the tokens.
+
+Speaker 2: 04:13 
+ Unreal. So for real, what is doing the calculations then?
+
+Speaker 3: 04:17 
+ The, the model that I've built in to the backend.
+
+Speaker 2: 04:21 
+ Okay, so you use AI to create the model. Now the model is spinning up the score without accessing and no data is getting put in any.
+
+Speaker 3: 04:27 
+ No data is getting put into OpenAI.
+
+Speaker 2: 04:29 
+ Can, can you write that into a paragraph of exactly how we use it that I could send as an engineer and speak to Andy?
+
