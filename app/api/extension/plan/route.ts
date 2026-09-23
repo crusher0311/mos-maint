@@ -34,8 +34,6 @@ import {
   LIFETIME_FLUID_SERVICE_KEYS,
   SERVICE_KEY_DISPLAY_NAMES,
   splitServicePhrases,
-  isInspectOnlyHistoryPhrase,
-  INSPECTION_SERVICE_KEYS,
   toKeyFromFreeText,
 } from "@/lib/service-keys";
 import { listTekmetricDeferredWorkByVin } from "@/lib/data/repositories/tekmetric-deferred-work";
@@ -57,6 +55,13 @@ import {
   type EngineProfile,
   type EngineRiskOverride,
 } from "@/lib/engine-risk";
+import {
+  chooseExtensionLastPerformed,
+  EXTENSION_TRANSMISSION_PATTERNS,
+  hasUnresolvedCvtRecommendation,
+  isPerformedExtensionHistoryPhrase,
+  mapExtensionTransmissionServiceToKey,
+} from "@/lib/plan-build/extension-service-history";
 
 /**
  * Test seam (Task #196): the route handler and `runOnDemandAnalysis`
@@ -209,8 +214,9 @@ const SERVICE_KEY_PATTERNS: Record<string, RegExp[]> = {
   engine_air: [/\bair filter\b/i, /engine air/i, /air cleaner/i],
   coolant: [/coolant/i, /antifreeze/i, /radiator flush/i],
   brake_fluid: [/brake fluid/i],
-  trans_auto: [/automatic trans/i, /\batf\b/i, /auto trans/i, /transmission fluid/i],
-  trans_manual: [/manual trans/i, /\bmtf\b/i],
+  trans_auto: EXTENSION_TRANSMISSION_PATTERNS.trans_auto,
+  trans_manual: EXTENSION_TRANSMISSION_PATTERNS.trans_manual,
+  dct: EXTENSION_TRANSMISSION_PATTERNS.dct,
   transfer_case: [/transfer case/i, /\bptu\b/i, /power transfer unit/i],
   front_differential: [/front differential/i],
   rear_differential: [/rear differential/i],
@@ -236,6 +242,8 @@ const SERVICE_KEY_PATTERNS: Record<string, RegExp[]> = {
 
 function mapServiceToKey(serviceName: string): string | null {
   const name = serviceName?.toLowerCase() || '';
+  const transmissionKey = mapExtensionTransmissionServiceToKey(name);
+  if (transmissionKey) return transmissionKey;
   for (const [key, patterns] of Object.entries(SERVICE_KEY_PATTERNS)) {
     if (patterns.some(p => p.test(name))) {
       return key;
@@ -339,10 +347,7 @@ function getLastPerformedInfo(
         // Verb-guard: an inspected/checked line ("Drive belts checked") must
         // never anchor a replacement clock. Inspection-type keys (emissions)
         // are exempt because the inspection IS the scheduled service.
-        const jobInspectBlocked =
-          isInspectOnlyHistoryPhrase(jobName) &&
-          !(serviceKey ? INSPECTION_SERVICE_KEYS.has(serviceKey) : false);
-        if (!jobInspectBlocked && servicePatterns.some(p => p.test(jobName))) {
+        if (isPerformedExtensionHistoryPhrase(jobName, serviceKey!, servicePatterns)) {
           // Treat 0 as "missing" — a historical RO with odometer=0 means the
           // odometer wasn't captured, not that the car had zero miles. Without
           // this guard, downstream math anchors at 0 and reports the entire
@@ -366,10 +371,6 @@ function getLastPerformedInfo(
   }
   
   if (carfaxRecords?.length) {
-    // Inspection-type keys (emissions) may be anchored by an inspect verb
-    // because the inspection IS the scheduled service; every other key needs a
-    // performed verb.
-    const carfaxInspectExempt = serviceKey ? INSPECTION_SERVICE_KEYS.has(serviceKey) : false;
     for (const record of carfaxRecords) {
       const desc = record.description || '';
       const descLower = desc.toLowerCase();
@@ -380,8 +381,7 @@ function getLastPerformedInfo(
       // service pattern AND is not inspect-only. Otherwise an inspection resets
       // a replacement clock (the reported "checked = replaced" bug).
       const regexMatch = !!servicePatterns && splitServicePhrases(desc).some(ph =>
-        servicePatterns.some(p => p.test(ph)) &&
-        !(isInspectOnlyHistoryPhrase(ph) && !carfaxInspectExempt)
+        isPerformedExtensionHistoryPhrase(ph, serviceKey!, servicePatterns)
       );
       // Operator overrides (admin mappings) are intentional and honored
       // regardless of verb, matching the whole normalized description.
@@ -400,22 +400,7 @@ function getLastPerformedInfo(
     }
   }
   
-  if (shopLastDone && carfaxLastDone) {
-    if (shopLastDone.date && carfaxLastDone.date) {
-      if (shopLastDone.date >= carfaxLastDone.date) {
-        return { source: 'shop', ...shopLastDone };
-      } else {
-        return { source: 'external', ...carfaxLastDone };
-      }
-    }
-    return { source: 'shop', ...shopLastDone };
-  } else if (shopLastDone) {
-    return { source: 'shop', ...shopLastDone };
-  } else if (carfaxLastDone) {
-    return { source: 'external', ...carfaxLastDone };
-  }
-  
-  return { source: 'unknown' };
+  return chooseExtensionLastPerformed(shopLastDone, carfaxLastDone);
 }
 
 type ShopIntervals = Record<string, { useShop: boolean; excluded?: boolean; miles: number | null; months: number | null }>;
@@ -2490,6 +2475,12 @@ async function _GET(request: NextRequest) {
       : Infinity;
     const maxAge = 24 * 60 * 60 * 1000;
     const hasRecommendations = analysisData?.recommendations?.length > 0;
+    // Narrow migration for analyses produced before the extension recognized
+    // DataOne's "Replace CVT fluid" wording. Rebuild only affected unresolved
+    // rows; do not invalidate every vehicle with a global schema bump.
+    const hasUnresolvedCvt = hasUnresolvedCvtRecommendation(
+      analysisData?.recommendations,
+    );
 
     const cachedShowInspect = analysisData?.showInspectItems ?? true;
     const prefsChanged = cachedShowInspect !== showInspectItems;
@@ -2504,9 +2495,9 @@ async function _GET(request: NextRequest) {
     const cachedSchemaVersion = analysisData?.schemaVersion ?? 1;
     const schemaStale = cachedSchemaVersion < ANALYSIS_CACHE_SCHEMA_VERSION;
 
-    console.log(`[Extension] Analysis cache check: exists=${!!analysisData}, age=${Math.round(analysisAge/1000)}s, hasRecs=${hasRecommendations}, prefsChanged=${prefsChanged}, mileageChanged=${mileageChanged} (cached=${cachedAnalysisMileage}, current=${currentAnalysisMileage}), schemaVersion=${cachedSchemaVersion}/${ANALYSIS_CACHE_SCHEMA_VERSION}${schemaStale ? " STALE" : ""}`);
+    console.log(`[Extension] Analysis cache check: exists=${!!analysisData}, age=${Math.round(analysisAge/1000)}s, hasRecs=${hasRecommendations}, unresolvedCvt=${hasUnresolvedCvt}, prefsChanged=${prefsChanged}, mileageChanged=${mileageChanged} (cached=${cachedAnalysisMileage}, current=${currentAnalysisMileage}), schemaVersion=${cachedSchemaVersion}/${ANALYSIS_CACHE_SCHEMA_VERSION}${schemaStale ? " STALE" : ""}`);
 
-    if (!analysisData || forceRefresh || analysisAge > maxAge || prefsChanged || !hasRecommendations || mileageChanged || schemaStale) {
+    if (!analysisData || forceRefresh || analysisAge > maxAge || prefsChanged || !hasRecommendations || hasUnresolvedCvt || mileageChanged || schemaStale) {
       try {
         const startTime = Date.now();
         
