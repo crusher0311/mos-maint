@@ -26,3 +26,9 @@ Omitting a package from a WorkOrder POST did not delete it in the live test.
 **How to apply:** Never use HTTP success alone to claim removal or implement duplicate-and-delete replacement. Require verified absence by ID and a supported deletion contract; this test covers omission-based removal, not every hypothetical provider endpoint.
 
 An explicit package `Header` deletion marker was also tested through the WorkOrder POST, deliberately bypassing only the payload cleaner's removal of header fields (not transport safeguards). With the existing package/header ID, current UTC `DeletionTime`, and `DeletionTimeSpecified:true`, the response and fresh GET still showed the package and the original sentinel `0001-01-01T00:00:00`. Other RO content was unchanged. This disproves that specific soft-delete payload for the tested configuration; schema audit fields alone do not establish write support.
+
+Changing REST request encoding to XML did not resolve existing-line repricing in the tested configuration.
+
+**Why:** An authorized `application/xml` POST used the supplied REST example's field order and repeated `ItemCollection` elements, preserving the work-order envelope and package header while targeting an existing test line. Explicit price/gross/net changes returned HTTP 200 but the response and fresh GET retained the old pricing, with no non-audit RO differences. `PriceUnit` was preserved and the unsupported line-level `Discount` write was omitted. A fresh preflight found a discount had appeared on the previously undiscounted test line, so never reuse old financial assumptions between experiments.
+
+**How to apply:** Do not promise XML fixes ignored JSON price updates. Establish the effective update contract for the actual API key/configuration, always capture current line state, and verify persistence rather than HTTP status.
