@@ -18,3 +18,9 @@ Do not send sparse WorkOrder/package/line updates as though the endpoint were PA
 **Why:** A further authorized test on a pre-existing, non-test labor line sent only its identity/type and a new price. Price stayed unchanged despite HTTP 200 and the user's confirmation that `UpdateWorkOrderLine` was enabled. Omitted line description and technician hours were cleared; omitted package header and WO scheduling/workflow fields also changed. A full preserved writable payload restored the complete RO snapshot, excluding audit headers, with no remaining differences.
 
 **How to apply:** Preserve unrelated writable fields at every nesting level and compare the full RO after experiments, not merely line prices. Do not keep attributing ignored price edits to a disabled permission once the operator confirms it is enabled; the actual supported pricing-write contract still needs verification.
+
+Omitting a package from a WorkOrder POST did not delete it in the live test.
+
+**Why:** The existing MOS removal builder submitted the preserved work order with only the test package filtered out. HTTP 200 was returned, but both the POST response and subsequent GET still contained that package; package count and full RO content were unchanged apart from audit headers. This contradicts the builder's comment claiming omission removes a package and aligns with the saved vendor documentation for WorkOrder-type records.
+
+**How to apply:** Never use HTTP success alone to claim removal or implement duplicate-and-delete replacement. Require verified absence by ID and a supported deletion contract; this test covers omission-based removal, not every hypothetical provider endpoint.
