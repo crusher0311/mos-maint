@@ -1,0 +1,50 @@
+2026-09-22T19:55:41.805716305Z   ✓ returns the canonical MOS shop
+2026-09-22T19:55:41.805719632Z   ✓ normalizes the provider subject
+2026-09-22T19:55:41.805724493Z   ✓ accepts only explicitly verified profile email
+2026-09-22T19:55:41.805741005Z   ✓ gives the proof a short freshness window
+2026-09-22T19:55:41.806443297Z   ✓ never upgrades an authenticated but unverified provider email
+2026-09-22T19:55:41.806959744Z   ✓ rejects a distributed replay claim
+2026-09-22T19:55:41.807418113Z [Extension Bootstrap] proofStatus=duplicate_grace provider=tekmetric shop=85 — duplicate exchange of the same proof within its lifetime
+2026-09-22T19:55:41.807453735Z   ✓ a duplicate exchange within the grace budget still verifies
+2026-09-22T19:55:41.80814608Z   ✓ rejects a provider session not assigned to the claimed shop
+2026-09-22T19:55:41.80847277Z   ✓ classifies an expired browser session
+2026-09-22T19:55:41.809518032Z   ✓ shopmonkey: probes the documented current-user endpoint on the pinned API host
+2026-09-22T19:55:41.809523339Z   ✓ shopmonkey: probes the session's location list for membership
+2026-09-22T19:55:41.809548072Z   ✓ shopmonkey: sends only the browser bearer, never a stored API key
+2026-09-22T19:55:41.809566764Z   ✓ shopmonkey: accepts a live session tied to the claimed shop
+2026-09-22T19:55:41.80956847Z   ✓ shopmonkey: returns the canonical MOS shop
+2026-09-22T19:55:41.80957311Z   ✓ shopmonkey: normalizes the provider subject
+2026-09-22T19:55:41.809603641Z   ✓ shopmonkey: normalizes the verified email
+2026-09-22T19:55:41.810052254Z   ✓ shopmonkey: rejects a session not assigned to the claimed location/company
+2026-09-22T19:55:41.810277775Z   ✓ shopmonkey: classifies an expired browser session
+2026-09-22T19:55:41.810299863Z   ✓ shopmonkey: fails closed without a captured browser bearer
+2026-09-22T19:55:41.810333397Z   ✓ shopmonkey: rollout flag off is a calm unavailable outcome
+2026-09-22T19:55:41.810349481Z   ✓ autoflow keeps the calm unsupported outcome (no confirmed identity endpoint)
+2026-09-22T19:55:41.810366629Z   ✓ autoflow ignores a supplied bearer proof and never probes the provider
+2026-09-22T19:55:41.810368249Z   ✓ fails unsupported providers closed
+2026-09-22T19:55:41.810376592Z   ✓ never forwards unsupported-provider cookies or credentials
+2026-09-22T19:55:41.810439224Z   ✓ honors the global rollout kill switch
+2026-09-22T19:55:41.810491805Z extension provider proof: PASS
+2026-09-22T19:55:41.925985543Z 
+2026-09-22T19:55:41.926002533Z > mos-maintenance-mvp@1.8.0 test:extension-login-code
+2026-09-22T19:55:41.926004773Z > tsx tests/extension-login-code.smoke.ts
+2026-09-22T19:55:41.926006158Z 
+2026-09-22T19:55:42.637409578Z extension-login-code smoke
+2026-09-22T19:55:42.642835486Z [Extension Session] login-code verified for account
+2026-09-22T19:55:42.643157754Z [Extension Session] issued assurance=verified shop=1 provider=tekmetric
+2026-09-22T19:55:42.644516229Z   ✓ valid code returns 200
+2026-09-22T19:55:42.64467799Z   ✓ valid code issues token
+2026-09-22T19:55:42.644681607Z   ✓ code is consumed (single-use)
+2026-09-22T19:55:42.645589727Z   ✓ replayed code returns 401
+2026-09-22T19:55:42.646277337Z   ✓ wrong code returns 401
+2026-09-22T19:55:42.646282401Z   ✓ wrong code increments attempts
+2026-09-22T19:55:42.646993775Z   ✓ expired code returns 401
+2026-09-22T19:55:42.647715798Z   ✓ attempt-capped code returns 401
+2026-09-22T19:55:42.648325067Z   ✓ missing credential returns 400
+2026-09-22T19:55:42.648330869Z extension login code: PASS
+2026-09-22T19:55:42.770694064Z 
+2026-09-22T19:55:42.770712477Z > mos-maintenance-mvp@1.8.0 test:slow-query-analyzer
+2026-09-22T19:55:42.770714764Z > tsx tests/slow-query-analyzer.smoke.ts && npm run test:slow-query-mongo-monitor
+2026-09-22T19:55:42.770716094Z 
+2026-09-22T19:55:43.102580415Z ==> Build failed 😞
+2026-09-22T19:55:43.102597461Z ==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys
