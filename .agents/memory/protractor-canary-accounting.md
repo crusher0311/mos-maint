@@ -114,3 +114,15 @@ requiring a live migration to close that gap defeats the isolation guarantee.
 
 **How to apply:** Treat preview indicators as development regardless of build
 mode, and default legacy timed trials to relay-only without changing live state.
+
+Only calculate traffic rates for completely retrieved log windows, and keep
+monitoring-API throttling separate from provider throttling.
+
+**Why:** A production traffic audit hit Render logs API HTTP 429 partway through
+retrieval. Treating the missing windows as zero traffic, or the monitoring 429
+as a Protractor response, would produce opposite but equally misleading conclusions.
+
+**How to apply:** Query bounded time bins, exclude build output using real instance
+labels, and report the exact covered windows and retrieval gaps. Relay errors,
+HTTP responses, admission counters, and local denials are distinct measurements;
+completed responses per second do not establish physical in-flight concurrency.
