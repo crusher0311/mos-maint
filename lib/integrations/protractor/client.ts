@@ -1464,7 +1464,7 @@ export async function protractorFetch<T>(
   options: RequestInit = {},
   retryCount = 0,
   shopId?: number,
-  opts?: { priority?: boolean; maxRetries?: number; timeoutMs?: number }
+  opts?: { priority?: boolean; maxRetries?: number; timeoutMs?: number; deadlineAtMs?: number }
 ): Promise<{ ok: boolean; data?: T; error?: string }> {
   const local = localPolicyError("rest");
   if (local) return local;
@@ -1505,6 +1505,9 @@ export async function protractorFetch<T>(
   const concurrencyLimiter = isPriority ? priorityConcurrencyLimit : protractorConcurrencyLimit;
 
   return concurrencyLimiter(async () => {
+    if (opts?.deadlineAtMs !== undefined && Date.now() >= opts.deadlineAtMs) {
+      return { ok: false, error: "Protractor validation deadline expired" };
+    }
     const concurrencyWaitStart = Date.now();
     const method = (options.method || "GET").toUpperCase();
     const baseUrl = method === "GET" ? BASE_URL_V2 : BASE_URL_V1;
@@ -1598,7 +1601,9 @@ export async function protractorFetch<T>(
             ),
           ),
           isPriority,
-          remainingMs,
+          opts?.deadlineAtMs === undefined
+            ? remainingMs
+            : Math.min(remainingMs ?? Infinity, Math.max(0, opts.deadlineAtMs - Date.now())),
           admissionTransport,
         )
       );
@@ -3396,7 +3401,7 @@ export async function testConnection(
   connectionId: string,
   apiKey: string,
   shopId: number,
-): Promise<{ ok: boolean; locations?: any[]; error?: string }> {
+): Promise<{ ok: boolean; locations?: any[]; error?: string; code?: string }> {
   const authentication = computeAuthentication(connectionId, apiKey);
   const config: ProtractorConfig = {
     shopId,
@@ -3406,17 +3411,32 @@ export async function testConnection(
     configured: true,
   };
 
-  const result = await protractorFetch<{ ItemCollection?: any[] }>(
+  const deadlineAtMs = Date.now() + 5000;
+  const pending = protractorFetch<{ ItemCollection?: any[] }>(
     "/Location/",
     config,
     {},
     0,
     shopId,
-    { priority: true }
+    { priority: true, maxRetries: 0, timeoutMs: 5000, deadlineAtMs }
   );
+  // Queue/admission waits can settle late, but every physical dispatch checks
+  // this same deadline. The transport itself is destroyed on its remaining
+  // wall-clock budget; no retries survive the validation response.
+  const settled = await settleBefore(pending, deadlineAtMs);
+  const result: { ok: boolean; data?: { ItemCollection?: any[] }; error?: string } = settled.timedOut
+    ? { ok: false, error: "Protractor validation deadline expired" }
+    : settled.value;
 
   if (!result.ok) {
-    return { ok: false, error: result.error };
+    const invalidCredentials = /^HTTP (401|403)\b/.test(result.error || "");
+    return {
+      ok: false,
+      code: invalidCredentials ? "PROTRACTOR_INVALID_CREDENTIALS" : "PROTRACTOR_VALIDATION_UNAVAILABLE",
+      error: invalidCredentials
+        ? "Protractor rejected these credentials."
+        : "Protractor credential validation is restricted or unavailable. Please try again later.",
+    };
   }
 
   return { ok: true, locations: result.data?.ItemCollection || [] };
