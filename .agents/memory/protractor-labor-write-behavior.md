@@ -9,6 +9,8 @@ For MOS-created labor lines, send explicit pricing rather than relying on `RateC
 
 `Quantity` and `TechnicianHour` can persist independently; this is not proof of payroll behavior. The test stored distinct billed and technician hours on creation. A later update to a test line changed technician hours, while price and totals remained at their prior values despite HTTP 200. Existing-line price changes may require location permissions; do not assume a creation capability implies update capability.
 
+Omitting `Price`/`UnitPrice` and updating only gross/net totals also left the existing line's price and totals unchanged after HTTP 200 and a fresh GET. This followed vendor creation examples that omit `Price`, while preserving the existing line ID, hours, rate code, cost, and discount amount (the unsupported `Discount` write itself was omitted). Vendor creation examples are not evidence of an existing-line repricing contract.
+
 The customer's existing ten-percent discount was not automatically applied to the API-created test lines with explicit gross totals. Do not infer universal customer-discount precedence from this: payload totals and `LaborDiscountAlways` matter.
 
 **How to apply:** Calculate and send intended line pricing explicitly, handle discounts deliberately, and verify critical read-back fields. Confirm provider update permissions and technician-pay semantics separately before promising repricing or payroll integration.
