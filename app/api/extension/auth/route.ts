@@ -218,26 +218,22 @@ async function _POST(request: NextRequest) {
       .toArray();
 
     const detectProvider = (s: any): ExtensionProvider | null => {
-      let raw = String(
-        s?.integrationProvider ||
-          (s?.tekmetric?.shopId || s?.tekmetricShopId
-            ? "tekmetric"
-            : s?.protractor?.connectionId || s?.protractorConnectionId
-              ? "protractor"
-              : s?.shopware?.tenantId
-                ? "shopware"
-                : s?.shopmonkey?.locationId || s?.shopmonkey?.companyId
-                  ? "shopmonkey"
-                  : s?.autoflow?.domain || s?.autoflow?.subdomain || s?.autoflow?.shopId
-                    ? "autoflow"
-                    : ""),
-      ).toLowerCase();
+      let raw = String(s?.integrationProvider || "").trim().toLowerCase();
       if (raw === "shop-ware" || raw === "shop_ware") raw = "shopware";
-      return ["tekmetric", "protractor", "shopware", "shopmonkey", "autoflow"].includes(raw)
-        ? (raw as ExtensionProvider)
-        : null;
+      // Preserve explicit primary-provider intent, including fail-closed
+      // behavior for stale metadata. Infer only for provider-less legacy shops,
+      // using the same persisted identifiers as advisory context matching.
+      if (raw) {
+        return providers.includes(raw as ExtensionProvider)
+          ? (raw as ExtensionProvider)
+          : null;
+      }
+      return providers.find((provider) => shopSupportsProvider(s, provider)) ?? null;
     };
 
+    const providers: ExtensionProvider[] = [
+      "tekmetric", "protractor", "shopware", "shopmonkey", "autoflow",
+    ];
     const smsIdsForShop = (s: any, provider: ExtensionProvider): string[] => {
       const values =
         provider === "tekmetric"
@@ -270,12 +266,14 @@ async function _POST(request: NextRequest) {
             ? Boolean(s?.shopware?.tenantId || s?.shopware?.tenantSubdomain)
             : provider === "shopmonkey"
               ? Boolean(s?.shopmonkey?.locationId || s?.shopmonkey?.companyId)
-              : Boolean(
+              : provider === "autoflow" && Boolean(
                   s?.autoflow?.shopId ||
                     s?.autoflow?.subdomain ||
                     s?.autoflow?.domain ||
                     s?.autoflowDomain ||
-                    s?.autoflow?.shopNumbers,
+                    (Array.isArray(s?.autoflow?.shopNumbers)
+                      ? s.autoflow.shopNumbers.some((id: unknown) => typeof id === "string" && id.trim())
+                      : s?.autoflow?.shopNumbers),
                 );
 
     const requestedId =
@@ -289,7 +287,7 @@ async function _POST(request: NextRequest) {
       );
     }
     const normalizedRequestedProvider = requestedProvider
-      ? String(requestedProvider).toLowerCase().replace(/^shop[-_]ware$/, "shopware")
+      ? String(requestedProvider).trim().toLowerCase().replace(/^shop[-_]ware$/, "shopware")
       : null;
     const normalizedSmsShopId =
       requestedSmsShopId == null || requestedSmsShopId === ""
@@ -434,15 +432,10 @@ async function _POST(request: NextRequest) {
       } else if (provider === "shopmonkey") {
         smsShopId = s.shopmonkey?.locationId || s.shopmonkey?.companyId || null;
       } else if (provider === "autoflow") {
-        smsShopId = s.autoflow?.subdomain || s.autoflow?.shopId || s.autoflow?.domain || null;
+        smsShopId = s.autoflow?.subdomain || s.autoflow?.shopId || s.autoflow?.domain || s.autoflowDomain || smsIdsForShop(s, "autoflow")[0] || null;
       }
 
-      const integrations: string[] = [];
-      if (s.tekmetric?.shopId || s.tekmetricShopId) integrations.push("tekmetric");
-      if (s.protractor?.connectionId || s.protractorConnectionId) integrations.push("protractor");
-      if (s.shopware?.tenantId) integrations.push("shopware");
-      if (s.shopmonkey?.locationId || s.shopmonkey?.companyId) integrations.push("shopmonkey");
-      if (s.autoflow?.domain || s.autoflow?.subdomain || s.autoflow?.shopId) integrations.push("autoflow");
+      const integrations = providers.filter((provider) => shopSupportsProvider(s, provider));
 
       let writeProvider: string | null = null;
       if (provider === "autoflow") {
