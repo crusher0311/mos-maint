@@ -178,6 +178,7 @@
     "test:sticker-mileage-coercion": "tsx tests/sticker-mileage-coercion.smoke.ts",
     "test:sticker-label-wysiwyg": "tsx tests/sticker-label-wysiwyg.smoke.ts",
     "test:sticker-config-cache": "tsx tests/sticker-config-cache.smoke.ts",
+    "test:tekmetric-interval-menu": "tsx tests/browser/tekmetric-interval-menu.smoke.ts",
     "test:tekmetric-negative-cache": "tsx tests/tekmetric-negative-cache.smoke.ts",
     "test:protractor-canned-jobs-filter": "tsx tests/protractor-canned-jobs-filter.smoke.ts",
     "test:fuel-type-label": "tsx tests/fuel-type-label.smoke.ts",
