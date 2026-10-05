@@ -384,10 +384,9 @@ async function main() {
   // Exercise the real route wrapper for auth, partner-only scoping, malformed
   // and oversized bodies, unknown shops, and cross-shop resolution.
   let shopExists = true;
-  let mappedMosShopId = 36;
-  let resolvedExternalShopId: string | undefined;
-  const mappingPath = require.resolve("../lib/data/repositories/appfueled-shop-mappings");
-  class MappingConflict extends Error {}
+  let resolvedMosShopId: number | undefined;
+  let maintenanceEnabled = true;
+  const mappingPath = require.resolve("../lib/data/repositories/shops");
   require.cache[mappingPath] = {
     id: mappingPath,
     filename: mappingPath,
@@ -395,12 +394,19 @@ async function main() {
     children: [],
     paths: [],
     exports: {
-      AppFueledMappingValidationError: MappingConflict,
-      resolveActiveAppFueledMapping: async (externalShopId: string) => {
-        resolvedExternalShopId = externalShopId;
-        return shopExists ? { mosShopId: mappedMosShopId, provider: "protractor", externalShopId } : null;
+      findShopByShopId: async (shopId: number) => {
+        resolvedMosShopId = shopId;
+        return shopExists ? { shopId } : null;
       },
     },
+  } as any;
+  const featurePath = require.resolve("../lib/featureResolver");
+  require.cache[featurePath] = {
+    id: featurePath, filename: featurePath, loaded: true, children: [], paths: [],
+    exports: { getFeatureEntitlements: async (shopId: number) => {
+      assert.equal(shopId, resolvedMosShopId);
+      return { canUseFeature: (feature: string) => feature === "maintenance" && maintenanceEnabled };
+    } },
   } as any;
   let vhiOutcome: "success" | "building" | "permanent" = "success";
   const vhiServicePath = require.resolve("../lib/external-api/partner-vhi-service");
@@ -597,12 +603,11 @@ async function main() {
   shopExists = false;
   assert.equal((await POST(request(octoberBody, "mos_partner_valid"))).status, 404);
   shopExists = true;
-  mappedMosShopId = 37;
   const octoberFirst = await POST(request(octoberBody, "mos_partner_valid"));
   const octoberJson = await octoberFirst.json();
   assert.equal(octoberFirst.status, 200);
-  assert.equal(resolvedExternalShopId, "37");
-  assert.equal(octoberJson.ingestion.shopId, 37, "MOS shop 37 requires an explicit authorized mapping");
+  assert.equal(resolvedMosShopId, 37);
+  assert.equal(octoberJson.ingestion.shopId, 37, "system-wide partner resolves the requested MOS shop without a mapping");
   assert.equal(octoberJson.ingestion.stored, true);
   assert.equal(octoberJson.ingestion.duplicate, false);
   assert.equal(octoberJson.vhi.success, true);
@@ -614,6 +619,23 @@ async function main() {
   assert.equal(retryJson.ingestion.duplicate, true);
   assert.equal(retryJson.vhi.success, true);
   assert.equal(reports.length, reportCount);
+  const shop25 = { ...octoberSubmission, smsShopId: "25", deliveryId: "system-wide-shop-25" };
+  const shop25Response = await POST(request(JSON.stringify(shop25), "mos_partner_valid"));
+  const shop25Json = await shop25Response.json();
+  assert.equal(shop25Response.status, 200);
+  assert.equal(shop25Json.ingestion.shopId, 25);
+  assert.equal(shop25Json.ingestion.duplicate, false, "delivery state is scoped to the target shop");
+  assert.match(shop25Json.vhi.reportUrl, /shopId=25/);
+  const shop25Retry = await POST(request(JSON.stringify(shop25), "mos_partner_valid"));
+  assert.equal((await shop25Retry.json()).ingestion.duplicate, true);
+  const countBeforeDenied = deliveries.length;
+  maintenanceEnabled = false;
+  assert.equal((await POST(request(JSON.stringify({ ...shop25, deliveryId: "denied-shop" }), "mos_partner_valid"))).status, 403);
+  assert.equal(deliveries.length, countBeforeDenied, "entitlement denial precedes ingestion writes");
+  maintenanceEnabled = true;
+  for (const smsShopId of ["0", "-1", "25abc", "2.5", "9007199254740992", "025"]) {
+    assert.equal((await POST(request(JSON.stringify({ ...shop25, smsShopId }), "mos_partner_valid"))).status, 400);
+  }
   mock.timers.setTime(new Date("2026-10-13T00:07:25.864Z").getTime());
   const expired = await POST(request(octoberBody, "mos_partner_valid"));
   assert.equal(expired.status, 400);

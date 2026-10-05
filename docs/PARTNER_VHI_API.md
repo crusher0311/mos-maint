@@ -46,7 +46,7 @@ curl -X POST "https://mos.tools/api/external/v1/carfax/reports" \
   --data '{
     "vin": "1GYS4MKJ4GR434503",
     "sms": "live_api",
-    "smsShopId": "provider-issued-shop-id",
+    "smsShopId": "37",
     "deliveryId": "carfax-report-987654",
     "retrievedAt": "2026-09-01T15:04:05.000Z",
     "report": {
@@ -121,16 +121,15 @@ If MOS already has a newer healthy snapshot, the request succeeds with
 `stored: false` and preserves that newer data. Snapshot freshness is based on
 `retrievedAt`, not delivery time.
 
-`sms` is AppFueled's transport namespace and must be exactly `live_api`; it is
-not a provider name. Before traffic is accepted, a platform administrator must
-create an active mapping from that external `smsShopId` to one MOS shop and its
-canonical provider. MOS validates the identifier against the provider identity
-on the shop both when the mapping is changed and every time it is used. Missing
-or disabled mappings return `404`; ambiguous, conflicting, or subsequently
-changed provider identities return `409`. No identifier is guessed, learned,
-or treated as an MOS shop ID. Operators manage these records through
-`/api/platform-admin/appfueled-shop-mappings` (`GET`, `POST`, and `PATCH`);
-disabling is `PATCH` with `isActive: false`, preserving audit metadata.
+`sms` is AppFueled's transport namespace and must be exactly `live_api`, not a
+provider name. `smsShopId` is the positive integer **MOS shop ID** (a string or
+number). AppFueled's authenticated partner key is system-wide: no per-shop
+AppFueled mapping or integration is required. The target shop must exist and
+have the maintenance entitlement before ingestion. Invalid IDs return `400`,
+unknown shops return `404`, and disabled maintenance access returns `403`.
+Authentication, the AppFueled partner identity, and `carfax:write` permission
+remain mandatory. Delivery deduplication and CARFAX storage are scoped to the
+requested MOS shop.
 
 Ingestion commits before VHI orchestration starts. The `vhi` field has exactly
 the successful GET VHI contract. This is also true for duplicate deliveries and
