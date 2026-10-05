@@ -9,6 +9,18 @@ import { Db } from "mongodb";
 import { mergeAutoflowIntoPrimary } from "@/lib/dashboard/autoflow-merge";
 import { prefixRegex, vinPrefix } from "@/lib/dashboard-search";
 import { dashboardAuditWorkOrderIdFromProvenance } from "@/lib/dashboard-audit-status";
+import {
+  defaultAutoflowWorkflowMapping,
+  normalizeAutoflowWorkflowStatus,
+} from "@/lib/autoflow-workflow";
+import {
+  getAutoflowWorkflowMapping,
+  InvalidAutoflowWorkflowMappingError,
+} from "@/lib/data/repositories/autoflow-workflows";
+import {
+  getDashboardUpdateMarker,
+  getDashboardUpdateToken,
+} from "@/lib/dashboard-updates";
 
 // Default number of NEW CARFAX reports fetched per page load for vehicles
 // missing mileage. Mile-less providers (Shopmonkey estimates rarely carry an
@@ -128,13 +140,59 @@ export async function GET(request: NextRequest) {
 
     const db = await getDb();
     const user = { shopId: session.shopId, email: session.email, role: session.role };
+    const dashboardUpdateDoc = await db.collection("dashboard_updates").findOne(
+      { _id: "lastUpdate" } as any,
+      {
+        projection: {
+          timestamp: 1,
+          globalVersion: 1,
+          shopTimestamps: 1,
+          shopVersions: 1,
+        },
+      },
+    );
+    const dashboardUpdateMarker = getDashboardUpdateMarker(
+      dashboardUpdateDoc,
+      user.shopId,
+    );
+    const dashboardUpdateToken = getDashboardUpdateToken(
+      dashboardUpdateDoc,
+      user.shopId,
+    );
     const shopIdNum = Number(user.shopId);
     const entitlements = await getFeatureEntitlements(shopIdNum);
     const maintenanceEnabled = entitlements.canUseFeature("maintenance");
 
     // Check shop SMS configuration to skip unnecessary queries
     const shopConfig = await db.collection("shops").findOne({ shopId: { $in: [String(user.shopId), Number(user.shopId)] } });
-    const isAutoFlowConfigured = !!(shopConfig?.autoflow?.apiKey || shopConfig?.autoflowApiKey);
+    const isAutoFlowConfigured = !!(
+      shopConfig?.autoflow?.apiKey ||
+      shopConfig?.autoflowApiKey ||
+      shopConfig?.autoflow?.configured ||
+      shopConfig?.autoflow?.domain ||
+      shopConfig?.autoflow?.subdomain ||
+      shopConfig?.autoflow?.shopId != null ||
+      shopConfig?.autoflowDomain ||
+      shopConfig?.autoflow?.shopNumbers?.length
+    );
+    let autoflowWorkflowMapping = defaultAutoflowWorkflowMapping();
+    if (isAutoFlowConfigured) {
+      // This read is storage-mode aware (including identity PG canonical).
+      // The Mongo shop document remains available for legacy integration
+      // toggles and provider queries below. Errors intentionally propagate:
+      // an unreadable mapping must not silently become fleet defaults.
+      const persisted = await getAutoflowWorkflowMapping(user.shopId);
+      if (persisted) autoflowWorkflowMapping = persisted;
+    }
+    const autoflowActiveStatuses = autoflowWorkflowMapping.active.map(
+      normalizeAutoflowWorkflowStatus,
+    );
+    const autoflowClosedStatuses = autoflowWorkflowMapping.closed.map(
+      normalizeAutoflowWorkflowStatus,
+    );
+    const autoflowExcludedStatuses = autoflowWorkflowMapping.excluded.map(
+      normalizeAutoflowWorkflowStatus,
+    );
     const isShopWareConfigured = !!(shopConfig?.shopware?.tenantId);
     const isShopmonkeyConfigured = !!(shopConfig?.shopmonkey?.apiKey);
 
@@ -206,6 +264,8 @@ export async function GET(request: NextRequest) {
           role: user.role,
           shopId: user.shopId,
         },
+        dashboardUpdateMarker,
+        dashboardUpdateToken,
       });
     }
 
@@ -232,6 +292,42 @@ export async function GET(request: NextRequest) {
               { $ifNull: ["$status", { $ifNull: ["$payload.status", "$type"] }] }
             ]
           },
+          statusNormalized: {
+            $reduce: {
+              input: {
+                $regexFindAll: {
+                  input: {
+                    $toLower: {
+                      $trim: {
+                        input: {
+                            $convert: {
+                              input: {
+                                $ifNull: [
+                                  "$payload.ticket.status",
+                                  { $ifNull: ["$status", { $ifNull: ["$payload.status", "$type"] }] }
+                                ]
+                              },
+                              to: "string",
+                              onError: "",
+                              onNull: "",
+                            }
+                        }
+                      }
+                    }
+                  },
+                  regex: "\\S+"
+                }
+              },
+              initialValue: "",
+              in: {
+                $concat: [
+                  "$$value",
+                  { $cond: [{ $eq: ["$$value", ""] }, "", " "] },
+                  "$$this.match"
+                ]
+              }
+            }
+          },
           vinNorm: {
             $toUpper: {
               $ifNull: [
@@ -240,13 +336,16 @@ export async function GET(request: NextRequest) {
               ]
             }
           },
-          // Track active vs close status for smart filtering
-          isActiveStatus: {
-            $in: ["$payload.ticket.status", ["CHECKED IN", "IN PROGRESS", "EST", "RACK ATTACK", 
-              "Build Estimate (Workflow) and Presentation (Advisor)", "Authorized ready for work"]]
-          },
-          isCloseStatus: { $eq: ["$payload.ticket.status", "Close"] }
         }
+      },
+      // Mongo does not expose sibling fields created by the same $addFields
+      // stage to one another, so classify in a separate stage.
+      {
+        $set: {
+          isActiveStatus: { $in: ["$statusNormalized", autoflowActiveStatuses] },
+          isCloseStatus: { $in: ["$statusNormalized", autoflowClosedStatuses] },
+          isExcludedStatus: { $in: ["$statusNormalized", autoflowExcludedStatuses] },
+        },
       },
       // Require VIN
       { $match: { vinNorm: { $type: "string", $ne: "" } } },
@@ -257,20 +356,33 @@ export async function GET(request: NextRequest) {
           _id: "$vinNorm",
           latest: { $first: "$$ROOT" },
           // Track last active and last close timestamps
-          lastActive: { $max: { $cond: ["$isActiveStatus", "$createdAtDate", null] } },
-          lastClose: { $max: { $cond: ["$isCloseStatus", "$createdAtDate", null] } }
+           lastActive: { $max: { $cond: ["$isActiveStatus", "$createdAtDate", null] } },
+           lastClose: { $max: { $cond: ["$isCloseStatus", "$createdAtDate", null] } },
+           lastExcluded: { $max: { $cond: ["$isExcludedStatus", "$createdAtDate", null] } }
         }
       },
       // Vehicle is active if: no close, OR last active is after last close
-      {
-        $match: {
-          lastActive: { $ne: null },
-          $or: [
-            { lastClose: null },
-            { $expr: { $gt: ["$lastActive", "$lastClose"] } }
-          ]
-        }
-      },
+       {
+         $match: {
+           $expr: {
+             $and: [
+               { $ne: ["$lastActive", null] },
+               {
+                 $or: [
+                   { $eq: ["$lastClose", null] },
+                   { $gt: ["$lastActive", "$lastClose"] }
+                 ]
+               },
+               {
+                 $or: [
+                   { $eq: ["$lastExcluded", null] },
+                   { $gt: ["$lastActive", "$lastExcluded"] }
+                 ]
+               }
+             ]
+           }
+         }
+       },
       { $replaceRoot: { newRoot: "$latest" } },
       // Compute display fields
       {
@@ -379,7 +491,11 @@ export async function GET(request: NextRequest) {
       {
         $lookup: {
           from: "dvi_results",
-          let: { ro: { $toString: "$displayRo" } },
+           let: {
+             ro: { $toString: "$displayRo" },
+             shopIdNum: Number(user.shopId),
+             shopIdStr: String(user.shopId),
+           },
           pipeline: [
             {
               $match: {
@@ -387,6 +503,10 @@ export async function GET(request: NextRequest) {
                   $and: [
                     { $ne: ["$$ro", null] }, 
                     { $ne: ["$$ro", "null"] },
+                      { $or: [
+                        { $eq: ["$shopId", "$$shopIdNum"] },
+                        { $eq: ["$shopId", "$$shopIdStr"] },
+                      ]},
                     { $or: [
                       { $eq: ["$roNumber", "$$ro"] },
                       { $eq: [{ $toString: "$roNumber" }, "$$ro"] }
@@ -404,7 +524,11 @@ export async function GET(request: NextRequest) {
       {
         $lookup: {
           from: "dvi",
-          let: { ro: { $toString: "$displayRo" } },
+           let: {
+             ro: { $toString: "$displayRo" },
+             shopIdNum: Number(user.shopId),
+             shopIdStr: String(user.shopId),
+           },
           pipeline: [
             {
               $match: {
@@ -412,6 +536,10 @@ export async function GET(request: NextRequest) {
                   $and: [
                     { $ne: ["$$ro", null] }, 
                     { $ne: ["$$ro", "null"] },
+                      { $or: [
+                        { $eq: ["$shopId", "$$shopIdNum"] },
+                        { $eq: ["$shopId", "$$shopIdStr"] },
+                      ]},
                     { $or: [
                       { $eq: ["$roNumber", "$$ro"] },
                       { $eq: [{ $toString: "$roNumber" }, "$$ro"] }
@@ -1128,7 +1256,9 @@ export async function GET(request: NextRequest) {
       },
       smsType,
       distanceUnit,
-      enabledFeatures
+      enabledFeatures,
+      dashboardUpdateMarker,
+      dashboardUpdateToken,
     });
     
     response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -1139,6 +1269,12 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error("Dashboard data error:", error);
+    if (error instanceof InvalidAutoflowWorkflowMappingError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 500 },
+      );
+    }
     return NextResponse.json({ error: "Failed to fetch dashboard data" }, { status: 500 });
   }
 }

@@ -36,6 +36,7 @@ export type AuditAction =
   | "protractor_operator_stop_activated"
   | "protractor_operator_stop_cleared"
   | "protractor_timed_trial_started"
+  | "protractor_continuous_live_started"
   | "dvi_best_practice_change";
 
 export interface AdminAuditLogEntry {

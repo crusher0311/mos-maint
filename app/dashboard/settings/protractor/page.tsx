@@ -2,6 +2,13 @@
 
 import { useState, useEffect } from "react";
 import {
+  initialSyncPresentation,
+  shouldPollInitialSync,
+  MAX_STATUS_POLLS,
+  STATUS_POLL_INTERVAL_MS,
+  type ProtractorSyncStatus,
+} from "./initial-sync-status";
+import {
   Settings,
   CheckCircle2,
   XCircle,
@@ -21,8 +28,7 @@ export default function ProtractorSettingsPage() {
   const [testing, setTesting] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [refreshingCannedJobs, setRefreshingCannedJobs] = useState(false);
-  const [status, setStatus] = useState<{
-    configured: boolean;
+  const [status, setStatus] = useState<(ProtractorSyncStatus & {
     connectionId?: string;
     connectionIdShort?: string;
     apiKey?: string;
@@ -33,7 +39,7 @@ export default function ProtractorSettingsPage() {
     webhookToken?: string;
     partCostEstimateRatio?: number | null;
     partCostEstimateRatioDefault?: number;
-  } | null>(null);
+  }) | null>(null);
   const [ratioInput, setRatioInput] = useState("");
   const [savingRatio, setSavingRatio] = useState(false);
   const [syncStats, setSyncStats] = useState<{
@@ -54,31 +60,58 @@ export default function ProtractorSettingsPage() {
   const [apiKey, setApiKey] = useState("");
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [testResult, setTestResult] = useState<{ ok: boolean; locations?: any[]; error?: string } | null>(null);
+  const importIsActive = shouldPollInitialSync(status);
 
   useEffect(() => {
-    fetchStatus();
+    const controller = new AbortController();
+    void fetchStatus(controller.signal);
+    return () => controller.abort();
   }, []);
 
-  async function fetchStatus() {
+  useEffect(() => {
+    if (!importIsActive) return;
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    let polls = 0;
+    const poll = async () => {
+      if (controller.signal.aborted) return;
+      polls++;
+      const succeeded = await fetchStatus(controller.signal, true);
+      if (succeeded && polls < MAX_STATUS_POLLS && !controller.signal.aborted) {
+        timer = setTimeout(poll, STATUS_POLL_INTERVAL_MS);
+      }
+    };
+    timer = setTimeout(poll, STATUS_POLL_INTERVAL_MS);
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [importIsActive]);
+
+  async function fetchStatus(signal?: AbortSignal, polling = false): Promise<boolean> {
     try {
-      const res = await fetch("/api/settings/protractor", { credentials: "include" });
-      if (res.ok) {
-        const data = await res.json();
-        setStatus(data);
+      const res = await fetch("/api/settings/protractor", { credentials: "include", signal });
+      const data = await res.json();
+      if (!res.ok) {
+        if (!signal?.aborted) setMessage({ type: "error", text: data.error || "Failed to load Protractor status" });
+        return false;
+      }
+      if (signal?.aborted) return false;
+      setStatus(data);
+      if (!polling) {
         setRatioInput(
           data.partCostEstimateRatio != null
             ? String(Math.round(data.partCostEstimateRatio * 100))
             : ""
         );
-
-        if (data.configured) {
-          fetchSyncStats();
-        }
+        if (data.configured) void fetchSyncStats();
       }
-    } catch (err) {
-      console.error("Failed to fetch Protractor status:", err);
+      return true;
+    } catch {
+      if (!signal?.aborted) setMessage({ type: "error", text: "Failed to load Protractor status. Please refresh the page." });
+      return false;
     } finally {
-      setLoading(false);
+      if (!signal?.aborted && !polling) setLoading(false);
     }
   }
 
@@ -176,7 +209,7 @@ export default function ProtractorSettingsPage() {
       const data = await res.json();
       setTestResult(data);
 
-      if (data.ok) {
+      if (res.ok && data.ok) {
         setMessage({ type: "success", text: "Connection test successful!" });
       } else {
         setMessage({ type: "error", text: data.error || "Connection test failed" });
@@ -208,7 +241,7 @@ export default function ProtractorSettingsPage() {
       const data = await res.json();
 
       if (res.ok && data.ok) {
-        setMessage({ type: "success", text: "Protractor connected successfully!" });
+        setMessage({ type: "success", text: "Protractor connection saved. Initial history import status is shown below." });
         setConnectionId("");
         setApiKey("");
         fetchStatus();
@@ -312,6 +345,8 @@ export default function ProtractorSettingsPage() {
     );
   }
 
+  const importStatus = initialSyncPresentation(status);
+
   return (
     <div className="max-w-2xl mx-auto p-6">
       <div className="mb-8">
@@ -330,8 +365,18 @@ export default function ProtractorSettingsPage() {
           <div className="mt-4 flex items-center gap-3">
             {status?.configured ? (
               <>
-                <CheckCircle2 className="w-5 h-5 text-green-600" />
-                <span className="text-green-700 font-medium">Connected</span>
+                {importStatus.tone === "progress" ? (
+                  <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
+                ) : importStatus.tone === "error" ? (
+                  <AlertCircle className="w-5 h-5 text-amber-600" />
+                ) : importStatus.tone === "neutral" ? (
+                  <Link2 className="w-5 h-5 text-gray-500" />
+                ) : (
+                  <CheckCircle2 className="w-5 h-5 text-green-600" />
+                )}
+                <span className={`font-medium ${importStatus.tone === "error" ? "text-amber-800" : importStatus.tone === "progress" ? "text-blue-700" : importStatus.tone === "neutral" ? "text-gray-700" : "text-green-700"}`}>
+                  {importStatus.title}
+                </span>
               </>
             ) : (
               <>
@@ -340,6 +385,11 @@ export default function ProtractorSettingsPage() {
               </>
             )}
           </div>
+          {status?.configured && (
+            <p className={`mt-2 text-sm ${importStatus.tone === "error" ? "text-amber-800" : "text-gray-600"}`} role="status">
+              {importStatus.detail}
+            </p>
+          )}
           
           {status?.configured && (
             <div className="mt-4 bg-gray-50 rounded-lg p-4 space-y-3">
@@ -358,6 +408,7 @@ export default function ProtractorSettingsPage() {
               {status.webhookToken && (
                 <div>
                   <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Webhook Token</label>
+                  <p className="text-xs text-gray-500 mt-1">Token generated for webhook setup; this does not confirm webhook registration or delivery.</p>
                   <div className="mt-1 font-mono text-sm text-gray-800 bg-white border border-gray-200 rounded px-3 py-2 select-all">
                     {status.webhookToken}
                   </div>

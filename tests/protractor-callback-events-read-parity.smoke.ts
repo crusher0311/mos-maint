@@ -25,6 +25,7 @@
  */
 import Module from "node:module";
 import { ObjectId } from "mongodb";
+import { replayableCallbackWindowWinners } from "../lib/integrations/protractor/callback-selection";
 
 let failed = 0;
 function ok(name: string, cond: boolean, detail?: string) {
@@ -86,9 +87,11 @@ const EVENTS: Ev[] = [
   { label: "pend-attempts0", method: "GET", receivedAt: T2, connectionId: "c2", shopId: 2, objectType: "WorkOrder", objectId: "P4", operation: "Created", priority: 1, attempts: 0, processed: false },
   { label: "pend-safety-boundary", method: "GET", receivedAt: T3, connectionId: "c4", shopId: 4, objectType: "ServiceItem", objectId: "P5", operation: "Modified", priority: 1, attempts: 2, historyOutcomeReason: "safety_boundary", processed: false },
   { label: "pend-missing-vin", method: "GET", receivedAt: T2, connectionId: "c4", shopId: 4, objectType: "ServiceItem", objectId: "P6", operation: "Modified", priority: 1, attempts: 2, historyOutcomeReason: "missing_vin", processed: false },
-  // Contact callbacks are claimed for safety, but their unsupported-contact
-  // evidence must not re-enter the ordinary callback queue.
-  { label: "contact-unsupported", method: "GET", receivedAt: T5, connectionId: "c3", shopId: 3, objectType: "Contact", objectId: "C1", operation: "Modified", priority: 0, attempts: 0, historyOutcomeReason: "unsupported_contact", processed: false },
+  // Exact-case Contacts have no replay handler even before their deferral
+  // outcome is persisted. A differently-cased provider type remains outside
+  // that exact safety boundary.
+  { label: "contact-pending", method: "GET", receivedAt: T5, connectionId: "c3", shopId: 3, objectType: "Contact", objectId: "C1", operation: "Modified", priority: 0, attempts: 0, processed: false },
+  { label: "contact-lowercase", method: "GET", receivedAt: T1, connectionId: "c3", shopId: 3, objectType: "contact", objectId: "C2", operation: "Modified", priority: 1, attempts: 0, processed: false },
 ];
 
 /* ---- fake Mongo store (legacy doc shape + real query semantics) ----------- */
@@ -118,6 +121,7 @@ const mongoDocs: Doc[] = EVENTS.map((e) => {
 
 function eqVal(a: unknown, b: unknown): boolean {
   if (a instanceof Date && b instanceof Date) return a.getTime() === b.getTime();
+  if (a instanceof ObjectId && b instanceof ObjectId) return a.equals(b);
   return a === b;
 }
 
@@ -146,6 +150,14 @@ function mongoMatch(doc: Doc, filter: Doc): boolean {
       for (const [op, cv] of Object.entries(cond)) {
         if (op === "$gte") {
           if (!(dv instanceof Date) || dv.getTime() < (cv as Date).getTime()) return false;
+        } else if (op === "$gt") {
+          if (dv instanceof Date && cv instanceof Date) {
+            if (dv.getTime() <= cv.getTime()) return false;
+          } else if (dv instanceof ObjectId && cv instanceof ObjectId) {
+            if (dv.toHexString() <= cv.toHexString()) return false;
+          } else if (!(typeof dv === "number" && dv > (cv as number))) {
+            return false;
+          }
         } else if (op === "$lt") {
           if (typeof dv !== "number" || !(dv < (cv as number))) return false;
         } else if (op === "$exists") {
@@ -169,8 +181,8 @@ function mongoSort(docs: Doc[], spec: Record<string, 1 | -1>): Doc[] {
   return [...docs].sort((a, b) => {
     for (const [k, dir] of keys) {
       const av = a[k], bv = b[k];
-      const an = av instanceof Date ? av.getTime() : (av as number);
-      const bn = bv instanceof Date ? bv.getTime() : (bv as number);
+      const an = av instanceof Date ? av.getTime() : av instanceof ObjectId ? av.toHexString() : (av as number);
+      const bn = bv instanceof Date ? bv.getTime() : bv instanceof ObjectId ? bv.toHexString() : (bv as number);
       if (an < bn) return -1 * dir;
       if (an > bn) return 1 * dir;
     }
@@ -188,14 +200,57 @@ const fakeCollection = {
       sort(s: Record<string, 1 | -1>) { sortSpec = s; return cursor; },
       limit(n: number) { lim = n; return cursor; },
       async toArray() {
-        return mongoSort(mongoDocs.filter((d) => mongoMatch(d, filter)), sortSpec).slice(0, lim === Infinity ? undefined : lim);
+        const out = mongoSort(mongoDocs.filter((d) => mongoMatch(d, filter)), sortSpec).slice(0, lim === Infinity ? undefined : lim);
+        return out;
       },
     };
     return cursor;
   },
 };
+const fairnessDocs = new Map<string, Doc>();
+let forceCursorCasLoss = false;
+const fairnessCollection = {
+  findOne: async (filter: Doc) => fairnessDocs.get(String(filter._id)) ?? null,
+  updateOne: async (filter: Doc, update: Doc, options?: Doc) => {
+    const id = String(filter._id);
+    const current = fairnessDocs.get(id);
+    const expectedRevision = filter.callbackRecoveryCursorRevision;
+    const initializing = (filter.$or as Doc[] | undefined)?.some((part) =>
+      (part.callbackRecoveryCursorRevision as any)?.$exists === false ||
+      part.callbackRecoveryCursorRevision === 0,
+    );
+    const revisionMatches = expectedRevision === undefined
+      ? true
+      : current?.callbackRecoveryCursorRevision === expectedRevision;
+    const missingInitializerMatches = !!initializing &&
+      (current?.callbackRecoveryCursorRevision === undefined || current?.callbackRecoveryCursorRevision === 0);
+    if (forceCursorCasLoss || (!revisionMatches && !missingInitializerMatches) || (!current && !options?.upsert)) {
+      forceCursorCasLoss = false;
+      return { matchedCount: 0, upsertedCount: 0 };
+    }
+    const next = {
+      _id: id,
+      ...(current ?? {}),
+      ...(update.$set as Doc),
+      callbackRecoveryCursorRevision:
+        Number(current?.callbackRecoveryCursorRevision ?? 0) +
+          Number((update.$inc as any)?.callbackRecoveryCursorRevision ?? 0),
+    };
+    fairnessDocs.set(id, next);
+    return { matchedCount: current ? 1 : 0, upsertedCount: current ? 0 : 1 };
+  },
+  find: (filter: Doc) => ({
+    toArray: async () => {
+      const ids = (filter._id as Doc).$in as unknown[];
+      return [...fairnessDocs.values()].filter((doc) => ids.includes(doc._id));
+    },
+  }),
+};
 const dbStub = {
-  getDb: async () => ({ collection: () => fakeCollection }),
+  getDb: async () => ({
+    collection: (name: string) =>
+      name === "protractor_callback_fairness" ? fairnessCollection : fakeCollection,
+  }),
   getMongoClient: async () => ({}),
 };
 
@@ -263,21 +318,40 @@ const pgStub = {
     );
     return row?.processedAt ? { processedAt: row.processedAt } : null;
   },
-  findPendingGetEvents: async (limit: number, maxAttempts: number, receivedNotBefore?: Date) =>
-    pgRows
+  findPendingGetEvents: async (
+    limit: number,
+    maxAttempts: number,
+    receivedNotBefore?: Date,
+    recoveryLimit = 0,
+  ) => {
+    const eligible = pgRows
       .filter(
         (r) =>
           r.method === "GET" &&
           r.processed === false &&
           r.eventKey !== null &&
           (!receivedNotBefore || r.receivedAt >= receivedNotBefore) &&
+            r.objectType !== "Contact" &&
            r.historyOutcomeReason !== "unsupported_contact" &&
           (r.attempts === null || r.attempts < maxAttempts),
-      )
+      );
+    const fresh = eligible
+      .slice()
       .sort((a, b) =>
         (a.priority! - b.priority!) || (b.receivedAt.getTime() - a.receivedAt.getTime()),
       )
-      .slice(0, limit)
+      .slice(0, limit);
+    const freshKeys = new Set(fresh.map((r) => r.eventKey));
+    const recovery = recoveryLimit > 0
+      ? eligible
+          .slice()
+          .sort((a, b) =>
+            (a.priority! - b.priority!) || (a.receivedAt.getTime() - b.receivedAt.getTime()),
+          )
+          .slice(0, recoveryLimit)
+          .filter((r) => !freshKeys.has(r.eventKey))
+      : [];
+    return [...fresh, ...recovery]
       .map((r) => ({
         eventKey: r.eventKey,
         method: r.method,
@@ -286,7 +360,11 @@ const pgStub = {
         objectId: r.objectId,
         operation: r.operation,
         receivedAt: r.receivedAt,
-      })),
+        ...(recoveryLimit > 0 ? {
+          selectionLane: freshKeys.has(r.eventKey) ? "fresh" as const : "recovery" as const,
+        } : {}),
+      }));
+  },
   countGetSince: async (field: "receivedAt" | "processedAt", since: Date) =>
     pgRows.filter((r) => {
       const v = field === "receivedAt" ? r.receivedAt : r.processedAt;
@@ -323,6 +401,29 @@ async function main() {
   delete process.env.PROTRACTOR_OPS_PG_CANONICAL;
   delete process.env.WRITE_MONGO_PROTRACTOR_OPS;
   const repo: Repo = await import("../lib/data/repositories/protractor-callback-events");
+  // Exercise PG -> public repository -> shared selection, including POST
+  // formatting, so dropping the raw rank at the wrapper boundary is caught.
+  const originalPendingRead = pgStub.findPendingGetEvents;
+  try {
+    (pgStub as any).findPendingGetEvents = async () => [
+      { eventKey: "raw-older", method: "POST", shopId: 1, objectType: "WorkOrder",
+        objectId: "rank-parity", operation: " CLOSED ", receivedAt: new Date(1000),
+        terminalRank: 0, winnerTieBreaker: 1, terminalFromCoalesce: true },
+      { eventKey: "raw-newer", method: "GET", shopId: 1, objectType: "WorkOrder",
+        objectId: "rank-parity", operation: "Update", receivedAt: new Date(2000),
+        terminalRank: 0, winnerTieBreaker: 2, terminalFromCoalesce: true },
+    ];
+    process.env.PROTRACTOR_OPS_PG_CANONICAL = "1";
+    const mapped = await repo.findPendingGetEvents(10, 3);
+    const chosen = replayableCallbackWindowWinners(mapped).winners;
+    ok("PG raw terminal rank survives wrapper formatting and selection",
+      mapped.every((row) => row.terminalRank === 0) &&
+      chosen.length === 1 && chosen[0].key === "raw-newer");
+  } finally {
+    pgStub.findPendingGetEvents = originalPendingRead;
+    delete process.env.PROTRACTOR_OPS_PG_CANONICAL;
+    fairnessDocs.clear();
+  }
 
   /* ============ hasRecentProcessedPost (POST dedup) ============ */
   console.log("\nhasRecentProcessedPost — POST dedup");
@@ -377,15 +478,20 @@ async function main() {
     const mOrder = res.mongo.map((e) => e.objectId);
     const pOrder = res.pg.map((e) => e.objectId);
     ok(
-      "queue order identical: priority asc then fleet cursor (P2,P1,P4,P5,P6)",
-      JSON.stringify(mOrder) === JSON.stringify(["P2", "P1", "P4", "P5", "P6"]) && JSON.stringify(pOrder) === JSON.stringify(mOrder),
+       "queue order identical: priority asc then fleet cursor (P2,P1,P4,C2,P5,P6)",
+       JSON.stringify(mOrder) === JSON.stringify(["P2", "P1", "P4", "C2", "P5", "P6"]) && JSON.stringify(pOrder) === JSON.stringify(mOrder),
       `mongo=${mOrder.join(",")} pg=${pOrder.join(",")}`,
     );
     ok("at-cap (attempts=5) excluded in both arms", !mOrder.includes("P3") && !pOrder.includes("P3"));
     ok("missing-attempts doc included in both arms", mOrder.includes("P2") && pOrder.includes("P2"));
     ok(
-      "unsupported Contact outcome excluded before the queue limit in both arms",
+       "exact-case pending Contact is excluded before the queue limit in both arms",
       !mOrder.includes("C1") && !pOrder.includes("C1"),
+      `mongo=${mOrder.join(",")} pg=${pOrder.join(",")}`,
+    );
+    ok(
+      "Contact exclusion uses the queue branch's exact-case semantics in both arms",
+      mOrder.includes("C2") && pOrder.includes("C2"),
       `mongo=${mOrder.join(",")} pg=${pOrder.join(",")}`,
     );
     const replayCap = await bothArms(repo, (r) => r.findPendingGetEvents(10, 3));
@@ -402,8 +508,15 @@ async function main() {
       !mOrder.some((o) => ["O1", "O2", "O3"].includes(o!)) && !pOrder.some((o) => ["O1", "O2", "O3"].includes(o!)),
     );
     ok(
-      "row fields identical across arms (shopId/objectType/operation)",
-      JSON.stringify(res.mongo.map(({ key, ...rest }) => rest)) === JSON.stringify(res.pg.map(({ key, ...rest }) => rest)),
+      "logical row fields identical across arms (store-local winner metadata ignored)",
+      JSON.stringify(res.mongo.map(({ key, status: _status, winnerTieBreaker: _tie, terminalFromCoalesce: _terminal, ...rest }) => {
+        delete (rest as Record<string, unknown>).terminalRank;
+        return rest;
+      })) ===
+        JSON.stringify(res.pg.map(({ key, status: _status, winnerTieBreaker: _tie, terminalFromCoalesce: _terminal, ...rest }) => {
+          delete (rest as Record<string, unknown>).terminalRank;
+          return rest;
+        })),
       JSON.stringify(res),
     );
     ok(
@@ -424,18 +537,354 @@ async function main() {
     const pStrict = strictCap.pg.map((e) => e.objectId);
     ok(
       "tighter cap (maxAttempts=2) drops attempts>=2 but keeps missing-attempts, identically",
-      JSON.stringify(mStrict) === JSON.stringify(["P2", "P4"]) && JSON.stringify(pStrict) === JSON.stringify(mStrict),
+       JSON.stringify(mStrict) === JSON.stringify(["P2", "P4", "C2"]) && JSON.stringify(pStrict) === JSON.stringify(mStrict),
       `mongo=${mStrict.join(",")} pg=${pStrict.join(",")}`,
     );
+    const recovery = await bothArms(repo, (r) => r.findPendingGetEvents(2, 5, 10, undefined, 5));
+    const recoveryMongo = recovery.mongo.filter((event) => event.selectionLane === "recovery");
+    const recoveryPg = recovery.pg.filter((event) => event.selectionLane === "recovery");
+    ok(
+       "bounded oldest recovery lane preserves eligible safety/failure retries in both arms",
+       recoveryMongo.some((event) => ["P5", "P6"].includes(event.objectId ?? "")) &&
+         recoveryPg.some((event) => ["P5", "P6"].includes(event.objectId ?? "")),
+      `mongo=${recoveryMongo.map((event) => event.objectId).join(",")} pg=${recoveryPg.map((event) => event.objectId).join(",")}`,
+    );
+    // Mongo's process-local tuple cursor moves past the first eligible page
+    // even when that page is duplicated by the fresh window. This is what
+    // prevents a terminal/duplicate-heavy old page from pinning recovery.
+    delete process.env.PROTRACTOR_OPS_PG_CANONICAL;
+    fairnessDocs.clear();
+    const firstRecoveryPage = await repo.findPendingGetEvents(2, 5, 10, undefined, 1);
+    const secondRecoveryPage = await repo.findPendingGetEvents(2, 5, 10, undefined, 1);
+    const thirdRecoveryPage = await repo.findPendingGetEvents(2, 5, 10, undefined, 1);
+    ok(
+      "Mongo recovery keyset advances beyond an already-fresh old page",
+      secondRecoveryPage.some((event) => event.objectId === "P4" && event.selectionLane === "recovery") &&
+        thirdRecoveryPage.some((event) =>
+          ["P5", "P6"].includes(event.objectId ?? "") && event.selectionLane === "recovery",
+        ),
+      `first=${firstRecoveryPage.map((event) => event.objectId).join(",")} second=${secondRecoveryPage.map((event) => event.objectId).join(",")} third=${thirdRecoveryPage.map((event) => event.objectId).join(",")}`,
+    );
+
+    // The recovery read is intentionally raw: an exhausted/unsupported page
+    // still advances its persisted tuple before replay eligibility is applied.
+    // All 271 blockers share one timestamp, exercising the `_id` tie key.
+    fairnessDocs.clear();
+    const originalMongoDocCount = mongoDocs.length;
+    const recoveryFloor = new Date("2027-01-01T00:00:00Z");
+    const tiedAt = new Date("2027-01-01T00:00:01Z");
+    for (let index = 0; index < 271; index += 1) {
+      mongoDocs.push({
+        _id: new ObjectId(),
+        method: "GET",
+        shopId: 88,
+        objectType: "WorkOrder",
+        objectId: `blocked-${index}`,
+        operation: "Update",
+        priority: 1,
+        attempts: index % 2 === 0 ? 3 : 1,
+        ...(index % 2 === 0
+          ? {}
+          : { historyOutcome: { category: "deferred", reason: "unsupported_contact" } }),
+        receivedAt: tiedAt,
+        processed: false,
+      });
+    }
+    mongoDocs.push({
+      _id: new ObjectId(),
+      method: "GET",
+      shopId: 88,
+      objectType: "WorkOrder",
+      objectId: "recovery-after-tied-blockers",
+      operation: "Update",
+      priority: 1,
+      attempts: 1,
+      historyOutcome: { category: "deferred", reason: "safety_boundary" },
+      receivedAt: tiedAt,
+      processed: false,
+    });
+    // Keep the useful recovery object out of the one-row fresh window.
+    mongoDocs.push({
+      _id: new ObjectId(),
+      method: "GET",
+      shopId: 89,
+      objectType: "WorkOrder",
+      objectId: "fresh-after-tied-blockers",
+      operation: "Update",
+      priority: 1,
+      attempts: 0,
+      receivedAt: new Date("2027-01-01T00:00:02Z"),
+      processed: false,
+    });
+    const tiedRecovery = await repo.findPendingGetEvents(1, 3, 1, recoveryFloor, 270);
+    const cursorDoc = fairnessDocs.get("protractor_callback_recovery_cursor:mongo:1798761600000");
+    const persistedCursor = cursorDoc?.callbackRecoveryCursor as any;
+    ok(
+      "raw recovery cursor crosses >270 rejected equal-time rows without skipping safety retry",
+      tiedRecovery.some((event) =>
+        event.objectId === "recovery-after-tied-blockers" && event.selectionLane === "recovery",
+      ) &&
+        persistedCursor?.floorMs === recoveryFloor.getTime(),
+      `recovery=${tiedRecovery.map((event) => event.objectId).join(",")}`,
+    );
+    ok(
+      "Mongo recovery cursor is persisted in existing fairness metadata",
+      persistedCursor?.id instanceof ObjectId,
+    );
+    // Simulate a new worker process: only the fairness document is supplied;
+    // no module-local cursor state is available to the next recovery read.
+    const cursorId = "protractor_callback_recovery_cursor:mongo:1798761600000";
+    const firstTiedBlocker = mongoDocs.find((doc) => doc.objectId === "blocked-0")!;
+    fairnessDocs.set(cursorId, {
+      _id: cursorId,
+      callbackRecoveryCursor: {
+        method: "GET",
+        priority: 1,
+        receivedAt: tiedAt,
+        id: firstTiedBlocker._id,
+        floorMs: recoveryFloor.getTime(),
+      },
+    });
+    const resumedRecovery = await repo.findPendingGetEvents(1, 3, 1, recoveryFloor, 270);
+    ok(
+      "persisted recovery tuple resumes after simulated process restart",
+      resumedRecovery.some((event) => event.objectId === "recovery-after-tied-blockers"),
+    );
+    // A stale overlapping worker cannot move the shared cursor backward or
+    // clear it during wrap; its recovery lane loses while fresh remains usable.
+    fairnessDocs.set(cursorId, {
+      _id: cursorId,
+      callbackRecoveryCursorRevision: 9,
+      callbackRecoveryCursor: {
+        method: "GET",
+        priority: 1,
+        receivedAt: tiedAt,
+        id: firstTiedBlocker._id,
+        floorMs: recoveryFloor.getTime(),
+      },
+    });
+    forceCursorCasLoss = true;
+    const staleWriterRecovery = await repo.findPendingGetEvents(1, 3, 1, recoveryFloor, 270);
+    const afterCasLoss = fairnessDocs.get(cursorId)!;
+    ok(
+      "Mongo stale recovery cursor writer loses CAS without clobbering progress",
+      staleWriterRecovery.length === 1 &&
+        staleWriterRecovery[0]?.objectId === "fresh-after-tied-blockers" &&
+        afterCasLoss.callbackRecoveryCursorRevision === 9 &&
+        (afterCasLoss.callbackRecoveryCursor as any)?.id.equals(firstTiedBlocker._id),
+    );
+    mongoDocs.splice(originalMongoDocCount);
+    fairnessDocs.clear();
   }
 
-  /* ============ countGetSince (webhook-health lag) ============ */
+  /* ============ durable Mongo recovery carry-over ======================= */
+  {
+    delete process.env.PROTRACTOR_OPS_PG_CANONICAL;
+    fairnessDocs.clear();
+    const recoveryOriginalCount = mongoDocs.length;
+    const carryFloor = new Date("2031-02-03T00:00:00Z");
+    const carryAt = new Date("2031-02-03T00:00:01Z");
+    const carryDocs: Doc[] = Array.from({ length: 6 }, (_, index) => ({
+      _id: new ObjectId(),
+      method: "GET",
+      priority: 1,
+      shopId: 777,
+      objectType: "WorkOrder",
+      objectId: `buffer-carry-over-${index}`,
+      operation: index === 4 ? "DELETE" : "Update",
+      attempts: 1,
+      receivedAt: carryAt,
+      processed: false,
+    }));
+    mongoDocs.push(...carryDocs);
+    const carryId = `protractor_callback_recovery_cursor:mongo:${carryFloor.getTime()}`;
+    const freshOnly = await repo.findPendingGetEvents(1, 3, 1, carryFloor);
+    const carryFirst = await repo.findPendingGetEvents(1, 3, 1, carryFloor, 5);
+    const carryState = fairnessDocs.get(carryId)!;
+    const carryEntries = carryState.callbackRecoveryBuffer as Array<{ key: string; generation: string }>;
+    const overlapKey = freshOnly[0]!.key;
+    ok(
+      "Mongo cursor and every eligible raw-page entry persist atomically",
+      carryEntries.length === 6 && !!carryState.callbackRecoveryCursor &&
+        typeof carryState.callbackRecoveryCursorRevision === "number",
+    );
+    ok(
+      "fresh/recovery overlap is offered once as recovery",
+      carryFirst.filter((event) => event.key === overlapKey).length === 1 &&
+        carryFirst.find((event) => event.key === overlapKey)?.selectionLane === "recovery",
+    );
+    const firstEntry = carryEntries.find((entry) => entry.key === String(carryDocs[0]!._id))!;
+    forceCursorCasLoss = true;
+    await repo.acknowledgeRecoveryCandidate(firstEntry.key, firstEntry.generation, carryFloor);
+    ok(
+      "stale buffered ACK CAS loss retains work",
+      (fairnessDocs.get(carryId)?.callbackRecoveryBuffer as Array<{ key: string }>).some(
+        (entry) => entry.key === firstEntry.key,
+      ),
+    );
+    await repo.acknowledgeRecoveryCandidate(firstEntry.key, firstEntry.generation, carryFloor);
+    const afterAck = fairnessDocs.get(carryId)!;
+    ok(
+      "genuine ACK removes only its exact generation",
+      !(afterAck.callbackRecoveryBuffer as Array<{ key: string }>).some(
+        (entry) => entry.key === firstEntry.key,
+      ),
+    );
+    carryDocs[0]!.processed = true;
+    const nextBatch = await repo.findPendingGetEvents(1, 3, 1, carryFloor, 5);
+    ok(
+      "all five unselected distinct objects remain offered on the next invocation",
+      carryDocs.slice(1).every((doc) => nextBatch.some((item) =>
+        item.key === String(doc._id) && item.selectionLane === "recovery")),
+    );
+    fairnessDocs.set(carryId, {
+      ...afterAck,
+      callbackRecoveryBuffer: [
+        ...(afterAck.callbackRecoveryBuffer as Array<{ key: string; generation: string }>),
+        { key: firstEntry.key, generation: "newer-page-generation" },
+      ],
+    });
+    await repo.acknowledgeRecoveryCandidate(firstEntry.key, firstEntry.generation, carryFloor);
+    ok(
+      "old-generation ACK cannot clear a newer page entry",
+      (fairnessDocs.get(carryId)?.callbackRecoveryBuffer as Array<{ key: string; generation: string }>).some(
+        (entry) => entry.key === firstEntry.key && entry.generation === "newer-page-generation",
+      ),
+    );
+    await repo.acknowledgeRecoveryCandidate(firstEntry.key, "newer-page-generation", carryFloor);
+
+    // A new invocation has no process-local state; it must reconstruct from
+    // fairness metadata and recheck all ordinary eligibility guards.
+    carryDocs[1]!.processed = true;
+    carryDocs[2]!.attempts = 3;
+    carryDocs[3]!.historyOutcome = { category: "deferred", reason: "unsupported_contact" };
+    const resumed = await repo.findPendingGetEvents(1, 3, 1, carryFloor, 5);
+    const resumedEntries = fairnessDocs.get(carryId)?.callbackRecoveryBuffer as Array<{ key: string; generation: string }>;
+    ok(
+      "restart retains unselected entries but prunes completed/exhausted/contact rows",
+      resumed.some((event) => event.key === String(carryDocs[4]!._id)) &&
+        !resumedEntries.some((entry) =>
+          [String(carryDocs[1]!._id), String(carryDocs[2]!._id), String(carryDocs[3]!._id)]
+            .includes(entry.key),
+        ),
+      `offered=${resumed.map((event) => event.key).join(",")} retained=${resumedEntries.map((entry) => entry.key).join(",")}`,
+    );
+    // Queue authority passes selected and in-memory-coalesced buffer entries
+    // to this metadata-only prune; it must not complete the callback rows.
+    await repo.pruneRecoveryCandidates(resumedEntries, carryFloor);
+    ok(
+      "authority-blocked coalesced prefix prunes metadata without completion",
+      (fairnessDocs.get(carryId)?.callbackRecoveryBuffer as unknown[]).length === 0 &&
+        carryDocs[4]!.processed === false,
+    );
+    mongoDocs.splice(recoveryOriginalCount);
+    fairnessDocs.clear();
+  }
+  {
+    delete process.env.PROTRACTOR_OPS_PG_CANONICAL;
+    fairnessDocs.clear();
+    const originalLength = mongoDocs.length;
+    const floor = new Date("2032-01-01T00:00:00Z");
+    const waiting: Doc[] = Array.from({ length: 3 }, (_, index) => ({
+      _id: new ObjectId(), method: "GET", priority: 1, shopId: 778,
+      objectType: "WorkOrder", objectId: `successive-turn-${index}`,
+      operation: "Update", attempts: 1, processed: false,
+      receivedAt: new Date(floor.getTime() + 1000 + index),
+    }));
+    mongoDocs.push(...waiting);
+    const offered = new Set<string>();
+    for (let tick = 0; tick < waiting.length; tick++) {
+      const batch = await repo.findPendingGetEvents(1, 3, 1, floor, 3);
+      const recovery = batch.filter((item) => item.selectionLane === "recovery")
+        .sort((a, b) => (a.recoveryBufferOrder ?? 0) - (b.recoveryBufferOrder ?? 0));
+      ok(`batch ${tick + 1} retains every still-waiting candidate`,
+        waiting.filter((doc) => !doc.processed).every((doc) =>
+          recovery.some((item) => item.key === String(doc._id))));
+      const selected = recovery[0]!;
+      offered.add(selected.key);
+      // Model one successful attempt/completion, never the whole selected page.
+      waiting.find((doc) => String(doc._id) === selected.key)!.processed = true;
+      await repo.acknowledgeRecoveryCandidate(
+        selected.key, selected.recoveryBufferGeneration!, floor,
+      );
+    }
+    ok("one recovery slot gives every eligible object its turn across three batches",
+      offered.size === waiting.length);
+    mongoDocs.splice(originalLength);
+    fairnessDocs.clear();
+  }
+  {
+    // Contacts must not fill the fixed 270-entry carry-over. In particular,
+    // supported old work immediately following a full Contact prefix must be
+    // retained, and Contacts accidentally persisted by an older scheduler must
+    // be removed from metadata (not from callback records) on later reads.
+    delete process.env.PROTRACTOR_OPS_PG_CANONICAL;
+    fairnessDocs.clear();
+    const originalLength = mongoDocs.length;
+    const contactFloor = new Date("2033-01-01T00:00:00Z");
+    const contactAt = new Date("2033-01-01T00:00:01Z");
+    const contactPrefix: Doc[] = Array.from({ length: 270 }, (_, index) => ({
+      _id: new ObjectId(), method: "GET", priority: 1, shopId: 779,
+      objectType: "Contact", objectId: `contact-prefix-${index}`,
+      operation: "Update", attempts: 0, receivedAt: contactAt, processed: false,
+    }));
+    const workAfterContacts: Doc = {
+      _id: new ObjectId(), method: "GET", priority: 1, shopId: 779,
+      objectType: "WorkOrder", objectId: "work-after-contact-prefix",
+      operation: "Update", attempts: 1,
+      receivedAt: new Date(contactAt.getTime() + 1000), processed: false,
+    };
+    mongoDocs.push(...contactPrefix, workAfterContacts);
+    const contactCursorId =
+      `protractor_callback_recovery_cursor:mongo:${contactFloor.getTime()}`;
+    const afterPrefix = await repo.findPendingGetEvents(0, 3, 0, contactFloor, 270);
+    const afterPrefixState = fairnessDocs.get(contactCursorId)!;
+    const afterPrefixEntries =
+      afterPrefixState.callbackRecoveryBuffer as Array<{ key: string; generation: string }>;
+    ok(
+      "Mongo Contact prefix cannot consume recovery buffer capacity before supported work",
+      afterPrefix.some((item) => item.key === String(workAfterContacts._id) &&
+        item.selectionLane === "recovery") &&
+        afterPrefixEntries.length === 1 &&
+        afterPrefixEntries[0]?.key === String(workAfterContacts._id),
+      `offered=${afterPrefix.map((item) => item.objectId).join(",")} retained=${afterPrefixEntries.map((entry) => entry.key).join(",")}`,
+    );
+    ok(
+      "Mongo Contact prefix remains untouched notification records",
+      contactPrefix.every((doc) => doc.processed === false && doc.attempts === 0),
+    );
+    fairnessDocs.set(contactCursorId, {
+      ...afterPrefixState,
+      callbackRecoveryBuffer: [
+        { key: String(contactPrefix[0]!._id), generation: "stale-contact-one" },
+        { key: String(contactPrefix[1]!._id), generation: "stale-contact-two" },
+        ...afterPrefixEntries,
+      ],
+    });
+    const afterBufferedContacts = await repo.findPendingGetEvents(0, 3, 0, contactFloor, 1);
+    const afterBufferedState = fairnessDocs.get(contactCursorId)!;
+    const afterBufferedEntries =
+      afterBufferedState.callbackRecoveryBuffer as Array<{ key: string; generation: string }>;
+    ok(
+      "Mongo persisted Contact recovery entries are pruned across reads without evicting work",
+      afterBufferedContacts.some((item) => item.key === String(workAfterContacts._id)) &&
+        JSON.stringify(afterBufferedEntries.map((entry) => entry.key)) ===
+          JSON.stringify([String(workAfterContacts._id)]),
+      `offered=${afterBufferedContacts.map((item) => item.objectId).join(",")} retained=${afterBufferedEntries.map((entry) => entry.key).join(",")}`,
+    );
+    ok(
+      "Mongo buffered Contact pruning never completes or resets Contact callbacks",
+      contactPrefix.slice(0, 2).every((doc) => doc.processed === false && doc.attempts === 0),
+    );
+    mongoDocs.splice(originalLength);
+    fairnessDocs.clear();
+  }
   console.log("\ncountGetSince — webhook-health lag windows");
   {
-    // GET events with receivedAt >= SINCE includes the unsupported Contact;
+     // GET events with receivedAt >= SINCE includes both Contact notifications;
     // webhook-health counts received callbacks even when queue replay omits it.
     const recv = await bothArms(repo, (r) => r.countGetSince("receivedAt", SINCE));
-    ok("receivedAt window counts match", recv.mongo === recv.pg && recv.mongo === 9, JSON.stringify(recv));
+     ok("receivedAt window counts match", recv.mongo === recv.pg && recv.mongo === 10, JSON.stringify(recv));
 
     // GET events processed within window: O1, O2 (O3 processed BEFORE; pendings have no processedAt)
     const proc = await bothArms(repo, (r) => r.countGetSince("processedAt", SINCE));
@@ -443,7 +892,7 @@ async function main() {
 
     // POST docs (no method field / NULL method) never counted
     const all = await bothArms(repo, (r) => r.countGetSince("receivedAt", BEFORE));
-    ok("POST events never counted as GET in either arm", all.mongo === all.pg && all.mongo === 10, JSON.stringify(all));
+     ok("POST events never counted as GET in either arm", all.mongo === all.pg && all.mongo === 11, JSON.stringify(all));
   }
 
   /* ============ countRecentByConnection (rate limit) ============ */

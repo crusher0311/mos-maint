@@ -1,6 +1,7 @@
 #!/usr/bin/env npx tsx
 import { MongoClient } from 'mongodb';
 import * as dotenv from 'dotenv';
+import { CUSTOMER_SOURCE_INDEX } from './lib/customer-source-index';
 
 dotenv.config({ path: '.env.local' });
 
@@ -42,6 +43,7 @@ async function createIndexes() {
     {
       collection: 'normalized_customers',
       indexes: [
+        { spec: CUSTOMER_SOURCE_INDEX.key, options: { name: CUSTOMER_SOURCE_INDEX.name } },
         { spec: { shopId: 1, email: 1 }, options: { name: 'shopId_email' } },
         { spec: { 'provenance.sourceSystem': 1, 'provenance.sourceIds.id': 1 }, options: { name: 'source_lookup' } },
         { spec: { shopId: 1, 'softDelete.isDeleted': 1 }, options: { name: 'shop_active' } },

@@ -5,6 +5,7 @@ import {
 import {
   __protractorClientTestHooks,
   createServiceItem,
+  getEffectiveProtractorOutboundPolicy,
   protractorFetch,
   runWithProtractorCallbackTransport,
   soapAddServicePackage,
@@ -37,6 +38,7 @@ const ENV_KEYS = [
   "PROTRACTOR_OUTBOUND_DENIED_INSTANCE_IDS",
   "PROTRACTOR_CALLBACK_CANARY_UNTIL",
   "PROTRACTOR_CALLBACK_REPLAY_NOT_BEFORE",
+  "PROTRACTOR_CALLBACK_TRIAL_ENABLED",
   "RENDER_INSTANCE_ID",
 ] as const;
 
@@ -289,6 +291,61 @@ async function main() {
     ]);
   });
   ok("callback canary admits callback-scoped REST/SOAP", requests === beforeCanaryRequests + 2);
+
+  delete process.env.PROTRACTOR_CALLBACK_CANARY_UNTIL;
+  delete process.env.PROTRACTOR_CALLBACK_REPLAY_NOT_BEFORE;
+  process.env.PROTRACTOR_CALLBACK_TRIAL_ENABLED = "true";
+  const liveStartedAt = new Date(Date.now() - 1_000);
+  __protractorClientTestHooks.getOperatorStop = async () => ({
+    active: false,
+    canary: {
+      mode: "live",
+      generation: "continuous-live-generation",
+      scope: "callbacks_and_interactive",
+      requiresCallback: false,
+      requiresRelay: true,
+      workersSuspendedConfirmed: true,
+      startedAt: liveStartedAt,
+      maxAdmissions: null,
+      consumedAdmissions: 0,
+      remainingAdmissions: null,
+      audit: [],
+    },
+  } as any);
+  const livePolicy = await getEffectiveProtractorOutboundPolicy();
+  ok(
+    "persisted continuous generation supplies a fresh Mongo callback floor",
+    livePolicy.allowed === true &&
+      livePolicy.callbackNotBeforeMs === liveStartedAt.getTime() &&
+      livePolicy.relayRequired === true &&
+      livePolicy.allowInteractive === true,
+  );
+  __protractorClientTestHooks.getOperatorStop = async () => ({
+    active: false,
+    canary: {
+      mode: "live",
+      generation: "stale-expiry-must-deny",
+      scope: "callbacks_and_interactive",
+      requiresCallback: false,
+      requiresRelay: true,
+      workersSuspendedConfirmed: true,
+      startedAt: liveStartedAt,
+      expiresAt: new Date(Date.now() + 60_000),
+      maxAdmissions: null,
+      consumedAdmissions: 0,
+      remainingAdmissions: null,
+      audit: [],
+    },
+  } as any);
+  ok(
+    "continuous mode denies an inherited timed expiry rather than falling back",
+    (await getEffectiveProtractorOutboundPolicy()).reason === "timed_trial_not_active",
+  );
+  __protractorClientTestHooks.getOperatorStop = async () => ({
+    active: false,
+    canary: undefined,
+  } as any);
+  delete process.env.PROTRACTOR_CALLBACK_TRIAL_ENABLED;
 
   let fakeNow = Date.parse("2026-09-09T17:00:00.000Z");
   __protractorClientTestHooks.now = () => fakeNow;

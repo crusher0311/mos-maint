@@ -103,6 +103,9 @@ function restoreAll() {
 /** Common happy-path plumbing: session present, not admin, budget OK. */
 function stubCommon(deps: any) {
   deps.getSession = async () => ({ ...SESSION });
+  if ("getFeatureEntitlements" in deps) {
+    deps.getFeatureEntitlements = async () => ({ canUseFeature: () => true });
+  }
   if ("isPlatformAdmin" in deps) deps.isPlatformAdmin = async () => false;
   if ("enforceAiBudget" in deps) deps.enforceAiBudget = async () => null;
   if ("trackOpenAiCall" in deps) deps.trackOpenAiCall = () => {};

@@ -121,6 +121,29 @@ export async function findVehicleByVin(
   return rows.length ? reconstructVehicle(rows[0]) : null;
 }
 
+export async function findVehicleByProtractorWorkOrder(
+  shopId: number | string,
+  workOrderId: string,
+): Promise<AnyDoc | null> {
+  const db = getDb();
+  const variants = shopVariants(shopId);
+  const sourceFragment = JSON.stringify({
+    status: {
+      sources: [{ provider: "protractor", workOrderId: String(workOrderId) }],
+    },
+  });
+  const rows = await db
+    .select()
+    .from(preNormalizedVehicles)
+    .where(and(
+      sql`${preNormalizedVehicles.shopId}::text = ANY(${variants})`,
+      sql`${preNormalizedVehicles.payload} @> ${sourceFragment}::jsonb`,
+    ))
+    .orderBy(desc(preNormalizedVehicles.updatedAt))
+    .limit(1);
+  return rows.length ? reconstructVehicle(rows[0]) : null;
+}
+
 export interface PgVehicleUpsertFields {
   shopId?: number | string | null;
   vin?: string | null;

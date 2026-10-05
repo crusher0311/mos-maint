@@ -52,6 +52,9 @@ export async function replayDeferredTerminalPost(
     workOrderId: event.objectId,
     status: event.operation,
   });
-  if (!applied) return false;
-  return true;
+  // A fetched non-DELETE terminal event must have local state to transition.
+  // Unlike DELETE, already-absent is not an idempotent success here: the
+  // snapshot writer and canonical terminal reader may target different stores
+  // during migration, so accepting absence could hide an unapplied close.
+  return applied === "applied";
 }

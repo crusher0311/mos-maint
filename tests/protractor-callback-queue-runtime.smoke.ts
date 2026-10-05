@@ -21,11 +21,34 @@ type CallbackEvent = {
   objectId: string | null;
   operation: string | null;
   receivedAt: Date;
+  selectionLane?: "fresh" | "recovery";
 };
 
 type Doc = Record<string, any>;
 
 const originalLoad = (Module as any)._load;
+const originalConsoleInfo = console.info;
+const timingRecords: Array<Record<string, any>> = [];
+const normalizationTimingRecords: Array<Record<string, any>> = [];
+console.info = ((prefix: unknown, payload?: unknown, ...rest: unknown[]) => {
+  if (prefix === "[ProtractorCallbackTiming]") {
+    try {
+      timingRecords.push(JSON.parse(String(payload)));
+    } catch {
+      throw new Error("callback timing telemetry was not valid JSON");
+    }
+    return;
+  }
+  if (prefix === "[ProtractorCallbackNormalizationTiming]") {
+    try {
+      normalizationTimingRecords.push(JSON.parse(String(payload)));
+    } catch {
+      throw new Error("normalization timing telemetry was not valid JSON");
+    }
+    return;
+  }
+  originalConsoleInfo(prefix, payload, ...rest);
+}) as typeof console.info;
 
 const pending: CallbackEvent[] = [];
 const ownerTokens = new Map<string, string | null>();
@@ -42,8 +65,12 @@ const dispatches: CallbackEvent[] = [];
 const processingStarts: string[] = [];
 const claims: Array<{ key: string; ownerToken: string | null }> = [];
 const completionCalls: any[][] = [];
+const processedMarks: Array<{ key: string; details: any }> = [];
 const served: Array<{ shopId: number; key: string }> = [];
 const releases: Array<{ key: string; ownerToken?: string }> = [];
+const selectionCalls: any[][] = [];
+const transportDeadlines: number[] = [];
+const dispatchClockAdvances = new Map<string, number>();
 const callbackOutcomeWrites: Array<{
   key: string;
   ownerToken: string;
@@ -54,6 +81,9 @@ const callbackDeferralWrites: Array<{
   ownerToken: string;
   outcome: any;
 }> = [];
+const recoveryAcks: Array<{ key: string; generation: string }> = [];
+const recoveryRotations: Array<{ key: string; generation: string }> = [];
+const recoveryPrunes: Array<{ key: string; generation: string }> = [];
 const errors: Array<{ key: string; message: string }> = [];
 const attempts = new Map<string, number>();
 
@@ -62,9 +92,16 @@ const workOrderFetches: string[] = [];
 const vehicleFetches: string[] = [];
 const workOrderSnapshots: Array<{ shopId: number; workOrder: Doc }> = [];
 const normalizedWorkOrders: Doc[] = [];
+const normalizedEnterpriseIds: Array<string | undefined> = [];
+const normalizationTimingRecorders: unknown[] = [];
+const normalizationThrows = new Set<string>();
 const indexCalls: Doc[] = [];
 const vehicleReplayResults = new Map<string, any[]>();
 const workOrderReplayResults = new Map<string, any[]>();
+let drainSetupAdvanceMs = 0;
+let selectionAdvanceMs = 0;
+let claimAdvanceMs = 0;
+let returnAllPendingForSelection = false;
 
 function event(
   key: string,
@@ -107,23 +144,45 @@ function resetQueueState(events: CallbackEvent[]): void {
   processingStarts.length = 0;
   claims.length = 0;
   completionCalls.length = 0;
+  processedMarks.length = 0;
   served.length = 0;
   releases.length = 0;
+  selectionCalls.length = 0;
+  transportDeadlines.length = 0;
+  dispatchClockAdvances.clear();
   callbackOutcomeWrites.length = 0;
   callbackDeferralWrites.length = 0;
+  recoveryAcks.length = 0;
+  recoveryRotations.length = 0;
+  recoveryPrunes.length = 0;
   errors.length = 0;
   attempts.clear();
+  timingRecords.length = 0;
+  normalizationTimingRecords.length = 0;
+  normalizationTimingRecorders.length = 0;
+  drainSetupAdvanceMs = 0;
+  selectionAdvanceMs = 0;
+  claimAdvanceMs = 0;
+  returnAllPendingForSelection = false;
 }
 
 const callbackEventsMock = {
   __esModule: true,
   findPendingGetEvents: async (...args: any[]) => {
+    selectionCalls.push(args);
+    if (selectionAdvanceMs) {
+      clockOffsetMs += selectionAdvanceMs;
+      selectionAdvanceMs = 0;
+    }
     const requestedLimit = Number(args[2] ?? args[0] ?? pending.length);
-    return pending.slice(0, requestedLimit);
+    return returnAllPendingForSelection ? pending.slice() : pending.slice(0, requestedLimit);
   },
+  filterPendingCallbackCandidatesByAuthority: async (items: CallbackEvent[]) => items,
   claimCallbackEvent: async (key: string) => {
     const ownerToken = ownerTokens.has(key) ? ownerTokens.get(key)! : null;
     claims.push({ key, ownerToken });
+    clockOffsetMs += claimAdvanceMs;
+    claimAdvanceMs = 0;
     return ownerToken;
   },
   recordProcessingStarted: async (key: string) => {
@@ -135,6 +194,9 @@ const callbackEventsMock = {
     const thrown = completionErrors.get(String(args[0]));
     if (thrown) throw thrown;
     return completionResults.get(String(args[0])) ?? true;
+  },
+  markProcessed: async (key: string, details: any) => {
+    processedMarks.push({ key, details });
   },
   markCallbackShopSuccessfullyServed: async (shopId: number, key: string) => {
     served.push({ shopId, key });
@@ -149,6 +211,15 @@ const callbackEventsMock = {
   recordError: async (key: string, message: string) => {
     errors.push({ key, message });
   },
+  acknowledgeRecoveryCandidate: async (key: string, generation: string) => {
+    recoveryAcks.push({ key, generation });
+  },
+  rotateRecoveryCandidate: async (key: string, generation: string) => {
+    recoveryRotations.push({ key, generation });
+  },
+  pruneRecoveryCandidates: async (entries: Array<{ key: string; generation: string }>) => {
+    recoveryPrunes.push(...entries);
+  },
   releaseCallbackEventAdmission: async (
     key: string,
     _identity: unknown,
@@ -156,7 +227,13 @@ const callbackEventsMock = {
   ) => {
     releases.push({ key, ownerToken });
   },
-  getCallbackQueueDb: async () => queueDb,
+  getCallbackQueueDb: async () => {
+    if (drainSetupAdvanceMs) {
+      clockOffsetMs += drainSetupAdvanceMs;
+      drainSetupAdvanceMs = 0;
+    }
+    return queueDb;
+  },
 };
 
 const clientMock = {
@@ -167,9 +244,10 @@ const clientMock = {
     requireTimedTrial: false,
   }),
   runWithProtractorCallbackTransport: async (
-    _deadlineMs: number,
+    deadlineMs: number,
     callback: () => Promise<unknown>,
   ) => {
+    transportDeadlines.push(deadlineMs);
     const transportError = transportErrors.shift();
     if (transportError) throw transportError;
     return callback();
@@ -193,7 +271,7 @@ const clientMock = {
           ID: objectId,
           WorkflowStage: "OPEN",
           Completed: false,
-          ServiceItem: { VIN: "OPEN-VIN" },
+          ServiceItem: { VIN: "1HGCM82633A004352" },
         },
       };
     }
@@ -216,10 +294,13 @@ const queueDb = {
   collection: (name: string) => {
     if (name === "shops") {
       return {
-        findOne: async () => ({
-          enterpriseId: "enterprise-42",
-          integrationProvider: "protractor",
-        }),
+        findOne: async () => {
+          shopLookupCount++;
+          return {
+            enterpriseId: "enterprise-42",
+            integrationProvider: "protractor",
+          };
+        },
       };
     }
     if (name === "protractor_work_orders") {
@@ -231,6 +312,7 @@ const queueDb = {
     throw new Error(`unexpected collection ${name}`);
   },
 };
+let shopLookupCount = 0;
 
 const integrationMock = {
   __esModule: true,
@@ -243,10 +325,16 @@ const integrationMock = {
 };
 
 class MockNormalizedIngestionService {
-  constructor(..._args: any[]) {}
+  constructor(...args: any[]) {
+    normalizedEnterpriseIds.push(args[3] as string | undefined);
+    normalizationTimingRecorders.push(args[4]?.callbackNormalizationTiming);
+  }
 
   async ingestWorkOrderWithAllEntities(workOrder: Doc): Promise<void> {
     normalizedWorkOrders.push(workOrder);
+    if (normalizationThrows.has(String(workOrder.ID))) {
+      throw new Error("normalization failure");
+    }
   }
 }
 
@@ -254,7 +342,15 @@ const terminalMock = {
   __esModule: true,
   applyProtractorTerminalCallback: async (db: unknown, args: Doc) => {
     terminalApplications.push({ db, args });
-    return true;
+    const admitted = pending.find((item) => item.objectId === args.workOrderId);
+    if (admitted) {
+      const clockAdvance = dispatchClockAdvances.get(admitted.key);
+      if (clockAdvance !== undefined) {
+        clockOffsetMs += clockAdvance;
+        dispatchClockAdvances.delete(admitted.key);
+      }
+    }
+    return "applied";
   },
 };
 
@@ -320,6 +416,8 @@ const dispatch = async (item: CallbackEvent): Promise<any> => {
   const thrown = dispatchErrors.get(item.key);
   if (thrown) throw thrown;
   if (lateCompletionKeys.has(item.key)) clockOffsetMs = 61_000;
+  const clockAdvance = dispatchClockAdvances.get(item.key);
+  if (clockAdvance !== undefined) clockOffsetMs += clockAdvance;
   return dispatchOutcomes.get(item.key);
 };
 
@@ -354,6 +452,24 @@ async function runQueueAssertions(
   assert.deepEqual(
     await processProtractorCallbackQueue({}, dispatch, queueOptions()),
     { processed: 1, failed: 0 },
+  );
+  assert.equal(
+    timingRecords.some((record) =>
+      record.kind === "callback_stage_timing" &&
+      record.stage === "total" &&
+      record.outcome === "success"
+    ),
+    true,
+    "successful callbacks emit a total timing outcome",
+  );
+  assert.equal(
+    timingRecords.some((record) =>
+      JSON.stringify(record).includes("wo-applied") ||
+      JSON.stringify(record).includes("shop") ||
+      JSON.stringify(record).includes("VIN")
+    ),
+    false,
+    "callback timing telemetry contains no callback identity",
   );
   assert.equal(dispatches.length, 1, "claimed event is dispatched");
   assert.equal(completionCalls.length, 1);
@@ -400,6 +516,29 @@ async function runQueueAssertions(
     await processProtractorCallbackQueue({}, dispatch, queueOptions()),
     { processed: 0, failed: 1 },
   );
+  assert.equal(
+    timingRecords.some((record) =>
+      record.kind === "callback_stage_timing" &&
+      record.stage === "dispatch" &&
+      record.outcome === "failed"
+    ),
+    true,
+    "dispatch failures emit a failed dispatch timing outcome",
+  );
+  assert.equal(
+    timingRecords.some((record) =>
+      record.kind === "callback_stage_timing" &&
+      record.stage === "total" &&
+      record.outcome === "failed"
+    ),
+    true,
+    "dispatch failures emit a failed total timing outcome",
+  );
+  assert.equal(
+    timingRecords.some((record) => JSON.stringify(record).includes("provider dispatch exploded")),
+    false,
+    "timing telemetry does not include error text",
+  );
   assert.deepEqual(
     callbackOutcomeWrites,
     [{
@@ -417,36 +556,43 @@ async function runQueueAssertions(
   assert.deepEqual(served, []);
   assert.deepEqual(releases, [{ key: thrown.key, ownerToken: "owner-thrown" }]);
 
-  const contact = event("contact", "contact-1");
-  contact.objectType = "Contact";
-  resetQueueState([contact]);
-  ownerTokens.set(contact.key, "owner-contact");
-  dispatchOutcomes.set(contact.key, {
-    category: "applied_indexed",
-    reason: "indexed",
-  });
+  const contactFresh = event("contact-fresh", "contact-fresh");
+  contactFresh.objectType = "Contact";
+  const contactRecovery = {
+    ...event("contact-recovery", "contact-recovery"),
+    objectType: "Contact",
+    selectionLane: "recovery" as const,
+    recoveryBufferGeneration: "contact-buffer-generation",
+  };
+  const afterContacts = event("after-contacts", "wo-after-contacts");
+  resetQueueState([contactFresh, contactRecovery, afterContacts]);
+  // Model the repository's pre-limit Contact exclusion boundary while keeping
+  // this queue-only seam able to return both rejected and supported rows.
+  returnAllPendingForSelection = true;
+  ownerTokens.set(afterContacts.key, "owner-after-contacts");
 
   assert.deepEqual(
-    await processProtractorCallbackQueue({}, dispatch, queueOptions()),
-    { processed: 0, failed: 0 },
-    "unsupported Contact callbacks are held without becoming failures",
+    await processProtractorCallbackQueue({}, dispatch, { ...queueOptions(), limit: 1 }),
+    { processed: 1, failed: 0 },
+    "unsupported Contacts cannot consume the one fresh/recovery selection slot",
   );
-  assert.deepEqual(dispatches, [], "Contact callbacks are not dispatched");
-  assert.deepEqual(processingStarts, [], "Contact callbacks do not increment attempts");
-  assert.equal(attempts.get(contact.key) ?? 0, 0);
-  assert.deepEqual(completionCalls, [], "Contact callbacks are not completed");
   assert.deepEqual(
-    callbackOutcomeWrites,
-    [{
-      key: contact.key,
-      ownerToken: "owner-contact",
-      outcome: { category: "deferred", reason: "unsupported_contact" },
-    }],
-    "Contact deferral is fenced to its admission owner",
+    dispatches.map((item) => item.key),
+    [afterContacts.key],
+    "supported work after fresh and recovery Contacts is dispatched",
   );
+  assert.deepEqual(processingStarts, [afterContacts.key]);
+  assert.equal(attempts.get(contactFresh.key) ?? 0, 0);
+  assert.equal(attempts.get(contactRecovery.key) ?? 0, 0);
+  assert.deepEqual(completionCalls.map((args) => args[0]), [afterContacts.key]);
+  assert.deepEqual(callbackOutcomeWrites, [], "selection filtering does not rewrite Contact evidence");
   assert.deepEqual(callbackDeferralWrites, []);
   assert.deepEqual(errors, []);
-  assert.deepEqual(releases, [{ key: contact.key, ownerToken: "owner-contact" }]);
+  assert.deepEqual(
+    recoveryPrunes,
+    [{ key: contactRecovery.key, generation: "contact-buffer-generation" }],
+    "an existing Contact carry-over is pruned as scheduler metadata only",
+  );
 
   const pacedExpiry = event("paced-expiry", "wo-paced-expiry");
   resetQueueState([pacedExpiry]);
@@ -616,6 +762,7 @@ async function runQueueAssertions(
   assert.deepEqual(served, []);
 
   const unclaimed = event("unclaimed", "wo-unclaimed");
+  (unclaimed as any).recoveryBufferGeneration = "unclaimed-generation";
   resetQueueState([unclaimed]);
   ownerTokens.set(unclaimed.key, null);
   dispatchOutcomes.set(unclaimed.key, {
@@ -632,6 +779,318 @@ async function runQueueAssertions(
   assert.deepEqual(completionCalls, []);
   assert.deepEqual(served, []);
   assert.deepEqual(releases, []);
+  assert.deepEqual(recoveryAcks, [], "rejected claims retain their buffered generation");
+  assert.deepEqual(
+    recoveryRotations,
+    [{ key: unclaimed.key, generation: "unclaimed-generation" }],
+    "rejected claims rotate rather than discard their buffered generation",
+  );
+}
+
+async function runRecoveryLaneAssertions(
+  processProtractorCallbackQueue: (
+    db: any,
+    dispatch: (item: any) => Promise<any>,
+    options: any,
+  ) => Promise<{ processed: number; failed: number }>,
+): Promise<void> {
+  const recovery = {
+    ...event("recovery-expired-attempt", "wo-recovery"),
+    selectionLane: "recovery" as const,
+    recoveryBufferGeneration: "recovery-generation",
+  };
+  const fresh = Array.from({ length: 45 }, (_, index) => ({
+    ...event(`fresh-${index}`, `wo-fresh-${index}`),
+    selectionLane: "fresh" as const,
+  }));
+  resetQueueState([recovery, ...fresh]);
+  for (const item of [recovery, ...fresh]) {
+    ownerTokens.set(item.key, `owner-${item.key}`);
+  }
+
+  assert.deepEqual(
+    await processProtractorCallbackQueue({}, dispatch, {
+      ...queueOptions(),
+      limit: 45,
+    }),
+    { processed: 45, failed: 0 },
+    "one recovery candidate and forty-four fresh candidates fit the hard cap",
+  );
+  assert.equal(
+    dispatches.some((item) => item.key === recovery.key),
+    true,
+    "the reserved recovery candidate survives fair preselection and final ordering",
+  );
+  assert.equal(
+    dispatches.filter((item) => item.selectionLane === "fresh").length,
+    44,
+    "recovery reserves one slot without consuming the fresh batch",
+  );
+  assert.equal(
+    dispatches.some((item) => item.key === fresh.at(-1)?.key),
+    false,
+    "the hard maximum remains forty-five physical callback admissions",
+  );
+  assert.equal(
+    claims[0]?.key,
+    recovery.key,
+    "recovery is admitted before fresh work so it cannot age out at the deadline",
+  );
+  assert.equal(selectionCalls[0]?.[4], 270, "queue requests one bounded recovery lane");
+  assert.deepEqual(
+    recoveryAcks,
+    [{ key: recovery.key, generation: "recovery-generation" }],
+    "a recovery entry is acknowledged only after its durable attempt starts",
+  );
+}
+
+function runRecoveryBufferOrderAssertions(
+  selectFairCallbackBatch: (candidates: any[], limit: number) => { selected: any[] },
+): void {
+  const olderRejected = {
+    ...event("buffer-old", "same-shop-old"),
+    selectionLane: "recovery" as const,
+    recoveryBufferGeneration: "old-generation",
+    // This is the persisted order after an earlier unclaimed attempt rotated
+    // the old entry behind its peer.
+    recoveryBufferOrder: 1,
+  };
+  const nextPeer = {
+    ...event("buffer-next", "same-shop-next"),
+    selectionLane: "recovery" as const,
+    recoveryBufferGeneration: "next-generation",
+    recoveryBufferOrder: 0,
+  };
+  assert.equal(
+    selectFairCallbackBatch([olderRejected, nextPeer], 1).selected[0]?.key,
+    nextPeer.key,
+    "same-shop recovery rotation outranks receivedAt so a rejected claim cannot pin the slot",
+  );
+}
+
+async function runPreAdmissionDeadlineAssertions(
+  processProtractorCallbackQueue: (
+    db: any,
+    dispatch: (item: any) => Promise<any>,
+    options: any,
+  ) => Promise<{ processed: number; failed: number }>,
+): Promise<void> {
+  const assertUnclaimed = (key: string, label: string): void => {
+    assert.deepEqual(dispatches, [], `${label}: no dispatch`);
+    assert.deepEqual(claims, [], `${label}: no claim`);
+    assert.deepEqual(processedMarks, [], `${label}: no markProcessed`);
+    assert.deepEqual(processingStarts, [], `${label}: no processing attempt`);
+    assert.equal(attempts.get(key) ?? 0, 0, `${label}: no attempt charge`);
+    assert.deepEqual(releases, [], `${label}: no admission release`);
+    assert.deepEqual(completionCalls, [], `${label}: no completion`);
+    assert.deepEqual(served, [], `${label}: no served mutation`);
+  };
+
+  const lateAcquire = event(
+    "late-budget-acquire",
+    "wo-late-budget-acquire",
+    "DELETE",
+  );
+  (lateAcquire as any).recoveryBufferGeneration = "late-acquire-generation";
+  resetQueueState([lateAcquire]);
+  const lateAcquireDeadline = Date.now() + 10_000;
+  let lateAcquireEligibilityCalls = 0;
+
+  assert.deepEqual(
+    await processProtractorCallbackQueue({}, dispatch, {
+      ...queueOptions(),
+      deadlineAtMs: lateAcquireDeadline,
+      isShopEligible: async () => {
+        lateAcquireEligibilityCalls++;
+        return true;
+      },
+      acquireBudgetSlot: async () => {
+        clockOffsetMs += 10_001;
+        return true;
+      },
+    }),
+    { processed: 0, failed: 0 },
+    "late budget-slot wait exits at the absolute deadline",
+  );
+  assert.equal(
+    lateAcquireEligibilityCalls,
+    0,
+    "late budget-slot wait does not reach eligibility",
+  );
+  assertUnclaimed(lateAcquire.key, "late budget-slot wait");
+  assert.deepEqual(recoveryAcks, [], "pre-claim deadline retains recovery carry-over");
+  assert.equal(
+    timingRecords.some(
+      (record) => record.kind === "callback_batch_timing" &&
+        record.exitReason === "deadline",
+    ),
+    true,
+    "late budget-slot wait records a deadline exit",
+  );
+
+  const lateEligibility = event(
+    "late-eligibility",
+    "wo-late-eligibility",
+    "DELETE",
+  );
+  resetQueueState([lateEligibility]);
+  const lateEligibilityDeadline = Date.now() + 10_000;
+
+  assert.deepEqual(
+    await processProtractorCallbackQueue({}, dispatch, {
+      ...queueOptions(),
+      deadlineAtMs: lateEligibilityDeadline,
+      isShopEligible: async () => {
+        clockOffsetMs += 10_001;
+        return false;
+      },
+      acquireBudgetSlot: async () => true,
+    }),
+    { processed: 0, failed: 0 },
+    "late ineligible-shop wait exits at the absolute deadline",
+  );
+  assertUnclaimed(lateEligibility.key, "late eligibility wait");
+  assert.equal(
+    timingRecords.some(
+      (record) => record.kind === "callback_batch_timing" &&
+        record.exitReason === "deadline",
+    ),
+    true,
+    "late eligibility wait records a deadline exit",
+  );
+
+  const lateClaim = {
+    ...event("late-recovery-claim", "wo-late-recovery-claim"),
+    selectionLane: "recovery" as const,
+    recoveryBufferGeneration: "late-claim-generation",
+  };
+  resetQueueState([lateClaim]);
+  ownerTokens.set(lateClaim.key, "late-claim-owner");
+  claimAdvanceMs = 10_001;
+  assert.deepEqual(
+    await processProtractorCallbackQueue({}, dispatch, {
+      ...queueOptions(),
+      deadlineAtMs: Date.now() + 10_000,
+    }),
+    { processed: 0, failed: 0 },
+  );
+  assert.deepEqual(recoveryAcks, [], "a claim crossing the deadline must retain carry-over");
+  assert.deepEqual(processingStarts, [], "a late claim does not start an attempt");
+  assert.deepEqual(dispatches, [], "a late claim does not dispatch");
+  assert.deepEqual(releases, [{ key: lateClaim.key, ownerToken: "late-claim-owner" }],
+    "a late claim releases its ownership fence");
+}
+
+async function runDrainDeadlineAssertions(
+  processProtractorCallbackDrain: (
+    db: any,
+    options?: { budgetMs?: number },
+  ) => Promise<{ processed: number; failed: number }>,
+): Promise<void> {
+  const admission = event("default-admission", "wo-default-admission", "DELETE");
+  resetQueueState([admission]);
+  ownerTokens.set(admission.key, "owner-default-admission");
+
+  const defaultInvocationStartedAt = Date.now();
+  assert.deepEqual(
+    await processProtractorCallbackDrain(queueDb),
+    { processed: 1, failed: 0 },
+  );
+  const defaultDeadline = transportDeadlines[0];
+  assert.ok(defaultDeadline, "default drain passes an admission deadline to transport");
+  assert.ok(
+    defaultDeadline - defaultInvocationStartedAt >= 39_500 &&
+      defaultDeadline - defaultInvocationStartedAt < 41_000,
+    "default drain admission deadline stays near 40 seconds from invocation",
+  );
+  const defaultSelection = selectionCalls[0];
+  assert.equal(defaultSelection?.[1], 3, "drain keeps the callback max-attempt limit");
+  assert.equal(defaultSelection?.[2], 45, "drain keeps the bounded selection limit");
+
+  const extendedWindow = event("extended-window", "wo-extended-window", "DELETE");
+  resetQueueState([extendedWindow]);
+  ownerTokens.set(extendedWindow.key, "owner-extended-window");
+  drainSetupAdvanceMs = 20_000;
+  selectionAdvanceMs = 15_000;
+  assert.deepEqual(
+    await processProtractorCallbackDrain(undefined),
+    { processed: 1, failed: 0 },
+    "default drain can admit work after 30 seconds but before 40 seconds",
+  );
+  assert.deepEqual(processingStarts, [extendedWindow.key]);
+
+  const setupAndSelection = event(
+    "default-setup-selection-budget",
+    "wo-default-setup-selection-budget",
+    "DELETE",
+  );
+  resetQueueState([setupAndSelection]);
+  ownerTokens.set(setupAndSelection.key, "owner-default-setup-selection-budget");
+  drainSetupAdvanceMs = 20_000;
+  selectionAdvanceMs = 20_001;
+
+  assert.deepEqual(
+    await processProtractorCallbackDrain(undefined),
+    { processed: 0, failed: 0 },
+    "default drain charges database setup and selection against its invocation budget",
+  );
+  assert.deepEqual(dispatches, [], "an exhausted default budget admits no callback");
+  assert.deepEqual(processingStarts, [], "an exhausted default budget starts no callback");
+  assert.deepEqual(completionCalls, [], "an unadmitted callback has no completion");
+
+  const admitted = event("admitted-before-deadline", "wo-admitted-before-deadline", "DELETE");
+  const notAdmitted = event("after-deadline", "wo-after-deadline", "DELETE");
+  resetQueueState([admitted, notAdmitted]);
+  ownerTokens.set(admitted.key, "owner-admitted-before-deadline");
+  ownerTokens.set(notAdmitted.key, "owner-after-deadline");
+  dispatchClockAdvances.set(admitted.key, 40_001);
+  terminalApplications.length = 0;
+
+  assert.deepEqual(
+    await processProtractorCallbackDrain(queueDb),
+    { processed: 1, failed: 0 },
+    "admitted callback completion remains durable after the deadline",
+  );
+  assert.deepEqual(
+    processingStarts,
+    [admitted.key],
+    "deadline exhaustion stops the next dispatch",
+  );
+  assert.deepEqual(
+    terminalApplications.map(({ args }) => args.workOrderId),
+    [admitted.objectId],
+    "deadline exhaustion stops the next provider replay",
+  );
+  assert.deepEqual(
+    completionCalls.map((args) => args[0]),
+    [admitted.key],
+    "the callback admitted before exhaustion still completes",
+  );
+  assert.ok(
+    Date.now() >= transportDeadlines[0],
+    "the admitted completion runs after the admission deadline",
+  );
+
+  const explicit = event(
+    "explicit-relative-budget",
+    "wo-explicit-relative-budget",
+    "DELETE",
+  );
+  resetQueueState([explicit]);
+  ownerTokens.set(explicit.key, "owner-explicit-relative-budget");
+  drainSetupAdvanceMs = 20_000;
+  selectionAdvanceMs = 10_001;
+  const explicitInvocationStartedAt = Date.now();
+
+  assert.deepEqual(
+    await processProtractorCallbackDrain(undefined, { budgetMs: 60_000 }),
+    { processed: 1, failed: 0 },
+    "explicit 60-second drain budgets retain relative deadline semantics",
+  );
+  assert.ok(
+    transportDeadlines[0] - explicitInvocationStartedAt >= 89_000,
+    "explicit budget starts after setup and selection rather than invocation",
+  );
 }
 
 async function runDrainAssertions(
@@ -670,11 +1129,11 @@ async function runDrainAssertions(
   ]);
   vehicleReplayResults.set(vehicleMissingData.objectId!, [
     { ok: false, error: "missing data" },
-    { ok: true, vehicle: { VIN: "VEHICLE-REPLAYED-VIN" } },
+    { ok: true, vehicle: { VIN: "1HGCM82633A004352" } },
   ]);
   vehicleReplayResults.set(vehicleMissingVin.objectId!, [
     { ok: true, vehicle: { Make: "NoVin" } },
-    { ok: true, vehicle: { VIN: "VIN-REPLAYED" } },
+    { ok: true, vehicle: { VIN: "1M8GDM9AXKP042788" } },
   ]);
 
   resetQueueState([
@@ -694,11 +1153,13 @@ async function runDrainAssertions(
   vehicleFetches.length = 0;
   workOrderSnapshots.length = 0;
   normalizedWorkOrders.length = 0;
+  normalizedEnterpriseIds.length = 0;
   indexCalls.length = 0;
+  shopLookupCount = 0;
 
   assert.deepEqual(
     await processProtractorCallbackDrain(queueDb, { budgetMs: 60_000 }),
-    { processed: 3, failed: 2 },
+    { processed: 4, failed: 1 },
   );
 
   const outcomes = new Map(
@@ -713,11 +1174,14 @@ async function runDrainAssertions(
     reason: "open_work_order",
   });
   assert.deepEqual(outcomes.get(missingVin.key), {
-    category: "failed",
+    category: "deferred",
     reason: "missing_vin",
   });
   assert.equal(outcomes.has(vehicleMissingData.key), false, "missing vehicle data does not complete");
-  assert.equal(outcomes.has(vehicleMissingVin.key), false, "vehicle missing VIN does not complete");
+  assert.deepEqual(outcomes.get(vehicleMissingVin.key), {
+    category: "deferred",
+    reason: "missing_vin",
+  }, "provider-data blocks complete this generation without claiming application");
   assert.equal(terminalApplications.length, 1, "terminal DELETE uses terminal application");
   assert.deepEqual(terminalApplications[0].args, {
     shopId: 42,
@@ -733,39 +1197,111 @@ async function runDrainAssertions(
     vehicleFetches.sort(),
     ["vehicle-missing-data", "vehicle-missing-vin"],
   );
-  assert.equal(workOrderSnapshots.length, 2);
-  assert.equal(normalizedWorkOrders.length, 2);
+  assert.equal(workOrderSnapshots.length, 1);
+  assert.equal(normalizedWorkOrders.length, 1);
+  assert.equal(
+    workOrderSnapshots.some(({ workOrder }) => workOrder.ID === missingVin.objectId),
+    false,
+    "a malformed VIN is blocked before snapshot persistence",
+  );
+  assert.equal(
+    normalizedWorkOrders.some((workOrder) => workOrder.ID === missingVin.objectId),
+    false,
+    "a malformed VIN is blocked before normalized ingestion",
+  );
+  assert.equal(
+    normalizationTimingRecorders.length,
+    1,
+    "the drain passes one normalization recorder to each VIN-valid work-order normalization",
+  );
+  assert(
+    normalizationTimingRecorders.every(Boolean),
+    "normalization recorder ownership is runtime-visible, not source-only",
+  );
+  assert.equal(
+    normalizationTimingRecords.length,
+    1,
+    "normalization timing finalizes for every completed normalization path",
+  );
+  assert(
+    normalizationTimingRecords.every(
+      (record) => record.kind === "callback_normalization_timing" &&
+        record.outcome === "success",
+    ),
+    "successful callback normalizations emit finalized summaries",
+  );
+  assert.deepEqual(
+    normalizedEnterpriseIds,
+    ["enterprise-42"],
+    "normalization reuses enterprise metadata from the eligibility lookup",
+  );
+  assert.equal(
+    shopLookupCount,
+    5,
+    "each selected callback performs one eligibility lookup, not a second normalization lookup",
+  );
   assert.deepEqual(indexCalls, [], "failed and open branches do not claim indexed evidence");
   assert.deepEqual(
     new Map(callbackOutcomeWrites.map((write) => [write.key, write.outcome])),
     new Map([
       [vehicleMissingData.key, { category: "failed", reason: "dispatch_failed" }],
-      [vehicleMissingVin.key, { category: "failed", reason: "missing_vin" }],
     ]),
-    "failed replay outcomes stay pending with bounded evidence",
+    "true replay failures stay pending with bounded evidence",
   );
   assert.deepEqual(
     new Map(errors.map((entry) => [entry.key, entry.message])),
     new Map([
       [vehicleMissingData.key, "Vehicle callback replay failed: missing data"],
-      [vehicleMissingVin.key, "Callback replay failed: missing_vin"],
     ]),
   );
   assert.deepEqual(
     served.map(({ key }) => key).sort(),
-    [terminal.key, open.key, missingVin.key].sort(),
-    "historical noncritical failure completion still marks work served",
+    [terminal.key, open.key, missingVin.key, vehicleMissingVin.key].sort(),
+    "data-blocked generations complete with explicit non-application evidence",
   );
 
-  resetQueueState([vehicleMissingData, vehicleMissingVin]);
+  const normalizationFailure = event(
+    "normalization-failure",
+    "wo-normalization-failure",
+    "Update",
+  );
+  resetQueueState([normalizationFailure]);
+  ownerTokens.set(normalizationFailure.key, "owner-normalization-failure");
+  workOrderReplayResults.set(normalizationFailure.objectId!, [{
+    ok: true,
+    workOrder: {
+      ID: normalizationFailure.objectId,
+      WorkflowStage: "CLOSED",
+      Completed: true,
+        ServiceItem: { VIN: "1G1JC5244R7252367" },
+    },
+  }]);
+  normalizationThrows.add(normalizationFailure.objectId!);
+  assert.deepEqual(
+    await processProtractorCallbackDrain(queueDb, { budgetMs: 60_000 }),
+    { processed: 1, failed: 0 },
+    "normalization exceptions remain isolated from callback completion",
+  );
+  normalizationThrows.delete(normalizationFailure.objectId!);
+  assert.equal(normalizationTimingRecords.length, 1);
+  assert.equal(normalizationTimingRecords[0]?.outcome, "failed");
+
+  const correctedVehicleCallback = {
+    ...vehicleMissingVin,
+    key: `${vehicleMissingVin.key}-corrected`,
+    receivedAt: new Date(vehicleMissingVin.receivedAt!.getTime() + 1),
+  };
+  resetQueueState([vehicleMissingData, correctedVehicleCallback]);
   ownerTokens.set(vehicleMissingData.key, "owner-vehicle-missing-data-replay");
-  ownerTokens.set(vehicleMissingVin.key, "owner-vehicle-missing-vin-replay");
+  ownerTokens.set(correctedVehicleCallback.key, "owner-vehicle-missing-vin-replay");
   terminalApplications.length = 0;
   workOrderFetches.length = 0;
   vehicleFetches.length = 0;
   workOrderSnapshots.length = 0;
   normalizedWorkOrders.length = 0;
+  normalizedEnterpriseIds.length = 0;
   indexCalls.length = 0;
+  shopLookupCount = 0;
 
   assert.deepEqual(
     await processProtractorCallbackDrain(queueDb, { budgetMs: 60_000 }),
@@ -779,23 +1315,25 @@ async function runDrainAssertions(
     category: "terminal_no_history",
     reason: "vehicle_snapshot",
   });
-  assert.deepEqual(replayOutcomes.get(vehicleMissingVin.key), {
+  assert.deepEqual(replayOutcomes.get(correctedVehicleCallback.key), {
     category: "terminal_no_history",
     reason: "vehicle_snapshot",
   });
   assert.equal(workOrderSnapshots.length, 0);
   assert.equal(normalizedWorkOrders.length, 0);
+  assert.deepEqual(normalizedEnterpriseIds, []);
   assert.deepEqual(indexCalls, []);
   assert.deepEqual(
     vehicleFetches.sort(),
     ["vehicle-missing-data", "vehicle-missing-vin"],
   );
+  assert.equal(shopLookupCount, 2, "replay retries still perform one eligibility lookup per callback");
   assert.deepEqual(callbackOutcomeWrites, []);
   assert.deepEqual(callbackDeferralWrites, []);
   assert.deepEqual(errors, []);
   assert.deepEqual(
     served.map(({ key }) => key).sort(),
-    [vehicleMissingData.key, vehicleMissingVin.key].sort(),
+    [vehicleMissingData.key, correctedVehicleCallback.key].sort(),
   );
 }
 
@@ -930,17 +1468,25 @@ async function runTerminalPostAssertions(
 }
 
 async function main(): Promise<void> {
-  const { processProtractorCallbackQueue } = await import(
+  const { processProtractorCallbackQueue, selectFairCallbackBatch } = await import(
     "../lib/integrations/protractor/callback-queue"
   );
   const { processProtractorCallbackDrain } = await import(
     "../lib/integrations/protractor/callback-drain"
   );
 
-  await runQueueAssertions(processProtractorCallbackQueue);
-  await runDrainAssertions(processProtractorCallbackDrain);
-  await runTerminalPostAssertions(processProtractorCallbackDrain);
-  Date.now = originalDateNow;
+  try {
+    await runQueueAssertions(processProtractorCallbackQueue);
+    await runRecoveryLaneAssertions(processProtractorCallbackQueue);
+    runRecoveryBufferOrderAssertions(selectFairCallbackBatch);
+    await runPreAdmissionDeadlineAssertions(processProtractorCallbackQueue);
+    await runDrainDeadlineAssertions(processProtractorCallbackDrain);
+    await runDrainAssertions(processProtractorCallbackDrain);
+    await runTerminalPostAssertions(processProtractorCallbackDrain);
+  } finally {
+    Date.now = originalDateNow;
+    console.info = originalConsoleInfo;
+  }
   console.log("protractor callback queue runtime: all checks passed");
 }
 

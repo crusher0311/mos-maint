@@ -29,7 +29,10 @@ import {
   createSoftDelete,
   INormalizedAdapter,
 } from './normalized-adapter';
-import { updateRepairPattern } from '@/lib/repair-patterns';
+import {
+  updateRepairPattern,
+  updateRepairPatternsForIngestion,
+} from '@/lib/repair-patterns';
 import pLimit from 'p-limit';
 import { SupabaseDualWriter } from '@/lib/supabase-dual-writer';
 import { shouldShadowWriteMongo } from './normalized-write-mode';
@@ -41,6 +44,11 @@ import {
   type AuditProvider,
   type AuditReceiptSource,
 } from '@/lib/estimate-assist/audit-automation';
+import {
+  normalizationWriteTimingOperation,
+  type NormalizationTimingOperation,
+  type NormalizationTimingRecorder,
+} from './normalization-timing';
 
 // Bounded concurrency for per-entity child writes during work-order
 // ingestion (task #946). High enough to collapse the serial round-trip
@@ -93,6 +101,12 @@ export interface IngestionOptions {
    * TEKMETRIC_5K_SCALING_PLAN.md (Step 2 Phase B).
    */
   ingestionVia?: string;
+  /**
+   * Explicitly opt this service into the bounded callback-normalization
+   * timing summary.  Production callers other than the Protractor callback
+   * drain leave this unset, so their processing and telemetry are unchanged.
+   */
+  callbackNormalizationTiming?: NormalizationTimingRecorder;
 }
 
 /**
@@ -200,6 +214,29 @@ export class NormalizedIngestionService {
       }
     }
   }
+
+  /**
+   * Keep timing completely outside ingestion semantics.  The recorder itself
+   * is supplied only by the Protractor callback drain; when absent this is
+   * exactly the original await.  The pure recorder catches clock/logger
+   * failures and rethrows only the wrapped operation's own error.
+   */
+  private async timed<T>(
+    operation: NormalizationTimingOperation,
+    work: () => Promise<T>,
+    outcomeForResult?: (value: T) => 'success' | 'failed' | 'skipped',
+  ): Promise<T> {
+    const timing = this.options.callbackNormalizationTiming;
+    if (!timing) return work();
+    return timing.measure(operation, work, outcomeForResult);
+  }
+
+  private writeTimingOperation(
+    entityType: string,
+    kind: 'canonical' | 'mirror',
+  ): NormalizationTimingOperation {
+    return normalizationWriteTimingOperation(entityType, kind);
+  }
   
   // ---------------------------------------------------------------------------
   // HELPER: Sanitize raw payload for MongoDB storage
@@ -245,9 +282,21 @@ export class NormalizedIngestionService {
       // code is correct before AND after WRITE_MONGO_NORMALIZED=0.
       const existing =
         (this.supabaseDualWriter
-          ? await this.supabaseDualWriter.findVehicleByNaturalKey(this.shopId, mapped.vin, sourceIds[0])
+          ? await this.timed(
+            'vehicle_pg_natural_key_read',
+            () => this.supabaseDualWriter!.findVehicleByNaturalKey(
+              this.shopId,
+              mapped.vin,
+              sourceIds[0],
+            ),
+          )
           : null) ??
-        (shouldShadowWriteMongo() ? await collection.findOne(existingQuery) : null);
+        (shouldShadowWriteMongo()
+          ? await this.timed(
+            'vehicle_mongo_natural_key_read',
+            () => collection.findOne(existingQuery),
+          )
+          : null);
       
       const contentHash = generateContentHash(mapped);
       
@@ -372,9 +421,20 @@ export class NormalizedIngestionService {
       // only while shadow writes are on.
       const existing =
         (this.supabaseDualWriter
-          ? await this.supabaseDualWriter.findCustomerByNaturalKey(this.shopId, sourceIds[0])
+          ? await this.timed(
+            'customer_pg_natural_key_read',
+            () => this.supabaseDualWriter!.findCustomerByNaturalKey(
+              this.shopId,
+              sourceIds[0],
+            ),
+          )
           : null) ??
-        (shouldShadowWriteMongo() ? await collection.findOne(existingQuery) : null);
+        (shouldShadowWriteMongo()
+          ? await this.timed(
+            'customer_mongo_natural_key_read',
+            () => collection.findOne(existingQuery),
+          )
+          : null);
       
       const contentHash = generateContentHash(mapped);
       
@@ -512,7 +572,10 @@ export class NormalizedIngestionService {
       const vehicleData = this.adapter.extractVehicleFromWorkOrder(sourceData);
       let vehicleId: string | undefined;
       if (vehicleData) {
-        const vehicleResult = await this.ingestVehicle(sourceData);
+        const vehicleResult = await this.timed(
+          'vehicle_resolution',
+          () => this.ingestVehicle(sourceData),
+        );
         if (vehicleResult.success && vehicleResult.entityId) {
           vehicleId = vehicleResult.entityId;
         }
@@ -521,7 +584,10 @@ export class NormalizedIngestionService {
       const customerData = this.adapter.extractCustomerFromWorkOrder(sourceData);
       let customerId: string | undefined;
       if (customerData) {
-        const customerResult = await this.ingestCustomer(sourceData);
+        const customerResult = await this.timed(
+          'customer_resolution',
+          () => this.ingestCustomer(sourceData),
+        );
         if (customerResult.success && customerResult.entityId) {
           customerId = customerResult.entityId;
         }
@@ -533,6 +599,17 @@ export class NormalizedIngestionService {
         shopId: this.shopId,
         'provenance.sourceIds': { $elemMatch: sourceIds[0] },
       };
+      if (
+        this.adapter.sourceSystem === 'protractor' &&
+        this.options.ingestionVia === 'webhook-queue-replay' &&
+        typeof sourceIds[0]?.idValue === 'string' &&
+        sourceIds[0].idValue.length > 0
+      ) {
+        // Expose the indexed leaf without weakening the full same-element
+        // identity match above. Do not require provenance.sourceSystem:
+        // legacy rows can omit it. No hint ties this path to an index name.
+        existingQuery['provenance.sourceIds.idValue'] = sourceIds[0].idValue;
+      }
       
       // task #552 (W3a cutover): PG-canonical change-detection, Mongo fallback
       // only while shadow writes are on.
@@ -545,9 +622,21 @@ export class NormalizedIngestionService {
           : (sourceIds[0]?.idValue != null ? String(sourceIds[0].idValue) : null);
       const existing =
         (this.supabaseDualWriter
-          ? await this.supabaseDualWriter.findWorkOrderByNaturalKey(this.shopId, sourceIds[0], woNumberKey)
+          ? await this.timed(
+            'work_order_pg_natural_key_read',
+            () => this.supabaseDualWriter!.findWorkOrderByNaturalKey(
+              this.shopId,
+              sourceIds[0],
+              woNumberKey,
+            ),
+          )
           : null) ??
-        (shouldShadowWriteMongo() ? await collection.findOne(existingQuery) : null);
+        (shouldShadowWriteMongo()
+          ? await this.timed(
+            'work_order_mongo_natural_key_read',
+            () => collection.findOne(existingQuery),
+          )
+          : null);
       
       const contentHash = generateContentHash(mapped);
       
@@ -758,9 +847,20 @@ export class NormalizedIngestionService {
       // only while shadow writes are on.
       const existing =
         (this.supabaseDualWriter
-          ? await this.supabaseDualWriter.findServiceJobByNaturalKey(workOrderId, sourceId)
+          ? await this.timed(
+            'service_job_pg_natural_key_read',
+            () => this.supabaseDualWriter!.findServiceJobByNaturalKey(
+              workOrderId,
+              sourceId,
+            ),
+          )
           : null) ??
-        (shouldShadowWriteMongo() ? await collection.findOne(existingQuery) : null);
+        (shouldShadowWriteMongo()
+          ? await this.timed(
+            'service_job_mongo_natural_key_read',
+            () => collection.findOne(existingQuery),
+          )
+          : null);
       
       const contentHash = generateContentHash(mapped);
       const sourceIds = [{
@@ -929,9 +1029,20 @@ export class NormalizedIngestionService {
       // only while shadow writes are on.
       const existing =
         (this.supabaseDualWriter
-          ? await this.supabaseDualWriter.findLineItemByNaturalKey(serviceJobId, sourceId)
+          ? await this.timed(
+            'line_item_pg_natural_key_read',
+            () => this.supabaseDualWriter!.findLineItemByNaturalKey(
+              serviceJobId,
+              sourceId,
+            ),
+          )
           : null) ??
-        (shouldShadowWriteMongo() ? await collection.findOne(existingQuery) : null);
+        (shouldShadowWriteMongo()
+          ? await this.timed(
+            'line_item_mongo_natural_key_read',
+            () => collection.findOne(existingQuery),
+          )
+          : null);
 
       const contentHash = generateContentHash(mapped);
 
@@ -1056,9 +1167,20 @@ export class NormalizedIngestionService {
       // only while shadow writes are on.
       const existing =
         (this.supabaseDualWriter
-          ? await this.supabaseDualWriter.findPaymentByNaturalKey(workOrderId, sourceId)
+          ? await this.timed(
+            'payment_pg_natural_key_read',
+            () => this.supabaseDualWriter!.findPaymentByNaturalKey(
+              workOrderId,
+              sourceId,
+            ),
+          )
           : null) ??
-        (shouldShadowWriteMongo() ? await collection.findOne(existingQuery) : null);
+        (shouldShadowWriteMongo()
+          ? await this.timed(
+            'payment_mongo_natural_key_read',
+            () => collection.findOne(existingQuery),
+          )
+          : null);
       
       const contentHash = generateContentHash(mapped);
       
@@ -1372,7 +1494,10 @@ export class NormalizedIngestionService {
     inspections: IngestionResult[];
     recommendations: IngestionResult[];
   }> {
-    const workOrderResult = await this.ingestWorkOrder(sourceData);
+    const workOrderResult = await this.timed(
+      'work_order_resolution',
+      () => this.ingestWorkOrder(sourceData),
+    );
     
     const serviceJobs: IngestionResult[] = [];
     const lineItems: IngestionResult[] = [];
@@ -1389,7 +1514,14 @@ export class NormalizedIngestionService {
       const vehicleData = this.adapter.extractVehicleFromWorkOrder(sourceData);
       let vehicleId = '';
       if (vehicleData?.vin && this.supabaseDualWriter) {
-        const pgVehicle = await this.supabaseDualWriter.findVehicleByNaturalKey(this.shopId, vehicleData.vin, undefined);
+        const pgVehicle = await this.timed(
+          'post_parent_vehicle_fk_pg_read',
+          () => this.supabaseDualWriter!.findVehicleByNaturalKey(
+            this.shopId,
+            vehicleData.vin,
+            undefined,
+          ),
+        );
         if (pgVehicle?._id) vehicleId = String(pgVehicle._id);
       }
       if (!vehicleId && shouldShadowWriteMongo()) {
@@ -1397,7 +1529,10 @@ export class NormalizedIngestionService {
         if (vehicleData?.vin) {
           vehicleQuery.vin = vehicleData.vin;
         }
-        const vehicleDoc = await this.db.collection(NORMALIZED_COLLECTIONS.vehicles).findOne(vehicleQuery);
+        const vehicleDoc = await this.timed(
+          'post_parent_vehicle_fk_mongo_read',
+          () => this.db.collection(NORMALIZED_COLLECTIONS.vehicles).findOne(vehicleQuery),
+        );
         if (vehicleDoc?._id) vehicleId = String(vehicleDoc._id);
       }
 
@@ -1430,9 +1565,18 @@ export class NormalizedIngestionService {
       const recommendationData = this.adapter.extractRecommendationsFromWorkOrder(sourceData);
       const limit = pLimit(INGESTION_WRITE_CONCURRENCY);
       const [payResults, inspResults, recResults] = await Promise.all([
-        Promise.all(paymentData.map((payment: any) => limit(() => this.ingestPayment(workOrderId, payment)))),
-        Promise.all(inspectionData.map((inspection: any) => limit(() => this.ingestInspection(workOrderId, vehicleId, inspection)))),
-        Promise.all(recommendationData.map((rec: any) => limit(() => this.ingestRecommendation(vehicleId, rec, workOrderId)))),
+        Promise.all(paymentData.map((payment: any) => limit(() => this.timed(
+          'payment',
+          () => this.ingestPayment(workOrderId, payment),
+        )))),
+        Promise.all(inspectionData.map((inspection: any) => limit(() => this.timed(
+          'inspection',
+          () => this.ingestInspection(workOrderId, vehicleId, inspection),
+        )))),
+        Promise.all(recommendationData.map((rec: any) => limit(() => this.timed(
+          'recommendation',
+          () => this.ingestRecommendation(vehicleId, rec, workOrderId),
+        )))),
       ]);
       payments.push(...payResults);
       inspections.push(...inspResults);
@@ -1529,7 +1673,10 @@ export class NormalizedIngestionService {
     await Promise.all(
       rawServiceJobs.map((rawJob, jobIdx) =>
         jobLimit(async () => {
-          const sjResult = await this.ingestServiceJob(workOrderId, rawJob);
+          const sjResult = await this.timed(
+            'service_job',
+            () => this.ingestServiceJob(workOrderId, rawJob),
+          );
           serviceJobs[jobIdx] = sjResult;
           if (sjResult.success && sjResult.entityId) {
             const rawLines = this.adapter.extractLineItemsFromServiceJob(rawJob);
@@ -1538,7 +1685,10 @@ export class NormalizedIngestionService {
             const lineResults: IngestionResult[] = new Array(rawLines.length);
             await Promise.all(
               rawLines.map((rawLine: any, lineIdx: number) =>
-                lineLimit(() => this.ingestLineItem(workOrderId, sjResult.entityId!, rawLine)).then(
+                lineLimit(() => this.timed(
+                  'line_item',
+                  () => this.ingestLineItem(workOrderId, sjResult.entityId!, rawLine),
+                )).then(
                   (r) => {
                     lineResults[lineIdx] = r;
                   },
@@ -1591,7 +1741,10 @@ export class NormalizedIngestionService {
       (wo) => this.adapter.extractVehicleFromWorkOrder(wo)?.vin,
     );
     try {
-      this._acesBatchCache = await enrichVinsWithAcesAllVins(batchVins);
+      this._acesBatchCache = await this.timed(
+        'aces_decode',
+        () => enrichVinsWithAcesAllVins(batchVins),
+      );
     } catch (err) {
       console.warn(
         `[ingest] Bulk ACES prefetch failed for shop ${this.shopId} ` +
@@ -1732,7 +1885,10 @@ export class NormalizedIngestionService {
     // cache null and keep the direct per-VIN lookup.
     const aces = this._acesBatchCache
       ? (vehicle?.vin ? this._acesBatchCache.get(vehicle.vin) ?? null : null)
-      : await enrichVinWithAces(vehicle?.vin);
+      : await this.timed(
+        'aces_decode',
+        () => enrichVinWithAces(vehicle?.vin),
+      );
 
     // Task #382 — Build per-service-job line arrays with PCDB / PartsTech
     // IDs attached to each part line. Only applies to Tekmetric and Shop-Ware
@@ -1756,12 +1912,15 @@ export class NormalizedIngestionService {
         total: job.total,
       });
       
-      const existing = await jobIndexCollection.findOne({
-        shopId: this.shopId,
-        sourceSystem: this.adapter.sourceSystem,
-        workOrderId: String(workOrderId),
-        title: job.title,
-      });
+      const existing = await this.timed(
+        'job_index_lookup',
+        () => jobIndexCollection.findOne({
+          shopId: this.shopId,
+          sourceSystem: this.adapter.sourceSystem,
+          workOrderId: String(workOrderId),
+          title: job.title,
+        }),
+      );
       
       if (existing && existing.contentHash === contentHash) {
         continue;
@@ -1824,15 +1983,21 @@ export class NormalizedIngestionService {
       };
       
       if (existing) {
-        await jobIndexCollection.updateOne(
-          { _id: existing._id },
-          { $set: jobIndexEntry }
+        await this.timed(
+          'job_index_write',
+          () => jobIndexCollection.updateOne(
+            { _id: existing._id },
+            { $set: jobIndexEntry },
+          ).then(() => undefined),
         );
       } else {
-        await jobIndexCollection.insertOne({
-          ...jobIndexEntry,
-          createdAt: new Date(),
-        });
+        await this.timed(
+          'job_index_write',
+          () => jobIndexCollection.insertOne({
+            ...jobIndexEntry,
+            createdAt: new Date(),
+          }).then(() => undefined),
+        );
       }
     }
   }
@@ -1977,6 +2142,22 @@ export class NormalizedIngestionService {
                        sourceData.postedDate || sourceData.completedDate;
     const performedDate = closedDate ? new Date(closedDate) : new Date();
     
+    const repairPatternJobs: Array<{
+      shopId: number;
+      enterpriseId?: string;
+      year: number;
+      make: string;
+      model: string;
+      mileage: number;
+      jobTitle: string;
+      laborAmount: number;
+      partsAmount: number;
+      totalAmount: number;
+      laborHours: number;
+      vin?: string;
+      performedDate: Date;
+    }> = [];
+
     for (const job of serviceJobs) {
       if (!job.title || job.title.length < 3) continue;
       
@@ -1986,26 +2167,65 @@ export class NormalizedIngestionService {
         continue;
       }
       
-      try {
-        await updateRepairPattern({
-          shopId: this.shopId,
-          enterpriseId: this.enterpriseId,
-          year: vehicle.year,
-          make: vehicle.make,
-          model: vehicle.model,
-          mileage,
-          jobTitle: job.title,
-          laborAmount: job.laborTotal || 0,
-          partsAmount: job.partsTotal || 0,
-          totalAmount: job.total || 0,
-          laborHours: job.laborHoursBilled || job.laborHoursActual || 0,
-          vin: vehicle.vin,
-          performedDate,
-        });
-      } catch (err) {
-        // Log but don't fail the main ingestion
-        console.error('Failed to update repair pattern:', err);
-      }
+      repairPatternJobs.push({
+        shopId: this.shopId,
+        enterpriseId: this.enterpriseId,
+        year: vehicle.year,
+        make: vehicle.make,
+        model: vehicle.model,
+        mileage,
+        jobTitle: job.title,
+        laborAmount: job.laborTotal || 0,
+        partsAmount: job.partsTotal || 0,
+        totalAmount: job.total || 0,
+        laborHours: job.laborHoursBilled || job.laborHoursActual || 0,
+        vin: vehicle.vin,
+        performedDate,
+      });
+    }
+
+    if (repairPatternJobs.length === 0) return;
+
+    const useIngestionBatch =
+      this.options.ingestionVia === 'webhook-queue-replay' &&
+      this.adapter.sourceSystem === 'protractor';
+
+    if (useIngestionBatch) {
+      await this.timed(
+        'repair_patterns',
+        async () => {
+          try {
+            const processed = await updateRepairPatternsForIngestion(repairPatternJobs);
+            // A partial batch is useful evidence even though the existing
+            // ingestion behavior treats each pattern failure as non-fatal.
+            return processed === repairPatternJobs.length;
+          } catch (err) {
+            // Keep the callback replay non-fatal if batching itself fails
+            // before the helper can isolate a key.
+            console.error('Failed to update repair patterns:', 1);
+            return false;
+          }
+        },
+      );
+      return;
+    }
+
+    // Preserve the existing per-job behavior for every provider and every
+    // non-replay path. The optimization is intentionally opt-in to the
+    // Protractor callback replay only.
+    for (const repairPatternJob of repairPatternJobs) {
+      await this.timed(
+        'repair_patterns',
+        async () => {
+          try {
+            await updateRepairPattern(repairPatternJob);
+            return true;
+          } catch (err) {
+            console.error('Failed to update repair pattern:', 1);
+            return false;
+          }
+        },
+      );
     }
   }
 
@@ -2059,39 +2279,44 @@ export class NormalizedIngestionService {
     action: string,
     upsertFn: () => Promise<void>
   ): Promise<void> {
-    if (!this.supabaseDualWriter) {
-      throw new Error(
-        `[PgCanonical] writer not initialized — cannot persist ${entityType} ${entityId} (shop ${this.shopId})`
-      );
-    }
-    try {
-      await upsertFn();
-      // Task #460: per-chunk PG write fan-out. AsyncLocalStorage-scoped,
-      // so it only counts when the call chain originated inside a
-      // `withChunkWriteCounters` wrapper (i.e. the backfill chunk path).
-      // Live/webhook ingestion paths are unaffected.
-      bumpPgWrites();
-    } catch (err) {
-      const e = err as any;
-      const cause = e?.cause as any;
-      const pgCode = e?.code ?? cause?.code ?? null;
-      const pgDetail = e?.detail ?? cause?.detail ?? null;
-      const pgConstraint = e?.constraint ?? cause?.constraint ?? null;
-      const pgColumn = e?.column ?? cause?.column ?? null;
-      const pgTable = e?.table ?? cause?.table ?? null;
-      const pgHint = e?.hint ?? cause?.hint ?? null;
-      const causeMessage = cause?.message ?? null;
-      const baseMessage = err instanceof Error ? err.message : String(err);
-      console.error(
-        `[PgCanonical] Postgres write failed — entity: ${entityType}, id: ${entityId}, action: ${action}, shop: ${this.shopId}, ` +
-        `pgCode: ${pgCode}, pgConstraint: ${pgConstraint}, pgColumn: ${pgColumn}, pgTable: ${pgTable}, ` +
-        `pgDetail: ${pgDetail ? String(pgDetail).slice(0, 500) : null}, ` +
-        `pgHint: ${pgHint ? String(pgHint).slice(0, 200) : null}, ` +
-        `causeMessage: ${causeMessage ? String(causeMessage).slice(0, 300) : null}, ` +
-        `error: ${baseMessage}`
-      );
-      throw err;
-    }
+    await this.timed(
+      this.writeTimingOperation(entityType, 'canonical'),
+      async () => {
+        if (!this.supabaseDualWriter) {
+          throw new Error(
+            `[PgCanonical] writer not initialized — cannot persist ${entityType} ${entityId} (shop ${this.shopId})`
+          );
+        }
+        try {
+          await upsertFn();
+          // Task #460: per-chunk PG write fan-out. AsyncLocalStorage-scoped,
+          // so it only counts when the call chain originated inside a
+          // `withChunkWriteCounters` wrapper (i.e. the backfill chunk path).
+          // Live/webhook ingestion paths are unaffected.
+          bumpPgWrites();
+        } catch (err) {
+          const e = err as any;
+          const cause = e?.cause as any;
+          const pgCode = e?.code ?? cause?.code ?? null;
+          const pgDetail = e?.detail ?? cause?.detail ?? null;
+          const pgConstraint = e?.constraint ?? cause?.constraint ?? null;
+          const pgColumn = e?.column ?? cause?.column ?? null;
+          const pgTable = e?.table ?? cause?.table ?? null;
+          const pgHint = e?.hint ?? cause?.hint ?? null;
+          const causeMessage = cause?.message ?? null;
+          const baseMessage = err instanceof Error ? err.message : String(err);
+          console.error(
+            `[PgCanonical] Postgres write failed — entity: ${entityType}, id: ${entityId}, action: ${action}, shop: ${this.shopId}, ` +
+            `pgCode: ${pgCode}, pgConstraint: ${pgConstraint}, pgColumn: ${pgColumn}, pgTable: ${pgTable}, ` +
+            `pgDetail: ${pgDetail ? String(pgDetail).slice(0, 500) : null}, ` +
+            `pgHint: ${pgHint ? String(pgHint).slice(0, 200) : null}, ` +
+            `causeMessage: ${causeMessage ? String(causeMessage).slice(0, 300) : null}, ` +
+            `error: ${baseMessage}`
+          );
+          throw err;
+        }
+      },
+    );
   }
 
   /**
@@ -2111,16 +2336,25 @@ export class NormalizedIngestionService {
     fn: () => Promise<unknown>
   ): Promise<void> {
     if (!shouldShadowWriteMongo()) return;
-    try {
-      await fn();
-      // Task #460: per-chunk Mongo shadow-write fan-out (see PG sibling above).
-      bumpMongoWrites();
-    } catch (err) {
-      const baseMessage = err instanceof Error ? err.message : String(err);
-      console.error(
-        `[ShadowMongo] write failed (non-fatal) — entity: ${entityType}, shop: ${this.shopId}, error: ${baseMessage}`
-      );
-    }
+    await this.timed(
+      this.writeTimingOperation(entityType, 'mirror'),
+      async () => {
+        try {
+          await fn();
+          // Task #460: per-chunk Mongo shadow-write fan-out (see PG sibling above).
+          bumpMongoWrites();
+          return true;
+        } catch (err) {
+          const baseMessage = err instanceof Error ? err.message : String(err);
+          console.error(
+            `[ShadowMongo] write failed (non-fatal) — entity: ${entityType}, shop: ${this.shopId}, error: ${baseMessage}`
+          );
+          // Preserve the existing non-fatal mirror behavior, while allowing
+          // the opted-in timing summary to count a swallowed failure.
+          return false;
+        }
+      },
+    );
   }
   
   private mergeSourceIds(existing: any[], incoming: any[]): any[] {
@@ -2149,25 +2383,35 @@ export class NormalizedIngestionService {
   private async _stampIngestionVia(workOrderId: string): Promise<void> {
     const via = this.options.ingestionVia;
     if (!via) return;
-    try {
-      const collection = this.db.collection(NORMALIZED_COLLECTIONS.workOrders);
-      const now = new Date();
-      // Two writes (rather than one with $setOnInsert) because we're not
-      // upserting — we're updating an already-inserted/updated row, so
-      // $setOnInsert wouldn't fire. The first updateOne is "set if missing"
-      // (immutable first-writer attribution); the second is unconditional
-      // (always-fresh diagnostic).
-      await collection.updateOne(
-        { _id: workOrderId as any, firstIngestedVia: { $exists: false } },
-        { $set: { firstIngestedVia: via, firstIngestedAt: now } }
-      );
-      await collection.updateOne(
-        { _id: workOrderId as any },
-        { $set: { lastIngestedVia: via, lastIngestedAt: now } }
-      );
-    } catch (err: any) {
-      console.log(`[NIS] _stampIngestionVia(${workOrderId}, ${via}) failed: ${err?.message}`);
-    }
+    await this.timed(
+      'ingestion_stamp',
+      async () => {
+        try {
+          const collection = this.db.collection(NORMALIZED_COLLECTIONS.workOrders);
+          const now = new Date();
+          // Two writes (rather than one with $setOnInsert) because we're not
+          // upserting — we're updating an already-inserted/updated row, so
+          // $setOnInsert wouldn't fire. The first updateOne is "set if missing"
+          // (immutable first-writer attribution); the second is unconditional
+          // (always-fresh diagnostic).
+          await collection.updateOne(
+            { _id: workOrderId as any, firstIngestedVia: { $exists: false } },
+            { $set: { firstIngestedVia: via, firstIngestedAt: now } }
+          );
+          await collection.updateOne(
+            { _id: workOrderId as any },
+            { $set: { lastIngestedVia: via, lastIngestedAt: now } }
+          );
+          return true;
+        } catch (err: any) {
+          console.log(`[NIS] _stampIngestionVia(${workOrderId}, ${via}) failed: ${err?.message}`);
+          // The stamp has always been non-fatal. Returning false preserves
+          // that behavior while counting the swallowed failure when timing is
+          // explicitly enabled.
+          return false;
+        }
+      },
+    );
   }
 
   private async createAuditEntry(
@@ -2201,7 +2445,10 @@ export class NormalizedIngestionService {
       },
     };
     
-    await auditCollection.insertOne(entry);
+    await this.timed(
+      'audit_write',
+      () => auditCollection.insertOne(entry).then(() => undefined),
+    );
   }
 }
 

@@ -1,0 +1,23 @@
+PS C:\Users\brand> Select-String -Path (Get-PSReadLineOption).HistorySavePath -Pattern 'ssh '
+
+AppData\Roaming\Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt:295:ssh brandoncrusha@192.168.0.119
+AppData\Roaming\Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt:297:ssh brandoncrusha@192.168.0.119
+AppData\Roaming\Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt:298:ssh pi@printbridge.local
+AppData\Roaming\Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt:299:ssh pi@pi.local
+AppData\Roaming\Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt:300:ssh pi@raspberrypi.local
+AppData\Roaming\Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt:301:ssh pi@192.168.1.119
+AppData\Roaming\Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt:303:ssh pi@raspberrypi.local
+AppData\Roaming\Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt:318:ssh ubuntu@3.12.16.245
+AppData\Roaming\Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt:319:ssh -i
+"C:\Users\brand\Downloads\servicesolution (2).pem" ubuntu@3.12.16.245
+AppData\Roaming\Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt:323:ssh -i
+"C:\Users\brand\Downloads\servicesolution (2).pem" ubuntu@3.12.16.245
+AppData\Roaming\Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt:328:ssh -i
+"C:\Users\brand\Downloads\servicesolution (2).pem" ubuntu@3.12.16.245
+AppData\Roaming\Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt:330:ssh -i
+"C:\Users\brand\Downloads\servicesolution (2).pem" ubuntu@3.12.16.245
+AppData\Roaming\Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt:458:ssh pi@<192.168.0.119>
+AppData\Roaming\Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt:459:ssh pi@192.168.0.119
+AppData\Roaming\Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt:460:ssh pi@192.168.0.119
+AppData\Roaming\Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt:12418:Select-String -Path
+(Get-PSReadLineOption).HistorySavePath -Pattern 'ssh '

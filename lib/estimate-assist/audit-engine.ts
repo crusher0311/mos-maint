@@ -65,6 +65,21 @@ export interface AuditVehicleMetadata {
   model?: string;
 }
 
+/**
+ * Vehicle identity captured at audit time.  This is deliberately metadata
+ * only: audit rules must continue to operate on line items and may not use
+ * these fields to change their findings.
+ *
+ * The property is optional so audits saved before recommendation resolution
+ * was introduced remain readable.
+ */
+export interface AuditVehicleMetadata {
+  vin?: string;
+  year?: number;
+  make?: string;
+  model?: string;
+}
+
 export interface AuditReport {
   workOrderId?: string;
   workOrderNumber?: string;

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getDb } from "@/lib/mongo";
+import { readShopProtractorCredentials } from "@/lib/integrations/protractor/shop-eligibility";
 
 export async function GET() {
   try {
@@ -29,7 +30,9 @@ export async function GET() {
       $or: [{ _id: user.shopId }, { shopId: user.shopId }]
     });
 
-    const hasProtractor = !!(shop?.protractor?.baseUrl && shop?.protractor?.apiKey);
+    // Match the same shop-owned, provider-aware credentials used by the
+    // Protractor settings status; a disconnected shop is not integrated.
+    const hasProtractor = !!readShopProtractorCredentials(shop);
     const hasTekmetric = !!shop?.tekmetric?.shopId;
     const hasAutoFlow = !!shop?.autoflow?.apiKey;
     const hasCarfax = !!shop?.carfax?.locationId;

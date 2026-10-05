@@ -50,9 +50,131 @@ export interface EventDoc {
   [extra: string]: unknown;
 }
 
+/** Metadata-only row used by the platform-admin AutoFlow workflow picker. */
+export interface AutoflowObservedEventMetadata {
+  shopId: string;
+  status: string | null;
+  type: string | null;
+  receivedAt: Date | null;
+  createdAt: Date | null;
+}
+
+/**
+ * Read only the fields needed to discover AutoFlow workflow labels.
+ *
+ * `listRecentEvents` deliberately rebuilds the legacy Mongo-shaped event
+ * document for its debugging callers, so its projection is not a privacy
+ * boundary on the PG path. This dedicated query never selects the payload
+ * jsonb (which may contain webhook secrets and customer data), is tenant
+ * scoped, bounded, and has a local statement timeout.
+ */
+export async function listAutoflowObservedEventMetadata(
+  shopId: string | number,
+  options: { since?: Date; limit?: number } = {},
+): Promise<AutoflowObservedEventMetadata[]> {
+  const since =
+    options.since ??
+    new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+  const limit = Math.max(1, Math.min(5_000, Math.floor(options.limit ?? 5_000)));
+  const db = getPg();
+
+  return db.transaction(async (tx) => {
+    await tx.execute(dsql`SET LOCAL statement_timeout = '2500ms'`);
+    const rows = (await tx.execute(dsql`
+      SELECT
+        shop_id AS "shopId",
+        COALESCE(
+          payload #>> '{ticket,status}',
+          payload ->> 'status',
+          payload #>> '{event,status}'
+        ) AS status,
+        type,
+        received_at AS "receivedAt",
+        created_at AS "createdAt"
+      FROM events
+      WHERE provider = 'autoflow'
+        AND shop_id = ${String(shopId)}
+        AND COALESCE(received_at, created_at) >= ${since}
+      ORDER BY COALESCE(received_at, created_at) DESC
+      LIMIT ${limit}
+    `)) as unknown as Array<{
+      shopId: string | null;
+      status: string | null;
+      type: string | null;
+      receivedAt: Date | null;
+      createdAt: Date | null;
+    }>;
+    return rows.map((row) => ({
+      shopId: String(row.shopId ?? shopId),
+      status: row.status,
+      type: row.type,
+      receivedAt: row.receivedAt ?? null,
+      createdAt: row.createdAt ?? null,
+    }));
+  });
+}
+
 async function collection(): Promise<Collection<EventDoc>> {
   const db = await getDb();
   return db.collection<EventDoc>(COLLECTION);
+}
+
+/**
+ * Legacy Mongo companion for the bounded workflow discovery query. During the
+ * events PG migration, historical rows may exist only in the shadow mirror;
+ * this path selects the same small metadata surface and never returns
+ * `payload`, `raw`, tokens, or customer fields.
+ */
+export async function listAutoflowObservedEventMetadataMongo(
+  shopId: string | number,
+  options: { since?: Date; limit?: number } = {},
+): Promise<AutoflowObservedEventMetadata[]> {
+  const since =
+    options.since ??
+    new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+  const limit = Math.max(1, Math.min(5_000, Math.floor(options.limit ?? 5_000)));
+  const shopIds: Array<string | number> = [String(shopId)];
+  if (Number.isFinite(Number(shopId))) shopIds.push(Number(shopId));
+  const rows = await (await collection())
+    .find(
+      {
+        provider: "autoflow",
+        shopId: { $in: shopIds },
+        $or: [
+          { receivedAt: { $gte: since } },
+          { createdAt: { $gte: since } },
+        ],
+      } as any,
+      {
+        projection: {
+          shopId: 1,
+          type: 1,
+          status: 1,
+          receivedAt: 1,
+          createdAt: 1,
+          "payload.ticket.status": 1,
+          "payload.status": 1,
+          "payload.event.status": 1,
+        },
+        maxTimeMS: 2_500,
+      },
+    )
+    .sort({ receivedAt: -1, createdAt: -1 })
+    .limit(limit)
+    .toArray();
+
+  return rows.map((row: any) => ({
+    shopId: String(row.shopId ?? shopId),
+    status:
+      row.payload?.ticket?.status ??
+      row.payload?.status ??
+      row.status ??
+      row.payload?.event?.status ??
+      null,
+    type: typeof row.type === "string" ? row.type : null,
+    receivedAt: row.receivedAt ?? null,
+    createdAt: row.createdAt ?? null,
+  }));
 }
 
 /* -------------------------------- write --------------------------------- */

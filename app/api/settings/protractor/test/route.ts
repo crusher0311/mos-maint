@@ -1,6 +1,6 @@
 import { NextResponse, NextRequest } from "next/server";
 import { getSession } from "@/lib/auth";
-import { testConnection } from "@/lib/integrations/protractor";
+import { validateCredentials, validationFailure } from "../validation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,7 +15,8 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { connectionId, apiKey } = body;
 
-    if (!connectionId || !apiKey) {
+    if (typeof connectionId !== "string" || !connectionId.trim() ||
+        typeof apiKey !== "string" || !apiKey.trim()) {
       return NextResponse.json(
         { error: "Connection ID and API Key are required" },
         { status: 400 }
@@ -25,13 +26,15 @@ export async function POST(req: NextRequest) {
     const cleanConnectionId = connectionId.trim().toLowerCase();
     const cleanApiKey = apiKey.trim().toLowerCase();
 
-    const result = await testConnection(cleanConnectionId, cleanApiKey, Number(session.shopId));
+    const shopId = Number(session.shopId);
+    if (!Number.isSafeInteger(shopId) || shopId <= 0) {
+      return NextResponse.json({ error: "Invalid shop" }, { status: 403 });
+    }
+    const result = await validateCredentials(shopId, cleanConnectionId, cleanApiKey);
 
     if (!result.ok) {
-      return NextResponse.json(
-        { ok: false, error: result.error },
-        { status: 400 }
-      );
+      const failure = validationFailure(result);
+      return NextResponse.json(failure.body, { status: failure.status });
     }
 
     return NextResponse.json({

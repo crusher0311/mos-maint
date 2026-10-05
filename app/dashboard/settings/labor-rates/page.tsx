@@ -39,6 +39,8 @@ type LaborRateRule = {
   priority: number;
   conditions: RuleCondition[];
   matchMode: "all" | "any";
+  applyToAllLabor?: boolean;
+  repriceExistingCategoryLabor?: boolean;
   overrideCategoryRates?: boolean;
   createdAt?: string;
   updatedAt?: string;
@@ -140,10 +142,22 @@ export default function LaborRatesPage() {
       setSaving(true);
       setError(null);
       const method = isNewRule ? "POST" : "PUT";
+      const isCategoryRule = editingRule.conditions.some(
+        (condition) => condition.type === "jobCategory",
+      );
       const res = await fetch("/api/settings/labor-rates", {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(editingRule),
+        body: JSON.stringify({
+          ...editingRule,
+          applyToAllLabor:
+            !isCategoryRule && editingRule.applyToAllLabor === true,
+          repriceExistingCategoryLabor:
+            isCategoryRule &&
+            editingRule.repriceExistingCategoryLabor === true,
+          overrideCategoryRates:
+            !isCategoryRule && editingRule.overrideCategoryRates === true,
+        }),
       });
 
       if (!res.ok) {
@@ -184,6 +198,9 @@ export default function LaborRatesPage() {
       priority: rules.length,
       conditions: [],
       matchMode: "all",
+      applyToAllLabor: false,
+      repriceExistingCategoryLabor: false,
+      overrideCategoryRates: false,
     });
     setIsNewRule(true);
   };
@@ -193,6 +210,13 @@ export default function LaborRatesPage() {
     const fieldOption = field ? RO_FIELD_OPTIONS.find(f => f.value === field) : null;
     setEditingRule({
       ...editingRule,
+      ...(type === "jobCategory"
+        ? {
+            applyToAllLabor: false,
+            repriceExistingCategoryLabor: false,
+            overrideCategoryRates: false,
+          }
+        : {}),
       conditions: [
         ...editingRule.conditions,
         { type, field: field || null, label: fieldOption?.label || null, values: [] },
@@ -203,15 +227,27 @@ export default function LaborRatesPage() {
   const removeCondition = (index: number) => {
     if (!editingRule) return;
     const updated = [...editingRule.conditions];
-    updated.splice(index, 1);
-    setEditingRule({ ...editingRule, conditions: updated });
+    const [removed] = updated.splice(index, 1);
+    setEditingRule({
+      ...editingRule,
+      conditions: updated,
+      ...(removed?.type === "jobCategory"
+        ? { repriceExistingCategoryLabor: false }
+        : {}),
+    });
   };
 
   const updateConditionValues = (index: number, values: string[]) => {
     if (!editingRule) return;
     const updated = [...editingRule.conditions];
     updated[index] = { ...updated[index], values };
-    setEditingRule({ ...editingRule, conditions: updated });
+    setEditingRule({
+      ...editingRule,
+      conditions: updated,
+      ...(updated[index].type === "jobCategory"
+        ? { repriceExistingCategoryLabor: false }
+        : {}),
+    });
   };
 
   const toggleExpanded = (id: string) => {
@@ -351,6 +387,18 @@ export default function LaborRatesPage() {
                         Overrides categories
                       </span>
                     )}
+                    {rule.applyToAllLabor === true &&
+                      !rule.conditions.some((condition) => condition.type === "jobCategory") && (
+                      <span className="bg-green-100 text-green-700 text-xs font-medium px-2 py-0.5 rounded-full">
+                        Reprices existing jobs
+                      </span>
+                    )}
+                    {rule.repriceExistingCategoryLabor === true &&
+                      rule.conditions.some((condition) => condition.type === "jobCategory") && (
+                      <span className="bg-green-100 text-green-700 text-xs font-medium px-2 py-0.5 rounded-full">
+                        Reprices existing category labor
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
@@ -414,7 +462,8 @@ export default function LaborRatesPage() {
         <h4 className="font-medium mb-1">How Labor Rate Rules Work</h4>
         <ul className="list-disc list-inside space-y-1 text-blue-700">
           <li>Rules are evaluated by priority (highest first) when a repair order is opened</li>
-          <li>The first matching rule sets the labor rate for the job</li>
+          <li>Existing labor is repriced only when the matching rule has explicit consent</li>
+          <li>RO-default updates remain blocked until provider behavior is verified; opted-in job repricing still runs</li>
           <li>Rates are stored in dollars — your SMS handles any conversion automatically</li>
           <li>Rules with no conditions act as a default rate (use lowest priority)</li>
           <li>The Chrome extension auto-applies rates when viewing repair orders</li>
@@ -453,6 +502,9 @@ function RuleEditor({
   const [showFieldPicker, setShowFieldPicker] = useState(false);
   const [customTagInput, setCustomTagInput] = useState("");
   const [customerInput, setCustomerInput] = useState("");
+  const hasJobCategoryCondition = rule.conditions.some(
+    (condition) => condition.type === "jobCategory",
+  );
 
   return (
     <div className="bg-white rounded-lg border-2 border-blue-300 shadow-lg p-6 space-y-5">
@@ -528,21 +580,90 @@ function RuleEditor({
         </div>
       </div>
 
-      <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-        <label className="flex items-start gap-3 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={!!rule.overrideCategoryRates}
-            onChange={(e) => onChange({ ...rule, overrideCategoryRates: e.target.checked })}
-            className="mt-0.5 text-blue-600 rounded"
-          />
-          <div>
-            <span className="text-sm font-medium text-gray-800">Override per-job category rates</span>
-            <p className="text-xs text-gray-500 mt-0.5">
-              When enabled, this rule's rate applies to all jobs — including those that would normally be handled by a category-specific rule (e.g., Diag or Maint). Use this for fleet or wholesale accounts that get a flat rate regardless of job type.
+      <div className="border border-gray-200 rounded-lg p-4 bg-gray-50 space-y-4">
+        <div>
+          <h4 className="text-sm font-medium text-gray-800">
+            {hasJobCategoryCondition ? "Category labor rate" : "Repair-order default rate"}
+          </h4>
+          <p className="text-xs text-gray-500 mt-0.5">
+            {hasJobCategoryCondition
+              ? "This rate is limited to labor in the selected job categories."
+              : "This rule targets the repair-order default rate. Existing job labor is protected unless you explicitly opt in below."}
+          </p>
+          {!hasJobCategoryCondition && (
+            <p className="text-xs text-amber-700 mt-2 rounded border border-amber-200 bg-amber-50 p-2">
+              RO-default updates are temporarily blocked until provider behavior is verified. Opted-in existing-job repricing still runs.
             </p>
-          </div>
-        </label>
+          )}
+        </div>
+
+        {hasJobCategoryCondition ? (
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={rule.repriceExistingCategoryLabor === true}
+              onChange={(e) =>
+                onChange({
+                  ...rule,
+                  applyToAllLabor: false,
+                  repriceExistingCategoryLabor: e.target.checked,
+                })
+              }
+              className="mt-0.5 text-blue-600 rounded"
+            />
+            <div>
+              <span className="text-sm font-medium text-gray-800">
+                Reprice existing labor in these categories
+              </span>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Applies during both auto-apply and Apply Now. Changing the category scope turns this consent off so a broader scope is never approved accidentally.
+              </p>
+            </div>
+          </label>
+        ) : (
+          <>
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={rule.applyToAllLabor === true}
+                onChange={(e) =>
+                  onChange({
+                    ...rule,
+                    applyToAllLabor: e.target.checked,
+                    repriceExistingCategoryLabor: false,
+                  })
+                }
+                className="mt-0.5 text-blue-600 rounded"
+              />
+              <div>
+                <span className="text-sm font-medium text-gray-800">
+                  Reprice labor on existing jobs
+                </span>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Explicitly allow this RO-level rule to change labor already on the estimate during both auto-apply and Apply Now.
+                </p>
+              </div>
+            </label>
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={rule.overrideCategoryRates === true}
+                onChange={(e) =>
+                  onChange({ ...rule, overrideCategoryRates: e.target.checked })
+                }
+                className="mt-0.5 text-blue-600 rounded"
+              />
+              <div>
+                <span className="text-sm font-medium text-gray-800">
+                  Override per-job category rates
+                </span>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Gives this RO rule precedence only where repricing consent exists. It can override consenting category labor, but protected category jobs remain unchanged. This option never grants repricing permission by itself.
+                </p>
+              </div>
+            </label>
+          </>
+        )}
       </div>
 
       <div className="space-y-3">

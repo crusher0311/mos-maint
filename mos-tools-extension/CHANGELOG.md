@@ -1,3 +1,15 @@
+# 1.35.2
+
+- Existing job labor is protected by default in automatic application and Apply
+  Now. Category rules require their own explicit, category-scoped consent;
+  RO rules retain the explicit apply-to-all-labor consent.
+- Category presence and override precedence no longer authorize repricing.
+  Protected and failed category jobs cannot fall through to RO repricing.
+- Both rule editors show and preserve consent, including enterprise copies.
+- RO-default writes fail closed pending approved verification that Tekmetric's
+  summary update cannot cascade into protected job prices. Opted-in job updates
+  remain separate. No Chrome Web Store publication is included.
+
 # 1.35.0
 
 - Labor-rate rules now refresh from the server whenever the Rates tab opens and

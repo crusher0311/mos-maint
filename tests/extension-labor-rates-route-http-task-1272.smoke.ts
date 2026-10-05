@@ -152,6 +152,49 @@ async function run() {
     assert.equal(staleBody.revision, 8);
     assert.equal(shopReadCount, 2);
 
+    let savedRules: any[] = [];
+    __laborRateRuleDeps.replacePgLaborRateRulesIfRevision = async (
+      _shopId,
+      rules,
+      _revision,
+    ) => {
+      savedRules = rules as any[];
+      return { matchedCount: 1, modifiedCount: 1, revision: 9 };
+    };
+    const consentResponse = await PUT(request("exts_writer_labor_rates", {
+      rules: [
+        {
+          id: "explicit-consent",
+          name: "Explicit consent",
+          rate: 150,
+          priority: 1,
+          conditions: [],
+          matchMode: "all",
+          applyToAllLabor: true,
+          repriceExistingCategoryLabor: true,
+        },
+        {
+          id: "truthy-is-not-consent",
+          name: "Truthy values",
+          rate: 140,
+          priority: 0,
+          conditions: [],
+          matchMode: "all",
+          applyToAllLabor: "true",
+          repriceExistingCategoryLabor: 1,
+        },
+      ],
+      expectedRevision: 8,
+    }));
+    const consentBody = await json(consentResponse);
+    assert.equal(consentResponse.status, 200);
+    assert.equal(savedRules[0].applyToAllLabor, true);
+    assert.equal(savedRules[0].repriceExistingCategoryLabor, true);
+    assert.equal(savedRules[1].applyToAllLabor, false);
+    assert.equal(savedRules[1].repriceExistingCategoryLabor, false);
+    assert.equal(consentBody.rules[0].applyToAllLabor, true);
+    assert.equal(consentBody.rules[0].repriceExistingCategoryLabor, true);
+
     console.log("extension labor-rates HTTP Task #1272 checks passed");
   } finally {
     authDeps.lookupExtensionSession = originalAuthDeps.lookupExtensionSession;

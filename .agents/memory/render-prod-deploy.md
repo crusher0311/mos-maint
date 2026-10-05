@@ -5,6 +5,15 @@ description: Prod runs on Render and builds from GitHub main; merging a fix to m
 
 # Prod runs on Render — merging to main is not deploying
 
+Production timing comparisons must exclude Render prebuild smoke-test output.
+
+**Why:** Render's logs API can label prebuild test output as `type=app`, including
+synthetic callback timing events. Those records lacked an `instance` label,
+while actual running replica events included one.
+
+**How to apply:** For runtime before/after comparisons, require the target service,
+`type=app`, and a real instance label. Do not trust the app label alone.
+
 `origin` is GitHub (`crusher0311/mos-maint`). Prod = two Render services that
 build from branch `main`: a **web service** (runs the in-process node-cron
 backfill) and a **background worker** (the drain worker). Merging a fix to

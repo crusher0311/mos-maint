@@ -74,6 +74,8 @@ export async function listAutoflowShops(): Promise<AutoflowShopSummary[]> {
           { "autoflow.subdomain": { $exists: true } },
           { "autoflow.shopId": { $exists: true } },
           { "autoflow.configured": true },
+          { "autoflow.apiKey": { $exists: true } },
+          { autoflowApiKey: { $exists: true } },
           { "autoflow.shopNumbers.0": { $exists: true } },
           { autoflowDomain: { $exists: true } },
         ],
@@ -84,6 +86,7 @@ export async function listAutoflowShops(): Promise<AutoflowShopSummary[]> {
           name: 1,
           "autoflow.domain": 1,
           "autoflow.subdomain": 1,
+          "autoflow.shopId": 1,
           "autoflow.shopNumbers": 1,
           autoflowDomain: 1,
         },
@@ -132,7 +135,7 @@ export async function listAutoflowIdentifierConflicts(): Promise<
 export async function findShopByIdBasic(shopId: string | number) {
   const db = await __deps.getDb();
   return db.collection("shops").findOne(
-    { shopId },
+    { shopId: { $in: [String(shopId), Number(shopId)] } },
     { projection: { shopId: 1, name: 1, autoflow: 1, autoflowDomain: 1 } },
   );
 }

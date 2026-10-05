@@ -11,6 +11,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import * as vm from "node:vm";
+import "../mos-tools-extension/labor-rate-core.js";
 
 const background = readFileSync(
   join(__dirname, "..", "mos-tools-extension", "background.js"),
@@ -25,6 +26,7 @@ const broadcasts: any[] = [];
 let failJobNames = new Set<string>();
 
 const sandbox: any = {
+  MosLaborRateCore: (globalThis as any).MosLaborRateCore,
   console,
   ownJobPostInFlight: false,
   lastAppliedRoId: null,
@@ -89,6 +91,7 @@ const context = {
   roNumber: "RO-9001",
 };
 const rule = {
+  repriceExistingCategoryLabor: true,
   name: "Brake labor",
   rate: 125,
   conditions: [{ type: "jobCategory", values: ["Brake"] }],

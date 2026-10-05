@@ -80,7 +80,17 @@ export async function PUT(req: NextRequest) {
       throw error;
     }
   }
-  const { id, name, rate, priority, conditions, matchMode, overrideCategoryRates } = body;
+  const {
+    id,
+    name,
+    rate,
+    priority,
+    conditions,
+    matchMode,
+    overrideCategoryRates,
+    applyToAllLabor,
+    repriceExistingCategoryLabor,
+  } = body;
 
   if (!id) return NextResponse.json({ error: "Rule ID required" }, { status: 400 });
 
@@ -94,6 +104,8 @@ export async function PUT(req: NextRequest) {
       conditions,
       matchMode,
       overrideCategoryRates,
+      applyToAllLabor,
+      repriceExistingCategoryLabor,
     });
   } catch (error) {
     if (error instanceof LaborRateRuleValidationError) {
@@ -111,9 +123,15 @@ export async function PUT(req: NextRequest) {
   rules[index] = {
     ...normalized,
     ...(rules[index].color ? { color: rules[index].color } : {}),
-    ...(rules[index].applyToAllLabor !== undefined
-      ? { applyToAllLabor: rules[index].applyToAllLabor }
-      : {}),
+    applyToAllLabor: Object.prototype.hasOwnProperty.call(body, "applyToAllLabor")
+      ? normalized.applyToAllLabor
+      : rules[index].applyToAllLabor,
+    repriceExistingCategoryLabor: Object.prototype.hasOwnProperty.call(
+      body,
+      "repriceExistingCategoryLabor",
+    )
+      ? normalized.repriceExistingCategoryLabor
+      : rules[index].repriceExistingCategoryLabor,
     createdAt: rules[index].createdAt,
     updatedAt: new Date(),
   };

@@ -26,6 +26,11 @@ doesn't match (work-order# vs invoice#) looks like a data gap but isn't — the
 record can be present in job_index with the correct VIN and not declined.
 
 **How to apply:**
+- For Detect Dog incidents, compare its maintenance-analysis output with the
+  shared plan before changing shared synonyms. **Why:** an extension-local
+  mapper can lose an OEM CVT key even when the shared plan already credits
+  the same CARFAX service correctly; a passing shared-triage fixture alone
+  does not reproduce the user-facing path.
 - When a performed service shows "no record", first dump the DataOne OEM item
   names for that VIN (`getMaintenanceScheduleCached`, name field is
   `maintenance_name`) and run BOTH `toKeyFromName` and `toKeyFromFreeText` on

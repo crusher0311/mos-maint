@@ -202,7 +202,7 @@ async function main(): Promise<void> {
       "the same production-shaped process may proceed only after explicit relay approval",
     );
 
-    console.log("Scenario 2: only staged mode reads the live Mongo trial state");
+    console.log("Scenario 2: shared activation state is authoritative across replicas");
     let nowMs = baseNow;
     let stopReads = 0;
     __protractorClientTestHooks.now = () => nowMs;
@@ -220,7 +220,9 @@ async function main(): Promise<void> {
     delete process.env.PROTRACTOR_CALLBACK_TRIAL_ENABLED;
     const ordinary = await getEffectiveProtractorOutboundPolicy();
     assert.equal(ordinary.allowed, true);
-    assert.equal(stopReads, 0, "ordinary policy must not read the operator-stop store");
+    assert.equal(ordinary.relayRequired, true);
+    assert.equal(ordinary.callbackNotBeforeMs, baseNow - 1_000);
+    assert.equal(stopReads, 1, "an unstaged replica must observe shared relay-only activation");
 
     process.env.PROTRACTOR_CALLBACK_TRIAL_ENABLED = "true";
     const live = await getEffectiveProtractorOutboundPolicy();
@@ -228,7 +230,7 @@ async function main(): Promise<void> {
     assert.equal(live.requireTimedTrial, true);
     assert.equal(live.allowInteractive, false);
     assert.equal(live.callbackNotBeforeMs, baseNow - 1_000);
-    assert.equal(stopReads, 1);
+    assert.equal(stopReads, 2);
 
     __protractorClientTestHooks.getOperatorStop = async () => ({
       active: false,

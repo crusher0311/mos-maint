@@ -119,11 +119,13 @@ export async function ensureProtractorWebhookSubscription(opts: {
       lastEnsuredAt: now,
       firstEnsuredAt: now,
     });
-  } catch (err: any) {
-    console.warn(
-      `[ProtractorWebhookSubscribe] Failed to persist subscription record for shop ${shopId}:`,
-      err?.message,
-    );
+  } catch {
+    // Keep diagnostic output bounded and independent of storage exceptions,
+    // which may embed the token-bearing callback URL or connection details.
+    console.warn(JSON.stringify({
+      event: "protractor_webhook_subscription_record_unavailable",
+      shopId,
+    }));
   }
 
   return {

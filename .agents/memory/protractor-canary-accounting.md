@@ -26,6 +26,18 @@ Count physical admission at the Mongo confirmation, never from runtime logs. Do 
 
 **How to apply:** Preserve conservative accounting across retries and failures. Keep terminal causes immutable, use Mongo time at the write boundary, and keep the physical safety record outside rate-limit TTL deletion. Legacy traffic without a canary remains compatible; a completed canary never silently becomes unrestricted traffic.
 
+Do not use successful HTTP-response telemetry as a complete transport-error
+census. Reconcile it with no-response relay errors and local admission failures.
+
+**Why:** A production audit found relay `upstream_error` events after the live
+deployment that were absent from the response-based API usage totals. Build
+smoke tests also emitted realistic error markers without reliable build labels.
+
+**How to apply:** Report completed HTTP responses, relay transport errors, and
+local pacer deferrals separately; never add them as independent requests without
+correlation. Isolate deployment-window test noise before reporting provider
+failures, and do not equate `upstream_error` with a proven provider outage.
+
 Treat a timed live trial as distinct from a small request-budget canary. Its
 observation clock starts at the operator's activation, not at build/deploy time,
 and it deliberately tests sustained organic callbacks without a request cap.
@@ -42,6 +54,19 @@ unattended sync, and enrichment remain excluded. Derive the callback replay
 floor from activation and never extend or reopen a terminal generation.
 Worker suspension is an operator attestation in the UI, not an independently
 verified service-state check.
+
+Continuous reopening is deliberately limited to new callbacks and authenticated
+customer-facing activity, not bulk recovery or unattended synchronization.
+
+**Why:** The relay trial established transport viability but left substantial
+untouched callback history. Combining the transition to continuous service with
+historical replay or worker resumption would introduce unmeasured load and obscure
+whether everyday traffic is healthy.
+
+**How to apply:** Require a new, explicitly approved generation from an armed stop
+and preserve earlier audit history. Treat old-backlog recovery and worker resumption
+as separate operational decisions. Apply the activation floor throughout callback
+selection, claiming, and sibling completion—not just initial selection.
 
 Foreground admission must be bound to the authenticated target shop and close
 when the awaited request ends. Priority/retry flags are not proof of foreground
@@ -89,3 +114,15 @@ requiring a live migration to close that gap defeats the isolation guarantee.
 
 **How to apply:** Treat preview indicators as development regardless of build
 mode, and default legacy timed trials to relay-only without changing live state.
+
+Only calculate traffic rates for completely retrieved log windows, and keep
+monitoring-API throttling separate from provider throttling.
+
+**Why:** A production traffic audit hit Render logs API HTTP 429 partway through
+retrieval. Treating the missing windows as zero traffic, or the monitoring 429
+as a Protractor response, would produce opposite but equally misleading conclusions.
+
+**How to apply:** Query bounded time bins, exclude build output using real instance
+labels, and report the exact covered windows and retrieval gaps. Relay errors,
+HTTP responses, admission counters, and local denials are distinct measurements;
+completed responses per second do not establish physical in-flight concurrency.

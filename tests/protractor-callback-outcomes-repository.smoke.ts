@@ -28,6 +28,8 @@ let pgReportRows: Doc[] = [];
 let pgReportSelectCalls = 0;
 let pgAdmissionMode = false;
 let pgAdmissionSelectCalls = 0;
+let mongoClaimFilters: Doc[] = [];
+let pgFloorWinnerScenario = false;
 
 function idString(value: unknown): string {
   return value instanceof ObjectId ? value.toHexString() : String(value);
@@ -102,18 +104,25 @@ const eventCollection = {
     docs.forEach((doc) => applyMongoUpdate(doc, update));
     return { matchedCount: docs.length };
   },
-  find: (filter: Doc, options: Doc) => {
-    mongoReportQuery = { filter, options };
-    let rows = mongoReportDocs.filter((doc) => matchesMongoFilter(doc, filter));
+  find: (filter: Doc, options?: Doc) => {
+    if (options) mongoReportQuery = { filter, options };
+    else mongoClaimFilters.push(filter);
+    let rows = options
+      ? mongoReportDocs.filter((doc) => matchesMongoFilter(doc, filter))
+      : [...mongoEvents.values()].filter((doc) => matchesMongoFilter(doc, filter));
     return {
       sort: (sort: Doc) => {
-        mongoReportQuery.sort = sort;
+        if (mongoReportQuery) mongoReportQuery.sort = sort;
         rows = rows.slice().sort((a, b) =>
           Number(new Date(b.receivedAt)) - Number(new Date(a.receivedAt)));
         return {
-          limit: (limit: number) => ({
-            toArray: async () => rows.slice(0, limit),
-          }),
+          limit: (limit: number) => {
+            const limited = rows.slice(0, limit);
+            return {
+              toArray: async () => limited,
+              next: async () => limited[0] ?? null,
+            };
+          },
         };
       },
     };
@@ -175,9 +184,18 @@ const columns = new Proxy({}, {
   get: (_target, property) => ({ kind: "column", name: String(property) }),
 }) as any;
 
-function pgSelectionRows(selection: Doc, limit?: number): Doc[] {
+function pgSelectionRows(selection: Doc, limit?: number, where?: unknown): Doc[] {
   if (pgAdmissionMode && "eventKey" in selection) {
     pgAdmissionSelectCalls += 1;
+    if (pgFloorWinnerScenario) {
+      // Model an old terminal sibling that would win this global selection if
+      // any outer or advisory-lock reselection drops the activation floor.
+      const hasFloor = JSON.stringify(where).includes("2026-06-01T00:00:00.000Z");
+      if (!hasFloor) return [{ eventKey: "old-terminal", processingStartedAt: null }];
+      return pgAdmissionSelectCalls === 4
+        ? []
+        : pgOwnerRows.slice(0, limit ?? pgOwnerRows.length);
+    }
     // The fake candidate query exposes only the older supported generation.
     // The real predicate under test is asserted from the captured where tree.
     return pgAdmissionSelectCalls === 4
@@ -222,7 +240,7 @@ const pgTransaction = {
       then: (resolve: (value: Doc[]) => void, reject: (error: unknown) => void) => {
         try {
           pgSelects.push({ selection, ...state });
-          resolve(pgSelectionRows(selection, state.limit));
+          resolve(pgSelectionRows(selection, state.limit, state.where));
         } catch (error) {
           reject(error);
         }
@@ -429,6 +447,49 @@ async function main() {
   }
 
   {
+    const fixture = seedMongoGeneration();
+    mongoEvents.get(fixture.siblingId.toHexString())!.operation = "DELETE";
+    mongoEvents.get(fixture.newerId.toHexString())!.processed = true;
+    mongoClaimFilters = [];
+    assert.equal(
+      await repo.claimCallbackEvent(
+        fixture.siblingId.toHexString(),
+        fixture.identity,
+        fixture.ownerReceivedAt,
+      ),
+      null,
+      "an old terminal sibling cannot be the claim winner after a fresh activation floor",
+    );
+    assert.ok(
+      mongoClaimFilters.every((filter) =>
+        filter.receivedAt?.$gte?.getTime() === fixture.ownerReceivedAt.getTime()),
+      "Mongo global winner reselection carries the persisted activation floor",
+    );
+  }
+
+  {
+    const fixture = seedMongoGeneration();
+    await repo.completeCallbackGeneration(
+      fixture.ownerKey,
+      fixture.identity,
+      "owner-token",
+      fixture.ownerReceivedAt,
+      { category: "applied_indexed", reason: "indexed" },
+      fixture.ownerReceivedAt,
+    );
+    assert.equal(
+      mongoEvents.get(fixture.siblingId.toHexString())!.processed,
+      false,
+      "a new activation floor excludes older sibling callbacks from coalescing",
+    );
+    assert.equal(
+      mongoEvents.get(fixture.newerId.toHexString())!.processed,
+      false,
+      "the activation-floor guard retains newer sibling callbacks too",
+    );
+  }
+
+  {
     const fixture = seedMongoGeneration(true);
     assert.equal(
       await repo.completeCallbackGeneration(
@@ -624,6 +685,29 @@ async function main() {
       /unsupported_contact/,
       "PG winner/admission predicates carry the unsupported Contact exclusion",
     );
+    pgSelects.length = 0;
+    pgAdmissionSelectCalls = 1;
+    pgFloorWinnerScenario = true;
+    pgOwnerRows = [{
+      eventKey: "fresh-floor-winner",
+      processingStartedAt: new Date("2026-06-01T00:00:00.000Z"),
+    }];
+    assert.equal(
+      await pgRepo.claimCallbackEvent(
+      "fresh-floor-winner",
+      contactIdentity,
+      600_000,
+      new Date("2026-06-01T00:00:00.000Z"),
+      ),
+      "2026-06-01T00:00:00.000Z",
+      "PG fresh winner remains claimable when an old terminal sibling exists",
+    );
+    assert.ok(
+      pgSelects.every((select) =>
+        JSON.stringify(select.where).includes("2026-06-01T00:00:00.000Z")),
+      "every PG claim/advisory-lock reselection is bounded by the persisted activation floor",
+    );
+    pgFloorWinnerScenario = false;
     pgAdmissionMode = false;
     pgUpdates.length = 0;
     const identity = {

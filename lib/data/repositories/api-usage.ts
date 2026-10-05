@@ -98,10 +98,11 @@ export interface ProtractorOperatorStopState {
 
 export interface ProtractorCanaryState {
   generation: string;
-  mode?: "bounded" | "timed_trial";
+  mode?: "bounded" | "timed_trial" | "live";
   scope?: ProtractorTimedTrialScope;
   startedAt?: Date;
-  expiresAt: Date;
+  /** Continuous live generations deliberately have no expiry. */
+  expiresAt?: Date;
   maxAdmissions: number | null;
   consumedAdmissions: number;
   remainingAdmissions: number | null;
@@ -113,6 +114,7 @@ export interface ProtractorCanaryState {
    * stop/reopen operation is needed.
    */
   requiresRelay?: boolean;
+  workersSuspendedConfirmed?: boolean;
   /** Read compatibility for early trial records using the noun-first name. */
   relayRequired?: boolean;
   endedBy?: "time" | "budget" | "operator";
@@ -323,10 +325,82 @@ const validTimedTrialCanaryAccountingExpression = {
   ],
 };
 
+/**
+ * A continuous generation is intentionally a different persisted shape from a
+ * timed trial.  In particular, it has no expiry to accidentally inherit or
+ * reopen, and it is always the reviewed callback + authenticated-interactive
+ * scope.  The stop remains its only terminal control.
+ */
+const validLiveCanaryAccountingExpression = {
+  $cond: [
+    {
+      $and: [
+        { $eq: [{ $type: "$canary.generation" }, "string"] },
+        { $ne: ["$canary.generation", ""] },
+        { $eq: ["$canary.mode", "live"] },
+        { $eq: ["$canary.scope", "callbacks_and_interactive"] },
+        { $in: [{ $type: "$canary.requiresCallback" }, ["bool", "boolean"]] },
+        { $eq: ["$canary.requiresCallback", false] },
+        { $in: [{ $type: "$canary.requiresRelay" }, ["bool", "boolean"]] },
+        { $eq: ["$canary.requiresRelay", true] },
+        { $in: [{ $type: "$canary.workersSuspendedConfirmed" }, ["bool", "boolean"]] },
+        { $eq: ["$canary.workersSuspendedConfirmed", true] },
+        { $eq: [{ $type: "$canary.startedAt" }, "date"] },
+        { $eq: [{ $type: "$canary.expiresAt" }, "missing"] },
+        { $eq: [{ $type: "$canary.maxAdmissions" }, "null"] },
+        { $eq: [{ $type: "$canary.remainingAdmissions" }, "null"] },
+        { $in: [{ $type: "$canary.consumedAdmissions" }, ["int", "long"]] },
+        { $eq: [{ $type: "$canary.audit" }, "array"] },
+        {
+          $or: [
+            { $eq: [{ $type: "$canary.auditTruncatedAdmissions" }, "missing"] },
+            { $in: [{ $type: "$canary.auditTruncatedAdmissions" }, ["int", "long"]] },
+          ],
+        },
+        {
+          $or: [
+            {
+              $and: [
+                { $eq: [{ $type: "$canary.endedBy" }, "missing"] },
+                { $eq: [{ $type: "$canary.endedAt" }, "missing"] },
+              ],
+            },
+            {
+              $and: [
+                { $eq: ["$canary.endedBy", "operator"] },
+                { $eq: [{ $type: "$canary.endedAt" }, "date"] },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    {
+      $and: [
+        { $gte: ["$canary.consumedAdmissions", 0] },
+        { $lte: ["$canary.consumedAdmissions", MAX_SAFE_ADMISSIONS] },
+        {
+          $or: [
+            { $eq: [{ $type: "$canary.auditTruncatedAdmissions" }, "missing"] },
+            {
+              $and: [
+                { $gte: ["$canary.auditTruncatedAdmissions", 0] },
+                { $lte: ["$canary.auditTruncatedAdmissions", MAX_SAFE_ADMISSIONS] },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    false,
+  ],
+};
+
 const validCanaryAccountingExpression = {
   $or: [
     validBoundedCanaryAccountingExpression,
     validTimedTrialCanaryAccountingExpression,
+    validLiveCanaryAccountingExpression,
   ],
 };
 
@@ -359,11 +433,26 @@ const openTimedTrialCanaryExpression = {
   ],
 };
 
+const openLiveCanaryExpression = {
+  $cond: [
+    validLiveCanaryAccountingExpression,
+    {
+      $and: [
+        { $eq: [{ $type: "$canary.endedBy" }, "missing"] },
+        { $lte: ["$canary.startedAt", "$$NOW"] },
+        { $lt: ["$canary.consumedAdmissions", MAX_SAFE_ADMISSIONS] },
+      ],
+    },
+    false,
+  ],
+};
+
 const canaryAdmissionExpression = {
   $or: [
     { $eq: [{ $type: "$canary" }, "missing"] },
     openBoundedCanaryExpression,
     openTimedTrialCanaryExpression,
+    openLiveCanaryExpression,
   ],
 };
 
@@ -377,7 +466,7 @@ const finalCanaryAdmissionExpression = {
 
 const terminalCanaryExpression = {
   $cond: [
-    validCanaryAccountingExpression,
+    { $or: [validBoundedCanaryAccountingExpression, validTimedTrialCanaryAccountingExpression] },
     { $eq: [{ $type: "$canary.endedBy" }, "missing"] },
     false,
   ],
@@ -398,21 +487,25 @@ function projectProtractorStopState(row: any, now: Date): ProtractorOperatorStop
       else if (canary.expiresAt instanceof Date && canary.expiresAt.getTime() <= now.getTime()) endedBy = "time";
     }
     const timedTrial = canary?.mode === "timed_trial";
+    const live = canary?.mode === "live";
     return {
       generation: canary.generation,
       mode: canary.mode,
       startedAt: canary.startedAt,
       expiresAt: canary.expiresAt,
-      maxAdmissions: timedTrial ? null : canary.maxAdmissions,
+      maxAdmissions: timedTrial || live ? null : canary.maxAdmissions,
       consumedAdmissions: canary.consumedAdmissions ?? 0,
-      remainingAdmissions: timedTrial
+      remainingAdmissions: timedTrial || live
         ? null
         : Math.max(0, (canary.maxAdmissions ?? 0) - (canary.consumedAdmissions ?? 0)),
-      scope: timedTrial ? canary.scope ?? "callbacks" : undefined,
+      scope: timedTrial || live ? canary.scope ?? "callbacks" : undefined,
       requiresCallback: canary.requiresCallback,
-      requiresRelay: timedTrial
+      requiresRelay: timedTrial || live
         ? true
         : canary.requiresRelay ?? canary.relayRequired,
+      workersSuspendedConfirmed: live
+        ? canary.workersSuspendedConfirmed === true
+        : undefined,
       endedBy,
       endedAt: canary.endedAt ?? (endedBy === "time" ? canary.expiresAt : undefined),
       auditTruncatedAdmissions: canary.auditTruncatedAdmissions,
@@ -566,8 +659,8 @@ async function finalizeProtractorCanaryTerminalState(
                   generation: "$canary.generation",
                   consumedAdmissions: "$canary.consumedAdmissions",
                   remainingAdmissions: {
-                    $cond: [
-                      validTimedTrialCanaryAccountingExpression,
+          $cond: [
+            { $or: [validTimedTrialCanaryAccountingExpression, validLiveCanaryAccountingExpression] },
                       null,
                       {
                         $max: [
@@ -858,6 +951,12 @@ export async function acquireProtractorPhysicalTransportLease(
         $expr: {
           $and: [
             canaryAdmissionExpression,
+            {
+              $or: [
+                { $ne: ["$canary.mode", "live"] },
+                { $eq: ["$operatorStop.active", false] },
+              ],
+            },
             { $lte: [{ $ifNull: ["$nextAllowedAt", "$$NOW"] }, "$$NOW"] },
             { $lte: [{ $ifNull: ["$leaseExpiresAt", "$$NOW"] }, "$$NOW"] },
           ],
@@ -911,7 +1010,31 @@ export async function acquireProtractorPhysicalTransportLease(
     if (hasCanary) {
       const canary = state?.canary;
       const timedTrial = canary?.mode === "timed_trial";
-      const malformed = timedTrial
+      const live = canary?.mode === "live";
+      const liveTerminalPair =
+        (canary?.endedBy === undefined && canary?.endedAt === undefined) ||
+        (canary?.endedBy === "operator" && canary?.endedAt instanceof Date &&
+          Number.isFinite(canary.endedAt.getTime()));
+      const malformed = live
+        ? (
+          typeof canary?.generation !== "string" ||
+          canary.generation.trim().length === 0 ||
+          !(canary?.startedAt instanceof Date) ||
+          !Number.isFinite(canary.startedAt.getTime()) ||
+          canary?.expiresAt !== undefined ||
+          canary?.scope !== "callbacks_and_interactive" ||
+          canary?.requiresCallback !== false ||
+          canary?.requiresRelay !== true ||
+          canary?.workersSuspendedConfirmed !== true ||
+          canary?.maxAdmissions !== null ||
+          canary?.remainingAdmissions !== null ||
+          !isSafeAdmissionCounter(canary?.consumedAdmissions) ||
+          !Array.isArray(canary?.audit) ||
+          (canary?.auditTruncatedAdmissions !== undefined &&
+            !isSafeAdmissionCounter(canary.auditTruncatedAdmissions)) ||
+          !liveTerminalPair
+        )
+        : timedTrial
         ? (
           canary?.endedBy ||
           typeof canary?.generation !== "string" ||
@@ -937,7 +1060,7 @@ export async function acquireProtractorPhysicalTransportLease(
           (canary?.audit !== undefined && !Array.isArray(canary.audit)) ||
           canary.expiresAt.getTime() <= Date.now()
         );
-      if (canary?.mode !== undefined && !timedTrial && canary.mode !== "bounded") return null;
+      if (canary?.mode !== undefined && !timedTrial && !live && canary.mode !== "bounded") return null;
       const validTimedScopePair =
         (canary?.scope === undefined &&
           (canary?.requiresCallback === undefined || canary?.requiresCallback === true)) ||
@@ -945,6 +1068,7 @@ export async function acquireProtractorPhysicalTransportLease(
         (canary?.scope === "callbacks_and_interactive" && canary?.requiresCallback === false);
       if (malformed) return null;
       if (timedTrial && !validTimedScopePair) return null;
+      if (live && state?.operatorStop?.active !== false) return null;
       if (!timedTrial && canary.consumedAdmissions >= canary.maxAdmissions) return null;
     }
     const remaining = deadlineMs - Date.now();
@@ -1029,8 +1153,37 @@ export async function confirmProtractorPhysicalTransportLease(
       false,
     ],
   };
+  const liveAdmissionExpression = {
+    $cond: [
+      validLiveCanaryAccountingExpression,
+      {
+        $and: [
+          { $eq: [{ $type: "$canary.endedBy" }, "missing"] },
+          { $lte: ["$canary.startedAt", "$$NOW"] },
+          { $lt: ["$canary.consumedAdmissions", MAX_SAFE_ADMISSIONS] },
+          { $eq: ["$ownerCanaryGeneration", "$canary.generation"] },
+          relayRequiredExpression,
+          {
+            $or: [
+              {
+                $and: [
+                  { $gte: [callbackReceivedAt, "$canary.startedAt"] },
+                  { $lte: [callbackReceivedAt, "$$NOW"] },
+                ],
+              },
+              { $gt: [interactiveShopId, 0] },
+            ],
+          },
+        ],
+      },
+      false,
+    ],
+  };
+  const unboundedAdmissionExpression = {
+    $or: [timedTrialAdmissionExpression, liveAdmissionExpression],
+  };
   const canaryConfirmationExpression = context.requireTimedTrial === true
-    ? timedTrialAdmissionExpression
+    ? unboundedAdmissionExpression
     : {
       $or: [
         { $eq: [{ $type: "$canary" }, "missing"] },
@@ -1041,7 +1194,7 @@ export async function confirmProtractorPhysicalTransportLease(
             false,
           ],
         },
-        timedTrialAdmissionExpression,
+        unboundedAdmissionExpression,
       ],
     };
   const finalBoundedAdmissionExpression = {
@@ -1058,8 +1211,8 @@ export async function confirmProtractorPhysicalTransportLease(
       generation: "$canary.generation",
       consumedAdmissions: nextCanaryConsumedExpression,
       remainingAdmissions: {
-        $cond: [
-          validTimedTrialCanaryAccountingExpression,
+          $cond: [
+            { $or: [validTimedTrialCanaryAccountingExpression, validLiveCanaryAccountingExpression] },
           null,
           {
             $subtract: [
@@ -1099,6 +1252,12 @@ export async function confirmProtractorPhysicalTransportLease(
       $expr: {
         $and: [
           { $gt: ["$leaseExpiresAt", "$$NOW"] },
+          {
+            $or: [
+              { $ne: ["$canary.mode", "live"] },
+              { $eq: ["$operatorStop.active", false] },
+            ],
+          },
           canaryConfirmationExpression,
         ],
       },
@@ -1150,7 +1309,7 @@ export async function confirmProtractorPhysicalTransportLease(
             "$$REMOVE",
             {
               $cond: [
-                validTimedTrialCanaryAccountingExpression,
+                { $or: [validTimedTrialCanaryAccountingExpression, validLiveCanaryAccountingExpression] },
                 "$canary.endedBy",
                 {
                   $cond: [
@@ -1345,7 +1504,11 @@ export async function activateProtractorOperatorStop(input: {
                     {
                       endedBy: {
                         $cond: [
-                          validTimedTrialCanaryAccountingExpression,
+                          validLiveCanaryAccountingExpression,
+                          { $ifNull: ["$canary.endedBy", "operator"] },
+                          {
+                            $cond: [
+                              validTimedTrialCanaryAccountingExpression,
                           {
                             $ifNull: [
                               "$canary.endedBy",
@@ -1377,11 +1540,17 @@ export async function activateProtractorOperatorStop(input: {
                               },
                             ],
                           },
+                            ],
+                          },
                         ],
                       },
                       endedAt: {
                         $cond: [
-                          validTimedTrialCanaryAccountingExpression,
+                          validLiveCanaryAccountingExpression,
+                          { $ifNull: ["$canary.endedAt", pipelineNow] },
+                          {
+                            $cond: [
+                              validTimedTrialCanaryAccountingExpression,
                           {
                             $ifNull: [
                               "$canary.endedAt",
@@ -1404,13 +1573,26 @@ export async function activateProtractorOperatorStop(input: {
                                   pipelineNow,
                                 ],
                               },
+                            ],
+                          },
                             ],
                           },
                         ],
                       },
                       audit: {
                         $cond: [
-                          validTimedTrialCanaryAccountingExpression,
+                          validLiveCanaryAccountingExpression,
+                          appendCanaryAudit([[{
+                            event: "operator_stop",
+                            at: pipelineNow,
+                            generation: "$canary.generation",
+                            consumedAdmissions: "$canary.consumedAdmissions",
+                            remainingAdmissions: null,
+                            endedBy: { $ifNull: ["$canary.endedBy", "operator"] },
+                          }]]),
+                          {
+                            $cond: [
+                              validTimedTrialCanaryAccountingExpression,
                           appendCanaryAudit([[{
                             event: "operator_stop",
                             at: pipelineNow,
@@ -1472,6 +1654,8 @@ export async function activateProtractorOperatorStop(input: {
                               ],
                             },
                           }]]),
+                            ],
+                          },
                         ],
                       },
                       auditTruncatedAdmissions: {
@@ -1670,6 +1854,174 @@ export async function startProtractorTimedTrial(input: {
     scope,
     requiresRelay,
   );
+  return projectProtractorStopState(row, now);
+}
+
+function assertFreshProtractorLiveGeneration(
+  row: any,
+  generation: string,
+  stopId: string,
+): void {
+  const canary = row?.canary;
+  if (
+    row?.operatorStop?.active !== false ||
+    row?.operatorStop?.stopId !== stopId ||
+    canary?.generation !== generation ||
+    canary?.mode !== "live" ||
+    canary?.scope !== "callbacks_and_interactive" ||
+    canary?.requiresCallback !== false ||
+    canary?.requiresRelay !== true ||
+    canary?.workersSuspendedConfirmed !== true ||
+    !(canary?.startedAt instanceof Date) ||
+    !Number.isFinite(canary.startedAt.getTime()) ||
+    Object.hasOwn(canary ?? {}, "expiresAt") ||
+    canary?.maxAdmissions !== null ||
+    canary?.remainingAdmissions !== null ||
+    canary?.consumedAdmissions !== 0 ||
+    canary?.endedBy !== undefined ||
+    canary?.endedAt !== undefined ||
+    canary?.auditTruncatedAdmissions !== undefined ||
+    !Array.isArray(canary?.audit) ||
+    canary.audit.length !== 1 ||
+    canary.audit[0]?.event !== "opened" ||
+    canary.audit[0]?.generation !== generation
+  ) {
+    throw new Error("New Protractor live generation could not be verified; refresh status before retrying");
+  }
+}
+
+/**
+ * Atomically replace an armed operator stop with a continuous, relay-only
+ * generation.  This is deliberately not a clear/open-ended compatibility
+ * path: callers must provide the exact stop generation they armed, and the
+ * previous generation is archived only when it is already terminal.
+ */
+export async function startProtractorLive(input: {
+  changedBy: string;
+  reason: string;
+  expectedStopId: string;
+  workersSuspendedConfirmed: true;
+  now?: Date;
+}): Promise<ProtractorOperatorStopState> {
+  const changedBy = input.changedBy.trim();
+  const reason = input.reason.trim();
+  const expectedStopId = input.expectedStopId.trim();
+  if (!changedBy || !reason || !expectedStopId || input.workersSuspendedConfirmed !== true) {
+    throw new Error("changedBy, reason, expectedStopId, and workersSuspendedConfirmed=true are required");
+  }
+  await initializeTransportLease(
+    PROTRACTOR_PHYSICAL_TRANSPORT_KEY,
+    __protractorPhysicalTransportTestHooks.getDb,
+  );
+  const db = await __protractorPhysicalTransportTestHooks.getDb();
+  const now = input.now ?? new Date();
+  const pipelineNow = input.now ?? "$$NOW";
+  const generation = __protractorPhysicalTransportTestHooks.randomUUID();
+  const row = await db.collection<any>(RATE_LIMIT_COLLECTION).findOneAndUpdate(
+    {
+      _id: PROTRACTOR_PHYSICAL_TRANSPORT_KEY,
+      "operatorStop.active": true,
+      "operatorStop.stopId": expectedStopId,
+      // A stopped generation is replaced only after its terminal evidence is
+      // complete. Never discard an unended/malformed predecessor merely
+      // because an operator stop happens to be present.
+      $expr: {
+        $and: [
+          {
+            $or: [
+              { $eq: [{ $type: "$physicalAdmissionOwnerToken" }, "missing"] },
+              { $lte: [{ $ifNull: ["$leaseExpiresAt", "$$NOW"] }, "$$NOW"] },
+            ],
+          },
+          {
+            $or: [
+              { $eq: [{ $type: "$canary" }, "missing"] },
+              {
+                $and: [
+                  validCanaryAccountingExpression,
+                  { $in: ["$canary.endedBy", ["time", "budget", "operator"]] },
+                  { $eq: [{ $type: "$canary.endedAt" }, "date"] },
+                  { $isArray: "$canary.audit" },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    },
+    [{
+      $set: {
+        canaryHistory: {
+          $cond: [
+            {
+              $and: [
+                validCanaryAccountingExpression,
+                { $in: ["$canary.endedBy", ["time", "budget", "operator"]] },
+                { $eq: [{ $type: "$canary.endedAt" }, "date"] },
+                { $isArray: "$canary.audit" },
+              ],
+            },
+            {
+              $slice: [
+                {
+                  $concatArrays: [
+                    { $cond: [{ $isArray: "$canaryHistory" }, "$canaryHistory", []] },
+                    ["$canary"],
+                  ],
+                },
+                -20,
+              ],
+            },
+            {
+              $slice: [
+                { $cond: [{ $isArray: "$canaryHistory" }, "$canaryHistory", []] },
+                -20,
+              ],
+            },
+          ],
+        },
+      },
+    },
+    // Aggregation assignments merge nested objects. Archive, remove, then
+    // construct a fresh shape so terminal trial fields cannot leak into live.
+    { $unset: ["canary", "operatorStop"] },
+    {
+      $set: {
+        operatorStop: {
+          active: false,
+          stopId: { $literal: expectedStopId },
+          reason: { $literal: reason },
+          changedBy: { $literal: changedBy },
+          clearedAt: pipelineNow,
+          updatedAt: pipelineNow,
+        },
+        canary: {
+          generation,
+          mode: "live",
+          scope: "callbacks_and_interactive",
+          requiresCallback: false,
+          requiresRelay: true,
+          startedAt: pipelineNow,
+          maxAdmissions: null,
+          remainingAdmissions: null,
+          consumedAdmissions: 0,
+          workersSuspendedConfirmed: true,
+          audit: [{
+            event: "opened",
+            at: pipelineNow,
+            generation,
+            consumedAdmissions: 0,
+            remainingAdmissions: null,
+            workersSuspendedConfirmed: true,
+          }],
+        },
+        expiresAt: "$$REMOVE",
+      },
+    }],
+    { returnDocument: "after", maxTimeMS: 1000 },
+  );
+  if (!row) throw new Error("operator stop changed; refresh state before starting live mode");
+  assertFreshProtractorLiveGeneration(row, generation, expectedStopId);
   return projectProtractorStopState(row, now);
 }
 

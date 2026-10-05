@@ -1,6 +1,7 @@
 export type ProtractorShopRecord = {
   integrationProvider?: unknown;
   protractor?: {
+    configured?: boolean;
     connectionId?: unknown;
     apiKey?: unknown;
   } | null;
@@ -20,6 +21,7 @@ function nonEmptyString(value: unknown): value is string {
 export function isProtractorShopRecord(shop: unknown): boolean {
   if (!shop || typeof shop !== "object") return false;
   const record = shop as ProtractorShopRecord;
+  if (record.protractor?.configured === false) return false;
 
   const declaredProvider = nonEmptyString(record.integrationProvider)
     ? record.integrationProvider.trim().toLowerCase()

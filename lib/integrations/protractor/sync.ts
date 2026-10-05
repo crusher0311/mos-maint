@@ -20,6 +20,8 @@ import * as backfillProgress from "@/lib/data/repositories/protractor-backfill-p
 import pLimit from "p-limit";
 import { detectDviLinksFromProtractorInvoice, isDviLinkIngestEnabled } from "@/lib/dvi-links/ingest";
 import { isProtractorShopRecord } from "./shop-eligibility";
+import { assertBackgroundSyncAllowed, BackgroundSyncRestricted, runStagedInitialSync, storedBinding } from "./onboarding";
+import { InitialSyncSuperseded, withInitialSyncCheckpointFence, writeProtractorCheckpoint, markProtractorBackfillComplete } from "./initial-sync-fence";
 
 const MAX_WALL_CLOCK_MS = 1800000; // 30 minutes max
 // Per-chunk metrics rolling window. Mirrors the Tekmetric backfill cap so the
@@ -61,6 +63,7 @@ async function fetchInvoicesForDateRange(
     );
 
     if (!result.ok) {
+      await assertBackgroundSyncAllowed();
       console.error(`[Backfill] Shop ${shopId} Invoice error at skip=${skip}:`, result.error);
       hadError = true;
       break;
@@ -217,7 +220,7 @@ async function backfillShopChunk(
   db: any, 
   shopId: number,
   _rateLimiter: ReturnType<typeof pLimit>
-): Promise<{ jobsIndexed: number; skipped: number; complete: boolean; message: string; vehiclesFetched: number; normalizedCount: number }> {
+): Promise<{ jobsIndexed: number; skipped: number; complete: boolean; message: string; vehiclesFetched: number; normalizedCount: number; error?: string }> {
   // Per-chunk speed metrics. Captured here and persisted at the end of the
   // chunk so a regression in vehicle cache hit rate or a backoff spike is
   // visible in the admin sync-health view without grepping cron logs.
@@ -282,7 +285,7 @@ async function backfillShopChunk(
   } else {
     chunkEnd = new Date(today);
     console.log(`[Backfill] Shop ${shopId}: Starting fresh (logicVersion=${progress?.logicVersion || 'none'})`);
-    await backfillProgress.upsertMerge(shopId, {
+    await writeProtractorCheckpoint(shopId, {
       set: {
         shopId,
         startedAt: new Date(),
@@ -361,7 +364,7 @@ async function backfillShopChunk(
     }
     daysToProcess = shrunk;
   }
-  await backfillProgress.upsertMerge(shopId, {
+  await writeProtractorCheckpoint(shopId, {
     set: {
       pendingAttempt: {
         chunkEnd,
@@ -378,13 +381,10 @@ async function backfillShopChunk(
   }
 
   if (chunkEnd <= oldestDate) {
-    await backfillProgress.upsertMerge(shopId, {
+    await writeProtractorCheckpoint(shopId, {
       set: { completed: true, completedAt: new Date() },
     });
-    await db.collection("shops").updateOne(
-      { shopId },
-      { $set: { protractorBackfillComplete: true, protractorBackfillCompletedAt: new Date() } }
-    );
+    await markProtractorBackfillComplete(db, shopId);
     return { jobsIndexed: 0, skipped: 0, complete: true, message: "Already complete", vehiclesFetched: 0, normalizedCount: 0 };
   }
 
@@ -432,7 +432,7 @@ async function backfillShopChunk(
       0,
       RECENT_CHUNK_METRICS_LIMIT,
     );
-    await backfillProgress.upsertMerge(shopId, {
+    await writeProtractorCheckpoint(shopId, {
       set: {
         currentChunkEnd: nextChunkEnd,
         lastRunAt: new Date(),
@@ -450,12 +450,9 @@ async function backfillShopChunk(
       unset: ["pendingAttempt"],
     });
     if (isComplete) {
-      await db.collection("shops").updateOne(
-        { shopId },
-        { $set: { protractorBackfillComplete: true, protractorBackfillCompletedAt: new Date() } }
-      );
+      await markProtractorBackfillComplete(db, shopId);
     }
-    return { jobsIndexed: 0, skipped: 0, complete: isComplete, message: `${startStr} to ${endStr}: 0 invoices${chunkHadError ? " (HOLD)" : ""}`, vehiclesFetched: 0, normalizedCount: 0 };
+    return { jobsIndexed: 0, skipped: 0, complete: isComplete, message: `${startStr} to ${endStr}: 0 invoices${chunkHadError ? " (HOLD)" : ""}`, vehiclesFetched: 0, normalizedCount: 0, ...(chunkHadError ? { error: "Historical invoice fetch failed; cursor retained for retry." } : {}) };
   }
 
   const allJobEntries: any[] = [];
@@ -690,6 +687,7 @@ async function backfillShopChunk(
     normalizedCount = normalizedResult.workOrders.created + normalizedResult.workOrders.updated;
     console.log(`[Backfill] Shop ${shopId}: Normalized ${normalizedCount} WOs`);
   } catch (normalizedError) {
+    chunkHadError = true;
     console.error(`[Backfill] Shop ${shopId}: Normalized ingestion error:`, normalizedError);
   }
 
@@ -751,7 +749,7 @@ async function backfillShopChunk(
       `backoff=${chunkMetrics.backoff429Ms}ms`,
   );
 
-  await backfillProgress.upsertMerge(shopId, {
+  await writeProtractorCheckpoint(shopId, {
     set: {
       currentChunkEnd: nextChunkEnd,
       lastRunAt: new Date(),
@@ -771,10 +769,7 @@ async function backfillShopChunk(
   });
 
   if (isComplete) {
-    await db.collection("shops").updateOne(
-      { shopId },
-      { $set: { protractorBackfillComplete: true, protractorBackfillCompletedAt: new Date() } }
-    );
+    await markProtractorBackfillComplete(db, shopId);
     console.log(`[Backfill] Shop ${shopId}: Marked protractorBackfillComplete=true`);
   }
   
@@ -784,6 +779,7 @@ async function backfillShopChunk(
   return {
     jobsIndexed,
     skipped: skippedUnchanged,
+    ...(chunkHadError ? { error: "Historical sync batch failed; cursor retained for retry." } : {}),
     complete: isComplete,
     message: `${startStr} to ${endStr}: ${jobsIndexed} jobs, ${vehiclesFetched} vehicles fetched, ${normalizedCount} normalized, ${daysToProcess}d chunk`,
     vehiclesFetched,
@@ -808,6 +804,16 @@ async function backfillShopChunk(
 }
 
 export async function runProtractorBackfill(
+  shopId: number,
+  options: { singlePass?: boolean; maxChunks?: number } = {},
+) {
+  const db = await getDb();
+  return runStagedInitialSync(db, shopId, (staged) =>
+    runProtractorBackfillBatch(shopId, staged ? { ...options, singlePass: true } : options),
+  );
+}
+
+async function runProtractorBackfillBatch(
   shopId: number,
   options: { singlePass?: boolean; maxChunks?: number } = {},
 ): Promise<{
@@ -869,10 +875,8 @@ export async function runProtractorBackfill(
   // "Already in progress" signal instead of letting the outer try/catch
   // misclassify it as a backfill error.
   const staleLockThreshold = new Date(Date.now() - STALE_THRESHOLD_MS);
-  const lockResult = await backfillProgress.acquireLease(
-    shopId,
-    staleLockThreshold,
-    new Date(),
+  const lockResult = await withInitialSyncCheckpointFence(shopId, () =>
+    backfillProgress.acquireLease(shopId, staleLockThreshold, new Date()),
   );
 
   if (!lockResult) {
@@ -895,18 +899,24 @@ export async function runProtractorBackfill(
 
   try {
     while (chunksProcessed < chunkCap) {
+      await assertBackgroundSyncAllowed();
+      const currentShop = await db.collection("shops").findOne({ shopId });
+      if (!isProtractorShopRecord(currentShop) || storedBinding(currentShop) !== storedBinding(shopDoc)) {
+        throw new Error("Protractor connection changed or disconnected; historical sync stopped.");
+      }
       if (Date.now() - startTime > MAX_WALL_CLOCK_MS) {
         console.log(`[Backfill] Shop ${shopId}: Wall clock limit reached after ${chunksProcessed} chunks`);
         break;
       }
 
       const result = await backfillShopChunk(db, shopId, rateLimiter);
+      if (result.error) throw new Error(result.error);
       chunksProcessed++;
       totalJobsIndexed += result.jobsIndexed;
 
       console.log(`[Backfill] Shop ${shopId} chunk ${chunksProcessed}: ${result.message}`);
       
-      await backfillProgress.upsertMerge(shopId, {
+      await writeProtractorCheckpoint(shopId, {
         set: { lastActivityAt: new Date() },
       });
 
@@ -920,7 +930,7 @@ export async function runProtractorBackfill(
 
     console.log(`[Backfill] Shop ${shopId}: Run finished - ${chunksProcessed} chunks, ${totalJobsIndexed} jobs indexed, complete: ${complete}`);
     
-    await backfillProgress.upsertMerge(shopId, {
+    await writeProtractorCheckpoint(shopId, {
       set: { inProgress: false, lastCompletedRunAt: new Date() },
     });
     
@@ -942,13 +952,18 @@ export async function runProtractorBackfill(
     
     return { chunksProcessed, totalJobsIndexed, complete };
   } catch (err: any) {
+    if (err instanceof InitialSyncSuperseded) throw err;
+    if (err instanceof BackgroundSyncRestricted) {
+      await writeProtractorCheckpoint(shopId, { set: { inProgress: false } });
+      throw err;
+    }
     console.error(`[Backfill] Shop ${shopId}: Error during backfill:`, err.message);
     
     const progress = await backfillProgress.findByShop(shopId);
     const retryCount = ((progress?.retryCount as number) || 0) + 1;
     const MAX_RETRIES = 5;
     
-    await backfillProgress.upsertMerge(shopId, {
+    await writeProtractorCheckpoint(shopId, {
       set: {
         inProgress: false,
         lastError: err.message,
@@ -980,6 +995,10 @@ export async function runProtractorBackfill(
 }
 
 const STALE_THRESHOLD_MS = 30 * 60 * 1000; // 30 minutes
+
+export const __staleBackfillDeps = {
+  runBackfill: (shopId: number) => runProtractorBackfill(shopId),
+};
 
 export async function findAndResumeStaleBackfills(): Promise<{
   resumed: number;
@@ -1015,24 +1034,7 @@ export async function findAndResumeStaleBackfills(): Promise<{
   });
 
   const [staleBackfills, protractorShops] = await Promise.all([
-    db.collection("backfill_progress").find({
-      completed: { $ne: true },
-      $or: [
-        { lastAttemptedAt: { $lt: staleThreshold } },
-        { lastAttemptedAt: { $exists: false }, lastRunAt: { $lt: staleThreshold } },
-        { inProgress: true, lastAttemptedAt: { $lt: staleThreshold } },
-        // Catch docs that crashed before writing any chunk-completion timestamp.
-        // These have `inProgress: true` + `startedAt` from months ago but no
-        // `lastRunAt` / `lastAttemptedAt`. Without this branch the previous
-        // three clauses can never match them and the doc is stuck forever.
-        {
-          inProgress: true,
-          lastAttemptedAt: { $exists: false },
-          lastRunAt: { $exists: false },
-          startedAt: { $lt: staleThreshold },
-        },
-      ]
-    }).toArray(),
+    backfillProgress.findStaleBackfills(staleThreshold),
     db.collection("shops").find({ "protractor.configured": true }).project({
       shopId: 1,
       integrationProvider: 1,
@@ -1068,7 +1070,7 @@ export async function findAndResumeStaleBackfills(): Promise<{
     console.log(`[Backfill] Resuming stale backfill for shop ${progressShopId}`);
     shopIds.push(progressShopId);
     
-    runProtractorBackfill(progressShopId).then(result => {
+    __staleBackfillDeps.runBackfill(progressShopId).then(result => {
       console.log(`[Backfill] Shop ${progressShopId} resumed backfill completed:`, result);
     }).catch(err => {
       console.error(`[Backfill] Shop ${progressShopId} resumed backfill failed:`, err.message);

@@ -5,6 +5,28 @@ description: How to interpret history evidence without changing callback retry s
 
 Keep history-application evidence separate from queue completion and transport success. A processed callback can have failed history indexing; coalesced siblings do not independently prove history application.
 
+Missing-VIN generations may stop automatic retries while retaining deferred
+history evidence; recovery requires a newer corrected callback, not silently
+marking the old attempt as successfully applied.
+
+**Why:** Repeating a successful fetch of unchanged missing identity wastes
+provider capacity. The approved behavior preserves the data gap without a
+mass replay or clearing existing exhausted records.
+
+**How to apply:** Keep processed/queue completion separate from data readiness.
+Validate alternate identifiers before ingestion and preserve newer-generation
+fencing when a corrected notification arrives.
+
+Deletion no-ops require absence across stores still used by active writers,
+not just the selected canonical read store.
+
+**Why:** During the migration, direct Mongo snapshot writers can coexist with
+PG-canonical repository reads. A PG miss alone can falsely acknowledge a
+deletion while leaving a live Mongo record untouched.
+
+**How to apply:** Check applicable stores, fail on read errors, and mutate
+matched identities without upserts that duplicate legacy string-shop rows.
+
 **Why:** Callback indexing failures were historically non-critical to queue completion. The outcome-reporting change deliberately preserves that retry/coalescing behavior rather than silently introducing provider replays. An applied result can also mean existing index content was hash-verified unchanged, not that a new write occurred.
 
 **How to apply:** When extending callback reporting, do not derive applied status from processed/noAction, successful relay responses, or snapshot markers. Treat historical rows without explicit evidence as unknown. Changing which indexing failures trigger retries requires a separate operational decision, not an observability-only edit.
@@ -35,3 +57,54 @@ refunding ambiguous physical admissions would undermine the trial budget.
 **How to apply:** Keep deferrals owner-fenced and idempotent. A batch deadline
 must stop new provider work without suppressing real evidence returned by
 already-admitted work; durable completion still needs the existing owner fences.
+
+Diagnose growing callback queues using full callback completion time, not only
+relay latency, and compare work-order callbacks with vehicle callbacks.
+
+**Why:** Production work-order callbacks were substantially slower end-to-end
+than their successful relay attempts, while vehicle callbacks stayed fast.
+Increasing outbound concurrency without separating these stages would also
+multiply local ingestion load. Some old callbacks still progressed even while
+the overall actionable queue grew, so growth did not establish a global lockup.
+
+**How to apply:** Compare several activation-scoped snapshots, excluding retained
+Contacts and exhausted retries from actionable work. Count unique objects as
+well as notifications, and distinguish owner completion from coalesced siblings.
+Use stage timing to establish the expensive operation before tuning capacity;
+source-code fanout alone is a hypothesis, not measured causation.
+
+Do not interpret a PG miss followed by Mongo fallback as proof of migration
+drift. First-time normalization also misses both stores before creating both.
+
+**Why:** A bounded production comparison found matching PG/Mongo identities,
+with many rows created during callback processing. The Mongo fallback's
+query planner chose a shop/vehicle index bounded only by shop, despite an
+existing compound provider-identity index.
+
+**How to apply:** Compare creation times and matching keys before scheduling a
+backfill. Inspect the actual fallback query plan and all compound-index
+prefix predicates before adding an index or retiring recovery behavior.
+
+Prefer the redundant dotted provider-ID predicate plus the original full
+`$elemMatch` over a hard index hint for callback work-order recovery.
+
+**Why:** Bounded production hit/miss explains selected the existing compound
+provider index naturally with only two keys examined. A forced hint adds
+availability risk where that index is absent, while filtering on top-level
+sourceSystem would exclude legacy records that omit it.
+
+**How to apply:** Preserve the complete same-element identity match and monitor
+the existing operation timing after rollout. Revisit planning only on measured
+regression; do not remove legacy recovery based on this optimization.
+
+Increase callback processing opportunity separately from provider pacing and
+historical/background admission.
+
+**Why:** The daytime queue accumulated mostly unattempted notifications despite
+successful retrievals. Enabling unrelated background work would add competition
+without increasing the callback worker's execution window.
+
+**How to apply:** Prefer an isolated worker-budget change first. Include setup
+and pre-admission waits in short scheduler deadlines; retain durable completion
+for already-admitted work. Scheduler headroom is nominal, not a hard guarantee
+when database persistence stalls.

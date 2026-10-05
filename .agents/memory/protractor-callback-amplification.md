@@ -124,3 +124,15 @@ Deploy the relay with stop-and-drain-before-start singleton replacement plus a
 startup cooldown, verify one DNS target and one relay process, deploy the
 incompatible signed-deadline client contract while outbound stays disabled,
 and require full relay mode before reopening organic traffic.
+
+Check the live official status page at https://status.protractorsoftware.com/
+and open its current incident, rather than relying on search-result snippets.
+
+**Why:** An indexed result reported no recent events while the live page already
+reported login and on-screen errors. MOS relay calls were still receiving HTTP
+200 responses during that SMS-client incident; API success did not disprove it.
+
+**How to apply:** Distinguish SMS-client, catalog, and API incidents, and keep
+provider-reported symptoms separate from root cause. Compare actual MOS traffic
+before and after a deployment; neither unchanged caps nor a provider incident
+announcement alone proves MOS did or did not contribute.

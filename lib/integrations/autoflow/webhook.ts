@@ -17,6 +17,10 @@ import { fetchDviByInvoice, upsertDviSnapshot } from "@/lib/integrations/autoflo
 import { upsertCustomerFromEvent } from "@/lib/upsert-customer";
 import { insertEvent } from "@/lib/data/repositories/events";
 import { updateDviResultCrossRef } from "@/lib/data/repositories/dvi";
+import {
+  reserveAutoflowDashboardUpdate,
+  finishAutoflowDashboardUpdate,
+} from "@/lib/autoflow-dashboard-outbox";
 
 // ---- HMAC helpers --------------------------------------------------------
 
@@ -208,8 +212,26 @@ export async function processAutoflowWebhookEvent(args: {
   raw: string;
   payload: any;
 }): Promise<void> {
-  const { db, shop, token, raw, payload } = args;
+  const { db, shop } = args;
 
+  // Reserve before ANY durable business write: a marker/outbox database
+  // outage must not leave a successfully saved event with no retry intent.
+  const notificationId = await reserveAutoflowDashboardUpdate(
+    db, shop.shopId, "autoflow_webhook",
+  );
+  try {
+    await persistAutoflowWebhookEvent(args);
+  } finally {
+    // Only the notification is retried, never event/customer/DVI processing.
+    // Also invalidate on ambiguous business-write failure (it may have landed).
+    await finishAutoflowDashboardUpdate(db, notificationId);
+  }
+}
+
+async function persistAutoflowWebhookEvent(
+  args: Parameters<typeof processAutoflowWebhookEvent>[0],
+): Promise<void> {
+  const { db, shop, token, raw, payload } = args;
   // Persist raw event for audit / console.
   // events ingress is PG-canonical via the repository; Mongo `events` is
   // shadow-mirrored during soak so legacy aggregate readers still see the row.
@@ -221,14 +243,13 @@ export async function processAutoflowWebhookEvent(args: {
     raw,
     receivedAt: new Date(),
   });
-
   // ---- Normalize into first-class docs so dashboards light up ---------
   try {
     const eventName = String(getEventName(payload)).toLowerCase();
 
     // AutoFlow is a DVI-only provider: it has no work-order snapshot
-    // collection, no NormalizedIngestionService adapter, and never bumps
-    // `dashboard_updates`. Its DVI snapshots are cross-referenced onto the
+    // collection or NormalizedIngestionService adapter. Its DVI snapshots are
+    // cross-referenced onto the
     // primary SMS work order (Tekmetric/Protractor/Shop-Ware) which already
     // drives dashboard visibility. The marker just lets a DVI event be traced.
     console.log(`[autoflow-webhook] received event=${eventName || "(none)"} shop=${shop.shopId}`);

@@ -104,6 +104,26 @@
     return roleCanWrite === true && sessionCanMutate === true;
   }
 
+  // Category and RO consent are deliberately separate. Neither a precedence
+  // setting nor a manual Apply Now action can authorize existing-job edits.
+  function allowsExistingLaborRepricing(rule, categoryScoped = false) {
+    return categoryScoped
+      ? rule?.repriceExistingCategoryLabor === true
+      : rule?.applyToAllLabor === true;
+  }
+
+  function categoryRuleMatchesJob(rule, job) {
+    const category = job.jobCategoryName || job.jobCategory?.name ||
+      job.jobCategory || job.category || job.type || '';
+    if (typeof category !== 'string' || !category) return false;
+    const normalized = category.toLowerCase();
+    return (rule.conditions || [])
+      .filter(condition => condition.type === 'jobCategory')
+      .flatMap(condition => condition.values || [])
+      .some(value => typeof value === 'string' && value.length > 0 &&
+        (normalized.includes(value.toLowerCase()) || value.toLowerCase().includes(normalized)));
+  }
+
   // Keep the browser/provider proof out of broadcast payloads while still
   // giving the side panel a stable discriminator for the current session.
   function sessionDiscriminator(identity) {
@@ -162,7 +182,7 @@
         code: outcome.code || null,
       }));
       result.error = result.success
-        ? 'One or more labor-rate operations failed after another operation succeeded'
+        ? `One or more labor-rate operations failed after another operation succeeded: ${failedOutcomes[0].error || 'Labor-rate operation failed'}`
         : (failedOutcomes[0].error || 'Labor-rate operation failed');
       result.code = failedOutcomes[0].code || null;
     }
@@ -180,6 +200,8 @@
     contextMatches,
     appliedBroadcastMatchesCurrent,
     effectiveMutationPermission,
+    allowsExistingLaborRepricing,
+    categoryRuleMatchesJob,
     sessionDiscriminator,
     summarizeLaborRateOutcomes,
   };

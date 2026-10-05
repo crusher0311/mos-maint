@@ -929,11 +929,11 @@ function handleImmediatePrint() {
   });
 }
 
+let dismissIntervalDropdown = null;
+
 async function showIntervalDropdown(event, buttonElement) {
-  // Remove existing dropdown if any
-  const existingDropdown = document.getElementById('mos-interval-dropdown');
-  if (existingDropdown) {
-    existingDropdown.remove();
+  if (dismissIntervalDropdown) {
+    dismissIntervalDropdown();
     return;
   }
   
@@ -949,19 +949,96 @@ async function showIntervalDropdown(event, buttonElement) {
     borderRadius: '8px',
     boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
     zIndex: '999999',
-    minWidth: '180px',
+    boxSizing: 'border-box',
+    width: 'max-content',
+    overflowY: 'auto',
+    overflowX: 'hidden',
+    overscrollBehavior: 'contain',
+    whiteSpace: 'normal',
+    overflowWrap: 'anywhere',
+    textAlign: 'left',
+    lineHeight: '1.4',
     padding: '4px 0',
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
   });
   
-  // Position dropdown below the button
-  const rect = buttonElement.getBoundingClientRect();
-  dropdown.style.top = `${rect.bottom + 4}px`;
-  dropdown.style.left = `${rect.left}px`;
-  
   // Show loading state
   dropdown.innerHTML = '<div style="padding: 12px 16px; color: #666; font-size: 13px;">Loading intervals...</div>';
   document.body.appendChild(dropdown);
+
+  let closed = false;
+  let frame = 0;
+  let cancelConfigWait = null;
+  let lastGeometry = '';
+  const closeDropdown = () => {
+    if (closed) return;
+    closed = true;
+    cancelAnimationFrame(frame);
+    cancelConfigWait?.();
+    document.removeEventListener('click', onClick, true);
+    document.removeEventListener('keydown', onKeyDown, true);
+    document.removeEventListener('scroll', onScroll, true);
+    dropdown.remove();
+    if (dismissIntervalDropdown === closeDropdown) dismissIntervalDropdown = null;
+  };
+  const onClick = (e) => {
+    // Capture also sees the print button's stopPropagation left-click.
+    if (!dropdown.contains(e.target)) closeDropdown();
+  };
+  const onKeyDown = (e) => {
+    if (e.key === 'Escape') closeDropdown();
+  };
+  const onScroll = (e) => {
+    // Nested page scrollers can clip the anchor without moving it outside the
+    // viewport. Keep menu scrolling usable, but dismiss on page scrolling.
+    if (!dropdown.contains(e.target)) closeDropdown();
+  };
+  const positionDropdown = (force = false) => {
+    if (closed) return;
+    const rect = buttonElement.getBoundingClientRect();
+    const viewport = window.visualViewport;
+    const left = viewport?.offsetLeft || 0;
+    const top = viewport?.offsetTop || 0;
+    const width = viewport?.width || document.documentElement.clientWidth;
+    const height = viewport?.height || document.documentElement.clientHeight;
+    if (!buttonElement.isConnected || !dropdown.isConnected ||
+        !rect.width || !rect.height ||
+        getComputedStyle(buttonElement).visibility === 'hidden' ||
+        rect.right <= left || rect.left >= left + width ||
+        rect.bottom <= top || rect.top >= top + height) {
+      closeDropdown();
+      return;
+    }
+    const geometry = [rect.left, rect.top, rect.right, rect.bottom, left, top, width, height].join(',');
+    if (!force && geometry === lastGeometry) return;
+    lastGeometry = geometry;
+    const margin = 8;
+    const availableWidth = Math.max(1, width - margin * 2);
+    const availableHeight = Math.max(1, height - margin * 2);
+    dropdown.style.minWidth = `${Math.min(180, availableWidth)}px`;
+    dropdown.style.maxWidth = `${Math.min(320, availableWidth)}px`;
+    dropdown.style.maxHeight = `${availableHeight}px`;
+    const menu = dropdown.getBoundingClientRect();
+    const below = top + height - margin - rect.bottom - 4;
+    const above = rect.top - 4 - top - margin;
+    const desiredTop = menu.height > below && above > below
+      ? rect.top - 4 - menu.height
+      : rect.bottom + 4;
+    dropdown.style.left = `${Math.max(left + margin, Math.min(rect.left, left + width - margin - menu.width))}px`;
+    dropdown.style.top = `${Math.max(top + margin, Math.min(desiredTop, top + height - margin - menu.height))}px`;
+  };
+  // Track only while open: also catches sidebar transitions/layout shifts that
+  // don't dispatch resize or scroll. All resources belong to this menu instance.
+  const trackAnchor = () => {
+    positionDropdown();
+    if (!closed) frame = requestAnimationFrame(trackAnchor);
+  };
+  dismissIntervalDropdown = closeDropdown;
+  document.addEventListener('click', onClick, true);
+  document.addEventListener('keydown', onKeyDown, true);
+  document.addEventListener('scroll', onScroll, true);
+  trackAnchor();
+  if (closed) return;
   
   // Fetch shop's configured intervals via the background's SWR cache (task
   // #1076): a warm entry renders near-instantly; a cold miss is bounded by
@@ -975,14 +1052,19 @@ async function showIntervalDropdown(event, buttonElement) {
       // but if the message channel itself dies (worker restart mid-flight)
       // the callback may never fire — resolve to defaults shortly after the
       // background's own bound instead of hanging the dropdown.
-      const guard = setTimeout(() => resolve(null), 10000);
+      const finish = (value) => {
+        clearTimeout(guard);
+        cancelConfigWait = null;
+        resolve(value);
+      };
+      const guard = setTimeout(() => finish(null), 10000);
+      cancelConfigWait = () => finish(null);
       safeSendMessage({
         action: 'GET_STICKER_CONFIG',
         shopId: context.shopId,
         provider: context.provider || 'tekmetric'
       }, (res) => {
-        clearTimeout(guard);
-        resolve(res);
+        finish(res);
       });
     });
     
@@ -1026,6 +1108,8 @@ async function showIntervalDropdown(event, buttonElement) {
       return;
     }
   }
+  // A late response must never populate a dismissed or replacement menu.
+  if (closed) return;
   
   // Fallback to defaults if no intervals fetched
   if (intervals.length === 0) {
@@ -1063,7 +1147,7 @@ async function showIntervalDropdown(event, buttonElement) {
     });
     
     item.addEventListener('click', () => {
-      dropdown.remove();
+      closeDropdown();
       const current = detectContext();
       if (String(context.shopId) !== String(current.shopId) ||
           String(context.roId) !== String(current.roId)) {
@@ -1080,14 +1164,7 @@ async function showIntervalDropdown(event, buttonElement) {
     dropdown.appendChild(item);
   });
   
-  // Close dropdown when clicking outside
-  const closeDropdown = (e) => {
-    if (!dropdown.contains(e.target) && e.target !== buttonElement) {
-      dropdown.remove();
-      document.removeEventListener('click', closeDropdown);
-    }
-  };
-  setTimeout(() => document.addEventListener('click', closeDropdown), 0);
+  positionDropdown(true);
 }
 
 function handleImmediatePrintWithInterval(miles, months, useKm) {

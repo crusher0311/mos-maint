@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { CheckCircle, ArrowRight, Loader2, ExternalLink, Settings, Users, Puzzle, Car } from "lucide-react";
 import Link from "next/link";
+import { initialSyncPresentation, type ProtractorSyncStatus } from "../settings/protractor/initial-sync-status";
 
 interface OnboardingStep {
   id: string;
@@ -36,6 +37,26 @@ export default function OnboardingPage() {
       const hasIntegration = integrationsData.hasIntegration;
       const hasTeamMembers = (usersData.users?.length || 0) > 1;
       const hasVehicles = (vehiclesData.rows?.length || 0) > 0;
+      const protractorConnected = !!integrationsData.integrations?.protractor;
+      const otherIntegration = !!(
+        integrationsData.integrations?.tekmetric ||
+        integrationsData.integrations?.autoflow ||
+        integrationsData.integrations?.carfax
+      );
+      let protractorStatus: ProtractorSyncStatus | null = null;
+      if (protractorConnected) {
+        try {
+          const response = await fetch("/api/settings/protractor", { credentials: "include" });
+          if (response.ok) protractorStatus = await response.json();
+        } catch {
+          // Unknown import status must not be mistaken for a completed import.
+        }
+      }
+      const protractorImport = protractorConnected
+        ? initialSyncPresentation(protractorStatus ?? { configured: true, initialSyncState: null })
+        : null;
+      const protractorImportIncomplete = protractorConnected &&
+        !otherIntegration && protractorStatus?.initialSyncState !== "complete";
 
       setSteps([
         {
@@ -57,9 +78,11 @@ export default function OnboardingPage() {
         {
           id: "vehicles",
           title: "Import Vehicles",
-          description: "Sync vehicles from your shop management system",
-          completed: hasVehicles,
-          href: "/dashboard",
+          description: protractorImportIncomplete
+            ? protractorImport!.title + ". " + protractorImport!.detail
+            : "Sync vehicles from your shop management system",
+          completed: hasVehicles && !protractorImportIncomplete,
+          href: protractorImportIncomplete ? "/dashboard/settings/protractor" : "/dashboard",
           icon: <Car className="w-5 h-5" />,
         },
         {

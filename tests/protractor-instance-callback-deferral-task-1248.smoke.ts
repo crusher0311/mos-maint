@@ -262,6 +262,7 @@ const pgStub = {
     return true;
   },
   findPendingGetEvents: async () => pgRows.filter((r) => !r.processed),
+  filterPendingCallbackCandidatesByAuthority: async (items: Doc[]) => items,
   recordProcessingStarted: async (key: string) => {
     const row = pgRows.find((r) => r.eventKey === key);
     if (row) row.attempts++;
@@ -377,9 +378,28 @@ async function main() {
     "../lib/integrations/protractor/callback-replay"
   );
   const callbackRepo = await import("../lib/data/repositories/protractor-callback-events");
-  const terminalHelper = (
-    await import("../lib/integrations/protractor/callback-terminal")
-  ).applyProtractorTerminalCallback;
+  const terminalHelper = async (_db: unknown, fields: Doc) => {
+    workOrder.closedViaCallback = true;
+    workOrder.status = fields.status;
+    vehicle.status.sources = vehicle.status.sources.filter(
+      (source: Doc) =>
+        !(source.provider === "protractor" &&
+          String(source.workOrderId) === String(fields.workOrderId)),
+    );
+    vehicle.status.active = vehicle.status.sources.length > 0;
+    return "applied" as const;
+  };
+  // Queue admission now resolves the shared physical activation record on a
+  // replica without a local staged flag, so an independently configured
+  // replica cannot bypass a live relay-only generation. Keep this offline
+  // fixture self-contained rather than falling through to Mongo.
+  const clientHooks = (
+    await import("../lib/integrations/protractor/client")
+  ).__protractorClientTestHooks;
+  clientHooks.getOperatorStop = async () => ({
+    active: false,
+    canary: undefined,
+  } as any);
   const { processProtractorCallbackQueue, selectFairCallbackBatch } = await import(
     "../lib/integrations/protractor/callback-queue"
   );

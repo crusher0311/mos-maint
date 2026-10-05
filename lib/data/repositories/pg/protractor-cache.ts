@@ -198,6 +198,48 @@ export async function findCachedWorkOrderById(
   return rows.length ? reconstructWorkOrder(rows[0]) : null;
 }
 
+export async function findCachedWorkOrderByProviderIdentity(
+  shopId: number,
+  workOrderId: string,
+): Promise<AnyDoc | null> {
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(protractorWorkOrders)
+    .where(
+      and(
+        eq(protractorWorkOrders.shopId, shopId),
+        sql`(${protractorWorkOrders.workOrderId} = ${workOrderId}
+          OR ${protractorWorkOrders.workOrderGuid} = ${workOrderId}
+          OR (${protractorWorkOrders.payload} #>> '{data,ID}') = ${workOrderId})`,
+      ),
+    )
+    .limit(1);
+  return rows.length ? reconstructWorkOrder(rows[0]) : null;
+}
+
+export async function markCachedWorkOrderTerminal(
+  shopId: number,
+  workOrderId: string,
+  set: PgWorkOrderUpsertFields,
+): Promise<void> {
+  const db = getDb();
+  const rows = await db
+    .update(protractorWorkOrders)
+    .set({
+      ...workOrderColumns(set),
+      payload: sql`${protractorWorkOrders.payload} || ${JSON.stringify(set)}::jsonb`,
+    })
+    .where(and(
+      eq(protractorWorkOrders.shopId, shopId),
+      eq(protractorWorkOrders.workOrderId, workOrderId),
+    ))
+    .returning({ workOrderId: protractorWorkOrders.workOrderId });
+  if (rows.length !== 1) {
+    throw new Error("Cached Protractor work order disappeared before terminal update");
+  }
+}
+
 export async function findCachedWorkOrdersByIds(
   shopId: number,
   workOrderIds: string[],
