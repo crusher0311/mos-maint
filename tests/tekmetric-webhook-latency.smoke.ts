@@ -78,11 +78,16 @@ function withCapturedDefer() {
 function withFakeDb(seed: Record<string, any[]>) {
   const fake = makeFakeDb(seed);
   const original = __deps.getDb;
+  const originalInsertLog = __deps.insertWebhookLog;
   __deps.getDb = async () => fake.db as any;
+  __deps.insertWebhookLog = async (doc: any) => {
+    fake.collections.tekmetric_webhook_logs.push({ ...doc });
+  };
   return {
     fake,
     restore: () => {
       __deps.getDb = original;
+      __deps.insertWebhookLog = originalInsertLog;
     },
   };
 }

@@ -60,6 +60,10 @@ export interface TekmetricVehicle {
 }
 
 export interface TekmetricRepairOrder {
+  /** Provider-recorded sharing dates; inspection is independent of estimate/invoice. */
+  inspectionShareDate?: string | null;
+  estimateShareDate?: string | null;
+  invoiceShareDate?: string | null;
   id: number;
   repairOrderNumber: number;
   shopId: number;

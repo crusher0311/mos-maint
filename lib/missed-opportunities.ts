@@ -43,7 +43,9 @@ export {
 
 // v6 records Tekmetric advisor/disposition/price evidence. Invalidate older
 // saved reports so corrected reingestion is visible immediately.
-export const MISSED_OPPORTUNITY_REPORT_VERSION = 6;
+export const MISSED_OPPORTUNITY_REPORT_VERSION = 7;
+
+import { normalizeDviEngagement } from "@/lib/dvi-engagement";
 
 export type RecommendationSource = "vhi" | "dvi" | "both";
 export type RecommendationOutcome =
@@ -62,6 +64,8 @@ export interface MissedOpportunityRecommendation extends MissingVhiItem {
 
 /** One closed RO's evaluation result. */
 export interface MissedOpportunityRo {
+  /** Absent in saved legacy reports; absence is unknown, never a negative. */
+  dviEngagement?: import("@/lib/dvi-engagement").DviEngagement;
   /** Normalized work-order id (PG uuid). */
   workOrderId: string;
   /** Display RO number. */
@@ -440,7 +444,7 @@ export interface MissedOpportunityReport {
   notEvaluated: Array<
     Pick<
       MissedOpportunityRo,
-      "workOrderId" | "workOrderNumber" | "closedDate" | "vin" | "vehicle" | "skipReason"
+      "workOrderId" | "workOrderNumber" | "closedDate" | "vin" | "vehicle" | "skipReason" | "dviEngagement"
     >
   >;
   /** True when the window held more closed ROs than the evaluation cap. */
@@ -462,6 +466,7 @@ export function normalizeMissedOpportunityReportCache(
     rows: Array.isArray(report?.rows)
       ? report.rows.map((row) => ({
           ...row,
+          dviEngagement: normalizeDviEngagement(row.dviEngagement),
           ticketJobs: Array.isArray((row as any).ticketJobs)
             ? (row as any).ticketJobs
             : null,
@@ -470,7 +475,9 @@ export function normalizeMissedOpportunityReportCache(
             : [],
         }))
       : [],
-    notEvaluated: Array.isArray(report?.notEvaluated) ? report.notEvaluated : [],
+    notEvaluated: Array.isArray(report?.notEvaluated)
+      ? report.notEvaluated.map(row => ({ ...row, dviEngagement: normalizeDviEngagement(row.dviEngagement) }))
+      : [],
   };
 }
 

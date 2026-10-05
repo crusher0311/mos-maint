@@ -198,7 +198,7 @@ case-insensitive. The exact names in the first column are therefore
 | `RepairOrder.Posted` | Terminal processing, job indexing, cache invalidation, deferred normalized ingestion. | Listed by local endpoint; exact Tekmetric event: **confirm**. |
 | `RepairOrder.Invoiced` | Treated as terminal/invoiced. | Listed by local endpoint; exact Tekmetric event: **confirm**. |
 | `Inspection.Complete` / `InspectionComplete` / wording containing inspection plus complete or marked complete | Marks the DVI complete and attempts to fetch the full inspection task list. | Matching behavior: **confirmed locally**. Official spelling and payload: **confirm**. |
-| `CustomerViewedInspection` or an event name containing customer plus viewed | Marks a customer-viewed timestamp when an RO ID is present. | Matching behavior: **confirmed locally**. Official availability/name: **confirm**. |
+| `[customer name] viewed their inspection for Repair Order #[number]` | Persists shop-scoped inspection-view receipt evidence after matching the RO number to its payload. | **Observed in received deliveries.** Estimate views are separate. No exact view timestamp; see `docs/dvi-engagement-evidence.md`. |
 | Standalone vehicle update | No dedicated local handler. Vehicle data is enriched from an RO's `vehicleId`. | **Confirmed local gap**; ask whether Tekmetric offers this event. |
 | Standalone customer update | No dedicated local handler. Customer data is enriched from an RO's `customerId`. | **Confirmed local gap**; ask whether Tekmetric offers this event. |
 | Unknown event | May be logged and acknowledged without domain processing. | Defensive forward-compatibility recommendation. |

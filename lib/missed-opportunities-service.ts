@@ -27,6 +27,8 @@ import {
   normalizedLineItems,
 } from "@/lib/db/schema/normalized";
 import { findCachedPlansForVehicles } from "@/lib/data/repositories/missed-opportunities";
+import { findTekmetricDviEvidence } from "@/lib/data/repositories/dvi-engagement";
+import { loadReportDviEngagement } from "@/lib/missed-opportunities-dvi";
 import {
   findCachedWorkOrdersByIds,
   findDisplayRoNumbersByIds,
@@ -439,6 +441,13 @@ export async function computeMissedOpportunityReport(
   finishStage("planCacheLoadingMs", stageStartedAt);
 
   stageStartedAt = Date.now();
+  const dviByRo = await loadReportDviEngagement(
+    shopId, scoped, findTekmetricDviEvidence,
+    Math.min(1_000, Math.max(0, PROVIDER_CACHE_ENRICHMENT_BUDGET_MS - providerCacheEnrichmentMs)),
+  );
+  finishStage("dviEngagementMs", stageStartedAt);
+
+  stageStartedAt = Date.now();
   const rows: MissedOpportunityRo[] = scoped.map((wo) => {
     const vin = extractVin(wo.vehicle);
     const vehicleLabel = vehicleLabelFrom(wo.vehicle);
@@ -446,6 +455,7 @@ export async function computeMissedOpportunityReport(
     const ticketJobs = ticketJobsByWo.get(wo.id) || [];
     const base = {
       workOrderId: wo.id,
+      dviEngagement: dviByRo.get(wo.id),
       workOrderNumber:
         displayRoNumbers[String(wo.workOrderNumber || "")] ||
         String(wo.workOrderNumber || ""),
@@ -491,8 +501,9 @@ export async function computeMissedOpportunityReport(
     rows: rows.filter((r) => r.evaluated && r.recommendations.length > 0),
     notEvaluated: rows
       .filter((r) => !r.evaluated)
-      .map(({ workOrderId, workOrderNumber, closedDate, vin, vehicle, skipReason }) => ({
+      .map(({ workOrderId, workOrderNumber, closedDate, vin, vehicle, skipReason, dviEngagement }) => ({
         workOrderId,
+        dviEngagement,
         workOrderNumber,
         closedDate,
         vin,

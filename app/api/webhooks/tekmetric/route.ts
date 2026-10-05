@@ -17,6 +17,7 @@ export const dynamic = "force-dynamic";
 // Test seam (`__deps`: getDb / defer / insertWebhookLog) lives in ./deps.ts —
 // Next's generated route types reject non-handler exports from route.ts.
 import { __deps } from "./deps";
+import { evidenceTimestamp, tekmetricInspectionViewRo } from "@/lib/dvi-engagement";
 
 const TERMINAL_STATUSES = ["invoice", "invoiced", "posted", "deleted", "void", "closed"];
 
@@ -203,9 +204,7 @@ export async function POST(req: NextRequest) {
       eventType.toLowerCase().includes("inspection") && 
       (eventType.toLowerCase().includes("complete") || eventType.toLowerCase().includes("marked complete"));
     
-    const isCustomerViewed = 
-      eventType.toLowerCase().includes("customer") && 
-      eventType.toLowerCase().includes("viewed");
+    const viewedInspectionRoId = tekmetricInspectionViewRo(eventType, repairOrder);
     
     const isRepairOrderUpdate = 
       eventType.toLowerCase().includes("repairorder") ||
@@ -822,20 +821,18 @@ export async function POST(req: NextRequest) {
       }
     }
     
-    if (isCustomerViewed) {
-      const repairOrderId = data.repairOrderId || data.repair_order_id || data.roId;
-      
-      if (repairOrderId) {
-        await db.collection("tekmetric_work_orders").updateOne(
-          { workOrderId: String(repairOrderId) },
-          { 
-            $set: { 
-              customerViewedDvi: true,
-              customerViewedDviAt: new Date()
-            }
-          }
-        );
-        console.log(`[Tekmetric Webhook] Customer viewed DVI for RO ${repairOrderId}`);
+    // Provider sharing and customer viewing are independent. Never use legacy
+    // customerViewedDvi flags or RO updatedDate as inspection-view evidence.
+    const inspectionSharedAt = evidenceTimestamp(repairOrder?.inspectionShareDate);
+    if (repairOrder && (viewedInspectionRoId || inspectionSharedAt)) {
+      const shop = await db.collection("shops").findOne(
+        tekmetricShopIdFilter(Number(repairOrder.shopId)),
+      );
+      if (shop?.shopId) {
+        await __deps.recordDviEvidence(Number(shop.shopId), String(repairOrder.id), {
+          inspectionSharedAt,
+          inspectionViewReceivedAt: viewedInspectionRoId ? new Date(startTime).toISOString() : undefined,
+        });
       }
     }
     

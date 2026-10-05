@@ -454,6 +454,14 @@ export class NormalizedIngestionService {
   
   async ingestWorkOrder(sourceData: any): Promise<IngestionResult> {
     try {
+      // Preserve inspection-sharing evidence outside replaceable RO snapshots,
+      // including no-change ingestion runs. Other providers are not inferred.
+      if (this.adapter.sourceSystem === "tekmetric" && sourceData?.inspectionShareDate) {
+        const { recordTekmetricDviEvidence } = await import("@/lib/data/repositories/dvi-engagement");
+        await recordTekmetricDviEvidence(Number(this.shopId), String(sourceData.id), {
+          inspectionSharedAt: sourceData.inspectionShareDate,
+        });
+      }
       const mapped = this.adapter.mapWorkOrder(this.shopId, sourceData, this.enterpriseId);
       const sourceIds = this.adapter.getSourceIds(sourceData);
       

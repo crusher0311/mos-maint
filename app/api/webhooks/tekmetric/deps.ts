@@ -37,14 +37,18 @@ const defaultDefer: DeferFn = (fn) => {
     });
   });
 };
+import { recordTekmetricDviEvidence } from "@/lib/data/repositories/dvi-engagement";
+
 export const __deps: {
   getDb: typeof getDb;
   defer: DeferFn;
   insertWebhookLog: typeof insertTekmetricWebhookLog;
+  recordDviEvidence: typeof recordTekmetricDviEvidence;
 } = {
   getDb,
   defer: defaultDefer,
   // Webhook-log writes go through the flag-gated Mongo/PG repository;
   // exposed here so smoke tests can capture them alongside the fake db.
   insertWebhookLog: insertTekmetricWebhookLog,
+  recordDviEvidence: recordTekmetricDviEvidence,
 };
