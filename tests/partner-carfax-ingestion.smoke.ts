@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import { mock } from "node:test";
 import { NextRequest } from "next/server";
 import { withUpstreamTimeout } from "../lib/with-upstream-timeout";
 
@@ -103,6 +104,8 @@ require.cache[mongoPath] = {
 } as any;
 
 async function main() {
+  // Keep cache freshness and route timestamp checks independent of the day CI runs.
+  mock.timers.enable({ apis: ["Date"], now: new Date("2026-09-01T16:00:00.000Z") });
   const vhiServiceSource = fs.readFileSync(
     require.resolve("../lib/external-api/partner-vhi-service"),
     "utf8",
@@ -381,6 +384,7 @@ async function main() {
   // Exercise the real route wrapper for auth, partner-only scoping, malformed
   // and oversized bodies, unknown shops, and cross-shop resolution.
   let shopExists = true;
+  let resolvedExternalShopId: string | undefined;
   const mappingPath = require.resolve("../lib/data/repositories/appfueled-shop-mappings");
   class MappingConflict extends Error {}
   require.cache[mappingPath] = {
@@ -391,8 +395,10 @@ async function main() {
     paths: [],
     exports: {
       AppFueledMappingValidationError: MappingConflict,
-      resolveActiveAppFueledMapping: async () =>
-        shopExists ? { mosShopId: 36, provider: "protractor", externalShopId: "36" } : null,
+      resolveActiveAppFueledMapping: async (externalShopId: string) => {
+        resolvedExternalShopId = externalShopId;
+        return shopExists ? { mosShopId: 36, provider: "protractor", externalShopId } : null;
+      },
     },
   } as any;
   let vhiOutcome: "success" | "building" | "permanent" = "success";
@@ -548,6 +554,69 @@ async function main() {
   assert.equal(permanentJson.ingestion.duplicate, true);
   assert.equal(permanentJson.vhi.retryable, false);
   assert.equal(permanentJson.vhi.httpStatus, 403);
+
+  // October 5 partner submission shape; synthetic VIN/delivery ID, original
+  // retrieval time. This is an offline fixture, never a live replay.
+  mock.timers.setTime(new Date("2026-10-05T00:07:25.864Z").getTime());
+  const octoberSubmission = {
+    vin: valid.vin,
+    sms: "live_api",
+    smsShopId: "37",
+    deliveryId: "october-5-offline-regression",
+    retrievedAt: "2026-10-05T00:07:25.525Z",
+    report: {
+      vin: valid.vin,
+      reportDate: "2026-10-05",
+      serviceHistory: {
+        numberOfRecallRecords: 1,
+        displayRecords: [
+          { displayDate: "03/25/2024", odometer: "10", type: "service", text: ["Vehicle serviced", "Pre-delivery inspection completed"] },
+          { displayDate: "02/26/2025", odometer: "9,149", type: "service", text: ["Vehicle serviced", "Fluids checked", "Oil and filter changed"] },
+          { displayDate: "01/31/2026", odometer: "16,481", type: "service", text: ["Vehicle serviced", "Maintenance inspection completed", "Oil and filter changed"] },
+          { displayDate: "07/23/2026", type: "recall", text: ["Manufacturer Safety recall issued", "NHTSA #26V468", "Recall #26S55 ENGINE COMPARTMENT WIRING HARNESS REPAIR", "Status: Remedy Available"] },
+        ],
+        serviceCategories: [
+          { serviceName: "Oil change/Engine oil filter", dateOfLastService: "01/31/2026", odometerOfLastService: 16481 },
+        ],
+      },
+    },
+  };
+  assert.equal(validateCarfaxIngestionBody(octoberSubmission).ok, true);
+  vhiOutcome = "success";
+  const octoberBody = JSON.stringify(octoberSubmission);
+  assert.equal((await POST(request(octoberBody))).status, 401);
+  assert.equal((await POST(request(octoberBody, "mos_under"))).status, 403);
+  for (const sms of ["unknown_provider", "tekmetric"]) {
+    assert.equal(
+      (await POST(request(JSON.stringify({ ...octoberSubmission, sms }), "mos_partner_valid"))).status,
+      400,
+      "unknown providers and canonical-provider substitution remain rejected",
+    );
+  }
+  shopExists = false;
+  assert.equal((await POST(request(octoberBody, "mos_partner_valid"))).status, 404);
+  shopExists = true;
+  const octoberFirst = await POST(request(octoberBody, "mos_partner_valid"));
+  const octoberJson = await octoberFirst.json();
+  assert.equal(octoberFirst.status, 200);
+  assert.equal(resolvedExternalShopId, "37");
+  assert.equal(octoberJson.ingestion.shopId, 36, "external 37 is not implicitly MOS shop 37");
+  assert.equal(octoberJson.ingestion.stored, true);
+  assert.equal(octoberJson.ingestion.duplicate, false);
+  assert.equal(octoberJson.vhi.success, true);
+  assert.match(octoberJson.vhi.reportUrl, /shopId=36/);
+  const reportCount = reports.length;
+  const octoberRetry = await POST(request(octoberBody, "mos_partner_valid"));
+  const retryJson = await octoberRetry.json();
+  assert.equal(octoberRetry.status, 200);
+  assert.equal(retryJson.ingestion.duplicate, true);
+  assert.equal(retryJson.vhi.success, true);
+  assert.equal(reports.length, reportCount);
+  mock.timers.setTime(new Date("2026-10-13T00:07:25.864Z").getTime());
+  const expired = await POST(request(octoberBody, "mos_partner_valid"));
+  assert.equal(expired.status, 400);
+  assert.match((await expired.json()).error, /within 7 days/);
+  mock.timers.reset();
 
   console.log("partner CARFAX ingestion: PASS");
 }

@@ -1,0 +1,72 @@
+# Detect Dog – Shop Board (Replit Agent Prompt)
+
+> Paste everything below the line into Replit Agent. Build Phase 1 only; send Phase 2/3 as follow-up prompts once Phase 1 works.
+
+---
+
+## Context
+
+I'm building a **Shop Board** module for **Detect Dog**, part of Oil Sticker's SaaS platform for independent auto repair and tire shops. Our shops run **Protractor** as their shop management system. Oil Sticker already has a Protractor integration (API key), which will live in Replit Secrets — never hard-code keys.
+
+The goal: a live, technician-by-hour scheduling and dispatch board that lets shop managers, service advisors, and our call center see real capacity, book against it, and catch late jobs before the customer calls. This is our own original product — do not copy any competitor's code, branding, or screens.
+
+## Tech requirements
+
+- Full-stack web app: React + TypeScript front end, Node/Express (TypeScript) back end, PostgreSQL (Replit DB/Postgres) with a migration tool (Drizzle or Prisma).
+- Real-time updates to every open board via WebSockets or Server-Sent Events (no manual refresh).
+- **Data adapter pattern:** all shop-system data goes through a `ShopDataProvider` interface. Build two implementations:
+  1. `MockProvider` – seeded realistic data (1 store, 12 techs, ~50 jobs/day) so the app works immediately.
+  2. `ProtractorProvider` – stubbed with clear TODOs; reads customers, vehicles, and work orders using the key in `PROTRACTOR_API_KEY`. Assume **read-only** access until confirmed otherwise.
+- Multi-store from day one (every record has `store_id`). Role-based login: Admin, Manager, Advisor, Tech, Call Center Agent.
+- Clean, high-contrast UI that reads well on a wall-mounted TV and on a phone.
+
+## Phase 1 – Live Shop Board (build this now)
+
+**Board layout**
+- Rows = technicians (plus non-tech lanes: Alignment, Tires/Wheel, Vendor/Sublet).
+- Columns = hourly time slots for the store's business hours; lunch/breaks shown as blocked (hatched).
+- Header shows job count per hour slot.
+- Each job is a card: customer first name, year/make/model, RO/work order #, estimated hours, transportation type icon. Card width = estimated duration.
+- Drag-and-drop a card to reassign tech or time; resize to change duration. Every change broadcasts live to all viewers.
+
+**Job statuses (color-coded, editable list per store)**
+Pending Arrival → Here → Sold Work → On the Rack → MPI/Inspection → On Hold → Test Drive → Car Wash → Done → Gone. Plus flags: Assistance Needed, Time Added, No Show.
+
+**Promise time**
+- Every job has a promise time. Auto-flag cards that are **over promise time** or have **moved past their original promise**. A "Late / At Risk" filter lists them.
+
+**Transportation type**
+- Waiter, Drop Off, Night Drop, Tow In. Daily summary bar shows count of each plus total expected hours.
+
+**Tech load**
+- Per tech: available hours (shift minus breaks), booked hours, and load % (booked ÷ available). Color it: under 70% = underloaded, 70–110% = healthy, over 110% = overbooked.
+
+**Views & tools**
+- Default view, Status view, Transportation view, Tag view.
+- **TV mode:** full-screen, auto-refresh, no edit controls, shareable read-only URL with a revocable token.
+- **Customer-safe view:** first names and vehicles only, for a lobby screen.
+- Add Walk-in button, "Needs RO" list (jobs with no work order linked), On-Hold list, Today's Stats panel.
+
+**Admin setup**
+- Stores, business hours, technicians (shift, skill level 1–3, speed factor), lanes, statuses, and a **job duration table** (service name → default hours, required skill level).
+
+## Phase 2 – Capacity Booking (next prompt)
+
+- Booking screen for advisors and call center agents: pick services → system totals estimated hours → shows open slots by tech that fit skill level and capacity → book.
+- Limit waiters per hour slot (configurable) to keep the waiter/drop-off mix balanced.
+- Track booking source (Call Center, Web, Walk-in, Advisor) and the agent who booked it for reporting.
+- Customer text confirmation/reminder hooks (stub the SMS provider).
+
+## Phase 3 – Protractor Sync (only after write access is confirmed)
+
+- Match board jobs to Protractor work orders automatically.
+- If Protractor allows writes: create appointments/ROs from the board. If not: keep the board as the scheduling source of truth and reconcile against Protractor work orders.
+- Pull tech clock time if available to show true efficiency (flag hours ÷ clock hours).
+
+## Definition of done for Phase 1
+
+- Runs with mock data on first launch.
+- Two browser windows show the same drag-and-drop change within 2 seconds.
+- TV mode URL works without login and can be revoked.
+- Late jobs flag automatically when the clock passes promise time.
+- README explaining the `ShopDataProvider` interface and where Protractor wiring goes.

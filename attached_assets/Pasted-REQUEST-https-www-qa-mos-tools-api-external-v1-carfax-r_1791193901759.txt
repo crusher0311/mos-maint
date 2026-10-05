@@ -1,0 +1,91 @@
+REQUEST:
+https://www.qa.mos.tools/api/external/v1/carfax/reports
+Accept: application/json
+Content-Type: application/json
+X-API-Key: ***MASKED***
+X-Request-Id: af-carfax-20261004_200724_cf5545-1FMDE1BH1RLA31910
+
+{
+    "vin": "1FMDE1BH1RLA31910",
+    "sms": "live_api",
+    "smsShopId": "37",
+    "deliveryId": "dd460929e46bef64e02af1c6",
+    "retrievedAt": "2026-10-05T00:07:25.525Z",
+    "report": {
+        "vin": "1FMDE1BH1RLA31910",
+        "reportDate": "2026-10-05",
+        "serviceHistory": {
+            "numberOfRecallRecords": 1,
+            "displayRecords": [
+                {
+                    "displayDate": "03/25/2024",
+                    "odometer": "10",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Pre-delivery inspection completed"
+                    ]
+                },
+                {
+                    "displayDate": "02/26/2025",
+                    "odometer": "9,149",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Fluids checked",
+                        "Oil and filter changed"
+                    ]
+                },
+                {
+                    "displayDate": "01/31/2026",
+                    "odometer": "16,481",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed",
+                        "Oil and filter changed"
+                    ]
+                },
+                {
+                    "displayDate": "07/23/2026",
+                    "type": "recall",
+                    "text": [
+                        "Manufacturer Safety recall issued",
+                        "NHTSA #26V468",
+                        "Recall #26S55 ENGINE COMPARTMENT WIRING HARNESS REPAIR",
+                        "Status: Remedy Available"
+                    ]
+                }
+            ],
+            "serviceCategories": [
+                {
+                    "serviceName": "Oil change/Engine oil filter",
+                    "dateOfLastService": "01/31/2026",
+                    "odometerOfLastService": 16481
+                }
+            ]
+        }
+    }
+}
+
+RESPONSE:
+HTTP/2 400 
+date: Mon, 05 Oct 2026 00:07:25 GMT
+content-type: application/json
+rndr-id: d0540da3-7202-4262
+server: cloudflare
+vary: RSC, Next-Router-State-Tree, Next-Router-Prefetch
+vary: Accept-Encoding
+x-ratelimit-limit: 1000
+x-ratelimit-remaining: 995
+x-ratelimit-reset: 2026-10-05T00:08:25.762Z
+x-render-origin-server: Render
+x-request-id: af-carfax-20261004_200724_cf5545-1FMDE1BH1RLA31910
+cf-cache-status: DYNAMIC
+cf-ray: a4582fa0dc60c235-CMH
+alt-svc: h3=":443"; ma=86400
+
+{
+    "error": "sms must be one of: tekmetric, shopware, protractor, autoflow, shopmonkey",
+    "requestId": "af-carfax-20261004_200724_cf5545-1FMDE1BH1RLA31910"
+}
