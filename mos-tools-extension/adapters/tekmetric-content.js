@@ -816,7 +816,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 let printButtonInjected = false;
 
 function injectPrintButton() {
-  if (printButtonInjected) return;
   
   const context = detectContext();
   if (!context.roId) return;
@@ -827,52 +826,8 @@ function injectPrintButton() {
     return;
   }
   
-  // Find the print icon button in Tekmetric's header action bar
-  // The print button is typically an icon button with a print SVG
-  let printButton = null;
-  let targetContainer = null;
-  
-  // Look for buttons with print-related attributes or SVGs
-  const allButtons = document.querySelectorAll('button');
-  for (const btn of allButtons) {
-    // Check if button contains a print icon (SVG with polyline for printer shape)
-    const svg = btn.querySelector('svg');
-    if (svg) {
-      const svgContent = svg.innerHTML.toLowerCase();
-      // Print icons typically have printer-related paths
-      if (svgContent.includes('polyline') && svgContent.includes('rect') && 
-          (btn.title?.toLowerCase().includes('print') || 
-           btn.getAttribute('aria-label')?.toLowerCase().includes('print') ||
-           svgContent.includes('6 9 6 2 18 2 18 9'))) {
-        printButton = btn;
-        targetContainer = btn.parentElement;
-        break;
-      }
-    }
-    
-    // Also check for data-testid or class containing print
-    if (btn.dataset.testid?.includes('print') || 
-        btn.className?.includes('print') ||
-        btn.title?.toLowerCase() === 'print') {
-      printButton = btn;
-      targetContainer = btn.parentElement;
-      break;
-    }
-  }
-  
-  // If no print button found, try looking in the header icon row area
-  if (!targetContainer) {
-    // Tekmetric uses an icon row in the RO header - look for grouped icon buttons
-    const iconRows = document.querySelectorAll('[class*="IconButton"], [class*="icon-button"], [class*="action-bar"]');
-    for (const row of iconRows) {
-      const buttons = row.querySelectorAll('button');
-      if (buttons.length >= 2) {
-        targetContainer = row;
-        printButton = buttons[buttons.length - 1]; // Insert after last button
-        break;
-      }
-    }
-  }
+  const targetContainer = findTekmetricActionContainer();
+  const printButton = targetContainer?.querySelector('button:not([id^="mos-"])');
   
   if (!targetContainer) {
     console.log('[MOS Tools] Could not find target container for print button');
@@ -1282,39 +1237,66 @@ function isButtonVisible(key) {
 function removeInjectedButton(id) {
   const el = document.getElementById(id);
   if (el) el.remove();
+  if (id === 'mos-fab') {
+    fabDragController?.abort();
+    fabDragging = false;
+  }
 }
 
 function checkAndInjectButton() {
+  if (!chrome.runtime?.id) {
+    buttonLifecycleDiagnostic('context_invalidated');
+    return;
+  }
   const context = detectContext();
+  const routeKey = `${context.shopId || ''}:${context.roId || ''}`;
+  if (routeKey !== buttonRouteKey) {
+    buttonRouteKey = routeKey;
+    for (const id of RO_BUTTON_IDS) removeInjectedButton(id);
+    removeInjectedButton('mos-undo-chip');
+    undoChipCheckedRoId = null;
+    document.getElementById('mos-interval-dropdown')?.remove();
+  }
+  if (!context.roId) refreshFloatingSetting();
   if (context.roId) {
     fetchShopFeatures(context.shopId, (features) => {
+      if (routeKey !== buttonRouteKey || routeKey !== liveButtonRouteKey()) return;
+      const anchor = findTekmetricActionContainer();
+      if (!anchor) buttonLifecycleDiagnostic('anchor_missing');
+      for (const id of RO_BUTTON_IDS) {
+        const node = document.getElementById(id);
+        if (node && node.parentElement !== anchor) node.remove();
+        if (!document.getElementById(id) && seenButtonIds.has(id)) buttonLifecycleDiagnostic('control_detached');
+      }
       // Oil sticker print button has no feature gate today; visibility
       // preference alone decides.
       if (isButtonVisible('oil_sticker')) {
-        if (!printButtonInjected) setTimeout(injectPrintButton, 1000);
+        if (anchor) injectPrintButton();
       } else {
         removeInjectedButton('mos-print-button');
         printButtonInjected = false;
       }
       if (features.dvi_prefill && isButtonVisible('dvi_prefill')) {
-        setTimeout(injectPrefillButton, 200);
+        if (anchor) injectPrefillButton();
       } else {
         removeInjectedButton('mos-prefill-dvi-btn');
         prefillButtonInjected = false;
       }
       if (features.enhance_notes && isButtonVisible('enhance_notes')) {
-        setTimeout(injectEnhanceButton, 400);
+        if (anchor) injectEnhanceButton();
       } else {
         removeInjectedButton('mos-enhance-notes-btn');
         enhanceButtonInjected = false;
       }
       if (features.dvi_prefill && isButtonVisible('add_vhi_recommendations')) {
-        setTimeout(injectBuildRoFromVhiButton, 600);
+        if (anchor) injectBuildRoFromVhiButton();
       } else {
         removeInjectedButton('mos-build-ro-vhi-btn');
         buildRoFromVhiButtonInjected = false;
       }
       checkAndInjectUndoChip(context);
+      applyFloatingToFab();
+      for (const id of RO_BUTTON_IDS) if (document.getElementById(id)) seenButtonIds.add(id);
     });
   } else {
     const existingButton = document.getElementById('mos-print-button');
@@ -1337,8 +1319,6 @@ function checkAndInjectButton() {
     if (existingBuild) existingBuild.remove();
     buildRoFromVhiButtonInjected = false;
     buildRoFromVhiInFlight = false;
-    cachedFeatures = null;
-    cachedButtonVis = null;
   }
 }
 
@@ -1357,6 +1337,7 @@ function checkAndInjectUndoChip(context) {
   safeSendMessage(
     { action: 'UNDO_SNAPSHOT_LIST', provider: 'tekmetric', shopId: context.shopId, roId: context.roId },
     (resp) => {
+      if (`${context.shopId || ''}:${context.roId || ''}` !== liveButtonRouteKey()) return;
       if (!resp || !resp.success || !Array.isArray(resp.snapshots) || resp.snapshots.length === 0) return;
       injectUndoChip(resp.snapshots);
     }
@@ -1417,25 +1398,93 @@ function injectUndoChip(snapshots) {
 
 let prefillButtonInjected = false;
 let cachedFeatures = null;
-let cachedFloatingEnabled = null; // null = unknown (show), true = show, false = hide FAB launcher
+let cachedFloatingEnabled = null; // Unknown must not reveal an owner/user-disabled launcher.
 let floatingFabFetchInFlight = false;
 let featuresFetchInFlight = false;
+const RO_BUTTON_IDS = ['mos-print-button', 'mos-prefill-dvi-btn', 'mos-enhance-notes-btn', 'mos-build-ro-vhi-btn'];
+const seenButtonIds = new Set();
+let buttonRouteKey = '';
+let featuresScope = null;
+let featuresGeneration = 0;
+let featuresFreshUntil = 0;
+let featuresRetryAt = 0;
+let featuresFailures = 0;
+const lifecycleDiagnosticTimes = new Map();
+
+function liveButtonRouteKey() {
+  const m = location.pathname.match(/\/(?:admin\/)?shop\/(\d+)(?:\/repair-orders\/(\d+))?/);
+  return `${m?.[1] || ''}:${m?.[2] || ''}`;
+}
+
+// Fixed vocabulary only: never log page content, identities, tokens or URLs.
+function buttonLifecycleDiagnostic(reason) {
+  const now = Date.now();
+  if (now - (lifecycleDiagnosticTimes.get(reason) || 0) < 60000) return;
+  lifecycleDiagnosticTimes.set(reason, now);
+  console.warn('[MOS Tools] button lifecycle:', reason);
+}
+
+function invalidateButtonSettings() {
+  featuresGeneration++;
+  featuresFetchInFlight = false;
+  featuresFreshUntil = featuresRetryAt = featuresFailures = 0;
+  cachedFeatures = cachedButtonVis = cachedFloatingEnabled = null;
+  for (const id of RO_BUTTON_IDS) removeInjectedButton(id);
+  removeInjectedButton('mos-fab');
+  applyFloatingToFab();
+}
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if ((area === 'local' && (changes.mosApiToken || changes.mosUser)) ||
+      (area === 'session' && changes.mosBootstrapAuth)) {
+    invalidateButtonSettings();
+    checkAndInjectButton();
+  }
+});
 
 function fetchShopFeatures(shopId, callback) {
-  if (cachedFeatures) { callback(cachedFeatures); return; }
+  if (featuresScope !== shopId) {
+    invalidateButtonSettings();
+    featuresScope = shopId;
+  }
+  if (cachedFeatures) callback(cachedFeatures);
+  else if (Date.now() < featuresRetryAt) callback({});
+  if (Date.now() < featuresFreshUntil || Date.now() < featuresRetryAt) return;
   if (featuresFetchInFlight) return;
   featuresFetchInFlight = true;
-  safeSendMessage({ action: 'GET_SHOP_FEATURES', shopId, provider: 'tekmetric' }, (resp) => {
+  const generation = featuresGeneration;
+  let settled = false;
+  const finish = (resp, reason) => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timer);
+    if (generation !== featuresGeneration) return;
     featuresFetchInFlight = false;
-    if (resp && resp.success) {
+    if (resp?.success && resp.features && typeof resp.features === 'object') {
       cachedFeatures = resp.features;
-      // Task #1086: per-user button visibility rides along with features.
       cachedButtonVis = (resp.buttonVisibility && resp.buttonVisibility.tekmetric) || null;
+      cachedFloatingEnabled = resp.floatingButtonEnabled === true;
+      featuresFreshUntil = Date.now() + 60000;
+      featuresFailures = 0;
+      callback(cachedFeatures);
+      applyFloatingToFab();
     } else {
-      cachedFeatures = {};
+      featuresRetryAt = Date.now() + Math.min(30000, 2000 * 2 ** Math.min(featuresFailures++, 4));
+      buttonLifecycleDiagnostic(reason || 'settings_failed');
+      // Print stays ungated on an initial failure; a known hidden preference
+      // remains authoritative during same-identity transient failures.
+      if (!cachedFeatures) callback({});
     }
-    callback(cachedFeatures);
-  });
+  };
+  const timer = setTimeout(() => finish(null, 'settings_timeout'), 10000);
+  try {
+    if (!chrome.runtime?.id) { finish(null, 'context_invalidated'); return; }
+    const pending = chrome.runtime.sendMessage({ action: 'GET_SHOP_FEATURES', shopId, provider: 'tekmetric' }, (resp) => {
+      const error = chrome.runtime.lastError;
+      finish(error ? null : resp, error ? 'settings_transport' : null);
+    });
+    pending?.catch?.(() => finish(null, 'settings_transport'));
+  } catch (_) { finish(null, 'context_invalidated'); }
 }
 
 // Locate the RO page's print/action-bar container. Extracted from
@@ -1446,6 +1495,7 @@ function findTekmetricActionContainer() {
   const allButtons = document.querySelectorAll('button');
   for (const btn of allButtons) {
     if (btn.id && btn.id.startsWith('mos-')) continue;
+    if (!btn.getClientRects().length || getComputedStyle(btn).visibility === 'hidden') continue;
     const svg = btn.querySelector('svg');
     if (svg) {
       const svgContent = svg.innerHTML.toLowerCase();
@@ -1464,13 +1514,13 @@ function findTekmetricActionContainer() {
   }
   const iconRows = document.querySelectorAll('[class*="IconButton"], [class*="icon-button"], [class*="action-bar"]');
   for (const row of iconRows) {
+    if (!row.getClientRects().length || getComputedStyle(row).visibility === 'hidden') continue;
     if (row.querySelectorAll('button').length >= 2) return row;
   }
   return null;
 }
 
 function injectPrefillButton() {
-  if (prefillButtonInjected) return;
   if (document.getElementById('mos-prefill-dvi-btn')) {
     prefillButtonInjected = true;
     return;
@@ -1554,7 +1604,6 @@ function stopEnhanceSlowNotice() {
 }
 
 function injectEnhanceButton() {
-  if (enhanceButtonInjected) return;
   if (document.getElementById('mos-enhance-notes-btn')) {
     enhanceButtonInjected = true;
     return;
@@ -2425,7 +2474,6 @@ let buildRoFromVhiButtonInjected = false;
 let buildRoFromVhiInFlight = false;
 
 function injectBuildRoFromVhiButton() {
-  if (buildRoFromVhiButtonInjected) return;
   if (document.getElementById('mos-build-ro-vhi-btn')) {
     buildRoFromVhiButtonInjected = true;
     return;
@@ -2816,50 +2864,45 @@ function showToast(message, type = 'info') {
 
 // ==================== FLOATING ACTION BUTTON ====================
 let fabInjected = false;
+let fabDragController = null;
 let fabDragging = false;
 let fabDragStartY = 0;
 let fabStartTop = 0;
 
 function applyFloatingToFab() {
-  if (cachedFloatingEnabled === false) {
-    const ex = document.getElementById('mos-fab');
-    if (ex) ex.remove();
+  if (cachedFloatingEnabled !== true) {
+    removeInjectedButton('mos-fab');
     fabInjected = false;
-  } else if (cachedFloatingEnabled === true) {
+  } else {
     injectFloatingButton();
   }
 }
 
 // Resolve the owner + user floating-launcher decision and show/hide the FAB.
-// Fail-open: only an explicit `false` hides it; unknown / errors leave it shown.
+// Wait for an affirmative decision; unknown is not permission to show.
 function refreshFloatingSetting() {
-  if (cachedFloatingEnabled !== null) { applyFloatingToFab(); return; }
-  if (floatingFabFetchInFlight) return;
   const ctx = detectContext();
   if (!ctx.shopId) return;
-  floatingFabFetchInFlight = true;
-  safeSendMessage({ action: 'GET_SHOP_FEATURES', shopId: ctx.shopId, provider: 'tekmetric' }, (resp) => {
-    floatingFabFetchInFlight = false;
-    if (resp && resp.success) {
-      cachedFloatingEnabled = resp.floatingButtonEnabled !== false;
-      applyFloatingToFab();
-    }
-  });
+  fetchShopFeatures(ctx.shopId, () => applyFloatingToFab());
+  applyFloatingToFab();
 }
 
 function injectFloatingButton() {
   // Owner/user gate: the launcher (FAB) is disabled for this shop+user.
-  if (cachedFloatingEnabled === false) {
+  if (cachedFloatingEnabled !== true) {
     const ex = document.getElementById('mos-fab');
     if (ex) ex.remove();
     fabInjected = false;
     return;
   }
-  if (fabInjected) return;
   if (document.getElementById('mos-fab')) {
     fabInjected = true;
     return;
   }
+  fabDragController?.abort();
+  fabDragController = new AbortController();
+  fabDragging = false;
+  const dragSignal = fabDragController.signal;
   
   // Create the floating action button
   const fab = document.createElement('button');
@@ -2934,7 +2977,7 @@ function injectFloatingButton() {
     // Constrain to viewport
     newTop = Math.max(10, Math.min(window.innerHeight - 58, newTop));
     fab.style.top = `${newTop}px`;
-  });
+  }, { signal: dragSignal });
   
   document.addEventListener('mouseup', (e) => {
     if (!fabDragging) return;
@@ -2951,7 +2994,7 @@ function injectFloatingButton() {
     if (movedDistance < 5) {
       openSidePanel();
     }
-  });
+  }, { signal: dragSignal });
   
   document.body.appendChild(fab);
   fabInjected = true;

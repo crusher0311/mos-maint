@@ -722,6 +722,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === "GET_SHOP_FEATURES") {
+    // Bound the entire message (including worker restore/bootstrap/body read),
+    // not only response headers. Settle once; late results cannot revive it.
+    const controller = new AbortController();
+    let settled = false;
+    const respond = (value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(deadline);
+      sendResponse(value);
+    };
+    const deadline = setTimeout(() => {
+      controller.abort();
+      respond({ success: false, transient: true, code: 'FEATURES_TIMEOUT' });
+    }, 8000);
     (async () => {
       try {
         // Wait for chrome.storage state restore before reading
@@ -731,18 +745,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         // on every attempt (Task: AutoFlow v4 feature-fetch loop).
         await _stateReady;
         await ensureBootstrapBoundToActiveTab();
+        if (settled) return;
+        const requestEpoch = authEpoch;
+        const requestToken = mosApiToken;
         const shopId = message.shopId || currentSmsContext?.shopId;
         if (!mosApiToken || !shopId) {
-          sendResponse({ success: false, features: {} });
+          respond({ success: false, transient: true });
           return;
         }
         const apiBase = mosApiUrl || 'https://mos.tools';
         const provider = message.provider || currentSmsContext?.provider || '';
         const res = await fetch(`${apiBase}/api/extension/features?shopId=${shopId}&provider=${provider}&_token=${encodeURIComponent(mosApiToken)}`, {
+          signal: controller.signal,
           headers: { 'Authorization': `Bearer ${mosApiToken}` }
         });
         if (!res.ok) {
-          sendResponse({ success: false, features: {} });
+          respond({ success: false, transient: true });
           return;
         }
         const data = await res.json();
@@ -756,7 +774,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const role = (userRec?.role || '').toString().toLowerCase();
         const isAdmin = userRec?.role === 'platform_admin' || userRec?.isPlatformAdmin === true;
         const canWrite = isAdmin || (!userRec?.readOnly && !READ_ONLY_ROLES.has(role));
-        sendResponse({
+        if (requestEpoch !== authEpoch || requestToken !== mosApiToken ||
+            !data.features || typeof data.features !== 'object') {
+          respond({ success: false, transient: true });
+          return;
+        }
+        respond({
           success: true,
           features: data.features || {},
           writeProvider: data.writeProvider || null,
@@ -771,8 +794,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           buttonVisibility: data.buttonVisibility || null,
         });
       } catch (err) {
-        console.warn("[MOS] Feature fetch error:", err.message);
-        sendResponse({ success: false, features: {} });
+        console.warn("[MOS] Feature fetch failed");
+        respond({ success: false, transient: true });
       }
     })();
     return true;
