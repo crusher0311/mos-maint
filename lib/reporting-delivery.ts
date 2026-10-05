@@ -19,12 +19,13 @@ import {
 export const REPORTING_EXPORT_MAX_ROWS = 5_000;
 
 export function declarativeReportCsv(result: DeclarativeReportResult) {
-  const metricKeys = result.metadata.metrics.flatMap((metric) => metric.valueKeys.map(String));
-  const columns = ["key", "label", "shopId", ...metricKeys, ...metricKeys.map((key) => `${key}_comparison`)];
+  const metricKeys = [...new Set(result.metadata.metrics.flatMap((metric) => metric.valueKeys.map(String)))];
+  const columns = ["key", "label", "shopId", ...metricKeys, ...metricKeys.map((key) => `${key}_comparison`), "coverage_notes"];
   const rows = result.rows.map((row) => [
     row.key, row.label, row.shopId ?? "",
     ...metricKeys.map((key) => row.current[key]),
     ...metricKeys.map((key) => row.comparison?.[key]),
+    result.metadata.dataQuality.notes.join(" "),
   ]);
   return [columns, ...rows].map((row) => row.map(csvCell).join(",")).join("\r\n");
 }
@@ -163,7 +164,8 @@ export function reportingCsvResult(
     ...report.byLocation.map((group) => ({ dimension: "location", group })),
     ...report.byAdvisor.map((group) => ({ dimension: "advisor", group })),
     ...report.byTechnician.map((group) => ({ dimension: "technician", group })),
-    ...report.byRecommendationSource.map((group) => ({ dimension: "recommendationSource", group })),
+      ...report.byRecommendationSource.map((group) => ({ dimension: "recommendationSource", group })),
+      ...(report.bySoldLaborHours || []).map((group) => ({ dimension: "soldLaborHoursBand", group })),
   ];
   const savedDimension = typeof (options.layout as any)?.dimension === "string"
     ? (options.layout as any).dimension
@@ -286,10 +288,12 @@ export function buildSavedReportEmail(result: DeclarativeReportResult, dashboard
       : [renderedValue(row.current[key])]),
   ].join(" | ")).join("\n");
   const presentation = result.metadata.presentation.kind;
+  const quality = result.metadata.dataQuality.notes;
+  const qualityHtml = quality.length ? `<p>${quality.map(escapeHtml).join("<br>")}</p>` : "";
   return {
     subject: `MOS report — ${result.metadata.definitionName}`,
-    html: `<div style="font-family:system-ui;line-height:1.5"><h2>${escapeHtml(result.metadata.definitionName)}</h2><p>${escapeHtml(presentation)} report · ${result.rows.length} row${result.rows.length === 1 ? "" : "s"}</p><table border="1" cellpadding="6" cellspacing="0"><thead><tr>${tableHeaders.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead><tbody>${rowHtml}</tbody></table><p><a href="${escapeHtml(dashboardUrl)}">Open this report</a></p><p style="font-size:12px;color:#666"><a href="${escapeHtml(unsubscribeUrl)}">Disable this report</a></p></div>`,
-    text: `${result.metadata.definitionName}\n${presentation} report\n${tableHeaders.join(" | ")}\n${textRows}\nOpen report: ${dashboardUrl}\nDisable: ${unsubscribeUrl}`,
+    html: `<div style="font-family:system-ui;line-height:1.5"><h2>${escapeHtml(result.metadata.definitionName)}</h2><p>${escapeHtml(presentation)} report · ${result.rows.length} row${result.rows.length === 1 ? "" : "s"}</p><table border="1" cellpadding="6" cellspacing="0"><thead><tr>${tableHeaders.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead><tbody>${rowHtml}</tbody></table>${qualityHtml}<p><a href="${escapeHtml(dashboardUrl)}">Open this report</a></p><p style="font-size:12px;color:#666"><a href="${escapeHtml(unsubscribeUrl)}">Disable this report</a></p></div>`,
+    text: `${result.metadata.definitionName}\n${presentation} report\n${tableHeaders.join(" | ")}\n${textRows}\n${result.metadata.dataQuality.notes.join("\n")}\nOpen report: ${dashboardUrl}\nDisable: ${unsubscribeUrl}`,
   };
 }
 

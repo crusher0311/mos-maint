@@ -15,9 +15,14 @@ import {
 import type { ReportingFailureKind, ReportingPeriodResponse } from "@/lib/reporting-kpi-contract";
 import type { ResolvedReportingScope } from "@/lib/reporting-scope";
 import type { ReportExecutionPlan } from "@/lib/report-definition-contract";
+import { LABOR_REPORT_SQL, LABOR_MAX_ORDERS } from "@/lib/labor-reporting-query";
+import { aggregateLaborFacts, type LaborFact } from "@/lib/labor-reporting-aggregate";
+import { LABOR_REPORTING_NOTES } from "@/lib/labor-reporting-contract";
+import { recoverLaborEvidence } from "@/lib/labor-reporting-recovery";
+import { laborPartitions } from "@/lib/labor-reporting-partitions";
 
 type Row = Record<string, any>;
-type ReportingStage = "business" | "technician" | "events";
+type ReportingStage = "business" | "technician" | "events" | "labor";
 type CancelableQuery = PromiseLike<Row[]> & { cancel?: () => void };
 type ReportingQuery = (
   text: string,
@@ -214,6 +219,7 @@ export async function getReportingKpis(
     beforeStage?: (remaining: number) => Promise<void>;
     transaction?: ReportingTransaction;
     executionPlan?: ReportExecutionPlan;
+    recoverLabor?: typeof recoverLaborEvidence;
   },
 ): Promise<ReportingKpiResponse> {
   const deadlineAt = options?.deadlineAt ?? Date.now() + REPORTING_QUERY_DEADLINE_MS;
@@ -237,6 +243,7 @@ export async function getReportingKpis(
         });
         return getReportingKpis(scope, range, {
           ...options,
+          recoverLabor: options?.recoverLabor ?? recoverLaborEvidence,
           deadlineAt,
           beforeStage: async (remaining) => {
             const timeout = Math.min(options?.statementTimeoutMs ?? REPORTING_QUERY_DEADLINE_MS, remaining);
@@ -595,6 +602,50 @@ export async function getReportingKpis(
       ],
     },
   };
+  if (stages.has("labor")) {
+    const laborRows: Row[] = [];
+    for (const params of laborPartitions(scope.shopIds, range.start, range.end)) {
+      const rows = await runStage("labor", query, LABOR_REPORT_SQL,
+        params, deadlineAt, options.beforeStage);
+      if (laborRows.length + rows.length > LABOR_MAX_ORDERS) {
+        throw new ReportingQueryError("Labor reporting exceeds 100,000 closed ROs. Select fewer locations or a shorter date range.", "validation", "labor");
+      }
+      laborRows.push(...rows);
+    }
+    if (options.recoverLabor) {
+      // Cache reads get at most 8 seconds of the existing absolute budget.
+      const recoveryDeadline = Math.min(deadlineAt, Date.now() + 8000);
+      try {
+        await withinDeadline(options.recoverLabor(laborRows as LaborFact[], recoveryDeadline),
+          recoveryDeadline, "labor_source_cache");
+      } catch {
+        result.dataQuality.notes.push("Historical source-cache recovery was incomplete; uncovered ROs remain unavailable.");
+      }
+    }
+    const labor = aggregateLaborFacts(laborRows as LaborFact[]);
+    Object.assign(result.summary, labor.summary);
+    for (const location of result.byLocation) {
+      Object.assign(location.metrics, labor.locations.get(location.key) ?? {
+        laborClosedROCount: 0, soldLaborHours: null, soldLaborCoveredROs: 0,
+        presentedLaborHours: null, presentedLaborCoveredROs: 0, netLaborSales: null, netLaborCoveredROs: 0,
+      });
+    }
+    for (const [key, values] of labor.dates) {
+      let day = result.timeSeries.find(row => row.key === key);
+      if (!day) {
+        day = group({ dimension_key: key, dimension_label: key });
+        result.timeSeries.push(day);
+      }
+      Object.assign(day.metrics, values);
+    }
+    result.timeSeries.sort((a,b) => a.key.localeCompare(b.key));
+    result.bySoldLaborHours = labor.bands.map(band => ({
+      key: band.key, label: band.label,
+      metrics: { ...finalizeMetrics({}), ...band.metrics }, availability: availability(),
+    }));
+    result.dataQuality.notes.push(...LABOR_REPORTING_NOTES,
+      `Labor coverage: ${labor.summary.soldLaborCoveredROs}/${labor.summary.laborClosedROCount} ROs for sold hours; ${labor.summary.presentedLaborCoveredROs}/${labor.summary.laborClosedROCount} for presented hours; ${labor.summary.netLaborCoveredROs}/${labor.summary.laborClosedROCount} for net sales.`);
+  }
   console.info("[reporting-kpis] stage_complete", {
     stage: "assembly", durationMs: Date.now() - assemblyStartedAt,
     shops: scope.shopIds.length, days: range.days,

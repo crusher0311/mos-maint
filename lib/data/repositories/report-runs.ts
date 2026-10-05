@@ -5,7 +5,7 @@ import type { DeclarativeReportResult, ReportDefinitionV1 } from "@/lib/report-d
 import type { CustomReportScopeRequest } from "@/lib/data/repositories/custom-reports";
 
 const COLLECTION = "report_runs";
-export const REPORT_RUN_EXECUTION_VERSION = 1;
+export const REPORT_RUN_EXECUTION_VERSION = 3;
 export const REPORT_RUN_FRESH_MS = 15 * 60_000;
 const MAX_ATTEMPTS = 3;
 

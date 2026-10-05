@@ -74,7 +74,7 @@ export const CUSTOM_REPORT_AI_JSON_SCHEMA = {
               { type: "array", maxItems: 10, items: {
                 type: "object", additionalProperties: false, required: ["dimension", "operator", "value"],
                 properties: {
-                  dimension: { type: "string", enum: ["location", "advisor", "technician", "recommendationSource"] },
+                  dimension: { type: "string", enum: ["location", "advisor", "technician", "recommendationSource", "soldLaborHoursBand"] },
                   operator: { type: "string", enum: ["eq", "notEq", "in", "notIn"] },
                   value: { anyOf: [
                     { type: "string", minLength: 1, maxLength: 200 },
