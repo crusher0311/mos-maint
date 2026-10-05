@@ -49,6 +49,8 @@ export type ExtensionAuthCode =
 export interface ExtensionAuthResult {
   /** Current matched identity before the downstream single-shop projection. */
   accountUser?: any;
+  /** Legacy compatibility must not invent a lifetime for undated credentials. */
+  legacyTokenHasExpiry?: boolean;
   user: any | null;
   authorized: boolean;
   error: string | null;
@@ -496,9 +498,12 @@ export async function validateExtensionToken(
       : (Array.isArray((user as any).extensionTokens)
         ? (user as any).extensionTokens.find((t: any) => t?.token === token) ?? null
         : null);
-  const effectiveCreatedAt: Date | null = matchedTokenEntry?.createdAt
-    ? new Date(matchedTokenEntry.createdAt)
-    : (user.extensionTokenCreatedAt ? new Date(user.extensionTokenCreatedAt) : null);
+  const tokenCreatedAt = (user as any).extensionToken === token
+    ? user.extensionTokenCreatedAt
+    : matchedTokenEntry?.createdAt;
+  const effectiveCreatedAt: Date | null = tokenCreatedAt
+    ? new Date(tokenCreatedAt)
+    : null;
 
   if (effectiveCreatedAt) {
     const tokenAge = Date.now() - effectiveCreatedAt.getTime();
@@ -525,6 +530,7 @@ export async function validateExtensionToken(
   // Enterprise auto-access: expand owner/admin reach to all shops sharing their
   // enterpriseId (additive, best-effort). Runs once here so the requiredShopId
   // check below AND every downstream getUserShopIds() caller see the same set.
+  const accountUser = { ...user };
   await attachEnterpriseAccess(db, user);
 
   if (requiredShopId) {
@@ -561,6 +567,8 @@ export async function validateExtensionToken(
   };
   (user as any).extensionPrincipal = legacyPrincipal;
   return enforceExtensionRoutePolicy(request, {
+    accountUser,
+    legacyTokenHasExpiry: effectiveCreatedAt != null && Number.isFinite(effectiveCreatedAt.getTime()),
     user,
     authorized: true,
     error: null,
