@@ -2,6 +2,7 @@ import { NextRequest,NextResponse } from "next/server";
 import { deps } from "../jwt-invoice-preview/deps";
 import { recoveryDeps } from "./deps";
 import { resolveProtractorConfig,protractorFetch } from "@/lib/integrations/protractor/client";
+import { recoverySourcePath,readRecoverySourceWithQueueRetry,RECOVERY_QUEUE_BUSY } from "@/lib/jwt-september-recovery";
 
 export const dynamic="force-dynamic";
 export const maxDuration=300;
@@ -30,7 +31,7 @@ export async function POST(req:NextRequest) {
   } catch {return respond({ok:false,error:"Same-origin JSON action required; scope overrides are forbidden."},400);}
   try {
     if(action!=="step") return respond(await recoveryDeps.control(action));
-    const result=await recoveryDeps.step(async offset=>{
+    const result=await recoveryDeps.step(async (_offset,day=2)=>{
       if(deps.relayMode()!=="relay") throw new Error("Relay required");
       return deps.interactive(async()=>{
         const policy=await deps.policy();
@@ -38,10 +39,13 @@ export async function POST(req:NextRequest) {
           throw new Error("Current production policy blocks recovery reads");
         const config=await resolveProtractorConfig(227);
         if(!config.configured || config.shopId!==227) throw new Error("Shop configuration unavailable");
-        const result=await protractorFetch<{ItemCollection:unknown[]}>(
-          `/Invoice/?startDate=2026-09-02&endDate=2026-10-01&take=25&skip=${offset}`,
-          config,{method:"GET"},0,227,{priority:true,maxRetries:0,timeoutMs:20000});
-        if(!result.ok || !Array.isArray(result.data?.ItemCollection)) throw new Error("Source unavailable");
+        const result=await readRecoverySourceWithQueueRetry(()=>protractorFetch<{ItemCollection:unknown[]}>(
+          recoverySourcePath(day),
+          config,{method:"GET"},0,227,{priority:true,maxRetries:0,timeoutMs:20000}));
+        if(!result.ok || !Array.isArray(result.data?.ItemCollection)) {
+          const tooLarge=JSON.stringify(result).includes("upstream_response_too_large");
+          throw Object.assign(new Error("Source unavailable"),{recoveryCode:tooLarge?"source_too_large":result.error===RECOVERY_QUEUE_BUSY?"source_queue_busy":"source_unavailable"});
+        }
         return result.data.ItemCollection;
       });
     },recoveryDeps.recover);

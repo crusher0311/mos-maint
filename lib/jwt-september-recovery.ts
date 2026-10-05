@@ -3,9 +3,27 @@ import candidates from "@/docs/reporting/jwt-701-september-recovery-candidates.j
 
 export const JWT_RECOVERY_ID="jwt-701-september-2026-v1";
 export const JWT_RECOVERY_PAGE_SIZE=25;
+// Only this pre-dispatch rejection proves no request reached Protractor.
+export const RECOVERY_QUEUE_BUSY="Protractor fleet transport pacer deadline expired";
+export async function readRecoverySourceWithQueueRetry<T extends {ok:boolean;error?:string}>(
+  read:()=>Promise<T>,
+  wait:(ms:number)=>Promise<void>=ms=>new Promise(resolve=>setTimeout(resolve,ms)),
+):Promise<T> {
+  for(let attempt=0;;attempt++) {
+    const result=await read();
+    if(result.ok || result.error!==RECOVERY_QUEUE_BUSY || attempt===5) return result;
+    await wait(1000*2**attempt);
+  }
+}
+export function recoverySourcePath(day:number) {
+  if(!Number.isInteger(day)||day<2||day>30) throw new Error("Invalid recovery day");
+  const start=`2026-09-${String(day).padStart(2,"0")}`;
+  const end=day===30?"2026-10-01":`2026-09-${String(day+1).padStart(2,"0")}`;
+  return `/Invoice/?startDate=${start}&endDate=${end}`;
+}
 export type Outcome={wo:string;state:string;reason?:string};
 export type RecoveryState={
-  phase:"collect"|"repair"|"complete";offset:number;cursor:number;outcomes:Outcome[];
+  phase:"collect"|"repair"|"complete";offset:number;cursor:number;outcomes:Outcome[];day?:number;
 };
 export const recoveryCandidates=candidates;
 export function initialRecoveryState():RecoveryState {
@@ -14,7 +32,7 @@ export function initialRecoveryState():RecoveryState {
     .map(n=>({wo:n.wo,state:"held",reason:"Ambiguous stored invoice identity"}))};
 }
 export interface RecoveryDeps {
-  readPage(offset:number):Promise<any[]>;
+  readPage(offset:number,day?:number):Promise<any[]>;
   saveSource(wo:string,raw:any,page:number,digest:string):Promise<boolean>;
   loadSource(wo:string):Promise<any|null>;
   recover(text:string):Promise<{outcomes:Outcome[]}>;
@@ -25,13 +43,16 @@ export async function advanceRecovery(input:RecoveryState,deps:RecoveryDeps):Pro
   if(state.phase==="complete") return state;
   if(state.phase==="collect") {
     if(state.offset>=1000) throw new Error("Source page limit reached; recovery paused");
-    const rows=await deps.readPage(state.offset);
-    if(!Array.isArray(rows)||rows.length>JWT_RECOVERY_PAGE_SIZE)
+    if(state.day===undefined && state.offset!==0) throw new Error("Legacy collection checkpoint requires review");
+    const day=state.day??2;
+    recoverySourcePath(day);
+    const rows=await deps.readPage(state.offset,day);
+    if(!Array.isArray(rows)||rows.length>500 || state.offset+rows.length>1000)
       throw new Error("Unexpected source page; recovery paused");
     if(Buffer.byteLength(JSON.stringify(rows))>4_000_000)
-      throw new Error("Source page exceeds size limit; recovery paused");
+      throw Object.assign(new Error("Source page exceeds size limit; recovery paused"),{recoveryCode:"source_too_large"});
     for(const r of rows) {
-      const n=candidates.find(n=>n.wo===String(r?.WorkOrderNumber)&&n.invoice===String(r?.InvoiceNumber));
+      const n=candidates.find(n=>Number(n.date.slice(8))===day && n.wo===String(r?.WorkOrderNumber)&&n.invoice===String(r?.InvoiceNumber));
       if(!n || state.outcomes.some(x=>x.wo===n.wo)) continue;
       if(rows.filter(x=>String(x?.WorkOrderNumber)===n.wo || String(x?.InvoiceNumber)===n.invoice ||
         (r.ID && x?.ID===r.ID)).length>1) {
@@ -42,12 +63,13 @@ export async function advanceRecovery(input:RecoveryState,deps:RecoveryDeps):Pro
       const digest=createHash("sha256").update(text).digest("hex");
       if(Buffer.byteLength(text)>1_000_000) {
         state.outcomes.push({wo:n.wo,state:"held",reason:"Invoice exceeds source-size limit"});
-      } else if(!await deps.saveSource(n.wo,r,state.offset,digest)) {
+      } else if(!await deps.saveSource(n.wo,r,day,digest)) {
         state.outcomes.push({wo:n.wo,state:"held",reason:"Duplicate or changed source invoice"});
       }
     }
     state.offset+=rows.length;
-    if(rows.length<JWT_RECOVERY_PAGE_SIZE) state.phase="repair";
+    state.day=day+1;
+    if(day===30) state.phase="repair";
     return state;
   }
   while(state.cursor<candidates.length && state.outcomes.some(x=>x.wo===candidates[state.cursor].wo)) state.cursor++;

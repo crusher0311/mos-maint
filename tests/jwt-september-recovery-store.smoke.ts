@@ -53,6 +53,7 @@ async function main(){
   const ready=new Promise<void>(r=>{entered=r;});
   const recover=async()=>{writes++;entered();await new Promise<void>(r=>{release=r;});return {outcomes:[{wo:n.wo,state:"applied"}]};};
   await store.recoveryStep(async()=>[raw],recover);
+  for(let day=3;day<=30;day++) await store.recoveryStep(async()=>[],recover);
   const active=store.recoveryStep(async()=>assert.fail("must not fetch during repair"),recover);
   await ready;
   assert.equal((await store.recoveryStep(async()=>[],recover)).busy,true,"only one lease holder");
@@ -71,6 +72,9 @@ async function main(){
   await store.recoveryStep(async()=>{throw new Error("policy denied");},recover);
   assert.equal((await store.recoveryStatus()).status,"paused");
   assert.equal(data.get("operator_invoice_recovery_jobs")!.get(engine.JWT_RECOVERY_ID).state.offset,0);
+  await store.recoveryControl("start");
+  await store.recoveryStep(async()=>{throw Object.assign(new Error(),{recoveryCode:"source_too_large"});},recover);
+  assert.match((await store.recoveryStatus()).error,/single day's invoice response exceeds/);
   console.log("JWT durable lease, pause race, source privacy, cleanup, resume and failure checkpoints: PASS");
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});

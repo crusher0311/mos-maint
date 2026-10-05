@@ -100,7 +100,7 @@ export function createRecoverySession(options: {
       current = payload;
       options.onStatus(payload);
       if (payload.error) {
-        stop("The server reported a recovery error. Processing stopped; review the reported outcomes and refresh status before resuming.");
+        stop(payload.error);
         return;
       }
       succeeded = true;
