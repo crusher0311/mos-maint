@@ -485,7 +485,8 @@ async function resolveMosShopId(
   db: any,
   authResult: any,
   smsShopId?: string | null,
-  requestedProvider?: string | null
+  requestedProvider?: string | null,
+  shopwareContext: { locationId?: unknown; repairOrderId?: unknown } = {},
 ): Promise<{
   mosShopId: number | null;
   shop: any;
@@ -533,7 +534,9 @@ async function resolveMosShopId(
       userShopIds,
       isPlatformAdmin,
       providerHint: effectiveProvider,
-      providerHintIsAuthoritative: Boolean(principalProvider) || effectiveProvider === "tekmetric",
+      providerHintIsAuthoritative: Boolean(principalProvider) || effectiveProvider === "tekmetric" || effectiveProvider === "shopware",
+      shopwareLocationId: shopwareContext.locationId,
+      shopwareRepairOrderId: shopwareContext.repairOrderId,
     });
     } catch {
       return { mosShopId: null, shop: null, resolvedProvider: null, lookupFailure: {
@@ -603,7 +606,10 @@ async function _GET(request: NextRequest) {
     const provider = searchParams.get("provider");
 
     const db = await getDb();
-    const { mosShopId, shop, resolvedProvider, lookupFailure } = await resolveMosShopId(db, authResult, smsShopId, provider);
+    const { mosShopId, shop, resolvedProvider, lookupFailure } = await resolveMosShopId(db, authResult, smsShopId, provider, {
+      locationId: searchParams.get("swShopId"),
+      repairOrderId: searchParams.get("swRoId"),
+    });
 
     console.log(`[Extension Sticker] GET: smsShopId=${smsShopId}, provider=${provider}, mosShopId=${mosShopId}, features=${JSON.stringify(shop?.features || [])}`);
 
@@ -773,7 +779,9 @@ async function _POST(request: NextRequest) {
       shop,
       resolvedProvider: stickerResolvedProvider,
       lookupFailure,
-    } = await resolveMosShopId(db, authResult, smsShopId, provider);
+    } = await resolveMosShopId(db, authResult, smsShopId, provider, {
+      locationId: body.swShopId, repairOrderId: body.swRoId,
+    });
 
     if (!shop) {
       return NextResponse.json(

@@ -67,6 +67,57 @@ function withFakeDb(
 async function run() {
   console.log("extension-shop-lookup smoke");
 
+  // Authoritative Shop-Ware identity is global, never narrowed to the user's
+  // sole accessible shop. Shared tenants may represent legitimate locations.
+  for (const collision of ["slug", "cross-field", "tenant", "duplicate-document"] as const) {
+    const identifier = collision === "tenant" ? "5700" : "allcare-services-llc";
+    const first = {
+      _id: "state-street", shopId: 136,
+      shopware: { tenantSubdomain: "allcare-services-llc", tenantId: "5700", swShopId: 6194 },
+    };
+    const second = {
+      _id: "other-record", shopId: collision === "duplicate-document" ? 136 : 174,
+      shopware: collision === "cross-field"
+        ? { tenantId: identifier, swShopId: 6192 }
+        : { tenantSubdomain: "allcare-services-llc", tenantId: "5700", swShopId: 6192 },
+    };
+    for (const isPlatformAdmin of [false, true]) {
+      const { fake, restore } = withFakeDb({ shops: [first, second] });
+      try {
+        const result = await findShopBySmsIdDetailed(identifier, {
+          providerHint: "shopware", providerHintIsAuthoritative: true,
+          userShopIds: [136], isPlatformAdmin,
+        });
+        ok(`Shop-Ware ${collision} blocks ${isPlatformAdmin ? "admin" : "single-shop user"}`, result.status === "conflict");
+        ok(`Shop-Ware ${collision} lookup performs no writes`, fake.ops.every(op => ["find", "findOne"].includes(op.op)));
+      } finally { restore(); }
+    }
+  }
+  {
+    const owner = {
+      shopId: 136, name: "State Street",
+      shopware: { tenantSubdomain: "unique-fixture", tenantId: 5700, swShopId: 6194 },
+      stickerConfig: { logo: "state-street-logo", tagline: "State Street" },
+    };
+    const { fake, restore } = withFakeDb({ shops: [
+      owner,
+      { shopId: 174, shopware: { tenantSubdomain: "other-fixture", tenantId: 5700, swShopId: 6192 } },
+      { shopId: 999, tekmetric: { shopId: "unique-fixture" } },
+    ] });
+    try {
+      const lookup = (id: string, userShopIds: number[]) => findShopBySmsIdDetailed(id, {
+        userShopIds, providerHint: "shop-ware", providerHintIsAuthoritative: true,
+      });
+      const result = await lookup("unique-fixture", [136]);
+      ok("unique Shop-Ware slug preserves exact owner branding", result.status === "resolved" &&
+        result.mosShopId === 136 && result.shopDoc.stickerConfig.logo === "state-street-logo");
+      ok("unique Shop-Ware owner outside scope is denied", (await lookup("unique-fixture", [174])).status === "access_denied");
+      ok("Shop-Ware owner with empty scope is denied", (await lookup("unique-fixture", [])).status === "access_denied");
+      ok("unknown Shop-Ware slug never auto-learns from sole accessible shop", (await lookup("unclaimed", [136])).status === "not_found");
+      ok("authoritative Shop-Ware success/denial/miss do not mutate", fake.ops.every(op => ["find", "findOne"].includes(op.op)));
+    } finally { restore(); }
+  }
+
   // 1. Tekmetric numeric match
   {
     const { fake, restore } = withFakeDb({

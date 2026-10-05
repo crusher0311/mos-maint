@@ -5098,7 +5098,8 @@ async function handleApplyLaborRateNow() {
 let stickerConfig = null;
 let stickerConfigContextKey = null;
 let stickerConfigRequest = 0;
-const stickerContextKey = (ctx) => `${ctx?._tabId}:${ctx?.provider}:${ctx?.shopId}`;
+const stickerContextKey = (ctx) => `${ctx?._tabId}:${ctx?.provider}:${ctx?.shopId}` +
+  (ctx?.provider === 'shopware' ? `:${ctx?.swShopId}:${ctx?.roId}` : '');
 let keytagEnabled = false;
 // Oil-sticker entitlement as last seen from /api/extension/sticker.
 //   true  = enabled, false = definitively disabled, null = unknown/transient.
@@ -5204,7 +5205,11 @@ async function loadStickerConfig() {
     let endpoint = '/api/extension/sticker';
     if (currentContext && currentContext.shopId) {
       const provider = currentContext.provider || '';
-      endpoint += `?shopId=${currentContext.shopId}&provider=${provider}`;
+      endpoint += `?shopId=${encodeURIComponent(snapshot.shopId)}&provider=${encodeURIComponent(provider)}`;
+      if (provider === 'shopware') {
+        if (snapshot.swShopId != null) endpoint += `&swShopId=${encodeURIComponent(snapshot.swShopId)}`;
+        if (snapshot.roId != null) endpoint += `&swRoId=${encodeURIComponent(snapshot.roId)}`;
+      }
     }
     
     const result = await sendMessage({
@@ -5610,6 +5615,10 @@ async function handleStickerPrint() {
     if (currentContext && currentContext.shopId) {
       body.smsShopId = currentContext.shopId;
       body.provider = currentContext.provider || '';
+      if (currentContext.provider === 'shopware') {
+        if (currentContext.swShopId != null) body.swShopId = currentContext.swShopId;
+        if (currentContext.roId != null) body.swRoId = currentContext.roId;
+      }
     }
     
     // Add customer/vehicle data for auto booking

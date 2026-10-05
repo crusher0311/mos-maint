@@ -43,6 +43,7 @@ function detectContext() {
   const context = {
     provider: "shopware",
     shopId: null,      // tenant subdomain — MOS server resolves to a shop
+    swShopId: null,    // active location hint; server verifies against provider
     roId: null,
     roNumber: null,
     vin: null,
@@ -63,6 +64,18 @@ function detectContext() {
   const tenantMatch = hostname.match(/^([^.]+)\.(shop-ware\.com|shop-ware-api-sandbox\.com)/);
   if (tenantMatch) {
     context.shopId = tenantMatch[1];
+  }
+
+  // Never infer the active location from shop names or the first menu option.
+  // On RO pages the server can also derive it from the provider's RO response.
+  const locationHints = [
+    new URL(url).searchParams.get('shop_id'),
+    document.querySelector('select#shop_id')?.value,
+    document.querySelector('meta[name="current-shop-id"]')?.getAttribute('content'),
+  ].filter(value => value != null && value !== '');
+  if (locationHints.length && locationHints.every(value =>
+    /^[1-9]\d*$/.test(String(value)) && String(value) === String(locationHints[0]))) {
+    context.swShopId = String(locationHints[0]);
   }
 
   // ============ EXTRACT RO ID FROM URL ============
@@ -682,7 +695,9 @@ async function showIntervalDropdown(event, buttonElement) {
     const result = await new Promise((resolve) => {
       chrome.runtime.sendMessage({
         action: 'MOS_API_REQUEST',
-        endpoint: `/api/extension/sticker?shopId=${context.shopId}&provider=${context.provider || 'shopware'}`
+        endpoint: `/api/extension/sticker?shopId=${encodeURIComponent(context.shopId)}&provider=shopware` +
+          (context.swShopId ? `&swShopId=${encodeURIComponent(context.swShopId)}` : '') +
+          (context.roId ? `&swRoId=${encodeURIComponent(context.roId)}` : '')
       }, resolve);
     });
 

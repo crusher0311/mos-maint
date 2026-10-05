@@ -1,4 +1,5 @@
 import { getDb, getMongoClient } from '@/lib/mongo';
+import { resolveShopwareStickerLocation, verifiedShopwareLocation } from "@/lib/shopware-sticker-location";
 import {
   acquireAutoflowAliasClaim,
   AutoflowAtomicClaimConflictError,
@@ -44,12 +45,27 @@ export type ShopLookupResult = ResolvedShopLookup | null;
 export const __deps: {
   getDb: typeof getDb;
   getMongoClient: typeof getMongoClient;
+  verifyShopwareLocation: (
+    tenantId: number,
+    context: { locationId: number | null; repairOrderId: number | null },
+  ) => Promise<number>;
   discoverShopmonkeyIds: (
     apiKey: string,
   ) => Promise<{ companyId: string | null; locationId: string | null }>;
 } = {
   getDb,
   getMongoClient,
+  verifyShopwareLocation: async (tenantId, { locationId, repairOrderId }) => {
+    const { shopWareRequest } = await import("@/lib/integrations/shopware/client");
+    const { withUpstreamTimeout } = await import("@/lib/with-upstream-timeout");
+    const path = repairOrderId
+      ? `/tenants/${tenantId}/repair_orders/${repairOrderId}`
+      : `/tenants/${tenantId}/shops/${locationId}`;
+    const data = await withUpstreamTimeout(
+      shopWareRequest(path, { signal: AbortSignal.timeout(5000) }), 5500, "Shop-Ware sticker location", null,
+    );
+    return verifiedShopwareLocation(data, tenantId, { locationId, repairOrderId });
+  },
   discoverShopmonkeyIds: async (apiKey: string) => {
     const { discoverIdsFromKey } = await import(
       "@/lib/integrations/shopmonkey/auth"
@@ -136,6 +152,8 @@ export async function findShopBySmsIdDetailed(
     isPlatformAdmin?: boolean;
     providerHint?: string;
     providerHintIsAuthoritative?: boolean;
+    shopwareLocationId?: unknown;
+    shopwareRepairOrderId?: unknown;
   } = {}
 ): Promise<ShopLookupOutcome> {
   const db = await __deps.getDb();
@@ -148,6 +166,22 @@ export async function findShopBySmsIdDetailed(
     options.providerHintIsAuthoritative === true
       ? providerHint as ResolvedShopLookup["provider"] | undefined
       : undefined;
+
+  if (providerHint === "shopware" &&
+      (options.shopwareLocationId != null || options.shopwareRepairOrderId != null)) {
+    const result = await resolveShopwareStickerLocation(db, smsShopId, {
+      locationId: options.shopwareLocationId, repairOrderId: options.shopwareRepairOrderId,
+    }, __deps.verifyShopwareLocation);
+    if (result.status === "conflict") return {
+      status: "conflict", provider: "shopware", identifier: smsShopId,
+      conflictType: "canonical", shopIds: result.shopIds,
+    };
+    if (result.status === "not_found") return { status: "not_found", provider: "shopware" };
+    if (!isShopAccessible(result.owner, userShopIds, isPlatformAdmin)) {
+      return { status: "access_denied", provider: "shopware" };
+    }
+    return resolvedShop(result.owner, "shopware");
+  }
 
   // Server-managed mappings must resolve against exact canonical provider
   // fields only. Keep this path before the extension compatibility resolver so

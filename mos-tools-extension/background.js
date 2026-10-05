@@ -4311,6 +4311,15 @@ const _stickerConfigCacheImpl = createStickerConfigCache({
 });
 
 function getStickerConfigCached(shopId, provider, opts) {
+  // Shop-Ware tenants can contain multiple locations. Do not reuse the
+  // tenant-only SWR cache across locations or ROs; resolve provider evidence.
+  if (provider === 'shopware') {
+    const context = opts?.context || {};
+    const query = new URLSearchParams({ shopId: String(shopId), provider });
+    if (context.swShopId != null) query.set('swShopId', String(context.swShopId));
+    if (context.roId != null) query.set('swRoId', String(context.roId));
+    return handleMosApiRequest(`/api/extension/sticker?${query}`, { timeoutMs: STICKER_CONFIG_FETCH_DEADLINE_MS });
+  }
   return _stickerConfigCacheImpl.get(shopId, provider, opts);
 }
 
@@ -4354,7 +4363,7 @@ async function handleImmediateStickerPrint(context, tabId, overrideInterval = nu
     // exist), so any failure degrades instead of stalling the print.
     const cachedEntry = scoped
       ? await scoped.request(`/api/extension/sticker?shopId=${encodeURIComponent(context.shopId)}&provider=tekmetric`)
-      : await getStickerConfigCached(context.shopId, context.provider || 'tekmetric');
+      : await getStickerConfigCached(context.shopId, context.provider || 'tekmetric', { context });
     if (cachedEntry && cachedEntry.config) {
       if (context.useKilometers == null && cachedEntry.config.useKilometers) unit = 'km';
       shopIntervals = cachedEntry.config.intervals;
@@ -4371,6 +4380,10 @@ async function handleImmediateStickerPrint(context, tabId, overrideInterval = nu
     smsShopId: context.shopId,
     provider: context.provider || ''
   };
+  if (context.provider === 'shopware') {
+    if (context.swShopId != null) requestBody.swShopId = context.swShopId;
+    if (context.roId != null) requestBody.swRoId = context.roId;
+  }
   
   if (overrideInterval && overrideInterval.miles && overrideInterval.months) {
     requestBody.customMiles = overrideInterval.miles;
