@@ -6,48 +6,56 @@ id = "JGLO0JcvLjM7oJ_I-rlxQ"
 uri = "file://scripts/one-off/tekmetric-open-jobs-migration-2026-04-30/output/appt-dump-src10216-20260501T123452.json"
 type = "unspecified"
 title = "Arlington dump (10216 → 18007) — 13 appts"
+logical_id = "3c94c8ea-f931-4e2d-a222-42d2f3b06803"
 
 [[outputs]]
 id = "IXQCyhfaN4rjNWBvdQS7g"
 uri = "file://scripts/one-off/tekmetric-open-jobs-migration-2026-04-30/output/appt-dump-src10214-20260501T123650.json"
 type = "unspecified"
 title = "Streamwood dump (10214 → 18008) — 18 appts"
+logical_id = "eccce127-a876-4407-9b02-909bb33c764e"
 
 [[outputs]]
 id = "euUL0VFrGsR7eRiJo0AZ7"
 uri = "file://scripts/one-off/tekmetric-open-jobs-migration-2026-04-30/output/appt-dump-src10215-20260501T124504.json"
 type = "unspecified"
 title = "Shop 3 dump (10215 → 18009) — 97 appts"
+logical_id = "5227637a-5738-400b-9b23-6d11dc2906d6"
 
 [[outputs]]
 id = "Q91PuHXhGk9ZGxrRQiVTZ"
 uri = "file://scripts/one-off/tekmetric-open-jobs-migration-2026-04-30/output/appt-gaps-all-shops-20260501.csv"
 type = "table"
 title = "Appointment Gaps — All 3 Shops (call list for front desk)"
+logical_id = "3e2bbe9a-322f-4dbf-81c0-52110cbeea3c"
 
 [[outputs]]
 id = "OJ4_rKx1PG7calgLDrPRT"
 uri = "file://docs/runbooks/mongo-cutover-sequence.md"
 type = "text"
 title = "Mongo → Postgres Cutover Sequence (load-relief ordering)"
+logical_id = "9c79b509-894a-4603-9489-8dbafe625d93"
 
 [[outputs]]
 id = "qPNDnZpWvQLp-E00Ax2zr"
 uri = "file://public/icons/service/oil_change.svg"
 type = "image"
 title = "Current oil-change icon (oil_change.svg)"
+logical_id = "f77910f1-c50e-4f72-b7b7-b4017c548fdb"
 
 [[outputs]]
 id = "oF08Uxr2A8eEkT8Jz3zoM"
 uri = "file://public/icons/service/oil_reminder.svg"
 type = "image"
 title = "Alternate oil icon already in the set (oil_reminder.svg)"
+logical_id = "7dda20cf-e25e-447e-9345-e8223fd69904"
 
 [[outputs]]
 id = "IPwOsg4q6oAvVRLgwigzV"
 uri = "file://public/icons/service/icon_sheet.svg"
 type = "image"
 title = "The full imported icon sheet (not yet wired up)"
+logical_id = "6fccd613-d0e8-4647-bba4-c4f809f8d4a5"
 
 [[outputs]]
 id = "QzrHRBBUwBHy_8uJDdKrS"
@@ -55,6 +63,7 @@ uri = "file://dist/mos-tools-extension.zip"
 type = "unspecified"
 title = "Detect Dog Chrome Extension v1.35.0"
 description = "Packaged extension with authoritative labor-rate refresh, revision conflict protection, and shop-bound synchronization."
+logical_id = "e3af985e-3147-4bf8-9d43-50475a77109f"
 
 [[outputs]]
 id = "uFocsQ_xmazBVg9B0svbk"
@@ -62,6 +71,7 @@ uri = "file://exports/protractor-callback-events-2026-08-31.csv"
 type = "table"
 title = "Protractor callback event log — August 31, 2026"
 description = "7,289 persisted callback events from 12:00 AM through 12:10 PM Central. Includes timestamps, connection/shop IDs, object IDs, operations, processing status, attempts, and errors. Raw payloads and callback tokens are excluded."
+logical_id = "191947bb-0a53-4b3f-893e-ff908cea83c5"
 
 [[outputs]]
 id = "67mlA4uGGMoscndSpipZP"
@@ -69,3 +79,4 @@ uri = "file://exports/protractor-callback-summary-2026-08-31.json"
 type = "unspecified"
 title = "Protractor callback analysis summary"
 description = "Counts by connection, object type, operation, repeated object, and repeat interval for the incident window."
+logical_id = "b41c9be5-52c6-41e1-b889-c4e051fdd0d6"
