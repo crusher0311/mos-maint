@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { validateExtensionToken, getUserShopIds, buildAuthErrorBody, getAuthErrorStatus, type ExtensionAuthResult } from "./extension-auth";
+import { validateExtensionToken, isActiveExtensionUser, buildAuthErrorBody, getAuthErrorStatus, type ExtensionAuthResult } from "./extension-auth";
 import { findShopBySmsIdDetailed } from "./extension-shop-lookup";
 import { issueExtensionSession, hashExtensionSessionToken } from "./extension-session";
 
@@ -15,12 +15,13 @@ export async function switchLocation(request: NextRequest, validatedAuth?: Exten
     const auth = validatedAuth ?? await __deps.validateExtensionToken(request);
     if (!auth.authorized) return reply(buildAuthErrorBody(auth), getAuthErrorStatus(auth));
     const principal = auth.principal;
-    // Bootstrap, Basic, legacy and derived sessions cannot renew authentication.
-    // Pre-migration sessions need a one-time explicit sign-in to record provenance.
-    if (!principal || principal.assurance !== "verified" || principal.isLegacy ||
-        principal.parentTokenHash || !["password", "login_code"].includes(principal.authenticationMethod || "")) {
-      return reply({ code: "EXPLICIT_LOGIN_REQUIRED", error: "Sign in to MOS once to enable Tekmetric location switching." }, 403);
-    }
+    const signIn = () => reply({ code: "EXPLICIT_LOGIN_REQUIRED", error: "Sign in to MOS once to enable Tekmetric location switching." }, 403);
+    if (!principal || principal.assurance !== "verified") return signIn();
+    const account = auth.accountUser;
+    if (!isActiveExtensionUser(account)) return signIn();
+    // Only direct assignments count, never enterprise expansion or client labels.
+    const assigned = [...new Set([account.shopId, ...(Array.isArray(account.shopIds) ? account.shopIds : [])]
+      .filter(id => /^[1-9]\d*$/.test(String(id))).map(Number))];
     const body = await request.json();
     if (body.provider !== "tekmetric" || !/^[1-9]\d*$/.test(String(body.smsShopId || ""))) {
       return reply({ code: "CONTEXT_REQUIRED", error: "A current Tekmetric location is required." }, 400);
@@ -30,7 +31,7 @@ export async function switchLocation(request: NextRequest, validatedAuth?: Exten
     const target = await __deps.findShopBySmsIdDetailed(String(body.smsShopId), {
       providerHint: "tekmetric",
       providerHintIsAuthoritative: true,
-      userShopIds: getUserShopIds(auth.accountUser).map(Number),
+      userShopIds: assigned,
       isPlatformAdmin: auth.accountUser?.role === "platform_admin" || auth.accountUser?.isPlatformAdmin === true,
     });
     if (target.status !== "resolved") {
@@ -43,6 +44,22 @@ export async function switchLocation(request: NextRequest, validatedAuth?: Exten
       return reply({ code, error }, status);
     }
     const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") || "";
+    if (!token || !Number.isFinite(principal.expiresAt.getTime()) || principal.expiresAt.getTime() <= Date.now()) {
+      return reply({ code: "TOKEN_EXPIRED", error: "Token expired" }, 401);
+    }
+    const sameShop = principal.isLegacy
+      ? auth.legacyTokenHasExpiry === true && assigned.length === 1 &&
+        Number(account.shopId) === target.mosShopId && assigned[0] === target.mosShopId
+      : principal.provider === "tekmetric" && principal.shopId === target.mosShopId &&
+        assigned.includes(target.mosShopId);
+    if (sameShop) {
+      // No issuance, persistence, elevation or renewal: reuse the validated bearer.
+      return reply({ token, shopId: target.mosShopId, smsShopId: String(body.smsShopId),
+        provider: "tekmetric", expiresAt: principal.expiresAt.toISOString(), reused: true }, 200);
+    }
+    // Only a provenance-bearing root may obtain a DIFFERENT location's authority.
+    if (principal.isLegacy || principal.parentTokenHash ||
+        !["password", "login_code"].includes(principal.authenticationMethod || "")) return signIn();
     const issued = await __deps.issueExtensionSession({
       shopId: target.mosShopId, provider: "tekmetric", assurance: "verified",
       userId: principal.userId, expiresAt: new Date(Math.min(principal.expiresAt.getTime(), Date.now() + 5 * 60_000)),

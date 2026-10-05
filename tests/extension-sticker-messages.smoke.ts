@@ -2,12 +2,20 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import vm from "node:vm";
 import { createStickerLocationRequest } from "../mos-tools-extension/lib/sticker-location-session.js";
+import { NextRequest } from "next/server";
+import { switchLocation, __deps as locationDeps } from "../lib/extension-location-session";
 
 const source = fs.readFileSync("mos-tools-extension/background.js", "utf8");
 const panelSource = fs.readFileSync("mos-tools-extension/sidepanel.js", "utf8");
 async function main() {
   const shops = new Map([[1, "100"], [2, "200"]]);
   const prints: string[] = [];
+  let oldSession: "modern" | "legacy" | null = null;
+  let issues = 0;
+  locationDeps.issueExtensionSession = (async () => { issues++; throw new Error("same-shop must not issue"); }) as any;
+  locationDeps.findShopBySmsIdDetailed = (async () => ({
+    status: "resolved", mosShopId: 10, provider: "tekmetric",
+  })) as any;
   let panelMessage: (message: any) => Promise<void> = async () => {};
   let panelLoading = Promise.resolve();
   let switchFailure: string | null = null;
@@ -30,9 +38,21 @@ async function main() {
           if (switchFailure) return Response.json({ error: switchFailure }, { status: 403 });
           assert.equal(options.headers.Authorization, "Bearer root");
           const { smsShopId } = JSON.parse(options.body);
+          if (oldSession) {
+            assert.equal(smsShopId, "100");
+            return switchLocation(new NextRequest(url, options), {
+              authorized: true, error: null, user: { shopId: 10 },
+              accountUser: { _id: "advisor", shopId: 10, shopIds: [10], role: "user" },
+              legacyTokenHasExpiry: true,
+              principal: { sessionId: "old", userId: "advisor", assurance: "verified",
+                capabilities: ["read", "shop_tool"], expiresAt: new Date("2099-01-01"),
+                ...(oldSession === "legacy" ? { isLegacy: true } : { shopId: 10, provider: "tekmetric" as const }) },
+            });
+          }
           return Response.json({ token: `scope-${smsShopId}`, provider: "tekmetric", smsShopId });
         }
-        const tokenShop = options.headers.Authorization.replace("Bearer scope-", "");
+        const tokenShop = oldSession ? "100" : options.headers.Authorization.replace("Bearer scope-", "");
+        if (oldSession) assert.equal(options.headers.Authorization, "Bearer root");
         if (options.method === "POST") {
           const body = JSON.parse(options.body);
           assert.equal(body.smsShopId, tokenShop);
@@ -154,6 +174,22 @@ async function main() {
     assert.equal(elements.stickerError.textContent, failure);
   }
   switchFailure = null;
+  for (const kind of ["modern", "legacy"] as const) {
+    oldSession = kind;
+    w = worker();
+    const immediate = w.send({ action: "PRINT_STICKER_IMMEDIATE", context: ctx(1) }, 1);
+    w.restore();
+    assert.equal((await immediate).sticker.dataUrl, "logo-100");
+    await w.send({ action: "OPEN_STICKER_PANEL", context: ctx(1) }, 1);
+    await panelLoading;
+    assert.equal(elements.stickerPrintBtn.disabled, false);
+    await panel.handleStickerPrint();
+    await Promise.resolve();
+    assert.equal(forwarded.at(-1).id, 1);
+    assert.equal(forwarded.at(-1).message.sticker.dataUrl, "logo-100");
+    assert.equal(issues, 0);
+  }
+  oldSession = null;
   await panel.loadStickerConfig();
   const forwardsBefore = forwarded.length;
   afterPost = () => { shops.set(1, "200"); };

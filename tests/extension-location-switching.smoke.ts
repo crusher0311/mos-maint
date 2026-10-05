@@ -57,7 +57,8 @@ async function main() {
     assert.equal(auth.requireExtensionPrincipalScope(result, { shopId: id === 10 ? 11 : 10, provider: "tekmetric" })?.code, "SHOP_FORBIDDEN");
   }
   console.log("✓ A → B → A stays single-shop; submitted MOS shop IDs ignored");
-  assert.equal((await change("200", child)).status, 403); // cannot chain scopes
+  const derived = await (await change("200")).json();
+  assert.equal((await change("100", derived.token)).status, 403); // cannot chain scopes
   user.shopIds = [10];
   assert.equal((await change("200")).status, 403);
   user.role = "admin"; // enterprise alone is not a modern session assignment
@@ -87,6 +88,81 @@ async function main() {
   assert.equal((await change("200", basic.token)).status, 403);
   const bootstrap = await sessions.issueExtensionSession({ shopId: 10, provider: "tekmetric", assurance: "verified", userId: "advisor" });
   assert.equal((await change("200", bootstrap.token)).status, 403);
+  const beforeReuse = rows.size;
+  const originalExpiry = bootstrap.principal.expiresAt.toISOString();
+  const reused = await (await change("100", bootstrap.token)).json();
+  assert.equal(reused.token, bootstrap.token);
+  assert.equal(reused.reused, true);
+  assert.equal(reused.expiresAt, originalExpiry);
+  assert.equal(rows.size, beforeReuse);
+  assert.equal((await change("100", basic.token)).status, 403);
+  user.shopId = 11; user.shopIds = [11];
+  assert.equal((await change("100", bootstrap.token)).status, 403);
+  user.shopId = 10; user.shopIds = [10, 11];
+  for (const token of [bootstrap.token, "ext_legacy"]) {
+    const modernUser = user;
+    if (token === "ext_legacy") user = { _id: "advisor", shopId: 10, shopIds: [10],
+      role: "user", extensionToken: token, extensionTokenCreatedAt: new Date() };
+    const count = rows.size;
+    const res = await change("100", token);
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.token, token);
+    assert.equal(rows.size, count);
+    const expiry = body.expiresAt;
+    assert.equal((await (await change("100", token)).json()).expiresAt, expiry);
+    assert.equal((await change("999", token)).status, 404);
+    shops.push({ shopId: 12, tekmetric: { shopId: 100 }, enterpriseId: "shared" });
+    assert.equal((await change("100", token)).status, 409);
+    shops.pop();
+    unavailable = true;
+    assert.equal((await change("100", token)).status, 503);
+    unavailable = false;
+    if (token === "ext_legacy") {
+      user.shopIds = [10, 11];
+      assert.equal((await change("100", token)).status, 403);
+      assert.equal((await change("200", token)).status, 403);
+      user.shopIds = [10]; user.shopId = undefined;
+      assert.equal((await change("100", token)).status, 403);
+      user.shopId = 10; user.role = "platform_admin";
+      assert.equal((await change("200", token)).status, 403);
+      user.disabled = true;
+      assert.equal((await change("100", token)).status, 403);
+      user.disabled = false;
+      // A concurrent-device token must never inherit the newer scalar login's
+      // timestamp, even when that newer login is still fresh.
+      user.extensionToken = "ext_newer";
+      user.extensionTokenCreatedAt = new Date();
+      user.extensionTokens = [{ token }];
+      assert.equal((await change("100", token)).status, 403);
+      user.extensionTokens[0].createdAt = "invalid-date";
+      assert.equal((await change("100", token)).status, 401);
+      const deviceCreatedAt = new Date(Date.now() - 86400000);
+      user.extensionTokens[0].createdAt = deviceCreatedAt;
+      const beforeDeviceReuse = rows.size;
+      const deviceReuse = await (await change("100", token)).json();
+      assert.equal(deviceReuse.reused, true);
+      assert.equal(deviceReuse.token, token);
+      assert.equal(deviceReuse.expiresAt, new Date(deviceCreatedAt.getTime() + 30 * 86400000).toISOString());
+      assert.equal(rows.size, beforeDeviceReuse);
+      user.extensionTokens[0].createdAt = new Date(0);
+      assert.equal((await change("100", token)).status, 401);
+      user.extensionToken = token;
+      user.extensionTokenCreatedAt = undefined;
+      assert.equal((await change("100", token)).status, 403);
+      user.extensionTokenCreatedAt = new Date(0);
+      assert.equal((await change("100", token)).status, 401);
+      user = null; // revoked legacy credential is no longer found
+      assert.equal((await change("100", token)).status, 401);
+    }
+    user = modernUser;
+  }
+  await sessions.revokeExtensionSession(bootstrap.principal.sessionId);
+  assert.equal((await change("100", bootstrap.token)).status, 401);
+  const oldRow = rows.get(sessions.hashExtensionSessionToken(bootstrap.token));
+  oldRow.revokedAt = null; oldRow.expiresAt = new Date(0);
+  assert.equal((await change("100", bootstrap.token)).status, 401);
+  console.log("✓ pre-provenance and dated single-primary legacy reuse: unchanged bearer/expiry, zero issuance; ambiguity and invalid credentials denied");
   await sessions.revokeExtensionSession(root.principal.sessionId);
   assert.equal((await sessions.lookupExtensionSession(b.token)).status, "revoked");
   assert.equal((await change("200")).status, 401);

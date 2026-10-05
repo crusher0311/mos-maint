@@ -30,7 +30,7 @@ the affected browser, and a live physical print were not inspected.
 ## Authority and rollout
 
 - Explicit password or emailed-code authentication records its provenance.
-- A root verified session exchanges its current Tekmetric page identifier for a
+- For a different shop, a root verified session exchanges its Tekmetric page identifier for a
   separate single-shop token. The target is resolved canonically across all shops
   before access is checked. A submitted MOS shop ID is ignored.
 - Eligibility uses the **matched account's current explicit shopId + shopIds**,
@@ -43,7 +43,7 @@ the affected browser, and a live physical print were not inspected.
   active status and capabilities are rechecked on each request.
 - Basic, provider-bootstrap, legacy and derived sessions cannot exchange scopes.
   Pre-upgrade sessions have no reliable password/bootstrap provenance: they need
-  **one explicit sign-in after rollout**, then can switch without further passwords
+  **one explicit sign-in after rollout for cross-location access**, then can switch without further passwords
   during the original authentication lifetime. Do not infer provenance from
   browser-local `authSource`.
 - **Apply `drizzle/0036_extension_location_sessions.sql` before deploying the
@@ -57,7 +57,8 @@ the affected browser, and a live physical print were not inspected.
 
 The saved explicit login is never replaced by bootstrap or a location token.
 Each operation captures its own tab, shop, RO, API origin and authentication epoch.
-Settings and generation use the same derived token. Explicit Tekmetric settings
+Settings and generation use the same operation-local token (original for a proven
+same-shop request, derived for a genuine exchange). Explicit Tekmetric settings
 bypass the older shared persistent cache; failed checks cannot reuse another
 location's settings. Requests have bounded timeouts.
 
@@ -84,6 +85,45 @@ Also run the existing principal-scope suite (including login/proof/bootstrap
 sub-suites), secure-session, enterprise-access, shop-lookup and sticker-cache
 tests. `npx tsc --noEmit --incremental false` avoids stale incremental diagnostics.
 These tests do not verify a physical printer or the authenticated Chrome UI.
+
+## Same-shop compatibility and Everett verification
+
+Same-shop requests now resolve the canonical Tekmetric mapping and current direct
+assignments before deciding whether an exchange is necessary. A verified modern
+session bound to that MOS shop and provider can reuse its original bearer even
+without password/login-code provenance. This is not a bootstrap elevation or
+renewal: the response returns the exact original token and expiry and inserts no
+session. Basic sessions still cannot use this exchange endpoint.
+
+An unbound legacy token is reusable only with a known original expiry, an active
+matched account, and exactly one directly assigned shop that is also its primary
+shop and the canonical target. Enterprise-expanded access and platform-admin
+bypass cannot prove same-shop legacy scope. Unknown, conflicting or unavailable
+mappings never fall back. Cross-location exchanges retain the provenance and
+root-session restrictions.
+
+Fixture verification covers pre-provenance modern and legacy single-shop logins,
+zero issuance and unchanged expiry, removed assignments, expired/revoked tokens,
+ambiguous legacy scope, mappings and outages. Actual worker/panel functions run
+through immediate printing and Customize → settings → generation → original-tab
+print after restoration with the server's reuse response. No frontend protocol
+change or saved-login replacement is needed.
+
+**Everett live status:** its actual session, matched account assignments, installed
+extension and physical print remain unverified. No production access, mutation,
+deployment or mapping repair was performed for this change. The separate
+Shop-Ware mapping incident is not addressed.
+
+**Safe temporary recovery:** explicitly sign in to MOS in the extension with the
+shop's authorized account, then reopen Customize from the current Tekmetric RO.
+This records server-owned provenance without widening assignments. If the shop is
+unlinked, conflicting or unauthorized, stop and have an operator investigate;
+do not retry through a less restrictive endpoint.
+
+After an approved release, verify Everett's original still-valid login (without
+first replacing it), immediate and Customize prints, shop branding, two-tab
+routing and worker restart. A fresh sign-in alone verifies the recovery path,
+not the older-session regression.
 
 ## Burlington / VPX operator checklist
 

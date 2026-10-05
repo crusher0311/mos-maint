@@ -4,7 +4,7 @@ description: Access and rollout constraints for password-authenticated sticker s
 ---
 Use the matched active account's explicit assignments for modern location exchanges, not a union of same-email documents or enterprise membership. Keep the saved explicit identity unchanged; derive operation-local scopes bounded by, and revoked with, the original login.
 
-**Why:** Duplicate user documents may have different passwords. Enterprise linkage alone does not authorize an advisor. Old session rows do not distinguish password login from verified provider bootstrap, so safely enabling exchanges requires a one-time explicit sign-in after upgrading.
+**Why:** Duplicate user documents may have different passwords. Enterprise linkage alone does not authorize an advisor. Old session rows do not distinguish password login from verified provider bootstrap, so safely enabling cross-location exchanges requires a one-time explicit sign-in after upgrading. Same-shop use must not require new switching authority: reuse the original credential and expiry only after canonical identity and current direct access are proven; unbound legacy scope needs a single directly assigned primary shop and known original expiry.
 
 **How to apply:** Apply the session provenance migration before server rollout. Never infer eligibility from the extension's local auth-source label. Keep print context and settings operation-local; fail closed on canonical mapping conflicts. See `docs/tekmetric-location-switching.md` for bounded read-only findings and operator verification.
 
