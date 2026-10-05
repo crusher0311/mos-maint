@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRef, useState } from "react";
 import type { recoveryEvidence } from "@/lib/jwt-invoice-recovery-evidence";
+import JwtBulkRecoveryClient from "./JwtBulkRecoveryClient";
 
 type InvoiceRow = {
   workOrderNumber: string | null;
@@ -151,6 +152,8 @@ export default function JwtInvoicePreviewClient() {
           Proposed actions are a dry run, not approval to repair or reconciled labor totals.
         </p>
       </section>
+
+      <JwtBulkRecoveryClient />
 
       <section className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm">
         <h2 className="font-semibold">Approved recovery: full-source prerequisite</h2>

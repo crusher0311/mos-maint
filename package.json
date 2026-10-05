@@ -266,7 +266,7 @@
     "test:extension-provider-proof": "tsx tests/extension-provider-proof.smoke.ts",
     "test:extension-login-code": "tsx tests/extension-login-code.smoke.ts",
     "test:protractor-relay-transport": "tsx tests/protractor-relay-transport.smoke.ts",
-    "test:jwt-invoice-preview": "tsx tests/jwt-invoice-preview.smoke.ts && tsx --require ./scripts/_stubs/server-only-stub.cjs tests/jwt-invoice-preview-route.smoke.ts"
+    "test:jwt-invoice-preview": "tsx tests/jwt-invoice-preview.smoke.ts && tsx --require ./scripts/_stubs/server-only-stub.cjs tests/jwt-invoice-preview-route.smoke.ts && tsx tests/jwt-september-recovery.smoke.ts && tsx tests/jwt-september-recovery-store.smoke.ts && tsx --require ./scripts/_stubs/server-only-stub.cjs tests/jwt-september-recovery-route.smoke.ts && tsx tests/jwt-recovery-vehicle-resolution.smoke.ts && tsx --test app/platform-admin/jwt-invoice-preview/JwtBulkRecoveryClient.test.ts"
   },
   "dependencies": {
     "@deepgram/sdk": "^5.0.0",

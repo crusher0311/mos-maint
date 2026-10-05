@@ -1,0 +1,1412 @@
+[
+  {
+    "wo": "701008206",
+    "invoice": "701006666",
+    "date": "2026-09-02",
+    "classification": "nonterminal"
+  },
+  {
+    "wo": "701008310",
+    "invoice": "701006656",
+    "date": "2026-09-02",
+    "classification": "nonterminal"
+  },
+  {
+    "wo": "701008332",
+    "invoice": "701006655",
+    "date": "2026-09-02",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008346",
+    "invoice": "701006644",
+    "date": "2026-09-02",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008347",
+    "invoice": "701006652",
+    "date": "2026-09-02",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008349",
+    "invoice": "701006643",
+    "date": "2026-09-02",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008350",
+    "invoice": "701006645",
+    "date": "2026-09-02",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008351",
+    "invoice": "701006647",
+    "date": "2026-09-02",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008352",
+    "invoice": "701006650",
+    "date": "2026-09-02",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008354",
+    "invoice": "701006662",
+    "date": "2026-09-02",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008356",
+    "invoice": "701006659",
+    "date": "2026-09-02",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008357",
+    "invoice": "701006653",
+    "date": "2026-09-02",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008359",
+    "invoice": "701006649",
+    "date": "2026-09-02",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008361",
+    "invoice": "701006646",
+    "date": "2026-09-02",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008362",
+    "invoice": "701006651",
+    "date": "2026-09-02",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008364",
+    "invoice": "701006664",
+    "date": "2026-09-02",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008366",
+    "invoice": "701006648",
+    "date": "2026-09-02",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008367",
+    "invoice": "701006661",
+    "date": "2026-09-02",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008369",
+    "invoice": "701006657",
+    "date": "2026-09-02",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008370",
+    "invoice": "701006654",
+    "date": "2026-09-02",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008371",
+    "invoice": "701006667",
+    "date": "2026-09-02",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008372",
+    "invoice": "701006658",
+    "date": "2026-09-02",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008374",
+    "invoice": "701006660",
+    "date": "2026-09-02",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008375",
+    "invoice": "701006665",
+    "date": "2026-09-02",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008380",
+    "invoice": "701006663",
+    "date": "2026-09-02",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008373",
+    "invoice": "701006678",
+    "date": "2026-09-03",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008377",
+    "invoice": "701006674",
+    "date": "2026-09-03",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008381",
+    "invoice": "701006681",
+    "date": "2026-09-03",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008382",
+    "invoice": "701006672",
+    "date": "2026-09-03",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008383",
+    "invoice": "701006669",
+    "date": "2026-09-03",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008385",
+    "invoice": "701006670",
+    "date": "2026-09-03",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008387",
+    "invoice": "701006671",
+    "date": "2026-09-03",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008388",
+    "invoice": "701006668",
+    "date": "2026-09-03",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008390",
+    "invoice": "701006673",
+    "date": "2026-09-03",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008393",
+    "invoice": "701006686",
+    "date": "2026-09-03",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008394",
+    "invoice": "701006675",
+    "date": "2026-09-03",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008395",
+    "invoice": "701006683",
+    "date": "2026-09-03",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008396",
+    "invoice": "701006679",
+    "date": "2026-09-03",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008398",
+    "invoice": "701006677",
+    "date": "2026-09-03",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008400",
+    "invoice": "701006676",
+    "date": "2026-09-03",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008402",
+    "invoice": "701006684",
+    "date": "2026-09-03",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008403",
+    "invoice": "701006685",
+    "date": "2026-09-03",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008405",
+    "invoice": "701006680",
+    "date": "2026-09-03",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008406",
+    "invoice": "701006682",
+    "date": "2026-09-03",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008376",
+    "invoice": "701006694",
+    "date": "2026-09-04",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008392",
+    "invoice": "701006707",
+    "date": "2026-09-04",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008401",
+    "invoice": "701006689",
+    "date": "2026-09-04",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008407",
+    "invoice": "701006693",
+    "date": "2026-09-04",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008409",
+    "invoice": "701006688",
+    "date": "2026-09-04",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008410",
+    "invoice": "701006687",
+    "date": "2026-09-04",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008411",
+    "invoice": "701006695",
+    "date": "2026-09-04",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008413",
+    "invoice": "701006691",
+    "date": "2026-09-04",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008415",
+    "invoice": "701006704",
+    "date": "2026-09-04",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008416",
+    "invoice": "701006690",
+    "date": "2026-09-04",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008418",
+    "invoice": "701006692",
+    "date": "2026-09-04",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008420",
+    "invoice": "701006699",
+    "date": "2026-09-04",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008421",
+    "invoice": "701006703",
+    "date": "2026-09-04",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008422",
+    "invoice": "701006697",
+    "date": "2026-09-04",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008424",
+    "invoice": "701006702",
+    "date": "2026-09-04",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008425",
+    "invoice": "701006696",
+    "date": "2026-09-04",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008426",
+    "invoice": "701006698",
+    "date": "2026-09-04",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008427",
+    "invoice": "701006700",
+    "date": "2026-09-04",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008429",
+    "invoice": "701006701",
+    "date": "2026-09-04",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008430",
+    "invoice": "701006706",
+    "date": "2026-09-04",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008432",
+    "invoice": "701006705",
+    "date": "2026-09-04",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008331",
+    "invoice": "701006714",
+    "date": "2026-09-05",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008423",
+    "invoice": "701006708",
+    "date": "2026-09-05",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008434",
+    "invoice": "701006724",
+    "date": "2026-09-05",
+    "classification": "invoice_number_only_match"
+  },
+  {
+    "wo": "701008435",
+    "invoice": "701006709",
+    "date": "2026-09-05",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008438",
+    "invoice": "701006710",
+    "date": "2026-09-05",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008440",
+    "invoice": "701006722",
+    "date": "2026-09-05",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008442",
+    "invoice": "701006716",
+    "date": "2026-09-05",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008443",
+    "invoice": "701006711",
+    "date": "2026-09-05",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008444",
+    "invoice": "701006715",
+    "date": "2026-09-05",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008445",
+    "invoice": "701006712",
+    "date": "2026-09-05",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008446",
+    "invoice": "701006718",
+    "date": "2026-09-05",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008447",
+    "invoice": "701006719",
+    "date": "2026-09-05",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008448",
+    "invoice": "701006713",
+    "date": "2026-09-05",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008449",
+    "invoice": "701006717",
+    "date": "2026-09-05",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008451",
+    "invoice": "701006720",
+    "date": "2026-09-05",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008452",
+    "invoice": "701006726",
+    "date": "2026-09-05",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008453",
+    "invoice": "701006721",
+    "date": "2026-09-05",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008455",
+    "invoice": "701006723",
+    "date": "2026-09-05",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008457",
+    "invoice": "701006725",
+    "date": "2026-09-05",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008231",
+    "invoice": "701006743",
+    "date": "2026-09-08",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008397",
+    "invoice": "701006746",
+    "date": "2026-09-08",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008404",
+    "invoice": "701006741",
+    "date": "2026-09-08",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008439",
+    "invoice": "701006751",
+    "date": "2026-09-08",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008441",
+    "invoice": "701006731",
+    "date": "2026-09-08",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008460",
+    "invoice": "701006728",
+    "date": "2026-09-08",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008461",
+    "invoice": "701006733",
+    "date": "2026-09-08",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008465",
+    "invoice": "701006738",
+    "date": "2026-09-08",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008466",
+    "invoice": "701006730",
+    "date": "2026-09-08",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008467",
+    "invoice": "701006739",
+    "date": "2026-09-08",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008468",
+    "invoice": "701006734",
+    "date": "2026-09-08",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008470",
+    "invoice": "701006732",
+    "date": "2026-09-08",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008471",
+    "invoice": "701006729",
+    "date": "2026-09-08",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008473",
+    "invoice": "701006740",
+    "date": "2026-09-08",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008474",
+    "invoice": "701006745",
+    "date": "2026-09-08",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008475",
+    "invoice": "701006750",
+    "date": "2026-09-08",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008476",
+    "invoice": "701006727",
+    "date": "2026-09-08",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008477",
+    "invoice": "701006744",
+    "date": "2026-09-08",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008482",
+    "invoice": "701006737",
+    "date": "2026-09-08",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008486",
+    "invoice": "701006742",
+    "date": "2026-09-08",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008490",
+    "invoice": "701006735",
+    "date": "2026-09-08",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008491",
+    "invoice": "701006736",
+    "date": "2026-09-08",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008492",
+    "invoice": "701006749",
+    "date": "2026-09-08",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008496",
+    "invoice": "701006748",
+    "date": "2026-09-08",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008497",
+    "invoice": "701006747",
+    "date": "2026-09-08",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008469",
+    "invoice": "701006768",
+    "date": "2026-09-09",
+    "classification": "nonterminal"
+  },
+  {
+    "wo": "701008479",
+    "invoice": "701006760",
+    "date": "2026-09-09",
+    "classification": "nonterminal"
+  },
+  {
+    "wo": "701008483",
+    "invoice": "701006755",
+    "date": "2026-09-09",
+    "classification": "nonterminal"
+  },
+  {
+    "wo": "701008484",
+    "invoice": "701006770",
+    "date": "2026-09-09",
+    "classification": "nonterminal"
+  },
+  {
+    "wo": "701008494",
+    "invoice": "701006764",
+    "date": "2026-09-09",
+    "classification": "nonterminal"
+  },
+  {
+    "wo": "701008502",
+    "invoice": "701006752",
+    "date": "2026-09-09",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008503",
+    "invoice": "701006758",
+    "date": "2026-09-09",
+    "classification": "nonterminal"
+  },
+  {
+    "wo": "701008504",
+    "invoice": "701006771",
+    "date": "2026-09-09",
+    "classification": "nonterminal"
+  },
+  {
+    "wo": "701008505",
+    "invoice": "701006757",
+    "date": "2026-09-09",
+    "classification": "nonterminal"
+  },
+  {
+    "wo": "701008508",
+    "invoice": "701006762",
+    "date": "2026-09-09",
+    "classification": "nonterminal"
+  },
+  {
+    "wo": "701008513",
+    "invoice": "701006756",
+    "date": "2026-09-09",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008517",
+    "invoice": "701006759",
+    "date": "2026-09-09",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008520",
+    "invoice": "701006763",
+    "date": "2026-09-09",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008521",
+    "invoice": "701006761",
+    "date": "2026-09-09",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008524",
+    "invoice": "701006772",
+    "date": "2026-09-09",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008526",
+    "invoice": "701006765",
+    "date": "2026-09-09",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008527",
+    "invoice": "701006767",
+    "date": "2026-09-09",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008528",
+    "invoice": "701006766",
+    "date": "2026-09-09",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008530",
+    "invoice": "701006773",
+    "date": "2026-09-09",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008531",
+    "invoice": "701006769",
+    "date": "2026-09-09",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008314",
+    "invoice": "701006796",
+    "date": "2026-09-10",
+    "classification": "nonterminal"
+  },
+  {
+    "wo": "701008454",
+    "invoice": "701006788",
+    "date": "2026-09-10",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008507",
+    "invoice": "701006777",
+    "date": "2026-09-10",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008515",
+    "invoice": "701006783",
+    "date": "2026-09-10",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008518",
+    "invoice": "701006797",
+    "date": "2026-09-10",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008519",
+    "invoice": "701006789",
+    "date": "2026-09-10",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008529",
+    "invoice": "701006779",
+    "date": "2026-09-10",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008534",
+    "invoice": "701006774",
+    "date": "2026-09-10",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008535",
+    "invoice": "701006782",
+    "date": "2026-09-10",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008536",
+    "invoice": "701006775",
+    "date": "2026-09-10",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008538",
+    "invoice": "701006784",
+    "date": "2026-09-10",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008540",
+    "invoice": "701006776",
+    "date": "2026-09-10",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008541",
+    "invoice": "701006798",
+    "date": "2026-09-10",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008542",
+    "invoice": "701006781",
+    "date": "2026-09-10",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008543",
+    "invoice": "701006778",
+    "date": "2026-09-10",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008544",
+    "invoice": "701006780",
+    "date": "2026-09-10",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008547",
+    "invoice": "701006786",
+    "date": "2026-09-10",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008548",
+    "invoice": "701006801",
+    "date": "2026-09-10",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008549",
+    "invoice": "701006785",
+    "date": "2026-09-10",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008550",
+    "invoice": "701006793",
+    "date": "2026-09-10",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008553",
+    "invoice": "701006792",
+    "date": "2026-09-10",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008555",
+    "invoice": "701006800",
+    "date": "2026-09-10",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008557",
+    "invoice": "701006794",
+    "date": "2026-09-10",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008558",
+    "invoice": "701006787",
+    "date": "2026-09-10",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008559",
+    "invoice": "701006791",
+    "date": "2026-09-10",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008560",
+    "invoice": "701006790",
+    "date": "2026-09-10",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008562",
+    "invoice": "701006795",
+    "date": "2026-09-10",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008564",
+    "invoice": "701006799",
+    "date": "2026-09-10",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008339",
+    "invoice": "701006825",
+    "date": "2026-09-11",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008493",
+    "invoice": "701006805",
+    "date": "2026-09-11",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008509",
+    "invoice": "701006807",
+    "date": "2026-09-11",
+    "classification": "nonterminal"
+  },
+  {
+    "wo": "701008511",
+    "invoice": "701006821",
+    "date": "2026-09-11",
+    "classification": "nonterminal"
+  },
+  {
+    "wo": "701008556",
+    "invoice": "701006819",
+    "date": "2026-09-11",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008565",
+    "invoice": "701006822",
+    "date": "2026-09-11",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008566",
+    "invoice": "701006802",
+    "date": "2026-09-11",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008567",
+    "invoice": "701006812",
+    "date": "2026-09-11",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008570",
+    "invoice": "701006809",
+    "date": "2026-09-11",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008571",
+    "invoice": "701006808",
+    "date": "2026-09-11",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008572",
+    "invoice": "701006803",
+    "date": "2026-09-11",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008575",
+    "invoice": "701006806",
+    "date": "2026-09-11",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008577",
+    "invoice": "701006804",
+    "date": "2026-09-11",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008578",
+    "invoice": "701006817",
+    "date": "2026-09-11",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008581",
+    "invoice": "701006820",
+    "date": "2026-09-11",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008584",
+    "invoice": "701006810",
+    "date": "2026-09-11",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008589",
+    "invoice": "701006813",
+    "date": "2026-09-11",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008590",
+    "invoice": "701006824",
+    "date": "2026-09-11",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008591",
+    "invoice": "701006823",
+    "date": "2026-09-11",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008593",
+    "invoice": "701006811",
+    "date": "2026-09-11",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008594",
+    "invoice": "701006815",
+    "date": "2026-09-11",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008597",
+    "invoice": "701006814",
+    "date": "2026-09-11",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008599",
+    "invoice": "701006816",
+    "date": "2026-09-11",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008603",
+    "invoice": "701006826",
+    "date": "2026-09-11",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008573",
+    "invoice": "701006833",
+    "date": "2026-09-12",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008585",
+    "invoice": "701006827",
+    "date": "2026-09-12",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008602",
+    "invoice": "701006837",
+    "date": "2026-09-12",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008604",
+    "invoice": "701006828",
+    "date": "2026-09-12",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008605",
+    "invoice": "701006829",
+    "date": "2026-09-12",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008606",
+    "invoice": "701006840",
+    "date": "2026-09-12",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008607",
+    "invoice": "701006830",
+    "date": "2026-09-12",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008608",
+    "invoice": "701006835",
+    "date": "2026-09-12",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008610",
+    "invoice": "701006834",
+    "date": "2026-09-12",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008611",
+    "invoice": "701006831",
+    "date": "2026-09-12",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008612",
+    "invoice": "701006832",
+    "date": "2026-09-12",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008614",
+    "invoice": "701006836",
+    "date": "2026-09-12",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008616",
+    "invoice": "701006838",
+    "date": "2026-09-12",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008617",
+    "invoice": "701006839",
+    "date": "2026-09-12",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008619",
+    "invoice": "701006842",
+    "date": "2026-09-12",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008621",
+    "invoice": "701006841",
+    "date": "2026-09-12",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008596",
+    "invoice": "701006847",
+    "date": "2026-09-14",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008623",
+    "invoice": "701006844",
+    "date": "2026-09-14",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008624",
+    "invoice": "701006843",
+    "date": "2026-09-14",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008625",
+    "invoice": "701006852",
+    "date": "2026-09-14",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008626",
+    "invoice": "701006854",
+    "date": "2026-09-14",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008627",
+    "invoice": "701006845",
+    "date": "2026-09-14",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008628",
+    "invoice": "701006846",
+    "date": "2026-09-14",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008630",
+    "invoice": "701006848",
+    "date": "2026-09-14",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008631",
+    "invoice": "701006849",
+    "date": "2026-09-14",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008632",
+    "invoice": "701006855",
+    "date": "2026-09-14",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008633",
+    "invoice": "701006850",
+    "date": "2026-09-14",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008635",
+    "invoice": "701006853",
+    "date": "2026-09-14",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008636",
+    "invoice": "701006851",
+    "date": "2026-09-14",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008637",
+    "invoice": "701006856",
+    "date": "2026-09-14",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008638",
+    "invoice": "701006857",
+    "date": "2026-09-14",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008641",
+    "invoice": "701006858",
+    "date": "2026-09-14",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008643",
+    "invoice": "701006859",
+    "date": "2026-09-14",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008644",
+    "invoice": "701006864",
+    "date": "2026-09-14",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008646",
+    "invoice": "701006863",
+    "date": "2026-09-14",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008647",
+    "invoice": "701006865",
+    "date": "2026-09-14",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008648",
+    "invoice": "701006860",
+    "date": "2026-09-14",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008649",
+    "invoice": "701006862",
+    "date": "2026-09-14",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008650",
+    "invoice": "701006861",
+    "date": "2026-09-14",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008933",
+    "invoice": "701007152",
+    "date": "2026-09-28",
+    "classification": "nonterminal"
+  },
+  {
+    "wo": "701008949",
+    "invoice": "701007140",
+    "date": "2026-09-28",
+    "classification": "nonterminal"
+  },
+  {
+    "wo": "701008990",
+    "invoice": "701007147",
+    "date": "2026-09-28",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008991",
+    "invoice": "701007158",
+    "date": "2026-09-28",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701008982",
+    "invoice": "701007161",
+    "date": "2026-09-29",
+    "classification": "nonterminal"
+  },
+  {
+    "wo": "701009013",
+    "invoice": "701007162",
+    "date": "2026-09-29",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701009038",
+    "invoice": "701007176",
+    "date": "2026-09-29",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701009042",
+    "invoice": "701007191",
+    "date": "2026-09-29",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701009048",
+    "invoice": "701007186",
+    "date": "2026-09-29",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701009049",
+    "invoice": "701007189",
+    "date": "2026-09-29",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701009032",
+    "invoice": "701007201",
+    "date": "2026-09-30",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701009056",
+    "invoice": "701007193",
+    "date": "2026-09-30",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701009064",
+    "invoice": "701007202",
+    "date": "2026-09-30",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701009081",
+    "invoice": "701007207",
+    "date": "2026-09-30",
+    "classification": "absent_by_both_numbers"
+  },
+  {
+    "wo": "701009083",
+    "invoice": "701007219",
+    "date": "2026-09-30",
+    "classification": "absent_by_both_numbers"
+  }
+]
