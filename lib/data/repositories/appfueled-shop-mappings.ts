@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { getDb as getPgDb } from "@/lib/db/drizzle";
 import { appfueledShopMappings } from "@/lib/db/schema/wave2";
 import { findShopBySmsIdDetailed } from "@/lib/extension-shop-lookup";
+import { findShopByShopId } from "@/lib/data/repositories/shops";
 
 export const APPFUELED_NAMESPACE = "live_api" as const;
 export const APPFUELED_PROVIDERS = [
@@ -22,7 +23,42 @@ export type AppFueledMappingInput = {
 export class AppFueledMappingValidationError extends Error {}
 
 export async function validateAuthoritativeMapping(input: AppFueledMappingInput) {
-  const resolved = await findShopBySmsIdDetailed(input.externalShopId, {
+  // AppFueled's live_api smsShopId is a MOS shop ID, not an upstream
+  // provider ID. An active operator-managed row is still required.
+  if (!Number.isSafeInteger(input.mosShopId) || input.mosShopId <= 0 ||
+      input.externalShopId.trim() !== String(input.mosShopId)) {
+    throw new AppFueledMappingValidationError("live_api shop identifier must match the authorized MOS shop ID");
+  }
+  if (!APPFUELED_PROVIDERS.includes(input.provider)) {
+    throw new AppFueledMappingValidationError("Unsupported canonical provider");
+  }
+  const target = await findShopByShopId(input.mosShopId);
+  if (!target) {
+    throw new AppFueledMappingValidationError("MOS shop does not exist");
+  }
+  const provider = String(target.integrationProvider || "").trim().toLowerCase().replace(/^shop[-_]ware$/, "shopware");
+  if (provider !== input.provider) {
+    throw new AppFueledMappingValidationError("MOS shop canonical provider does not match the authorized mapping");
+  }
+  // Resolve the shop's configured upstream identity, not the request's MOS ID.
+  // The authoritative lookup rejects ambiguity and never learns aliases.
+  const field = (config: unknown, key: string): unknown =>
+    config && typeof config === "object"
+      ? (config as Record<string, unknown>)[key]
+      : undefined;
+  const identifiers: Record<AppFueledProvider, unknown> = {
+    tekmetric: field(target.tekmetric, "shopId") ?? target.tekmetricShopId,
+    protractor: field(target.protractor, "connectionId") ?? target.protractorConnectionId,
+    shopware: field(target.shopware, "tenantId") ?? field(target.shopware, "tenantSubdomain"),
+    shopmonkey: field(target.shopmonkey, "locationId") ?? field(target.shopmonkey, "companyId"),
+    autoflow: field(target.autoflow, "domain") ?? field(target.autoflow, "subdomain") ?? field(target.autoflow, "shopId") ?? target.autoflowDomain,
+  };
+  const canonicalId = identifiers[input.provider];
+  if ((typeof canonicalId !== "string" && typeof canonicalId !== "number") ||
+      !String(canonicalId).trim()) {
+    throw new AppFueledMappingValidationError("MOS shop canonical provider identity is not configured");
+  }
+  const resolved = await findShopBySmsIdDetailed(String(canonicalId), {
     isPlatformAdmin: true,
     providerHint: input.provider,
     providerHintIsAuthoritative: true,

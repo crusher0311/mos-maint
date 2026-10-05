@@ -384,6 +384,7 @@ async function main() {
   // Exercise the real route wrapper for auth, partner-only scoping, malformed
   // and oversized bodies, unknown shops, and cross-shop resolution.
   let shopExists = true;
+  let mappedMosShopId = 36;
   let resolvedExternalShopId: string | undefined;
   const mappingPath = require.resolve("../lib/data/repositories/appfueled-shop-mappings");
   class MappingConflict extends Error {}
@@ -397,7 +398,7 @@ async function main() {
       AppFueledMappingValidationError: MappingConflict,
       resolveActiveAppFueledMapping: async (externalShopId: string) => {
         resolvedExternalShopId = externalShopId;
-        return shopExists ? { mosShopId: 36, provider: "protractor", externalShopId } : null;
+        return shopExists ? { mosShopId: mappedMosShopId, provider: "protractor", externalShopId } : null;
       },
     },
   } as any;
@@ -596,15 +597,16 @@ async function main() {
   shopExists = false;
   assert.equal((await POST(request(octoberBody, "mos_partner_valid"))).status, 404);
   shopExists = true;
+  mappedMosShopId = 37;
   const octoberFirst = await POST(request(octoberBody, "mos_partner_valid"));
   const octoberJson = await octoberFirst.json();
   assert.equal(octoberFirst.status, 200);
   assert.equal(resolvedExternalShopId, "37");
-  assert.equal(octoberJson.ingestion.shopId, 36, "external 37 is not implicitly MOS shop 37");
+  assert.equal(octoberJson.ingestion.shopId, 37, "MOS shop 37 requires an explicit authorized mapping");
   assert.equal(octoberJson.ingestion.stored, true);
   assert.equal(octoberJson.ingestion.duplicate, false);
   assert.equal(octoberJson.vhi.success, true);
-  assert.match(octoberJson.vhi.reportUrl, /shopId=36/);
+  assert.match(octoberJson.vhi.reportUrl, /shopId=37/);
   const reportCount = reports.length;
   const octoberRetry = await POST(request(octoberBody, "mos_partner_valid"));
   const retryJson = await octoberRetry.json();

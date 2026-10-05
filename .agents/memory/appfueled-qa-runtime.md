@@ -13,3 +13,9 @@ QA branch freshness must be checked independently of workspace source. A success
 **Why:** on 2026-10-05 the exact QA CARFAX allowlist error matched the deployed revision, while workspace validation already accepted `live_api`; there was no newer failed deployment to fix.
 
 **How to apply:** compare Render's live commit with both the remote QA branch and intended source before restarting or changing validation. Check both hostname aliases through domain metadata, not by assuming separate applications.
+
+For AppFueled `live_api` CARFAX requests, the operator clarified that `smsShopId` is the **MOS shop ID**, not an AppFueled ID or the upstream provider's ID.
+
+**Why:** searching upstream identifiers for the submitted number falsely suggested the intended shop could not be identified.
+
+**How to apply:** retain explicit operator authorization of the target MOS shop; verify its configured upstream identity separately. Never ask the partner to substitute a canonical provider for `live_api`.
