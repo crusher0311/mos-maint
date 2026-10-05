@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import React, { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 const ENDPOINT = "/api/platform-admin/protractor-operator-stop";
@@ -429,6 +430,7 @@ export default function ProtractorOperatorStopClient() {
     return (
       <div className="p-6">
         <h1 className="text-2xl font-bold text-gray-900">Protractor Live Controls</h1>
+            <Link href="/platform-admin/jwt-invoice-preview" className="text-sm text-blue-700 underline">JWT invoice recovery preview</Link>
         <p className="mt-2 text-sm text-gray-600">Loading operator-stop status…</p>
         {error && <ErrorNotice message={error} />}
       </div>
@@ -441,6 +443,7 @@ export default function ProtractorOperatorStopClient() {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Protractor Live Controls</h1>
+            <Link href="/platform-admin/jwt-invoice-preview" className="text-sm text-blue-700 underline">JWT invoice recovery preview</Link>
             <p className="mt-1 max-w-3xl text-sm text-gray-600">
               Production-only control for continuous relay-only operation, a 30-minute trial,
               and the emergency stop. Continuous mode stays active until stopped.

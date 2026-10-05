@@ -32,7 +32,7 @@
     "verify:reporting-readiness": "tsx scripts/verify-reporting-query-readiness.ts",
     "test:missed-opportunities-performance": "tsx tests/missed-opportunities-performance.smoke.ts",
     "test:reporting-delivery": "NODE_OPTIONS='--require ./scripts/_stubs/server-only-stub.cjs' tsx tests/reporting-delivery.smoke.ts",
-    "test:custom-reports": "tsx tests/report-definition-compiler.smoke.ts && tsx tests/custom-report-access.smoke.ts && tsx tests/custom-report-ai.smoke.ts && npm run test:reporting-kpis && npm run test:reporting-delivery && npm run test:report-runs",
+    "test:custom-reports": "tsx tests/report-definition-compiler.smoke.ts && tsx tests/custom-report-access.smoke.ts && tsx tests/custom-report-ai.smoke.ts && npm run test:reporting-kpis && npm run test:reporting-delivery && npm run test:report-runs && npm run test:jwt-invoice-preview",
     "test:report-runs": "NODE_OPTIONS='--require ./scripts/_stubs/server-only-stub.cjs' tsx tests/report-runs.smoke.ts",
     "test:shopware-connect-errors": "npm run test:shopware-repair-order-query && tsx tests/shopware-connect-errors.smoke.ts",
     "test:myoilsticker-migration-resume": "tsx tests/myoilsticker-migration-resume.smoke.ts",
@@ -265,7 +265,8 @@
     "test:slow-query-mongo-monitor": "tsx tests/slow-query-mongo-monitor.smoke.ts",
     "test:extension-provider-proof": "tsx tests/extension-provider-proof.smoke.ts",
     "test:extension-login-code": "tsx tests/extension-login-code.smoke.ts",
-    "test:protractor-relay-transport": "tsx tests/protractor-relay-transport.smoke.ts"
+    "test:protractor-relay-transport": "tsx tests/protractor-relay-transport.smoke.ts",
+    "test:jwt-invoice-preview": "tsx tests/jwt-invoice-preview.smoke.ts && tsx --require ./scripts/_stubs/server-only-stub.cjs tests/jwt-invoice-preview-route.smoke.ts"
   },
   "dependencies": {
     "@deepgram/sdk": "^5.0.0",
