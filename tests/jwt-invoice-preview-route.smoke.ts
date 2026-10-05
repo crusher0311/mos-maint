@@ -12,8 +12,10 @@ async function main() {
   deps.requirePlatformAdmin = async () => { throw Error("unauthorized"); };
   deps.read = async () => { reads++; return {ok:true,data:{ItemCollection:[]}}; };
   assert.equal((await POST(request())).status,401);
+  assert.equal((await POST(request({captureApprovedSource:true}))).status,401);
   deps.requirePlatformAdmin = async () => ({email:"admin@example.test"}) as any;
   assert.equal((await POST(request({shopId:228}))).status,400);
+  assert.equal((await POST(request({captureApprovedSource:true,shopId:228}))).status,400);
   assert.equal((await POST(request({}, "https://evil.test"))).status,403);
   assert.equal(reads,0);
   deps.enterprise = async()=>({name:"JWT",shopIds:[227]});
@@ -28,6 +30,7 @@ async function main() {
   assert.equal(success.status,200);
   assert.equal(success.headers.get("cache-control"),"no-store");
   assert.equal(reads,1);
+  assert.equal((await POST(request({captureApprovedSource:true}))).status,422);
   let release!: () => void;
   deps.read = async()=>{await new Promise<void>(resolve=>{release=resolve;});return {ok:true,data:{ItemCollection:[]}};};
   const pending=POST(request());

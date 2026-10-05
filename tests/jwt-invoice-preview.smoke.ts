@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { previewJwtInvoices, type InvoicePreviewDeps } from "../lib/jwt-invoice-preview";
 import { recoveryEvidence } from "../lib/jwt-invoice-recovery-evidence";
+import { captureApprovedRecoverySource } from "../lib/jwt-approved-recovery-source";
+import native from "../docs/reporting/jwt-701-september-1-native-identities.json";
 
 async function main() {
   let reads = 0, scopes = 0;
@@ -58,6 +60,10 @@ async function main() {
   const row = {id:"test",work_order_number:"1",status:"work_complete",business_date:null,deleted:false};
   assert.match(recoveryEvidence(source,"1","2",true,[]).proposedAction,/Candidate insert/);
   assert.match(recoveryEvidence(source,"1","2",true,[row]).proposedAction,/Candidate header update/);
+  const observedSource = {...source,WorkflowStage:"Invoice",Status:null};
+  assert.match(recoveryEvidence(observedSource,"1","2",true,[]).proposedAction,/Candidate insert/);
+  assert.match(recoveryEvidence(observedSource,"1","2",true,[row]).proposedAction,/status closed,/);
+  assert.match(recoveryEvidence({...observedSource,Status:"WorkInProgress"},"1","2",true,[row]).proposedAction,/Hold/);
   assert.match(recoveryEvidence(source,"1","2",true,[{...row,status:"paid",business_date:"2026-09-01"}]).proposedAction,/No header recovery/);
   for (const records of [[{...row,deleted:true}],[row,row],[{...row,work_order_number:"2"}]])
     assert.match(recoveryEvidence(source,"1","2",true,records).proposedAction,/Hold/);
@@ -69,5 +75,24 @@ async function main() {
   assert.match(JSON.stringify(failedStored.body),/database evidence unavailable/);
   assert.ok(!JSON.stringify(failedStored.body).includes("PRIVATE"));
   console.log("JWT recovery evidence dry run: ALL PASS");
+  const full = native.map((n,i)=>({
+    ID:`00000000-0000-4000-8000-${String(i+1).padStart(12,"0")}`,
+    Type:"WorkOrder",WorkflowStage:"Invoice",Status:null,
+    WorkOrderNumber:n.wo,InvoiceNumber:n.invoice,
+    InvoiceTime:"2026-09-01T12:00:00-04:00",ServicePackages:{ItemCollection:[]},
+  }));
+  const bundle=captureApprovedRecoverySource(full);
+  assert.equal(bundle.invoices.length,21);
+  assert.ok(!bundle.invoices.some(r=>r.WorkOrderNumber==="701008320"));
+  const first = bundle.invoices[0];
+  for (const patch of [
+    {ID:"invalid"},{WorkflowStage:"WorkInProgress"},{Status:"Voided"},
+    {InvoiceTime:"0001-01-01T00:00:00"},{ServicePackages:null},
+    {Type:"CreditInvoice"},{InvoiceNumber:"999"},
+  ]) assert.throws(()=>captureApprovedRecoverySource(full.map(r=>r.ID===first.ID?{...r,...patch}:r)));
+  assert.throws(()=>captureApprovedRecoverySource(full.filter(r=>r.ID!==first.ID)));
+  assert.throws(()=>captureApprovedRecoverySource([...full,first]));
+  assert.throws(()=>captureApprovedRecoverySource(Array(26).fill(first)));
+  console.log("JWT approved source capture: ALL PASS (no writes)");
 }
 main().catch(e=>{console.error(e);process.exit(1);});

@@ -16,7 +16,10 @@ export function recoveryEvidence(
     Number.isFinite(Date.parse(v)) ? v : null;
   const workflowStage = stage(record?.WorkflowStage);
   const status = stage(record?.Status);
-  const terminal = (v: string | null) => !!v && ["Closed", "Invoiced", "Paid"].includes(v);
+  // JWT native-identity-matched live evidence uses WorkflowStage "Invoice".
+  // This is separate from the object's Type, which remains "WorkOrder".
+  const terminal = (v: string | null) => !!v && ["Invoice", "Closed", "Invoiced", "Paid"].includes(v);
+  const targetStatus = (workflowStage || status) === "Invoice" ? "closed" : String(workflowStage || status).toLowerCase();
   const sourceTerminal = ["WorkOrder", "Invoice"].includes(record?.Type) && terminal(workflowStage || status) &&
     (!workflowStage || !status || terminal(status));
   const exact = stored?.filter(r => r.work_order_number === wo) ?? [];
@@ -32,7 +35,7 @@ export function recoveryEvidence(
     else if (exact.length !== 1 || alternative.length || exact[0].deleted) proposedAction = "Hold — identity conflict or soft deletion requires manual review";
     else if (["closed", "invoiced", "paid"].includes(exact[0].status ?? "") && exact[0].business_date === "2026-09-01")
       proposedAction = "No header recovery indicated — labor completeness not assessed";
-    else proposedAction = `Candidate header update — status ${String(workflowStage || status).toLowerCase()}, invoice timestamp ${stamp(record?.InvoiceTime)}; validate business-date basis and full detail before approval`;
+    else proposedAction = `Candidate header update — status ${targetStatus}, invoice timestamp ${stamp(record?.InvoiceTime)}; validate business-date basis and full detail before approval`;
   } else if (stored === null) proposedAction = "Hold — current database evidence unavailable";
   return {
     workflowStage, status, invoiceTime: stamp(record?.InvoiceTime),

@@ -64,7 +64,7 @@ export default function JwtInvoicePreviewClient() {
   const [error, setError] = useState<string | null>(null);
   const inFlight = useRef(false);
 
-  async function runPreview(): Promise<void> {
+  async function runPreview(captureSource = false): Promise<void> {
     if (inFlight.current) return;
     inFlight.current = true;
     setLoading(true);
@@ -77,7 +77,7 @@ export default function JwtInvoicePreviewClient() {
         credentials: "include",
         cache: "no-store",
         headers: { "content-type": "application/json", accept: "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify(captureSource ? {captureApprovedSource:true} : {}),
       });
       if (!response.ok) {
         const blocked = await response.json().catch(() => null);
@@ -87,6 +87,7 @@ export default function JwtInvoicePreviewClient() {
           "Approved relay transport is not active.",
           "A preview is already running on this server.",
           "The shared adapter declined or failed the read. No repair was attempted.",
+          "Full source capture failed validation. No repair was attempted.",
         ];
         setError(
           response.status === 401 || response.status === 403
@@ -97,6 +98,17 @@ export default function JwtInvoicePreviewClient() {
         return;
       }
       const payload: unknown = await response.json();
+      if (captureSource) {
+        const bundle = (payload as {recoverySource?: {shopId?:number; invoices?: unknown[]}})?.recoverySource;
+        if (bundle?.shopId !== 227 || !Array.isArray(bundle.invoices) || bundle.invoices.length !== 21)
+          throw new Error("Invalid source capture");
+        const blob = new Blob([JSON.stringify(bundle,null,2)],{type:"application/json"});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href=url; a.download="jwt-701-approved-recovery-source.json"; a.click();
+        setTimeout(()=>URL.revokeObjectURL(url),1000);
+        return;
+      }
       if (!isPreviewResult(payload)) {
         // Do not expose raw server errors, upstream response bodies, or credentials.
         setError("The invoice preview was unsuccessful or returned an invalid response. Nothing was retried automatically.");
@@ -138,6 +150,17 @@ export default function JwtInvoicePreviewClient() {
           Current evidence uses a bounded database lookup; dates are compared in UTC.
           Proposed actions are a dry run, not approval to repair or reconciled labor totals.
         </p>
+      </section>
+
+      <section className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm">
+        <h2 className="font-semibold">Approved recovery: full-source prerequisite</h2>
+        <p className="mt-1">Downloads only the 21 approved invoices, excluding the already-included invoice.
+          This is a read, not a repair. Full validation is still required before writing.
+          The file contains customer, vehicle and service details; keep it private.</p>
+        <button type="button" disabled={loading} onClick={() => void runPreview(true)}
+          className="mt-3 rounded bg-blue-700 px-4 py-2 font-medium text-white disabled:opacity-50">
+          Download full source for 21 approved invoices
+        </button>
       </section>
 
       <section className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
