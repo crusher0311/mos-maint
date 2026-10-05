@@ -4,6 +4,7 @@ import { readProtractorRelayConfig } from "@/lib/integrations/protractor/relay-c
 import { runWithProtractorInteractiveTransport } from "@/lib/integrations/protractor/interactive-context";
 import { getEffectiveProtractorOutboundPolicy, resolveProtractorConfig, protractorFetch } from "@/lib/integrations/protractor/client";
 import type { InvoicePreviewDeps } from "@/lib/jwt-invoice-preview";
+import { readJwtInvoicePreviewStored } from "@/lib/db/repositories/jwt-invoice-preview";
 
 export const deps: InvoicePreviewDeps & { requirePlatformAdmin: typeof requirePlatformAdmin } = {
   requirePlatformAdmin,
@@ -12,6 +13,7 @@ export const deps: InvoicePreviewDeps & { requirePlatformAdmin: typeof requirePl
   relayMode: () => readProtractorRelayConfig().mode,
   interactive: work => runWithProtractorInteractiveTransport(227, work),
   policy: getEffectiveProtractorOutboundPolicy,
+  stored: readJwtInvoicePreviewStored,
   read: async () => {
     const config = await resolveProtractorConfig(227);
     if (!config.configured || config.shopId !== 227) return { ok: false };

@@ -1,4 +1,5 @@
 import native from "@/docs/reporting/jwt-701-september-1-native-identities.json";
+import { recoveryEvidence, type StoredInvoiceEvidence } from "./jwt-invoice-recovery-evidence";
 
 export interface InvoicePreviewDeps {
   authorize(): Promise<unknown>;
@@ -7,6 +8,7 @@ export interface InvoicePreviewDeps {
   interactive<T>(work: () => Promise<T>): Promise<T>;
   policy(): Promise<{ allowed: boolean; callbackOnly?: boolean; requireTimedTrial?: boolean; allowInteractive?: boolean }>;
   read(): Promise<{ ok: boolean; data?: { ItemCollection?: unknown }; error?: string }>;
+  stored?(): Promise<StoredInvoiceEvidence[]>;
 }
 
 export async function previewJwtInvoices(deps: InvoicePreviewDeps) {
@@ -28,6 +30,8 @@ export async function previewJwtInvoices(deps: InvoicePreviewDeps) {
     if (!result.ok) return blocked("The shared adapter declined or failed the read. No repair was attempted.", 503);
     const records = result.data?.ItemCollection;
     if (!Array.isArray(records) || records.length > 25) return blocked("Unexpected invoice response. No repair was attempted.", 502);
+    let stored: StoredInvoiceEvidence[] | null = null;
+    try { stored = deps.stored ? await deps.stored() : null; } catch { /* Explicit unavailable evidence; never infer absence. */ }
     const numeric = (value: unknown) => typeof value === "number" && Number.isSafeInteger(value) && value >= 0
       ? String(value) : typeof value === "string" && /^\d{1,20}$/.test(value) ? value : null;
     const rows = records.map((record: any) => {
@@ -42,8 +46,14 @@ export async function previewJwtInvoices(deps: InvoicePreviewDeps) {
       const comparison = match && invoiceDate === "2026-09-01"
         ? `Native identity and date matched; stored snapshot: ${match.classification}. Closure not verified by this preview.`
         : "Unverified: identity or date does not match the September 1 native sample. Closure not verified by this preview.";
-      return { workOrderNumber, invoiceNumber, invoiceDate, type, comparison };
+      const evidence = recoveryEvidence(record, workOrderNumber, invoiceNumber,
+        !!match && invoiceDate === "2026-09-01", stored);
+      if (records.filter(r => numeric(r?.WorkOrderNumber) === workOrderNumber ||
+        numeric(r?.InvoiceNumber) === invoiceNumber).length > 1)
+        evidence.proposedAction = "Hold — duplicate source identities require manual review";
+      return { workOrderNumber, invoiceNumber, invoiceDate, type, comparison, evidence };
     });
-    return { status: 200, body: { ok: true, partial: true, rows, nativeCount: native.length, returnedCount: rows.length } };
+    return { status: 200, body: { ok: true, partial: true, observedAt: new Date().toISOString(),
+      rows, nativeCount: native.length, returnedCount: rows.length } };
   });
 }

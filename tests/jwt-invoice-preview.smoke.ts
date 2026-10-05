@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { previewJwtInvoices, type InvoicePreviewDeps } from "../lib/jwt-invoice-preview";
+import { recoveryEvidence } from "../lib/jwt-invoice-recovery-evidence";
 
 async function main() {
   let reads = 0, scopes = 0;
@@ -53,5 +54,20 @@ async function main() {
   assert.equal(failed.status,503);
   assert.ok(!JSON.stringify(failed.body).includes("SECRET"));
   console.log("JWT authenticated invoice preview: ALL PASS");
+  const source = {Type:"WorkOrder", WorkflowStage:"Closed", Status:"Closed", InvoiceTime:"2026-09-01T12:00:00"};
+  const row = {id:"test",work_order_number:"1",status:"work_complete",business_date:null,deleted:false};
+  assert.match(recoveryEvidence(source,"1","2",true,[]).proposedAction,/Candidate insert/);
+  assert.match(recoveryEvidence(source,"1","2",true,[row]).proposedAction,/Candidate header update/);
+  assert.match(recoveryEvidence(source,"1","2",true,[{...row,status:"paid",business_date:"2026-09-01"}]).proposedAction,/No header recovery/);
+  for (const records of [[{...row,deleted:true}],[row,row],[{...row,work_order_number:"2"}]])
+    assert.match(recoveryEvidence(source,"1","2",true,records).proposedAction,/Hold/);
+  assert.match(recoveryEvidence(source,"1","2",true,null).proposedAction,/unavailable/);
+  assert.match(recoveryEvidence(source,"1","2",false,[]).proposedAction,/Hold/);
+  for (const change of [{Type:"CreditInvoice"},{Type:"unknown"},{WorkflowStage:"WorkCompleted"},{Status:"WorkInProgress"},{InvoiceTime:"2026-09-01T99:00:00"}])
+    assert.match(recoveryEvidence({...source,...change},"1","2",true,[]).proposedAction,/Hold/);
+  const failedStored = await previewJwtInvoices({...deps, stored:async()=>{throw Error("PRIVATE");}});
+  assert.match(JSON.stringify(failedStored.body),/database evidence unavailable/);
+  assert.ok(!JSON.stringify(failedStored.body).includes("PRIVATE"));
+  console.log("JWT recovery evidence dry run: ALL PASS");
 }
 main().catch(e=>{console.error(e);process.exit(1);});

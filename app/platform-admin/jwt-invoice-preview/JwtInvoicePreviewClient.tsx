@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRef, useState } from "react";
+import type { recoveryEvidence } from "@/lib/jwt-invoice-recovery-evidence";
 
 type InvoiceRow = {
   workOrderNumber: string | null;
@@ -9,6 +10,7 @@ type InvoiceRow = {
   invoiceDate: string | null;
   type: string;
   comparison: string;
+  evidence: ReturnType<typeof recoveryEvidence>;
 };
 
 type PreviewResult = {
@@ -44,7 +46,13 @@ function isPreviewResult(value: unknown): value is PreviewResult {
         isNullableString(invoice.invoiceNumber) &&
         isNullableString(invoice.invoiceDate) &&
         typeof invoice.type === "string" &&
-        typeof invoice.comparison === "string"
+        typeof invoice.comparison === "string" &&
+        !!invoice.evidence && typeof invoice.evidence === "object" &&
+        ["workflowStage", "status", "invoiceTime", "createdTime", "modifiedTime"].every(
+          key => isNullableString((invoice.evidence as Record<string, unknown>)[key])
+        ) &&
+        typeof (invoice.evidence as Record<string, unknown>).current === "string" &&
+        typeof (invoice.evidence as Record<string, unknown>).proposedAction === "string"
       );
     })
   );
@@ -126,8 +134,9 @@ export default function JwtInvoicePreviewClient() {
           This page cannot widen that scope. Results may be partial and must not be treated as a complete recovery inventory.
         </p>
         <p className="mt-2">
-          This preview performs no writes and no repairs. Comparison reflects the stored snapshot,
-          not reconciled live labor totals.
+          No writes or repairs. Historical comparison reflects the earlier snapshot.
+          Current evidence uses a bounded database lookup; dates are compared in UTC.
+          Proposed actions are a dry run, not approval to repair or reconciled labor totals.
         </p>
       </section>
 
@@ -179,6 +188,15 @@ export default function JwtInvoicePreviewClient() {
 
         {result && (
           <>
+            <button type="button" className="mt-3 text-sm font-medium text-blue-700 underline"
+              onClick={() => {
+                const blob = new Blob([JSON.stringify({shopId:227,location:"701",date:"2026-09-01",
+                  readOnly:true,approvalRequired:true,...result},null,2)], {type:"application/json"});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url; a.download = "jwt-701-september-1-recovery-dry-run.json";
+                a.click(); setTimeout(() => URL.revokeObjectURL(url),1000);
+              }}>Download evidence and dry-run list</button>
             {result.partial && (
               <div role="status" className="mt-4 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
                 <strong>Partial preview.</strong> Only part of the fixed scope was returned.
@@ -200,6 +218,7 @@ export default function JwtInvoicePreviewClient() {
                     <th scope="col" className="px-2 py-2">Invoice date</th>
                     <th scope="col" className="px-2 py-2">Type</th>
                     <th scope="col" className="px-2 py-2">Comparison (stored snapshot)</th>
+                    <th scope="col" className="px-2 py-2">Source evidence / current database / dry run</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 text-gray-800">
@@ -210,11 +229,20 @@ export default function JwtInvoicePreviewClient() {
                       <td className="whitespace-nowrap px-2 py-3">{row.invoiceDate ?? "—"}</td>
                       <td className="px-2 py-3">{row.type}</td>
                       <td className="min-w-48 whitespace-pre-wrap break-words px-2 py-3">{row.comparison}</td>
+                      <td className="min-w-64 px-2 py-3">
+                        <div>WorkflowStage: {row.evidence.workflowStage ?? "unavailable"}</div>
+                        <div>Status: {row.evidence.status ?? "unavailable"}</div>
+                        <div>Invoice time: {row.evidence.invoiceTime ?? "unavailable"}</div>
+                        <div>Created: {row.evidence.createdTime ?? "unavailable"}</div>
+                        <div>Modified: {row.evidence.modifiedTime ?? "unavailable"}</div>
+                        <div className="mt-2 font-medium">Current database: {row.evidence.current}</div>
+                        <div className="mt-2 font-medium">Dry run: {row.evidence.proposedAction}</div>
+                      </td>
                     </tr>
                   ))}
                   {result.rows.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="px-2 py-6 text-center text-gray-500">
+                      <td colSpan={6} className="px-2 py-6 text-center text-gray-500">
                         No invoice rows returned for this fixed scope.
                         {result.partial && " This partial result does not establish that no invoices exist."}
                       </td>
