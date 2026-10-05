@@ -116,6 +116,13 @@ async function ensureCriticalIndexes() {
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
 
+  // Keep the Node crypto transport entirely outside edge instrumentation.
+  // Malformed relay settings still fail Node startup before workers begin.
+  const { preflightProtractorRelayConfig } = await import(
+    "@/lib/integrations/protractor/relay-config"
+  );
+  preflightProtractorRelayConfig();
+
   // Defense in depth for every production server entrypoint, including a
   // direct `next start` that bypasses Render's start-with-workers wrapper.
   // This runs before Next accepts requests and deliberately throws rather

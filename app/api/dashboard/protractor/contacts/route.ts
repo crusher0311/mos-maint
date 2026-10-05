@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getDb } from "@/lib/mongo";
 import { searchContacts } from "@/lib/integrations/protractor";
+import { runWithProtractorInteractiveTransport } from "@/lib/integrations/protractor/interactive-context";
 
 export async function GET(req: NextRequest) {
   try {
@@ -28,7 +29,10 @@ export async function GET(req: NextRequest) {
     }
 
     const shopId = Number(sess.shopId);
-    const result = await searchContacts(shopId, search);
+    const result = await runWithProtractorInteractiveTransport(
+      shopId,
+      () => searchContacts(shopId, search),
+    );
 
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: 500 });

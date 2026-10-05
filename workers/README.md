@@ -17,6 +17,22 @@ the web tier — see task #513.
 Concurrency is set per-queue inside `worker.ts`. Per-shop uniqueness
 comes from BullMQ's `jobId` (set in `lib/queue/producer.ts`).
 
+## Automatic audit consumer
+
+`estimate-audit` is intentionally **not** part of this backfill service.
+The backfill workers are scheduled off on weekday business hours, whereas RO
+audit warnings need a daytime consumer. After following
+`docs/runbooks/estimate-audit-automation.md`, deploy a separate always-on
+background worker with:
+
+```text
+NODE_OPTIONS=--conditions=react-server npx tsx workers/audit-worker.ts
+```
+
+It remains inert until `ESTIMATE_AUDIT_WORKER_ENABLED=true`; per-shop and
+global audit rollout flags remain off by default. Do not add this service to
+the worker-power scheduler.
+
 ## Running
 
 ```

@@ -34,16 +34,28 @@ type AnyDoc = Record<string, unknown>;
  * `find({ shopId, enriched: true })`. The typed `payload` jsonb stores the
  * full doc, so the reconstruction returns the verbatim Mongo shape. Returns
  * `[]` when nothing matches — the empty-result semantics are preserved
- * exactly (no caching / no synthesised rows).
+ * exactly (no caching / no synthesised rows). An optional limit is applied
+ * only for callers that intentionally request a bounded read.
  */
 export async function findEnrichedCannedJobs(
   shopId: number,
+  options?: { limit?: number },
 ): Promise<AnyDoc[]> {
   const db = getDb();
-  const rows = await db
+  const query = db
     .select({ payload: cannedJobs.payload })
     .from(cannedJobs)
     .where(eq(cannedJobs.shopId, shopId));
+  if (options?.limit !== undefined && (!Number.isFinite(options.limit) || options.limit < 0)) {
+    return [];
+  }
+  const boundedLimit = options?.limit === undefined ? undefined : Math.floor(options.limit);
+  if (boundedLimit === 0) return [];
+  const rows = await (
+    boundedLimit === undefined
+      ? query
+      : query.limit(boundedLimit)
+  );
   return rows
     .map((r) => (r.payload as AnyDoc) ?? {})
     .filter((doc) => (doc as AnyDoc).enriched === true);

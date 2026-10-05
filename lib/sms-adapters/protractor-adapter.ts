@@ -120,7 +120,9 @@ class ProtractorAdapter implements ISMSAdapter {
         const result = await protractorFetch<{ ItemCollection: any[] }>(
           `/WorkOrder?Page=${page}&PageSize=${pageSize}`,
           config,
-          { method: "GET" }
+          { method: "GET" },
+          0,
+          shopId,
         );
 
         if (!result.ok || !result.data?.ItemCollection) break;
@@ -247,7 +249,9 @@ class ProtractorAdapter implements ISMSAdapter {
     const result = await protractorFetch<any>(
       `/WorkOrder/${workOrderId}`,
       config,
-      { method: "POST", body: JSON.stringify(payload) }
+      { method: "POST", body: JSON.stringify(payload) },
+      0,
+      shopId,
     );
 
     if (!result.ok) {
@@ -305,7 +309,9 @@ class ProtractorAdapter implements ISMSAdapter {
     const result = await protractorFetch<any>(
       `/ServiceItem/${vehicleId}`,
       config,
-      { method: "GET" }
+      { method: "GET" },
+      0,
+      shopId,
     );
 
     if (!result.ok || !result.data) {
@@ -340,7 +346,9 @@ class ProtractorAdapter implements ISMSAdapter {
     const result = await protractorFetch<{ ItemCollection: any[] }>(
       `/ServiceItem?vin=${encodeURIComponent(vin)}`,
       config,
-      { method: "GET" }
+      { method: "GET" },
+      0,
+      shopId,
     );
 
     if (!result.ok || !result.data?.ItemCollection?.length) {

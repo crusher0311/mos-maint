@@ -28,6 +28,7 @@
 import { getDb } from "@/lib/mongo";
 import { runProtractorBackfill } from "@/lib/integrations/protractor/sync";
 import { findByShop as findBackfillProgressByShop } from "@/lib/data/repositories/protractor-backfill-progress";
+import { isProtractorShopRecord } from "@/lib/integrations/protractor/shop-eligibility";
 
 const PARALLELISM = Math.max(1, Number(process.env.DRAIN_PARALLELISM) || 3);
 // Round-robin tuning. CHUNKS_PER_TURN is how many chunks a shop walks before
@@ -119,6 +120,7 @@ export async function loadIncompleteProtractorShops(
   const jobs: ShopJob[] = [];
   for (const shop of shops) {
     const shopId = Number(shop.shopId);
+    if (!isProtractorShopRecord(shop)) continue;
     if (filter.length > 0 && !filter.includes(shopId)) continue;
 
     // Skip shops already marked complete in backfill_progress (defensive —

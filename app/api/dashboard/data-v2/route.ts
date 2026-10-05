@@ -4,6 +4,7 @@ import { getDb } from "@/lib/mongo";
 import { Db } from "mongodb";
 import { prefixRegex, vinPrefix } from "@/lib/dashboard-search";
 import { getFeatureEntitlements } from "@/lib/featureResolver";
+import { dashboardAuditWorkOrderIdFromProvenance } from "@/lib/dashboard-audit-status";
 
 /**
  * Test seam (Task #520): tests override these to drive the dashboard read
@@ -152,31 +153,37 @@ export async function GET(request: NextRequest) {
         .limit(pageSize)
         .toArray();
 
-      const rows = archivedWOs.map((wo: any) => ({
-        updatedAt: wo.closedAt || wo.updatedAt || new Date(),
-        displayName: wo.customer?.name || 'Unknown Customer',
-        displayVehicle: [wo.vehicle?.year, wo.vehicle?.make, wo.vehicle?.model].filter(Boolean).join(' '),
-        displayVin: wo.vin,
-        displayMiles: wo.mileageOut || wo.mileageIn || null,
-        displayRo: wo.sourceId,
-        normalizedId: wo._id?.toString?.() || null,
-        dviDone: false,
-        archived: true,
-        source: wo.smsType,
-        mileageEstimated: false,
-        mileageEstimateDetails: null as any,
-        af: {
-          status: 'Archived',
-          createdAt: wo.closedAt || wo.updatedAt,
-          miles: wo.mileageOut || wo.mileageIn || null,
-        },
-        vehicle: {
-          year: wo.vehicle?.year || null,
-          make: wo.vehicle?.make || null,
-          model: wo.vehicle?.model || null,
-          engine: wo.vehicle?.engine || null,
-        },
-      }));
+      const rows = archivedWOs.map((wo: any) => {
+        const source = String(wo.provenance?.sourceSystem || wo.smsType || "").trim().toLowerCase();
+        return {
+          updatedAt: wo.closedAt || wo.updatedAt || new Date(),
+          displayName: wo.customer?.name || 'Unknown Customer',
+          displayVehicle: [wo.vehicle?.year, wo.vehicle?.make, wo.vehicle?.model].filter(Boolean).join(' '),
+          displayVin: wo.vin,
+          displayMiles: wo.mileageOut || wo.mileageIn || null,
+          displayRo: wo.sourceId,
+          // The status endpoint is keyed by the provider's primary id, not
+          // this display value or the normalized Mongo id.
+          auditWorkOrderId: dashboardAuditWorkOrderIdFromProvenance(wo.provenance, source),
+          normalizedId: wo._id?.toString?.() || null,
+          dviDone: false,
+          archived: true,
+          source,
+          mileageEstimated: false,
+          mileageEstimateDetails: null as any,
+          af: {
+            status: 'Archived',
+            createdAt: wo.closedAt || wo.updatedAt,
+            miles: wo.mileageOut || wo.mileageIn || null,
+          },
+          vehicle: {
+            year: wo.vehicle?.year || null,
+            make: wo.vehicle?.make || null,
+            model: wo.vehicle?.model || null,
+            engine: wo.vehicle?.engine || null,
+          },
+        };
+      });
 
       if (maintenanceEnabled) await batchEstimateMileage(db, shopId, rows);
 
@@ -251,36 +258,40 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const rows = workOrders.map((wo: any) => ({
-      updatedAt: wo.updatedAt || new Date(),
-      displayName: wo.customer?.name || 'Unknown Customer',
-      displayVehicle: [wo.vehicle?.year, wo.vehicle?.make, wo.vehicle?.model].filter(Boolean).join(' '),
-      displayVin: wo.vin,
-      displayMiles: wo.mileageOut || wo.mileageIn || null,
-      displayRo: wo.sourceId,
-      workOrderId: wo.sourceId,
-      workOrderGuid: wo.sourceId,
-      // Normalized doc id — the one identifier the estimate-audit API can
-      // always resolve (open Protractor ROs carry a GUID in
-      // workOrderNumber; the human RO number only appears once closed).
-      normalizedId: wo._id?.toString?.() || null,
-      dviDone: wo.hasDvi || false,
-      source: wo.smsType,
-      displayStatus: wo.label || wo.status,
-      mileageEstimated: false,
-      mileageEstimateDetails: null as any,
-      af: {
-        status: wo.status,
-        createdAt: wo.createdAt,
-        miles: wo.mileageOut || wo.mileageIn || null
-      },
-      vehicle: {
-        year: wo.vehicle?.year || null,
-        make: wo.vehicle?.make || null,
-        model: wo.vehicle?.model || null,
-        engine: wo.vehicle?.engine || null,
-      }
-    }));
+    const rows = workOrders.map((wo: any) => {
+      const source = String(wo.provenance?.sourceSystem || wo.smsType || "").trim().toLowerCase();
+      return {
+        updatedAt: wo.updatedAt || new Date(),
+        displayName: wo.customer?.name || 'Unknown Customer',
+        displayVehicle: [wo.vehicle?.year, wo.vehicle?.make, wo.vehicle?.model].filter(Boolean).join(' '),
+        displayVin: wo.vin,
+        displayMiles: wo.mileageOut || wo.mileageIn || null,
+        displayRo: wo.sourceId,
+        workOrderId: wo.sourceId,
+        workOrderGuid: wo.sourceId,
+        // Provider state is keyed by the explicit primary provenance id.
+        // Never substitute sourceId/displayRo/normalizedId when it is absent.
+        auditWorkOrderId: dashboardAuditWorkOrderIdFromProvenance(wo.provenance, source),
+        // Normalized doc id remains the manual-audit identifier.
+        normalizedId: wo._id?.toString?.() || null,
+        dviDone: wo.hasDvi || false,
+        source,
+        displayStatus: wo.label || wo.status,
+        mileageEstimated: false,
+        mileageEstimateDetails: null as any,
+        af: {
+          status: wo.status,
+          createdAt: wo.createdAt,
+          miles: wo.mileageOut || wo.mileageIn || null
+        },
+        vehicle: {
+          year: wo.vehicle?.year || null,
+          make: wo.vehicle?.make || null,
+          model: wo.vehicle?.model || null,
+          engine: wo.vehicle?.engine || null,
+        }
+      };
+    });
 
     if (maintenanceEnabled) await batchEstimateMileage(db, shopId, rows);
 

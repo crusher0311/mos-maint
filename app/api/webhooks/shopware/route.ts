@@ -1,4 +1,5 @@
 import { NextResponse, NextRequest } from "next/server";
+import { getDb } from "@/lib/mongo";
 import { getRepairOrder, getVehicle, getCustomer } from "@/lib/integrations/shopware/client";
 import {
   transformRepairOrder,
@@ -24,6 +25,7 @@ import {
   upsertShopwareJobIndexEntries,
   upsertVehicle,
 } from "@/lib/data/repositories/shopware-cache";
+import { scheduleShopwareAuditReceipt } from "@/lib/data/repositories/estimate-audit-receipts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -172,6 +174,15 @@ async function handleRepairOrderEvent(
   console.log(`[SW Webhook] dashboard-bumped RO ${roId} (${ro.number}) for shop ${mosShopId}`);
 
   console.log(`[SW Webhook] Upserted RO ${roId} (${ro.number}) for shop ${mosShopId} — state: ${ro.state}`);
+
+  // Task #1279: this is the complete-ticket receipt point for Shop-Ware.
+  // It is intentionally fire-and-forget and feature-gated inside the
+  // scheduler; it does not run audit/VHI work or make an additional provider
+  // request in this webhook path. A zero-service ticket is still complete and
+  // must run so a previously reported warning can clear.
+  void scheduleShopwareAuditReceipt(mosShopId, ro, "webhook").catch((err: any) =>
+    console.warn(`[SW Webhook] audit receipt handoff failed for RO ${roId}:`, err?.message || err),
+  );
 
   // Prefetch maintenance plan for active ROs with VIN + odometer
   const vin = ro.vehicle?.vin?.toUpperCase() ?? null;

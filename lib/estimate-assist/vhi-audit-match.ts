@@ -245,6 +245,13 @@ export function buildMissingVhiFindings(
       suggestedAction: `Recommend "${item.title}" to the customer or add it to the estimate.`,
       suggestedJobTitle: item.title,
       confidence: overdue ? 0.85 : 0.7,
+      source: "vhi" as const,
+      sources: ["vhi"],
+      evidence: {
+        serviceKeys: [canonicalServiceKeyForItem(item)],
+        affectedJobTitles: [item.title],
+        operation: "missing_service",
+      },
     };
   });
 }

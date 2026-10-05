@@ -3,6 +3,15 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import crypto from "node:crypto";
 import https from "node:https";
 import pLimit from "p-limit";
+import {
+  acquireCallbackTransportLease,
+  acquireProtractorPhysicalTransportLease,
+  confirmProtractorPhysicalTransportLease,
+  getProtractorOperatorStop,
+  releaseCallbackTransportLease,
+  releaseProtractorPhysicalTransportLease,
+  renewProtractorPhysicalTransportLease,
+} from "@/lib/data/repositories/api-usage";
 import { getDb } from "@/lib/mongo";
 import {
   findDeferredWorkByShopAndVin,
@@ -15,6 +24,7 @@ import {
 import { findCachedWorkOrderByRoNumber } from "@/lib/data/repositories/protractor-work-orders";
 import {
   acquireProtractorOutboundGate,
+  PROTRACTOR_RELAY_OVERSIZED_RESPONSE_STATUS,
   recordProtractorResponse,
   PROTRACTOR_TRANSPORT_FAILURE_STATUS,
   type ProtractorGateDecision,
@@ -29,11 +39,39 @@ import { normalizeProtractorPackageLine } from "./package-normalization";
 import {
   evaluateProtractorOutboundPolicy,
   logProtractorPolicyDenial,
+  resolveProtractorEnvironment,
 } from "./outbound-policy.cjs";
+import {
+  assertProtractorRelayConfigured,
+  classifyProtractorEndpoint,
+  createProtractorRelayRequest,
+  readProtractorRelayErrorCode,
+  readProtractorRelayConfig,
+  RelayTransportError,
+  shouldUseProtractorRelay,
+  type ProtractorEndpointClass,
+} from "./relay-transport";
+import { readShopProtractorCredentials } from "./shop-eligibility";
+import {
+  getProtractorInteractiveTransportContext,
+  type ProtractorInteractiveTransportContext,
+} from "./interactive-context";
+export { runWithProtractorInteractiveTransport } from "./interactive-context";
 export { normalizeProtractorPackageLine } from "./package-normalization";
 
 const BASE_URL_V1 = "https://integration.protractor.com/IntegrationServices/1.0";
 const BASE_URL_V2 = "https://integration.protractor.com/IntegrationServices/2.0";
+
+type EffectiveProtractorOutboundPolicy = {
+  allowed: boolean;
+  reason: string;
+  identity: string | null;
+  callbackOnly?: boolean;
+  requireTimedTrial?: boolean;
+  relayRequired?: boolean;
+  allowInteractive?: boolean;
+  callbackNotBeforeMs?: number | null;
+};
 
 // Concurrency limiter: max 3 concurrent Protractor requests per process (for background tasks)
 const protractorConcurrencyLimit = pLimit(3);
@@ -45,6 +83,89 @@ const protractorConcurrencyLimit = pLimit(3);
 // fine for ad-hoc real-time API calls. Mirrors the Tekmetric/Shop-Ware
 // per-chunk pattern.
 const backoffStorage = new AsyncLocalStorage<{ ms: number }>();
+export interface ProtractorCallbackTransportContext {
+  /**
+   * Timestamp persisted with the callback event that caused this replay.
+   * This is intentionally never synthesized from the worker clock.
+   */
+  callbackReceivedAt?: Date;
+  requireTimedTrial?: boolean;
+}
+
+const callbackTransportStorage = new AsyncLocalStorage<{
+  deadlineMs: number;
+  callbackReceivedAt?: Date;
+  requireTimedTrial?: boolean;
+}>();
+
+export function runWithProtractorCallbackTransport<T>(
+  deadlineMs: number,
+  fn: () => Promise<T>,
+  receivedAtOrContext?: Date | ProtractorCallbackTransportContext,
+): Promise<T>;
+export function runWithProtractorCallbackTransport<T>(
+  deadlineMs: number,
+  receivedAtOrContext: Date | ProtractorCallbackTransportContext | undefined,
+  fn: () => Promise<T>,
+): Promise<T>;
+export function runWithProtractorCallbackTransport<T>(
+  deadlineMs: number,
+  fnOrReceivedAt: (() => Promise<T>) | Date | ProtractorCallbackTransportContext | undefined,
+  receivedAtOrFn?: Date | ProtractorCallbackTransportContext | (() => Promise<T>),
+): Promise<T> {
+  const fn = typeof fnOrReceivedAt === "function"
+    ? fnOrReceivedAt
+    : receivedAtOrFn as (() => Promise<T>);
+  const receivedAtOrContext = typeof fnOrReceivedAt === "function"
+    ? receivedAtOrFn as Date | ProtractorCallbackTransportContext | undefined
+    : fnOrReceivedAt;
+  const requireTimedTrial =
+    !(receivedAtOrContext instanceof Date) &&
+    receivedAtOrContext?.requireTimedTrial === true;
+  const callbackReceivedAt = receivedAtOrContext instanceof Date
+    ? (
+      Number.isFinite(receivedAtOrContext.getTime())
+        ? new Date(receivedAtOrContext.getTime())
+        : undefined
+    )
+    : receivedAtOrContext?.callbackReceivedAt instanceof Date &&
+        Number.isFinite(receivedAtOrContext.callbackReceivedAt.getTime())
+      ? new Date(receivedAtOrContext.callbackReceivedAt.getTime())
+      : undefined;
+  return callbackTransportStorage.run({ deadlineMs, callbackReceivedAt, requireTimedTrial }, fn);
+}
+
+async function runCallbackPacedTransport<T>(
+  transport: (remainingMs?: number) => Promise<T>,
+): Promise<T> {
+  const context = callbackTransportStorage.getStore();
+  if (!context) return transport();
+  const token = await __protractorClientTestHooks.acquireCallbackTransportLease(context.deadlineMs);
+  if (!token) {
+    throw new Error("callback deadline expired before transport lease");
+  }
+  try {
+    if (Date.now() >= context.deadlineMs) throw new Error("callback transport deadline expired");
+    const policy = getProtractorOutboundPolicy();
+    if (!policy.allowed) throw new Error(`callback transport blocked: ${policy.reason}`);
+    return await transport(Math.max(1, context.deadlineMs - Date.now()));
+  } finally {
+    await __protractorClientTestHooks.releaseCallbackTransportLease(token);
+  }
+}
+
+function callbackRemainingMs(): number | undefined {
+  const context = callbackTransportStorage.getStore();
+  return context ? Math.max(0, context.deadlineMs - Date.now()) : undefined;
+}
+
+async function sleepWithinCallbackDeadline(ms: number): Promise<void> {
+  const remaining = callbackRemainingMs();
+  if (remaining !== undefined && remaining <= ms) {
+    throw new Error("callback transport deadline expired during retry backoff");
+  }
+  await __protractorClientTestHooks.sleep(ms);
+}
 
 // Test-only dependency hooks. Unit tests (see
 // tests/protractor-retry-limiter-deadlock.smoke.ts) override these to
@@ -57,6 +178,23 @@ export const __protractorClientTestHooks: {
   httpsRequest: typeof httpsRequest;
   enforceLocalPolicyWithMockTransport: boolean;
   acquireDistributedRateLimitSlot: typeof acquireDistributedRateLimitSlot;
+  acquireCallbackTransportLease: typeof acquireCallbackTransportLease;
+  releaseCallbackTransportLease: typeof releaseCallbackTransportLease;
+  acquirePhysicalTransportLease: typeof acquireProtractorPhysicalTransportLease;
+  confirmPhysicalTransportLease: (
+    token: string,
+    context?: {
+      requireTimedTrial?: boolean;
+      callbackReceivedAt?: Date;
+      interactiveShopId?: number;
+      transport?: "direct" | "relay";
+      environment?: "production" | "development" | "test" | "unknown";
+    },
+  ) => Promise<boolean>;
+  renewPhysicalTransportLease: typeof renewProtractorPhysicalTransportLease;
+  releasePhysicalTransportLease: typeof releaseProtractorPhysicalTransportLease;
+  physicalTransportHeartbeatMs: number;
+  enforceFleetPacerWithMockTransport: boolean;
   trackApiRequest: typeof trackApiRequest;
   retryBaseDelayMs: number | null;
   // Task #936: lets wizard-create tests stub Mongo-backed config resolution
@@ -68,27 +206,52 @@ export const __protractorClientTestHooks: {
   // collaborators used by the service-package append loop.
   getDb: typeof getDb;
   getShopPartCostRatio: typeof getShopPartCostRatio;
+  getOperatorStop: typeof getProtractorOperatorStop;
   onFetchStart: ((endpoint: string, opts?: { priority?: boolean; maxRetries?: number }) => void) | null;
   acquireOutboundGate: (connectionId: string) => Promise<ProtractorGateDecision>;
   recordResponse: (connectionId: string, statusCode: number, retryAfterMs?: number) => Promise<void>;
   sleep: (ms: number) => Promise<void>;
   random: () => number;
+  now: () => number;
 } = {
   httpsRequest: productionHttpsRequest,
   enforceLocalPolicyWithMockTransport: false,
   acquireDistributedRateLimitSlot: (...args) => acquireDistributedRateLimitSlot(...args),
+  acquireCallbackTransportLease: (deadlineMs) => acquireCallbackTransportLease(deadlineMs),
+  releaseCallbackTransportLease: (token) => releaseCallbackTransportLease(token),
+  acquirePhysicalTransportLease: (deadlineMs) =>
+    acquireProtractorPhysicalTransportLease(deadlineMs),
+  confirmPhysicalTransportLease: (token, context) =>
+    (confirmProtractorPhysicalTransportLease as unknown as (
+      token: string,
+      context?: {
+        requireTimedTrial?: boolean;
+        callbackReceivedAt?: Date;
+        interactiveShopId?: number;
+        transport?: "direct" | "relay";
+        environment?: "production" | "development" | "test" | "unknown";
+      },
+    ) => Promise<boolean>)(token, context),
+  renewPhysicalTransportLease: (token) =>
+    renewProtractorPhysicalTransportLease(token),
+  releasePhysicalTransportLease: (token) =>
+    releaseProtractorPhysicalTransportLease(token),
+  physicalTransportHeartbeatMs: 30_000,
+  enforceFleetPacerWithMockTransport: false,
   trackApiRequest: (...args) => trackApiRequest(...args),
   retryBaseDelayMs: null,
   resolveProtractorConfig: (...args) => resolveProtractorConfig(...args),
   findCachedWorkOrderByRoNumber: (...args) => findCachedWorkOrderByRoNumber(...args),
   getDb: (...args) => getDb(...args),
   getShopPartCostRatio: (...args) => getShopPartCostRatio(...args),
+  getOperatorStop: (...args) => getProtractorOperatorStop(...args),
   onFetchStart: null,
   acquireOutboundGate: (connectionId) => acquireProtractorOutboundGate(connectionId),
   recordResponse: (connectionId, statusCode, retryAfterMs) =>
     recordProtractorResponse(connectionId, statusCode, retryAfterMs),
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   random: () => Math.random(),
+  now: () => Date.now(),
 };
 
 /**
@@ -134,7 +297,10 @@ async function acquireRateLimitSlot(priority: boolean = false): Promise<{ acquir
   const startTime = Date.now();
   
   // First: acquire distributed slot (blocks if global limit exceeded)
-  const distributed = await __protractorClientTestHooks.acquireDistributedRateLimitSlot('protractor');
+  // The relay hard-paces at one request per second, so this minute guard should
+  // never be full in healthy operation. One bounded claim is enough; do not
+  // let its legacy exponential retry loop outlive request/callback deadlines.
+  const distributed = await __protractorClientTestHooks.acquireDistributedRateLimitSlot('protractor', 1);
   if (!distributed.acquired) {
     if (distributed.circuitOpen) {
       console.warn(`[Protractor] Circuit breaker open, skipping request`);
@@ -188,6 +354,11 @@ function processRateLimitQueue(): void {
 }
 
 export type ProtractorConfig = {
+  /**
+   * Shop identity bound by resolveProtractorConfig/testConnection. Optional in
+   * the type only for legacy standalone scripts; transports reject it at runtime.
+   */
+  shopId?: number;
   connectionId: string;
   apiKey: string;
   authentication: string;
@@ -453,7 +624,12 @@ export async function soapAddServicePackage(
     return { ok: false, error: "Protractor not configured" };
   }
   const woXml = buildWorkOrderXml(workOrderPayload);
-  console.log(`[Protractor:SOAP] Attempting SOAP WorkOrderUpdate for ${workOrderGuid}, XML length: ${woXml.length}`);
+  console.log(JSON.stringify({
+    event: "protractor_soap_request",
+    method: "POST",
+    shopId: Number(shopId),
+    endpointClass: "soap",
+  }));
   return protractorSoapWorkOrderUpdate(config, workOrderGuid, woXml, shopId);
 }
 
@@ -468,11 +644,13 @@ export function computeAuthentication(connectionId: string, apiKey: string): str
 }
 
 export async function resolveProtractorConfig(shopId: number | string): Promise<ProtractorConfig> {
+  const normalizedShopId = Number(shopId);
   const db = await getDb();
   const shop = await db.collection("shops").findOne(
     { $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] },
     {
       projection: {
+        integrationProvider: 1,
         protractor: 1,
         protractorConnectionId: 1,
         protractorApiKey: 1,
@@ -480,22 +658,17 @@ export async function resolveProtractorConfig(shopId: number | string): Promise<
     }
   );
 
-  const connectionId =
-    shop?.protractorConnectionId ??
-    shop?.protractor?.connectionId ??
-    process.env.PROTRACTOR_CONNECTION_ID ??
-    "";
-
-  const apiKey =
-    shop?.protractorApiKey ??
-    shop?.protractor?.apiKey ??
-    process.env.PROTRACTOR_API_KEY ??
-    "";
+  // Never substitute process-wide credentials for a requested shop. Doing so
+  // can send a non-Protractor shop through another tenant's Protractor account.
+  const credentials = readShopProtractorCredentials(shop);
+  const connectionId = credentials?.connectionId ?? "";
+  const apiKey = credentials?.apiKey ?? "";
 
   const configured = Boolean(connectionId && apiKey);
   const authentication = configured ? computeAuthentication(connectionId, apiKey) : "";
 
   return {
+    shopId: normalizedShopId,
     connectionId,
     apiKey,
     authentication,
@@ -509,41 +682,121 @@ function httpsRequest(
   headers: Record<string, string>,
   body?: string,
   timeoutMs = 30000,
-): Promise<{ statusCode: number; body: string; headers?: Record<string, string | string[] | undefined> }> {
+  dispatchContext?: { relayRequired?: boolean },
+): Promise<{
+  statusCode: number;
+  body: string;
+  headers?: Record<string, string | string[] | undefined>;
+  transport?: "direct" | "relay";
+}> {
+  const relayConfig = readProtractorRelayConfig();
+  if (dispatchContext?.relayRequired === true) {
+    assertProtractorRelayConfigured(relayConfig);
+  }
+  let requestUrl = new URL(urlString);
+  let requestMethod = method;
+  let requestHeaders = headers;
+  let requestBody = body;
+  let requestTimeoutMs = timeoutMs;
+  const targetForMode = new URL(urlString);
+  const relayEligible = shouldUseProtractorRelay(relayConfig, targetForMode, method, headers);
+  if (relayEligible) {
+    const relay = createProtractorRelayRequest(
+      relayConfig as Extract<typeof relayConfig, { mode: "relay-read-only" | "relay" }>,
+      urlString,
+      method,
+      headers,
+      body,
+      timeoutMs,
+    );
+    requestUrl = relay.url;
+    requestMethod = "POST";
+    requestHeaders = relay.headers;
+    requestBody = relay.body;
+    requestTimeoutMs = relay.timeoutMs;
+    console.info(JSON.stringify({ event: "protractor_relay_request", ...relay.metadata }));
+  }
+
   return new Promise((resolve, reject) => {
-    const url = new URL(urlString);
-    
     const options: https.RequestOptions = {
-      hostname: url.hostname,
-      port: url.port || 443,
-      path: url.pathname + url.search,
-      method: method,
-      headers: headers,
+      hostname: requestUrl.hostname,
+      port: requestUrl.port || 443,
+      path: requestUrl.pathname + requestUrl.search,
+      method: requestMethod,
+      headers: requestHeaders,
     };
     
+    let settled = false;
+    let deadline: NodeJS.Timeout;
+    const settleError = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(deadline);
+      reject(relayEligible
+        ? (error instanceof RelayTransportError ? error : new RelayTransportError("relay_transport"))
+        : error);
+    };
     const req = https.request(options, (res) => {
       let data = "";
       res.on("data", (chunk) => { data += chunk; });
       res.on("end", () => {
-        resolve({ statusCode: res.statusCode || 0, body: data, headers: res.headers });
+        if (settled) return;
+        const relayErrorCode = relayEligible
+          ? readProtractorRelayErrorCode(res.headers)
+          : undefined;
+        if (relayErrorCode) {
+          settleError(new RelayTransportError(relayErrorCode));
+          return;
+        }
+        settled = true;
+        clearTimeout(deadline);
+        resolve({
+          statusCode: res.statusCode || 0,
+          body: data,
+          headers: res.headers,
+          transport: relayEligible ? "relay" : "direct",
+        });
       });
+      res.on("error", (error) => settleError(error));
+      res.on("aborted", () => settleError(new Error("Response aborted")));
     });
     
-    req.on("error", (err) => {
-      reject(err);
-    });
-    
-    req.setTimeout(timeoutMs, () => {
+    req.on("error", (err) => settleError(err));
+    // A wall-clock deadline is required in addition to setTimeout's socket
+    // inactivity behavior. This is the caller's end-to-end deadline.
+    deadline = setTimeout(() => {
       req.destroy();
-      reject(new Error("Request timeout"));
-    });
+      settleError(new Error("Request timeout"));
+    }, requestTimeoutMs);
     
-    if (body) {
-      req.write(body);
+    if (requestBody !== undefined) {
+      req.write(requestBody);
     }
     
     req.end();
   });
+}
+
+/**
+ * Resolve the physical route before admission so the same decision is used
+ * for the Mongo audit context and the eventual usage record.  Relay mode is
+ * not itself the route: relay-read-only only relays REST GETs, while SOAP and
+ * writes remain direct unless full relay mode is configured.
+ */
+function resolveProtractorPhysicalTransport(
+  urlString: string,
+  method: string,
+  headers: Record<string, string>,
+): "direct" | "relay" {
+  const relayConfig = readProtractorRelayConfig();
+  return shouldUseProtractorRelay(
+    relayConfig,
+    new URL(urlString),
+    method,
+    headers,
+  )
+    ? "relay"
+    : "direct";
 }
 
 const MAX_RETRY_AFTER_MS = 60_000;
@@ -569,13 +822,142 @@ export function isProtractorOutboundDisabled(): boolean {
 }
 
 export function getProtractorOutboundPolicy() {
-  return evaluateProtractorOutboundPolicy(process.env);
+  return evaluateProtractorOutboundPolicy(process.env, __protractorClientTestHooks.now());
+}
+
+function asFiniteDate(value: unknown): Date | null {
+  if (!(value instanceof Date) || !Number.isFinite(value.getTime())) return null;
+  return new Date(value.getTime());
+}
+
+/**
+ * Resolve the effective callback policy at queue-admission time.
+ *
+ * The staged policy intentionally has no process-clock deadline: activation
+ * lives in Mongo and the physical lease confirmation is the final, atomic
+ * authority. The queue still needs the persisted activation timestamp to
+ * exclude events that predate the trial, so only this mode performs the
+ * operator-stop read.
+ */
+export async function getEffectiveProtractorOutboundPolicy(): Promise<EffectiveProtractorOutboundPolicy> {
+  const policy = getProtractorOutboundPolicy();
+  if (!policy.allowed) return policy;
+
+  // A shared Mongo trial is authoritative even when this process did not
+  // receive the corresponding staging env flag.  Avoid a read for ordinary
+  // unscoped traffic (which preserves the legacy hot path), but always resolve
+  // it for callback/interactive admissions where a timed trial could consume
+  // the shared physical budget.
+  const shouldReadSharedTrial =
+    policy.requireTimedTrial === true ||
+    callbackTransportStorage.getStore() !== undefined ||
+    getProtractorInteractiveTransportContext() !== undefined;
+  if (!shouldReadSharedTrial) return policy;
+
+  let stop: any;
+  try {
+    stop = await __protractorClientTestHooks.getOperatorStop();
+  } catch {
+    return {
+      ...policy,
+      allowed: false,
+      reason: "timed_trial_state_unavailable",
+    };
+  }
+
+  const trial = stop?.canary;
+  const startedAt = asFiniteDate(trial?.startedAt);
+  const expiresAt = asFiniteDate(trial?.expiresAt);
+  const nowMs = __protractorClientTestHooks.now();
+  const live =
+    stop?.active !== true &&
+    trial?.mode === "timed_trial" &&
+    typeof trial?.generation === "string" &&
+    trial.generation.length > 0 &&
+    startedAt !== null &&
+    expiresAt !== null &&
+    startedAt.getTime() <= nowMs &&
+    expiresAt.getTime() > nowMs &&
+    trial?.endedBy == null &&
+    trial?.endedAt == null &&
+    trial?.maxAdmissions === null &&
+    trial?.remainingAdmissions === null;
+
+  if (!live) {
+    // An invalid/expired timed-trial generation must not be reinterpreted as
+    // unrestricted local traffic. Timed trials are relay-only even when this
+    // record predates the requiresRelay field.
+    if (trial?.mode === "timed_trial") {
+      return {
+        ...policy,
+        allowed: false,
+        reason: "timed_trial_not_active",
+      };
+    }
+    if (!policy.requireTimedTrial) return policy;
+    return {
+      ...policy,
+      allowed: false,
+      reason: "timed_trial_not_active",
+    };
+  }
+
+  // The persisted scope is the sole authority for widening the staged
+  // callback transport to reviewed interactive routes.  Legacy records omit
+  // `scope`/`requiresCallback`; those retain the strict callback-only
+  // behavior.  Reject every other combination rather than treating an
+  // unknown value as broad.
+  const scope = trial?.scope === undefined ? "callbacks" : trial.scope;
+  const requiresCallback =
+    trial?.requiresCallback === undefined ? true : trial.requiresCallback;
+  const validScope =
+    (scope === "callbacks" && requiresCallback === true) ||
+    (scope === "callbacks_and_interactive" && requiresCallback === false);
+  if (!validScope) {
+    return {
+      ...policy,
+      allowed: false,
+      reason: "timed_trial_scope_invalid",
+    };
+  }
+
+  return {
+    ...policy,
+    callbackNotBeforeMs: startedAt!.getTime(),
+    relayRequired: policy.requireTimedTrial === true ||
+      trial?.mode === "timed_trial",
+    // callbackOnly intentionally remains true in the broad mode: interactive
+    // transport is admitted only from the dedicated shop-bound ALS context.
+    allowInteractive: scope === "callbacks_and_interactive" &&
+      requiresCallback === false,
+  };
 }
 
 export function isProtractorOutboundAllowed(context = "unknown"): boolean {
   const decision = getProtractorOutboundPolicy();
   if (!decision.allowed) logProtractorPolicyDenial(decision, context);
   return decision.allowed;
+}
+
+function interactiveContextForShop(
+  actualShopId: number,
+): { context?: ProtractorInteractiveTransportContext; error?: string } {
+  const context = getProtractorInteractiveTransportContext();
+  if (!context) return {};
+  if (
+    !context.active ||
+    Date.now() >= context.expiresAtMs
+  ) {
+    return { error: "Protractor interactive transport context expired" };
+  }
+  if (
+    !Number.isSafeInteger(actualShopId) ||
+    actualShopId <= 0 ||
+    context.shopId !== actualShopId
+  ) {
+    return { error: "Protractor interactive transport shop mismatch" };
+  }
+  return { context };
 }
 
 function localPolicyError(context: string): { ok: false; error: string } | null {
@@ -590,7 +972,35 @@ function localPolicyError(context: string): { ok: false; error: string } | null 
     return null;
   }
   const decision = getProtractorOutboundPolicy();
-  if (decision.allowed) return null;
+  if (decision.allowed && !decision.callbackOnly) return null;
+  if (decision.allowed && decision.callbackOnly && callbackTransportStorage.getStore()) {
+    return null;
+  }
+  if (decision.allowed && decision.callbackOnly) {
+    // A request-scoped interactive context is a trusted source only after the
+    // final async effective-policy/physical-lease checks below.  Let it reach
+    // those checks even while this synchronous local policy still reflects the
+    // env staging flag (which cannot contain the persisted scope).
+    const interactive = getProtractorInteractiveTransportContext();
+    if (
+      interactive?.active === true &&
+      Date.now() < interactive.expiresAtMs
+    ) {
+      return null;
+    }
+  }
+  if (decision.allowed && decision.callbackOnly) {
+    const callbackOnlyDenial = {
+      allowed: false,
+      reason: "callback_canary_non_callback",
+      identity: decision.identity,
+    };
+    logProtractorPolicyDenial(callbackOnlyDenial, context);
+    return {
+      ok: false,
+      error: "Protractor outbound is restricted to the callback canary",
+    };
+  }
   logProtractorPolicyDenial(decision, context);
   return {
     ok: false,
@@ -615,6 +1025,313 @@ async function acquireOutboundGate(config: { connectionId: string }): Promise<{ 
   }
 }
 
+const PROTRACTOR_FLEET_PACER_WAIT_MS = 15_000;
+
+async function settleBefore<T>(
+  pending: Promise<T>,
+  deadlineAtMs: number,
+): Promise<{ timedOut: false; value: T } | { timedOut: true }> {
+  const remainingMs = deadlineAtMs - Date.now();
+  if (remainingMs <= 0) return { timedOut: true };
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      pending.then(value => ({ timedOut: false as const, value })),
+      new Promise<{ timedOut: true }>(resolve => {
+        timer = setTimeout(() => resolve({ timedOut: true }), remainingMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function shouldEnforceFleetPacer(): boolean {
+  return __protractorClientTestHooks.httpsRequest === productionHttpsRequest ||
+    __protractorClientTestHooks.enforceFleetPacerWithMockTransport;
+}
+
+/**
+ * Final provider-wide admission point before a physical REST/SOAP attempt.
+ * One Mongo-owned lease is shared by every shop, replica, priority lane, and
+ * retry. It remains held until the relay responds, then imposes a one-second
+ * cooldown. Priority changes concurrency order only; it never bypasses this
+ * gate.
+ */
+async function runFleetGuardedTransportAttempt<T>(
+  config: { connectionId: string },
+  actualShopId: number,
+  transport: (
+    remainingMs?: number,
+    dispatchContext?: { relayRequired: boolean },
+  ) => Promise<T>,
+  priority: boolean,
+  remainingMs?: number,
+  admissionTransport?: "direct" | "relay",
+): Promise<{ ok: true; response: T } | { ok: false; error: string }> {
+  const earlyLocal = localPolicyError("transport_attempt");
+  if (earlyLocal) return earlyLocal;
+  const earlyInteractive = interactiveContextForShop(actualShopId);
+  if (earlyInteractive.error) {
+    return { ok: false, error: earlyInteractive.error };
+  }
+
+  const enforceFleetPacer = shouldEnforceFleetPacer();
+  const waitStartedAt = Date.now();
+  const waitBudgetMs = Math.min(
+    PROTRACTOR_FLEET_PACER_WAIT_MS,
+    remainingMs ?? PROTRACTOR_FLEET_PACER_WAIT_MS,
+  );
+  if (waitBudgetMs <= 0) {
+    return { ok: false, error: "Protractor callback deadline expired before admission" };
+  }
+  const admissionDeadlineAtMs = waitStartedAt + waitBudgetMs;
+  let leaseToken: string | null = null;
+  let leaseHeartbeat: ReturnType<typeof setInterval> | null = null;
+  let heartbeatInFlight: Promise<void> | null = null;
+  let heartbeatFailed = false;
+
+  if (enforceFleetPacer) {
+    try {
+      const leaseAttempt = __protractorClientTestHooks.acquirePhysicalTransportLease(
+        admissionDeadlineAtMs,
+      );
+      const leaseAdmission = await settleBefore(leaseAttempt, admissionDeadlineAtMs);
+      if (leaseAdmission.timedOut) {
+        // The Mongo operation itself is not cancellable. If it resolves late
+        // with ownership, release it without ever permitting a physical send.
+        void leaseAttempt.then(async lateToken => {
+          if (lateToken) {
+            await __protractorClientTestHooks.releasePhysicalTransportLease(lateToken);
+          }
+        }).catch(() => undefined);
+        return { ok: false, error: "Protractor fleet transport admission deadline expired" };
+      }
+      leaseToken = leaseAdmission.value;
+    } catch (error: any) {
+      console.warn(JSON.stringify({
+        event: "protractor_fleet_pacer_unavailable",
+        message: String(error?.message || "unknown").slice(0, 160),
+      }));
+      return { ok: false, error: "Protractor fleet transport pacer unavailable" };
+    }
+    if (!leaseToken) {
+      console.warn(JSON.stringify({
+        event: "protractor_fleet_pacer_deadline",
+        waitedMs: Date.now() - waitStartedAt,
+        priority,
+      }));
+      return { ok: false, error: "Protractor fleet transport pacer deadline expired" };
+    }
+  }
+
+  try {
+    // Every blocking admission step happens before these final checks.
+    // Exhausted callback time is a rejection, never a 1ms transport grant.
+    const rateAdmission = await settleBefore(acquireRateLimitSlot(priority), admissionDeadlineAtMs);
+    if (rateAdmission.timedOut) {
+      return { ok: false, error: "Protractor rate-limit admission deadline expired" };
+    }
+    const rateSlot = rateAdmission.value;
+    if (!rateSlot.acquired) {
+      return { ok: false, error: "Rate limit exceeded or circuit breaker open" };
+    }
+
+    const elapsedMs = Date.now() - waitStartedAt;
+    if (remainingMs !== undefined && elapsedMs >= remainingMs) {
+      return { ok: false, error: "Protractor callback deadline expired before transport" };
+    }
+
+    const local = localPolicyError("transport_attempt");
+    if (local) return local;
+
+    const gateAdmission = await settleBefore(acquireOutboundGate(config), admissionDeadlineAtMs);
+    if (gateAdmission.timedOut) {
+      return { ok: false, error: "Protractor circuit-breaker admission deadline expired" };
+    }
+    const gate = gateAdmission.value;
+    if (!gate.ok) return gate;
+
+    const interactiveAtAdmission = interactiveContextForShop(actualShopId);
+    if (interactiveAtAdmission.error) {
+      return { ok: false, error: interactiveAtAdmission.error };
+    }
+    const callbackContext = callbackTransportStorage.getStore();
+    let finalPolicy: EffectiveProtractorOutboundPolicy = getProtractorOutboundPolicy();
+    if (
+      callbackContext !== undefined ||
+      interactiveAtAdmission.context !== undefined ||
+      finalPolicy.requireTimedTrial === true
+    ) {
+      // The local env flag cannot encode the persisted scope or whether the
+      // generation requires relay. Resolve the shared state immediately before
+      // confirmation, after all waits/gates, so a preview cannot consume the
+      // production admission with stale local settings.
+      const effective = await getEffectiveProtractorOutboundPolicy();
+      if (!effective.allowed) {
+        return {
+          ok: false,
+          error: effective.reason === "timed_trial_scope_invalid"
+            ? "Protractor interactive transport scope is invalid"
+            : effective.reason === "development_relay_required"
+              ? "Development Protractor traffic requires approved relay transport"
+              : "Protractor outbound trial policy is not active",
+        };
+      }
+      if (
+        interactiveAtAdmission.context &&
+        effective.callbackOnly === true &&
+        effective.allowInteractive !== true
+      ) {
+        return {
+          ok: false,
+          error: "Protractor interactive transport is not enabled",
+        };
+      }
+      finalPolicy = effective;
+    }
+    const relayRequired = finalPolicy.relayRequired === true;
+    let dispatchTransport: "direct" | "relay" | undefined = admissionTransport;
+    if (relayRequired) {
+      try {
+        const relayConfig = readProtractorRelayConfig();
+        assertProtractorRelayConfigured(relayConfig);
+        dispatchTransport = "relay";
+      } catch (error: any) {
+        logProtractorPolicyDenial(
+          {
+            allowed: false,
+            reason: "timed_trial_state_unavailable",
+            identity: null,
+          },
+          "relay_required_transport",
+        );
+        return {
+          ok: false,
+          error: String(error?.message || "Protractor relay transport is required"),
+        };
+      }
+    }
+    const interactiveBeforeConfirm = interactiveContextForShop(actualShopId);
+    if (interactiveBeforeConfirm.error) {
+      return { ok: false, error: interactiveBeforeConfirm.error };
+    }
+    if (leaseToken) {
+      const ownershipAdmission = await settleBefore(
+        __protractorClientTestHooks.confirmPhysicalTransportLease(leaseToken, {
+          requireTimedTrial:
+            finalPolicy.requireTimedTrial === true ||
+            callbackContext?.requireTimedTrial === true,
+          callbackReceivedAt: callbackContext?.callbackReceivedAt,
+          interactiveShopId: interactiveBeforeConfirm.context?.shopId,
+          transport: dispatchTransport,
+          environment: resolveProtractorEnvironment(process.env),
+        }),
+        admissionDeadlineAtMs,
+      );
+      if (ownershipAdmission.timedOut) {
+        return { ok: false, error: "Protractor fleet lease confirmation deadline expired" };
+      }
+      if (!ownershipAdmission.value) {
+        return { ok: false, error: "Protractor fleet transport lease lost before dispatch" };
+      }
+    }
+
+    const finalElapsedMs = Date.now() - waitStartedAt;
+    if (remainingMs !== undefined && finalElapsedMs >= remainingMs) {
+      return { ok: false, error: "Protractor callback deadline expired before dispatch" };
+    }
+    const finalLocal = localPolicyError("transport_dispatch");
+    if (finalLocal) return finalLocal;
+    const interactiveAtDispatch = interactiveContextForShop(actualShopId);
+    if (interactiveAtDispatch.error) {
+      return { ok: false, error: interactiveAtDispatch.error };
+    }
+
+    if (leaseToken) {
+      const token = leaseToken;
+      const heartbeat = () => {
+        if (heartbeatInFlight || heartbeatFailed) return;
+        heartbeatInFlight = (async () => {
+          try {
+            const renewed = await __protractorClientTestHooks.renewPhysicalTransportLease(token);
+            if (!renewed) heartbeatFailed = true;
+          } catch {
+            heartbeatFailed = true;
+          }
+        })().finally(() => {
+          heartbeatInFlight = null;
+        });
+      };
+      leaseHeartbeat = setInterval(
+        heartbeat,
+        __protractorClientTestHooks.physicalTransportHeartbeatMs,
+      );
+      leaseHeartbeat.unref?.();
+    }
+
+    if (leaseToken) {
+      const token = leaseToken;
+      const heartbeat = () => {
+        if (heartbeatInFlight || heartbeatFailed) return;
+        heartbeatInFlight = (async () => {
+          try {
+            const renewed = await __protractorClientTestHooks.renewPhysicalTransportLease(token);
+            if (!renewed) heartbeatFailed = true;
+          } catch {
+            heartbeatFailed = true;
+          }
+        })().finally(() => {
+          heartbeatInFlight = null;
+        });
+      };
+      leaseHeartbeat = setInterval(
+        heartbeat,
+        __protractorClientTestHooks.physicalTransportHeartbeatMs,
+      );
+      leaseHeartbeat.unref?.();
+    }
+
+    if (enforceFleetPacer) {
+      console.log(JSON.stringify({
+        event: "protractor_fleet_transport_admitted",
+        waitedMs: Date.now() - waitStartedAt,
+        priority,
+        callbackScoped: callbackTransportStorage.getStore() !== undefined,
+      }));
+    }
+    return {
+      ok: true,
+      response: await transport(
+        remainingMs === undefined ? undefined : remainingMs - finalElapsedMs,
+        { relayRequired },
+      ),
+    };
+  } finally {
+    if (leaseHeartbeat) clearInterval(leaseHeartbeat);
+    if (heartbeatInFlight) await heartbeatInFlight;
+    if (leaseToken) {
+      if (heartbeatFailed) {
+        console.error(JSON.stringify({
+          event: "protractor_fleet_pacer_heartbeat_failed",
+          action: "lease_left_to_expire",
+        }));
+      } else {
+        try {
+          await __protractorClientTestHooks.releasePhysicalTransportLease(leaseToken);
+        } catch (error: any) {
+          // A failed release leaves the lease in its fail-closed state until its
+          // expiry; do not mask an upstream response that already completed.
+          console.warn(JSON.stringify({
+            event: "protractor_fleet_pacer_release_failed",
+            message: String(error?.message || "unknown").slice(0, 160),
+          }));
+        }
+      }
+    }
+  }
+}
+
 async function recordBreakerResponse(
   config: { connectionId: string },
   statusCode: number,
@@ -633,25 +1350,90 @@ async function recordBreakerResponse(
   }
 }
 
+async function runBreakerRecordedTransport(
+  config: { connectionId: string },
+  transport: () => Promise<{
+    statusCode: number;
+    body: string;
+    headers?: Record<string, string | string[] | undefined>;
+    transport?: "direct" | "relay";
+  }>,
+): Promise<{
+  statusCode: number;
+  body: string;
+  headers?: Record<string, string | string[] | undefined>;
+  transport?: "direct" | "relay";
+}> {
+  try {
+    const response = await transport();
+    await recordBreakerResponse(
+      config,
+      response.statusCode,
+      parseProtractorRetryAfter(response.headers?.["retry-after"]),
+    );
+    return response;
+  } catch (error) {
+    await recordBreakerResponse(
+      config,
+      error instanceof RelayTransportError &&
+        error.code === "upstream_response_too_large"
+        ? PROTRACTOR_RELAY_OVERSIZED_RESPONSE_STATUS
+        : PROTRACTOR_TRANSPORT_FAILURE_STATUS,
+    );
+    throw error;
+  }
+}
+
+function logRelayTransportFailure(
+  error: RelayTransportError,
+  context: {
+    method: string;
+    shopId: number;
+    endpointClass: ProtractorEndpointClass;
+    attempt: number;
+    priority: boolean;
+  },
+): void {
+  console.error(JSON.stringify({
+    event: "protractor_relay_transport_error",
+    method: context.method,
+    shopId: context.shopId,
+    endpointClass: context.endpointClass,
+    relayErrorCode: error.code,
+    attempt: context.attempt,
+    priority: context.priority,
+  }));
+}
+
 async function runGuardedTransportAttempt<T>(
   config: { connectionId: string },
-  transport: () => Promise<T>,
+  actualShopId: number,
+  transport: (
+    remainingMs?: number,
+    dispatchContext?: { relayRequired: boolean },
+  ) => Promise<T>,
   priority = false,
+  admissionTransport?: "direct" | "relay",
 ): Promise<{ ok: true; response: T } | { ok: false; error: string }> {
   const local = localPolicyError("soap");
   if (local) return local;
   const concurrencyLimiter = priority ? priorityConcurrencyLimit : protractorConcurrencyLimit;
   return concurrencyLimiter(async () => {
-    const gate = await acquireOutboundGate(config);
-    if (!gate.ok) return gate;
-
-    // Every physical transport attempt, including SOAP retries, consumes the
-    // same distributed provider budget as REST.
-    const rateSlot = await acquireRateLimitSlot(priority);
-    if (!rateSlot.acquired) {
-      return { ok: false, error: "Rate limit exceeded or circuit breaker open" };
+    try {
+      return await runCallbackPacedTransport((remainingMs) =>
+        runFleetGuardedTransportAttempt(
+          config,
+          actualShopId,
+          transport,
+          priority,
+          remainingMs,
+          admissionTransport,
+        )
+      );
+    } catch (error: any) {
+      if (error instanceof RelayTransportError) throw error;
+      return { ok: false, error: `Callback transport pacer unavailable: ${error?.message || "unknown"}` };
     }
-    return { ok: true, response: await transport() };
   });
 }
 
@@ -661,11 +1443,33 @@ export async function protractorFetch<T>(
   options: RequestInit = {},
   retryCount = 0,
   shopId?: number,
-  opts?: { priority?: boolean; maxRetries?: number }
+  opts?: { priority?: boolean; maxRetries?: number; timeoutMs?: number }
 ): Promise<{ ok: boolean; data?: T; error?: string }> {
   const local = localPolicyError("rest");
   if (local) return local;
-
+  const normalizedShopId = Number(shopId);
+  if (
+    typeof shopId !== "number" ||
+    !Number.isSafeInteger(normalizedShopId) ||
+    normalizedShopId <= 0
+  ) {
+    console.error(JSON.stringify({
+      event: "protractor_request_blocked",
+      reason: "missing_shop_attribution",
+      method: (options.method || "GET").toUpperCase(),
+    }));
+    return { ok: false, error: "Protractor request requires a valid shop ID" };
+  }
+  if (config.shopId !== normalizedShopId) {
+    console.error(JSON.stringify({
+      event: "protractor_request_blocked",
+      reason: "shop_config_mismatch",
+      method: (options.method || "GET").toUpperCase(),
+      shopId: normalizedShopId,
+      configShopId: config.shopId,
+    }));
+    return { ok: false, error: "Protractor configuration does not belong to this shop" };
+  }
   if (!config.configured) {
     return { ok: false, error: "Protractor not configured" };
   }
@@ -684,6 +1488,7 @@ export async function protractorFetch<T>(
     const method = (options.method || "GET").toUpperCase();
     const baseUrl = method === "GET" ? BASE_URL_V2 : BASE_URL_V1;
     const url = `${baseUrl}${endpoint}`;
+    const endpointClass = classifyProtractorEndpoint(endpoint, "rest");
 
     // Retries MUST stay inside this callback as a loop. A recursive
     // protractorFetch() call would try to acquire a SECOND concurrency slot
@@ -692,20 +1497,8 @@ export async function protractorFetch<T>(
     let attempt = retryCount;
     // eslint-disable-next-line no-constant-condition
     while (true) {
-    const gate = await acquireOutboundGate(config);
-    if (!gate.ok) return gate;
-    const rateSlot = await acquireRateLimitSlot(isPriority);
-    if (!rateSlot.acquired) {
-      return { ok: false, error: "Rate limit exceeded or circuit breaker open" };
-    }
-
     const startTime = Date.now();
     const totalWaitMs = Date.now() - concurrencyWaitStart;
-    
-    if (isPriority) {
-      console.log(`[Protractor:PRIORITY] ${method} ${endpoint} (queue wait: ${totalWaitMs}ms, rate wait: ${rateSlot.waitedMs || 0}ms)`);
-    }
-  
     try {
       const headers: Record<string, string> = {
         "connectionid": config.connectionId,
@@ -723,8 +1516,27 @@ export async function protractorFetch<T>(
       }
       
       let body = options.body ? String(options.body) : undefined;
+      const admissionTransport = resolveProtractorPhysicalTransport(url, method, headers);
+
+      if (isPriority) {
+        if (admissionTransport === "relay") {
+          console.log(JSON.stringify({
+            event: "protractor_priority_request",
+            transport: "relay",
+            method,
+            queueWaitMs: totalWaitMs,
+          }));
+        } else {
+          console.log(`[Protractor:PRIORITY] ${method} ${endpoint} (queue wait: ${totalWaitMs}ms)`);
+        }
+      }
       
-      if (body && method === 'POST' && endpoint.startsWith('/WorkOrder/')) {
+      if (
+        admissionTransport !== "relay" &&
+        body &&
+        method === 'POST' &&
+        endpoint.startsWith('/WorkOrder/')
+      ) {
         const curlHeaders = Object.entries(headers)
           .map(([k, v]) => `-H '${k}: ${k === 'apikey' || k === 'authentication' ? '***REDACTED***' : v}'`)
           .join(' \\\n  ');
@@ -749,18 +1561,52 @@ export async function protractorFetch<T>(
           body = JSON.stringify(stripStatus(parsed));
         } catch {}
       }
-      const res = await __protractorClientTestHooks.httpsRequest(url, method, headers, body);
+      const transport = await runCallbackPacedTransport((remainingMs) =>
+        runFleetGuardedTransportAttempt(
+          config,
+          normalizedShopId,
+          (fleetRemainingMs, dispatchContext) => runBreakerRecordedTransport(
+            config,
+            () => __protractorClientTestHooks.httpsRequest(
+              url,
+              method,
+              headers,
+              body,
+              Math.min(opts?.timeoutMs ?? 30_000, fleetRemainingMs ?? 30_000),
+              dispatchContext,
+            ),
+          ),
+          isPriority,
+          remainingMs,
+          admissionTransport,
+        )
+      );
+      if (!transport.ok) return transport;
+      const res = transport.response;
+      const physicalTransport = res.transport ?? admissionTransport;
+      const actualRelayLogging = physicalTransport === "relay";
 
       const latencyMs = Date.now() - startTime;
       const isServerError = res.statusCode >= 500;
       const isRateLimited = res.statusCode === 429;
       const retryAfterMs = parseProtractorRetryAfter(res.headers?.["retry-after"]);
-      await recordBreakerResponse(config, res.statusCode, retryAfterMs);
+      if (actualRelayLogging) {
+        console.log(JSON.stringify({
+          event: "protractor_relay_response",
+          method,
+          statusCode: res.statusCode,
+          durationMs: latencyMs,
+          priority: isPriority,
+          shopId: normalizedShopId,
+        }));
+      }
       
-      __protractorClientTestHooks.trackApiRequest('protractor', endpoint, method, res.statusCode, latencyMs, shopId, {
+      __protractorClientTestHooks.trackApiRequest('protractor', actualRelayLogging ? 'relay' : endpoint, method, res.statusCode, latencyMs, normalizedShopId, {
         retryCount: attempt > 0 ? attempt : undefined,
-        errorMessage: res.statusCode >= 400 ? res.body?.substring(0, 200) : undefined,
-        sourceWorker: process.env.RENDER ? 'render' : 'replit'
+        errorMessage: !actualRelayLogging && res.statusCode >= 400 ? res.body?.substring(0, 200) : undefined,
+        sourceWorker: process.env.RENDER ? 'render' : 'replit',
+        environment: resolveProtractorEnvironment(process.env),
+        transport: physicalTransport,
       }).catch(() => {});
 
       // Interactive (user-facing) callers can cap retries via opts.maxRetries so
@@ -782,20 +1628,47 @@ export async function protractorFetch<T>(
           Math.max(isRateLimited ? retryAfterMs : 0, Math.min(baseWaitMs + jitter, MAX_TRANSIENT_BACKOFF_MS)),
         );
         
-        console.log(`[Protractor] ${isRateLimited ? 'Rate limited' : `Server error ${res.statusCode}`}, retrying in ${Math.round(waitMs)}ms (attempt ${attempt + 1}/${maxRetries}) | Body: ${(res.body || '').substring(0, 500)}`);
+        if (actualRelayLogging) {
+          console.log(JSON.stringify({
+            event: "protractor_relay_retry",
+            method,
+            statusCode: res.statusCode,
+            waitMs: Math.round(waitMs),
+            attempt: attempt + 1,
+            maxRetries,
+          }));
+        } else {
+          console.log(`[Protractor] ${isRateLimited ? 'Rate limited' : `Server error ${res.statusCode}`}, retrying in ${Math.round(waitMs)}ms (attempt ${attempt + 1}/${maxRetries}) | Body: ${(res.body || '').substring(0, 500)}`);
+        }
 
         const backoffCounter = backoffStorage.getStore();
         if (backoffCounter) backoffCounter.ms += waitMs;
-        await __protractorClientTestHooks.sleep(waitMs);
+        await sleepWithinCallbackDeadline(waitMs);
         attempt += 1;
         continue;
       }
       if (isDeterministicError) {
-        console.log(`[Protractor] Deterministic SQL error detected, skipping retries | Body: ${(res.body || '').substring(0, 300)}`);
+        if (actualRelayLogging) {
+          console.log(JSON.stringify({
+            event: "protractor_relay_deterministic_error",
+            method,
+            statusCode: res.statusCode,
+          }));
+        } else {
+          console.log(`[Protractor] Deterministic SQL error detected, skipping retries | Body: ${(res.body || '').substring(0, 300)}`);
+        }
       }
 
       if (res.statusCode < 200 || res.statusCode >= 300) {
-        console.log(`[Protractor] HTTP ${res.statusCode} for ${method} ${endpoint} | Body (${(res.body || '').length} chars): ${(res.body || '(empty)').substring(0, 500)}`);
+        if (actualRelayLogging) {
+          console.log(JSON.stringify({
+            event: "protractor_relay_http_error",
+            method,
+            statusCode: res.statusCode,
+          }));
+        } else {
+          console.log(`[Protractor] HTTP ${res.statusCode} for ${method} ${endpoint} | Body (${(res.body || '').length} chars): ${(res.body || '(empty)').substring(0, 500)}`);
+        }
         let errorMsg = res.body || "Unknown error";
         if (/<[^>]+>/i.test(errorMsg)) {
           errorMsg = `Server returned ${res.statusCode}`;
@@ -808,7 +1681,16 @@ export async function protractorFetch<T>(
       const data = res.body ? JSON.parse(res.body) : null;
       return { ok: true, data: data as T };
     } catch (err: any) {
-      await recordBreakerResponse(config, PROTRACTOR_TRANSPORT_FAILURE_STATUS);
+      if (err instanceof RelayTransportError) {
+        logRelayTransportFailure(err, {
+          method,
+          shopId: normalizedShopId,
+          endpointClass,
+          attempt: attempt + 1,
+          priority: isPriority,
+        });
+        return { ok: false, error: err.message };
+      }
       return { ok: false, error: err.message || "Network error" };
     }
     }
@@ -850,7 +1732,8 @@ export async function fetchVehicleByVin(
 
 export async function fetchVehicleById(
   shopId: number,
-  serviceItemId: string
+  serviceItemId: string,
+  opts?: { timeoutMs?: number; maxRetries?: number },
 ): Promise<{ ok: boolean; vehicle?: ProtractorVehicle; error?: string }> {
   const config = await resolveProtractorConfig(shopId);
   if (!config.configured) {
@@ -862,7 +1745,8 @@ export async function fetchVehicleById(
     config,
     {},
     0,
-    shopId
+    shopId,
+    opts,
   );
 
   if (!result.ok) {
@@ -1060,12 +1944,20 @@ const PROTRACTOR_SOAP_WO_URL = "https://integration.protractor.com/IntegrationSe
 const PROTRACTOR_SOAP_NS = "http://www.protractor.com/Integration/";
 
 async function protractorSoapServiceItemUpdate(
-  config: { connectionId: string; apiKey: string; authentication: string },
+  config: ProtractorConfig,
   serviceItemXml: string,
   // Task #936: per-request socket timeout (there was none — a hung SOAP
   // socket blocked the wizard's create-vehicle step indefinitely).
   opts?: { timeoutMs?: number; maxRetries?: number }
 ): Promise<{ ok: boolean; error?: string }> {
+  const normalizedShopId = Number(config.shopId);
+  if (!Number.isSafeInteger(normalizedShopId) || normalizedShopId <= 0) {
+    console.error(JSON.stringify({
+      event: "protractor_request_blocked",
+      reason: "soap_shop_attribution_missing",
+    }));
+    return { ok: false, error: "Protractor SOAP request requires a valid shop ID" };
+  }
   const timeoutMs = opts?.timeoutMs ?? 120_000;
   const maxRetries = opts?.maxRetries ?? 3;
   const soapEnvelope = [
@@ -1082,25 +1974,36 @@ async function protractorSoapServiceItemUpdate(
     '  </soap:Body>',
     '</soap:Envelope>',
   ].join("\n");
+  const soapHeaders = {
+    "Content-Type": "text/xml; charset=utf-8",
+    "SOAPAction": `${PROTRACTOR_SOAP_NS}ServiceItemUpdate`,
+  };
+  const admissionTransport = resolveProtractorPhysicalTransport(
+    PROTRACTOR_SOAP_URL,
+    "POST",
+    soapHeaders,
+  );
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      const transport = await runGuardedTransportAttempt(config, () =>
-        __protractorClientTestHooks.httpsRequest(
-          PROTRACTOR_SOAP_URL,
-          "POST",
-          {
-            "Content-Type": "text/xml; charset=utf-8",
-            "SOAPAction": `${PROTRACTOR_SOAP_NS}ServiceItemUpdate`,
-          },
-          soapEnvelope,
-          timeoutMs,
+      const transport = await runGuardedTransportAttempt(config, normalizedShopId, (remainingMs, dispatchContext) =>
+        runBreakerRecordedTransport(
+          config,
+          () => __protractorClientTestHooks.httpsRequest(
+            PROTRACTOR_SOAP_URL,
+            "POST",
+            soapHeaders,
+            soapEnvelope,
+            Math.min(timeoutMs, remainingMs ?? timeoutMs),
+            dispatchContext,
+          ),
         ),
+        false,
+        admissionTransport,
       );
       if (!transport.ok) return transport;
       const res = transport.response;
       const retryAfterMs = parseProtractorRetryAfter(res.headers?.["retry-after"]);
-      await recordBreakerResponse(config, res.statusCode, retryAfterMs);
       if (res.statusCode === 200 && !res.body.includes("<soap:Fault>")) {
         return { ok: true };
       }
@@ -1110,15 +2013,24 @@ async function protractorSoapServiceItemUpdate(
           MAX_RETRY_AFTER_MS,
           Math.max(retryAfterMs, Math.min(2000 * Math.pow(1.5, attempt), MAX_TRANSIENT_BACKOFF_MS)),
         );
-        await __protractorClientTestHooks.sleep(delay);
+        await sleepWithinCallbackDeadline(delay);
         continue;
       }
       const faultMatch = res.body.match(/faultstring>([^<]+)/);
       return { ok: false, error: faultMatch ? faultMatch[1] : `HTTP ${res.statusCode}` };
     } catch (err: any) {
-      await recordBreakerResponse(config, PROTRACTOR_TRANSPORT_FAILURE_STATUS);
+      if (err instanceof RelayTransportError) {
+        logRelayTransportFailure(err, {
+          method: "POST",
+          shopId: normalizedShopId,
+          endpointClass: "soap",
+          attempt: attempt + 1,
+          priority: false,
+        });
+        return { ok: false, error: err.message };
+      }
       if (attempt < maxRetries) {
-        await __protractorClientTestHooks.sleep(
+        await sleepWithinCallbackDeadline(
           Math.min(2000 * Math.pow(1.5, attempt), MAX_TRANSIENT_BACKOFF_MS),
         );
         continue;
@@ -1218,7 +2130,7 @@ function buildWorkOrderXml(wo: Record<string, any>): string {
 }
 
 async function protractorSoapWorkOrderUpdate(
-  config: { connectionId: string; apiKey: string; authentication: string },
+  config: ProtractorConfig,
   workOrderId: string,
   workOrderXml: string,
   shopId?: number | string,
@@ -1226,6 +2138,21 @@ async function protractorSoapWorkOrderUpdate(
   // socket timeout so a hung SOAP call can't spin a wizard button forever.
   opts?: { maxRetries?: number; timeoutMs?: number }
 ): Promise<{ ok: boolean; data?: any; error?: string }> {
+  const normalizedShopId = Number(shopId);
+  if (
+    (typeof shopId !== "number" && typeof shopId !== "string") ||
+    !Number.isSafeInteger(normalizedShopId) ||
+    normalizedShopId <= 0 ||
+    config.shopId !== normalizedShopId
+  ) {
+    console.error(JSON.stringify({
+      event: "protractor_request_blocked",
+      reason: "soap_shop_attribution_mismatch",
+      shopId: Number.isFinite(normalizedShopId) ? normalizedShopId : undefined,
+      configShopId: config.shopId,
+    }));
+    return { ok: false, error: "Protractor SOAP request requires matching shop configuration" };
+  }
   const timeoutMs = opts?.timeoutMs ?? 120_000;
   const soapEnvelope = [
     '<?xml version="1.0" encoding="utf-8"?>',
@@ -1241,37 +2168,53 @@ async function protractorSoapWorkOrderUpdate(
     '  </soap:Body>',
     '</soap:Envelope>',
   ].join('\n');
+  const soapHeaders = {
+    "Content-Type": "text/xml; charset=utf-8",
+    "SOAPAction": `${PROTRACTOR_SOAP_NS}WorkOrderUpdate`,
+  };
+  const admissionTransport = resolveProtractorPhysicalTransport(
+    PROTRACTOR_SOAP_WO_URL,
+    "POST",
+    soapHeaders,
+  );
 
   const maxRetries = opts?.maxRetries ?? 6;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const startTime = Date.now();
-      const transport = await runGuardedTransportAttempt(config, () =>
-        __protractorClientTestHooks.httpsRequest(
-          PROTRACTOR_SOAP_WO_URL,
-          "POST",
-          {
-            "Content-Type": "text/xml; charset=utf-8",
-            "SOAPAction": `${PROTRACTOR_SOAP_NS}WorkOrderUpdate`,
-          },
-          soapEnvelope,
-          timeoutMs,
+      const transport = await runGuardedTransportAttempt(config, normalizedShopId, (remainingMs, dispatchContext) =>
+        runBreakerRecordedTransport(
+          config,
+          () => __protractorClientTestHooks.httpsRequest(
+            PROTRACTOR_SOAP_WO_URL,
+            "POST",
+            soapHeaders,
+            soapEnvelope,
+            Math.min(timeoutMs, remainingMs ?? timeoutMs),
+            dispatchContext,
+          ),
         ),
+        false,
+        admissionTransport,
       );
       if (!transport.ok) return transport;
       const res = transport.response;
+      const physicalTransport = res.transport ?? admissionTransport;
       const retryAfterMs = parseProtractorRetryAfter(res.headers?.["retry-after"]);
-      await recordBreakerResponse(config, res.statusCode, retryAfterMs);
 
       const latencyMs = Date.now() - startTime;
-      trackApiRequest(
+      __protractorClientTestHooks.trackApiRequest(
         'protractor',
-        `/WorkOrder/${workOrderId}`,
+        'soap:work_order',
         'POST-SOAP',
         res.statusCode,
         latencyMs,
-        shopId === undefined ? undefined : Number(shopId)
-      );
+        normalizedShopId,
+        {
+          environment: resolveProtractorEnvironment(process.env),
+          transport: physicalTransport,
+        },
+      ).catch(() => {});
 
       if (res.statusCode === 200 && !res.body.includes('<soap:Fault>')) {
         const resultMatch = res.body.match(/WorkOrderUpdateResult>([\s\S]*?)<\//);
@@ -1282,31 +2225,53 @@ async function protractorSoapWorkOrderUpdate(
         const pkgCount = (resultXml.match(/<ServicePackage>/g) || []).length;
         console.log(`[Protractor:SOAP] WorkOrderUpdate succeeded in ${latencyMs}ms (attempt ${attempt + 1}/${maxRetries + 1}) | Response length: ${res.body.length} | ServicePackages in response: ${pkgCount} | Has packages: ${hasServicePkgs}`);
         if (pkgCount === 0 && resultXml.length > 0) {
-          console.log(`[Protractor:SOAP] WARNING: Response has no service packages. Response XML (first 1000): ${resultXml.substring(0, 1000)}`);
+          console.log(`[Protractor:SOAP] WARNING: Response has no service packages (response length: ${res.body.length})`);
         }
         return { ok: true };
       }
 
       const faultMatch = res.body.match(/faultstring>([^<]+)/);
       const errorMsg = faultMatch ? faultMatch[1] : `HTTP ${res.statusCode}`;
-      console.log(`[Protractor:SOAP] WorkOrderUpdate error (attempt ${attempt + 1}/${maxRetries + 1}): ${errorMsg}`);
+      console.log(JSON.stringify({
+        event: "protractor_soap_http_error",
+        method: "POST",
+        shopId: normalizedShopId,
+        endpointClass: "soap",
+        statusCode: res.statusCode,
+        attempt: attempt + 1,
+      }));
 
       if ((res.statusCode === 429 || res.statusCode >= 500) && attempt < maxRetries) {
         const delay = Math.min(
           MAX_RETRY_AFTER_MS,
           Math.max(retryAfterMs, Math.min(2000 * Math.pow(1.5, attempt), MAX_TRANSIENT_BACKOFF_MS)),
         );
-        await __protractorClientTestHooks.sleep(delay);
+        await sleepWithinCallbackDeadline(delay);
         continue;
       }
 
       return { ok: false, error: errorMsg };
     } catch (err: any) {
-      await recordBreakerResponse(config, PROTRACTOR_TRANSPORT_FAILURE_STATUS);
-      console.log(`[Protractor:SOAP] WorkOrderUpdate exception (attempt ${attempt + 1}/${maxRetries + 1}): ${err.message}`);
+      if (err instanceof RelayTransportError) {
+        logRelayTransportFailure(err, {
+          method: "POST",
+          shopId: normalizedShopId,
+          endpointClass: "soap",
+          attempt: attempt + 1,
+          priority: false,
+        });
+        return { ok: false, error: err.message };
+      }
+      console.log(JSON.stringify({
+        event: "protractor_soap_transport_exception",
+        method: "POST",
+        shopId: normalizedShopId,
+        endpointClass: "soap",
+        attempt: attempt + 1,
+      }));
       if (attempt < maxRetries) {
         const delay = Math.min(2000 * Math.pow(1.5, attempt), 10000);
-        await __protractorClientTestHooks.sleep(delay);
+        await sleepWithinCallbackDeadline(delay);
         continue;
       }
       return { ok: false, error: err.message || 'SOAP request failed' };
@@ -1368,20 +2333,35 @@ export async function createServiceItem(
     usage: params.odometer,
   });
 
-  console.log(`[Protractor] Creating vehicle via SOAP ServiceItemUpdate: ${description} VIN:${params.vin || 'N/A'}`);
+  console.log(JSON.stringify({
+    event: "protractor_soap_request",
+    method: "POST",
+    shopId,
+    endpointClass: "soap",
+  }));
 
   const soapResult = await protractorSoapServiceItemUpdate(
-    { connectionId: config.connectionId, apiKey: config.apiKey, authentication: config.authentication },
+    config,
     xmlBody,
     opts?.soapTimeoutMs !== undefined ? { timeoutMs: opts.soapTimeoutMs } : undefined
   );
 
   if (!soapResult.ok) {
-    console.error(`[Protractor] SOAP vehicle creation failed: ${soapResult.error}`);
+    console.error(JSON.stringify({
+      event: "protractor_soap_service_item_failed",
+      method: "POST",
+      shopId,
+      endpointClass: "soap",
+    }));
     return { ok: false, error: soapResult.error || "Failed to create vehicle via SOAP" };
   }
 
-  console.log(`[Protractor] Created vehicle ${newVehicleId}: ${description} VIN:${params.vin || 'N/A'}`);
+  console.log(JSON.stringify({
+    event: "protractor_soap_service_item_created",
+    method: "POST",
+    shopId,
+    endpointClass: "soap",
+  }));
   return { ok: true, vehicleId: newVehicleId };
 }
 
@@ -1992,7 +2972,7 @@ export async function fetchActiveWorkOrders(
 export async function fetchWorkOrderById(
   shopId: number | string,
   workOrderId: string,
-  opts?: { priority?: boolean }
+  opts?: { priority?: boolean; timeoutMs?: number; maxRetries?: number }
 ): Promise<{ ok: boolean; workOrder?: ProtractorWorkOrder; error?: string }> {
   const config = await __protractorClientTestHooks.resolveProtractorConfig(shopId);
   if (!config.configured) {
@@ -2006,7 +2986,13 @@ export async function fetchWorkOrderById(
     {},
     0,
     numShopId,
-    opts
+    opts?.priority
+      ? {
+          ...opts,
+          timeoutMs: opts.timeoutMs ?? 65_000,
+          maxRetries: opts.maxRetries ?? 1,
+        }
+      : opts
   );
 
   if (!result.ok) {
@@ -2387,10 +3373,12 @@ export async function fetchDeferredWork(
 
 export async function testConnection(
   connectionId: string,
-  apiKey: string
+  apiKey: string,
+  shopId: number,
 ): Promise<{ ok: boolean; locations?: any[]; error?: string }> {
   const authentication = computeAuthentication(connectionId, apiKey);
   const config: ProtractorConfig = {
+    shopId,
     connectionId,
     apiKey,
     authentication,
@@ -2402,7 +3390,7 @@ export async function testConnection(
     config,
     {},
     0,
-    undefined,
+    shopId,
     { priority: true }
   );
 
@@ -2792,6 +3780,7 @@ export async function fetchCannedJobs(
   const pageSize = 100;
   let hasMore = true;
   let cannedJobSuccess = false;
+  let successfulEmptySource: ProtractorCannedJobsListSource | undefined;
 
   while (hasMore && skip < 5000) {
     const params = new URLSearchParams();
@@ -2830,6 +3819,9 @@ export async function fetchCannedJobs(
     console.log(`[Protractor:CannedJobs] SUCCESS — Found ${allCannedJobs.length} canned jobs via GET /CannedJob/`);
     return { ok: true, cannedJobs: allCannedJobs, source: "cannedjob" };
   }
+  if (cannedJobSuccess) {
+    successfulEmptySource = "cannedjob";
+  }
 
   // Try GET /ServicePackageTemplate
   console.log(`[Protractor:CannedJobs] Trying GET /ServicePackageTemplate for shop ${shopId}...`);
@@ -2848,6 +3840,9 @@ export async function fetchCannedJobs(
       cannedJobs: getResult.data.ItemCollection,
       source: "servicepackagetemplate",
     };
+  }
+  if (getResult.ok) {
+    successfulEmptySource = successfulEmptySource || "servicepackagetemplate";
   }
   
   if (getResult.error) {
@@ -2895,6 +3890,9 @@ export async function fetchCannedJobs(
       // /ServicePackageTemplate/{id} bare endpoint, not /ServicePackage/CannedJob/{id}.
       return { ok: true, cannedJobs: items, source: "servicepackagetemplate" };
     }
+    if (result.ok) {
+      successfulEmptySource = successfulEmptySource || "servicepackagetemplate";
+    }
     
     if (result.error) {
       console.log(`[Protractor:CannedJobs] FAILED POST ${endpoint}: ${result.error}`);
@@ -2902,6 +3900,13 @@ export async function fetchCannedJobs(
     } else {
       console.log(`[Protractor:CannedJobs] POST ${endpoint} returned OK but no items. Response keys: ${Object.keys(result.data || {}).join(', ')}`);
     }
+  }
+
+  if (successfulEmptySource) {
+    console.log(
+      `[Protractor:CannedJobs] All successful list endpoints returned an empty list for shop ${shopId}`,
+    );
+    return { ok: true, cannedJobs: [], source: successfulEmptySource };
   }
 
   console.error(`[Protractor:CannedJobs] ALL endpoints failed for shop ${shopId}:`, errors);
@@ -4894,6 +5899,28 @@ export async function fetchCannedJobsWithCache(
   const db = await getDb();
   const cached = await db.collection("protractor_canned_jobs").findOne({ shopId });
 
+  /**
+   * Interactive routes run inside a shop-bound ALS capability. During the
+   * staged timed trial that capability must not turn this cache helper into a
+   * detached/deep-sync launcher: the request's transport budget is
+   * foreground-only and the wrapper can settle while enrichment is still
+   * running. Check the local timed-trial mode (rather than inferring it from
+   * the route's options) so every caller of this helper gets the same guard.
+   *
+   * Deliberately key this on the timed-trial requirement even if the
+   * persisted shop gate has just been cancelled. A stale/inherited context
+   * must never be allowed to start background work while the physical
+   * transport gate is denying that shop.
+   */
+  const interactiveContext = getProtractorInteractiveTransportContext();
+  const foregroundOnlyTimedTrial =
+    interactiveContext?.active === true &&
+    Date.now() < interactiveContext.expiresAtMs &&
+    Number.isSafeInteger(shopId) &&
+    shopId > 0 &&
+    interactiveContext.shopId === shopId &&
+    getProtractorOutboundPolicy().requireTimedTrial === true;
+
   // Normalize cached items to consistent format
   const extractRawLines = (job: any): any[] => {
     if (Array.isArray(job.lines)) return job.lines;
@@ -4916,6 +5943,49 @@ export async function fetchCannedJobsWithCache(
       lines: rawLines.map((l: any) => normalizeProtractorPackageLine(l)),
     };
   });
+
+  if (foregroundOnlyTimedTrial) {
+    // A force refresh is explicitly rejected rather than silently treated as
+    // a normal read. The route can translate this stable error into its 409
+    // response, and no list/detail request or cache write is started.
+    if (options?.forceRefresh) {
+      return {
+        ok: false,
+        error: "PROTRACTOR_CANNED_JOBS_FORCE_REFRESH_UNAVAILABLE_DURING_TIMED_TRIAL",
+      };
+    }
+
+    const hasCachedItems =
+      Array.isArray(cached?.items) &&
+      cached.items.length > 0 &&
+      !isCannedJobsCacheContentBlank(cached.items);
+    if (hasCachedItems) {
+      // Cache reads are safe in this foreground-only mode. In particular, do
+      // not run the normal lineless-cache background re-enrich branch.
+      return {
+        ok: true,
+        cannedJobs: normalizeCachedItems(cached.items),
+        source: cached?.source === "enriched" ? "enriched" : "cache",
+      };
+    }
+
+    // A true miss may fetch the bounded list, but must not persist the basic
+    // list: it is a partial representation and a failed/deferred detail pass
+    // must never overwrite a complete cache. There is intentionally no
+    // detached enrichment from this branch.
+    const listResult = await fetchCannedJobs(shopId);
+    if (!listResult.ok || listResult.cannedJobs === undefined) {
+      return {
+        ok: false,
+        error: listResult.error || "Could not fetch canned jobs during timed interactive transport",
+      };
+    }
+    return {
+      ok: true,
+      cannedJobs: normalizeCachedItems(listResult.cannedJobs),
+      source: "api",
+    };
+  }
 
   // Check if we have a valid enriched cache (not forcing refresh).
   // Task #891: an "enriched" stamp on an all-blank cache is a lie — treat it
@@ -5139,7 +6209,7 @@ export async function fetchCannedJobsWithCache(
   };
 }
 
-// ============= Appointment Functions =============
+// ------ Appointment Functions ------
 
 export interface CreateProtractorAppointmentParams {
   shopId: number;
@@ -5263,7 +6333,7 @@ export async function getProtractorAppointments(
   return { ok: true, appointments };
 }
 
-// ============= Employee Functions =============
+// ------ Employee Functions ------
 
 // Protractor's Integration Services exposes the shop's staff under the
 // `/Employee` resource. Field naming varies across Protractor configs, so the

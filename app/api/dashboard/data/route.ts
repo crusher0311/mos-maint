@@ -8,6 +8,7 @@ import { fetchCarfaxWithCache } from "@/lib/integrations/carfax";
 import { Db } from "mongodb";
 import { mergeAutoflowIntoPrimary } from "@/lib/dashboard/autoflow-merge";
 import { prefixRegex, vinPrefix } from "@/lib/dashboard-search";
+import { dashboardAuditWorkOrderIdFromProvenance } from "@/lib/dashboard-audit-status";
 
 // Default number of NEW CARFAX reports fetched per page load for vehicles
 // missing mileage. Mile-less providers (Shopmonkey estimates rarely carry an
@@ -576,6 +577,8 @@ export async function GET(request: NextRequest) {
           },
           displayRo: "$workOrderNumber",
           workOrderGuid: "$workOrderGuid",
+           // Stable Protractor GUID used by the automatic-audit state key.
+           auditWorkOrderId: "$workOrderGuid",
           dviDone: { $gt: [{ $size: "$autoflowDvi" }, 0] },
           source: { $literal: "protractor" },
           af: {
@@ -675,6 +678,8 @@ export async function GET(request: NextRequest) {
           displayMiles: "$odometer",
           displayRo: "$workOrderNumber",
           workOrderId: "$workOrderId",
+           // Stable Tekmetric order id, distinct from its display number.
+           auditWorkOrderId: "$workOrderId",
           dviDone: {
             $cond: {
               if: { $gt: [{ $size: "$autoflowDvi" }, 0] },
@@ -799,6 +804,8 @@ export async function GET(request: NextRequest) {
             },
             displayRo: { $toString: { $ifNull: ["$number", ""] } },
             roId: "$roId",
+            // Stable Shop-Ware repair-order id, distinct from its number.
+            auditWorkOrderId: "$roId",
             dviDone: { $gt: [{ $size: "$autoflowDvi" }, 0] },
             source: { $literal: "shopware" },
             displayStatus: {
@@ -880,6 +887,9 @@ export async function GET(request: NextRequest) {
               ],
             },
             displayRo: { $toString: { $ifNull: ["$workOrderNumber", ""] } },
+            // Keep provenance long enough to project the true Shopmonkey
+            // order.id below. workOrderNumber is display-only.
+            provenance: 1,
             dviDone: { $literal: false },
             source: { $literal: "shopmonkey" },
             displayStatus: {
@@ -905,6 +915,10 @@ export async function GET(request: NextRequest) {
           },
         },
       ]).toArray();
+      shopmonkeyRows = shopmonkeyRows.map(({ provenance, ...row }: any) => ({
+        ...row,
+        auditWorkOrderId: dashboardAuditWorkOrderIdFromProvenance(provenance, "shopmonkey"),
+      }));
 
       // Most Shopmonkey estimates carry no odometer (mileageIn/Out are rarely
       // filled at estimate time), so backfill missing miles from the newest

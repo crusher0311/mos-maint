@@ -15,6 +15,7 @@ import { getDb } from "@/lib/mongo";
 import { getRepairOrders, shopWareRequest } from "@/lib/integrations/shopware/client";
 import { computeJobHash } from "@/lib/job-index";
 import type { ShopWareRepairOrder, ShopWareVehicle, ShopWareCustomer } from "@/lib/integrations/shopware/types";
+import { scheduleShopwareAuditReceipt } from "@/lib/data/repositories/estimate-audit-receipts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -124,6 +125,13 @@ async function syncShop(
   let jobsSkipped = 0;
 
   for (const ro of ros) {
+    // The shared mapper requires the requested service/labor/parts
+    // associations (but accepts services: [] as a complete zero-job ticket).
+    // It consumes this poll response only and does not issue a provider call.
+    void scheduleShopwareAuditReceipt(mosShopId, ro, "poll").catch((error: any) =>
+      console.warn(`[SW Cron] audit receipt handoff failed for RO ${ro.id}:`, error?.message || error),
+    );
+
     let vehicle = ro.vehicle ?? null;
     let customer = ro.customer ?? null;
 

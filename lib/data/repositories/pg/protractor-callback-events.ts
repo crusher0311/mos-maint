@@ -17,6 +17,19 @@
 import { and, asc, count, desc, eq, gte, inArray, isNotNull, lt, max, or, sql } from "drizzle-orm";
 import { getDb } from "@/lib/db/drizzle";
 import { protractorCallbackEvents as t } from "@/lib/db/schema/wave3";
+import {
+  DEFAULT_CALLBACK_HISTORY_OUTCOME,
+  normalizeCallbackHistoryOutcome,
+  parseCallbackHistoryOutcome,
+  type CallbackHistoryOutcome,
+} from "@/lib/integrations/protractor/callback-outcomes";
+
+const CALLBACK_OUTCOME_JSON_KEY = "historyOutcome";
+const CALLBACK_OUTCOME_COALESCED: CallbackHistoryOutcome = {
+  category: "coalesced",
+  reason: "superseded",
+};
+const UNSUPPORTED_CONTACT_REASON = "unsupported_contact";
 
 export interface InsertPostEventFields {
   eventKey: string;
@@ -45,6 +58,7 @@ export interface CallbackAdmissionIdentity {
   objectType: string;
   objectId: string;
   operation: string | null;
+  terminal?: boolean;
 }
 
 /** Pure counterpart to the SQL POST admission predicate (regression-testable). */
@@ -56,24 +70,43 @@ export function isPostAdmissionMatch(
     (row.method === null || row.method === "POST") &&
     row.shopId === identity.shopId &&
     row.workOrderId === identity.objectId &&
-    (row.status || "").toUpperCase() === (identity.operation || "");
+    (
+      identity.operation === "*" ||
+      (row.status || "").toUpperCase() === (identity.operation || "")
+    );
 }
 
 function identityWhere(identity: CallbackAdmissionIdentity) {
+  const methodWhere = identity.operation === "*"
+    ? sql`TRUE`
+    : identity.method === "POST"
+      ? or(sql`${t.method} IS NULL`, eq(t.method, "POST"))
+      : eq(t.method, "GET");
+  const objectWhere = identity.operation === "*" && identity.objectType === "WorkOrder"
+    ? or(
+        eq(t.workOrderId, identity.objectId),
+        and(eq(t.objectType, "WorkOrder"), eq(t.objectId, identity.objectId)),
+      )
+    : identity.method === "POST"
+      ? eq(t.workOrderId, identity.objectId)
+      : and(eq(t.objectType, identity.objectType), eq(t.objectId, identity.objectId));
   if (identity.method === "POST") {
     return and(
-      or(sql`${t.method} IS NULL`, eq(t.method, "POST")),
+      methodWhere,
       eq(t.shopId, identity.shopId),
-      eq(t.workOrderId, identity.objectId),
-      sql`upper(coalesce(${t.status}, '')) = ${identity.operation ?? ""}`,
+      objectWhere!,
+      identity.operation === "*"
+        ? sql`TRUE`
+        : sql`upper(coalesce(${t.status}, '')) = ${identity.operation ?? ""}`,
     );
   }
   return and(
-    eq(t.method, "GET"),
+    methodWhere,
     eq(t.shopId, identity.shopId),
-    eq(t.objectType, identity.objectType),
-    eq(t.objectId, identity.objectId),
-    identity.operation == null
+    objectWhere!,
+    identity.operation === "*"
+      ? sql`TRUE`
+      : identity.operation == null
       ? sql`${t.operation} IS NULL`
       : eq(t.operation, identity.operation),
   );
@@ -82,11 +115,58 @@ function identityWhere(identity: CallbackAdmissionIdentity) {
 function identityLockKey(identity: CallbackAdmissionIdentity): string {
   return JSON.stringify([
     identity.shopId,
-    identity.method,
     identity.objectType,
     identity.objectId,
-    identity.operation,
   ]);
+}
+
+function outcomePayload(payload: unknown, outcome: CallbackHistoryOutcome): unknown {
+  if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+    return {
+      ...(payload as Record<string, unknown>),
+      [CALLBACK_OUTCOME_JSON_KEY]: outcome,
+    };
+  }
+  return {
+    callbackPayload: payload ?? null,
+    [CALLBACK_OUTCOME_JSON_KEY]: outcome,
+  };
+}
+
+function setOutcomeSql(outcome: CallbackHistoryOutcome) {
+  return sql`
+    jsonb_set(
+      CASE
+        WHEN jsonb_typeof(coalesce(${t.payload}, '{}'::jsonb)) = 'object'
+          THEN coalesce(${t.payload}, '{}'::jsonb)
+        ELSE '{}'::jsonb
+      END,
+      '{historyOutcome}',
+      ${JSON.stringify(outcome)}::jsonb,
+      true
+    )
+  `;
+}
+
+function setOutcomeAndDeferralOwnerSql(
+  outcome: CallbackHistoryOutcome,
+  ownerToken: string,
+) {
+  return sql`
+    jsonb_set(
+      ${setOutcomeSql(outcome)},
+      '{callbackDeferralOwnerToken}',
+      ${JSON.stringify(ownerToken)}::jsonb,
+      true
+    )
+  `;
+}
+
+function replayCandidateWhere() {
+  return or(
+    sql`(${t.payload} -> 'historyOutcome' ->> 'reason') IS NULL`,
+    sql`(${t.payload} -> 'historyOutcome' ->> 'reason') <> ${UNSUPPORTED_CONTACT_REASON}`,
+  );
 }
 
 export async function admitCallbackEvent(
@@ -100,50 +180,82 @@ export async function admitCallbackEvent(
     await tx.execute(
       sql`SELECT pg_advisory_xact_lock(hashtextextended(${identityLockKey(identity)}, 0))`,
     );
+    const winner = await tx
+      .select({ eventKey: t.eventKey })
+      .from(t)
+      .where(and(
+        identityWhere(identity),
+        eq(t.processed, false),
+        replayCandidateWhere(),
+      ))
+      .orderBy(
+        desc(sql`CASE WHEN upper(coalesce(${t.operation}, ${t.status}, '')) IN ('DELETE','INVOICED','INVOICE','CLOSED','VOID') THEN 1 ELSE 0 END`),
+        desc(t.receivedAt),
+        desc(t.id),
+      )
+      .limit(1);
+    if (winner[0]?.eventKey !== eventKey) return false;
     const active = await tx
       .select({ eventKey: t.eventKey })
       .from(t)
       .where(
         and(
           identityWhere(identity),
+          replayCandidateWhere(),
           isNotNull(t.processingStartedAt),
           gte(t.processingStartedAt, staleBefore),
         ),
       )
       .limit(1);
     if (active.length > 0) {
-      await tx
-        .update(t)
-        .set({ processed: true, processedAt: now, noAction: true })
-        .where(
-          and(
-            identityWhere(identity),
-            eq(t.processed, false),
-            sql`${t.eventKey} <> ${eventKey}`,
-            sql`${t.eventKey} <> ${active[0].eventKey}`,
-          ),
-        );
       return false;
     }
 
     const claimed = await tx
       .update(t)
       .set({ processingStartedAt: now })
-      .where(and(eq(t.eventKey, eventKey), eq(t.processed, false)))
+      .where(and(
+        eq(t.eventKey, eventKey),
+        eq(t.processed, false),
+        replayCandidateWhere(),
+      ))
       .returning({ eventKey: t.eventKey });
     if (claimed.length === 0) return false;
-    await tx
-      .update(t)
-      .set({ processed: true, processedAt: now, noAction: true, processingStartedAt: null })
-      .where(
-        and(
-          identityWhere(identity),
-          eq(t.processed, false),
-          sql`${t.eventKey} <> ${eventKey}`,
-        ),
-      );
     return true;
   });
+}
+
+export async function claimCallbackEvent(
+  eventKey: string,
+  identity: CallbackAdmissionIdentity,
+  leaseMs: number,
+): Promise<string | null> {
+  const winner = await getDb()
+    .select({ eventKey: t.eventKey })
+    .from(t)
+    .where(and(
+      identityWhere(identity),
+      eq(t.processed, false),
+      replayCandidateWhere(),
+    ))
+    .orderBy(
+      desc(sql`CASE WHEN upper(coalesce(${t.operation}, ${t.status}, '')) IN ('DELETE','INVOICED','INVOICE','CLOSED','VOID') THEN 1 ELSE 0 END`),
+      desc(t.receivedAt),
+      desc(t.id),
+    )
+    .limit(1);
+  if (winner[0]?.eventKey !== eventKey) return null;
+  if (!(await admitCallbackEvent(eventKey, identity, leaseMs))) return null;
+  const rows = await getDb()
+    .select({ processingStartedAt: t.processingStartedAt })
+    .from(t)
+    .where(and(
+      eq(t.eventKey, eventKey),
+      eq(t.processed, false),
+      replayCandidateWhere(),
+    ))
+    .limit(1);
+  return rows[0]?.processingStartedAt?.toISOString() ?? null;
 }
 
 export async function finishCallbackEventAdmission(
@@ -159,7 +271,11 @@ export async function finishCallbackEventAdmission(
     await tx
       .update(t)
       .set({ processingStartedAt: null })
-      .where(and(eq(t.eventKey, eventKey), isNotNull(t.processingStartedAt)));
+      .where(and(
+        eq(t.eventKey, eventKey),
+        isNotNull(t.processingStartedAt),
+        replayCandidateWhere(),
+      ));
 
     const pending = claimFollowUp
       ? await tx
@@ -169,6 +285,7 @@ export async function finishCallbackEventAdmission(
             and(
               identityWhere(identity),
               eq(t.processed, false),
+              replayCandidateWhere(),
               sql`${t.eventKey} <> ${eventKey}`,
             ),
           )
@@ -179,11 +296,18 @@ export async function finishCallbackEventAdmission(
 
     await tx
       .update(t)
-      .set({ processed: true, processedAt: now, noAction: true, processingStartedAt: null })
+      .set({
+        processed: true,
+        processedAt: now,
+        noAction: true,
+        processingStartedAt: null,
+        payload: setOutcomeSql(CALLBACK_OUTCOME_COALESCED),
+      })
       .where(
         and(
           identityWhere(identity),
           eq(t.processed, false),
+          replayCandidateWhere(),
           sql`${t.eventKey} <> ${eventKey}`,
           ...(pendingKey ? [sql`${t.eventKey} <> ${pendingKey}`] : []),
         ),
@@ -194,6 +318,92 @@ export async function finishCallbackEventAdmission(
       .set({ processingStartedAt: now })
       .where(eq(t.eventKey, pendingKey));
     return { ...identity, key: pendingKey };
+  });
+}
+
+/** Release a queue worker claim without consuming callbacks that arrived in-flight. */
+export async function releaseCallbackEventAdmission(
+  eventKey: string,
+  identity: CallbackAdmissionIdentity,
+  ownerToken?: string,
+): Promise<void> {
+  await getDb().transaction(async (tx) => {
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtextextended(${identityLockKey(identity)}, 0))`,
+    );
+    await tx
+      .update(t)
+      .set({ processingStartedAt: null })
+      .where(and(
+        eq(t.eventKey, eventKey),
+        ...(ownerToken ? [eq(t.processingStartedAt, new Date(ownerToken))] : []),
+      ));
+  });
+}
+
+export async function completeCallbackGeneration(
+  eventKey: string,
+  identity: CallbackAdmissionIdentity,
+  ownerToken: string,
+  ownerReceivedAt: Date,
+  outcome: CallbackHistoryOutcome = DEFAULT_CALLBACK_HISTORY_OUTCOME,
+): Promise<boolean> {
+  const db = getDb();
+  const ownerOutcome = normalizeCallbackHistoryOutcome(outcome);
+  return db.transaction(async (tx) => {
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtextextended(${identityLockKey(identity)}, 0))`,
+    );
+    const terminalPredicate = sql`
+      upper(coalesce(${t.operation}, ${t.status}, '')) IN
+      ('DELETE','INVOICED','INVOICE','CLOSED','VOID')
+    `;
+    const owner = await tx
+      .select({ eventKey: t.eventKey })
+      .from(t)
+      .where(and(
+        eq(t.eventKey, eventKey),
+        eq(t.processed, false),
+        eq(t.processingStartedAt, new Date(ownerToken)),
+        replayCandidateWhere(),
+      ))
+      .limit(1);
+    if (owner.length !== 1) return false;
+    const completedOwner = await tx
+      .update(t)
+      .set({
+        processed: true,
+        processedAt: new Date(),
+        noAction: true,
+        processingStartedAt: null,
+        payload: setOutcomeSql(ownerOutcome),
+      })
+      .where(and(
+        eq(t.eventKey, eventKey),
+        eq(t.processed, false),
+        eq(t.processingStartedAt, new Date(ownerToken)),
+        replayCandidateWhere(),
+      ))
+      .returning({ eventKey: t.eventKey });
+    if (completedOwner.length !== 1) return false;
+    await tx
+      .update(t)
+      .set({
+        processed: true,
+        processedAt: new Date(),
+        noAction: true,
+        processingStartedAt: null,
+        payload: setOutcomeSql(CALLBACK_OUTCOME_COALESCED),
+      })
+      .where(and(
+        identityWhere(identity),
+        eq(t.processed, false),
+        replayCandidateWhere(),
+        sql`${t.eventKey} <> ${eventKey}`,
+        sql`${t.receivedAt} <= ${ownerReceivedAt}`,
+        ...(identity.terminal ? [] : [sql`NOT (${terminalPredicate})`]),
+      ));
+    return true;
   });
 }
 
@@ -209,7 +419,10 @@ export async function insertPostEvent(f: InsertPostEventFields): Promise<void> {
       attempts: 0,
       priority: 1,
     } : {}),
-    payload: f.payload,
+    payload: outcomePayload(f.payload, {
+      category: "deferred",
+      reason: "pending_replay",
+    }),
     workOrderId: f.workOrderId,
     status: f.status ?? null,
     connectionId: f.connectionId,
@@ -231,6 +444,10 @@ export async function insertGetEvent(f: InsertGetEventFields): Promise<void> {
     processed: false,
     attempts: 0,
     priority: 1,
+    payload: outcomePayload(null, {
+      category: "deferred",
+      reason: "pending_replay",
+    }),
   });
 }
 
@@ -300,6 +517,7 @@ export async function markProcessedByKey(
     workOrderNumber?: string | number | null;
     noAction?: boolean;
     deletedFromDashboard?: boolean;
+    historyOutcome?: CallbackHistoryOutcome;
   } = {},
 ): Promise<void> {
   await getDb()
@@ -314,6 +532,9 @@ export async function markProcessedByKey(
       ...(fields.noAction !== undefined ? { noAction: fields.noAction } : {}),
       ...(fields.deletedFromDashboard !== undefined
         ? { deletedFromDashboard: fields.deletedFromDashboard }
+        : {}),
+      ...(fields.historyOutcome !== undefined
+        ? { payload: setOutcomeSql(normalizeCallbackHistoryOutcome(fields.historyOutcome)) }
         : {}),
     })
     .where(eq(t.eventKey, eventKey));
@@ -391,23 +612,88 @@ export async function recordAttempt(eventKey: string, lastError?: string): Promi
     .where(eq(t.eventKey, eventKey));
 }
 
-/** `$set processingStartedAt` + `$inc attempts` (queue-drain start stamp). */
+/** Increment attempts without changing the immutable admission fence. */
 export async function recordProcessingStarted(eventKey: string): Promise<void> {
   await getDb()
     .update(t)
     .set({
-      processingStartedAt: new Date(),
+      lastAttemptAt: new Date(),
       attempts: sql`COALESCE(${t.attempts}, 0) + 1`,
     })
     .where(eq(t.eventKey, eventKey));
 }
 
 /** `$set lastError, lastErrorAt` (queue-drain failure stamp; no $inc). */
-export async function recordError(eventKey: string, message: string): Promise<void> {
+export async function recordError(
+  eventKey: string,
+  message: string,
+  ownerToken?: string,
+): Promise<void> {
+  const ownerStartedAt = ownerToken ? new Date(ownerToken) : null;
+  if (ownerToken && Number.isNaN(ownerStartedAt!.getTime())) return;
   await getDb()
     .update(t)
     .set({ lastError: message, lastErrorAt: new Date() })
-    .where(eq(t.eventKey, eventKey));
+    .where(and(
+      eq(t.eventKey, eventKey),
+      ...(ownerStartedAt
+        ? [eq(t.processed, false), eq(t.processingStartedAt, ownerStartedAt)]
+        : []),
+    ));
+}
+
+/** Persist queue-failure evidence only while this owner still holds the fence. */
+export async function recordCallbackOutcome(
+  eventKey: string,
+  ownerToken: string,
+  outcome: CallbackHistoryOutcome,
+): Promise<void> {
+  const ownerStartedAt = new Date(ownerToken);
+  if (Number.isNaN(ownerStartedAt.getTime())) return;
+  await getDb()
+    .update(t)
+    .set({ payload: setOutcomeSql(normalizeCallbackHistoryOutcome(outcome, {
+      category: "failed",
+      reason: "dispatch_failed",
+    })) })
+    .where(and(
+      eq(t.eventKey, eventKey),
+      eq(t.processed, false),
+      eq(t.processingStartedAt, ownerStartedAt),
+    ));
+}
+
+/**
+ * Leave a safety-boundary callback replayable without charging the queue
+ * attempt spent reaching that boundary.  The processing timestamp is the PG
+ * owner fence established by claimCallbackEvent; no admission state is
+ * changed here.
+ */
+export async function recordCallbackDeferral(
+  eventKey: string,
+  ownerToken: string,
+  outcome: CallbackHistoryOutcome,
+): Promise<void> {
+  const ownerStartedAt = new Date(ownerToken);
+  if (Number.isNaN(ownerStartedAt.getTime())) return;
+  await getDb()
+    .update(t)
+    .set({
+      payload: setOutcomeAndDeferralOwnerSql(
+        normalizeCallbackHistoryOutcome(outcome),
+        ownerToken,
+      ),
+      attempts: sql`GREATEST(COALESCE(${t.attempts}, 0) - 1, 0)`,
+    })
+    .where(and(
+      eq(t.eventKey, eventKey),
+      eq(t.processed, false),
+      eq(t.processingStartedAt, ownerStartedAt),
+      or(
+        sql`${t.payload} ->> 'callbackDeferralOwnerToken' IS NULL`,
+        sql`${t.payload} ->> 'callbackDeferralOwnerToken' <> ${ownerToken}`,
+      ),
+    ));
 }
 
 export interface PendingGetEvent {
@@ -417,14 +703,17 @@ export interface PendingGetEvent {
   objectType: string | null;
   objectId: string | null;
   operation: string | null;
+  receivedAt: Date;
 }
 
 /** protractor-sync pre-sweep queue: unprocessed callback events under the attempt cap. */
 export async function findPendingGetEvents(
   limit: number,
   maxAttempts: number,
+  receivedNotBefore?: Date,
 ): Promise<PendingGetEvent[]> {
-  const rows = await getDb()
+  const db = getDb();
+  const rows = await db
     .select({
       eventKey: t.eventKey,
       method: t.method,
@@ -432,6 +721,7 @@ export async function findPendingGetEvents(
       objectType: t.objectType,
       objectId: t.objectId,
       operation: t.operation,
+      receivedAt: t.receivedAt,
     })
     .from(t)
     .where(
@@ -440,9 +730,15 @@ export async function findPendingGetEvents(
         eq(t.processed, false),
         isNotNull(t.eventKey),
         or(sql`${t.attempts} IS NULL`, lt(t.attempts, maxAttempts)),
+        replayCandidateWhere(),
+        receivedNotBefore ? gte(t.receivedAt, receivedNotBefore) : undefined,
       ),
     )
-    .orderBy(asc(t.priority), asc(t.receivedAt))
+    .orderBy(
+      asc(t.priority),
+      desc(t.receivedAt),
+      desc(t.id),
+    )
     .limit(limit);
   return rows.map((r) => ({
     ...r,
@@ -578,4 +874,84 @@ export async function connectionShopPairs(): Promise<
       shopId: Number(r.shopId),
       last: r.last ?? null,
     }));
+}
+
+function reportReceivedAt(value: unknown): string | null {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString();
+  }
+  if (typeof value === "string") {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+  }
+  return null;
+}
+
+/**
+ * Bounded, redacted callback-outcome sample. Each method gets its own bounded
+ * read (2.5s statement timeout) so PostgreSQL can use
+ * pro_cb_method_received_idx; the two windows are merged in memory and capped
+ * at the newest 200 rows. Raw provider payload and error columns never cross
+ * this repository boundary.
+ */
+export async function getCallbackOutcomeReport() {
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const rows = await getDb().transaction(async (tx) => {
+    await tx.execute(sql`SET LOCAL statement_timeout = '2500ms'`);
+    const boundedRows: any[] = [];
+    for (const method of ["GET", "POST"] as const) {
+      const methodRows = await tx
+        .select({
+          method: t.method,
+          shopId: t.shopId,
+          receivedAt: t.receivedAt,
+          historyOutcome: sql<unknown>`${t.payload} -> 'historyOutcome'`,
+        })
+        .from(t)
+        .where(and(eq(t.method, method), gte(t.receivedAt, since)))
+        .orderBy(desc(t.receivedAt))
+        .limit(200);
+      boundedRows.push(...methodRows);
+    }
+    return boundedRows;
+  });
+  const counts: Record<string, number> = {};
+  const reportReceivedTime = (value: unknown): number => {
+    if (value instanceof Date) {
+      const time = value.getTime();
+      return Number.isNaN(time) ? Number.NEGATIVE_INFINITY : time;
+    }
+    if (typeof value === "string") {
+      const time = Date.parse(value);
+      return Number.isNaN(time) ? Number.NEGATIVE_INFINITY : time;
+    }
+    return Number.NEGATIVE_INFINITY;
+  };
+  const reportRows = rows
+    .sort((a, b) => {
+      return reportReceivedTime(b.receivedAt) - reportReceivedTime(a.receivedAt);
+    })
+    .slice(0, 200)
+    .map((row) => {
+      const outcome = parseCallbackHistoryOutcome(row.historyOutcome);
+      const category = outcome?.category ?? "unknown";
+      const reason = outcome?.reason ?? "unknown";
+      counts[category] = (counts[category] ?? 0) + 1;
+      return {
+        method: row.method === "GET" ? "GET" as const : "POST" as const,
+        shopId: row.shopId == null ? 0 : Number(row.shopId),
+        receivedAt: reportReceivedAt(row.receivedAt),
+        category,
+        reason,
+        ...(outcome?.indexedJobs === undefined ? {} : { indexedJobs: outcome.indexedJobs }),
+        ...(outcome?.changedJobs === undefined ? {} : { changedJobs: outcome.changedJobs }),
+      };
+    });
+  return {
+    sampleLimit: 200 as const,
+    windowHours: 24 as const,
+    sampled: reportRows.length,
+    counts,
+    rows: reportRows,
+  };
 }

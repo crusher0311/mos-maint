@@ -12,6 +12,7 @@ import {
 import { checkShopFeatureGate } from "@/lib/extension-route-guard";
 import { buildInspectionLineTitle, buildFindingsNote, appendRatingTag, buildVhiContextNote } from "@/lib/auto-dvi/compose";
 import { pushInspectionPackageToProtractor } from "@/lib/auto-dvi/protractor-push";
+import { runWithProtractorInteractiveTransport } from "@/lib/integrations/protractor/interactive-context";
 import { buildRecommendedWorkPackages } from "@/lib/auto-dvi/recommended-work";
 import { trackPushToRO } from "@/lib/extension-analytics";
 
@@ -100,31 +101,34 @@ export async function POST(req: NextRequest) {
       ? await buildRecommendedWorkPackages({ shopId, items: recommendedInputs })
       : null;
 
-  const result = await pushInspectionPackageToProtractor({
+  const result = await runWithProtractorInteractiveTransport(
     shopId,
-    vin: vinUpper,
-    roNumber: body.roNumber || null,
-    workOrderGuid: body.workOrderGuid || null,
-    packageTitle: PACKAGE_TITLE,
-    lineTitles,
-    note: findingsNote,
-    extraPackages: recommendedWork?.packages.map((p) => ({ title: p.title, hours: p.hours, rate: p.rate })),
-    // Native Protractor inspection-results write (§1.9.4).
-    inspectionItems: items.map((i) => ({
-      name: String(i.name),
-      rating: i.rating ?? null,
-      notes: i.notes ?? null,
-      recommendation: i.recommendation ?? null,
-      context: buildVhiContextNote({
-        source: i.source === "shop" || i.source === "recall" ? i.source : "vhi",
-        bucket: i.bucket ?? null,
-        action: i.action ?? null,
-        dueAtMiles: i.dueAtMiles ?? null,
-        milesToGo: i.milesToGo ?? null,
-        notes: i.itemNotes ?? null,
-      }),
-    })),
-  });
+    () => pushInspectionPackageToProtractor({
+      shopId,
+      vin: vinUpper,
+      roNumber: body.roNumber || null,
+      workOrderGuid: body.workOrderGuid || null,
+      packageTitle: PACKAGE_TITLE,
+      lineTitles,
+      note: findingsNote,
+      extraPackages: recommendedWork?.packages.map((p) => ({ title: p.title, hours: p.hours, rate: p.rate })),
+      // Native Protractor inspection-results write (§1.9.4).
+      inspectionItems: items.map((i) => ({
+        name: String(i.name),
+        rating: i.rating ?? null,
+        notes: i.notes ?? null,
+        recommendation: i.recommendation ?? null,
+        context: buildVhiContextNote({
+          source: i.source === "shop" || i.source === "recall" ? i.source : "vhi",
+          bucket: i.bucket ?? null,
+          action: i.action ?? null,
+          dueAtMiles: i.dueAtMiles ?? null,
+          milesToGo: i.milesToGo ?? null,
+          notes: i.itemNotes ?? null,
+        }),
+      })),
+    }),
+  );
   if (!result.ok) {
     return NextResponse.json(
       { error: result.error, requiresManualEntry: result.requiresManualEntry },

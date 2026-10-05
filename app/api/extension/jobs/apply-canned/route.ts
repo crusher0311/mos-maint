@@ -9,6 +9,7 @@ import {
   resolveProtractorConfig,
   protractorFetch,
 } from "@/lib/integrations/protractor";
+import { runWithProtractorInteractiveTransport } from "@/lib/integrations/protractor/interactive-context";
 import { trackPushToRO } from "@/lib/extension-analytics";
 
 export const runtime = "nodejs";
@@ -123,12 +124,15 @@ async function _POST(req: NextRequest) {
         lookupOutcomes.protractor = "skipped_not_configured";
       } else {
         try {
-          const searchResult = await protractorFetch<any>(
-            `/WorkOrder?$filter=WorkOrderNumber eq '${sanitizedRoNumber}'&$top=5`,
-            config,
-            {},
-            0,
-            shopId
+          const searchResult = await runWithProtractorInteractiveTransport(
+            shopId,
+            () => protractorFetch<any>(
+              `/WorkOrder?$filter=WorkOrderNumber eq '${sanitizedRoNumber}'&$top=5`,
+              config,
+              {},
+              0,
+              shopId,
+            ),
           );
 
           if (!searchResult.ok) {
@@ -160,19 +164,30 @@ async function _POST(req: NextRequest) {
 
     if (!targetWorkOrderId && vin) {
       try {
-        const vehicleResult = await fetchVehicleByVin(shopId, vin);
+        const lookupResult = await runWithProtractorInteractiveTransport(
+          shopId,
+          async () => {
+            const vehicleResult = await fetchVehicleByVin(shopId, vin);
+            if (!vehicleResult.ok || !vehicleResult.vehicle) {
+              return { vehicleResult, woResult: null };
+            }
+            const woResult = await fetchWorkOrdersForVehicle(shopId, vehicleResult.vehicle.ID, {
+              includeOpen: true,
+            });
+            return { vehicleResult, woResult };
+          },
+        );
+        const vehicleResult = lookupResult.vehicleResult;
+        const woResult = lookupResult.woResult;
         if (!vehicleResult.ok) {
           lookupOutcomes.vin = "errored";
           lookupErrors.push(`vehicle: ${(vehicleResult as any).error || "unknown"}`);
         } else if (!vehicleResult.vehicle) {
           lookupOutcomes.vin = "ran_empty";
         } else {
-          const woResult = await fetchWorkOrdersForVehicle(shopId, vehicleResult.vehicle.ID, {
-            includeOpen: true,
-          });
-          if (!woResult.ok) {
+          if (!woResult || !woResult.ok) {
             lookupOutcomes.vin = "errored";
-            lookupErrors.push(`workorders: ${(woResult as any).error || "unknown"}`);
+            lookupErrors.push(`workorders: ${(woResult as any)?.error || "unknown"}`);
           } else {
             const openWos = (woResult.workOrders || []).filter((wo: any) => !wo.Completed);
             if (openWos.length > 0) {
@@ -253,7 +268,10 @@ async function _POST(req: NextRequest) {
       );
     }
 
-    const result = await applyCannedJobToWorkOrder(shopId, targetWorkOrderId, cannedJobId, cannedJobTitle);
+    const result = await runWithProtractorInteractiveTransport(
+      shopId,
+      () => applyCannedJobToWorkOrder(shopId, targetWorkOrderId!, cannedJobId, cannedJobTitle),
+    );
 
     if (!result.ok) {
       return NextResponse.json(

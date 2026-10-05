@@ -23,6 +23,8 @@ import {
 } from './client';
 import { transformVehicle, transformRepairOrder, transformCannedJob } from './transform';
 import { resolveShopDistanceUnit } from '@/lib/shop-distance-unit';
+import { auditAutomationEnabled } from '@/lib/estimate-assist/audit-automation';
+import { scheduleNormalizedAuditReceipt } from '@/lib/data/repositories/estimate-audit-receipts';
 
 interface TekmetricShopDoc extends ShopDoc {
   shopId: number | string;
@@ -143,6 +145,20 @@ export class TekmetricAdapter implements IIntegrationAdapter {
         getJobs(ro.id, shopId),
         getMileageUnit(shopId),
       ]);
+      // The detail and jobs calls above are the caller's live read. The
+      // receipt hook consumes that complete raw ticket only; it never makes a
+      // provider request of its own.
+      if (auditAutomationEnabled(shopId) && Array.isArray(jobs.content)) {
+        const receipt = { ...ro, jobs: jobs.content };
+        void scheduleNormalizedAuditReceipt(
+          shopId,
+          "tekmetric",
+          receipt,
+          "live",
+        ).catch((error: any) =>
+          console.warn(`[Tekmetric] audit receipt handoff failed for live RO ${ro.id}:`, error?.message || error),
+        );
+      }
       return { ok: true, data: transformRepairOrder(ro, undefined, undefined, jobs.content, { mileageUnit }) };
     } catch (err: any) {
       return { ok: false, error: err.message || 'Work order not found' };

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { fetchAllActiveInspections, fetchActiveInspections } from "@/lib/integrations/protractor";
+import { runWithProtractorInteractiveTransport } from "@/lib/integrations/protractor/interactive-context";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,10 +21,16 @@ export async function GET(req: NextRequest) {
     const workOrderId = req.nextUrl.searchParams.get("workOrderId");
 
     if (workOrderId) {
-      const result = await fetchActiveInspections(shopId, workOrderId);
+      const result = await runWithProtractorInteractiveTransport(
+        shopId,
+        () => fetchActiveInspections(shopId, workOrderId),
+      );
       return NextResponse.json(result);
     } else {
-      const result = await fetchAllActiveInspections(shopId);
+      const result = await runWithProtractorInteractiveTransport(
+        shopId,
+        () => fetchAllActiveInspections(shopId),
+      );
       return NextResponse.json(result);
     }
   } catch (err: any) {

@@ -862,6 +862,7 @@ export async function runFullPageBackfillChunk(
       enterpriseId,
       {
         syncRunId: `tekmetric-fullpage-${Date.now()}`,
+        ingestionVia: "backfill",
         createAuditLog: false,
         dualWriteToJobIndex: true,
         dualWriteToRepairPatterns: true,

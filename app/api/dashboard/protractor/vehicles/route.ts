@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getDb } from "@/lib/mongo";
 import { fetchVehiclesByOwner } from "@/lib/integrations/protractor";
+import { runWithProtractorInteractiveTransport } from "@/lib/integrations/protractor/interactive-context";
 
 export async function GET(req: NextRequest) {
   try {
@@ -28,7 +29,10 @@ export async function GET(req: NextRequest) {
     }
 
     const shopId = Number(sess.shopId);
-    const result = await fetchVehiclesByOwner(shopId, ownerId);
+    const result = await runWithProtractorInteractiveTransport(
+      shopId,
+      () => fetchVehiclesByOwner(shopId, ownerId),
+    );
 
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: 500 });

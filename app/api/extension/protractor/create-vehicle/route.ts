@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
 import { checkExtensionWritePermission } from "@/lib/extension-write-guard";
 import { createServiceItem } from "@/lib/integrations/protractor";
+import { runWithProtractorInteractiveTransport } from "@/lib/integrations/protractor/interactive-context";
 import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
 import { resolveClientRequestId } from "@/lib/idempotent-create-id";
 
@@ -76,30 +77,33 @@ async function _POST(req: NextRequest) {
       guard.user?._id ?? guard.user?.email,
       clientRequestId,
     );
-    const result = await withUpstreamTimeout(
-      createServiceItem(
-        guard.mosShopId,
-        {
-          ownerId,
-          vin: vin || undefined,
-          year: year ? Number(year) : undefined,
-          make: make || undefined,
-          model: model || undefined,
-          submodel: submodel || undefined,
-          color: color || undefined,
-          engine: engine || undefined,
-          transmission: transmission || undefined,
-          odometer: odometer ? Number(odometer) : undefined,
-          licensePlate: licensePlate || undefined,
-        },
-        {
-          vehicleId: pinnedVehicleId,
-          soapTimeoutMs: SOAP_TIMEOUT_MS,
-        },
+    const result = await runWithProtractorInteractiveTransport(
+      guard.mosShopId,
+      () => withUpstreamTimeout(
+        createServiceItem(
+          guard.mosShopId,
+          {
+            ownerId,
+            vin: vin || undefined,
+            year: year ? Number(year) : undefined,
+            make: make || undefined,
+            model: model || undefined,
+            submodel: submodel || undefined,
+            color: color || undefined,
+            engine: engine || undefined,
+            transmission: transmission || undefined,
+            odometer: odometer ? Number(odometer) : undefined,
+            licensePlate: licensePlate || undefined,
+          },
+          {
+            vehicleId: pinnedVehicleId,
+            soapTimeoutMs: SOAP_TIMEOUT_MS,
+          },
+        ),
+        UPSTREAM_DEADLINE_MS,
+        `ext-create-vehicle shop=${guard.mosShopId}`,
+        { ok: false, error: SLOW_UPSTREAM_MSG, timedOut: true } as any,
       ),
-      UPSTREAM_DEADLINE_MS,
-      `ext-create-vehicle shop=${guard.mosShopId}`,
-      { ok: false, error: SLOW_UPSTREAM_MSG, timedOut: true } as any,
     );
 
     if (!result.ok) {

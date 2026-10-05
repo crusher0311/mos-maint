@@ -33,6 +33,9 @@ export type AuditAction =
   | "data_export"
   | "build_ro_from_vhi"
   | "billing_settings_change"
+  | "protractor_operator_stop_activated"
+  | "protractor_operator_stop_cleared"
+  | "protractor_timed_trial_started"
   | "dvi_best_practice_change";
 
 export interface AdminAuditLogEntry {

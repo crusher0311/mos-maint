@@ -17,12 +17,14 @@ export default function EstimateAuditPage() {
   // null = still reading the URL (first client render); string ("" when no
   // param) once resolved, so the panel mounts exactly once with the prefill.
   const [wo, setWo] = useState<string | null>(null);
+  const [provider, setProvider] = useState<string | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     setWo((params.get("workOrderId") || params.get("wo") || "").trim());
+    setProvider((params.get("provider") || "").trim());
   }, []);
 
-  if (wo === null) return null;
-  return <EstimateAssistPanel initialWorkOrderId={wo || undefined} />;
+  if (wo === null || provider === null) return null;
+  return <EstimateAssistPanel initialWorkOrderId={wo || undefined} initialProvider={provider || undefined} />;
 }

@@ -79,7 +79,6 @@ const ALLOWLIST = new Set([
   "app/api/autovitals/settings/route.ts",
   "app/api/autovitals/sync/route.ts",
   "app/api/autovitals/vehicles/route.ts",
-  "app/api/callbacks/protractor/route.ts",
   "app/api/carfax/debug/[vin]/route.ts",
   "app/api/communications/caller-lookup/route.ts",
   "app/api/cron/backfill-chunk-speed-health/route.ts",

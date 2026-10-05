@@ -16,6 +16,7 @@
 // change). When ON, reads go to the Postgres mirror and writes go
 // PG-first, then replay the Mongo write via
 // `shadowWriteMongoLegacyStore` (only while the shadow flag is on).
+import type { Db } from "mongodb";
 import { getDb } from "@/lib/mongo";
 import {
   isCannedJobsPgCanonical,
@@ -33,24 +34,37 @@ type AnyDoc = Record<string, unknown>;
 /**
  * Returns every enriched canned job for a shop
  * (`find({ shopId, enriched: true }).toArray()`). Empty result => `[]`.
+ * Pass `limit` only for callers that intentionally need a bounded read; the
+ * default remains unbounded for extension-plan compatibility.
  */
 export async function findEnrichedCannedJobs(
   shopId: number | string,
+  options?: { dbOverride?: Db; limit?: number },
 ): Promise<AnyDoc[]> {
   if (isCannedJobsPgCanonical()) {
-    return pg.findEnrichedCannedJobs(Number(shopId));
+    return pg.findEnrichedCannedJobs(Number(shopId), { limit: options?.limit });
   }
-  return findEnrichedCannedJobsMongo(shopId);
+  return findEnrichedCannedJobsMongo(shopId, options?.dbOverride, options?.limit);
 }
 
 async function findEnrichedCannedJobsMongo(
   shopId: number | string,
+  dbOverride?: Db,
+  limit?: number,
 ): Promise<AnyDoc[]> {
-  const db = await getDb();
-  return db
-    .collection("canned_jobs")
-    .find({ shopId, enriched: true })
-    .toArray();
+  const db = dbOverride || await getDb();
+  const collection = db.collection("canned_jobs");
+  if (typeof collection.find !== "function") return [];
+  const cursor = collection.find({ shopId, enriched: true });
+  if (limit !== undefined && (!Number.isFinite(limit) || limit < 0)) return [];
+  const boundedLimit = limit === undefined ? undefined : Math.floor(limit);
+  if (boundedLimit === 0) return [];
+  const limitedCursor =
+    boundedLimit !== undefined && typeof cursor.limit === "function"
+      ? cursor.limit(boundedLimit)
+      : cursor;
+  if (typeof limitedCursor.toArray !== "function") return [];
+  return limitedCursor.toArray();
 }
 
 /* -------------------------------------------------------------------------- */

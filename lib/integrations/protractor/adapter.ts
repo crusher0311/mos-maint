@@ -15,6 +15,8 @@ import { resolveProtractorConfig, protractorFetch, testConnection as testProtrac
 import { transformVehicle, transformWorkOrder, transformCannedJob, transformDeferredWork } from './transform';
 import type { ProtractorVehicle, ProtractorWorkOrder, ProtractorCannedJob, ProtractorDeferredWork } from './client';
 import { withUpstreamTimeout } from '@/lib/with-upstream-timeout';
+import { auditAutomationEnabled } from '@/lib/estimate-assist/audit-automation';
+import { scheduleNormalizedAuditReceipt } from '@/lib/data/repositories/estimate-audit-receipts';
 
 interface ProtractorShopDoc extends ShopDoc {
   shopId: number | string;
@@ -64,7 +66,7 @@ export class ProtractorAdapter implements IIntegrationAdapter {
     if (!config.configured) {
       return { ok: false, error: 'Protractor is not configured for this shop' };
     }
-    const result = await testProtractorConnection(config.connectionId, config.apiKey);
+    const result = await testProtractorConnection(config.connectionId, config.apiKey, shopId);
     if (!result.ok) {
       return { ok: false, error: result.error || 'Connection test failed' };
     }
@@ -147,6 +149,18 @@ export class ProtractorAdapter implements IIntegrationAdapter {
       return { ok: false, error: result.error || 'Work order not found' };
     }
 
+    // The detail response is the live receipt. The helper is pure and only
+    // accepts explicit ServicePackages/DeferredServicePackages collections.
+    if (auditAutomationEnabled(shopId)) {
+      void scheduleNormalizedAuditReceipt(
+        shopId,
+        "protractor",
+        result.data,
+        "live",
+      ).catch((error: any) =>
+        console.warn(`[Protractor] audit receipt handoff failed for live WO ${workOrderId}:`, error?.message || error),
+      );
+    }
     return { ok: true, data: transformWorkOrder(result.data, { mileageUnit }) };
   }
 

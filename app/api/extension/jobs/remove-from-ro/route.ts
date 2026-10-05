@@ -20,6 +20,7 @@ import {
   buildMinimalPayloadForRemove,
   soapAddServicePackage,
 } from "@/lib/integrations/protractor";
+import { runWithProtractorInteractiveTransport } from "@/lib/integrations/protractor/interactive-context";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -105,7 +106,10 @@ async function _POST(req: NextRequest) {
       );
     }
 
-    const woResult = await fetchWorkOrderById(shopId, workOrderId, { priority: true });
+    const woResult = await runWithProtractorInteractiveTransport(
+      shopId,
+      () => fetchWorkOrderById(shopId, workOrderId, { priority: true }),
+    );
     if (!woResult.ok || !woResult.workOrder) {
       return NextResponse.json(
         { error: woResult.error || "Work order not found" },
@@ -150,20 +154,26 @@ async function _POST(req: NextRequest) {
       `[Ext Remove-from-RO:${requestId}] shop=${shopId} wo=${workOrderId} removing package ${servicePackageId} ("${target?.ServicePackageHeader?.Title || ""}"), ${remaining.length} remain`
     );
 
-    const updateResult = await protractorFetch<any>(
-      `/WorkOrder/${workOrderId}`,
-      config,
-      { method: "POST", body: JSON.stringify(updatedWorkOrder) },
-      0,
+    const updateResult = await runWithProtractorInteractiveTransport(
       shopId,
-      { priority: true }
+      () => protractorFetch<any>(
+        `/WorkOrder/${workOrderId}`,
+        config,
+        { method: "POST", body: JSON.stringify(updatedWorkOrder) },
+        0,
+        shopId,
+        { priority: true },
+      ),
     );
 
     if (!updateResult.ok) {
       // Mirror the add path's SOAP fallback for the known Status-column bug.
       const isStatusColumnError = (updateResult.error || "").includes("Invalid column name 'Status'");
       if (isStatusColumnError) {
-        const soapResult = await soapAddServicePackage(shopId, workOrderId, updatedWorkOrder);
+        const soapResult = await runWithProtractorInteractiveTransport(
+          shopId,
+          () => soapAddServicePackage(shopId, workOrderId, updatedWorkOrder),
+        );
         if (!soapResult.ok) {
           return NextResponse.json(
             { error: "Failed to undo — Protractor database issue. Please remove the job in Protractor manually." },

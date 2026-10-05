@@ -6,13 +6,9 @@ import { enforceAiBudget } from "@/lib/ai-budget";
 import { isPlatformAdmin as isPlatformAdminEmail } from "@/lib/super-admins";
 import { ESTIMATE_COLLECTIONS } from "@/lib/estimate-assist/job-knowledge-base";
 import {
-  AuditFinding,
-  AuditReport,
   AuditLineItem,
-  runStaticAuditRules,
-  dedupeAndSortFindings,
-  summarizeFindings,
 } from "@/lib/estimate-assist/audit-engine";
+import { evaluateAudit } from "@/lib/estimate-assist/audit-evaluator";
 import { NORMALIZED_COLLECTIONS } from "@/lib/normalized-schema";
 import {
   validateExtensionToken,
@@ -20,34 +16,16 @@ import {
   buildAuthErrorBody,
   isExtensionBearerRequest,
 } from "@/lib/extension-auth";
-import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
-import { getCachedPlan } from "@/lib/plan-cache";
-import {
-  findMissingVhiItems,
-  buildMissingVhiFindings,
-  type VhiComparison,
-  type VhiComparisonItem,
-} from "@/lib/estimate-assist/vhi-audit-match";
 import { getFeatureEntitlements } from "@/lib/featureResolver";
 import {
   canAccessShopFeature,
   type ShopFeatureSession,
 } from "@/lib/shop-feature-access";
 
-// Static rule logic (missing parts/labor, labor-hour ranges, companion
-// suggestions, dedupe/sort, score math) lives in
-// lib/estimate-assist/audit-engine.ts so it is unit-testable without this
-// route's server-only auth imports.
+// Authorization, live-RO resolution, and budget enforcement remain in this
+// manual route. The reusable server evaluator below receives only resolved,
+// already-authorized/budgeted data and never persists a report.
 export type { AuditFinding, AuditReport } from "@/lib/estimate-assist/audit-engine";
-
-// Budget for the optional AI-findings pass. The static rule findings are
-// already computed by then, so on timeout we return those instead of hanging.
-const AI_TIMEOUT_MS = 20_000;
-
-// Task #1145: bounded budget for the cached-VHI-plan read. This is a pure
-// cache lookup (getCachedPlan never triggers an on-demand rebuild); on
-// timeout or miss the audit proceeds with a "VHI comparison skipped" note.
-const VHI_LOOKUP_TIMEOUT_MS = 5_000;
 
 export const dynamic = "force-dynamic";
 
@@ -78,6 +56,7 @@ interface AuditRequest {
   workOrderId?: string;
   lineItems?: AuditLineItem[];
   vehicleInfo?: {
+    vin?: string;
     year?: number;
     make?: string;
     model?: string;
@@ -218,7 +197,7 @@ export async function POST(req: NextRequest) {
     let vehicleInfo = body.vehicleInfo || null;
     // Task #1145: VIN for the VHI comparison, resolved from whichever WO
     // lookup succeeds below. Null → comparison skipped (never fails the audit).
-    let vehicleVin: string | null = null;
+    let vehicleVin: string | null = body.vehicleInfo?.vin ? String(body.vehicleInfo.vin) : null;
     let workOrderNumber: string | undefined;
     let workOrderId = body.workOrderId;
     // Provider + the provider's own primary RO id (from normalized
@@ -385,153 +364,24 @@ export async function POST(req: NextRequest) {
       }, { status: 400, headers: corsHeaders });
     }
 
-    const findings = runStaticAuditRules(lineItems);
-    let findingId = findings.length;
-
-    // Task #1145: compare the ticket against the vehicle's cached VHI plan
-    // and flag due/due-soon items that aren't quoted. Cache read only — a
-    // miss/timeout degrades to a "skipped" note, never a rebuild or an error.
-    let vhiComparison: VhiComparison = { status: "skipped", reason: "No VIN available for this repair order" };
-    if (vehicleVin && canUseMaintenance) {
-      try {
-        const db = await __deps.getDb();
-        const cachedPlan = await withUpstreamTimeout(
-          getCachedPlan(db, vehicleVin.toUpperCase(), shopId, vehicleInfo?.mileage ?? null),
-          VHI_LOOKUP_TIMEOUT_MS,
-          "estimate-audit-vhi-lookup",
-          null,
-        );
-        const buckets = cachedPlan?.plan?.buckets;
-        if (buckets) {
-          const planItems: VhiComparisonItem[] = [
-            ...(buckets.overdue || []).map((it: any) => ({ ...it, status: "overdue" as const })),
-            ...(buckets.dueSoon || []).map((it: any) => ({ ...it, status: "due_soon" as const })),
-          ];
-          const missing = findMissingVhiItems(lineItems.map((li) => li.title), planItems);
-          const distLabel = cachedPlan?.plan?.distanceUnit === "kilometers" ? "km" : "mi";
-          const vhiFindings = buildMissingVhiFindings(missing, findingId, distLabel);
-          findingId += vhiFindings.length;
-          findings.push(...vhiFindings);
-          vhiComparison = { status: "compared", missingCount: missing.length };
-        } else {
-          vhiComparison = { status: "skipped", reason: "No VHI plan is cached for this vehicle yet" };
-        }
-      } catch (vhiErr: any) {
-        console.warn(`[Estimate Audit] VHI comparison failed (non-fatal): ${vhiErr?.message || vhiErr}`);
-        vhiComparison = { status: "skipped", reason: "VHI plan lookup failed" };
-      }
-    }
-
-    let aiFindings: AuditFinding[] = [];
-    try {
-      const openai = __deps.getOpenAI();
-      const startTime = Date.now();
-
-      const lineItemsSummary = lineItems.map((li, i) =>
-        `${i + 1}. "${li.title}" - Labor: ${li.laborHours || 'N/A'}h ($${li.laborTotal || 'N/A'}), Parts: $${li.partsTotal || 'N/A'}, Total: $${li.total || 'N/A'}`
-      ).join("\n");
-
-      const vehicleStr = vehicleInfo
-        ? `${vehicleInfo.year || ''} ${vehicleInfo.make || ''} ${vehicleInfo.model || ''} (${vehicleInfo.mileage || 'N/A'} miles)`.trim()
-        : "Unknown vehicle";
-
-      const completion = await withUpstreamTimeout(
-        openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "system",
-            content: `You are an expert automotive estimate auditor. Review the estimate line items and identify issues. Focus on:
-1. Missing commonly-associated services not already flagged
-2. Description improvements for customer communication
-3. Safety concerns
-4. Internal inconsistencies (e.g. a parts-replacement job with $0 parts, labor listed with no hours)
-
-NEVER judge whether a price is high or low, and NEVER reference "industry standards", "market rates", or "typical pricing" — you have no pricing data, and shop pricing varies legitimately by region, vehicle, and business model. Do not produce pricing/cost findings of any kind.
-
-All line items are on the SAME repair order and will be performed during the SAME visit. The order they are listed in does NOT reflect the order the technician will perform them — shops control execution sequence. Do NOT produce findings about the timing, ordering, or sequencing of services relative to each other (e.g. "do the alignment after the suspension work") — the shop already handles that.
-
-Return JSON array of findings:
-[{
-  "severity": "critical"|"warning"|"info",
-  "category": "string",
-  "title": "string",
-  "description": "string",
-  "suggestedAction": "string",
-  "confidence": 0.0-1.0,
-  "lineItemIndex": number|null
-}]
-
-Only include genuinely useful findings. Do not repeat obvious items. Maximum 5 findings.`,
-          },
-          {
-            role: "user",
-            content: `Vehicle: ${vehicleStr}\n\nEstimate Line Items:\n${lineItemsSummary}`,
-          },
-        ],
-        temperature: 0.3,
-        max_tokens: 800,
-        response_format: { type: "json_object" },
-        }),
-        AI_TIMEOUT_MS,
-        "estimate-audit-ai",
-        null,
-      );
-
-      if (completion) {
-        __deps.trackOpenAiCall(shopId, "/api/estimate-assist/audit", completion, Date.now() - startTime);
-      }
-
-      const aiContent = completion?.choices[0]?.message?.content || "{}";
-      let parsed: any;
-      try {
-        parsed = JSON.parse(aiContent);
-      } catch {
-        parsed = {};
-      }
-
-      const aiItems = Array.isArray(parsed) ? parsed : (parsed.findings || parsed.items || []);
-      // Belt-and-suspenders: drop any pricing-opinion findings the model
-      // produces despite the prompt ban. There is no pricing dataset behind
-      // the AI, so "unusually high/low vs industry standards" claims are
-      // fabricated and misleading (Brandon, 2026-07-11).
-      const isPricingOpinion = (f: any) =>
-        /pric/i.test(String(f?.category || "")) ||
-        /industry standard|market rate|typical pricing|(higher|lower) side compared/i.test(
-          `${f?.title || ""} ${f?.description || ""} ${f?.suggestedAction || ""}`,
-        );
-      aiFindings = aiItems
-        .filter((f: any) => f && f.title && f.description && !isPricingOpinion(f))
-        .map((f: any) => ({
-          id: `f-${++findingId}`,
-          severity: f.severity || "info",
-          category: f.category || "AI Analysis",
-          title: f.title,
-          description: f.description,
-          suggestedAction: f.suggestedAction,
-          confidence: f.confidence || 0.5,
-          lineItemIndex: f.lineItemIndex,
-        }));
-    } catch (aiError) {
-      console.error("[Estimate Audit] AI analysis failed:", aiError);
-    }
-
-    const deduped = dedupeAndSortFindings([...findings, ...aiFindings]);
-    const summary = summarizeFindings(deduped);
-
-    const report: AuditReport = {
-      workOrderId,
-      workOrderNumber,
-      provider,
-      smsWorkOrderId,
-      vehicleDisplay: vehicleInfo
-        ? `${vehicleInfo.year || ''} ${vehicleInfo.make || ''} ${vehicleInfo.model || ''}`.trim()
-        : undefined,
-      auditDate: new Date().toISOString(),
-      findings: deduped,
-      summary,
-      vhiComparison,
-    };
+    const report = await evaluateAudit(
+      {
+        shopId,
+        lineItems,
+        vehicleInfo,
+        vehicleVin,
+        canUseMaintenance,
+        workOrderId,
+        workOrderNumber,
+        provider,
+        smsWorkOrderId,
+      },
+      {
+        getDb: __deps.getDb,
+        getOpenAI: __deps.getOpenAI,
+        trackOpenAiCall: __deps.trackOpenAiCall,
+      },
+    );
 
     try {
       const db = await __deps.getDb();
@@ -541,8 +391,8 @@ Only include genuinely useful findings. Do not repeat obvious items. Maximum 5 f
         workOrderId,
         workOrderNumber,
         lineItemCount: lineItems.length,
-        findingCount: deduped.length,
-        score: summary.score,
+        findingCount: report.findings.length,
+        score: report.summary.score,
         report,
         createdAt: new Date(),
       });

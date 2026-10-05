@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { getDb } from "@/lib/mongo";
 import { createProtractorWorkOrder } from "@/lib/integrations/protractor";
 import { finalizeProtractorWorkOrderCreation } from "@/lib/integrations/protractor/work-order-service";
+import { runWithProtractorInteractiveTransport } from "@/lib/integrations/protractor/interactive-context";
 import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
 import { resolveClientRequestId } from "@/lib/idempotent-create-id";
 
@@ -66,32 +67,35 @@ export async function POST(req: NextRequest) {
     // client-pinned WO ID so a wizard retry after a timeout upserts the SAME
     // work order instead of creating a duplicate. The whole create is bounded
     // by an upstream deadline so the route always answers.
-    const result = await withUpstreamTimeout(
-      createProtractorWorkOrder(
-        shopId,
-        {
-          contactId,
-          vehicleId,
-          vin: vin || undefined,
-          concernText: concernText || undefined,
-          concerns: Array.isArray(concerns)
-            ? (concerns as unknown[]).filter((c): c is string => typeof c === "string" && c.trim().length > 0)
-            : undefined,
-          note: note || undefined,
-          mileage: mileage || undefined,
-          servicePackages: servicePackages || undefined,
-        },
-        {
-          interactive: true,
-          // Task #937: derive the upstream ID server-side (hash of
-          // kind+shop+user+key) so the wizard's retry stays duplicate-safe
-          // without letting a caller target an existing record's UUID.
-          workOrderId: resolveClientRequestId("workOrder", shopId, String(sess.userId ?? user.email ?? ""), clientRequestId),
-        },
+    const result = await runWithProtractorInteractiveTransport(
+      shopId,
+      () => withUpstreamTimeout(
+        createProtractorWorkOrder(
+          shopId,
+          {
+            contactId,
+            vehicleId,
+            vin: vin || undefined,
+            concernText: concernText || undefined,
+            concerns: Array.isArray(concerns)
+              ? (concerns as unknown[]).filter((c): c is string => typeof c === "string" && c.trim().length > 0)
+              : undefined,
+            note: note || undefined,
+            mileage: mileage || undefined,
+            servicePackages: servicePackages || undefined,
+          },
+          {
+            interactive: true,
+            // Task #937: derive the upstream ID server-side (hash of
+            // kind+shop+user+key) so the wizard's retry stays duplicate-safe
+            // without letting a caller target an existing record's UUID.
+            workOrderId: resolveClientRequestId("workOrder", shopId, String(sess.userId ?? user.email ?? ""), clientRequestId),
+          },
+        ),
+        UPSTREAM_DEADLINE_MS,
+        `wizard-create-work-order shop=${shopId}`,
+        { ok: false, error: SLOW_UPSTREAM_MSG, timedOut: true } as any,
       ),
-      UPSTREAM_DEADLINE_MS,
-      `wizard-create-work-order shop=${shopId}`,
-      { ok: false, error: SLOW_UPSTREAM_MSG, timedOut: true } as any,
     );
 
     const createMs = Date.now() - tStart;

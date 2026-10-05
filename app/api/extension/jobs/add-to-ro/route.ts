@@ -9,6 +9,7 @@ import {
   buildMinimalPayloadForPost,
   soapAddServicePackage,
 } from "@/lib/integrations/protractor";
+import { runWithProtractorInteractiveTransport } from "@/lib/integrations/protractor/interactive-context";
 import {
   getShopPartCostRatio,
   resolvePartLineCost,
@@ -20,6 +21,11 @@ import {
   needsCachedLaborRate,
   resolveAddToRoLaborRate,
 } from "@/lib/integrations/protractor/labor-rate";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
+import {
+  rehydrateRecommendationSelection,
+} from "@/lib/estimate-assist/recommendation-resolver";
+import type { AuditSelection } from "@/lib/estimate-assist/recommendation-types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,16 +53,28 @@ async function _POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { shopId, provider, roNumber, vin, job, source, workOrderGuid: workOrderGuidHint } = body as {
+    const {
+      shopId,
+      provider,
+      roNumber,
+      vin,
+      vehicle,
+      job: submittedJob,
+      source: submittedSource,
+      auditSelection: rawAuditSelection,
+      auditFinding,
+      workOrderGuid: workOrderGuidHint,
+    } = body as {
       shopId: number;
       provider?: string;
       roNumber?: string;
       vin?: string;
+      vehicle?: { vin?: string; year?: number | string; make?: string; model?: string };
       workOrderGuid?: string;
       // Task #888 — where the pushed job came from. "canned" makes the
       // template's own labor rate win over the RO/cached shop rate.
       source?: string;
-      job: {
+      job?: {
         title: string;
         description?: string;
         code?: string;
@@ -88,6 +106,8 @@ async function _POST(req: NextRequest) {
           unitCost?: number;
         }>;
       };
+      auditSelection?: AuditSelection & { sourceIdentity?: AuditSelection["source"] };
+      auditFinding?: { suggestedJobTitle?: string };
     };
 
     if (!shopId) {
@@ -124,6 +144,73 @@ async function _POST(req: NextRequest) {
         buildAuthErrorBody(scopeFailure),
         { status: getAuthErrorStatus(scopeFailure), headers: corsHeaders }
       );
+    }
+
+    let job = submittedJob;
+    let source = submittedSource;
+    let auditSelectionSource: AuditSelection["source"] | undefined;
+    let auditSelectionWarnings: Array<{ code: string; message: string }> = [];
+    if (rawAuditSelection) {
+      const expectedTitle = typeof auditFinding?.suggestedJobTitle === "string"
+        ? auditFinding.suggestedJobTitle.slice(0, 180)
+        : "";
+      if (!expectedTitle) {
+        return NextResponse.json(
+          { ok: false, error: "auditFinding.suggestedJobTitle is required to bind the source" },
+          { status: 400, headers: corsHeaders },
+        );
+      }
+      const entitlements = await getFeatureEntitlements(Number(shopId));
+      if (!entitlements.canUseFeature("estimate_assist") || !entitlements.canUseFeature("job_lookup")) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "Estimate Assist and Job Lookup are required for selected-source writes",
+            code: "FEATURE_NOT_AVAILABLE",
+            feature: "estimate_assist",
+            upgradeRequired: true,
+            currentPlan: entitlements.billing.plan,
+          },
+          { status: 402, headers: corsHeaders },
+        );
+      }
+
+      const selection: AuditSelection = rawAuditSelection.source
+        ? rawAuditSelection
+        : { source: rawAuditSelection.sourceIdentity || (rawAuditSelection as any) };
+      const hydrated = await rehydrateRecommendationSelection(
+        Number(shopId),
+        selection,
+        vehicle || { vin },
+        { expectedTitle },
+      );
+      if (!hydrated.ok) {
+        const status = hydrated.code === "FORBIDDEN" ? 403 : hydrated.code === "UNAVAILABLE" ? 503 : 404;
+        return NextResponse.json(
+          { ok: false, error: hydrated.error, code: hydrated.code },
+          { status, headers: corsHeaders },
+        );
+      }
+      const recommendation = hydrated.recommendation;
+      auditSelectionSource = recommendation.source;
+      auditSelectionWarnings = recommendation.warnings;
+      source = recommendation.source.kind === "canned" ? "canned" : "history";
+      job = {
+        title: recommendation.title,
+        description: recommendation.description || undefined,
+        code: recommendation.code || undefined,
+        lines: recommendation.lines.map((line) => ({
+          lineType: line.lineType,
+          description: line.description,
+          partNumber: line.partNumber || undefined,
+          manufacturer: line.manufacturer || undefined,
+          quantity: line.quantity,
+          unitPrice: line.unitPrice,
+          extendedPrice: line.extendedPrice,
+          cost: line.cost == null ? undefined : line.cost,
+          extendedCost: line.extendedCost == null ? undefined : line.extendedCost,
+        })),
+      };
     }
 
     if (!job || !job.title) {
@@ -167,13 +254,16 @@ async function _POST(req: NextRequest) {
     }
 
     if (!workOrderGuid && sanitizedRoNumber) {
-      const searchResult = await protractorFetch<any>(
-        `/WorkOrder?$filter=WorkOrderNumber eq '${sanitizedRoNumber}'&$top=5`,
-        config,
-        {},
-        0,
+      const searchResult = await runWithProtractorInteractiveTransport(
         shopId,
-        { priority: true }
+        () => protractorFetch<any>(
+          `/WorkOrder?$filter=WorkOrderNumber eq '${sanitizedRoNumber}'&$top=5`,
+          config,
+          {},
+          0,
+          shopId,
+          { priority: true },
+        ),
       );
 
       if (searchResult.ok && searchResult.data) {
@@ -194,17 +284,23 @@ async function _POST(req: NextRequest) {
 
     if (!workOrderGuid && vin) {
       const { fetchVehicleByVin, fetchWorkOrdersForVehicle } = await import("@/lib/integrations/protractor");
-      const vehicleResult = await fetchVehicleByVin(shopId, vin);
-      if (vehicleResult.ok && vehicleResult.vehicle) {
-        const woResult = await fetchWorkOrdersForVehicle(shopId, vehicleResult.vehicle.ID, {
-          includeOpen: true,
-        });
-        if (woResult.ok) {
-          const openWos = (woResult.workOrders || []).filter((wo: any) => !wo.Completed);
-          if (openWos.length > 0) {
-            workOrderGuid = openWos[0].ID;
-            console.log(`[Ext Add-to-RO:${requestId}] Found WO by VIN ${vin}: ${workOrderGuid}`);
+      const vehicleAndWorkOrders = await runWithProtractorInteractiveTransport(
+        shopId,
+        async () => {
+          const vehicleResult = await fetchVehicleByVin(shopId, vin);
+          if (!vehicleResult.ok || !vehicleResult.vehicle) {
+            return { vehicleResult, woResult: null };
           }
+          const woResult = await fetchWorkOrdersForVehicle(shopId, vehicleResult.vehicle.ID, {
+            includeOpen: true,
+          });
+          return { vehicleResult, woResult };
+        });
+      if (vehicleAndWorkOrders.woResult?.ok) {
+        const openWos = (vehicleAndWorkOrders.woResult.workOrders || []).filter((wo: any) => !wo.Completed);
+        if (openWos.length > 0) {
+          workOrderGuid = openWos[0].ID;
+          console.log(`[Ext Add-to-RO:${requestId}] Found WO by VIN ${vin}: ${workOrderGuid}`);
         }
       }
     }
@@ -222,7 +318,10 @@ async function _POST(req: NextRequest) {
     }
 
     const fetchWOStart = Date.now();
-    const existingWOResult = await fetchWorkOrderById(shopId, workOrderGuid, { priority: true });
+    const existingWOResult = await runWithProtractorInteractiveTransport(
+      shopId,
+      () => fetchWorkOrderById(shopId, workOrderGuid!, { priority: true }),
+    );
     console.log(`[Ext Add-to-RO:${requestId}] WO fetch took ${Date.now() - fetchWOStart}ms`);
 
     if (!existingWOResult.ok || !existingWOResult.workOrder) {
@@ -365,13 +464,16 @@ async function _POST(req: NextRequest) {
     console.log(`[Ext Add-to-RO:${requestId}] POSTing "${job.title}" with ${servicePackageLines.length} lines...`);
     const postStart = Date.now();
 
-    const updateResult = await protractorFetch<any>(
-      `/WorkOrder/${workOrderGuid}`,
-      config,
-      { method: "POST", body: JSON.stringify(updatedWorkOrder) },
-      0,
+    const updateResult = await runWithProtractorInteractiveTransport(
       shopId,
-      { priority: true }
+      () => protractorFetch<any>(
+        `/WorkOrder/${workOrderGuid}`,
+        config,
+        { method: "POST", body: JSON.stringify(updatedWorkOrder) },
+        0,
+        shopId,
+        { priority: true },
+      ),
     );
 
     console.log(`[Ext Add-to-RO:${requestId}] POST took ${Date.now() - postStart}ms, ok=${updateResult.ok}`);
@@ -380,7 +482,10 @@ async function _POST(req: NextRequest) {
       const isStatusColumnError = (updateResult.error || "").includes("Invalid column name 'Status'");
       if (isStatusColumnError) {
         console.log(`[Ext Add-to-RO:${requestId}] REST failed with Status column error — SOAP fallback`);
-        const soapResult = await soapAddServicePackage(shopId, workOrderGuid, updatedWorkOrder);
+        const soapResult = await runWithProtractorInteractiveTransport(
+          shopId,
+          () => soapAddServicePackage(shopId, workOrderGuid!, updatedWorkOrder),
+        );
         if (!soapResult.ok) {
           return NextResponse.json(
             { error: "Failed to add job — Protractor database issue. Please contact Protractor support." },
@@ -402,7 +507,7 @@ async function _POST(req: NextRequest) {
       userId: auth.user.email || undefined,
       vin: vin || undefined,
       jobTitle: job.title,
-      jobSource: "extension_protractor",
+      jobSource: source === "history" || source === "audit" ? "lookup" : "extension_protractor",
       repairOrderId: workOrderGuid,
     }).catch((err) => console.error("[Ext Add-to-RO] Analytics failed:", err));
 
@@ -413,6 +518,14 @@ async function _POST(req: NextRequest) {
         workOrderId: workOrderGuid,
         // Task #1094: lets the side panel snapshot this add for undo.
         servicePackageId: newServicePackageId,
+        servicePackage: {
+          title: job.title,
+          linesAdded: servicePackageLines.length,
+          ...(auditSelectionSource ? { source: auditSelectionSource } : {}),
+          ...(auditSelectionWarnings.length ? { warnings: auditSelectionWarnings } : {}),
+        },
+        ...(auditSelectionSource ? { source: auditSelectionSource } : {}),
+        ...(auditSelectionWarnings.length ? { warnings: auditSelectionWarnings } : {}),
       },
       { headers: corsHeaders }
     );

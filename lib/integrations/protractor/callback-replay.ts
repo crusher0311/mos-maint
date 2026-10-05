@@ -3,7 +3,6 @@ import {
   fetchWorkOrderById,
   upsertProtractorWorkOrderSnapshot,
 } from "@/lib/integrations/protractor";
-import * as callbackEvents from "@/lib/data/repositories/protractor-callback-events";
 import { applyProtractorTerminalCallback } from "./callback-terminal";
 
 export const TERMINAL_CALLBACK_STATUSES = new Set([
@@ -12,6 +11,10 @@ export const TERMINAL_CALLBACK_STATUSES = new Set([
   "CLOSED",
   "VOID",
 ]);
+export const CALLBACK_REPLAY_FETCH_OPTIONS = Object.freeze({
+  timeoutMs: 8_000,
+  maxRetries: 0,
+});
 
 export interface DeferredTerminalPost {
   key: string;
@@ -31,11 +34,18 @@ export async function replayDeferredTerminalPost(
     fetchWorkOrderById,
     upsertProtractorWorkOrderSnapshot,
     applyProtractorTerminalCallback,
-    markProcessed: callbackEvents.markProcessed,
   },
 ): Promise<boolean> {
-  const result = await deps.fetchWorkOrderById(event.shopId, event.objectId);
-  if (!result.ok || !result.workOrder) return false;
+  const result = await deps.fetchWorkOrderById(
+    event.shopId,
+    event.objectId,
+    CALLBACK_REPLAY_FETCH_OPTIONS,
+  );
+  if (!result.ok || !result.workOrder) {
+    // Preserve local admission/expiry evidence for the queue's narrow safety
+    // classifier. Returning false here erased it and consumed failure retries.
+    throw new Error(`Work-order callback replay failed: ${result.error || "missing data"}`);
+  }
   await deps.upsertProtractorWorkOrderSnapshot(event.shopId, result.workOrder);
   const applied = await deps.applyProtractorTerminalCallback(db, {
     shopId: event.shopId,
@@ -43,6 +53,5 @@ export async function replayDeferredTerminalPost(
     status: event.operation,
   });
   if (!applied) return false;
-  await deps.markProcessed(event.key);
   return true;
 }

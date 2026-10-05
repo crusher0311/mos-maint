@@ -14,6 +14,7 @@ import {
   selectPollCadence,
   isWebhookFirstDisabled,
 } from "./webhook-coverage";
+import { scheduleAuditReceiptForNormalizedPayload } from "@/lib/integrations/core/normalized-ingestion";
 
 const ACTIVE_STATUS_IDS = [1, 2, 3, 4];
 const TERMINAL_STATUSES = ["Invoice", "Invoiced", "Posted", "Deleted", "Void"];
@@ -453,6 +454,21 @@ async function upsertWorkOrder(
   const inspectionShared = !!(ro as any).inspectionShareDate;
   const dviDetected = inferDviFromLabelOrJobs(label, (ro as any).jobs || []) || hasInspectionUrl || inspectionShared;
   const dviComplete = inspectionShared || /complete|done|finished/i.test(label);
+
+  // Use only the poll response already being upserted. The receipt helper
+  // rejects an omitted jobs collection, while accepting an explicit [] as a
+  // complete zero-job ticket; it does not initiate a Tekmetric request.
+  try {
+    await scheduleAuditReceiptForNormalizedPayload(
+      db,
+      shopId,
+      "tekmetric",
+      { ...ro, vehicle },
+      "poll",
+    );
+  } catch (auditErr: any) {
+    console.warn(`[Tekmetric Incremental] audit receipt handoff failed for RO ${ro.id}:`, auditErr?.message || auditErr);
+  }
 
   const existing = await db.collection("tekmetric_work_orders").findOne({
     shopId: { $in: [String(shopId), Number(shopId)] },

@@ -57,6 +57,7 @@ async function run() {
     "/api/protractor/apply-canned-job",
     "/api/estimate-assist/audit",
     "/api/estimate-assist/job-builder",
+    "/api/estimate-assist/resolve-recommendation",
     "/api/vehicle/common-failures",
   ];
   for (const p of allowlisted) {

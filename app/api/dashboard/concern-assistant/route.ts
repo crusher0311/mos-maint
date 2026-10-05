@@ -12,6 +12,7 @@ import { trackApiRequest } from "@/lib/api-usage-tracker";
 import { enforceAiBudget } from "@/lib/ai-budget";
 import { isPlatformAdmin as isPlatformAdminEmail } from "@/lib/super-admins";
 import { resolveProtractorConfig, protractorFetch } from "@/lib/integrations/protractor/client";
+import { runWithProtractorInteractiveTransport } from "@/lib/integrations/protractor/interactive-context";
 import { SYMPTOM_QUESTION_GUIDE } from "@/lib/symptomQuestionGuide";
 import {
   biasSymptomGuide,
@@ -374,7 +375,8 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "workOrderId and concernText are required" }, { status: 400 });
       }
 
-      const config = await resolveProtractorConfig(session.shopId);
+      const shopId = Number(session.shopId);
+      const config = await resolveProtractorConfig(shopId);
       if (!config.configured) {
         return NextResponse.json({ error: "Protractor not configured for this shop" }, { status: 400 });
       }
@@ -383,12 +385,15 @@ export async function POST(request: NextRequest) {
       let woServiceItemId = serviceItemId;
 
       if (!woContactId || !woServiceItemId) {
-        const woResult = await protractorFetch<any>(
-          `/WorkOrder/${workOrderId}`,
-          config,
-          {},
-          0,
-          session.shopId
+        const woResult = await runWithProtractorInteractiveTransport(
+          shopId,
+          () => protractorFetch<any>(
+            `/WorkOrder/${workOrderId}`,
+            config,
+            {},
+            0,
+            shopId,
+          ),
         );
         if (woResult.ok && woResult.data) {
           if (!woContactId) woContactId = woResult.data.ContactID || woResult.data.Contact?.ID;
@@ -426,15 +431,18 @@ export async function POST(request: NextRequest) {
         },
       };
 
-      const result = await protractorFetch<any>(
-        `/WorkOrder/${workOrderId}`,
-        config,
-        {
-          method: "POST",
-          body: JSON.stringify(payload),
-        },
-        0,
-        session.shopId
+      const result = await runWithProtractorInteractiveTransport(
+        shopId,
+        () => protractorFetch<any>(
+          `/WorkOrder/${workOrderId}`,
+          config,
+          {
+            method: "POST",
+            body: JSON.stringify(payload),
+          },
+          0,
+          shopId,
+        ),
       );
 
       if (!result.ok) {
@@ -448,17 +456,21 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === "get-work-orders") {
-      const config = await resolveProtractorConfig(session.shopId);
+      const shopId = Number(session.shopId);
+      const config = await resolveProtractorConfig(shopId);
       if (!config.configured) {
         return NextResponse.json({ error: "Protractor not configured" }, { status: 400 });
       }
 
-      const result = await protractorFetch<{ ItemCollection?: any[] }>(
-        `/WorkOrder/?take=50&skip=0`,
-        config,
-        {},
-        0,
-        session.shopId
+      const result = await runWithProtractorInteractiveTransport(
+        shopId,
+        () => protractorFetch<{ ItemCollection?: any[] }>(
+          `/WorkOrder/?take=50&skip=0`,
+          config,
+          {},
+          0,
+          shopId,
+        ),
       );
 
       if (!result.ok) {

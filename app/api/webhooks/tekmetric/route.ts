@@ -6,10 +6,14 @@ import { indexTekmetricWorkOrderJobs } from "@/lib/integrations/tekmetric/job-in
 import { getVehicle, getCustomer } from "@/lib/integrations/tekmetric";
 import { invalidateCachedPlan } from "@/lib/plan-cache";
 import { triggerVhiOnWorkOrderClose, triggerVhiOnWorkOrderCreate, extractAuthorizedJobsFromTekmetricRo } from "@/lib/vhi-webhook-trigger";
-import { NormalizedIngestionService } from "@/lib/integrations/core/normalized-ingestion";
+import {
+  NormalizedIngestionService,
+  scheduleAuditReceiptForNormalizedPayload,
+} from "@/lib/integrations/core/normalized-ingestion";
 import { getRepairOrderInspectionsWithXAuth } from "@/lib/integrations/tekmetric/client";
 import { tekmetricShopIdFilter } from "@/lib/integrations/tekmetric/shop-lookup";
 import { insertWebhookLog as insertTekmetricWebhookLog } from "@/lib/data/repositories/tekmetric-ops";
+import { mayScheduleVerifiedWebhookAudit } from "@/lib/integrations/core/webhook-audit-admission";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,6 +45,7 @@ async function runWebhookNormalizedIngestion(
   tekmetricShopId: number,
   repairOrder: any,
   cached: any | null,
+  verifiedForAuditReceipt: boolean,
 ): Promise<void> {
   try {
     const shop = await db.collection("shops").findOne(tekmetricShopIdFilter(tekmetricShopId));
@@ -50,6 +55,25 @@ async function runWebhookNormalizedIngestion(
     }
     const internalShopId = Number(shop.shopId);
     const enterpriseId = shop?.enterpriseId as string | undefined;
+
+    // The webhook payload is already a receipt. Hand it off before optional
+    // VIN/customer enrichment so audit admission never causes provider I/O.
+    // Sparse envelopes are rejected by the pure helper; [] jobs is retained
+    // as a valid complete ticket.
+    if (verifiedForAuditReceipt) {
+      try {
+        await scheduleAuditReceiptForNormalizedPayload(
+          db,
+          internalShopId,
+          "tekmetric",
+          repairOrder,
+          "webhook",
+          enterpriseId,
+        );
+      } catch (err: any) {
+        console.warn(`[Tekmetric Webhook NIS] audit receipt handoff failed for RO ${repairOrder?.id}:`, err?.message || err);
+      }
+    }
 
     // The Tekmetric adapter needs full `vehicle` and `customer` objects, not
     // just IDs. Try cache fields first to avoid an API call; fall back to live
@@ -88,7 +112,12 @@ async function runWebhookNormalizedIngestion(
       "tekmetric",
       internalShopId,
       enterpriseId,
-      { dualWriteToJobIndex: false, dualWriteToRepairPatterns: true, ingestionVia: "webhook" },
+      {
+        dualWriteToJobIndex: false,
+        dualWriteToRepairPatterns: true,
+        ingestionVia: "webhook",
+        suppressAutomaticAuditReceipt: true,
+      },
     );
     const result = await ingestionService.ingestWorkOrderBatchWithAllEntities([enriched]);
     console.log(
@@ -174,6 +203,10 @@ export async function POST(req: NextRequest) {
       console.warn(`[Tekmetric Webhook] Signature rejected: ${sigError}`);
       return NextResponse.json({ error: "invalid_signature", detail: sigError }, { status: 401 });
     }
+    const verifiedForAuditReceipt = mayScheduleVerifiedWebhookAudit(
+      process.env.TEKMETRIC_WEBHOOK_SIGNING_SECRET,
+      sigError,
+    );
 
     let body: any;
     try {
@@ -447,7 +480,13 @@ export async function POST(req: NextRequest) {
         // service-jobs/line-items expansion shipped in #360 is the slow part
         // and now runs after the 200 OK has been sent back to Tekmetric.
         __deps.defer(() =>
-          runWebhookNormalizedIngestion(db, tekmetricShopId, repairOrder, cached),
+          runWebhookNormalizedIngestion(
+            db,
+            tekmetricShopId,
+            repairOrder,
+            cached,
+            verifiedForAuditReceipt,
+          ),
         );
 
         const wasInsert = !!result.upsertedId;
@@ -664,7 +703,13 @@ export async function POST(req: NextRequest) {
           const refreshedCached = await db.collection("tekmetric_work_orders").findOne(
             { workOrderId: String(roId) }
           );
-          await runWebhookNormalizedIngestion(db, tekmetricShopId, repairOrder, refreshedCached);
+          await runWebhookNormalizedIngestion(
+            db,
+            tekmetricShopId,
+            repairOrder,
+            refreshedCached,
+            verifiedForAuditReceipt,
+          );
         });
       }
       
@@ -797,7 +842,8 @@ export async function POST(req: NextRequest) {
               db,
               tekShopForNis,
               enrichedRo,
-              refreshedCached
+              refreshedCached,
+              verifiedForAuditReceipt,
             );
           });
         }

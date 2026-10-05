@@ -3,7 +3,11 @@ import { getDb } from "@/lib/mongo";
 import type { Db } from "mongodb";
 import { getOrder, getVehicle, getCustomer } from "@/lib/integrations/shopmonkey/client";
 import { invalidateCachedPlan } from "@/lib/plan-cache";
-import { NormalizedIngestionService } from "@/lib/integrations/core/normalized-ingestion";
+import {
+  NormalizedIngestionService,
+  scheduleAuditReceiptForNormalizedPayload,
+} from "@/lib/integrations/core/normalized-ingestion";
+import { mayScheduleVerifiedWebhookAudit } from "@/lib/integrations/core/webhook-audit-admission";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -127,10 +131,30 @@ async function runWebhookNormalizedIngestion(
   db: Db,
   shop: any,
   order: any,
+  verifiedForAuditReceipt: boolean,
 ): Promise<void> {
   try {
     const internalShopId = Number(shop.shopId);
     const enterpriseId = shop?.enterpriseId as string | undefined;
+
+    // Use the inbound complete-ticket payload as the receipt before optional
+    // vehicle/customer enrichment. Receipt scheduling itself never fetches
+    // from Shopmonkey; an explicit empty services/serviceItems collection is
+    // still a complete zero-job ticket.
+    if (verifiedForAuditReceipt) {
+      try {
+        await scheduleAuditReceiptForNormalizedPayload(
+          db,
+          internalShopId,
+          "shopmonkey",
+          order,
+          "webhook",
+          enterpriseId,
+        );
+      } catch (err: any) {
+        console.warn(`[Shopmonkey Webhook NIS] audit receipt handoff failed for order ${order?.id}:`, err?.message || err);
+      }
+    }
 
     let vehicle: any = order.vehicle || null;
     if (!vehicle?.vin && order.vehicleId) {
@@ -153,7 +177,12 @@ async function runWebhookNormalizedIngestion(
       "shopmonkey",
       internalShopId,
       enterpriseId,
-      { dualWriteToJobIndex: false, dualWriteToRepairPatterns: true, ingestionVia: "webhook" },
+      {
+        dualWriteToJobIndex: false,
+        dualWriteToRepairPatterns: true,
+        ingestionVia: "webhook",
+        suppressAutomaticAuditReceipt: true,
+      },
     );
     const result = await ingestionService.ingestWorkOrderBatchWithAllEntities([enriched]);
     console.log(
@@ -175,6 +204,10 @@ export async function POST(req: NextRequest) {
       console.warn(`[Shopmonkey Webhook] Signature rejected: ${sigError}`);
       return NextResponse.json({ error: "invalid_signature", detail: sigError }, { status: 401 });
     }
+    const verifiedForAuditReceipt = mayScheduleVerifiedWebhookAudit(
+      process.env.SHOPMONKEY_WEBHOOK_SIGNING_SECRET,
+      sigError,
+    );
 
     let body: any;
     try {
@@ -251,7 +284,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Defer the heavy NIS dual-write off the request thread (soft-fail).
-    __deps.defer(() => runWebhookNormalizedIngestion(db, shop, order));
+    __deps.defer(() => runWebhookNormalizedIngestion(db, shop, order, verifiedForAuditReceipt));
 
     console.log(`[Shopmonkey Webhook] order #${orderNumber} handled inline in ${Date.now() - startTime}ms`);
     return NextResponse.json({ ok: true }, { status: 200 });

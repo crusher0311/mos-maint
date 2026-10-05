@@ -46,6 +46,9 @@ export const QUEUE_NAMES = {
   TEKMETRIC_PREPASS: "tekmetric-prepass",
   DRAIN_TEKMETRIC: "drain-tekmetric",
   DRAIN_PROTRACTOR: "drain-protractor",
+  // Kept separate from backfills: automatic RO audits must be available while
+  // the night/weekend-only backfill worker is intentionally suspended.
+  ESTIMATE_AUDIT: "estimate-audit",
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
@@ -69,6 +72,27 @@ export const DEFAULT_JOB_OPTS = {
   removeOnComplete: true as const,
   removeOnFail: false as const,
 };
+
+/**
+ * Automatic audits have a shorter, deliberately bounded retry envelope than
+ * the long-running backfill queues.  The initial delay is also intentional:
+ * receipt handlers commonly observe several webhook/poll updates for one RO
+ * in a short burst, and the stable producer job id lets those updates
+ * coalesce while the job is delayed.
+ *
+ * Keep these options separate from DEFAULT_JOB_OPTS.  Changing the defaults
+ * would alter retry behavior for every existing queue.
+ */
+export const ESTIMATE_AUDIT_JOB_OPTS = {
+  delay: 4_000,
+  attempts: 3,
+  backoff: { type: "exponential" as const, delay: 5_000 },
+  removeOnComplete: true as const,
+  removeOnFail: false as const,
+};
+
+/** Producer-side deadline for audit queue Redis commands. */
+export const ESTIMATE_AUDIT_QUEUE_COMMAND_TIMEOUT_MS = 5_000;
 
 const queueCache = new Map<QueueName, BullQueue>();
 
@@ -109,4 +133,13 @@ export function __resetQueueCacheForTest(): void {
     } catch {}
   }
   queueCache.clear();
+}
+
+/** Test-only seam for producer tests; never used by application code. */
+export function __setQueueForTest(
+  name: QueueName,
+  queue: BullQueue | null,
+): void {
+  if (queue) queueCache.set(name, queue);
+  else queueCache.delete(name);
 }

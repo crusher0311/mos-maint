@@ -66,18 +66,280 @@ try {
 let isAuthenticated = false;
 // Role-derived write permission (viewer roles / readOnly flag). Conservative
 // default; refined via GET_MOS_AUTH.
-let roleCanWrite = true;
+let roleCanWrite = false;
 // Tiered session trust level (basic read-only vs verified). Derived by
 // session-tier-core.js from the login response's optional assurance /
 // capabilities fields. A basic session can never mutate, regardless of role.
 let sessionTier = null;        // raw derived object from MosSessionTierCore
-let sessionCanMutate = true;   // session permits mutations
-let sessionCanAdmin = true;    // session permits admin actions
+let sessionCanMutate = false;  // session permits mutations
+let sessionCanAdmin = false;   // session permits admin actions
 // Effective write permission consumed everywhere in the panel: BOTH the role
 // AND the session must allow writes. Recomputed by refreshEffectivePermissions.
-let currentUserCanWrite = true;
+let currentUserCanWrite = false;
 let currentContext = null;
 let currentTab = 'plan';
+
+// Estimate-audit requests can outlive both a rerun and the page context that
+// started them.  Keep a monotonic generation alongside the request's context
+// identity so a late response can never repaint a newer audit slot (the slot
+// is indexed by finding number, which is not an identity).
+let estimateAuditGeneration = 0;
+let activeEstimateAuditToken = null;
+const estimateAuditStatusCache = new Map();
+// A live/manual audit is an explicit, fresher advisor action. While its
+// context remains visible, a delayed persisted-state read must not repaint it.
+const estimateAuditManualResultPins = new Map();
+// A proactive outer-badge read can already be in flight when the advisor
+// opens Audit. Preserve that intent so its shared response opens the cache.
+const estimateAuditStatusOpenCachedContexts = new Set();
+let estimateAuditStatusRequestSequence = 0;
+let estimateAuditStatusRefreshTimer = null;
+let estimateAuditStatusInFlightContextKey = null;
+const ESTIMATE_AUDIT_STATUS_REFRESH_MS = 30000;
+
+function estimateAuditContextKey(context) {
+  if (!context) return 'no-context';
+  return JSON.stringify([
+    context.provider || '',
+    context.shopId ?? '',
+    context.roId ?? '',
+    context.tabId ?? context._tabId ?? '',
+  ]);
+}
+
+function invalidateEstimateAudit(reason) {
+  estimateAuditGeneration += 1;
+  activeEstimateAuditToken = null;
+  // This is intentionally a hard reset.  A stale finding must not remain
+  // actionable while a new RO/context is being painted.
+  if (typeof estimateAuditRecommendationStates !== 'undefined') {
+    estimateAuditRecommendationStates.clear();
+  }
+  const resultEl = document.getElementById('estimate-audit-result');
+  if (resultEl) {
+    resultEl.innerHTML = '';
+    resultEl.classList.add('hidden');
+  }
+  document.getElementById('estimate-audit-loading')?.classList.add('hidden');
+  if (reason) console.debug(`[MOS] Estimate audit invalidated: ${reason}`);
+}
+
+function captureEstimateAuditToken() {
+  return {
+    generation: estimateAuditGeneration,
+    contextKey: estimateAuditContextKey(currentContext),
+  };
+}
+
+function estimateAuditTokenIsCurrent(token) {
+  return Boolean(
+    token &&
+    token.generation === estimateAuditGeneration &&
+    token.contextKey === estimateAuditContextKey(currentContext),
+  );
+}
+
+function beginEstimateAudit() {
+  invalidateEstimateAudit('audit rerun');
+  const token = captureEstimateAuditToken();
+  estimateAuditManualResultPins.delete(token.contextKey);
+  activeEstimateAuditToken = token;
+  return token;
+}
+
+function estimateAuditStatusText(status, report, reason) {
+  const summary = report?.summary || {};
+  if (status === 'complete') {
+    if (Number(summary.critical) > 0) return `${summary.critical} critical finding${Number(summary.critical) === 1 ? '' : 's'} need review`;
+    if (Number(summary.warnings) > 0) return `${summary.warnings} warning${Number(summary.warnings) === 1 ? '' : 's'} need review`;
+    return 'Completed — no warning or critical findings';
+  }
+  const labels = {
+    pending: 'Audit is queued',
+    stale: 'Latest audit is stale',
+    partial: 'Audit completed with some checks unavailable',
+    unavailable: 'Automatic audit is unavailable',
+  };
+  return `${labels[status] || 'Audit status is unavailable'}${reason ? ` — ${reason}` : ''}`;
+}
+
+function estimateAuditReportCompleteness(report) {
+  // The evaluator's nested status is canonical. Top-level completeness and
+  // VHI skip are compatibility for reports saved before that contract.
+  if (report?.evaluation?.completeness === 'partial') return 'partial';
+  if (report?.evaluation?.completeness === 'complete') return 'complete';
+  if (report?.completeness === 'partial') return 'partial';
+  if (report?.completeness === 'complete') return 'complete';
+  return report?.vhiComparison?.status === 'skipped' ? 'partial' : 'complete';
+}
+
+function estimateAuditReportCompletenessReason(report) {
+  if (report?.evaluation?.ai?.status === 'unavailable') {
+    return report.evaluation.ai.reason || 'AI analysis was unavailable.';
+  }
+  if (report?.vhiComparison?.status === 'skipped') {
+    return report.vhiComparison.reason || 'VHI comparison was skipped.';
+  }
+  return undefined;
+}
+
+function estimateAuditCoverageHtml(report) {
+  const partial = estimateAuditReportCompleteness(report) === 'partial';
+  const reason = estimateAuditReportCompletenessReason(report);
+  return `<p style="font-size:10px; color:${partial ? '#374151' : '#166534'}; background:${partial ? '#f9fafb' : '#f0fdf4'}; border:1px solid ${partial ? '#d1d5db' : '#bbf7d0'}; border-radius:6px; padding:6px 8px; margin-bottom:8px;"><strong>${partial ? 'Partial audit coverage' : 'Completed audit coverage'}</strong> — ${escEstimate(partial ? (reason || 'Some audit checks were unavailable.') : 'Review findings before making estimate changes.')}</p>`;
+}
+
+function normalizeEstimateAuditStatus(value) {
+  const status = String(value || 'unavailable').toLowerCase();
+  return ['pending', 'stale', 'unavailable', 'partial', 'complete'].includes(status)
+    ? status
+    : 'unavailable';
+}
+
+function estimateAuditStatusVisual(status, report) {
+  if (status === 'complete' && Number(report?.summary?.critical) > 0) {
+    return { className: 'is-critical', symbol: '⛔', label: estimateAuditStatusText(status, report) };
+  }
+  if (status === 'complete' && Number(report?.summary?.warnings) > 0) {
+    return { className: 'is-warning', symbol: '⚠', label: estimateAuditStatusText(status, report) };
+  }
+  if (status === 'complete') return { className: 'is-clean', symbol: '', label: estimateAuditStatusText(status, report) };
+  return {
+    className: `is-${status}`,
+    symbol: status === 'pending' ? '…' : status === 'stale' ? '↻' : status === 'partial' ? '◐' : '?',
+    label: estimateAuditStatusText(status, report),
+  };
+}
+
+function renderEstimateAuditStatus(payload) {
+  const status = normalizeEstimateAuditStatus(payload?.status);
+  const report = payload?.report || null;
+  const visual = estimateAuditStatusVisual(status, report);
+  const statusEl = document.getElementById('estimate-audit-status');
+  const tabButton = document.querySelector('.tab-btn[data-tab="estimate"]');
+  const indicatorIds = ['estimate-audit-tab-indicator', 'estimate-audit-subtab-indicator'];
+
+  indicatorIds.forEach(id => {
+    const indicator = document.getElementById(id);
+    if (!indicator) return;
+    indicator.className = `estimate-audit-indicator ${visual.className}`;
+    indicator.textContent = visual.symbol;
+    indicator.classList.toggle('hidden', !visual.symbol);
+  });
+  if (tabButton) {
+    tabButton.setAttribute('aria-label', `Estimate Assist: ${visual.label}`);
+    tabButton.setAttribute('title', `Estimate Assist — ${visual.label}`);
+  }
+  const refreshButton = document.getElementById('estimate-audit-btn');
+  if (refreshButton && report) refreshButton.textContent = 'Refresh live audit';
+  if (!statusEl) return;
+  statusEl.className = `estimate-audit-status ${visual.className}`;
+  const updated = payload?.updatedAt ? ` Last updated ${new Date(payload.updatedAt).toLocaleString()}.` : '';
+  const detail = status === 'complete' && report
+    ? `${Number(report.summary?.critical || 0)} critical, ${Number(report.summary?.warnings || 0)} warnings.${updated}`
+    : `${payload?.reason ? escEstimate(payload.reason) : ''}${updated}`;
+  statusEl.innerHTML = `<strong>${escEstimate(visual.label)}</strong>${detail ? `<span>${detail}</span>` : ''}`;
+  statusEl.classList.remove('hidden');
+}
+
+function clearEstimateAuditStatus() {
+  estimateAuditStatusRequestSequence += 1;
+  const statusEl = document.getElementById('estimate-audit-status');
+  if (statusEl) {
+    statusEl.textContent = '';
+    statusEl.className = 'estimate-audit-status hidden';
+  }
+  ['estimate-audit-tab-indicator', 'estimate-audit-subtab-indicator'].forEach(id => {
+    const indicator = document.getElementById(id);
+    if (indicator) {
+      indicator.textContent = '';
+      indicator.className = 'estimate-audit-indicator hidden';
+    }
+  });
+  const tabButton = document.querySelector('.tab-btn[data-tab="estimate"]');
+  if (tabButton) {
+    tabButton.setAttribute('aria-label', 'Estimate Assist');
+    tabButton.setAttribute('title', 'Estimate Assist');
+  }
+  const refreshButton = document.getElementById('estimate-audit-btn');
+  if (refreshButton) refreshButton.textContent = 'Audit Current RO';
+}
+
+function openCachedEstimateAudit(report) {
+  if (!report || !currentContext?.roId) return;
+  // Opening a persisted report is read-only. It gets a fresh display token so
+  // recommendation review/add controls retain the same context guarantees as
+  // a manually run report, without running the evaluator again.
+  invalidateEstimateAudit('opening cached audit result');
+  const auditToken = captureEstimateAuditToken();
+  activeEstimateAuditToken = auditToken;
+  const resultEl = document.getElementById('estimate-audit-result');
+  if (resultEl) renderEstimateAuditReport(report, auditToken, resultEl);
+}
+
+async function fetchEstimateAuditStatus({ openCached = false } = {}) {
+  const context = currentContext;
+  if (!context?.provider || !context?.roId) return;
+  const contextKey = estimateAuditContextKey(context);
+  if (openCached) estimateAuditStatusOpenCachedContexts.add(contextKey);
+  if (estimateAuditManualResultPins.has(contextKey)) return;
+  // A slow/offline status read must not pile up every refresh interval.
+  if (estimateAuditStatusInFlightContextKey === contextKey) return;
+  const requestSequence = ++estimateAuditStatusRequestSequence;
+  estimateAuditStatusInFlightContextKey = contextKey;
+  try {
+    const result = await sendMessage({
+      action: 'GET_ESTIMATE_AUDIT_STATUS',
+      provider: context.provider,
+      shopId: context.shopId,
+      workOrderId: String(context.roId),
+    });
+    if (
+      requestSequence !== estimateAuditStatusRequestSequence ||
+      contextKey !== estimateAuditContextKey(currentContext) ||
+      estimateAuditManualResultPins.has(contextKey)
+    ) return;
+    const payload = result?.ok && result?.status
+      ? result
+      : { status: 'unavailable', reason: result?.error || 'Status could not be read.' };
+    estimateAuditStatusCache.set(contextKey, payload);
+    renderEstimateAuditStatus(payload);
+    const shouldOpenCached = estimateAuditStatusOpenCachedContexts.delete(contextKey);
+    if (shouldOpenCached && payload.report) openCachedEstimateAudit(payload.report);
+  } catch (error) {
+    if (
+      requestSequence !== estimateAuditStatusRequestSequence ||
+      contextKey !== estimateAuditContextKey(currentContext) ||
+      estimateAuditManualResultPins.has(contextKey)
+    ) return;
+    const payload = { status: 'unavailable', reason: error?.message || 'Status could not be read.' };
+    estimateAuditStatusCache.set(contextKey, payload);
+    renderEstimateAuditStatus(payload);
+    estimateAuditStatusOpenCachedContexts.delete(contextKey);
+  } finally {
+    if (estimateAuditStatusInFlightContextKey === contextKey) {
+      estimateAuditStatusInFlightContextKey = null;
+    }
+  }
+}
+
+function refreshEstimateAuditStatusWhileVisible() {
+  if (document.visibilityState === 'hidden') return;
+  void fetchEstimateAuditStatus();
+}
+
+function syncEstimateAuditStatusRefresh() {
+  if (estimateAuditStatusRefreshTimer) {
+    clearInterval(estimateAuditStatusRefreshTimer);
+    estimateAuditStatusRefreshTimer = null;
+  }
+  // The outer Estimate badge is useful before the advisor opens Estimate >
+  // Audit, so poll the one eligible active RO regardless of the selected tab.
+  // This remains one scoped status read every interval, never a fleet sweep.
+  if (currentContext?.provider && currentContext?.roId && document.visibilityState !== 'hidden') {
+    estimateAuditStatusRefreshTimer = setInterval(refreshEstimateAuditStatusWhileVisible, ESTIMATE_AUDIT_STATUS_REFRESH_MS);
+  }
+}
 
 // Client-side plan cache so revisiting an RO (tab switch or RO re-open) is
 // instant instead of re-hitting /api/extension/plan over the network every
@@ -546,6 +808,7 @@ async function init() {
 
 function applyAuthenticatedState(authStatus) {
   isAuthenticated = true;
+  updateLaborRateSession(authStatus);
   mosShops = authStatus.shops || [];
   if (authStatus.defaultExtensionTab) {
     userDefaultTab = sanitizeDefaultTab(authStatus.defaultExtensionTab);
@@ -759,7 +1022,19 @@ function setupEventListeners() {
   // Listen for context changes from background
   chrome.runtime.onMessage.addListener((message) => {
     if (message.action === 'SMS_CONTEXT_CHANGED') {
+      // Invalidate first and wait for GET_MOS_AUTH to provide the current
+      // discriminator. Never trust a delayed context broadcast to advance (or
+      // roll back) the session identity used by LABOR_RATE_APPLIED.
+      laborRateSessionDiscriminator = null;
+      invalidateLaborRateState('SMS context changed');
       updateContext(message.context);
+      // The provider proof/session discriminator can rotate without a
+      // different RO id. Refresh it before accepting a labor-rate broadcast.
+      sendMessage({ action: 'GET_MOS_AUTH' })
+        .then((auth) => {
+          if (auth?.isAuthenticated) updateLaborRateSession(auth);
+        })
+        .catch(() => {});
     }
     if (message.action === 'MOS_BOOTSTRAP_RESOLVED') {
       if (message.outcome === 'basic' || message.outcome === 'matched_user') {
@@ -774,11 +1049,17 @@ function setupEventListeners() {
             applyAuthenticatedState(auth);
           } else {
             isAuthenticated = false;
+            laborRateSessionKey = null;
+            laborRateSessionDiscriminator = null;
+            invalidateLaborRateState('session changed');
             showLoginState();
             showBootstrapOutcome(message.outcome);
           }
         }).catch(() => {
           isAuthenticated = false;
+          laborRateSessionKey = null;
+          laborRateSessionDiscriminator = null;
+          invalidateLaborRateState('session changed');
           showLoginState();
           showBootstrapOutcome(message.outcome);
         });
@@ -806,7 +1087,13 @@ function setupEventListeners() {
       loadPlan(true);
     }
     if (message.action === 'LABOR_RATE_APPLIED') {
-      if (message.success) {
+      if (!laborRateAppliedBroadcastMatchesCurrent(message)) return;
+      if (message.success && message.partialFailure) {
+        showNotification(
+          message.error || 'Some labor-rate updates failed. Review the active repair order and try again.',
+          'warning'
+        );
+      } else if (message.success) {
         const rate = typeof message.rate === 'number' ? message.rate.toFixed(2) : message.rate;
         if (message.perJob) {
           showNotification(
@@ -883,6 +1170,7 @@ async function applyPlatformAdminVisibility() {
   try {
     const auth = await sendMessage({ action: 'GET_MOS_AUTH' });
     const u = auth?.user;
+    updateLaborRateSession(auth);
     // Absorb the tiered session trust level from the same auth payload.
     applySessionTier(auth?.sessionTier);
     const isAdmin = u?.role === 'platform_admin' || u?.isPlatformAdmin === true;
@@ -916,11 +1204,17 @@ function applySessionTier(rawTier) {
   sessionCanMutate = sessionTier.canMutate !== false;
   sessionCanAdmin = sessionTier.canAdmin !== false;
   renderSessionTierBanner();
+  // applyPlatformAdminVisibility performs the role lookup asynchronously.
+  // Recompute now so a Basic session is read-only before that lookup settles.
+  refreshEffectivePermissions();
 }
 
 // Effective write permission is the AND of role permission and session trust.
 function refreshEffectivePermissions() {
-  currentUserCanWrite = !!roleCanWrite && !!sessionCanMutate;
+  const core = globalThis.MosLaborRateCore;
+  currentUserCanWrite = core
+    ? core.effectiveMutationPermission(roleCanWrite, sessionCanMutate)
+    : roleCanWrite === true && sessionCanMutate === true;
   applyMutationControlLock();
 }
 
@@ -952,6 +1246,7 @@ function applyMutationControlLock() {
   const selectors = [
     '.btn-add-toggle', '.btn-add-job', '.btn-add-canned',
     '#rates-apply-now-btn', '#rates-add-btn', '#rates-auto-apply-toggle',
+    '#rate-form-save', '.rate-group-delete-btn',
     '#add-all-declined-btn',
   ];
   document.querySelectorAll(selectors.join(',')).forEach(el => {
@@ -1081,6 +1376,17 @@ function switchJobsSubTab(subtab) {
 function switchTab(tab) {
   if (tab === 'lookup') { tab = 'jobs'; switchJobsSubTab('lookup'); }
   else if (tab === 'canned') { tab = 'jobs'; switchJobsSubTab('canned'); }
+
+  if (currentTab !== tab) {
+    invalidateEstimateAudit('panel navigation changed');
+  }
+
+  // Labor-rate responses are scoped to the panel view as well as the active
+  // SMS context. Leaving Rates must invalidate an in-flight response so a
+  // late result cannot repaint rules after the advisor has moved elsewhere.
+  if (currentTab === 'rates' && tab !== 'rates') {
+    invalidateLaborRateState('panel tab changed');
+  }
 
   // Leaving the Concern Assistant for anywhere other than itself cancels the
   // Create RO "return" mode, so a later standalone concern doesn't wrongly show
@@ -1217,15 +1523,48 @@ function switchTab(tab) {
   } else if (tab === 'create-ro') {
     initCreateRoTab();
   }
+  if (tab === 'estimate') {
+    const auditSubtabActive = document.querySelector('.estimate-subtab.active')?.dataset.subtab === 'audit';
+    if (auditSubtabActive) void fetchEstimateAuditStatus({ openCached: true });
+  }
+  syncEstimateAuditStatusRefresh();
 }
 
 function updateContext(context) {
   if (context && context.provider === 'autoflow') {
     context = enrichContextWithMosShop(context);
   }
+  if (context && typeof context === 'object') {
+    // Context broadcasts can carry the discriminator from the provider
+    // session that produced them. Rebind to the side panel's latest auth
+    // discriminator (or clear it while auth is refreshing) before computing
+    // invalidation keys, so stale broadcasts cannot strand fresh requests.
+    context = {
+      ...context,
+      laborRateSessionDiscriminator: laborRateSessionDiscriminator || null,
+    };
+  }
   
   const prevContext = currentContext;
+  const estimateAuditContextChanged =
+    estimateAuditContextKey(prevContext) !== estimateAuditContextKey(context);
+  const laborRateContextChanged =
+    laborRateContextKey(prevContext) !== laborRateContextKey(context);
   currentContext = context;
+
+  if (estimateAuditContextChanged) {
+    estimateAuditManualResultPins.clear();
+    estimateAuditStatusOpenCachedContexts.clear();
+    clearEstimateAuditStatus();
+    invalidateEstimateAudit('shop, tab, or repair-order context changed');
+    // Prime the outer tab badge as soon as a provider RO is known. This
+    // deliberately does not open/render the cached report; opening Audit
+    // remains an advisor action.
+    if (document.visibilityState !== 'hidden') void fetchEstimateAuditStatus();
+  }
+  if (laborRateContextChanged) {
+    invalidateLaborRateState('shop, tab, or repair-order context changed');
+  }
   
   if (!prevContext || !context || prevContext.roId !== context.roId || prevContext.shopId !== context.shopId) {
     keytagContextEnriched = false;
@@ -1310,6 +1649,11 @@ function updateContext(context) {
         loadCannedJobs();
       } else if (currentTab === 'specs') {
         loadVehicleSpecs();
+      } else if (currentTab === 'rates') {
+        // Rates are shop-scoped but the worker also binds the operation to
+        // the active RO/tab context. Re-load after an RO switch so the
+        // invalidated cache cannot leave the Rates panel blank.
+        loadLaborRates();
       }
     } else if (RO_INDEPENDENT_TABS.includes(currentTab)) {
       switchTab(currentTab);
@@ -1326,6 +1670,7 @@ function updateContext(context) {
     elements.hasContext.classList.add('hidden');
     document.getElementById('undo-bar')?.classList.add('hidden');
   }
+  syncEstimateAuditStatusRefresh();
 }
 
 // Features can fail to load transiently (a brief DB / shop-resolution blip on
@@ -1661,6 +2006,12 @@ async function handleLogin(e) {
 }
 
 async function handleLogout() {
+  // Invalidate before awaiting the worker so an in-flight Rates request cannot
+  // paint or merge into the old session while logout is still being handled.
+  invalidateLaborRateState('session ended');
+  invalidateEstimateAudit('session ended');
+  laborRateSessionKey = null;
+  laborRateSessionDiscriminator = null;
   await sendMessage({ action: 'MOS_LOGOUT' });
   isAuthenticated = false;
   currentContext = null;
@@ -3501,7 +3852,11 @@ async function handleSwAddFinding(service, isDraft = false) {
 // because errors are handled in here (notification) rather than thrown.
 // Task #888 — `source` marks where the job came from ('canned' makes the
 // server keep the template's own labor rate instead of the RO/cached rate).
-async function handleAddJob(job, source) {
+// `auditSelection` is an opaque source identity returned by the resolver. It
+// is deliberately separate from preview data: server-side write routes
+// rehydrate this identity before constructing a provider payload.
+async function handleAddJob(job, source, auditSelection, auditFinding, auditToken) {
+  if (auditToken && !estimateAuditTokenIsCurrent(auditToken)) return false;
   if (!currentUserCanWrite) {
     notifyReadOnlyBlocked();
     return false;
@@ -3520,16 +3875,22 @@ async function handleAddJob(job, source) {
         action: 'SW_ADD_SERVICE',
         serviceName,
         workOrderId: currentContext.roId,
-        vehicle: currentContext.vehicle || null
+        vehicle: currentContext.vehicle || null,
+        shopId: currentContext.mosShopId || currentContext.shopId,
+        ...(auditSelection ? { auditSelection } : {}),
+        ...(auditFinding ? { auditFinding } : {}),
       }, undefined, 'Still adding this job — big shops can take a minute. Please keep this panel open…');
+      if (auditToken && !estimateAuditTokenIsCurrent(auditToken)) return false;
       if (result.success) {
         showNotification(`Added: ${result.jobName || serviceName}`, 'success');
+        showAuditWriteWarnings(result);
         markServiceOnEstimate(result.jobName || serviceName, reqPlanCacheKey);
         return true;
       } else {
         throw new Error(result.error || 'Failed to add service');
       }
     } catch (err) {
+      if (auditToken && !estimateAuditTokenIsCurrent(auditToken)) return false;
       console.error('[MOS] Error adding Shop-Ware service:', err);
       showNotification(err.message, 'error');
       return false;
@@ -3597,7 +3958,7 @@ async function handleAddJob(job, source) {
           authRetryDelaysMs: [500, 1500, 4000, 8000, 12000],
           body: JSON.stringify({
             shopId: Number(mosShopId),
-            provider: currentContext.provider || sessionTier?.provider || 'protractor',
+            provider: currentContext?.provider || sessionTier?.provider || 'protractor',
             roNumber: currentContext.roId ? String(currentContext.roId) : undefined,
             vin: currentContext.vehicle?.vin || undefined,
             // Prefer the GUID captured when this RO was just created in
@@ -3606,6 +3967,8 @@ async function handleAddJob(job, source) {
             workOrderGuid: getRecentlyCreatedWoGuid(currentContext.vehicle?.vin, currentContext.roId),
             // Task #888 — 'canned' keeps the template's saved labor rate.
             source: source || undefined,
+            ...(auditSelection ? { auditSelection } : {}),
+            ...(auditFinding ? { auditFinding } : {}),
             job: jobData
           })
         }
@@ -3615,8 +3978,10 @@ async function handleAddJob(job, source) {
         // false timeout while the background still completes it.
       }, 90000, 'Still adding this job — big shops can take a minute. Please keep this panel open…');
 
+      if (auditToken && !estimateAuditTokenIsCurrent(auditToken)) return false;
       if (result.success) {
         showNotification(`Added: ${result.jobName || jobData.title}`, 'success');
+        showAuditWriteWarnings(result);
         markServiceOnEstimate(result.jobName || jobData.title, reqPlanCacheKey);
         // Task #1094: snapshot for undo (server returns the created package id).
         if (result.servicePackageId && result.workOrderId) {
@@ -3631,6 +3996,7 @@ async function handleAddJob(job, source) {
         throw new Error(result.error || 'Failed to add job to Protractor');
       }
     } catch (err) {
+      if (auditToken && !estimateAuditTokenIsCurrent(auditToken)) return false;
       console.error('[MOS] Error adding Protractor job:', err);
       showNotification(err.message, 'error');
       return false;
@@ -3671,11 +4037,17 @@ async function handleAddJob(job, source) {
       action: 'CREATE_TEKMETRIC_JOB',
       shopId: currentContext.shopId,
       roId: currentContext.roId,
-      jobData
+      jobData,
+      ...(auditSelection ? { auditSelection } : {}),
+      ...(auditFinding ? { auditFinding } : {}),
+      vehicle: currentContext.vehicle || null,
+      mosShopId: currentContext.mosShopId || resolvedMosShopId || null,
     }, undefined, 'Still adding this job — big shops can take a minute. Please keep this panel open…');
     
+    if (auditToken && !estimateAuditTokenIsCurrent(auditToken)) return false;
     if (result.success) {
       showNotification(`Added: ${result.jobName}`, 'success');
+      showAuditWriteWarnings(result);
       markServiceOnEstimate(result.jobName || jobData.name, reqPlanCacheKey);
       // Task #1094: the background snapshotted the created job id inside
       // CREATE_TEKMETRIC_JOB — just repaint the undo bar.
@@ -3685,6 +4057,7 @@ async function handleAddJob(job, source) {
       throw new Error(result.error || 'Failed to add job');
     }
   } catch (err) {
+    if (auditToken && !estimateAuditTokenIsCurrent(auditToken)) return false;
     console.error('[MOS] Error adding job:', err);
     showNotification(err.message, 'error');
     return false;
@@ -3907,36 +4280,334 @@ async function handleAddCannedJob(job) {
 let currentLaborRateRules = [];
 let currentLaborRateRulesRevision = 0;
 let currentLaborRateRulesSmsShopId = null;
+// Rules are a shop/tab/session-scoped client cache. Keep the context that was
+// actually displayed alongside the rules and revision; a response from an
+// older context must never become the basis for a write in the new one.
+let currentLaborRateRulesContext = null;
+let laborRateContextGeneration = 0;
+let laborRateOperationSequence = 0;
+let laborRateSessionKey = null;
+let laborRateSessionDiscriminator = null;
+
+function cloneLaborRateContext(context) {
+  if (!context || typeof context !== 'object') return null;
+  try {
+    return JSON.parse(JSON.stringify(context));
+  } catch (_) {
+    // Contexts are normally plain JSON objects. Keep a shallow copy as a
+    // defensive fallback so the outgoing request is still detached from the
+    // mutable currentContext object.
+    return { ...context };
+  }
+}
+
+// Labor-rate rules are shop configuration, so loading and editing them must
+// work while the provider tab is on a shop-level page with no active RO.
+// Applying a rule is the one operation that requires a captured RO.
+function getRatesContextSnapshot({ requiresRo = false } = {}) {
+  const snapshot = cloneLaborRateContext(currentContext);
+  if (!snapshot) return null;
+
+  const provider = snapshot.provider == null
+    ? ''
+    : String(snapshot.provider).trim().toLowerCase().replace(/^shop[-_]ware$/, 'shopware');
+  const tabId = snapshot._tabId ?? snapshot.tabId;
+  if (
+    provider !== 'tekmetric' ||
+    snapshot.shopId == null ||
+    snapshot.shopId === '' ||
+    tabId == null ||
+    !laborRateSessionDiscriminator ||
+    (requiresRo && (snapshot.roId == null || snapshot.roId === ''))
+  ) {
+    return null;
+  }
+
+  snapshot.provider = provider;
+  snapshot._tabId = tabId;
+  // Never trust a discriminator copied from a delayed provider-context
+  // broadcast; bind every request to the side panel's refreshed auth state.
+  snapshot.laborRateSessionDiscriminator = laborRateSessionDiscriminator;
+  return snapshot;
+}
+
+function laborRateContextKey(context) {
+  if (!context || typeof context !== 'object') return null;
+  const tabId = context._tabId ?? context.tabId ?? null;
+  return JSON.stringify({
+    provider: context.provider == null ? '' : String(context.provider).trim().toLowerCase().replace(/^shop[-_]ware$/, 'shopware'),
+    shopId: context.shopId == null ? null : String(context.shopId),
+    tabId: tabId == null ? null : String(tabId),
+    roId: context.roId == null ? null : String(context.roId),
+    sessionDiscriminator: context.laborRateSessionDiscriminator || null,
+  });
+}
+
+function laborRateContextScopeKey(context) {
+  if (!context || typeof context !== 'object') return null;
+  const tabId = context._tabId ?? context.tabId ?? null;
+  return JSON.stringify({
+    provider: context.provider == null ? '' : String(context.provider).trim().toLowerCase().replace(/^shop[-_]ware$/, 'shopware'),
+    shopId: context.shopId == null ? null : String(context.shopId),
+    tabId: tabId == null ? null : String(tabId),
+  });
+}
+
+function laborRateSessionFingerprint(authStatus) {
+  if (!authStatus?.isAuthenticated) return null;
+  const tier = authStatus.sessionTier && typeof authStatus.sessionTier === 'object'
+    ? authStatus.sessionTier
+    : {};
+  const user = authStatus.user && typeof authStatus.user === 'object'
+    ? authStatus.user
+    : {};
+  // The bearer token is intentionally not exposed to the panel. These
+  // server-provided session fields are enough to distinguish the normal
+  // login/bootstrap/logout transitions without putting credentials in UI
+  // state or telemetry.
+  return JSON.stringify({
+    authSource: authStatus.authSource || tier.authSource || null,
+    userId: user.id || user._id || user.email || null,
+    displayName: tier.displayName || null,
+    expiresAt: tier.expiresAt || null,
+    assurance: tier.assurance || tier.tier || null,
+  });
+}
+
+function laborRateAppliedBroadcastMatchesCurrent(message) {
+  const core = globalThis.MosLaborRateCore;
+  if (core?.appliedBroadcastMatchesCurrent) {
+    return core.appliedBroadcastMatchesCurrent(
+      message,
+      currentContext,
+      laborRateSessionDiscriminator,
+    );
+  }
+  const messageContext = message?.context;
+  const currentTabId = currentContext?._tabId ?? currentContext?.tabId;
+  const messageTabId = message?.tabId ?? messageContext?._tabId ?? messageContext?.tabId;
+  return Boolean(
+    messageContext &&
+    currentContext &&
+    currentTabId != null &&
+    messageTabId != null &&
+    String(currentTabId) === String(messageTabId) &&
+    laborRateContextScopeKey(messageContext) === laborRateContextScopeKey(currentContext) &&
+    messageContext.roId != null &&
+    currentContext.roId != null &&
+    String(messageContext.roId) === String(currentContext.roId) &&
+    message?.sessionDiscriminator &&
+    laborRateSessionDiscriminator &&
+    message.sessionDiscriminator === laborRateSessionDiscriminator
+  );
+}
+
+function synchronizeLaborRateContextSession() {
+  if (!currentContext || !laborRateSessionDiscriminator) return;
+  if (currentContext.laborRateSessionDiscriminator === laborRateSessionDiscriminator) return;
+  // Auth/bootstrap can rotate the provider session without another
+  // SMS_CONTEXT_CHANGED message. Keep the unchanged provider/shop/RO context
+  // usable for fresh requests, while invalidateLaborRateState below rejects
+  // every operation captured under the previous discriminator.
+  currentContext.laborRateSessionDiscriminator = laborRateSessionDiscriminator;
+}
+
+function updateLaborRateSession(authStatus) {
+  const nextKey = laborRateSessionFingerprint(authStatus);
+  const nextDiscriminator = authStatus?.laborRateSessionDiscriminator || null;
+  const sessionChanged = laborRateSessionKey !== nextKey;
+  const discriminatorChanged = laborRateSessionDiscriminator !== nextDiscriminator;
+  laborRateSessionKey = nextKey;
+  laborRateSessionDiscriminator = nextDiscriminator;
+  synchronizeLaborRateContextSession();
+  if (!sessionChanged && !discriminatorChanged) return;
+  invalidateLaborRateState('session changed');
+  // A session refresh can arrive without another SMS_CONTEXT_CHANGED
+  // broadcast. Re-fetch only when Rates is already the visible panel.
+  if (nextKey && currentContext?.shopId && currentTab === 'rates' && isAuthenticated) {
+    loadLaborRates();
+  }
+}
+
+function invalidateLaborRateState(reason) {
+  laborRateContextGeneration += 1;
+  laborRateOperationSequence += 1;
+  currentLaborRateRules = [];
+  currentLaborRateRulesRevision = 0;
+  currentLaborRateRulesSmsShopId = null;
+  currentLaborRateRulesContext = null;
+
+  // Clear the visible cache immediately. This is deliberately not a
+  // best-effort repaint: keeping old cards visible while a new shop loads
+  // invites an accidental save against the wrong location.
+  if (elements.ratesLoading) elements.ratesLoading.classList.add('hidden');
+  if (elements.ratesList) elements.ratesList.innerHTML = '';
+  if (elements.ratesEmptyHint) elements.ratesEmptyHint.classList.add('hidden');
+  if (elements.ratesMain) elements.ratesMain.classList.add('hidden');
+  if (elements.ratesError) {
+    elements.ratesError.textContent = '';
+    elements.ratesError.classList.add('hidden');
+  }
+  resetLaborRateApplyButton();
+  if (reason) {
+    console.debug('[LaborRate] Invalidated cached rules:', reason);
+  }
+}
+
+function startLaborRateOperation(context, { requiresRo = false } = {}) {
+  return {
+    sequence: ++laborRateOperationSequence,
+    generation: laborRateContextGeneration,
+    sessionKey: laborRateSessionKey,
+    context: cloneLaborRateContext(context),
+    contextKey: laborRateContextKey(context),
+    requiresRo,
+  };
+}
+
+function isCurrentLaborRateOperation(operation) {
+  if (!operation) return false;
+  return operation.sequence === laborRateOperationSequence &&
+    operation.generation === laborRateContextGeneration &&
+    operation.sessionKey === laborRateSessionKey &&
+    operation.contextKey === laborRateContextKey(currentContext);
+}
+
+function laborRateResponseMatchesContext(result, requestContext) {
+  if (!result || !requestContext) return false;
+  // Newer workers may echo the complete context. If they do, validate it;
+  // older workers only return smsShopId, which is still checked below.
+  if (result.context) {
+    if (laborRateContextScopeKey(result.context) !== laborRateContextScopeKey(requestContext)) {
+      return false;
+    }
+    if (result.context.roId != null && requestContext.roId != null &&
+        String(result.context.roId) !== String(requestContext.roId)) {
+      return false;
+    }
+    if (result.context.laborRateSessionDiscriminator &&
+        requestContext.laborRateSessionDiscriminator &&
+        result.context.laborRateSessionDiscriminator !== requestContext.laborRateSessionDiscriminator) {
+      return false;
+    }
+  }
+  if (result.sessionDiscriminator && laborRateSessionDiscriminator &&
+      result.sessionDiscriminator !== laborRateSessionDiscriminator) {
+    return false;
+  }
+  if (result.smsShopId != null && requestContext.shopId != null &&
+      String(result.smsShopId) !== String(requestContext.shopId)) {
+    return false;
+  }
+  if (
+    result.sessionDiscriminator &&
+    requestContext.laborRateSessionDiscriminator &&
+    result.sessionDiscriminator !== requestContext.laborRateSessionDiscriminator
+  ) {
+    return false;
+  }
+  if (
+    result.context?.laborRateSessionDiscriminator &&
+    requestContext.laborRateSessionDiscriminator &&
+    result.context.laborRateSessionDiscriminator !== requestContext.laborRateSessionDiscriminator
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function laborRateErrorMessage(result, operation) {
+  if (result?.contextChanged) {
+    return 'The active shop or browser tab changed while this request was in progress. Return to Rates and reload the rules for the current location.';
+  }
+
+  const code = String(result?.code || result?.serverCode || '').toUpperCase();
+  const raw = String(result?.error || '').trim();
+  if (code === 'TOKEN_INVALID' || code === 'TOKEN_EXPIRED' || code === 'TOKEN_REVOKED' ||
+      result?._mosStatus === 401 || result?.status === 401) {
+    return 'Your MOS.Tools session may have expired. Sign in again, then reload Labor Rates.';
+  }
+  if (code === 'SHOP_FORBIDDEN' || result?._mosStatus === 403 || result?.status === 403) {
+    return 'You do not have permission to manage labor rates for this location. Switch to an authorized shop or contact your MOS.Tools administrator.';
+  }
+  if (!operation?.context?.shopId) {
+    return 'Open the intended shop location in your shop-management tab, then reload Labor Rates.';
+  }
+  if (operation?.requiresRo && !operation?.context?.roId) {
+    return 'Open a repair order in your shop-management tab before applying a labor rate.';
+  }
+  if (/no accessible shop|not found|shop.*(access|configured)|unauthori[sz]ed|forbidden/i.test(raw)) {
+    return 'Labor rates are not available for this location. Verify the active shop and your MOS.Tools access, then reload Labor Rates.';
+  }
+  if (raw) return `Labor rates could not be loaded for this location: ${raw}`;
+  return 'Labor rates could not be loaded for this location. Verify the active shop and reload Labor Rates.';
+}
+
+function showLaborRateError(result, operation) {
+  const message = laborRateErrorMessage(result, operation);
+  elements.ratesError.textContent = message;
+  elements.ratesError.classList.remove('hidden');
+  elements.ratesMain.classList.remove('hidden');
+  return message;
+}
+
+function resetLaborRateApplyButton() {
+  if (!elements.ratesApplyNowBtn) return;
+  elements.ratesApplyNowBtn.disabled = !currentUserCanWrite;
+  elements.ratesApplyNowBtn.innerHTML = `
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="20 6 9 17 4 12"/>
+    </svg>
+    Apply Now
+  `;
+}
 
 async function loadLaborRates() {
+  const requestContext = getRatesContextSnapshot();
+  if (!requestContext) {
+    elements.ratesLoading.classList.add('hidden');
+    showLaborRateError({ error: 'missing shop context' }, { context: requestContext });
+    return;
+  }
+
+  const operation = startLaborRateOperation(requestContext);
   elements.ratesLoading.classList.remove('hidden');
   elements.ratesMain.classList.add('hidden');
   elements.ratesError.classList.add('hidden');
 
   try {
-    const autoApplyResult = await sendMessage({ action: 'GET_LABOR_RATE_AUTO_APPLY' });
+    const autoApplyResult = await sendMessage({
+      action: 'GET_LABOR_RATE_AUTO_APPLY',
+      context: requestContext,
+    });
+    if (!isCurrentLaborRateOperation(operation)) return;
     elements.ratesAutoApplyToggle.checked = !!autoApplyResult.enabled;
 
-    const result = await sendMessage({ action: 'GET_LABOR_RATE_RULES' });
+    const result = await sendMessage({
+      action: 'GET_LABOR_RATE_RULES',
+      context: requestContext,
+    });
+    if (!isCurrentLaborRateOperation(operation)) return;
     elements.ratesLoading.classList.add('hidden');
 
-    if (result.success) {
+    if (result.success && laborRateResponseMatchesContext(result, requestContext)) {
       currentLaborRateRules = result.rules || [];
       currentLaborRateRulesRevision = Number(result.revision ?? 0);
       currentLaborRateRulesSmsShopId = result.smsShopId ?? null;
+      currentLaborRateRulesContext = requestContext;
       renderLaborRateRules();
       elements.ratesMain.classList.remove('hidden');
     } else {
-      elements.ratesError.textContent = result.error || 'Failed to load rules';
-      elements.ratesError.classList.remove('hidden');
-      elements.ratesMain.classList.remove('hidden');
+      showLaborRateError(
+        result.success ? { contextChanged: true } : result,
+        operation,
+      );
     }
   } catch (err) {
+    if (!isCurrentLaborRateOperation(operation)) return;
     console.error('[MOS] Error loading labor rates:', err);
     elements.ratesLoading.classList.add('hidden');
-    elements.ratesError.textContent = err.message || 'Failed to load labor rate groups';
-    elements.ratesError.classList.remove('hidden');
-    elements.ratesMain.classList.remove('hidden');
+    showLaborRateError({ error: err.message || 'request failed' }, operation);
   }
 }
 
@@ -4021,6 +4692,10 @@ function renderLaborRateRules() {
   elements.ratesList.querySelectorAll('.rate-group-delete-btn').forEach(btn => {
     btn.addEventListener('click', () => handleDeleteRateGroup(btn.dataset.ruleId));
   });
+  // These buttons are rendered after the session-tier lock is applied during
+  // login. Re-apply it here so a Basic session cannot mutate freshly loaded
+  // labor-rate cards.
+  applyMutationControlLock();
 }
 
 function showRateForm(editRule = null) {
@@ -4110,6 +4785,16 @@ function hideRateForm() {
 
 async function handleSaveRateGroup() {
   if (!currentUserCanWrite) { notifyReadOnlyBlocked(); return; }
+  const requestContext = getRatesContextSnapshot();
+  if (!requestContext) {
+    showNotification('Open the intended shop location before saving labor rates.', 'error');
+    return;
+  }
+  if (!currentLaborRateRulesContext ||
+      laborRateContextKey(currentLaborRateRulesContext) !== laborRateContextKey(requestContext)) {
+    showNotification('The active shop or tab changed. Reload Labor Rates before saving.', 'warning');
+    return;
+  }
   const name = elements.rateFormName.value.trim();
   const makesRaw = elements.rateFormMakes.value.trim();
   const categoriesRaw = elements.rateFormCategories.value.trim();
@@ -4186,17 +4871,32 @@ async function handleSaveRateGroup() {
 
   elements.rateFormSave.disabled = true;
   elements.rateFormSaveText.textContent = 'Saving...';
+  const operation = startLaborRateOperation(requestContext);
+  const expectedRevision = currentLaborRateRulesRevision;
 
   try {
     const result = await sendMessage({
       action: 'SAVE_LABOR_RATE_RULES',
       rules: updatedRules,
-      expectedRevision: currentLaborRateRulesRevision,
+      expectedRevision,
       smsShopId: currentLaborRateRulesSmsShopId,
+      context: requestContext,
     });
+    if (!isCurrentLaborRateOperation(operation)) {
+      // The request may have completed against the old shop, but its result is
+      // no longer safe to display or merge into the current shop's cache.
+      showNotification('The active shop or tab changed while saving. Reload Labor Rates for the current location.', 'warning');
+      return;
+    }
+    if (!laborRateResponseMatchesContext(result, requestContext)) {
+      showNotification(laborRateErrorMessage({ contextChanged: true }, operation), 'warning');
+      return;
+    }
     if (result.success) {
-      currentLaborRateRules = updatedRules;
+      currentLaborRateRules = result.rules || updatedRules;
       currentLaborRateRulesRevision = Number(result.revision ?? currentLaborRateRulesRevision + 1);
+      currentLaborRateRulesSmsShopId = result.smsShopId ?? currentLaborRateRulesSmsShopId ?? requestContext.shopId;
+      currentLaborRateRulesContext = requestContext;
       renderLaborRateRules();
       hideRateForm();
       showNotification(editId ? 'Group updated' : 'Group added', 'success');
@@ -4205,16 +4905,24 @@ async function handleSaveRateGroup() {
         currentLaborRateRules = result.rules;
         currentLaborRateRulesRevision = Number(result.revision ?? currentLaborRateRulesRevision);
         currentLaborRateRulesSmsShopId = result.smsShopId ?? currentLaborRateRulesSmsShopId;
+        currentLaborRateRulesContext = requestContext;
         renderLaborRateRules();
         hideRateForm();
       }
-      showNotification(result.error || 'Failed to save', 'error');
+      showNotification(laborRateErrorMessage(result, operation), 'error');
     }
   } catch (err) {
-    showNotification(err.message || 'Failed to save labor rate group', 'error');
+    if (isCurrentLaborRateOperation(operation)) {
+      showNotification(laborRateErrorMessage({ error: err.message || 'Failed to save labor rate group' }, operation), 'error');
+    } else {
+      showNotification('The active shop or tab changed while saving. Reload Labor Rates for the current location.', 'warning');
+    }
   } finally {
-    elements.rateFormSave.disabled = false;
-    elements.rateFormSaveText.textContent = editId ? 'Update Group' : 'Add Group';
+    if (isCurrentLaborRateOperation(operation)) {
+      elements.rateFormSave.disabled = false;
+      elements.rateFormSaveText.textContent = editId ? 'Update Group' : 'Add Group';
+      applyMutationControlLock();
+    }
   }
 }
 
@@ -4226,12 +4934,24 @@ function handleEditRateGroup(ruleId) {
 }
 
 async function handleDeleteRateGroup(ruleId) {
+  if (!currentUserCanWrite) { notifyReadOnlyBlocked(); return; }
   const rule = currentLaborRateRules.find(r => r.id === ruleId);
   if (!rule) return;
 
   if (!confirm(`Delete "${rule.name}"? This cannot be undone.`)) return;
 
+  const requestContext = getRatesContextSnapshot();
+  if (!requestContext) {
+    showNotification('Open the intended shop location before deleting labor rates.', 'error');
+    return;
+  }
+  if (!currentLaborRateRulesContext ||
+      laborRateContextKey(currentLaborRateRulesContext) !== laborRateContextKey(requestContext)) {
+    showNotification('The active shop or tab changed. Reload Labor Rates before deleting.', 'warning');
+    return;
+  }
   const updatedRules = currentLaborRateRules.filter(r => r.id !== ruleId);
+  const operation = startLaborRateOperation(requestContext);
 
   try {
     const result = await sendMessage({
@@ -4239,10 +4959,21 @@ async function handleDeleteRateGroup(ruleId) {
       rules: updatedRules,
       expectedRevision: currentLaborRateRulesRevision,
       smsShopId: currentLaborRateRulesSmsShopId,
+      context: requestContext,
     });
+    if (!isCurrentLaborRateOperation(operation)) {
+      showNotification('The active shop or tab changed while deleting. Reload Labor Rates for the current location.', 'warning');
+      return;
+    }
+    if (!laborRateResponseMatchesContext(result, requestContext)) {
+      showNotification(laborRateErrorMessage({ contextChanged: true }, operation), 'warning');
+      return;
+    }
     if (result.success) {
       currentLaborRateRules = result.rules || updatedRules;
       currentLaborRateRulesRevision = Number(result.revision ?? currentLaborRateRulesRevision + 1);
+      currentLaborRateRulesSmsShopId = result.smsShopId ?? currentLaborRateRulesSmsShopId ?? requestContext.shopId;
+      currentLaborRateRulesContext = requestContext;
       renderLaborRateRules();
       showNotification(`"${rule.name}" deleted`, 'info');
     } else {
@@ -4250,21 +4981,28 @@ async function handleDeleteRateGroup(ruleId) {
         currentLaborRateRules = result.rules;
         currentLaborRateRulesRevision = Number(result.revision ?? currentLaborRateRulesRevision);
         currentLaborRateRulesSmsShopId = result.smsShopId ?? currentLaborRateRulesSmsShopId;
+        currentLaborRateRulesContext = requestContext;
         renderLaborRateRules();
       }
-      showNotification(result.error || 'Failed to delete', 'error');
+      showNotification(laborRateErrorMessage(result, operation), 'error');
     }
   } catch (err) {
-    showNotification(err.message || 'Failed to delete group', 'error');
+    if (isCurrentLaborRateOperation(operation)) {
+      showNotification(laborRateErrorMessage({ error: err.message || 'Failed to delete group' }, operation), 'error');
+    } else {
+      showNotification('The active shop or tab changed while deleting. Reload Labor Rates for the current location.', 'warning');
+    }
   }
 }
 
 async function handleApplyLaborRateNow() {
   if (!currentUserCanWrite) { notifyReadOnlyBlocked(); return; }
-  if (!currentContext?.roId) {
+  const requestContext = getRatesContextSnapshot({ requiresRo: true });
+  if (!requestContext) {
     showNotification('Navigate to a repair order first', 'error');
     return;
   }
+  const operation = startLaborRateOperation(requestContext, { requiresRo: true });
 
   elements.ratesApplyNowBtn.disabled = true;
   elements.ratesApplyNowBtn.innerHTML = `
@@ -4273,27 +5011,44 @@ async function handleApplyLaborRateNow() {
   `;
 
   try {
-    const result = await sendMessage({ action: 'APPLY_LABOR_RATE_NOW' });
-    if (result.success) {
+    const result = await sendMessage({
+      action: 'APPLY_LABOR_RATE_NOW',
+      context: requestContext,
+    });
+    if (!isCurrentLaborRateOperation(operation)) {
+      showNotification('The active shop, repair order, or browser tab changed while applying. Reload Rates and try again.', 'warning');
+      return;
+    }
+    if (!laborRateResponseMatchesContext(result, requestContext)) {
+      showNotification(laborRateErrorMessage({ contextChanged: true }, operation), 'warning');
+      return;
+    }
+    if (result.success && result.partialFailure) {
       showNotification(
-        `Labor rate updated: "${result.ruleName}" → $${result.rate.toFixed(2)}/hr`,
+        result.error || 'Some labor-rate updates failed. Review the active repair order and try again.',
+        'warning',
+      );
+    } else if (result.success) {
+      const rate = typeof result.rate === 'number'
+        ? result.rate.toFixed(2)
+        : String(result.rate ?? '');
+      showNotification(
+        `Labor rate updated: "${result.ruleName}" → $${rate}/hr`,
         'success'
       );
     } else if (result.noMatch) {
       showNotification('No matching rule for this vehicle', 'info');
     } else {
-      showNotification(result.error || 'Failed to apply labor rate', 'error');
+      showNotification(laborRateErrorMessage(result, operation), 'error');
     }
   } catch (err) {
-    showNotification(err.message || 'Failed to apply labor rate', 'error');
+    if (isCurrentLaborRateOperation(operation)) {
+      showNotification(laborRateErrorMessage({ error: err.message || 'Failed to apply labor rate' }, operation), 'error');
+    } else {
+      showNotification('The active shop, repair order, or browser tab changed while applying. Reload Rates and try again.', 'warning');
+    }
   } finally {
-    elements.ratesApplyNowBtn.disabled = false;
-    elements.ratesApplyNowBtn.innerHTML = `
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="20 6 9 17 4 12"/>
-      </svg>
-      Apply Now
-    `;
+    if (isCurrentLaborRateOperation(operation)) resetLaborRateApplyButton();
   }
 }
 
@@ -6176,6 +6931,7 @@ function hideConcernError() {
 // ==================== ESTIMATE ASSIST ====================
 let estimateLanguageMode = 'customer';
 
+const estimateAuditRecommendationStates = new Map();
 function escEstimate(str) {
   if (!str) return '';
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -6203,6 +6959,12 @@ function initEstimateAssist() {
       const subtab = btn.dataset.subtab;
       document.getElementById('estimate-builder-panel').classList.toggle('hidden', subtab !== 'builder');
       document.getElementById('estimate-audit-panel').classList.toggle('hidden', subtab !== 'audit');
+      if (subtab === 'audit') {
+        const cached = estimateAuditStatusCache.get(estimateAuditContextKey(currentContext));
+        if (cached?.report) openCachedEstimateAudit(cached.report);
+        void fetchEstimateAuditStatus({ openCached: true });
+      }
+      syncEstimateAuditStatusRefresh();
     });
   });
 
@@ -6238,6 +7000,10 @@ function initEstimateAssist() {
   });
 
   auditBtn.addEventListener('click', () => runEstimateAudit());
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'hidden') refreshEstimateAuditStatusWhileVisible();
+    syncEstimateAuditStatusRefresh();
+  });
 }
 
 // One-click add for a related/upsell job row (Task #854). Fetches the job's
@@ -6540,6 +7306,66 @@ async function runEstimateBuilder() {
   }
 }
 
+function auditRecommendationSourcePayload(candidate) {
+  const source = estimateCandidateSource(candidate);
+  if (!source || typeof source !== 'object' || !source.kind || !source.id) return null;
+  return { source: { ...source } };
+}
+
+// Shared by the manual evaluator and persisted automatic-audit status reader.
+// A cached report is advisory until an advisor explicitly reviews/adds a job;
+// rendering it must therefore preserve the exact recommendation confirmation
+// controls and context token used for a live audit.
+function renderEstimateAuditReport(report, auditToken, resultEl) {
+  const scoreColor = report.summary.score >= 85 ? '#16a34a' : report.summary.score >= 60 ? '#d97706' : '#dc2626';
+  const scoreBg = report.summary.score >= 85 ? '#f0fdf4' : report.summary.score >= 60 ? '#fffbeb' : '#fef2f2';
+  let html = `
+    <div style="display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:4px; margin-bottom:10px;">
+      <div style="background:${scoreBg}; border-radius:6px; padding:6px; text-align:center;"><div style="font-size:9px; color:var(--gray-500);">Score</div><div style="font-size:18px; font-weight:700; color:${scoreColor};">${escEstimate(report.summary.score)}</div></div>
+      <div style="background:#fef2f2; border-radius:6px; padding:6px; text-align:center;"><div style="font-size:9px; color:var(--gray-500);">Critical</div><div style="font-size:18px; font-weight:700; color:#dc2626;">${escEstimate(report.summary.critical)}</div></div>
+      <div style="background:#fffbeb; border-radius:6px; padding:6px; text-align:center;"><div style="font-size:9px; color:var(--gray-500);">Warn</div><div style="font-size:18px; font-weight:700; color:#d97706;">${escEstimate(report.summary.warnings)}</div></div>
+      <div style="background:#eff6ff; border-radius:6px; padding:6px; text-align:center;"><div style="font-size:9px; color:var(--gray-500);">Info</div><div style="font-size:18px; font-weight:700; color:#2563eb;">${escEstimate(report.summary.info)}</div></div>
+    </div>`;
+  html += estimateAuditCoverageHtml(report);
+  if (report.vehicleDisplay) {
+    html += `<p style="font-size:11px; color:var(--gray-500); margin-bottom:8px;">${escEstimate(report.vehicleDisplay)}${report.workOrderNumber ? ' &middot; WO# ' + escEstimate(report.workOrderNumber) : ''}</p>`;
+  }
+  if (report.vhiComparison?.status === 'skipped') {
+    html += `<p style="font-size:10px; color:var(--gray-500); background:var(--gray-50, #f9fafb); border:1px solid var(--gray-200, #e5e7eb); border-radius:6px; padding:6px 8px; margin-bottom:8px;">VHI comparison skipped${report.vhiComparison.reason ? ' — ' + escEstimate(report.vhiComparison.reason) : ''}.</p>`;
+  }
+  if (!Array.isArray(report.findings) || report.findings.length === 0) {
+    html += '<p style="font-size:12px; color:#16a34a; text-align:center; padding:16px;">No issues found - this estimate looks complete!</p>';
+  } else {
+    const severityStyles = {
+      critical: { bg: '#fef2f2', border: '#fecaca', badge: '#dc2626', badgeBg: '#fee2e2' },
+      warning: { bg: '#fffbeb', border: '#fde68a', badge: '#d97706', badgeBg: '#fef3c7' },
+      info: { bg: '#eff6ff', border: '#bfdbfe', badge: '#2563eb', badgeBg: '#dbeafe' },
+    };
+    for (const [findingIndex, finding] of report.findings.entries()) {
+      const style = severityStyles[finding.severity] || severityStyles.info;
+      html += `
+        <div class="estimate-audit-finding" data-finding-index="${findingIndex}" style="background:${style.bg}; border:1px solid ${style.border}; border-radius:6px; padding:8px; margin-bottom:6px;">
+          <div style="display:flex; align-items:center; gap:4px; margin-bottom:3px; flex-wrap:wrap;"><span style="font-size:9px; font-weight:700; padding:1px 5px; background:${style.badgeBg}; color:${style.badge}; border-radius:8px; text-transform:uppercase;">${escEstimate(finding.severity)}</span><span style="font-size:10px; color:var(--gray-500);">${escEstimate(finding.category)}</span><span style="font-size:10px; color:var(--gray-400);">${Math.round((finding.confidence || 0) * 100)}%</span></div>
+          <div style="font-size:12px; font-weight:600; color:var(--gray-800); margin-bottom:2px;">${escEstimate(finding.title)}</div>
+          <div style="font-size:11px; color:var(--gray-600); line-height:1.3;">${escEstimate(finding.description)}</div>
+          ${finding.suggestedAction ? `<div style="font-size:11px; color:var(--gray-500); margin-top:4px; font-style:italic;">${escEstimate(finding.suggestedAction)}</div>` : ''}
+          ${finding.suggestedJobTitle ? `<div style="display:flex; gap:4px; margin-top:4px;"><button class="estimate-audit-review-btn" data-finding-index="${findingIndex}" style="font-size:10px; padding:3px 8px; background:white; border:1px solid var(--gray-300); border-radius:4px; cursor:pointer;">+ Review matches</button></div><div class="estimate-audit-recommendation-slot" data-recommendation-slot></div>` : ''}
+        </div>`;
+    }
+  }
+  resultEl.innerHTML = html;
+  resultEl.classList.remove('hidden');
+  resultEl.querySelectorAll('.estimate-audit-review-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!estimateAuditTokenIsCurrent(auditToken)) return;
+      const findingIndex = Number(btn.dataset.findingIndex);
+      const finding = report.findings[findingIndex];
+      if (finding) await resolveAuditRecommendation(finding, findingIndex, resultEl, report, auditToken);
+    });
+  });
+  bindAuditRecommendationControls(resultEl, report);
+}
+
 async function runEstimateAudit() {
   const loadingEl = document.getElementById('estimate-audit-loading');
   const resultEl = document.getElementById('estimate-audit-result');
@@ -6550,6 +7376,17 @@ async function runEstimateAudit() {
     return;
   }
 
+  const auditToken = beginEstimateAudit();
+  // A manual result is authoritative for this visible RO. Do not let an
+  // earlier lightweight-status response repaint its freshness/state.
+  estimateAuditStatusRequestSequence += 1;
+  // Keep the request bound to the context that started it.  `currentContext`
+  // is mutable and may be replaced while either the live page read or the
+  // server audit is in flight.
+  const auditContext = {
+    ...currentContext,
+    vehicle: currentContext.vehicle ? { ...currentContext.vehicle } : currentContext.vehicle,
+  };
   loadingEl.classList.remove('hidden');
   resultEl.classList.add('hidden');
   resultEl.innerHTML = '';
@@ -6561,13 +7398,13 @@ async function runEstimateAudit() {
     // yet (open/in-progress ROs, freshly added estimate lines). If the
     // live fetch fails or yields nothing, fall back to the server-side
     // lookup by RO id — exactly the old behavior.
-    const auditBody = { workOrderId: String(currentContext.roId) };
-    if (currentContext.provider === 'tekmetric') {
+    const auditBody = { workOrderId: String(auditContext.roId) };
+    if (auditContext.provider === 'tekmetric') {
       try {
         const liveJobs = await sendMessage({
           action: 'GET_RO_AUDIT_LINE_ITEMS',
-          shopId: currentContext.shopId,
-          roId: currentContext.roId
+          shopId: auditContext.shopId,
+          roId: auditContext.roId
         });
         if (liveJobs?.success && Array.isArray(liveJobs.lineItems) && liveJobs.lineItems.length > 0) {
           auditBody.lineItems = liveJobs.lineItems;
@@ -6578,15 +7415,16 @@ async function runEstimateAudit() {
         console.warn('[MOS] Audit live-jobs fetch failed, using server lookup:', liveErr?.message || liveErr);
       }
     }
-    if (currentContext.vehicle && (currentContext.vehicle.year || currentContext.vehicle.make)) {
+    if (auditContext.vehicle && (auditContext.vehicle.year || auditContext.vehicle.make)) {
       auditBody.vehicleInfo = {
-        year: currentContext.vehicle.year,
-        make: currentContext.vehicle.make,
-        model: currentContext.vehicle.model,
-        mileage: currentContext.scrapedOdometer || currentContext.mileage || undefined
+        year: auditContext.vehicle.year,
+        make: auditContext.vehicle.make,
+        model: auditContext.vehicle.model,
+        mileage: auditContext.scrapedOdometer || auditContext.mileage || undefined
       };
     }
 
+    if (!estimateAuditTokenIsCurrent(auditToken)) return;
     const result = await sendMessage({
       action: 'MOS_API_REQUEST',
       endpoint: '/api/estimate-assist/audit',
@@ -6596,6 +7434,7 @@ async function runEstimateAudit() {
       }
     });
 
+    if (!estimateAuditTokenIsCurrent(auditToken)) return;
     loadingEl.classList.add('hidden');
 
     if (result.error) {
@@ -6612,6 +7451,17 @@ async function runEstimateAudit() {
     if (!result.ok || !result.report) throw new Error('No audit report returned');
 
     const report = result.report;
+    const status = estimateAuditReportCompleteness(report);
+    const statusPayload = {
+      ok: true,
+      status,
+      report,
+      reason: status === 'partial' ? estimateAuditReportCompletenessReason(report) : undefined,
+      updatedAt: report.auditDate,
+    };
+    estimateAuditManualResultPins.set(auditToken.contextKey, auditToken);
+    estimateAuditStatusCache.set(estimateAuditContextKey(auditContext), statusPayload);
+    renderEstimateAuditStatus(statusPayload);
     const scoreColor = report.summary.score >= 85 ? '#16a34a' : report.summary.score >= 60 ? '#d97706' : '#dc2626';
     const scoreBg = report.summary.score >= 85 ? '#f0fdf4' : report.summary.score >= 60 ? '#fffbeb' : '#fef2f2';
 
@@ -6635,6 +7485,7 @@ async function runEstimateAudit() {
         </div>
       </div>`;
 
+    html += estimateAuditCoverageHtml(report);
     if (report.vehicleDisplay) {
       html += `<p style="font-size:11px; color:var(--gray-500); margin-bottom:8px;">${escEstimate(report.vehicleDisplay)}${report.workOrderNumber ? ' &middot; WO# ' + escEstimate(report.workOrderNumber) : ''}</p>`;
     }
@@ -6655,10 +7506,10 @@ async function runEstimateAudit() {
         info: { bg: '#eff6ff', border: '#bfdbfe', badge: '#2563eb', badgeBg: '#dbeafe' }
       };
 
-      for (const finding of report.findings) {
+      for (const [findingIndex, finding] of report.findings.entries()) {
         const s = severityStyles[finding.severity] || severityStyles.info;
         html += `
-          <div style="background:${s.bg}; border:1px solid ${s.border}; border-radius:6px; padding:8px; margin-bottom:6px;">
+          <div class="estimate-audit-finding" data-finding-index="${findingIndex}" style="background:${s.bg}; border:1px solid ${s.border}; border-radius:6px; padding:8px; margin-bottom:6px;">
             <div style="display:flex; align-items:center; gap:4px; margin-bottom:3px; flex-wrap:wrap;">
               <span style="font-size:9px; font-weight:700; padding:1px 5px; background:${s.badgeBg}; color:${s.badge}; border-radius:8px; text-transform:uppercase;">${escEstimate(finding.severity)}</span>
               <span style="font-size:10px; color:var(--gray-500);">${escEstimate(finding.category)}</span>
@@ -6669,9 +7520,9 @@ async function runEstimateAudit() {
             ${finding.suggestedAction ? `<div style="font-size:11px; color:var(--gray-500); margin-top:4px; font-style:italic;">${escEstimate(finding.suggestedAction)}</div>` : ''}
             ${finding.suggestedJobTitle ? `
               <div style="display:flex; gap:4px; margin-top:4px;">
-                <button class="estimate-audit-build-btn" data-job-title="${escEstimate(finding.suggestedJobTitle)}" style="font-size:10px; padding:3px 8px; background:white; border:1px solid var(--gray-300); border-radius:4px; cursor:pointer;">+ Build Estimate</button>
-                <button class="estimate-audit-add-to-ro-btn" data-job-title="${escEstimate(finding.suggestedJobTitle)}" data-finding-desc="${escEstimate(finding.description)}" style="font-size:10px; padding:3px 8px; background:#2563eb; color:white; border:none; border-radius:4px; cursor:pointer;">+ Add to RO</button>
+                <button class="estimate-audit-review-btn" data-finding-index="${findingIndex}" style="font-size:10px; padding:3px 8px; background:white; border:1px solid var(--gray-300); border-radius:4px; cursor:pointer;">+ Review matches</button>
               </div>` : ''}
+            ${finding.suggestedJobTitle ? '<div class="estimate-audit-recommendation-slot" data-recommendation-slot></div>' : ''}
           </div>`;
       }
     }
@@ -6679,52 +7530,18 @@ async function runEstimateAudit() {
     resultEl.innerHTML = html;
     resultEl.classList.remove('hidden');
 
-    resultEl.querySelectorAll('.estimate-audit-build-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const title = btn.dataset.jobTitle;
-        if (title) {
-          document.getElementById('estimate-job-search').value = title;
-          document.querySelector('.estimate-subtab[data-subtab="builder"]').click();
-          runEstimateBuilder();
-        }
-      });
-    });
-
-    resultEl.querySelectorAll('.estimate-audit-add-to-ro-btn').forEach(btn => {
+    resultEl.querySelectorAll('.estimate-audit-review-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
-        const title = btn.dataset.jobTitle || '';
-        const desc = btn.dataset.findingDesc || '';
-
-        const job = {
-          title: title,
-          name: title,
-          description: desc,
-          note: desc,
-          laborItems: [{ name: title, hours: 1 }],
-          parts: []
-        };
-
-        btn.disabled = true;
-        btn.textContent = 'Adding...';
-        // handleAddJob reports failures via its return value (it notifies and
-        // swallows errors internally), so check the boolean.
-        const ok = await handleAddJob(job);
-        if (ok) {
-          btn.textContent = 'Added!';
-          btn.style.background = '#16a34a';
-        } else {
-          btn.textContent = 'Failed';
-          btn.style.background = '#dc2626';
-        }
-        setTimeout(() => {
-          btn.textContent = '+ Add to RO';
-          btn.style.background = '#2563eb';
-          btn.disabled = false;
-        }, 2000);
+        if (!estimateAuditTokenIsCurrent(auditToken)) return;
+        const findingIndex = Number(btn.dataset.findingIndex);
+        const finding = report.findings[findingIndex];
+        if (finding) await resolveAuditRecommendation(finding, findingIndex, resultEl, report, auditToken);
       });
     });
+    bindAuditRecommendationControls(resultEl, report);
 
   } catch (err) {
+    if (!estimateAuditTokenIsCurrent(auditToken)) return;
     loadingEl.classList.add('hidden');
     resultEl.innerHTML = `<p style="color:#dc2626; font-size:12px; padding:8px;">${escEstimate(err.message || 'Audit failed')}</p>`;
     resultEl.classList.remove('hidden');
@@ -8537,4 +9354,592 @@ function autoDviChecklistPayload() {
   return (autoDviData?.items || [])
     .filter((it) => it.source !== 'recall')
     .map((it) => ({ itemId: it.id, name: it.name, serviceKey: it.serviceKey || null }));
+}
+
+function estimateCandidateTitle(candidate) {
+  return String(candidate?.title || candidate?.name || candidate?.job?.title || 'Untitled job');
+}
+
+function estimateLineIsIncomplete(line) {
+  const description = String(line?.description || line?.name || line?.title || '').trim();
+  const quantity = estimateLineNumber(line?.quantity ?? line?.hours ?? 1);
+  const type = String(line?.lineType || line?.type || '').toLowerCase();
+  return !description || quantity == null || (type !== 'labor' && estimateLineNumber(line?.extendedPrice ?? line?.total ?? line?.amount ?? line?.price ?? line?.unitPrice) == null);
+}
+
+async function buildAuditGeneratedFallback(finding, findingIndex, resultEl, report, auditToken) {
+  if (!finding?.suggestedJobTitle) return;
+  const key = String(findingIndex);
+  const state = estimateAuditRecommendationStates.get(key);
+  const token = auditToken || state?.auditToken || activeEstimateAuditToken;
+  if (!state || !estimateAuditTokenIsCurrent(token)) return;
+  state.auditToken = token;
+  state.fallbackLoading = true;
+  estimateAuditRecommendationStates.set(key, state);
+  renderAuditRecommendationReview(finding, findingIndex, resultEl, report);
+  const auditVehicle = estimateAuditVehicle(currentContext);
+  try {
+    const result = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: '/api/estimate-assist/job-builder',
+      options: {
+        method: 'POST',
+        body: JSON.stringify({
+          jobNameOrId: finding.suggestedJobTitle,
+          ...auditVehicle,
+          languageMode: estimateLanguageMode,
+        }),
+      },
+    });
+    if (result.error) throw new Error(result.error);
+    if (!result.ok || !result.estimate) throw new Error('Generated estimate fallback failed.');
+    if (
+      !estimateAuditTokenIsCurrent(token) ||
+      estimateAuditRecommendationStates.get(key) !== state
+    ) return;
+    state.fallbackLoading = false;
+    state.fallbackJob = auditGeneratedFallbackJob(result.estimate, finding.suggestedJobTitle);
+    state.error = '';
+  } catch (error) {
+    if (
+      !estimateAuditTokenIsCurrent(token) ||
+      estimateAuditRecommendationStates.get(key) !== state
+    ) return;
+    state.fallbackLoading = false;
+    state.error = error.message || 'Generated estimate fallback failed.';
+  }
+  estimateAuditRecommendationStates.set(key, state);
+  renderAuditRecommendationReview(finding, findingIndex, resultEl, report);
+}
+
+function showAuditWriteWarnings(result) {
+  const warnings = Array.isArray(result?.warnings)
+    ? result.warnings
+    : Array.isArray(result?.servicePackage?.warnings)
+      ? result.servicePackage.warnings
+      : [];
+  if (warnings.length > 0) {
+    showNotification(`Added with review note: ${estimateWarningText(warnings[0])}`, 'info');
+  }
+}
+
+function estimateCandidateSourceLabel(candidate) {
+  const source = estimateCandidateSource(candidate);
+  if (typeof candidate?.source === 'string' && candidate.source.trim()) return candidate.source;
+  if (source && typeof source === 'object') {
+    const kind = String(source.kind || source.type || '').toLowerCase();
+    const base = source.label || source.name || source.listSource ||
+      (kind === 'canned' ? 'Canned job' : kind === 'history' ? 'Shop history' : source.sourceSystem);
+    const workOrder = source.workOrderNumber || source.workOrderId;
+    return `${base || 'Existing job'}${workOrder ? ` (RO ${workOrder})` : ''}`;
+  }
+  return String(candidate?.sourceLabel || candidate?.sourceType || 'Existing job');
+}
+
+function renderAuditRecommendationReview(finding, findingIndex, resultEl, report) {
+  const slot = auditRecommendationSlot(resultEl, findingIndex);
+  if (!slot) return;
+  const state = estimateAuditRecommendationStates.get(String(findingIndex)) || {
+    status: 'unavailable',
+    candidates: [],
+    warnings: [],
+  };
+  if (state.auditToken && !estimateAuditTokenIsCurrent(state.auditToken)) return;
+  const candidates = Array.isArray(state.candidates) ? state.candidates : [];
+  let html = '<div style="margin-top:8px; border-top:1px solid var(--gray-200); padding-top:8px;">';
+
+  if (state.loading) {
+    html += '<div style="font-size:11px; color:var(--gray-500);">Looking for reusable shop jobs and vehicle history…</div></div>';
+    slot.innerHTML = html;
+    return;
+  }
+  if (state.error) {
+    html += `<div style="font-size:11px; color:#dc2626; margin-bottom:5px;">${escEstimate(state.error)}</div>`;
+  }
+  const warnings = (Array.isArray(state.warnings) ? state.warnings : []).map(estimateWarningText);
+  if (warnings.length > 0) {
+    html += `<div style="background:#fffbeb; border:1px solid #fde68a; border-radius:5px; padding:6px 8px; margin-bottom:6px;"><div style="font-size:10px; font-weight:700; color:#92400e;">Review warnings</div><ul style="font-size:10px; color:#78350f; margin:3px 0 0 14px; padding:0;">${warnings.map(warning => `<li>${escEstimate(warning)}</li>`).join('')}</ul></div>`;
+  }
+
+  if (state.fallbackLoading) {
+    html += '<div style="font-size:11px; color:var(--gray-500);">Building an explicit generated estimate fallback…</div></div>';
+    slot.innerHTML = html;
+    return;
+  }
+
+  if (state.fallbackJob) {
+    const fallback = state.fallbackJob;
+    const labor = fallback.laborItems?.[0];
+    html += `
+      <div style="background:#f5f3ff; border:1px solid #ddd6fe; border-radius:5px; padding:7px; margin-bottom:6px;">
+        <div style="font-size:10px; font-weight:700; color:#6d28d9;">Generated estimate fallback</div>
+        <div style="font-size:12px; font-weight:600; color:var(--gray-800); margin-top:2px;">${escEstimate(fallback.title)}</div>
+        <div style="font-size:10px; color:var(--gray-600); margin-top:3px;">Labor: ${escEstimate(labor?.hours || 1)}h · ${escEstimate(fallback.parts?.length || 0)} part${fallback.parts?.length === 1 ? '' : 's'}</div>
+        <div style="font-size:11px; color:var(--gray-600); margin-top:4px;">This fallback is generated content, not a selected shop source.</div>
+        <button class="estimate-audit-fallback-add-btn" data-finding-index="${findingIndex}" style="font-size:10px; margin-top:6px; padding:4px 8px; background:#7c3aed; color:white; border:none; border-radius:4px; cursor:pointer;">Add generated estimate to RO</button>
+      </div>
+    `;
+    html += '</div>';
+    slot.innerHTML = html;
+    bindAuditRecommendationControls(resultEl, report);
+    return;
+  }
+
+  if (candidates.length === 0) {
+    const unavailable = state.status === 'unavailable';
+    html += `
+      <div style="font-size:11px; color:${unavailable ? '#92400e' : 'var(--gray-600)'}; margin-bottom:5px;">${unavailable
+        ? 'Existing-source lookup is temporarily unavailable, so no match could be verified.'
+        : 'No suitable existing shop job or vehicle-history match was found.'}</div>
+      <button class="estimate-audit-fallback-btn" data-finding-index="${findingIndex}" style="font-size:10px; padding:4px 8px; background:white; border:1px solid #7c3aed; color:#6d28d9; border-radius:4px; cursor:pointer;">Use generated estimate fallback</button>
+    `;
+    html += '</div>';
+    slot.innerHTML = html;
+    bindAuditRecommendationControls(resultEl, report);
+    return;
+  }
+
+  html += `<div style="font-size:10px; font-weight:700; color:var(--gray-600); margin-bottom:5px;">Select an existing source before adding “${escEstimate(finding.suggestedJobTitle)}”</div>`;
+  candidates.forEach((candidate, candidateIndex) => {
+    const id = estimateCandidateId(candidate, candidateIndex);
+    const checked = state.selectedCandidateId === id;
+    const lines = estimateCandidateLines(candidate);
+    const hydrating = state.hydratingCandidateIndex === candidateIndex;
+    const candidateWarnings = (Array.isArray(candidate.warnings) ? candidate.warnings : []).map(estimateWarningText);
+    const source = estimateCandidateSource(candidate);
+    const relevance = candidate.relevance && typeof candidate.relevance === 'object'
+      ? [candidate.relevance.band, candidate.relevance.vehicleMatch, candidate.relevance.reason].filter(Boolean).join(' · ')
+      : (candidate.vehicleRelevance || '');
+    html += `
+      <label style="display:block; background:${checked ? '#eff6ff' : 'white'}; border:1px solid ${checked ? '#60a5fa' : 'var(--gray-200)'}; border-radius:5px; padding:7px; margin-bottom:5px; cursor:pointer;">
+        <div style="display:flex; gap:5px; align-items:flex-start;">
+          <input type="radio" name="estimate-audit-candidate-${findingIndex}" data-candidate-index="${candidateIndex}" ${checked ? 'checked' : ''} style="margin-top:2px;">
+          <div style="min-width:0; flex:1;">
+            <div style="font-size:12px; font-weight:700; color:var(--gray-800);">${escEstimate(estimateCandidateTitle(candidate))}</div>
+            <div style="font-size:10px; color:var(--gray-500); margin-top:2px;">Source: <strong>${escEstimate(estimateCandidateSourceLabel(candidate))}</strong>${source?.sourceSystem ? ` · ${escEstimate(source.sourceSystem)}` : ''}</div>
+            ${relevance ? `<div style="font-size:10px; color:#2563eb; margin-top:2px;">Vehicle relevance: ${escEstimate(relevance)}</div>` : ''}
+            ${hydrating ? '<div style="font-size:10px; color:#2563eb; margin-top:4px;">Loading verified source lines…</div>' : lines.length > 0 ? `<div style="margin-top:5px;">${lines.map(line => `
+              <div style="display:flex; justify-content:space-between; gap:5px; font-size:10px; color:var(--gray-600); border-top:1px solid var(--gray-100); padding-top:2px;">
+                <span style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escEstimate(line.description || line.name || 'Line item')} × ${escEstimate(line.quantity ?? line.hours ?? 1)}</span>
+                <span style="white-space:nowrap;">${escEstimate(estimateLinePrice(line))}</span>
+              </div>`).join('')}</div>` : '<div style="font-size:10px; color:#dc2626; margin-top:4px;">Line details unavailable — this candidate cannot be confirmed.</div>'}
+            ${candidateWarnings.length > 0 ? `<ul style="font-size:10px; color:#92400e; margin:4px 0 0 14px; padding:0;">${candidateWarnings.map(warning => `<li>${escEstimate(warning)}</li>`).join('')}</ul>` : ''}
+          </div>
+        </div>
+      </label>
+    `;
+  });
+  html += `
+    <button class="estimate-audit-confirm-btn" data-finding-index="${findingIndex}" ${state.selectedCandidateId && state.hydratingCandidateIndex == null ? '' : 'disabled'} style="font-size:10px; padding:4px 8px; background:#2563eb; color:white; border:none; border-radius:4px; cursor:${state.selectedCandidateId && state.hydratingCandidateIndex == null ? 'pointer' : 'not-allowed'}; opacity:${state.selectedCandidateId && state.hydratingCandidateIndex == null ? '1' : '.55'};">Confirm selected existing job</button>
+    <button class="estimate-audit-fallback-btn" data-finding-index="${findingIndex}" style="font-size:10px; margin-left:4px; padding:4px 8px; background:white; border:1px solid #7c3aed; color:#6d28d9; border-radius:4px; cursor:pointer;">Use generated fallback</button>
+  `;
+  html += '</div>';
+  slot.innerHTML = html;
+  bindAuditRecommendationControls(resultEl, report);
+}
+
+async function hydrateAuditCandidatePreview(finding, findingIndex, candidateIndex, resultEl, report) {
+  const key = String(findingIndex);
+  const state = estimateAuditRecommendationStates.get(key);
+  const candidate = state?.candidates?.[candidateIndex];
+  const source = estimateCandidateSource(candidate);
+  const auditToken = state?.auditToken || activeEstimateAuditToken;
+  if (
+    !state ||
+    !candidate ||
+    !source?.kind ||
+    !source?.id ||
+    !estimateAuditTokenIsCurrent(auditToken)
+  ) return;
+  state.auditToken = auditToken;
+
+  const hydrationRequest = (state.hydrationRequest || 0) + 1;
+  state.hydrationRequest = hydrationRequest;
+  state.hydratingCandidateIndex = candidateIndex;
+  state.error = '';
+  estimateAuditRecommendationStates.set(key, state);
+  renderAuditRecommendationReview(finding, findingIndex, resultEl, report);
+  const auditVehicle = estimateAuditVehicle(currentContext);
+
+  try {
+    const result = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: '/api/estimate-assist/resolve-recommendation',
+      options: {
+        method: 'POST',
+        body: JSON.stringify({
+          mode: 'preview',
+          selection: { source: { ...source } },
+          finding: {
+            suggestedJobTitle: finding.suggestedJobTitle,
+            suggestedJobId: finding.suggestedJobId || null,
+          },
+          vehicle: auditVehicle,
+        }),
+      },
+    });
+    if (result.error) throw new Error(result.error);
+    if (!result.ok || !result.resolution) throw new Error('Selected source details were unavailable.');
+
+    const currentState = estimateAuditRecommendationStates.get(key);
+    if (
+      !estimateAuditTokenIsCurrent(auditToken) ||
+      currentState !== state ||
+      state.hydrationRequest !== hydrationRequest
+    ) return;
+    const resolution = result.resolution;
+    const hydratedCandidate = result.candidate ||
+      (Array.isArray(resolution.candidates) ? resolution.candidates[0] : null);
+    state.hydratingCandidateIndex = null;
+    if (!hydratedCandidate) {
+      state.selectedCandidateId = null;
+      state.status = resolution.status || 'no_match';
+      state.error = state.status === 'unavailable'
+        ? 'This source could not be verified right now. Use the generated estimate fallback or try again.'
+        : 'This source no longer matches the audit finding. Choose another source or use the generated fallback.';
+    } else {
+      // Replace the thin search row with the server-hydrated candidate. The
+      // source identity remains the server-returned identity; only its lines,
+      // title and warnings are adopted by the preview.
+      state.candidates[candidateIndex] = hydratedCandidate;
+      state.selectedCandidateId = estimateCandidateId(hydratedCandidate, candidateIndex);
+      state.status = 'candidates';
+      state.warnings = [
+        ...(Array.isArray(state.warnings) ? state.warnings : []),
+        ...(Array.isArray(resolution.warnings) ? resolution.warnings : []),
+      ];
+    }
+  } catch (error) {
+    const currentState = estimateAuditRecommendationStates.get(key);
+    if (
+      !estimateAuditTokenIsCurrent(auditToken) ||
+      currentState !== state ||
+      state.hydrationRequest !== hydrationRequest
+    ) return;
+    state.hydratingCandidateIndex = null;
+    state.selectedCandidateId = null;
+    state.status = 'unavailable';
+    state.error = error.message || 'Selected source details were unavailable.';
+  }
+  estimateAuditRecommendationStates.set(key, state);
+  renderAuditRecommendationReview(finding, findingIndex, resultEl, report);
+}
+
+async function resolveAuditRecommendation(finding, findingIndex, resultEl, report, auditToken) {
+  if (!finding?.suggestedJobTitle) return;
+  const key = String(findingIndex);
+  const token = auditToken || activeEstimateAuditToken;
+  if (!estimateAuditTokenIsCurrent(token)) return;
+  const state = {
+    status: 'resolving',
+    candidates: [],
+    warnings: [],
+    loading: true,
+    auditToken: token,
+  };
+  estimateAuditRecommendationStates.set(key, state);
+  renderAuditRecommendationReview(finding, findingIndex, resultEl, report);
+  const auditVehicle = estimateAuditVehicle(currentContext);
+  try {
+    const result = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: '/api/estimate-assist/resolve-recommendation',
+      options: {
+        method: 'POST',
+        body: JSON.stringify({
+          finding: {
+            suggestedJobTitle: finding.suggestedJobTitle,
+            suggestedJobId: finding.suggestedJobId || null,
+          },
+          vehicle: auditVehicle,
+        }),
+      },
+    });
+    if (result.error) throw new Error(result.error);
+    if (!result.ok || !result.resolution) throw new Error('Existing job lookup was unavailable.');
+    if (
+      !estimateAuditTokenIsCurrent(token) ||
+      estimateAuditRecommendationStates.get(key) !== state
+    ) return;
+    const resolution = result.resolution;
+    estimateAuditRecommendationStates.set(key, {
+      status: resolution.status || 'no_match',
+      candidates: Array.isArray(resolution.candidates) ? resolution.candidates : [],
+      warnings: Array.isArray(resolution.warnings) ? resolution.warnings : [],
+      loading: false,
+      auditToken: token,
+    });
+    renderAuditRecommendationReview(finding, findingIndex, resultEl, report);
+  } catch (error) {
+    if (
+      !estimateAuditTokenIsCurrent(token) ||
+      estimateAuditRecommendationStates.get(key) !== state
+    ) return;
+    estimateAuditRecommendationStates.set(key, {
+      status: 'unavailable',
+      candidates: [],
+      warnings: [],
+      loading: false,
+      error: error.message || 'Existing job lookup was unavailable.',
+      auditToken: token,
+    });
+    renderAuditRecommendationReview(finding, findingIndex, resultEl, report);
+  }
+}
+
+function estimateLineNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function auditRecommendationJob(candidate) {
+  const lines = estimateCandidateLines(candidate);
+  return {
+    title: estimateCandidateTitle(candidate),
+    name: estimateCandidateTitle(candidate),
+    description: candidate?.description || candidate?.customerDescription || candidate?.note || '',
+    note: candidate?.description || candidate?.customerDescription || candidate?.note || '',
+    lines,
+    laborItems: lines
+      .filter(line => String(line.lineType || line.type || '').toLowerCase() === 'labor')
+      .map(line => ({
+        name: line.description || line.name || estimateCandidateTitle(candidate),
+        hours: estimateLineNumber(line.hours ?? line.quantity) || 1,
+        ...(estimateLineNumber(line.unitPrice) > 0 ? { rate: estimateLineNumber(line.unitPrice) } : {}),
+      })),
+    parts: lines
+      .filter(line => String(line.lineType || line.type || '').toLowerCase() === 'part')
+      .map(line => ({
+        name: line.description || line.name || 'Part',
+        partNumber: line.partNumber || '',
+        brand: line.manufacturer || line.brand || '',
+        quantity: estimateLineNumber(line.quantity) || 1,
+        cost: estimateLineNumber(line.cost) || estimateLineNumber(line.unitPrice) || 0,
+        retail: estimateLineNumber(line.unitPrice) || estimateLineNumber(line.extendedPrice) || 0,
+        ...(estimateLineNumber(line.cost) > 0 ? { unitCost: estimateLineNumber(line.cost) } : {}),
+      })),
+  };
+}
+
+function estimateCandidateSource(candidate) {
+  const source = candidate?.sourceIdentity || candidate?.source;
+  if (source && typeof source === 'object') return source;
+  return candidate?.sourceIdentity || null;
+}
+
+function estimateLinePrice(line) {
+  const value = line?.extendedPrice ?? line?.total ?? line?.amount ?? line?.price ?? line?.unitPrice;
+  const number = estimateLineNumber(value);
+  return number == null ? 'Price unavailable' : `$${number.toFixed(2)}`;
+}
+
+function estimateWarningText(warning) {
+  if (typeof warning === 'string') return warning;
+  if (warning && typeof warning === 'object') return String(warning.message || warning.code || JSON.stringify(warning));
+  return String(warning || 'Review warning');
+}
+
+function auditRecommendationSlot(resultEl, findingIndex) {
+  const finding = Array.from(resultEl.querySelectorAll('.estimate-audit-finding'))
+    .find(element => element.dataset.findingIndex === String(findingIndex));
+  return finding?.querySelector('[data-recommendation-slot]') || null;
+}
+
+function bindAuditRecommendationControls(resultEl, report) {
+  resultEl.querySelectorAll('[data-candidate-index]').forEach(radio => {
+    if (radio.matches('input[type="radio"]')) {
+      radio.classList.add('estimate-audit-candidate-radio');
+    }
+  });
+  // The class is added above for compatibility with older extension CSS; bind
+  // Bind listeners for radios that were just classified.
+  resultEl.querySelectorAll('.estimate-audit-candidate-radio').forEach(radio => {
+    if (radio._mosRecommendationBound) return;
+    radio._mosRecommendationBound = true;
+    radio.addEventListener('change', () => {
+      const findingIndex = Number(radio.closest('[data-finding-index]')?.dataset.findingIndex);
+      const state = estimateAuditRecommendationStates.get(String(findingIndex));
+      const candidateIndex = Number(radio.dataset.candidateIndex);
+      const candidate = state?.candidates?.[candidateIndex];
+      if (!state || !candidate || !estimateAuditTokenIsCurrent(state.auditToken)) return;
+      state.selectedCandidateId = estimateCandidateId(candidate, candidateIndex);
+      estimateAuditRecommendationStates.set(String(findingIndex), state);
+      const finding = report.findings[findingIndex];
+      if (finding) {
+        renderAuditRecommendationReview(finding, findingIndex, resultEl, report);
+        void hydrateAuditCandidatePreview(finding, findingIndex, candidateIndex, resultEl, report);
+      }
+    });
+  });
+  resultEl.querySelectorAll('.estimate-audit-confirm-btn').forEach(btn => {
+    if (btn._mosRecommendationBound) return;
+    btn._mosRecommendationBound = true;
+    btn.addEventListener('click', () => {
+      const findingIndex = Number(btn.dataset.findingIndex);
+      const state = estimateAuditRecommendationStates.get(String(findingIndex));
+      if (!state || !estimateAuditTokenIsCurrent(state.auditToken)) return;
+      const candidateIndex = state?.candidates?.findIndex((candidate, index) =>
+        estimateCandidateId(candidate, index) === state.selectedCandidateId);
+      const candidate = candidateIndex != null && candidateIndex >= 0 ? state.candidates[candidateIndex] : null;
+      if (!candidate) return;
+      const lines = estimateCandidateLines(candidate);
+      const auditSelection = auditRecommendationSourcePayload(candidate);
+      state.confirmedCandidateId = null;
+      state.confirmedJob = null;
+      state.auditSelection = null;
+      if (lines.length === 0) {
+        state.error = 'This existing job has no usable line details. Use the generated estimate fallback instead.';
+      } else if (!auditSelection) {
+        state.error = 'This match has no authorized source identity and cannot be added.';
+      } else {
+        state.confirmedCandidateId = state.selectedCandidateId;
+        state.confirmedJob = auditRecommendationJob(candidate);
+        state.auditSelection = auditSelection;
+        state.error = lines.some(estimateLineIsIncomplete)
+          ? 'This package has incomplete line pricing. Review the source before adding it to the RO.'
+          : '';
+      }
+      estimateAuditRecommendationStates.set(String(findingIndex), state);
+      const finding = report.findings[findingIndex];
+      if (finding && estimateAuditTokenIsCurrent(state.auditToken)) {
+        renderConfirmedAuditRecommendation(finding, findingIndex, resultEl, report);
+      }
+    });
+  });
+  resultEl.querySelectorAll('.estimate-audit-fallback-btn').forEach(btn => {
+    if (btn._mosRecommendationBound) return;
+    btn._mosRecommendationBound = true;
+    btn.addEventListener('click', () => buildAuditGeneratedFallback(
+      report.findings[Number(btn.dataset.findingIndex)],
+      Number(btn.dataset.findingIndex),
+      resultEl,
+      report,
+      estimateAuditRecommendationStates.get(String(btn.dataset.findingIndex))?.auditToken,
+    ));
+  });
+  resultEl.querySelectorAll('.estimate-audit-fallback-add-btn').forEach(btn => {
+    if (btn._mosRecommendationBound) return;
+    btn._mosRecommendationBound = true;
+    btn.addEventListener('click', async () => {
+      const findingIndex = Number(btn.dataset.findingIndex);
+      const state = estimateAuditRecommendationStates.get(String(findingIndex));
+      const auditToken = state?.auditToken;
+      if (!state?.fallbackJob || !estimateAuditTokenIsCurrent(auditToken)) return;
+      btn.disabled = true;
+      btn.textContent = 'Adding…';
+      const ok = await handleAddJob(state.fallbackJob, 'audit', null, null, auditToken);
+      if (
+        !estimateAuditTokenIsCurrent(auditToken) ||
+        estimateAuditRecommendationStates.get(String(findingIndex)) !== state
+      ) return;
+      btn.textContent = ok ? 'Added!' : 'Failed';
+      btn.style.background = ok ? '#16a34a' : '#dc2626';
+      if (!ok) btn.disabled = false;
+    });
+  });
+}
+
+function renderConfirmedAuditRecommendation(finding, findingIndex, resultEl, report) {
+  const slot = auditRecommendationSlot(resultEl, findingIndex);
+  if (!slot) return;
+  const state = estimateAuditRecommendationStates.get(String(findingIndex));
+  if (!state || !estimateAuditTokenIsCurrent(state.auditToken)) return;
+  if (!state.confirmedJob) {
+    renderAuditRecommendationReview(finding, findingIndex, resultEl, report);
+    return;
+  }
+  const source = state.confirmedJob;
+  const lines = estimateCandidateLines(source);
+  const warning = state.error ? `<div style="font-size:10px; color:#92400e; background:#fffbeb; border:1px solid #fde68a; border-radius:5px; padding:5px; margin-bottom:5px;">${escEstimate(state.error)}</div>` : '';
+  slot.innerHTML = `
+    <div style="margin-top:8px; border-top:1px solid var(--gray-200); padding-top:8px;">
+      <div style="font-size:10px; font-weight:700; color:#166534; margin-bottom:4px;">Selected source lines — ${escEstimate(estimateCandidateSourceLabel(state.candidates.find((candidate, index) => estimateCandidateId(candidate, index) === state.confirmedCandidateId)))}</div>
+      ${warning}
+      ${lines.map(line => `<div style="display:flex; justify-content:space-between; gap:5px; font-size:10px; color:var(--gray-600);"><span>${escEstimate(line.description || line.name)} × ${escEstimate(line.quantity ?? line.hours ?? 1)}</span><span>${escEstimate(estimateLinePrice(line))}</span></div>`).join('')}
+      <button class="estimate-audit-selected-add-btn" data-finding-index="${findingIndex}" style="font-size:10px; margin-top:6px; padding:4px 8px; background:#2563eb; color:white; border:none; border-radius:4px; cursor:pointer;">Add selected job to RO</button>
+    </div>`;
+  bindAuditRecommendationControls(resultEl, report);
+  const addBtn = slot.querySelector('.estimate-audit-selected-add-btn');
+  if (addBtn) {
+    addBtn.addEventListener('click', async () => {
+      const auditToken = state.auditToken;
+      if (
+        !estimateAuditTokenIsCurrent(auditToken) ||
+        estimateAuditRecommendationStates.get(String(findingIndex)) !== state
+      ) return;
+      addBtn.disabled = true;
+      addBtn.textContent = 'Adding…';
+      const ok = await handleAddJob(
+        state.confirmedJob,
+        state.auditSelection?.source?.kind || 'audit',
+        state.auditSelection,
+        finding,
+        auditToken,
+      );
+      if (
+        !estimateAuditTokenIsCurrent(auditToken) ||
+        estimateAuditRecommendationStates.get(String(findingIndex)) !== state
+      ) return;
+      addBtn.textContent = ok ? 'Added!' : 'Failed';
+      addBtn.style.background = ok ? '#16a34a' : '#dc2626';
+      if (!ok) addBtn.disabled = false;
+      if (ok && state.error) {
+        state.error = '';
+        estimateAuditRecommendationStates.set(String(findingIndex), state);
+      }
+    });
+  }
+}
+
+function auditGeneratedFallbackJob(estimate, title) {
+  const recommendedHours = estimateLineNumber(estimate?.laborHours?.recommended) ||
+    estimateLineNumber(estimate?.laborHours?.typical) || 1;
+  const parts = Array.isArray(estimate?.requiredParts) ? estimate.requiredParts : [];
+  return {
+    title: estimate?.title || title,
+    name: estimate?.title || title,
+    description: estimateLanguageMode === 'customer'
+      ? (estimate?.customerDescription || estimate?.description || '')
+      : (estimate?.technicalDescription || estimate?.description || ''),
+    note: estimateLanguageMode === 'customer'
+      ? (estimate?.customerDescription || estimate?.description || '')
+      : (estimate?.technicalDescription || estimate?.description || ''),
+    laborItems: [{ name: estimate?.title || title, hours: recommendedHours }],
+    parts: parts.map(name => ({ name, quantity: 1 })),
+  };
+}
+
+function estimateCandidateLines(candidate) {
+  const direct = candidate?.lines || candidate?.lineItems || candidate?.servicePackageLines || candidate?.job?.lines;
+  if (Array.isArray(direct)) return direct.filter(Boolean);
+  const labor = Array.isArray(candidate?.laborLines)
+    ? candidate.laborLines.map(line => ({ ...line, lineType: line.lineType || 'labor' }))
+    : [];
+  const parts = Array.isArray(candidate?.partsLines)
+    ? candidate.partsLines.map(line => ({ ...line, lineType: line.lineType || 'part' }))
+    : [];
+  return [...labor, ...parts];
+}
+
+function estimateCandidateId(candidate, index) {
+  const source = candidate?.sourceIdentity || candidate?.source;
+  if (source && typeof source === 'object' && source.id != null) {
+    return `${source.kind || 'source'}:${source.sourceSystem || ''}:${source.shopId || ''}:${source.id}`;
+  }
+  return String(
+    candidate?.id ??
+    candidate?.jobId ??
+    candidate?.sourceId ??
+    `candidate-${index}`,
+  );
+}
+
+function estimateAuditVehicle(context = currentContext) {
+  const vehicle = context?.vehicle || {};
+  return {
+    vin: vehicle.vin || context?.vin || undefined,
+    year: vehicle.year || undefined,
+    make: vehicle.make || undefined,
+    model: vehicle.model || undefined,
+  };
 }

@@ -29,6 +29,7 @@ import {
   transformPastRecommendation,
 } from './transform';
 import { resolveShopDistanceUnit } from '@/lib/shop-distance-unit';
+import { scheduleShopwareAuditReceipt } from '@/lib/data/repositories/estimate-audit-receipts';
 
 async function getSwConfig(shopId: number): Promise<{ tenantId: number; swShopId: number } | null> {
   const db = await getDb();
@@ -121,6 +122,15 @@ export class ShopWareAdapter implements IIntegrationAdapter {
 
     try {
       const ro = await getRepairOrder(cfg.tenantId, parseInt(workOrderId, 10), shopId);
+      // A detail read is a complete live receipt. Do not use getWorkOrders:
+      // list responses may omit service lines and must not clear a current
+      // warning. This remains a feature-gated asynchronous queue handoff.
+      // This read has already happened for the caller; the receipt handoff
+      // itself is pure and never asks Shop-Ware for more data. An omitted
+      // services association is partial, while [] is a complete zero-job RO.
+      void scheduleShopwareAuditReceipt(shopId, ro, "live").catch((error: any) =>
+        console.warn(`[ShopWare] audit receipt handoff failed for live RO ${workOrderId}:`, error?.message || error),
+      );
       return { ok: true, data: transformRepairOrder(ro, { mileageUnit }) };
     } catch (err: any) {
       return { ok: false, error: err.message ?? 'Work order not found' };
@@ -138,6 +148,13 @@ export class ShopWareAdapter implements IIntegrationAdapter {
         vehicle_id: options?.vehicleId ? parseInt(options.vehicleId, 10) : undefined,
         customer_id: options?.customerId ? parseInt(options.customerId, 10) : undefined,
       });
+      // A list row is a poll receipt only if it explicitly carries services.
+      // Omitted services are a partial projection, never an empty ticket.
+      for (const ro of ros as any[]) {
+        void scheduleShopwareAuditReceipt(shopId, ro, "poll").catch((error: any) =>
+          console.warn(`[ShopWare] audit receipt handoff failed for polled RO ${ro.id}:`, error?.message || error),
+        );
+      }
 
       return { ok: true, data: ros.map((ro) => transformRepairOrder(ro, { mileageUnit })) };
     } catch (err: any) {

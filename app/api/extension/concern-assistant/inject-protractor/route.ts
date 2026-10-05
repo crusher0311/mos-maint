@@ -2,6 +2,7 @@ import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 import { NextRequest, NextResponse } from "next/server";
 import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
 import { resolveProtractorConfig, protractorFetch } from "@/lib/integrations/protractor/client";
+import { runWithProtractorInteractiveTransport } from "@/lib/integrations/protractor/interactive-context";
 import { markInjectedForUser } from "@/lib/data/repositories/concern-conversations";
 
 const corsHeaders = {
@@ -42,7 +43,7 @@ async function _POST(request: NextRequest) {
     const auth = { user: guard.user };
     const mosShopId = guard.mosShopId;
 
-    const config = await resolveProtractorConfig(shopId);
+    const config = await resolveProtractorConfig(mosShopId);
     if (!config.configured) {
       return NextResponse.json({ error: "Protractor not configured for this shop" }, { status: 400, headers: corsHeaders });
     }
@@ -52,12 +53,15 @@ async function _POST(request: NextRequest) {
     let woServiceItemId = serviceItemId;
 
     if (woId && (!woContactId || !woServiceItemId)) {
-      const woResult = await protractorFetch<any>(
-        `/WorkOrder/${woId}`,
-        config,
-        {},
-        0,
-        Number(shopId)
+      const woResult = await runWithProtractorInteractiveTransport(
+        mosShopId,
+        () => protractorFetch<any>(
+          `/WorkOrder/${woId}`,
+          config,
+          {},
+          0,
+          mosShopId,
+        ),
       );
 
       if (woResult.ok && woResult.data) {
@@ -108,15 +112,18 @@ async function _POST(request: NextRequest) {
 
     console.log(`[Protractor Concern] Adding concern to WO ${woId} for shop ${shopId}`);
 
-    const result = await protractorFetch<any>(
-      `/WorkOrder/${woId}`,
-      config,
-      {
-        method: "POST",
-        body: JSON.stringify(payload),
-      },
-      0,
-      Number(shopId)
+    const result = await runWithProtractorInteractiveTransport(
+      mosShopId,
+      () => protractorFetch<any>(
+        `/WorkOrder/${woId}`,
+        config,
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        },
+        0,
+        mosShopId,
+      ),
     );
 
     if (!result.ok) {

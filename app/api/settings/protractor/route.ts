@@ -144,7 +144,7 @@ export async function POST(req: NextRequest) {
     // refactor); on a timeout it continues in the background and its
     // result is discarded.
     const testResult = await Promise.race([
-      testConnection(cleanConnectionId, cleanApiKey).finally(() => {
+      testConnection(cleanConnectionId, cleanApiKey, shopId).finally(() => {
         if (timeoutHandle) {
           clearTimeout(timeoutHandle);
           timeoutHandle = null;

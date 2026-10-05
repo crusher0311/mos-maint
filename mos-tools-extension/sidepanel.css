@@ -43,6 +43,44 @@ body {
   display: none !important;
 }
 
+/* Current-RO audit state. Symbols are paired with text/aria labels in the
+ * panel; color is never the only severity cue. */
+.estimate-audit-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  margin-left: 3px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+}
+.estimate-audit-indicator.is-warning { background: #fef3c7; color: #92400e; }
+.estimate-audit-indicator.is-critical { background: #fee2e2; color: #991b1b; }
+.estimate-audit-indicator.is-pending { background: #dbeafe; color: #1d4ed8; }
+.estimate-audit-indicator.is-stale,
+.estimate-audit-indicator.is-partial { background: #e5e7eb; color: #374151; }
+.estimate-audit-indicator.is-unavailable { background: #f3f4f6; color: #4b5563; }
+
+.estimate-audit-status {
+  margin: 0 0 8px;
+  padding: 7px 8px;
+  border: 1px solid var(--gray-200);
+  border-radius: 6px;
+  font-size: 11px;
+  line-height: 1.35;
+}
+.estimate-audit-status strong { display: block; font-size: 11px; }
+.estimate-audit-status.is-clean { background: #f0fdf4; border-color: #bbf7d0; color: #166534; }
+.estimate-audit-status.is-warning { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+.estimate-audit-status.is-critical { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
+.estimate-audit-status.is-pending { background: #eff6ff; border-color: #bfdbfe; color: #1e40af; }
+.estimate-audit-status.is-stale,
+.estimate-audit-status.is-partial { background: #f9fafb; border-color: #d1d5db; color: #374151; }
+.estimate-audit-status.is-unavailable { background: #f9fafb; border-style: dashed; color: #4b5563; }
+
 /* ==================== Loading & States ==================== */
 .state-container {
   display: flex;

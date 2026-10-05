@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
 import { checkExtensionWritePermission } from "@/lib/extension-write-guard";
 import { createContact } from "@/lib/integrations/protractor";
+import { runWithProtractorInteractiveTransport } from "@/lib/integrations/protractor/interactive-context";
 import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
 import { resolveClientRequestId } from "@/lib/idempotent-create-id";
 
@@ -76,33 +77,36 @@ async function _POST(req: NextRequest) {
       guard.user?._id ?? guard.user?.email,
       clientRequestId,
     );
-    const result = await withUpstreamTimeout(
-      createContact(
-        guard.mosShopId,
-        {
-          firstName,
-          lastName,
-          phone1: phone1 || undefined,
-          phone2: phone2 || undefined,
-          email: email || undefined,
-          company: company || undefined,
-          street: street || undefined,
-          city: city || undefined,
-          province: province || undefined,
-          postalCode: postalCode || undefined,
-          country: country || undefined,
-          marketingSource: marketingSource || undefined,
-          note: note || undefined,
-        },
-        {
-          priority: true,
-          maxRetries: 1,
-          contactId: pinnedContactId,
-        },
+    const result = await runWithProtractorInteractiveTransport(
+      guard.mosShopId,
+      () => withUpstreamTimeout(
+        createContact(
+          guard.mosShopId,
+          {
+            firstName,
+            lastName,
+            phone1: phone1 || undefined,
+            phone2: phone2 || undefined,
+            email: email || undefined,
+            company: company || undefined,
+            street: street || undefined,
+            city: city || undefined,
+            province: province || undefined,
+            postalCode: postalCode || undefined,
+            country: country || undefined,
+            marketingSource: marketingSource || undefined,
+            note: note || undefined,
+          },
+          {
+            priority: true,
+            maxRetries: 1,
+            contactId: pinnedContactId,
+          },
+        ),
+        UPSTREAM_DEADLINE_MS,
+        `ext-create-contact shop=${guard.mosShopId}`,
+        { ok: false, error: SLOW_UPSTREAM_MSG, timedOut: true } as any,
       ),
-      UPSTREAM_DEADLINE_MS,
-      `ext-create-contact shop=${guard.mosShopId}`,
-      { ok: false, error: SLOW_UPSTREAM_MSG, timedOut: true } as any,
     );
 
     if (!result.ok) {

@@ -13,7 +13,7 @@
  *  - Companion-service suggestions (safety companions, brake-flush and
  *    timing-belt/water-pump heuristics, no duplicate suggestions)
  *  - Description-quality rule
- *  - Dedupe (category+title) and severity/confidence sort
+ *  - Conservative cross-source identity/evidence merge and severity/confidence sort
  *  - Score calculation (100 − 15c − 5w − 1i, clamped to [0, 100])
  */
 import {
@@ -300,6 +300,148 @@ console.log("estimate audit engine static rules");
     "sorted critical → warning(conf desc) → info",
     sorted.map(f => f.id).join(",") === "c,w-hi,w-lo,i",
     sorted.map(f => f.id).join(","),
+  );
+
+  const crossSource = dedupeAndSortFindings([
+    mk({
+      id: "static-labor",
+      severity: "warning",
+      category: "Missing Labor",
+      title: 'No labor on "Front Brake Pad Replacement"',
+      lineItemIndex: 0,
+      source: "static",
+      sources: ["static"],
+      evidence: { lineItemIndexes: [0], operation: "missing_labor" },
+    }),
+    mk({
+      id: "ai-labor",
+      severity: "warning",
+      category: "Estimate completeness",
+      title: "Front brake pads have missing labor",
+      source: "ai",
+      sources: ["ai"],
+      lineItemIndex: 0,
+    }),
+  ]);
+  ok(
+    "same line + operation merges even when AI category/title differ",
+    crossSource.length === 1,
+    JSON.stringify(crossSource),
+  );
+  ok(
+    "merged issue retains evidence from both sources",
+    crossSource[0]?.sources?.includes("static") === true &&
+      crossSource[0]?.sources?.includes("ai") === true &&
+      crossSource[0]?.evidence?.lineItemIndexes?.join(",") === "0",
+    JSON.stringify(crossSource[0]),
+  );
+
+  const separateLines = dedupeAndSortFindings([
+    mk({
+      id: "line-0",
+      category: "Missing Labor",
+      title: 'No labor on "Front Brake Pad Replacement"',
+      lineItemIndex: 0,
+      evidence: { lineItemIndexes: [0], operation: "missing_labor" },
+    }),
+    mk({
+      id: "line-1",
+      category: "Missing Labor",
+      title: 'No labor on "Rear Brake Pad Replacement"',
+      lineItemIndex: 1,
+      evidence: { lineItemIndexes: [1], operation: "missing_labor" },
+    }),
+  ]);
+  ok(
+    "same operation on different line evidence remains separate",
+    separateLines.length === 2,
+    JSON.stringify(separateLines),
+  );
+
+  const identicalTitlesSeparateLines = dedupeAndSortFindings([
+    mk({
+      id: "identical-line-0",
+      category: "Missing Labor",
+      title: 'No labor on "Brake Pad Replacement"',
+      lineItemIndex: 0,
+      evidence: { lineItemIndexes: [0], operation: "missing_labor" },
+    }),
+    mk({
+      id: "identical-line-1",
+      category: "Missing Labor",
+      title: 'No labor on "Brake Pad Replacement"',
+      lineItemIndex: 1,
+      evidence: { lineItemIndexes: [1], operation: "missing_labor" },
+    }),
+  ]);
+  ok(
+    "identical titles with distinct affected line evidence remain separate",
+    identicalTitlesSeparateLines.length === 2,
+    JSON.stringify(identicalTitlesSeparateLines),
+  );
+
+  const sameService = dedupeAndSortFindings([
+    mk({
+      id: "static-companion",
+      category: "Missing Companion Service",
+      title: "Consider Brake Fluid Flush",
+      suggestedJobId: "brake-fluid-flush",
+      source: "static",
+    }),
+    mk({
+      id: "ai-companion",
+      category: "Missing Companion Service",
+      title: "Recommend brake fluid exchange",
+      suggestedJobTitle: "Brake Fluid Flush",
+      source: "ai",
+    }),
+  ]);
+  ok(
+    "equivalent unscoped companion service merges by exact canonical service identity",
+    sameService.length === 1,
+    JSON.stringify(sameService),
+  );
+
+  const differingOperations = dedupeAndSortFindings([
+    mk({
+      id: "wheel-balance",
+      category: "Missing Companion Service",
+      title: "Review tire service",
+      evidence: { operation: "missing_companion", serviceKeys: ["wheel_balance"] },
+    }),
+    mk({
+      id: "tire-rotation",
+      category: "Missing Companion Service",
+      title: "Review tire service",
+      evidence: { operation: "missing_companion", serviceKeys: ["tire_rotation"] },
+    }),
+  ]);
+  ok(
+    "same category/title but different canonical operations/components remain separate",
+    differingOperations.length === 2,
+    JSON.stringify(differingOperations),
+  );
+
+  const ambiguousAiFindings = dedupeAndSortFindings([
+    mk({
+      id: "ai-safety",
+      category: "AI Analysis",
+      title: "Inspect brake hose condition",
+      lineItemIndex: 0,
+      source: "ai",
+    }),
+    mk({
+      id: "ai-description",
+      category: "AI Analysis",
+      title: "Clarify customer-facing description",
+      lineItemIndex: 0,
+      source: "ai",
+    }),
+  ]);
+  ok(
+    "different unknown AI operations on the same line do not merge by broad category",
+    ambiguousAiFindings.length === 2,
+    JSON.stringify(ambiguousAiFindings),
   );
 }
 

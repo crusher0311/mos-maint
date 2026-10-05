@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { resolvePrefill } from "@/lib/estimate-assist-prefill";
 
 interface AuditFinding {
@@ -16,12 +16,21 @@ interface AuditFinding {
   lineItemIndex?: number;
 }
 
+interface AuditVehicleMetadata {
+  vin?: string;
+  year?: number;
+  make?: string;
+  model?: string;
+}
+
 interface AuditReport {
   workOrderId?: string;
   workOrderNumber?: string;
   provider?: string;
   smsWorkOrderId?: string;
   vehicleDisplay?: string;
+  /** Added to new reports; old saved audits may not carry this metadata. */
+  vehicle?: AuditVehicleMetadata;
   auditDate: string;
   findings: AuditFinding[];
   /** Task #1145: outcome of the VHI-plan comparison (missing on old audits). */
@@ -30,6 +39,12 @@ interface AuditReport {
     reason?: string;
     missingCount?: number;
   };
+  /** New evaluator reports carry this directly; retained for saved-report compatibility. */
+  completeness?: "complete" | "partial";
+  evaluation?: {
+    completeness?: "complete" | "partial";
+    ai?: { status?: "completed" | "unavailable"; reason?: string };
+  };
   summary: {
     totalFindings: number;
     critical: number;
@@ -37,6 +52,167 @@ interface AuditReport {
     info: number;
     score: number;
   };
+}
+
+type AuditStatus = "pending" | "stale" | "unavailable" | "partial" | "complete";
+interface AuditStatusResponse {
+  ok: boolean;
+  status: AuditStatus;
+  report?: AuditReport;
+  reason?: string;
+  updatedAt?: string;
+}
+
+/**
+ * Resolver candidates intentionally accept a few source-adapter shapes. The
+ * resolver is shared by provider adapters, while this client only needs to
+ * render the common preview contract and preserve the returned lines.
+ */
+type RecommendationCandidate = {
+  [key: string]: any;
+  id?: string | number;
+  jobId?: string | number;
+  title?: string;
+  name?: string;
+  lines?: Array<Record<string, unknown>>;
+  laborLines?: Array<Record<string, unknown>>;
+  partsLines?: Array<Record<string, unknown>>;
+  source?: string | Record<string, unknown>;
+  sourceType?: string;
+  sourceLabel?: string;
+  warnings?: string[];
+  vehicleRelevance?: string | number | boolean;
+  relevance?: string | number | boolean;
+};
+
+interface RecommendationResolution {
+  status: string;
+  candidates: RecommendationCandidate[];
+  warnings: string[];
+}
+
+interface RecommendationState extends RecommendationResolution {
+  loading?: boolean;
+  error?: string;
+  selectedCandidateId?: string;
+  confirmedCandidateId?: string;
+  fallbackUsed?: boolean;
+  previewingCandidateId?: string;
+  selectedCandidateUnusable?: boolean;
+}
+
+interface PreviewRequestToken {
+  generation: number;
+  candidateId: string;
+  requestId: number;
+}
+
+function candidateId(candidate: RecommendationCandidate, index = 0): string {
+  const sourceId = candidate.source && typeof candidate.source === "object"
+    ? candidate.source.id
+    : undefined;
+  return String(
+    candidate.id ??
+    candidate.jobId ??
+    candidate.sourceId ??
+    candidate.sourceIdentity?.id ??
+    sourceId ??
+    `candidate-${index}`,
+  );
+}
+
+function candidateTitle(candidate: RecommendationCandidate): string {
+  return String(candidate.title ?? candidate.name ?? candidate.job?.title ?? "Untitled job");
+}
+
+function candidateSourceLabel(candidate: RecommendationCandidate): string {
+  const source = candidate.source;
+  if (typeof source === "string" && source.trim()) return source;
+  if (source && typeof source === "object") {
+    const kind = String(source.kind ?? source.type ?? "").toLowerCase();
+    const base = source.label ?? source.name ?? source.listSource ??
+      (kind === "canned" ? "Canned job" : kind === "history" ? "Shop history" : source.source);
+    const workOrder = source.workOrderNumber ?? source.workOrderId;
+    return String(base || "Existing job") + (workOrder ? ` (RO ${workOrder})` : "");
+  }
+  return String(candidate.sourceLabel ?? candidate.sourceType ?? "Existing job");
+}
+
+function candidateTotal(candidate: RecommendationCandidate): unknown {
+  const explicit = candidate.total ??
+    candidate.totalPrice ??
+    candidate.price ??
+    candidate.pricing?.total ??
+    candidate.pricing?.totalPrice;
+  if (explicit != null) return explicit;
+  const lineTotals = candidateLines(candidate)
+    .map(line => toNumber(line.extendedPrice ?? line.total ?? line.amount))
+    .filter((value): value is number => value != null);
+  return lineTotals.length > 0 ? lineTotals.reduce((sum, value) => sum + value, 0) : null;
+}
+
+function toNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) return Number(value);
+  return null;
+}
+
+function formatMoney(value: unknown): string {
+  const amount = toNumber(value);
+  return amount == null ? "Price unavailable" : `$${amount.toFixed(2)}`;
+}
+
+function warningText(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object") {
+    const warning = value as Record<string, unknown>;
+    return String(warning.message ?? warning.code ?? JSON.stringify(value));
+  }
+  return String(value ?? "Review warning");
+}
+
+function relevanceText(value: unknown): string {
+  if (!value || typeof value !== "object") return String(value ?? "");
+  const relevance = value as Record<string, unknown>;
+  const labels = [relevance.band, relevance.vehicleMatch, relevance.reason]
+    .filter(Boolean)
+    .map(String);
+  return labels.join(" — ") || JSON.stringify(value);
+}
+
+function candidateLines(candidate: RecommendationCandidate): Array<Record<string, unknown>> {
+  const direct = candidate.lines ?? candidate.lineItems ?? candidate.servicePackageLines ?? candidate.job?.lines;
+  if (Array.isArray(direct)) return direct.filter(Boolean);
+  const labor = Array.isArray(candidate.laborLines)
+    ? candidate.laborLines.map(line => ({ ...line, lineType: line.lineType ?? "labor" }))
+    : [];
+  const parts = Array.isArray(candidate.partsLines)
+    ? candidate.partsLines.map(line => ({ ...line, lineType: line.lineType ?? "part" }))
+    : [];
+  return [...labor, ...parts];
+}
+
+function lineDescription(line: Record<string, unknown>): string {
+  return String(line.description ?? line.name ?? line.title ?? "Line item");
+}
+
+function linePrice(line: Record<string, unknown>): unknown {
+  return line.extendedPrice ?? line.total ?? line.amount ?? line.price ?? line.unitPrice;
+}
+
+function lineIsIncomplete(line: Record<string, unknown>): boolean {
+  const quantity = toNumber(line.quantity ?? line.hours ?? 1);
+  const price = linePrice(line);
+  const lineType = String(line.lineType ?? line.type ?? "").toLowerCase();
+  return !lineDescription(line).trim() || quantity == null || (lineType !== "labor" && toNumber(price) == null);
+}
+
+function resolutionStatus(status: unknown): string {
+  return String(status || "unavailable").toLowerCase().replace(/[\s-]+/g, "_");
+}
+
+function resolutionHasCandidates(state?: RecommendationState): boolean {
+  return Boolean(state?.candidates?.length);
 }
 
 interface WorkOrderPickerItem {
@@ -67,6 +243,23 @@ const severityColors: Record<string, { bg: string; text: string; border: string;
   info: { bg: "bg-blue-50", text: "text-blue-800", border: "border-blue-200", badge: "bg-blue-100 text-blue-700" },
 };
 
+function reportCompleteness(report: AuditReport | null | undefined): "complete" | "partial" {
+  // `evaluation` is the evaluator's canonical result contract. Older
+  // persisted reports predate it, so use their top-level field (then the
+  // explicit VHI skip) only as backwards-compatible evidence.
+  if (report?.evaluation?.completeness === "partial") return "partial";
+  if (report?.evaluation?.completeness === "complete") return "complete";
+  if (report?.completeness === "partial") return "partial";
+  if (report?.completeness === "complete") return "complete";
+  return report?.vhiComparison?.status === "skipped" ? "partial" : "complete";
+}
+
+function reportCompletenessReason(report: AuditReport): string | undefined {
+  if (report.evaluation?.ai?.status === "unavailable") return report.evaluation.ai.reason || "AI analysis was unavailable.";
+  if (report.vhiComparison?.status === "skipped") return report.vhiComparison.reason;
+  return undefined;
+}
+
 export interface EstimateAssistPanelProps {
   /**
    * Auto-run an audit for this id on mount (normalized `_id`, RO number, or
@@ -77,6 +270,10 @@ export interface EstimateAssistPanelProps {
   initialRoDisplay?: string;
   /** Prefill the Smart Job Builder VIN field. */
   initialVin?: string;
+  /** Provider routing identity for the lightweight current-RO status read. */
+  initialProvider?: string;
+  /** Stable provider-side RO identity for status reads (may differ from normalized id). */
+  initialStatusWorkOrderId?: string;
   /** Embedded (modal) mode: hide the page header and outer width constraints. */
   embedded?: boolean;
 }
@@ -85,11 +282,16 @@ export default function EstimateAssistPanel({
   initialWorkOrderId,
   initialRoDisplay,
   initialVin,
+  initialProvider,
+  initialStatusWorkOrderId,
   embedded = false,
 }: EstimateAssistPanelProps = {}) {
   const [workOrderId, setWorkOrderId] = useState("");
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState<AuditReport | null>(null);
+  const [auditStatus, setAuditStatus] = useState<AuditStatusResponse | null>(null);
+  const [auditStatusLoading, setAuditStatusLoading] = useState(false);
+  const [statusProvider, setStatusProvider] = useState(initialProvider || "");
   const [error, setError] = useState("");
   const [severityFilter, setSeverityFilter] = useState<string>("all");
   const [history, setHistory] = useState<AuditHistoryItem[]>([]);
@@ -122,6 +324,23 @@ export default function EstimateAssistPanel({
   const [pushBuilderError, setPushBuilderError] = useState("");
   const [pushErrors, setPushErrors] = useState<Record<string, string>>({});
   const [jobBuilderError, setJobBuilderError] = useState("");
+  // Recommendation resolution is deliberately separate from the generated
+  // builder state. A report may have several actionable findings, and a
+  // resolver response must never make a previous report's selection/push
+  // state look confirmed on the new report.
+  const [recommendationStates, setRecommendationStates] = useState<Record<string, RecommendationState>>({});
+  const [selectedRecommendationCandidates, setSelectedRecommendationCandidates] =
+    useState<Record<string, RecommendationCandidate>>({});
+  const reportGeneration = useRef(0);
+  const auditStatusSequence = useRef(0);
+  const auditStatusTarget = useRef("");
+  const auditStatusProvider = useRef(initialProvider || "");
+  const auditStatusInFlightTarget = useRef("");
+  // A manual evaluator response is newer and more authoritative than any
+  // persisted automatic-audit poll for this exact provider RO.
+  const manualAuditPin = useRef<{ provider: string; workOrderId: string; generation: number } | null>(null);
+  const previewRequestSequence = useRef(0);
+  const previewRequests = useRef<Record<string, PreviewRequestToken>>({});
   // null = still checking; fail open on transient errors so a hiccup in the
   // features API never locks a paying shop out of the page.
   const [featureAllowed, setFeatureAllowed] = useState<boolean | null>(null);
@@ -134,6 +353,87 @@ export default function EstimateAssistPanel({
   const pickerFetchSeq = useRef(0);
   const pickerDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pickerContainerRef = useRef<HTMLDivElement | null>(null);
+
+  const loadAuditStatus = async (
+    workOrderIdForStatus: string,
+    options: { openCached?: boolean; fallbackToLive?: boolean; provider?: string; forceManualResult?: boolean } = {},
+  ) => {
+    const target = String(workOrderIdForStatus || "").trim();
+    if (!target) return;
+    const provider = String(options.provider || auditStatusProvider.current || initialProvider || report?.provider || "")
+      .trim()
+      .toLowerCase();
+    if (!["tekmetric", "protractor", "shopware", "shopmonkey"].includes(provider)) {
+      setAuditStatus({
+        ok: false,
+        status: "unavailable",
+        reason: "Select the repair order provider before checking a saved automatic audit.",
+      });
+      // Legacy deep links do not carry an auditable provider identity. Do not
+      // guess one (which could cross provider keys); retain the established
+      // direct audit behavior only when this mount explicitly requested a
+      // fallback. Typed flows remain manual and can select a provider first.
+      if (options.fallbackToLive) void runAudit(target);
+      return;
+    }
+    auditStatusProvider.current = provider;
+    setStatusProvider(provider);
+    const requestKey = `${provider}|${target}`;
+    const pin = manualAuditPin.current;
+    if (!options.forceManualResult && pin?.provider === provider && pin.workOrderId === target) return;
+    if (auditStatusInFlightTarget.current === requestKey) return;
+    auditStatusTarget.current = target;
+    const sequence = ++auditStatusSequence.current;
+    auditStatusInFlightTarget.current = requestKey;
+    setAuditStatusLoading(true);
+    try {
+      const params = new URLSearchParams({
+        provider,
+        workOrderId: target,
+      });
+      const response = await fetch(`/api/estimate-assist/audit/status?${params}`);
+      const data = await response.json() as Partial<AuditStatusResponse>;
+      const currentPin = manualAuditPin.current;
+      if (
+        sequence !== auditStatusSequence.current ||
+        auditStatusTarget.current !== target ||
+        (!options.forceManualResult && currentPin?.provider === provider && currentPin.workOrderId === target)
+      ) return;
+      if (!response.ok || !data.ok || !data.status) {
+        throw new Error(data.reason || "Current audit status is unavailable.");
+      }
+      const status = (["pending", "stale", "unavailable", "partial", "complete"] as string[]).includes(data.status)
+        ? data.status as AuditStatus
+        : "unavailable";
+      const payload: AuditStatusResponse = {
+        ok: true,
+        status,
+        report: data.report,
+        reason: data.reason,
+        updatedAt: data.updatedAt,
+      };
+      setAuditStatus(payload);
+      // Opening a cached report only changes the display. It does not invoke
+      // the evaluator, so automatic state reads never spend AI budget or
+      // overwrite the advisor's live/manual audit.
+      if (options.openCached && payload.report) {
+        resetRecommendationState();
+        setError("");
+        setReport(payload.report);
+      }
+    } catch (err) {
+      if (sequence !== auditStatusSequence.current || auditStatusTarget.current !== target) return;
+      const message = err instanceof Error ? err.message : "Current audit status is unavailable.";
+      setAuditStatus({ ok: false, status: "unavailable", reason: message });
+      // Compatibility fallback only for a failed status transport (not a
+      // legitimate unavailable/pending status). A current-RO deep link still
+      // works against an older deployment that has not exposed this read path.
+      if (options.fallbackToLive) void runAudit(target);
+    } finally {
+      if (sequence === auditStatusSequence.current) setAuditStatusLoading(false);
+      if (auditStatusInFlightTarget.current === requestKey) auditStatusInFlightTarget.current = "";
+    }
+  };
 
   const fetchPickerResults = useCallback((query: string) => {
     const seq = ++pickerFetchSeq.current;
@@ -187,7 +487,20 @@ export default function EstimateAssistPanel({
     if (auditId) {
       setActiveTab("audit");
       setWorkOrderId(inputDisplay);
-      runAudit(auditId);
+      const statusId = String(initialStatusWorkOrderId || "").trim();
+      const provider = String(initialProvider || "").trim().toLowerCase();
+      if (statusId && ["tekmetric", "protractor", "shopware", "shopmonkey"].includes(provider)) {
+        void loadAuditStatus(statusId, {
+          openCached: true,
+          fallbackToLive: true,
+          provider,
+        });
+      } else {
+        // There is no safely routable persisted-state key. Run the requested
+        // manual audit rather than querying status under a normalized or
+        // human-facing display id.
+        void runAudit(auditId);
+      }
     }
     // Run once on mount only — deliberately not reactive to state changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -250,6 +563,49 @@ export default function EstimateAssistPanel({
     }
   }, [activeTab, loadHistory]);
 
+  // The current-RO read is deliberately bounded and only runs while the audit
+  // surface is visible. It opens a persisted report when one exists; it never
+  // reruns the evaluator. Manual refresh remains the only live evaluation.
+  useEffect(() => {
+    const target = auditStatusTarget.current || String(initialStatusWorkOrderId || "").trim();
+    if (activeTab !== "audit" || !target) return;
+    const refresh = () => {
+      if (document.visibilityState !== "hidden") void loadAuditStatus(target, { openCached: !report });
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 30000);
+    return () => window.clearInterval(timer);
+    // `report` intentionally controls whether an available cache should paint;
+    // other values are read at execution time and request sequencing protects
+    // a changed RO.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, initialStatusWorkOrderId, initialWorkOrderId, report]);
+
+  const resetRecommendationState = () => {
+    // Invalidate in-flight resolver/builder responses from the previous
+    // report before clearing visible state.
+    reportGeneration.current += 1;
+    previewRequests.current = {};
+    setRecommendationStates({});
+    setSelectedRecommendationCandidates({});
+    setBuiltEstimates({});
+    setBuildingFindingId(null);
+    setPushingFindingId(null);
+    setPushedFindings({});
+    setHandoffFindings({});
+    setPushErrors({});
+  };
+
+  const resetReportState = () => {
+    resetRecommendationState();
+    setPushedBuilder(false);
+    setBuilderHandoffUrl("");
+    setPushBuilderError("");
+    setJobBuilderResult(null);
+    setJobBuilderError("");
+    setReport(null);
+  };
+
   // idOverride lets the picker audit by the normalized _id (exact match)
   // while the input keeps showing the human-facing RO number.
   const runAudit = async (idOverride?: string) => {
@@ -258,10 +614,20 @@ export default function EstimateAssistPanel({
       setError("Please enter a work order number or ID");
       return;
     }
+    // A manual id can be a normalized document id or display number. Do not
+    // poll automatic status until the response below supplies a provider's
+    // stable id.
+    auditStatusTarget.current = "";
+    auditStatusSequence.current += 1;
+    manualAuditPin.current = null;
     setPickerOpen(false);
     setLoading(true);
     setError("");
-    setReport(null);
+    resetReportState();
+    // resetReportState invalidates all in-flight recommendation work. Capture
+    // the new generation so an older audit response cannot replace this
+    // report (or clear this request's loading/error state).
+    const generation = reportGeneration.current;
     try {
       const response = await fetch("/api/estimate-assist/audit", {
         method: "POST",
@@ -272,12 +638,41 @@ export default function EstimateAssistPanel({
       if (!response.ok || !data.ok) {
         throw new Error(data.error || "Audit failed");
       }
+      if (generation !== reportGeneration.current) return;
       setReport(data.report);
+      const reportProvider = String(data.report?.provider || "").trim().toLowerCase();
+      // smsWorkOrderId is the explicit upstream primary key captured from
+      // normalized provenance. report.workOrderId/auditId can instead be the
+      // normalized document id or display RO entered by an advisor, neither of
+      // which may be used to poll durable automatic-audit state.
+      const providerWorkOrderId = String(data.report?.smsWorkOrderId || "").trim();
+      if (
+        providerWorkOrderId &&
+        ["tekmetric", "protractor", "shopware", "shopmonkey"].includes(reportProvider)
+      ) {
+        auditStatusProvider.current = reportProvider;
+        auditStatusTarget.current = providerWorkOrderId;
+        setStatusProvider(reportProvider);
+      }
+      const manualStatus = reportCompleteness(data.report);
+      manualAuditPin.current = {
+        provider: reportProvider,
+        workOrderId: providerWorkOrderId,
+        generation,
+      };
+      setAuditStatus({
+        ok: true,
+        status: manualStatus,
+        report: data.report,
+        reason: manualStatus === "partial" ? reportCompletenessReason(data.report) : undefined,
+        updatedAt: data.report?.auditDate,
+      });
     } catch (err: unknown) {
+      if (generation !== reportGeneration.current) return;
       const message = err instanceof Error ? err.message : "Audit failed";
       setError(message);
     } finally {
-      setLoading(false);
+      if (generation === reportGeneration.current) setLoading(false);
     }
   };
 
@@ -314,30 +709,356 @@ export default function EstimateAssistPanel({
     setJobBuilderLoading(false);
   };
 
-  const addToEstimate = async (finding: AuditFinding) => {
+  const vehicleForReport = (reportForFinding?: AuditReport | null) => ({
+    vin: reportForFinding?.vehicle?.vin,
+    year: reportForFinding?.vehicle?.year,
+    make: reportForFinding?.vehicle?.make,
+    model: reportForFinding?.vehicle?.model,
+  });
+
+  const resolveRecommendation = async (
+    finding: AuditFinding,
+    reportForFinding: AuditReport | null = report,
+  ) => {
     if (!finding.suggestedJobTitle) return;
-    setBuildingFindingId(finding.id);
-    setError("");
+    const generation = reportGeneration.current;
+    const previous = recommendationStates[finding.id];
+    setRecommendationStates(prev => ({
+      ...prev,
+      [finding.id]: {
+        status: previous?.status || "resolving",
+        candidates: previous?.candidates || [],
+        warnings: previous?.warnings || [],
+        loading: true,
+        error: "",
+      },
+    }));
     try {
+      const response = await fetch("/api/estimate-assist/resolve-recommendation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          finding: {
+            suggestedJobTitle: finding.suggestedJobTitle,
+            suggestedJobId: finding.suggestedJobId,
+          },
+          vehicle: vehicleForReport(reportForFinding),
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.ok || !data.resolution) {
+        throw new Error(data.error || "Existing job lookup was unavailable.");
+      }
+      const resolution = data.resolution as Partial<RecommendationResolution>;
+      const candidates = Array.isArray(resolution.candidates) ? resolution.candidates : [];
+      const warnings = Array.isArray(resolution.warnings)
+        ? resolution.warnings.map(warningText)
+        : [];
+      if (generation !== reportGeneration.current) return;
+      setRecommendationStates(prev => ({
+        ...prev,
+        [finding.id]: {
+          status: String(resolution.status || (candidates.length ? "matched" : "no_match")),
+          candidates,
+          warnings,
+          loading: false,
+          error: "",
+        },
+      }));
+    } catch (err: unknown) {
+      if (generation !== reportGeneration.current) return;
+      const message = err instanceof Error ? err.message : "Existing job lookup was unavailable.";
+      setRecommendationStates(prev => ({
+        ...prev,
+        [finding.id]: {
+          status: "unavailable",
+          candidates: [],
+          warnings: [],
+          loading: false,
+          error: message,
+        },
+      }));
+    }
+  };
+
+  const buildGeneratedFallback = async (
+    finding: AuditFinding,
+    reportForFinding: AuditReport | null = report,
+  ) => {
+    if (!finding.suggestedJobTitle) return;
+    const generation = reportGeneration.current;
+    setBuildingFindingId(finding.id);
+    setPushErrors(prev => ({ ...prev, [finding.id]: "" }));
+    try {
+      const vehicle = vehicleForReport(reportForFinding);
       const response = await fetch("/api/estimate-assist/job-builder", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           jobNameOrId: finding.suggestedJobTitle,
+          vin: vehicle.vin || undefined,
+          year: vehicle.year,
+          make: vehicle.make,
+          model: vehicle.model,
           languageMode,
         }),
       });
       const data = await response.json();
-      if (data.ok && data.estimate) {
-        setBuiltEstimates(prev => ({ ...prev, [finding.id]: data.estimate }));
-      } else {
-        setError(data.error || `Couldn't build "${finding.suggestedJobTitle}". Please try again.`);
+      if (!response.ok || !data.ok || !data.estimate) {
+        throw new Error(data.error || `Couldn't build "${finding.suggestedJobTitle}".`);
       }
-    } catch (err) {
-      console.error("Add to estimate failed:", err);
-      setError(`Couldn't build "${finding.suggestedJobTitle}". Please check your connection and try again.`);
+      if (generation !== reportGeneration.current) return;
+      setBuiltEstimates(prev => ({
+        ...prev,
+        [finding.id]: {
+          ...data.estimate,
+          source: "generated_fallback",
+          sourceLabel: "Generated estimate fallback",
+          fallbackReason: recommendationStates[finding.id]?.status || "no_match",
+        },
+      }));
+      setRecommendationStates(prev => ({
+        ...prev,
+        [finding.id]: {
+          ...(prev[finding.id] || { status: "no_match", candidates: [], warnings: [] }),
+          fallbackUsed: true,
+          loading: false,
+        },
+      }));
+    } catch (err: unknown) {
+      if (generation !== reportGeneration.current) return;
+      const message = err instanceof Error ? err.message : "Generated fallback failed.";
+      setRecommendationStates(prev => ({
+        ...prev,
+        [finding.id]: {
+          ...(prev[finding.id] || { status: "unavailable", candidates: [], warnings: [] }),
+          loading: false,
+          error: message,
+        },
+      }));
+    } finally {
+      if (generation === reportGeneration.current) setBuildingFindingId(null);
     }
-    setBuildingFindingId(null);
+  };
+
+  const confirmRecommendation = (finding: AuditFinding) => {
+    const state = recommendationStates[finding.id];
+    if (!state?.selectedCandidateId) return;
+    const selected = state.candidates.find(
+      (candidate, index) => candidateId(candidate, index) === state.selectedCandidateId,
+    );
+    if (!selected) return;
+    const lines = candidateLines(selected);
+    if (lines.length === 0) {
+      setRecommendationStates(prev => ({
+        ...prev,
+        [finding.id]: {
+          ...state,
+          selectedCandidateUnusable: true,
+          error: "This existing job has no usable line details. Use the generated estimate fallback instead.",
+        },
+      }));
+      return;
+    }
+    const incomplete = lines.some(lineIsIncomplete);
+    const source = candidateSourceLabel(selected);
+    const estimate = {
+      ...selected,
+      title: candidateTitle(selected),
+      description: selected.description ?? selected.customerDescription ?? selected.note ?? "",
+      lines,
+      // Keep the opaque resolver identity intact for server-side
+      // revalidation; sourceLabel is display-only.
+      source: selected.source,
+      sourceIdentity: selected.sourceIdentity ?? selected.source,
+      sourceLabel: `Existing job — ${source}`,
+      sourceCandidateId: state.selectedCandidateId,
+      incompleteLines: incomplete,
+      laborHours: selected.laborHours,
+      requiredParts: selected.requiredParts,
+    };
+    setSelectedRecommendationCandidates(prev => ({ ...prev, [finding.id]: selected }));
+    setBuiltEstimates(prev => ({ ...prev, [finding.id]: estimate }));
+    setRecommendationStates(prev => ({
+      ...prev,
+      [finding.id]: {
+        ...state,
+        confirmedCandidateId: state.selectedCandidateId,
+        error: incomplete
+          ? "This package has incomplete line pricing. Review the highlighted lines before adding it to the RO."
+          : "",
+      },
+    }));
+  };
+
+  // Backwards-compatible name for callers within this panel: clicking
+  // "+ Add to Estimate" now always reviews existing jobs first.
+  const addToEstimate = (finding: AuditFinding) => resolveRecommendation(finding);
+
+  /**
+   * A compact canned/history result may only contain source identity. Once a
+   * user selects it, ask the resolver to hydrate that one item rather than
+   * pretending the list row is an estimate. The server re-checks ownership
+   * and returns the current detail; the browser never supplies authoritative
+   * lines or prices.
+   */
+  const previewRecommendation = async (
+    finding: AuditFinding,
+    candidate: RecommendationCandidate,
+    candidateIndex: number,
+    requestId: number,
+  ) => {
+    const source =
+      candidate.sourceIdentity && typeof candidate.sourceIdentity === "object"
+        ? candidate.sourceIdentity
+        : candidate.source && typeof candidate.source === "object"
+          ? candidate.source
+          : null;
+    const selectedId = candidateId(candidate, candidateIndex);
+    const generation = reportGeneration.current;
+    const isCurrentPreview = () => {
+      const current = previewRequests.current[finding.id];
+      return generation === reportGeneration.current &&
+        current?.generation === generation &&
+        current.candidateId === selectedId &&
+        current.requestId === requestId;
+    };
+    if (!source) {
+      if (!isCurrentPreview()) return;
+      setRecommendationStates(prev => ({
+        ...prev,
+        [finding.id]: {
+          ...(prev[finding.id] || { status: "candidates", candidates: [], warnings: [] }),
+          selectedCandidateId: selectedId,
+          previewingCandidateId: undefined,
+          selectedCandidateUnusable: true,
+          error: "This candidate has no revalidation source identity. Use the generated estimate fallback instead.",
+        },
+      }));
+      return;
+    }
+
+    setRecommendationStates(prev => ({
+      ...prev,
+      [finding.id]: {
+        ...(prev[finding.id] || { status: "candidates", candidates: [], warnings: [] }),
+        selectedCandidateId: selectedId,
+        previewingCandidateId: selectedId,
+        selectedCandidateUnusable: false,
+        error: "",
+      },
+    }));
+
+    try {
+      const response = await fetch("/api/estimate-assist/resolve-recommendation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "preview",
+          finding: {
+            suggestedJobTitle: finding.suggestedJobTitle,
+            suggestedJobId: finding.suggestedJobId,
+          },
+          vehicle: vehicleForReport(report),
+          selection: { source },
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.ok || !data.resolution) {
+        throw new Error(data.error || "Selected job details are unavailable.");
+      }
+      if (!isCurrentPreview()) return;
+
+      const resolution = data.resolution as Partial<RecommendationResolution> & {
+        candidate?: RecommendationCandidate;
+      };
+      const hydrated = Array.isArray(resolution.candidates)
+        ? resolution.candidates[0]
+        : resolution.candidate;
+      if (!hydrated) {
+        const warning = Array.isArray(resolution.warnings)
+          ? resolution.warnings.map(warningText).join(" ")
+          : "";
+        throw new Error(warning || "Selected job details are unavailable.");
+      }
+
+      setRecommendationStates(prev => {
+        if (!isCurrentPreview()) return prev;
+        const current = prev[finding.id] || {
+          status: "candidates",
+          candidates: [],
+          warnings: [],
+        };
+        const candidates = current.candidates.map((existing, index) =>
+          candidateId(existing, index) === selectedId
+            ? {
+                ...hydrated,
+                // Keep the client selection key stable even if the preview
+                // response omits its display-only id.
+                id: hydrated.id ?? selectedId,
+                source: hydrated.source ?? source,
+                sourceIdentity: hydrated.sourceIdentity ?? source,
+              }
+            : existing,
+        );
+        const hasLines = candidateLines(hydrated).length > 0;
+        return {
+          ...prev,
+          [finding.id]: {
+            ...current,
+            candidates,
+            warnings: Array.isArray(resolution.warnings)
+              ? resolution.warnings.map(warningText)
+              : current.warnings,
+            previewingCandidateId: undefined,
+            selectedCandidateUnusable: !hasLines,
+            error: hasLines
+              ? ""
+              : "Selected job details are still missing usable lines. Use the generated estimate fallback instead.",
+          },
+        };
+      });
+    } catch (err: unknown) {
+      if (!isCurrentPreview()) return;
+      const message = err instanceof Error ? err.message : "Selected job details are unavailable.";
+      setRecommendationStates(prev => ({
+        ...prev,
+        [finding.id]: {
+          ...(prev[finding.id] || { status: "candidates", candidates: [], warnings: [] }),
+          previewingCandidateId: undefined,
+          selectedCandidateUnusable: true,
+          error: `${message} Use the generated estimate fallback instead.`,
+        },
+      }));
+    }
+  };
+
+  const selectRecommendationCandidate = (
+    finding: AuditFinding,
+    candidate: RecommendationCandidate,
+    candidateIndex: number,
+  ) => {
+    const selectedId = candidateId(candidate, candidateIndex);
+    const generation = reportGeneration.current;
+    const requestId = ++previewRequestSequence.current;
+    previewRequests.current[finding.id] = {
+      generation,
+      candidateId: selectedId,
+      requestId,
+    };
+    setRecommendationStates(prev => ({
+      ...prev,
+      [finding.id]: {
+        ...(prev[finding.id] || { status: "candidates", candidates: [], warnings: [] }),
+        selectedCandidateId: selectedId,
+        previewingCandidateId: undefined,
+        selectedCandidateUnusable: false,
+        error: "",
+      },
+    }));
+    if (candidateLines(candidate).length === 0) {
+      void previewRecommendation(finding, candidate, candidateIndex, requestId);
+    }
   };
 
   // Push a built estimate onto the audited RO.
@@ -359,31 +1080,76 @@ export default function EstimateAssistPanel({
         : null;
   const canPushToRo = pushProvider !== null;
 
+  const pushLinesForEstimate = (be: Record<string, unknown>, finding: AuditFinding) => {
+    // Resolver-selected packages keep their source lines and prices. Do not
+    // rebuild them from the knowledge base (which would lose historical
+    // source identity and silently turn priced lines into generic $0 parts).
+    if (String(be.sourceCandidateId || "") && Array.isArray(be.lines)) {
+      return (be.lines as Array<Record<string, unknown>>).map(line => {
+        const rawType = String(line.lineType ?? line.type ?? "part").toLowerCase();
+        const lineType = rawType.includes("labor") ? "labor" : rawType.includes("sublet") ? "sublet" : "part";
+        const quantity = toNumber(line.quantity ?? line.hours ?? 1) ?? 1;
+        const price = toNumber(line.unitPrice ?? line.price ?? line.amount ?? 0) ?? 0;
+        const extendedPrice = toNumber(line.extendedPrice ?? line.total ?? line.amount) ?? price * quantity;
+        return {
+          lineType,
+          description: lineDescription(line),
+          quantity,
+          unitPrice: price,
+          extendedPrice,
+          ...(line.partNumber ? { partNumber: String(line.partNumber) } : {}),
+          ...(line.manufacturer ? { manufacturer: String(line.manufacturer) } : {}),
+          ...(line.cost != null ? { cost: toNumber(line.cost) ?? undefined } : {}),
+          ...(line.extendedCost != null ? { extendedCost: toNumber(line.extendedCost) ?? undefined } : {}),
+        };
+      });
+    }
+    const lh = be.laborHours as Record<string, unknown> | undefined;
+    const laborHours = Number(lh?.recommended) || Number(lh?.typical) || Number(lh?.min) || 1;
+    const requiredParts = Array.isArray(be.requiredParts) ? (be.requiredParts as string[]) : [];
+    return [
+      {
+        lineType: "labor",
+        description: String(be.title || finding.suggestedJobTitle || "Labor"),
+        quantity: laborHours,
+        unitPrice: 0,
+        extendedPrice: 0,
+      },
+      ...requiredParts.map(part => ({
+        lineType: "part",
+        description: part,
+        quantity: 1,
+        unitPrice: 0,
+        extendedPrice: 0,
+      })),
+    ];
+  };
+
   const pushToRo = async (finding: AuditFinding) => {
     const be = builtEstimates[finding.id];
     if (!be || !report?.smsWorkOrderId) return;
+    const lines = pushLinesForEstimate(be, finding);
+    if (Boolean(be.sourceCandidateId) && (Boolean(be.incompleteLines) || lines.some(line => lineIsIncomplete(line)))) {
+      setPushErrors(prev => ({
+        ...prev,
+        [finding.id]: "This selected existing job has incomplete line pricing. Review the candidate before adding it to the RO.",
+      }));
+      return;
+    }
     setPushingFindingId(finding.id);
     setPushErrors(prev => ({ ...prev, [finding.id]: "" }));
     try {
-      const lh = be.laborHours as Record<string, unknown> | undefined;
-      const laborHours = Number(lh?.recommended) || Number(lh?.typical) || Number(lh?.min) || 1;
-      const requiredParts = Array.isArray(be.requiredParts) ? (be.requiredParts as string[]) : [];
-      const lines = [
-        {
-          lineType: "labor",
-          description: String(be.title || finding.suggestedJobTitle || "Labor"),
-          quantity: laborHours,
-          unitPrice: 0,
-          extendedPrice: 0,
-        },
-        ...requiredParts.map(part => ({
-          lineType: "part",
-          description: part,
-          quantity: 1,
-          unitPrice: 0,
-          extendedPrice: 0,
-        })),
-      ];
+      const sourceObject = be.sourceIdentity && typeof be.sourceIdentity === "object"
+        ? be.sourceIdentity as Record<string, unknown>
+        : be.source && typeof be.source === "object"
+          ? be.source as Record<string, unknown>
+          : null;
+      const sourceText = String(sourceObject?.kind || be.source || "").toLowerCase();
+      const source = sourceText.includes("canned")
+        ? "canned"
+        : sourceText.includes("history") || sourceText.includes("existing")
+          ? "lookup"
+          : "lookup";
       const response = await fetch("/api/jobs/add-to-ro", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -392,8 +1158,17 @@ export default function EstimateAssistPanel({
           job: {
             title: String(be.title || finding.suggestedJobTitle || ""),
             description: String(be.customerDescription || be.description || ""),
+            code: be.code ? String(be.code) : undefined,
             lines,
           },
+          // The existing add workflow remains the only provider write path.
+          // Keep source identity and audited vehicle metadata beside it for
+          // provider analytics and for the historical/canned distinction.
+          source,
+          ...(be.sourceCandidateId && sourceObject
+            ? { auditSelection: { source: sourceObject } }
+            : {}),
+          vehicle: vehicleForReport(report),
         }),
       });
       const data = await response.json();
@@ -452,6 +1227,8 @@ export default function EstimateAssistPanel({
             description: String(be.customerDescription || be.technicalDescription || ""),
             lines,
           },
+          source: be.source === "generated_fallback" ? "lookup" : undefined,
+          vehicle: vehicleForReport(report),
         }),
       });
       const data = await response.json();
@@ -488,7 +1265,37 @@ export default function EstimateAssistPanel({
     return "bg-red-50 border-red-200";
   };
 
+  const auditStatusPresentation = (status: AuditStatusResponse | null) => {
+    if (!status) return null;
+    const reportForStatus = status.report || report;
+    if (status.status === "complete" && (reportForStatus?.summary.critical || 0) > 0) {
+      return { icon: "⛔", title: "Critical findings need review", classes: "border-red-200 bg-red-50 text-red-800" };
+    }
+    if (status.status === "complete" && (reportForStatus?.summary.warnings || 0) > 0) {
+      return { icon: "⚠", title: "Warnings need review", classes: "border-amber-200 bg-amber-50 text-amber-800" };
+    }
+    if (status.status === "complete") {
+      return { icon: "✓", title: "Completed with no warning or critical findings", classes: "border-green-200 bg-green-50 text-green-800" };
+    }
+    const info: Record<Exclude<AuditStatus, "complete">, { icon: string; title: string }> = {
+      pending: { icon: "…", title: "Audit is queued" },
+      stale: { icon: "↻", title: "Latest audit is stale" },
+      partial: { icon: "◐", title: "Audit completed with some checks unavailable" },
+      unavailable: { icon: "?", title: "Automatic audit is unavailable" },
+    };
+    const current = info[status.status];
+    return {
+      ...current,
+      classes: status.status === "pending"
+        ? "border-blue-200 bg-blue-50 text-blue-800"
+        : status.status === "unavailable"
+          ? "border-gray-300 border-dashed bg-gray-50 text-gray-700"
+          : "border-gray-300 bg-gray-50 text-gray-700",
+    };
+  };
+
   const est = jobBuilderResult as Record<string, unknown> | null;
+  const auditStatusView = auditStatusPresentation(auditStatus);
 
   const containerClass = embedded ? "p-1" : "max-w-6xl mx-auto p-6";
 
@@ -558,12 +1365,35 @@ export default function EstimateAssistPanel({
       {activeTab === "audit" && (
         <div>
           <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
+            {auditStatusView && (
+              <div className={`mb-3 flex items-start gap-2 rounded-md border px-3 py-2 text-sm ${auditStatusView.classes}`} role="status" aria-live="polite">
+                <span aria-hidden="true" className="font-bold">{auditStatusView.icon}</span>
+                <div>
+                  <span className="font-semibold">{auditStatusView.title}</span>
+                  {auditStatus?.reason && <span> — {auditStatus.reason}</span>}
+                  {auditStatus?.updatedAt && (
+                    <span className="block text-xs opacity-80 mt-0.5">
+                      Last updated {new Date(auditStatus.updatedAt).toLocaleString()}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
             <div className="flex gap-3">
               <div className="flex-1 relative" ref={pickerContainerRef}>
                 <input
                   type="text"
                   value={workOrderId}
                   onChange={(e) => {
+                    // Do not leave a report/recommendation actionable while
+                    // the advisor is entering a different RO identity.
+                    if (e.target.value !== workOrderId) {
+                      auditStatusSequence.current += 1;
+                      auditStatusTarget.current = "";
+                      manualAuditPin.current = null;
+                      setAuditStatus(null);
+                      resetReportState();
+                    }
                     setWorkOrderId(e.target.value);
                     setPickerOpen(true);
                   }}
@@ -631,9 +1461,67 @@ export default function EstimateAssistPanel({
                 disabled={loading}
                 className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
               >
-                {loading ? "Auditing..." : "Run Audit"}
+                {loading ? "Auditing..." : report ? "Refresh live audit" : "Run live audit"}
               </button>
             </div>
+            <div className="mt-3 flex flex-wrap items-end gap-2">
+              <label className="text-xs text-gray-600">
+                Saved-audit provider
+                <select
+                  value={statusProvider}
+                  onChange={(e) => {
+                    const provider = e.target.value;
+                    auditStatusProvider.current = provider;
+                    setStatusProvider(provider);
+                    setAuditStatus(null);
+                  }}
+                  className="mt-1 block px-2 py-1.5 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Select provider</option>
+                  <option value="tekmetric">Tekmetric</option>
+                  <option value="protractor">Protractor</option>
+                  <option value="shopware">Shop-Ware</option>
+                  <option value="shopmonkey">Shopmonkey</option>
+                </select>
+              </label>
+              <button
+                onClick={() => {
+                  const target = workOrderId.trim();
+                  if (!target) {
+                    setError("Enter a provider repair order ID to check its saved audit.");
+                    return;
+                  }
+                  // A typed display number may not be the provider primary
+                  // key. The status route uses exact scoped identity, so this
+                  // can safely return unavailable but cannot show another RO.
+                  resetReportState();
+                  manualAuditPin.current = null;
+                  setError("");
+                  void loadAuditStatus(target, { openCached: true, provider: statusProvider, forceManualResult: true });
+                }}
+                disabled={auditStatusLoading || !workOrderId.trim() || !statusProvider}
+                className="px-3 py-1.5 text-sm font-medium bg-white border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Check saved audit
+              </button>
+              <p className="text-xs text-gray-500 pb-1">
+                Use the provider’s RO ID; manual audit accepts an RO number or normalized ID.
+              </p>
+            </div>
+            {auditStatus?.report && !report && (
+              <button
+                onClick={() => {
+                  resetRecommendationState();
+                  setReport(auditStatus.report || null);
+                }}
+                className="mt-3 px-3 py-1.5 text-sm font-medium bg-white border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-50"
+              >
+                Open latest audit
+              </button>
+            )}
+            {auditStatusLoading && (
+              <p className="text-xs text-gray-400 mt-2">Checking current audit status…</p>
+            )}
             {error && <p className="text-red-600 text-sm mt-2">{error}</p>}
           </div>
 
@@ -660,9 +1548,36 @@ export default function EstimateAssistPanel({
                 </div>
               </div>
 
-              {report.vehicleDisplay && (
+              <div
+                className={`mb-4 rounded-md border px-3 py-2 text-xs ${
+                  reportCompleteness(report) === "partial"
+                    ? "border-gray-300 bg-gray-50 text-gray-700"
+                    : "border-green-200 bg-green-50 text-green-800"
+                }`}
+                role="status"
+                data-testid="audit-coverage"
+              >
+                <span className="font-semibold">
+                  {reportCompleteness(report) === "partial"
+                    ? "Partial audit coverage"
+                    : "Completed audit coverage"}
+                </span>
+                {" — "}
+                {reportCompleteness(report) === "partial"
+                  ? (reportCompletenessReason(report) || "Some audit checks were unavailable.")
+                  : "Review findings before making estimate changes."}
+              </div>
+
+              {(report.vehicleDisplay || report.vehicle) && (
                 <div className="text-sm text-gray-500 mb-4">
-                  Vehicle: <span className="font-medium text-gray-700">{report.vehicleDisplay}</span>
+                  Vehicle: <span className="font-medium text-gray-700">
+                    {report.vehicleDisplay ||
+                      [report.vehicle?.year, report.vehicle?.make, report.vehicle?.model].filter(Boolean).join(" ") ||
+                      "Unknown vehicle"}
+                  </span>
+                  {report.vehicle?.vin && (
+                    <> &middot; VIN <span className="font-medium text-gray-700">{report.vehicle.vin}</span></>
+                  )}
                   {report.workOrderNumber && (
                     <> &middot; WO# <span className="font-medium text-gray-700">{report.workOrderNumber}</span></>
                   )}
@@ -720,19 +1635,20 @@ export default function EstimateAssistPanel({
                           <div className="flex flex-col gap-1.5">
                             <button
                               onClick={() => addToEstimate(finding)}
-                              disabled={buildingFindingId === finding.id || !!builtEstimates[finding.id]}
+                              disabled={recommendationStates[finding.id]?.loading || !!builtEstimates[finding.id]}
                               className={`px-3 py-1.5 text-xs font-medium rounded-lg whitespace-nowrap ${
                                 builtEstimates[finding.id]
                                   ? "bg-green-600 text-white cursor-default"
                                   : "bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
                               }`}
                             >
-                              {buildingFindingId === finding.id ? "Building..." :
-                               builtEstimates[finding.id] ? "Added" : "+ Add to Estimate"}
+                              {recommendationStates[finding.id]?.loading ? "Finding existing jobs..." :
+                               builtEstimates[finding.id] ? "Added" : "+ Review matches"}
                             </button>
                             <button
                               onClick={() => {
                                 setJobBuilderQuery(finding.suggestedJobTitle || "");
+                                if (report.vehicle?.vin) setJobBuilderVin(report.vehicle.vin);
                                 setActiveTab("builder");
                               }}
                               className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded-lg hover:bg-gray-50 whitespace-nowrap"
@@ -742,6 +1658,167 @@ export default function EstimateAssistPanel({
                           </div>
                         )}
                       </div>
+                      {recommendationStates[finding.id] && !builtEstimates[finding.id] && (() => {
+                        const resolution = recommendationStates[finding.id];
+                        const status = resolutionStatus(resolution.status);
+                        const hasCandidates = resolutionHasCandidates(resolution);
+                        const selectedCandidate = resolution.candidates.find(
+                          (candidate, index) =>
+                            candidateId(candidate, index) === resolution.selectedCandidateId,
+                        );
+                        const selectedCandidateHasNoLines =
+                          Boolean(selectedCandidate) && candidateLines(selectedCandidate!).length === 0;
+                        const canFallback = !hasCandidates && !resolution.loading &&
+                          (status === "no_match" || status === "no_suitable_match" ||
+                            status === "not_found" || status === "unavailable" || status === "error" ||
+                            status === "nomatch") ||
+                          (!resolution.loading &&
+                            !resolution.previewingCandidateId &&
+                            Boolean(resolution.selectedCandidateUnusable) &&
+                            selectedCandidateHasNoLines);
+                        return (
+                          <div className="mt-3 p-3 bg-white rounded-lg border border-blue-200" data-testid={`recommendation-review-${finding.id}`}>
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-sm font-semibold text-gray-800">Existing job review</p>
+                              <span className={`text-xs px-2 py-0.5 rounded-full ${
+                                status === "unavailable" ? "bg-amber-100 text-amber-800" :
+                                hasCandidates ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-700"
+                              }`}>
+                                {resolution.loading ? "Checking…" :
+                                 status === "unavailable" ? "Lookup unavailable" :
+                                 hasCandidates ? `${resolution.candidates.length} candidate${resolution.candidates.length === 1 ? "" : "s"}` :
+                                 "No suitable match"}
+                              </span>
+                            </div>
+                            <p className="text-xs text-gray-500 mt-1">
+                              Select an existing job and confirm it before it can be added. Nothing is written to the RO during lookup.
+                            </p>
+                            {resolution.error && (
+                              <p className="text-xs text-amber-700 mt-2">{resolution.error}</p>
+                            )}
+                            {resolution.warnings.length > 0 && (
+                              <div className="mt-2 rounded border border-amber-200 bg-amber-50 p-2">
+                                <p className="text-xs font-semibold text-amber-800">Review warnings</p>
+                                <ul className="mt-1 list-disc pl-4 text-xs text-amber-800 space-y-0.5">
+                                  {resolution.warnings.map((warning, index) => <li key={index}>{warning}</li>)}
+                                </ul>
+                              </div>
+                            )}
+                            {hasCandidates && (
+                              <div className="mt-3 space-y-2">
+                                {resolution.candidates.map((candidate, index) => {
+                                  const id = candidateId(candidate, index);
+                                  const lines = candidateLines(candidate);
+                                  const total = candidateTotal(candidate);
+                                  const relevance = candidate.vehicleRelevance ?? candidate.relevance ?? candidate.vehicleMatch ?? candidate.vehicle?.relevance;
+                                  const candidateWarnings = Array.isArray(candidate.warnings)
+                                    ? candidate.warnings.map(warningText)
+                                    : [];
+                                  return (
+                                    <label
+                                      key={id}
+                                      className={`block rounded-lg border p-3 cursor-pointer ${
+                                        resolution.selectedCandidateId === id
+                                          ? "border-blue-500 bg-blue-50"
+                                          : "border-gray-200 hover:border-blue-300"
+                                      }`}
+                                    >
+                                      <div className="flex items-start gap-2">
+                                        <input
+                                          type="radio"
+                                          name={`recommendation-${finding.id}`}
+                                          value={id}
+                                          checked={resolution.selectedCandidateId === id}
+                                          onChange={() => selectRecommendationCandidate(finding, candidate, index)}
+                                          className="mt-1"
+                                        />
+                                        <div className="min-w-0 flex-1">
+                                          <div className="flex items-start justify-between gap-2">
+                                            <p className="text-sm font-semibold text-gray-900">{candidateTitle(candidate)}</p>
+                                            <span className="text-xs font-medium text-gray-700 shrink-0">
+                                              {formatMoney(total)}
+                                            </span>
+                                          </div>
+                                          <p className="text-xs text-gray-500 mt-0.5">
+                                            Source: <span className="font-medium text-gray-700">{candidateSourceLabel(candidate)}</span>
+                                          </p>
+                                          {relevance != null && (
+                                            <p className="text-xs text-gray-500 mt-0.5">
+                                              Vehicle relevance: <span className="font-medium text-gray-700">
+                                                {relevanceText(relevance)}
+                                              </span>
+                                            </p>
+                                          )}
+                                          <div className="mt-2 border-t border-gray-100 pt-2">
+                                            <p className="text-xs font-semibold text-gray-500 uppercase">Source lines</p>
+                                            {lines.length > 0 ? (
+                                              <ul className="mt-1 space-y-1">
+                                                {lines.map((line, lineIndex) => (
+                                                  <li key={lineIndex} className={`flex items-center justify-between gap-2 text-xs ${
+                                                    lineIsIncomplete(line) ? "text-amber-700" : "text-gray-600"
+                                                  }`}>
+                                                    <span className="truncate">
+                                                      {lineDescription(line)} · qty {String(line.quantity ?? line.hours ?? 1)}
+                                                    </span>
+                                                    <span className="shrink-0">{formatMoney(linePrice(line))}</span>
+                                                  </li>
+                                                ))}
+                                              </ul>
+                                            ) : (
+                                              <p className="text-xs text-amber-700 mt-1">
+                                                {resolution.previewingCandidateId === id
+                                                  ? "Loading selected job details…"
+                                                  : resolution.selectedCandidateUnusable && resolution.selectedCandidateId === id
+                                                    ? "Selected details are unavailable — use the generated fallback below."
+                                                    : "Selecting this candidate will load its current job details."}
+                                              </p>
+                                            )}
+                                          </div>
+                                          {candidateWarnings.length > 0 && (
+                                            <ul className="mt-2 list-disc pl-4 text-xs text-amber-700">
+                                              {candidateWarnings.map((warning, warningIndex) => <li key={warningIndex}>{warning}</li>)}
+                                            </ul>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </label>
+                                  );
+                                })}
+                                <button
+                                  onClick={() => confirmRecommendation(finding)}
+                                  disabled={
+                                    !resolution.selectedCandidateId ||
+                                    Boolean(resolution.previewingCandidateId) ||
+                                    selectedCandidateHasNoLines ||
+                                    Boolean(resolution.selectedCandidateUnusable)
+                                  }
+                                  className="px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  Confirm selected existing job
+                                </button>
+                                {resolution.error && <p className="text-xs text-red-600">{resolution.error}</p>}
+                              </div>
+                            )}
+                            {canFallback && !resolution.fallbackUsed && (
+                              <div className="mt-3 border-t border-gray-100 pt-3">
+                                <p className="text-xs text-gray-600">
+                                  {status === "unavailable"
+                                    ? "The existing-job lookup is unavailable."
+                                    : "No suitable reusable job was found."}{" "}
+                                  You can explicitly use the generated builder fallback; it will retain the audited vehicle context.
+                                </p>
+                                <button
+                                  onClick={() => buildGeneratedFallback(finding)}
+                                  disabled={buildingFindingId === finding.id}
+                                  className="mt-2 px-3 py-1.5 text-xs font-medium bg-gray-900 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50"
+                                >
+                                  {buildingFindingId === finding.id ? "Building generated fallback…" : "Use generated estimate fallback"}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                       {builtEstimates[finding.id] && (() => {
                         const be = builtEstimates[finding.id];
                         const lh = be.laborHours as Record<string, unknown> | undefined;
@@ -750,9 +1827,43 @@ export default function EstimateAssistPanel({
                             <div className="flex items-center gap-2 mb-2">
                               <span className="text-xs font-semibold text-green-700 bg-green-50 px-2 py-0.5 rounded-full">Estimate Line Item</span>
                               <span className="text-xs text-gray-400">{String(be.category || "")}</span>
+                              {Boolean(be.sourceLabel) && (
+                                <span className="text-xs font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full">
+                                  {String(be.sourceLabel)}
+                                </span>
+                              )}
                             </div>
                             <p className="text-sm font-semibold text-gray-900">{String(be.title || "")}</p>
                             <p className="text-xs text-gray-600 mt-1">{String(be.description || "")}</p>
+                            {Array.isArray(be.lines) && (be.lines as Array<Record<string, unknown>>).length > 0 && (
+                              <div className="mt-2 rounded border border-blue-100 bg-blue-50/40 p-2">
+                                <p className="text-xs font-semibold text-gray-500 uppercase">Selected source lines</p>
+                                <ul className="mt-1 space-y-1">
+                                  {(be.lines as Array<Record<string, unknown>>).map((line, lineIndex) => (
+                                    <li key={lineIndex} className={`flex items-center justify-between gap-2 text-xs ${
+                                      lineIsIncomplete(line) ? "text-amber-700" : "text-gray-600"
+                                    }`}>
+                                      <span className="truncate">{lineDescription(line)}</span>
+                                      <span className="shrink-0">{formatMoney(linePrice(line))}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                            {Boolean(be.incompleteLines) && (
+                              <div className="mt-2">
+                                <p className="text-xs text-amber-700">
+                                  Some source lines are incomplete or missing prices. Review them before adding this package to the RO.
+                                </p>
+                                <button
+                                  onClick={() => buildGeneratedFallback(finding)}
+                                  disabled={buildingFindingId === finding.id}
+                                  className="mt-1 px-2 py-1 text-xs font-medium bg-white border border-amber-300 text-amber-800 rounded hover:bg-amber-50 disabled:opacity-50"
+                                >
+                                  Use generated fallback instead
+                                </button>
+                              </div>
+                            )}
                             <div className="flex gap-4 mt-2 text-xs text-gray-500">
                               <span>Labor: <strong className="text-gray-700">{String(lh?.typical || 0)}h</strong> ({String(lh?.min || 0)}-{String(lh?.max || 0)}h)</span>
                               {Array.isArray(be.requiredParts) && (be.requiredParts as string[]).length > 0 && (
@@ -763,7 +1874,7 @@ export default function EstimateAssistPanel({
                               <div className="mt-3 flex items-center gap-3">
                                 <button
                                   onClick={() => pushToRo(finding)}
-                                  disabled={pushingFindingId === finding.id || !!pushedFindings[finding.id]}
+                                  disabled={pushingFindingId === finding.id || !!pushedFindings[finding.id] || Boolean(be.incompleteLines)}
                                   className={`px-3 py-1.5 text-xs font-medium rounded-lg ${
                                     pushedFindings[finding.id]
                                       ? "bg-green-600 text-white cursor-default"
@@ -786,7 +1897,9 @@ export default function EstimateAssistPanel({
                                       ? handoffFindings[finding.id]
                                         ? "Add this package on the RO in Tekmetric — its API doesn't allow adding jobs directly."
                                         : "Tekmetric's API doesn't allow adding jobs directly — this checks the RO is open, then opens it in Tekmetric so you can add the package there."
-                                      : "Labor uses your shop rate; parts are added at $0 — set pricing in Protractor."}
+                                      : be.sourceCandidateId
+                                        ? "Selected source lines and prices are preserved through the existing add workflow."
+                                        : "Labor uses your shop rate; parts are added at $0 — set pricing in Protractor."}
                                   </span>
                                 )}
                               </div>
@@ -1171,12 +2284,18 @@ export default function EstimateAssistPanel({
                             {finding.suggestedJobTitle && (
                               <button
                                 onClick={() => {
-                                  setJobBuilderQuery(finding.suggestedJobTitle || "");
-                                  setActiveTab("builder");
+                                  // Saved reports may predate vehicle metadata;
+                                  // resolveRecommendation handles that safely
+                                  // and the fallback remains explicitly labeled.
+                                  resetRecommendationState();
+                                  setReport(item.report);
+                                  setWorkOrderId(item.workOrderNumber || item.workOrderId || "");
+                                  setActiveTab("audit");
+                                  resolveRecommendation(finding, item.report);
                                 }}
                                 className="mt-2 px-2 py-1 text-xs font-medium bg-white border border-gray-300 rounded hover:bg-gray-50"
                               >
-                                + Build Estimate
+                                Review existing job match
                               </button>
                             )}
                           </div>

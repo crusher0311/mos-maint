@@ -36,6 +36,7 @@ function ok(name: string, cond: boolean, detail?: string) {
 }
 
 const config: ProtractorConfig = {
+  shopId: 1,
   connectionId: "test-conn",
   apiKey: "test-key",
   authentication: "test-auth",
@@ -51,6 +52,8 @@ __protractorClientTestHooks.acquireDistributedRateLimitSlot = async () => ({
   currentCount: 0,
 });
 __protractorClientTestHooks.trackApiRequest = async () => {};
+__protractorClientTestHooks.acquireOutboundGate = async () => ({ allowed: true, probe: false });
+__protractorClientTestHooks.recordResponse = async () => {};
 __protractorClientTestHooks.retryBaseDelayMs = 5;
 
 async function main() {

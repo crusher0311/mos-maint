@@ -24,7 +24,7 @@ import crypto from "node:crypto";
  *    shops or by a different user.
  */
 export function deriveIdempotentUpstreamId(
-  kind: "contact" | "vehicle" | "workOrder",
+  kind: "contact" | "vehicle" | "workOrder" | "servicePackage" | "servicePackageLine",
   shopId: number | string,
   userId: string,
   clientRequestId: string,
@@ -46,7 +46,7 @@ export function deriveIdempotentUpstreamId(
  * fresh random UUID — the pre-#937 behavior).
  */
 export function resolveClientRequestId(
-  kind: "contact" | "vehicle" | "workOrder",
+  kind: "contact" | "vehicle" | "workOrder" | "servicePackage" | "servicePackageLine",
   shopId: number | string,
   userId: unknown,
   clientRequestId: unknown,

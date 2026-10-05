@@ -30,6 +30,8 @@ interface ApiUsageRecord {
   requestId?: string;
   retryCount?: number;
   sourceWorker?: string;
+  environment?: "production" | "development" | "test" | "unknown";
+  transport?: "direct" | "relay";
   promptTokens?: number;
   completionTokens?: number;
   totalTokens?: number;
@@ -42,6 +44,9 @@ export interface TrackingOptions {
   requestId?: string;
   retryCount?: number;
   sourceWorker?: string;
+  /** Coarse provenance only; never store domains, hostnames, or deployment IDs. */
+  environment?: "production" | "development" | "test" | "unknown";
+  transport?: "direct" | "relay";
   tokens?: { prompt?: number; completion?: number; total?: number };
 }
 
@@ -236,6 +241,7 @@ export async function acquireDistributedRateLimitSlot(
     }
 
     await releaseRateLimitSlot(key);
+    if (attempt === maxRetries - 1) break;
     
     const exponentialWait = baseWaitMs * Math.pow(2, attempt);
     const jitter = Math.random() * 1000;
@@ -284,6 +290,8 @@ export async function trackApiRequest(
     requestId: options?.requestId || generateRequestId(),
     retryCount: options?.retryCount,
     sourceWorker: options?.sourceWorker,
+    environment: options?.environment,
+    transport: options?.transport,
     promptTokens: options?.tokens?.prompt,
     completionTokens: options?.tokens?.completion,
     totalTokens: options?.tokens?.total,

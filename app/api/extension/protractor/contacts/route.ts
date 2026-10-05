@@ -2,6 +2,7 @@ import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 import { NextRequest, NextResponse } from "next/server";
 import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
 import { searchContacts } from "@/lib/integrations/protractor";
+import { runWithProtractorInteractiveTransport } from "@/lib/integrations/protractor/interactive-context";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -31,7 +32,10 @@ async function _GET(req: NextRequest) {
     });
     if (!guard.ok) return guard.response;
 
-    const result = await searchContacts(guard.mosShopId, search);
+    const result = await runWithProtractorInteractiveTransport(
+      guard.mosShopId,
+      () => searchContacts(guard.mosShopId, search),
+    );
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: 500, headers: corsHeaders });
     }

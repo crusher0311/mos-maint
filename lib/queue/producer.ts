@@ -21,8 +21,16 @@
  * `inflight-lock.ts` for the ported workloads.
  */
 
+import { createHash } from "crypto";
 import { shouldUseQueueForShop } from "./feature-flag";
-import { getQueue, QUEUE_NAMES, type QueueName } from "./queues";
+import {
+  ESTIMATE_AUDIT_JOB_OPTS,
+  ESTIMATE_AUDIT_QUEUE_COMMAND_TIMEOUT_MS,
+  getQueue,
+  QUEUE_NAMES,
+  type QueueName,
+} from "./queues";
+import type { JobsOptions } from "bullmq";
 
 export type EnqueueResult =
   | { enqueued: true; jobId: string; queue: QueueName }
@@ -56,16 +64,59 @@ export type DrainJobData = {
   enqueuedAt: string;
 };
 
+export type EstimateAuditJobData = {
+  shopId: number;
+  provider: "tekmetric" | "protractor" | "shopware" | "shopmonkey";
+  workOrderId: string;
+  revision: number;
+  enqueuedAt: string;
+};
+
+type SafeAddOptions = Omit<JobsOptions, "jobId"> & {
+  /**
+   * Optional producer-side deadline.  This is intentionally opt-in: the
+   * shared Redis connection is also used by blocking workers, so setting
+   * ioredis `commandTimeout` globally would break those workers.  Audit
+   * producers use this to fail closed instead of waiting forever on Redis.
+   */
+  commandTimeoutMs?: number;
+};
+
+async function boundedQueueCall<T>(
+  operation: string,
+  call: () => Promise<T>,
+  timeoutMs?: number,
+): Promise<T> {
+  if (!timeoutMs || timeoutMs <= 0) return call();
+
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      call(),
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`${operation}_timeout`)),
+          timeoutMs,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 async function safeAdd(
   queueName: QueueName,
   jobName: string,
   data: unknown,
   jobId: string,
+  options: SafeAddOptions = {},
 ): Promise<EnqueueResult> {
   const q = getQueue(queueName);
   if (!q) {
     return { enqueued: false, reason: "queue_unavailable", queue: queueName };
   }
+  const { commandTimeoutMs, ...jobOptions } = options;
   try {
     // Self-heal dead-lettered shops. Queues run `removeOnFail: false`, so a
     // job that exhausts its retries persists in the `failed` set forever
@@ -78,18 +129,30 @@ async function safeAdd(
     // Completed jobs can't collide (removeOnComplete: true removes them
     // immediately), so any pre-existing job is active/waiting/delayed/paused
     // (a genuine "someone else has it" duplicate) OR failed (our stuck case).
-    const existing = await q.getJob(jobId);
+    const existing = await boundedQueueCall(
+      "queue_get_job",
+      () => q.getJob(jobId),
+      commandTimeoutMs,
+    );
     if (existing) {
       let state: string | undefined;
       try {
-        state = await existing.getState();
+        state = await boundedQueueCall(
+          "queue_get_state",
+          () => existing.getState(),
+          commandTimeoutMs,
+        );
       } catch {
         // If we can't read state, fall through to the duplicate branch — we
         // never want this best-effort re-drive to throw away an enqueue.
       }
       if (state === "failed") {
         try {
-          await existing.retry();
+          await boundedQueueCall(
+            "queue_retry_failed_job",
+            () => existing.retry(),
+            commandTimeoutMs,
+          );
           console.log(
             `[Queue ${queueName}] re-drove dead-lettered job jobId=${jobId} (failed -> waiting)`,
           );
@@ -109,7 +172,11 @@ async function safeAdd(
       // Active / waiting / delayed / paused — a real in-flight duplicate.
       return { enqueued: false, reason: "duplicate", queue: queueName };
     }
-    const job = await q.add(jobName, data, { jobId });
+    const job = await boundedQueueCall(
+      "queue_add",
+      () => q.add(jobName, data, { ...jobOptions, jobId }),
+      commandTimeoutMs,
+    );
     // BullMQ returns the existing job (same instance, same id) when a
     // duplicate is rejected — but it also returns a job object for a
     // brand-new enqueue. The way to detect a duplicate is to inspect
@@ -118,7 +185,11 @@ async function safeAdd(
     // we asked for and trust BullMQ's uniqueness. The only failure
     // mode is duplicate, which throws in some BullMQ versions — we
     // catch that below.
-    return { enqueued: true, jobId: String(job.id), queue: queueName };
+    return {
+      enqueued: true,
+      jobId: String(job.id),
+      queue: queueName,
+    };
   } catch (err: any) {
     const msg = String(err?.message || err);
     if (/duplicat|already exists/i.test(msg)) {
@@ -186,4 +257,98 @@ export async function enqueueDrain(
   // "_" delimiter — BullMQ forbids ":" in custom jobIds (see fullpage note).
   const jobId = `${queueName}_${tag}`;
   return safeAdd(queueName, "drain", data, jobId);
+}
+
+/**
+ * Automatic audits are opt-in independently from backfill queues. Never
+ * fall back to inline evaluation: callers retain durable pending state and a
+ * subsequent receipt can re-drive an unavailable queue.
+ */
+export async function enqueueEstimateAudit(
+  data: EstimateAuditJobData,
+): Promise<EnqueueResult> {
+  const queueName = QUEUE_NAMES.ESTIMATE_AUDIT;
+  if (process.env.ESTIMATE_AUDIT_AUTOMATION_DISABLED === "true" ||
+      (process.env.ESTIMATE_AUDIT_AUTOMATION_ENABLED !== "true" &&
+       !new Set((process.env.ESTIMATE_AUDIT_AUTOMATION_SHOPS || "").split(",").map((v) => v.trim())).has(String(data.shopId)))) {
+    return { enqueued: false, reason: "flag_off", queue: queueName };
+  }
+  const jobId = estimateAuditJobId(data);
+  const result = await safeAdd(
+    queueName,
+    "evaluate",
+    data,
+    jobId,
+    {
+      ...ESTIMATE_AUDIT_JOB_OPTS,
+      commandTimeoutMs: ESTIMATE_AUDIT_QUEUE_COMMAND_TIMEOUT_MS,
+    },
+  );
+
+  if (result.enqueued) {
+    estimateAuditQueueCounters.queued += 1;
+    console.info(JSON.stringify({
+      event: "estimate_audit_queued",
+      queue: queueName,
+      jobId: result.jobId,
+      shopId: data.shopId,
+      provider: data.provider,
+      revision: data.revision,
+      delayMs: ESTIMATE_AUDIT_JOB_OPTS.delay,
+    }));
+  } else if (result.reason === "duplicate") {
+    estimateAuditQueueCounters.deduped += 1;
+    console.info(JSON.stringify({
+      event: "estimate_audit_deduped",
+      queue: queueName,
+      jobId,
+      shopId: data.shopId,
+      provider: data.provider,
+      revision: data.revision,
+    }));
+  }
+  return result;
+}
+
+/**
+ * The audit identity deliberately hashes the complete, provider-side identity
+ * instead of putting a sanitized/truncated RO number in a BullMQ job id.
+ *
+ * JSON gives us unambiguous field boundaries (unlike concatenation), and the
+ * full SHA-256 digest stays within BullMQ's custom-id character constraints
+ * without discarding any part of a long or punctuation-heavy RO id.
+ */
+export function estimateAuditJobId(data: Pick<
+  EstimateAuditJobData,
+  "shopId" | "provider" | "workOrderId" | "revision"
+> & Partial<Pick<EstimateAuditJobData, "enqueuedAt">>): string {
+  const identity = JSON.stringify({
+    shopId: data.shopId,
+    provider: data.provider,
+    workOrderId: String(data.workOrderId),
+    revision: data.revision,
+  });
+  const digest = createHash("sha256").update(identity, "utf8").digest("hex");
+  return `${QUEUE_NAMES.ESTIMATE_AUDIT}_${digest}`;
+}
+
+export type EstimateAuditQueueCounters = {
+  queued: number;
+  deduped: number;
+};
+
+const estimateAuditQueueCounters: EstimateAuditQueueCounters = {
+  queued: 0,
+  deduped: 0,
+};
+
+/** Process-local counters for queue admission dashboards and smoke tests. */
+export function getEstimateAuditQueueCounters(): EstimateAuditQueueCounters {
+  return { ...estimateAuditQueueCounters };
+}
+
+/** Test-only seam; queue counters are intentionally not persisted here. */
+export function __resetEstimateAuditQueueCountersForTest(): void {
+  estimateAuditQueueCounters.queued = 0;
+  estimateAuditQueueCounters.deduped = 0;
 }

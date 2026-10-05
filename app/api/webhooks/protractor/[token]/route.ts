@@ -11,7 +11,11 @@ import { attributeRevenueFromWorkOrder } from "@/lib/enterprise";
 import { extractJobIndexFromWorkOrder, computeJobHash } from "@/lib/job-index";
 import { triggerVhiOnWorkOrderClose, triggerVhiOnWorkOrderCreate, extractAuthorizedJobsFromProtractorRo } from "@/lib/vhi-webhook-trigger";
 import { insertEvent } from "@/lib/data/repositories/events";
-import { NormalizedIngestionService } from "@/lib/integrations/core/normalized-ingestion";
+import {
+  NormalizedIngestionService,
+  scheduleAuditReceiptForNormalizedPayload,
+} from "@/lib/integrations/core/normalized-ingestion";
+import { isProtractorShopRecord } from "@/lib/integrations/protractor/shop-eligibility";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,7 +51,19 @@ async function findShopByToken(token: string) {
   const db = await __deps.getDb();
   return db
     .collection("shops")
-    .findOne({ protractorWebhookToken: token }, { projection: { shopId: 1, name: 1 } });
+    .findOne(
+      { protractorWebhookToken: token },
+      {
+        projection: {
+          shopId: 1,
+          name: 1,
+          integrationProvider: 1,
+          protractor: 1,
+          protractorApiKey: 1,
+          protractorConnectionId: 1,
+        },
+      },
+    );
 }
 
 function resolveVin(payload: any): string | null {
@@ -69,6 +85,9 @@ export async function GET(req: NextRequest, ctx: { params: { token: string } }) 
   const isPing = req.nextUrl.searchParams.has("ping");
   const shop = await findShopByToken(token);
   if (!shop) return NextResponse.json({ error: "invalid token" }, { status: 401 });
+  if (!isProtractorShopRecord(shop)) {
+    return NextResponse.json({ ok: true, ignored: true, reason: "Shop is not a Protractor integration" });
+  }
 
   if (isPing) {
     return NextResponse.json({ ok: true, shopId: shop.shopId, tokenValid: true });
@@ -82,6 +101,9 @@ export async function POST(req: NextRequest, ctx: { params: { token: string } })
 
   const shop = await findShopByToken(token);
   if (!shop) return NextResponse.json({ error: "invalid token" }, { status: 401 });
+  if (!isProtractorShopRecord(shop)) {
+    return NextResponse.json({ ok: true, ignored: true, reason: "Shop is not a Protractor integration" });
+  }
 
   const raw = await req.text();
   let payload: any = null;
@@ -185,6 +207,21 @@ export async function POST(req: NextRequest, ctx: { params: { token: string } })
         console.log(`[Protractor Webhook] received WO=${woNum} shop=${shopId} op=${operation}`);
         await __deps.upsertProtractorWorkOrderSnapshot(shopId, result.workOrder);
         console.log(`[Protractor Webhook] enriched WO=${woNum} (protractor_work_orders upserted)`);
+        // The fetched work order is the complete raw receipt. Schedule it
+        // before normalized writes; this helper is pure and makes no
+        // additional Protractor call.
+        try {
+          await scheduleAuditReceiptForNormalizedPayload(
+            db,
+            shopId,
+            "protractor",
+            result.workOrder,
+            "webhook",
+            shop.enterpriseId as string | undefined,
+          );
+        } catch (err: any) {
+          console.warn(`[Protractor Webhook] audit receipt handoff failed for WO ${woNum}:`, err?.message || err);
+        }
 
         // Task #517 — Webhook normalization durability: previously the
         // webhook only wrote to `protractor_work_orders`, leaving
@@ -204,7 +241,12 @@ export async function POST(req: NextRequest, ctx: { params: { token: string } })
             'protractor',
             shopId,
             enterpriseId,
-            { dualWriteToJobIndex: false, dualWriteToRepairPatterns: true, ingestionVia: 'webhook' }
+            {
+              dualWriteToJobIndex: false,
+              dualWriteToRepairPatterns: true,
+              ingestionVia: 'webhook',
+              suppressAutomaticAuditReceipt: true,
+            }
           );
           const normResult = await ingestionService.ingestWorkOrderWithAllEntities(result.workOrder);
           console.log(

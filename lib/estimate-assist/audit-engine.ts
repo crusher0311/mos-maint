@@ -14,6 +14,22 @@ import {
   searchJobs,
   JobKnowledgeEntry,
 } from "@/lib/estimate-assist/job-knowledge-base";
+import { toKeyFromFreeText, toKeyFromName } from "@/lib/service-keys";
+
+export type AuditFindingSource = "static" | "vhi" | "ai";
+
+/**
+ * Stable, machine-readable evidence retained when equivalent findings from
+ * different evaluators are combined.  It intentionally contains only RO
+ * line/service references, never an unbounded AI explanation.
+ */
+export interface AuditFindingEvidence {
+  lineItemIndexes?: number[];
+  lineItemTitles?: string[];
+  serviceKeys?: string[];
+  affectedJobTitles?: string[];
+  operation?: string;
+}
 
 export interface AuditFinding {
   id: string;
@@ -26,6 +42,27 @@ export interface AuditFinding {
   suggestedJobTitle?: string;
   confidence: number;
   lineItemIndex?: number;
+  /** Evaluator that first raised this finding (legacy reports omit this). */
+  source?: AuditFindingSource;
+  /** All evaluators whose evidence was merged into this one issue. */
+  sources?: AuditFindingSource[];
+  /** Conservative service/line evidence used for identity and review. */
+  evidence?: AuditFindingEvidence;
+}
+
+/**
+ * Vehicle identity captured at audit time.  This is deliberately metadata
+ * only: audit rules must continue to operate on line items and may not use
+ * these fields to change their findings.
+ *
+ * The property is optional so audits saved before recommendation resolution
+ * was introduced remain readable.
+ */
+export interface AuditVehicleMetadata {
+  vin?: string;
+  year?: number;
+  make?: string;
+  model?: string;
 }
 
 export interface AuditReport {
@@ -40,6 +77,8 @@ export interface AuditReport {
    */
   smsWorkOrderId?: string;
   vehicleDisplay?: string;
+  /** Vehicle identity used when reviewing or falling back from a finding. */
+  vehicle?: AuditVehicleMetadata;
   auditDate: string;
   findings: AuditFinding[];
   summary: AuditSummary;
@@ -55,6 +94,28 @@ export interface AuditReport {
     reason?: string;
     missingCount?: number;
   };
+  /** Overall result completeness for current evaluator reports. */
+  completeness: AuditCompleteness;
+  /** Explicit optional-AI outcome; unavailable means static/VHI findings remain useful but partial. */
+  aiStatus: AuditAiStatus;
+  /**
+   * An audit can still return useful static findings when an optional
+   * evaluator is unavailable.  Consumers must not present such a result as a
+   * fully completed AI review.
+   */
+  evaluation?: AuditEvaluationStatus;
+}
+
+export interface AuditEvaluationStatus {
+  completeness: AuditCompleteness;
+  ai: AuditAiStatus;
+}
+
+export type AuditCompleteness = "complete" | "partial";
+
+export interface AuditAiStatus {
+  status: "completed" | "unavailable";
+  reason?: string;
 }
 
 export interface AuditSummary {
@@ -244,21 +305,102 @@ export function runStaticAuditRules(lineItems: AuditLineItem[]): AuditFinding[] 
     }
   }
 
-  return findings;
+  return findings.map((finding) => ({
+    ...finding,
+    source: "static",
+    sources: ["static"],
+    evidence: {
+      lineItemIndexes:
+        typeof finding.lineItemIndex === "number" ? [finding.lineItemIndex] : undefined,
+      lineItemTitles:
+        typeof finding.lineItemIndex === "number" && lineItems[finding.lineItemIndex]?.title
+          ? [lineItems[finding.lineItemIndex].title]
+          : undefined,
+      affectedJobTitles: finding.suggestedJobTitle ? [finding.suggestedJobTitle] : undefined,
+      operation: findingOperation(finding),
+    },
+  }));
 }
 
 /**
- * Drop duplicate findings (same category + title, first wins) and sort by
- * severity (critical → warning → info), then confidence descending.
+ * Return narrow, stable identity keys for a finding.  A line-specific issue
+ * needs the same line and operation; an unscoped recommendation needs an
+ * exact service key and operation.  The final category/title key preserves
+ * legacy exact-deduplication without fuzzy-title collapse.
+ */
+export function findingIdentityKeys(finding: AuditFinding): string[] {
+  const operation = finding.evidence?.operation || findingOperation(finding);
+  const keys: string[] = [];
+  const hasConcreteOperation = !operation.startsWith("category:");
+  const indexes = finding.evidence?.lineItemIndexes?.length
+    ? finding.evidence.lineItemIndexes
+    : typeof finding.lineItemIndex === "number"
+      ? [finding.lineItemIndex]
+      : [];
+  for (const index of indexes) {
+    // An AI finding with only a broad category (for example "AI Analysis")
+    // has not supplied enough operation evidence to merge solely because it
+    // names the same line. Recognized operations are deliberately narrower.
+    if (hasConcreteOperation && Number.isInteger(index) && index >= 0) {
+      keys.push(`line:${index}:operation:${operation}`);
+    }
+  }
+
+  // Do not infer an arbitrary component from free text.  Service keys are
+  // only used for missing-service/companion recommendations, where an exact
+  // canonical identity is meaningful.
+  if (operation === "missing_service" || operation === "missing_companion") {
+    for (const serviceKey of findingServiceKeys(finding)) {
+      keys.push(`service:${serviceKey}:operation:${operation}`);
+    }
+  }
+
+  // An exact legacy key is safe only if this finding has no stronger affected
+  // line/component evidence.  Otherwise two identical-looking findings on
+  // separate brake-pad lines, for example, must remain two issues.
+  const hasLineEvidence = indexes.some((index) => Number.isInteger(index) && index >= 0);
+  const hasServiceEvidence = keys.some((key) => key.startsWith("service:"));
+  if (!hasLineEvidence && !hasServiceEvidence) {
+    keys.push(
+      `exact:${normalizeFindingText(finding.category)}:${normalizeFindingText(finding.title)}`,
+    );
+  } else if (hasLineEvidence && !hasConcreteOperation) {
+    // For unknown operations exact text can still collapse a retransmitted
+    // duplicate, but affected-line identity remains part of the key.
+    for (const index of indexes) {
+      if (Number.isInteger(index) && index >= 0) {
+        keys.push(
+          `exact-line:${index}:${normalizeFindingText(finding.category)}:${normalizeFindingText(finding.title)}`,
+        );
+      }
+    }
+  }
+  return keys;
+}
+
+/**
+ * Merge only findings with a shared conservative identity, then sort by
+ * severity (critical → warning → info) and confidence.  This happens before
+ * score calculation so one issue cannot lower the score multiple times just
+ * because static, VHI, and AI passes described it differently.
  */
 export function dedupeAndSortFindings(findings: AuditFinding[]): AuditFinding[] {
-  const existingTitles = new Set<string>();
-  const deduped = findings.filter(f => {
-    const key = `${f.category}:${f.title}`;
-    if (existingTitles.has(key)) return false;
-    existingTitles.add(key);
-    return true;
-  });
+  const deduped: AuditFinding[] = [];
+  const identities = new Map<string, number>();
+  for (const finding of findings) {
+    const keys = findingIdentityKeys(finding);
+    const existingIndex = keys.map((key) => identities.get(key)).find(
+      (index): index is number => index != null,
+    );
+    if (existingIndex == null) {
+      const index = deduped.push(normalizeFindingEvidence(finding)) - 1;
+      for (const key of keys) identities.set(key, index);
+      continue;
+    }
+    const merged = mergeFindings(deduped[existingIndex], finding);
+    deduped[existingIndex] = merged;
+    for (const key of findingIdentityKeys(merged)) identities.set(key, existingIndex);
+  }
 
   deduped.sort((a, b) => {
     const severityOrder = { critical: 0, warning: 1, info: 2 };
@@ -268,6 +410,95 @@ export function dedupeAndSortFindings(findings: AuditFinding[]): AuditFinding[] 
   });
 
   return deduped;
+}
+
+function normalizeFindingText(value: string | undefined): string {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function findingOperation(finding: AuditFinding): string {
+  const text = `${finding.category || ""} ${finding.title || ""} ${finding.description || ""}`.toLowerCase();
+  if (/missing\s+parts|no\s+parts|parts?\s+(?:are\s+)?missing/.test(text)) return "missing_parts";
+  if (/missing\s+labor|no\s+labor|labor\s+(?:is\s+)?missing/.test(text)) return "missing_labor";
+  if (/low\s+labor\s+hours/.test(text)) return "low_labor_hours";
+  if (/high\s+labor\s+hours/.test(text)) return "high_labor_hours";
+  if (/description\s+quality|incomplete\s+description/.test(text)) return "description_quality";
+  if (/due\s+on\s+vhi|not\s+on\s+(?:this\s+)?ticket/.test(text)) return "missing_service";
+  if (/companion|commonly.associated|consider\s+(?:adding|brake|water)/.test(text)) {
+    return "missing_companion";
+  }
+  return `category:${normalizeFindingText(finding.category)}`;
+}
+
+function findingServiceKeys(finding: AuditFinding): string[] {
+  const keys = new Set<string>(
+    (finding.evidence?.serviceKeys || []).map((key) => String(key).trim()).filter(Boolean),
+  );
+  if (finding.suggestedJobId) keys.add(`job:${normalizeFindingText(finding.suggestedJobId).replace(/\s+/g, "-")}`);
+  for (const text of [finding.suggestedJobTitle, finding.title]) {
+    if (!text) continue;
+    const named = toKeyFromName(text);
+    // A combined recommendation can legitimately mention multiple services
+    // (for example, wheel balance *and* rotation).  Do not use an ambiguous
+    // free-text result as an identity, or it could collapse either component
+    // into a different single-service finding. Exact one-key extraction is
+    // safe; the name mapper is only used when free-text sees no service.
+    const inferred = toKeyFromFreeText(text);
+    if (inferred.length === 1) keys.add(inferred[0]);
+    else if (inferred.length === 0 && named) keys.add(named);
+  }
+  return Array.from(keys);
+}
+
+function normalizeFindingEvidence(finding: AuditFinding): AuditFinding {
+  const lineItemIndexes = new Set<number>(finding.evidence?.lineItemIndexes || []);
+  if (typeof finding.lineItemIndex === "number") lineItemIndexes.add(finding.lineItemIndex);
+  const sources = new Set<AuditFindingSource>(finding.sources || []);
+  if (finding.source) sources.add(finding.source);
+  return {
+    ...finding,
+    ...(sources.size > 0 ? { sources: Array.from(sources) } : {}),
+    evidence: {
+      ...finding.evidence,
+      ...(lineItemIndexes.size > 0 ? { lineItemIndexes: Array.from(lineItemIndexes).sort((a, b) => a - b) } : {}),
+      operation: finding.evidence?.operation || findingOperation(finding),
+    },
+  };
+}
+
+function mergeFindings(first: AuditFinding, second: AuditFinding): AuditFinding {
+  const a = normalizeFindingEvidence(first);
+  const b = normalizeFindingEvidence(second);
+  const severityOrder = { critical: 0, warning: 1, info: 2 };
+  // Preserve the stronger presentation, while retaining all source evidence.
+  const primary = severityOrder[a.severity] <= severityOrder[b.severity] ? a : b;
+  const secondary = primary === a ? b : a;
+  const union = (left?: string[], right?: string[]) => {
+    const values = Array.from(new Set([...(left || []), ...(right || [])].filter(Boolean)));
+    return values.length ? values : undefined;
+  };
+  const indexes = Array.from(new Set([
+    ...(a.evidence?.lineItemIndexes || []),
+    ...(b.evidence?.lineItemIndexes || []),
+  ])).sort((x, y) => x - y);
+  return {
+    ...primary,
+    confidence: Math.max(a.confidence || 0, b.confidence || 0),
+    source: primary.source || secondary.source,
+    sources: union(a.sources, b.sources) as AuditFindingSource[] | undefined,
+    lineItemIndex:
+      indexes.length === 1 ? indexes[0] : primary.lineItemIndex,
+    evidence: {
+      lineItemIndexes: indexes.length ? indexes : undefined,
+      lineItemTitles: union(a.evidence?.lineItemTitles, b.evidence?.lineItemTitles),
+      serviceKeys: union(findingServiceKeys(a), findingServiceKeys(b)),
+      affectedJobTitles: union(a.evidence?.affectedJobTitles, b.evidence?.affectedJobTitles),
+      operation: a.evidence?.operation || b.evidence?.operation || findingOperation(primary),
+    },
+  };
 }
 
 /** Score math: 100 − 15/critical − 5/warning − 1/info, clamped to [0, 100]. */

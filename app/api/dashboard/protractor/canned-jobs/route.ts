@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getDb } from "@/lib/mongo";
 import { fetchCannedJobsWithCache, normalizeProtractorPackageLine, isCannedJobsCacheContentBlank } from "@/lib/integrations/protractor";
+import { runWithProtractorInteractiveTransport } from "@/lib/integrations/protractor/interactive-context";
 
 function extractLines(raw: any): any[] {
   if (!raw) return [];
@@ -65,7 +66,10 @@ export async function GET(req: NextRequest) {
         };
       });
     } else {
-      const result = await fetchCannedJobsWithCache(shopId);
+      const result = await runWithProtractorInteractiveTransport(
+        shopId,
+        () => fetchCannedJobsWithCache(shopId),
+      );
       if (!result.ok || !result.cannedJobs) {
         return NextResponse.json({ error: result.error || "Failed to fetch canned jobs" }, { status: 500 });
       }

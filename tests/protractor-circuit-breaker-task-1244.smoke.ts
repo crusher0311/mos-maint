@@ -1,3 +1,4 @@
+import "./helpers/deny-network-egress";
 import {
   __protractorClientTestHooks,
   createServiceItem,
@@ -23,6 +24,7 @@ function ok(name: string, condition: boolean, detail = "") {
 }
 
 const config: ProtractorConfig = {
+  shopId: 1,
   connectionId: "connection-a",
   apiKey: "key",
   authentication: "auth",

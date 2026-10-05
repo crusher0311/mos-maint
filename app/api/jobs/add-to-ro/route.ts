@@ -9,6 +9,7 @@ import {
   protractorFetch,
   createProtractorWorkOrder
 } from "@/lib/integrations/protractor";
+import { runWithProtractorInteractiveTransport } from "@/lib/integrations/protractor/interactive-context";
 import {
   getShopPartCostRatio,
   resolvePartLineCost,
@@ -20,6 +21,12 @@ import {
   needsCachedLaborRate,
   resolveAddToRoLaborRate,
 } from "@/lib/integrations/protractor/labor-rate";
+import { resolveClientRequestId } from "@/lib/idempotent-create-id";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
+import {
+  rehydrateRecommendationSelection,
+} from "@/lib/estimate-assist/recommendation-resolver";
+import type { AuditSelection } from "@/lib/estimate-assist/recommendation-types";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +48,11 @@ type JobPayload = {
   description?: string;
   code?: string;
   lines: JobLine[];
+};
+
+type AuditSelectionPayload = AuditSelection & {
+  /** Older UI builds may send the identity directly under auditSelection. */
+  sourceIdentity?: AuditSelection["source"];
 };
 
 /**
@@ -132,18 +144,105 @@ export async function POST(req: NextRequest) {
   const config = await resolveProtractorConfig(shopId);
 
   const body = await req.json();
-  const { workOrderGuid, job, source, vehicle } = body as { 
+  const {
+    workOrderGuid,
+    job: submittedJob,
+    source: submittedSource,
+    vehicle,
+    clientRequestId,
+    auditSelection: rawAuditSelection,
+  } = body as {
     workOrderGuid: string; 
-    job: JobPayload;
-    source?: "plan" | "failures" | "lookup" | "canned" | "autocomplete";
+    job?: JobPayload;
+    source?: "plan" | "failures" | "lookup" | "canned" | "autocomplete" | "history" | "audit";
     vehicle?: { vin?: string; year?: number; make?: string; model?: string };
+    clientRequestId?: string;
+    auditSelection?: AuditSelectionPayload;
   };
 
   if (!workOrderGuid) {
     return NextResponse.json({ error: "Work order GUID is required" }, { status: 400 });
   }
 
-  if (!job || !job.title) {
+  let job: JobPayload | undefined = submittedJob;
+  let source = submittedSource;
+  let auditSelectionWarnings: Array<{ code: string; message: string }> = [];
+  let auditSelectionSource: AuditSelection["source"] | undefined;
+
+  // Task #1274: a selected audit candidate is an identity, not a client-side
+  // job payload.  Rehydrate it before checking/constructing the provider
+  // write, so a browser cannot alter lines, prices, or cross-shop source data.
+  if (rawAuditSelection) {
+    const entitlements = await getFeatureEntitlements(shopId);
+    if (!entitlements.canUseFeature("estimate_assist")) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Estimate Assist is not available on your current plan",
+          code: "FEATURE_NOT_AVAILABLE",
+          feature: "estimate_assist",
+          upgradeRequired: true,
+          currentPlan: entitlements.billing.plan,
+        },
+        { status: 402 },
+      );
+    }
+    if (!entitlements.canUseFeature("job_lookup")) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Job Lookup is not available on your current plan",
+          code: "FEATURE_NOT_AVAILABLE",
+          feature: "job_lookup",
+          upgradeRequired: true,
+          currentPlan: entitlements.billing.plan,
+        },
+        { status: 402 },
+      );
+    }
+
+    const selection: AuditSelection = rawAuditSelection.source
+      ? rawAuditSelection
+      : { source: rawAuditSelection.sourceIdentity || (rawAuditSelection as any) };
+    const hydrated = await rehydrateRecommendationSelection(
+      shopId,
+      selection,
+      vehicle || {},
+    );
+    if (!hydrated.ok) {
+      const status =
+        hydrated.code === "FORBIDDEN" ? 403 :
+        hydrated.code === "UNAVAILABLE" ? 503 :
+        404;
+      return NextResponse.json(
+        { ok: false, error: hydrated.error, code: hydrated.code },
+        { status },
+      );
+    }
+
+    const hydratedJob = hydrated.recommendation;
+    auditSelectionSource = hydratedJob.source;
+    job = {
+      title: hydratedJob.title,
+      description: hydratedJob.description || undefined,
+      code: hydratedJob.code || undefined,
+      lines: hydratedJob.lines.map((line) => ({
+        lineType: line.lineType,
+        description: line.description,
+        partNumber: line.partNumber || undefined,
+        manufacturer: line.manufacturer || undefined,
+        quantity: line.quantity,
+        unitPrice: line.unitPrice,
+        extendedPrice: line.extendedPrice,
+        cost: line.cost == null ? undefined : line.cost,
+        extendedCost: line.extendedCost == null ? undefined : line.extendedCost,
+      })),
+    };
+    source = hydratedJob.source.kind === "canned" ? "canned" : "history";
+    auditSelectionWarnings = hydratedJob.warnings;
+  }
+
+  if (!job || !job.title || !Array.isArray(job.lines) || job.lines.length === 0) {
     return NextResponse.json({ error: "Job details are required" }, { status: 400 });
   }
 
@@ -166,7 +265,10 @@ export async function POST(req: NextRequest) {
 
   console.log(`[Add-to-RO:${requestId}] Fetching WO ${workOrderGuid} for shop ${shopId}...`);
   const fetchWOStart = Date.now();
-  const existingWOResult = await fetchWorkOrderById(shopId, workOrderGuid, { priority: true });
+  const existingWOResult = await runWithProtractorInteractiveTransport(
+    shopId,
+    () => fetchWorkOrderById(shopId, workOrderGuid, { priority: true }),
+  );
   console.log(`[Add-to-RO:${requestId}] WO fetch took ${Date.now() - fetchWOStart}ms`);
   if (!existingWOResult.ok || !existingWOResult.workOrder) {
     return NextResponse.json(
@@ -205,6 +307,30 @@ export async function POST(req: NextRequest) {
   const existingPackages = Array.isArray(existingPackagesRaw)
     ? existingPackagesRaw
     : (existingPackagesRaw?.ItemCollection || []);
+  const idempotencyScope = String(session.email ?? "");
+  const packageId = resolveClientRequestId(
+    "servicePackage",
+    shopId,
+    idempotencyScope,
+    clientRequestId,
+  ) || randomUUID();
+  const existingIdempotentPackage = existingPackages.find(
+    (pkg: any) => String(pkg?.ID || "").toLowerCase() === packageId.toLowerCase(),
+  );
+  if (existingIdempotentPackage) {
+    console.log(`[Add-to-RO:${requestId}] Idempotent replay: package already present`);
+    return NextResponse.json({
+      ok: true,
+      idempotentReplay: true,
+      message: `"${job.title}" was already added to the work order`,
+      servicePackage: {
+        title: job.title,
+        linesAdded: job.lines.length,
+        ...(auditSelectionSource ? { source: auditSelectionSource } : {}),
+        ...(auditSelectionWarnings.length ? { warnings: auditSelectionWarnings } : {}),
+      },
+    });
+  }
 
   const mapLineType = (lineType: string): string => {
     switch (lineType) {
@@ -263,8 +389,14 @@ export async function POST(req: NextRequest) {
   const partCostRatio = await getShopPartCostRatio(shopId);
 
   const servicePackageLines = job.lines.map((line, idx) => {
+    const lineId = resolveClientRequestId(
+      "servicePackageLine",
+      shopId,
+      idempotencyScope,
+      typeof clientRequestId === "string" ? `${clientRequestId}:${idx}` : undefined,
+    ) || randomUUID();
     const baseLine = {
-      ID: randomUUID(),
+      ID: lineId,
       Rank: idx + 1,
       Type: mapLineType(line.lineType),
       Description: line.description,
@@ -279,7 +411,7 @@ export async function POST(req: NextRequest) {
     if (line.lineType === "labor") {
       const laborTotal = line.quantity * shopLaborRate;
       return {
-        ID: randomUUID(),
+        ID: lineId,
         Rank: idx + 1,
         Type: "Labor",
         Description: line.description,
@@ -320,7 +452,7 @@ export async function POST(req: NextRequest) {
   });
 
   const newServicePackage = {
-    ID: randomUUID(),
+    ID: packageId,
     Chapter: "Service",
     Code: job.code || `JL-${Date.now()}`,
     Rank: existingPackages.length + 1,
@@ -343,64 +475,84 @@ export async function POST(req: NextRequest) {
   console.log(`[Add-to-RO:${requestId}] Full payload: ${JSON.stringify(updatedWorkOrder).substring(0, 2000)}`);
   const postStart = Date.now();
 
-  const updateResult = await protractorFetch<any>(
-    `/WorkOrder/${workOrderGuid}`,
-    config,
-    {
-      method: "POST",
-      body: JSON.stringify(updatedWorkOrder),
-    },
-    0,
+  const updateResult = await runWithProtractorInteractiveTransport(
     shopId,
-    { priority: true }
+    () => protractorFetch<any>(
+      `/WorkOrder/${workOrderGuid}`,
+      config,
+      {
+        method: "POST",
+        body: JSON.stringify(updatedWorkOrder),
+      },
+      0,
+      shopId,
+      { priority: true, maxRetries: 1 },
+    ),
   );
   
   console.log(`[Add-to-RO:${requestId}] POST took ${Date.now() - postStart}ms, ok=${updateResult.ok}`);
 
+  const containsPinnedPackage = (workOrder: any): boolean => {
+    const packagesRaw = workOrder?.ServicePackages;
+    const packages = Array.isArray(packagesRaw)
+      ? packagesRaw
+      : (packagesRaw?.ItemCollection || []);
+    return Array.isArray(packages) && packages.some(
+      (pkg: any) => String(pkg?.ID || "").toLowerCase() === packageId.toLowerCase(),
+    );
+  };
+  const verifyPinnedPackage = async (transportLabel: "REST" | "SOAP"): Promise<boolean> => {
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    const verifyResult = await runWithProtractorInteractiveTransport(
+      shopId,
+      () => fetchWorkOrderById(shopId, workOrderGuid, {
+        priority: true,
+      }),
+    );
+    if (!verifyResult.ok || !verifyResult.workOrder) {
+      console.log(
+        `[Add-to-RO:${requestId}] ${transportLabel} verification GET failed: ${verifyResult.error || "work order missing"}`,
+      );
+      return false;
+    }
+    const confirmed = containsPinnedPackage(verifyResult.workOrder);
+    console.log(
+      `[Add-to-RO:${requestId}] ${transportLabel} verification exactPackageId=${confirmed}`,
+    );
+    return confirmed;
+  };
+
+  let writeConfirmed = false;
   if (!updateResult.ok) {
     const isStatusColumnError = (updateResult.error || '').includes("Invalid column name 'Status'");
     
     if (isStatusColumnError) {
       console.log(`[Add-to-RO:${requestId}] REST failed with Status column SQL error — trying SOAP fallback...`);
       const soapStart = Date.now();
-      const soapResult = await soapAddServicePackage(shopId, workOrderGuid, updatedWorkOrder);
+      const soapResult = await runWithProtractorInteractiveTransport(
+        shopId,
+        () => soapAddServicePackage(shopId, workOrderGuid, updatedWorkOrder),
+      );
       console.log(`[Add-to-RO:${requestId}] SOAP took ${Date.now() - soapStart}ms, ok=${soapResult.ok}`);
       
       if (soapResult.ok) {
-        console.log(`[Add-to-RO:${requestId}] SOAP succeeded: verifying package was added...`);
-        
-        await new Promise(r => setTimeout(r, 1000));
-        const verifyResult = await protractorFetch<any>(
-          `/WorkOrder/${workOrderGuid}`,
-          config,
-          {},
-          0,
-          shopId,
-          { priority: true }
-        );
-        
-        if (verifyResult.ok && verifyResult.data) {
-          const verifyPkgs = verifyResult.data?.ServicePackages?.ItemCollection || 
-                             verifyResult.data?.ServicePackages || [];
-          const found = Array.isArray(verifyPkgs) && verifyPkgs.some(
-            (p: any) => p.ServicePackageHeader?.Title === job.title || p.Code === newServicePackage.Code
+        console.log(`[Add-to-RO:${requestId}] SOAP succeeded: verifying exact package ID...`);
+        writeConfirmed = await verifyPinnedPackage("SOAP");
+        if (!writeConfirmed) {
+          return NextResponse.json(
+            {
+              error: "Protractor accepted the update, but MOS could not confirm it. Retry safely; the same package ID will be reused.",
+            },
+            { status: 502 },
           );
-          
-          if (found) {
-            console.log(`[Add-to-RO:${requestId}] SOAP VERIFIED: Package "${job.title}" confirmed in WO`);
-          } else {
-            console.log(`[Add-to-RO:${requestId}] SOAP WARNING: Package "${job.title}" not found in verification GET. Packages: ${JSON.stringify(verifyPkgs.map((p: any) => p.ServicePackageHeader?.Title)).substring(0, 500)}`);
-            
-            return NextResponse.json(
-              { error: `SOAP update accepted but package was not confirmed. This Protractor installation may have a database issue (missing 'Status' column). Please contact Protractor support.` },
-              { status: 500 }
-            );
-          }
-        } else {
-          console.log(`[Add-to-RO:${requestId}] Could not verify SOAP result (GET failed)`);
         }
       } else {
-        console.log(`[Add-to-RO:${requestId}] SOAP also failed: ${soapResult.error}`);
+        console.log(JSON.stringify({
+          event: "add_to_ro_soap_failed",
+          requestId,
+          shopId,
+          endpointClass: "soap",
+        }));
         return NextResponse.json(
           { error: `Failed to add job: Protractor's database has a missing 'Status' column. Both REST and SOAP methods failed. Please contact Protractor support about this SQL error.` },
           { status: 500 }
@@ -414,18 +566,26 @@ export async function POST(req: NextRequest) {
       );
     }
   } else {
-    const responsePackages = updateResult.data?.ServicePackages?.ItemCollection || 
-                             updateResult.data?.ServicePackages || [];
-    const addedPackage = Array.isArray(responsePackages) 
-      ? responsePackages.find((p: any) => 
-          p.ServicePackageHeader?.Title === job.title || 
-          p.Code === newServicePackage.Code
-        )
-      : null;
-    
-    if (!addedPackage) {
-      console.log(`[Add-to-RO:${requestId}] WARNING: REST returned OK but package not found in response`);
+    writeConfirmed = containsPinnedPackage(updateResult.data);
+    if (!writeConfirmed) {
+      console.log(`[Add-to-RO:${requestId}] REST returned OK without the exact package ID; verifying with GET...`);
+      writeConfirmed = await verifyPinnedPackage("REST");
     }
+    if (!writeConfirmed) {
+      return NextResponse.json(
+        {
+          error: "Protractor accepted the update, but MOS could not confirm it. Retry safely; the same package ID will be reused.",
+        },
+        { status: 502 },
+      );
+    }
+  }
+
+  if (!writeConfirmed) {
+    return NextResponse.json(
+      { error: "MOS could not confirm that Protractor saved the package." },
+      { status: 502 },
+    );
   }
   
   console.log(`[Add-to-RO:${requestId}] Success: Added "${job.title}" to WO ${workOrderGuid}, total time: ${Date.now() - startTime}ms`);
@@ -442,7 +602,10 @@ export async function POST(req: NextRequest) {
     vehicleMake: vehicle?.make,
     vehicleModel: vehicle?.model,
     jobTitle: job.title,
-    jobSource: source || "lookup",
+    // Analytics predates Task #1274's explicit audit/history source labels;
+    // keep the write route's richer source while mapping those labels to the
+    // existing lookup bucket for the stable event schema.
+    jobSource: source === "history" || source === "audit" ? "lookup" : source || "lookup",
     repairOrderId: workOrderGuid,
     laborAmount,
     partsAmount,
@@ -455,6 +618,8 @@ export async function POST(req: NextRequest) {
     servicePackage: {
       title: job.title,
       linesAdded: job.lines.length,
+      ...(auditSelectionSource ? { source: auditSelectionSource } : {}),
+      ...(auditSelectionWarnings.length ? { warnings: auditSelectionWarnings } : {}),
     },
   });
 }

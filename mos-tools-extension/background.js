@@ -15,6 +15,10 @@ const MosTelemetryCore = globalThis.MosTelemetryCore;
 // the extension-auth response's optional assurance/capabilities fields).
 import './session-tier-core.js';
 const MosSessionTierCore = globalThis.MosSessionTierCore;
+// Pure labor-rate contracts shared with the side panel. This keeps broadcast
+// filtering and mutation-result semantics executable outside Chrome as well.
+import './labor-rate-core.js';
+const MosLaborRateCore = globalThis.MosLaborRateCore;
 // Signed provider-action receipts are validated again at each direct mutation
 // sink so authorization cannot be detached from the operation it approved.
 import './provider-action-grant-core.js';
@@ -22,7 +26,7 @@ const MosProviderActionGrantCore = globalThis.MosProviderActionGrantCore;
 import './tekmetric-session-recovery-core.js';
 const MosTekmetricSessionRecoveryCore = globalThis.MosTekmetricSessionRecoveryCore;
 
-// ==================== STATE MANAGEMENT ====================
+// ------ STATE MANAGEMENT ------
 let mosApiToken = null;
 let mosApiUrl = null;
 let currentSmsContext = null;
@@ -39,10 +43,20 @@ let bootstrapInFlightToken = null;
 let bootstrapInFlightKey = null;
 const smsContextsByTab = new Map();
 const tekmetricProofsByTab = new Map();
+// Safe, non-secret provider-session generation used only as a UI/broadcast
+// discriminator. The credential itself never leaves this worker.
+const laborRateProviderSessionGenerationByTab = new Map();
+function rotateLaborRateProviderSession(tabId) {
+  if (tabId == null || tabId < 0) return;
+  laborRateProviderSessionGenerationByTab.set(
+    tabId,
+    (laborRateProviderSessionGenerationByTab.get(tabId) || 0) + 1,
+  );
+}
 // Shopmonkey per-user browser bearer, captured from the SPA's own API calls.
 // Memory-only, same lifecycle rules as tekmetricProofsByTab.
 const shopmonkeyProofsByTab = new Map();
-let activeTabId = null;
+      const activeTabId = tabs[0]?.id;
 chrome.tabs.query({ active: true, currentWindow: true })
   .then((tabs) => { activeTabId = tabs[0]?.id ?? null; })
   .catch(() => {});
@@ -65,9 +79,19 @@ let laborRateRulesLastFetch = 0;
 let laborRateRulesRevision = 0;
 let laborRateRulesShopId = null;
 let laborRateRulesSmsShopId = null;
+let laborRateRulesContextKey = null;
+let laborRateRulesRequestSequence = 0;
+// Rules are scoped to the complete foreground context, not just an SMS shop
+// identifier.  A provider can expose numeric identifiers that overlap with
+// another provider and a service-worker restart can retain a cache while the
+// provider tab has rotated its session.  Keep entries separate so neither
+// case can paint or save another location's rules.
+const laborRateRulesCache = new Map();
 const LABOR_RULES_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const LABOR_RULES_CACHE_MAX = 50;
 let laborRateAutoApply = true; // Default on
 let lastAppliedRoId = null; // Prevent duplicate applications
+let lastAppliedLaborRateContextKey = null;
 let ownJobPostInFlight = false; // Track our own POST /job calls to avoid loops
 let lastJobCount = 0; // Track job count to detect new jobs
 let laborReapplyTimer = null; // Debounce timer for re-applying after new jobs
@@ -78,7 +102,7 @@ const XAUTH_RELAY_INTERVAL = 30 * 60 * 1000; // Relay x-auth-token at most once 
 // API Sniffer state (platform admin only)
 let snifferActive = false;
 
-// ==================== PERSISTENCE ====================
+// ------ PERSISTENCE ------
 // Restore all persisted state on startup as a single awaitable promise.
 // This prevents race conditions where message handlers fire before
 // chrome.storage callbacks complete (e.g. after service worker restart).
@@ -124,8 +148,11 @@ const _stateReady = Promise.all([
         tekmetricBaseUrl = result.tekmetricBaseUrl;
       }
       if (result.currentSmsContext) {
-        currentSmsContext = result.currentSmsContext;
-        if (currentSmsContext._tabId) {
+        currentSmsContext = decorateLaborRateContext(
+          result.currentSmsContext,
+          result.currentSmsContext._tabId,
+        );
+        if (currentSmsContext?._tabId != null) {
           smsContextsByTab.set(currentSmsContext._tabId, currentSmsContext);
         }
       }
@@ -160,7 +187,7 @@ const _stateReady = Promise.all([
   })
 ]);
 
-// ==================== TEKMETRIC TOKEN CAPTURE ====================
+// ------ TEKMETRIC TOKEN CAPTURE ------
 chrome.webRequest.onBeforeSendHeaders.addListener(
   (details) => {
     let requestOrigin = null;
@@ -175,15 +202,26 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
     } catch (e) {}
     
     // Detect when Tekmetric UI adds/modifies a job — re-apply labor rates
-    if (!ownJobPostInFlight && laborRateAutoApply && currentSmsContext?.roId) {
+    const requestTabContext = details.tabId >= 0
+      ? smsContextsByTab.get(details.tabId) || null
+      : null;
+    if (
+      !ownJobPostInFlight &&
+      laborRateAutoApply &&
+      details.tabId === activeTabId &&
+      requestTabContext?.provider === 'tekmetric' &&
+      requestTabContext?.roId
+    ) {
       const isJobPost = details.method === 'POST' && /\/api\/shop\/\d+\/job\b/.test(details.url);
       if (isJobPost) {
         console.log("[LaborRate] New job detected on RO, will re-apply rules");
         if (laborReapplyTimer) clearTimeout(laborReapplyTimer);
+        const reapplyContext = { ...requestTabContext };
         laborReapplyTimer = setTimeout(() => {
           lastAppliedRoId = null; // Reset so it re-applies on same RO
+          lastAppliedLaborRateContextKey = null;
           lastJobCount = 0;
-          autoApplyLaborRate(currentSmsContext).catch(err => {
+          autoApplyLaborRate(reapplyContext).catch(err => {
             console.warn("[LaborRate] Re-apply after new job error:", err.message);
           });
         }, 2000); // Wait 2s for Tekmetric to finish saving
@@ -284,7 +322,25 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
           seenAt: Date.now(),
         });
         tabContext = smsContextsByTab.get(details.tabId) || null;
-        tabTokenChanged = priorTabProof?.token !== tokenHeader.value;
+        tabTokenChanged =
+          priorTabProof?.token !== tokenHeader.value ||
+          priorTabProof?.origin !== requestOrigin;
+        if (tabTokenChanged) {
+          rotateLaborRateProviderSession(details.tabId);
+          if (tabContext) {
+            tabContext = decorateLaborRateContext(tabContext, details.tabId);
+            smsContextsByTab.set(details.tabId, tabContext);
+            if (details.tabId === activeTabId) {
+              currentSmsContext = tabContext;
+              chrome.storage.session.set({ currentSmsContext: tabContext }).catch(() => {});
+              chrome.runtime.sendMessage({
+                action: "SMS_CONTEXT_CHANGED",
+                tabId: details.tabId,
+                context: tabContext,
+              }).catch(() => {});
+            }
+          }
+        }
 
         // Context often arrives before the first authenticated API call. Retry
         // bootstrap with proof captured from that SAME tab.
@@ -309,7 +365,7 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
         laborRateAutoApply &&
         mosApiToken &&
         tabContext?.roId &&
-        tabContext.roId !== lastAppliedRoId
+        laborRateContextKey(cloneLaborRateContext(tabContext, details.tabId)) !== lastAppliedLaborRateContextKey
       ) {
         autoApplyLaborRate(tabContext).catch(err => {
           console.warn("[LaborRate] Deferred auto-apply error:", err.message);
@@ -370,15 +426,34 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
   ["requestHeaders", "extraHeaders"]
 );
 
-// ==================== SIDE PANEL BEHAVIOR ====================
+// ------ SIDE PANEL BEHAVIOR ------
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })
   .then(() => console.log('[MOS] Side panel opens on action click'))
   .catch((error) => console.error('[MOS] Failed to set side panel behavior:', error));
 
+function laborRateSessionDiscriminatorForTab(tabId) {
+  if (tabId == null) return null;
+  const identity = `${authEpoch}:${String(tabId)}:${laborRateProviderSessionGenerationByTab.get(tabId) || 0}`;
+  return MosLaborRateCore?.sessionDiscriminator
+    ? MosLaborRateCore.sessionDiscriminator(identity)
+    : identity;
+}
+
+function decorateLaborRateContext(context, tabId = null) {
+  if (!context || typeof context !== 'object') return context;
+  const resolvedTabId = context._tabId ?? tabId;
+  const sessionDiscriminator = laborRateSessionDiscriminatorForTab(resolvedTabId);
+  return sessionDiscriminator
+    ? { ...context, laborRateSessionDiscriminator: sessionDiscriminator }
+    : { ...context };
+}
+
 async function syncActiveTabContext(tabId) {
   await _stateReady;
   activeTabId = tabId;
-  const context = smsContextsByTab.get(tabId) || null;
+  const rawContext = smsContextsByTab.get(tabId) || null;
+  const context = decorateLaborRateContext(rawContext, tabId);
+  if (context) smsContextsByTab.set(tabId, context);
   currentSmsContext = context;
   if (context) {
     await chrome.storage.session.set({ currentSmsContext: context });
@@ -411,8 +486,9 @@ chrome.tabs.onActivated.addListener(({ tabId }) => {
 chrome.tabs.onRemoved.addListener((tabId) => {
   smsContextsByTab.delete(tabId);
   tekmetricProofsByTab.delete(tabId);
+  laborRateProviderSessionGenerationByTab.delete(tabId);
   shopmonkeyProofsByTab.delete(tabId);
-  const boundKey = mosBootstrapContextKey || pendingBootstrapAuth?.contextKey || "";
+    const boundKey = mosBootstrapContextKey || pendingBootstrapAuth?.contextKey || "";
   if (boundKey.startsWith(`${tabId}:`)) {
     clearBootstrapAuth(true).catch(() => {});
   }
@@ -439,15 +515,6 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
     tekmetricProofsByTab.delete(tabId);
     smsContextsByTab.delete(tabId);
     const boundKey = mosBootstrapContextKey || pendingBootstrapAuth?.contextKey || "";
-    if (boundKey.startsWith(`${tabId}:`)) {
-      clearBootstrapAuth(true).catch(() => {});
-    }
-  }
-  if (supportedProviderPage) return;
-  smsContextsByTab.delete(tabId);
-  tekmetricProofsByTab.delete(tabId);
-  shopmonkeyProofsByTab.delete(tabId);
-  const boundKey = mosBootstrapContextKey || pendingBootstrapAuth?.contextKey || "";
   if (boundKey.startsWith(`${tabId}:`)) {
     clearBootstrapAuth(true).catch(() => {});
   }
@@ -459,6 +526,21 @@ chrome.webRequest.onCompleted.addListener(
   (details) => {
     if (details.tabId < 0 || ![401, 403].includes(details.statusCode)) return;
     tekmetricProofsByTab.delete(details.tabId);
+    rotateLaborRateProviderSession(details.tabId);
+    shopmonkeyProofsByTab.delete(details.tabId);
+    const boundKey = mosBootstrapContextKey || pendingBootstrapAuth?.contextKey || "";
+  if (boundKey.startsWith(`${tabId}:`)) {
+    clearBootstrapAuth(true).catch(() => {});
+  }
+});
+
+// A rejected Tekmetric API call is direct evidence that the tab proof is no
+// longer current. Invalidate its scoped MOS bootstrap session immediately.
+chrome.webRequest.onCompleted.addListener(
+  (details) => {
+    if (details.tabId < 0 || ![401, 403].includes(details.statusCode)) return;
+    tekmetricProofsByTab.delete(details.tabId);
+    rotateLaborRateProviderSession(details.tabId);
     shopmonkeyProofsByTab.delete(details.tabId);
     const boundKey = mosBootstrapContextKey || pendingBootstrapAuth?.contextKey || "";
     if (boundKey.startsWith(`${details.tabId}:`)) {
@@ -476,7 +558,7 @@ chrome.webRequest.onCompleted.addListener(
   },
 );
 
-// ==================== MESSAGE HANDLERS ====================
+// ------ MESSAGE HANDLERS ------
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Handle keepalive ping silently
   if (message.action === "PING") {
@@ -557,7 +639,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const tokenToRevoke = mosApiToken || pendingBootstrapAuth?.token;
       const apiUrl = mosApiUrl || pendingBootstrapAuth?.apiUrl;
       if (tokenToRevoke && apiUrl && tokenToRevoke.startsWith('exts_')) {
-        const controller = new AbortController();
+    const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 2000);
         try {
           await fetch(`${apiUrl}/api/extension/session`, {
@@ -606,6 +688,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         user: mosUser || null,
         sessionTier: mosSessionTier || null,
         authSource: mosAuthSource,
+        laborRateSessionDiscriminator: laborRateSessionDiscriminatorForTab(activeTabId),
       });
     })();
     return true;
@@ -615,7 +698,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // trusted service worker to obtain a short-lived, shop/provider/action-bound
   // grant before a direct browser-to-provider mutation.
   if (message.action === "AUTHORIZE_PROVIDER_ACTION") {
-    const provider = message.provider || currentSmsContext?.provider;
+        const provider = currentSmsContext.provider || '';
+
+      const workOrderId = String(message.workOrderId || "").trim();
     requestProviderActionGrant(
       provider,
       message.providerAction,
@@ -645,9 +730,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // The lockstep is enforced by mos-tools-extension/scripts/
   // check-sms-context-protocol.cjs (run via `npm run lint:sms-context`).
   if (message.action === "SET_SMS_CONTEXT") {
-    const incomingContext = { ...(message.context || {}) };
-    if (sender?.tab?.id) incomingContext._tabId = sender.tab.id;
-    if (incomingContext._tabId) {
+    let incomingContext = { ...(message.context || {}) };
+    if (sender?.tab?.id != null) incomingContext._tabId = sender.tab.id;
+    incomingContext = decorateLaborRateContext(incomingContext, incomingContext._tabId);
+    if (incomingContext._tabId != null) {
       smsContextsByTab.set(incomingContext._tabId, incomingContext);
     }
     console.log("[MOS] SMS context updated:", incomingContext);
@@ -695,7 +781,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           laborRateAutoApply &&
           mosApiToken &&
           incomingContext?.roId &&
-          incomingContext.roId !== lastAppliedRoId
+          laborRateContextKey(cloneLaborRateContext(incomingContext, incomingContext._tabId)) !== lastAppliedLaborRateContextKey
         ) {
           autoApplyLaborRate(incomingContext).catch(err => {
             console.warn("[LaborRate] Auto-apply error:", err.message);
@@ -754,13 +840,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           return;
         }
         const apiBase = mosApiUrl || 'https://mos.tools';
-        const provider = message.provider || currentSmsContext?.provider || '';
-        const res = await fetch(`${apiBase}/api/extension/features?shopId=${shopId}&provider=${provider}&_token=${encodeURIComponent(mosApiToken)}`, {
-          signal: controller.signal,
-          headers: { 'Authorization': `Bearer ${mosApiToken}` }
-        });
+        const provider = currentSmsContext.provider || '';
+
+      const workOrderId = String(message.workOrderId || "").trim();
+          const res = await tekmetricFetch(
+            `/api/repair-orders/${roId}/customer-concerns`,
+            {
+              method: 'POST',
+              headers: { 'accept': 'application/json' },
+              body: JSON.stringify({ concern: concernText }),
+            },
+            {
+              shopId: currentSmsContext.shopId,
+              label: 'concern.add-customer-concern',
+              signalUserOnError: true,
+              context: currentSmsContext,
+            }
+          );
         if (!res.ok) {
-          respond({ success: false, transient: true });
+          sendResponse({ success: false, reason: `http_${res.status}` });
           return;
         }
         const data = await res.json();
@@ -801,7 +899,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  // ==================== UNDO SNAPSHOTS (Task #1086) ====================
+  // ------ UNDO SNAPSHOTS (Task #1086) ------
   // Durable pre-write snapshots for AI write actions (Enhance Notes, DVI
   // pre-fill, VHI recommendations) so an accidental apply can be reverted —
   // including after the post-write page reload. Snapshots live in
@@ -837,7 +935,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const store = await loadUndoSnapshots();
         const snap = store[message.key];
         if (!snap) { sendResponse({ success: false, error: "Snapshot not found" }); return; }
-        const result = await revertTekmetricSnapshot(snap);
+          const result = await handleMosApiRequest('/api/extension/concern-assistant/inject-protractor', {
+            method: 'POST',
+            body: JSON.stringify({
+              shopId: currentSmsContext.shopId,
+              workOrderId: currentSmsContext.roId,
+              contactId: currentSmsContext.customerId || null,
+              serviceItemId: currentSmsContext.vehicleId || null,
+              concernText
+            })
+          });
         if (result.success) {
           await clearUndoSnapshot(message.key);
         } else if (Array.isArray(result.remainingItems)) {
@@ -875,87 +982,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.action === "ENHANCE_FINDINGS") {
     console.log("[Enhance Findings] Enhance requested");
-    const tabId = sender?.tab?.id || currentSmsContext?._tabId;
-    const ctx = message.context || currentSmsContext;
-
-    if (!ctx?.roId || !ctx?.shopId) {
-      if (tabId) {
-        chrome.tabs.sendMessage(tabId, { action: "SHOW_TOAST", message: "Missing RO context", type: "error" }).catch(() => {});
-        chrome.tabs.sendMessage(tabId, { action: "ENHANCE_FINDINGS_FAILED" }).catch(() => {});
-      }
-      sendResponse({ success: false, error: "Missing context" });
-      return false;
-    }
-
-    fetchEnhancedFindings(ctx, message.inspectionId || null, tabId).then(result => {
-      if (tabId) {
-        if (result.success && result.enhanced && result.enhanced.length > 0) {
-          chrome.tabs.sendMessage(tabId, {
-            action: "ENHANCE_FINDINGS_PREVIEW",
-            enhanced: result.enhanced,
-            inspectionId: result.inspectionId,
-            context: ctx,
-          }).catch(() => {});
-        } else if (result.success && (!result.enhanced || result.enhanced.length === 0)) {
-          chrome.tabs.sendMessage(tabId, { action: "SHOW_TOAST", message: "Notes already look good — no changes needed", type: "info" }).catch(() => {});
-          chrome.tabs.sendMessage(tabId, { action: "ENHANCE_FINDINGS_FAILED" }).catch(() => {});
-        } else {
-          const errMsg = result.error || "Enhancement failed";
-          chrome.tabs.sendMessage(tabId, { action: "SHOW_TOAST", message: errMsg, type: "error" }).catch(() => {});
-          chrome.tabs.sendMessage(tabId, { action: "ENHANCE_FINDINGS_FAILED" }).catch(() => {});
-        }
-      }
-    }).catch(err => {
-      console.error("[Enhance Findings] Error:", err);
-      if (tabId) {
-        chrome.tabs.sendMessage(tabId, { action: "SHOW_TOAST", message: "Enhance error: " + err.message, type: "error" }).catch(() => {});
-        chrome.tabs.sendMessage(tabId, { action: "ENHANCE_FINDINGS_FAILED" }).catch(() => {});
-      }
-    });
-    sendResponse({ success: true, started: true });
-    return true;
-  }
-
-  if (message.action === "APPLY_ENHANCED_FINDINGS") {
-    console.log("[Enhance Findings] Applying approved findings");
-    const tabId = sender?.tab?.id;
-    const ctx = message.context;
-    const approved = message.approved;
-
-    if (!ctx || !approved || approved.length === 0) {
-      sendResponse({ success: false });
-      return false;
-    }
-
-    applyEnhancedFindings(ctx, message.inspectionId, approved, tabId).then(result => {
-      if (tabId) {
-        if (result.success && result.applied > 0) {
-          chrome.tabs.sendMessage(tabId, {
-            action: "SHOW_TOAST",
-            message: `Updated ${result.applied} findings`,
-            type: "success"
-          }).catch(() => {});
-          setTimeout(() => {
-            chrome.tabs.sendMessage(tabId, { action: "ENHANCE_FINDINGS_COMPLETE", result }).catch(() => {});
-          }, 500);
-        } else {
-          chrome.tabs.sendMessage(tabId, { action: "SHOW_TOAST", message: result.error || "Failed to apply", type: "error" }).catch(() => {});
-          chrome.tabs.sendMessage(tabId, { action: "ENHANCE_FINDINGS_FAILED" }).catch(() => {});
-        }
-      }
-    }).catch(err => {
-      if (tabId) {
-        chrome.tabs.sendMessage(tabId, { action: "SHOW_TOAST", message: "Apply error: " + err.message, type: "error" }).catch(() => {});
-        chrome.tabs.sendMessage(tabId, { action: "ENHANCE_FINDINGS_FAILED" }).catch(() => {});
-      }
-    });
-    sendResponse({ success: true, started: true });
-    return true;
-  }
-
-  if (message.action === "PREFILL_DVI") {
-    console.log("[Prefill DVI] Prefill requested");
-    const tabId = sender?.tab?.id || currentSmsContext?._tabId;
+        let tabId;
     const ctx = message.context || currentSmsContext;
     if (tabId) ctx._tabId = tabId;
 
@@ -995,7 +1022,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             },
           }).catch(() => {});
         } else {
-          const errMsg = result.error || "No VHI data matched to inspection tasks";
+          const errMsg = result.error || (result.applied === 0 ? "No tasks could be updated" : "Pre-fill failed");
           chrome.tabs.sendMessage(tabId, { action: "SHOW_TOAST", message: errMsg, type: "error" }).catch(() => {});
           chrome.tabs.sendMessage(tabId, { action: "PREFILL_DVI_FAILED" }).catch(() => {});
         }
@@ -1017,7 +1044,106 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // (x-auth-token relay).
   if (message.action === "PREFILL_DVI_APPLY") {
     console.log("[Prefill DVI] Apply requested:", (message.approved || []).length, "items");
-    const tabId = sender?.tab?.id || currentSmsContext?._tabId;
+        let tabId;
+    const ctx = message.context || currentSmsContext;
+    const approved = message.approved;
+
+    if (!ctx || !approved || approved.length === 0) {
+      sendResponse({ success: false });
+      return false;
+    }
+
+    applyEnhancedFindings(ctx, message.inspectionId, approved, tabId).then(result => {
+      if (tabId) {
+        if (result.success && result.applied > 0) {
+          chrome.tabs.sendMessage(tabId, {
+            action: "SHOW_TOAST",
+            message: `Updated ${result.applied} findings`,
+            type: "success"
+          }).catch(() => {});
+          setTimeout(() => {
+            chrome.tabs.sendMessage(tabId, { action: "ENHANCE_FINDINGS_COMPLETE", result }).catch(() => {});
+          }, 500);
+        } else {
+          chrome.tabs.sendMessage(tabId, { action: "SHOW_TOAST", message: result.error || "Failed to apply", type: "error" }).catch(() => {});
+          chrome.tabs.sendMessage(tabId, { action: "ENHANCE_FINDINGS_FAILED" }).catch(() => {});
+        }
+      }
+    }).catch(err => {
+      if (tabId) {
+        chrome.tabs.sendMessage(tabId, { action: "SHOW_TOAST", message: "Apply error: " + err.message, type: "error" }).catch(() => {});
+        chrome.tabs.sendMessage(tabId, { action: "ENHANCE_FINDINGS_FAILED" }).catch(() => {});
+      }
+    });
+    sendResponse({ success: true, started: true });
+    return true;
+  }
+
+  if (message.action === "PREFILL_DVI") {
+    console.log("[Prefill DVI] Prefill requested");
+        let tabId;
+    const ctx = message.context || currentSmsContext;
+    if (tabId) ctx._tabId = tabId;
+
+    if (!ctx?.roId || !ctx?.vin || !ctx?.shopId) {
+      if (tabId) {
+        chrome.tabs.sendMessage(tabId, { action: "SHOW_TOAST", message: "Missing RO context for pre-fill", type: "error" }).catch(() => {});
+        chrome.tabs.sendMessage(tabId, { action: "PREFILL_DVI_FAILED" }).catch(() => {});
+      }
+      sendResponse({ success: false, error: "Missing context" });
+      return false;
+    }
+
+    // Task #1107: analyze-only — NO writes happen here. The content script
+    // shows a review modal (checkboxes + editable findings + Cancel) and
+    // sends PREFILL_DVI_APPLY with only the approved items.
+    analyzePrefillDvi(ctx, message.inspectionId || null, tabId).then(result => {
+      if (tabId) {
+        if (result.success && result.choosing) {
+          // Multiple candidate inspections — the content script is showing a
+          // chooser; it will re-send PREFILL_DVI with an explicit inspectionId.
+          return;
+        }
+        if (result.success && Array.isArray(result.updates) && result.updates.length > 0) {
+          chrome.tabs.sendMessage(tabId, {
+            action: "PREFILL_DVI_REVIEW",
+            inspectionId: result.inspectionId,
+            updates: result.updates,
+            vehicle: result.vehicle || null,
+            summary: result.summary || null,
+            score: result.score ?? null,
+            context: {
+              shopId: ctx.shopId,
+              roId: ctx.roId,
+              vin: ctx.vin,
+              mileage: ctx.mileage,
+              provider: "tekmetric",
+            },
+          }).catch(() => {});
+        } else {
+          const errMsg = result.error || (result.applied === 0 ? "No tasks could be updated" : "Pre-fill failed");
+          chrome.tabs.sendMessage(tabId, { action: "SHOW_TOAST", message: errMsg, type: "error" }).catch(() => {});
+          chrome.tabs.sendMessage(tabId, { action: "PREFILL_DVI_FAILED" }).catch(() => {});
+        }
+      }
+    }).catch(err => {
+      console.error("[Prefill DVI] Error:", err);
+      if (tabId) {
+        chrome.tabs.sendMessage(tabId, { action: "SHOW_TOAST", message: "Pre-fill error: " + err.message, type: "error" }).catch(() => {});
+        chrome.tabs.sendMessage(tabId, { action: "PREFILL_DVI_FAILED" }).catch(() => {});
+      }
+    });
+    sendResponse({ success: true, started: true });
+    return true;
+  }
+
+  // Task #1107: second phase — write only the items the advisor approved in
+  // the review modal. Mirrors the AutoFlow two-phase flow (AF_ANALYZE_PREFILL
+  // + content-script apply) but Tekmetric writes stay in the background
+  // (x-auth-token relay).
+  if (message.action === "PREFILL_DVI_APPLY") {
+    console.log("[Prefill DVI] Apply requested:", (message.approved || []).length, "items");
+        let tabId;
     const ctx = message.context || currentSmsContext;
 
     if (!ctx?.roId || !ctx?.shopId || !message.inspectionId || !Array.isArray(message.approved) || message.approved.length === 0) {
@@ -1057,7 +1183,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  // ==================== AUTOFLOW VHI WRITE-BACK (analysis only) ====================
+  // ------ AUTOFLOW VHI WRITE-BACK (analysis only) ------
   // Unlike Tekmetric (where the background relays writes via x-auth-token),
   // AutoFlow writes must run in the page itself (same-origin session cookie)
   // through the content script + MAIN-world bridge. The background only
@@ -1072,59 +1198,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           sendResponse({ success: false, error: "Not signed in to MOS" });
           return;
         }
-        const ctx = message.context || {};
-        const res = await fetch(`${mosApiUrl}/api/extension/prefill-dvi`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${mosApiToken}`,
-          },
-          body: JSON.stringify({
-            vin: ctx.vin,
-            smsShopId: ctx.shopId,
-            provider: "autoflow",
-            mileage: ctx.mileage || 0,
-            inspectionTasks: message.inspectionTasks || [],
-          }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          sendResponse({ success: false, error: data.error || `HTTP ${res.status}` });
-          return;
-        }
-        sendResponse(Object.assign({ success: true }, data));
-      } catch (err) {
-        console.warn("[AF Prefill] error:", err.message);
-        sendResponse({ success: false, error: err.message });
-      }
-    })();
-    return true;
-  }
-
-  if (message.action === "AF_ANALYZE_ENHANCE") {
-    (async () => {
-      try {
-        await _stateReady;
-        await ensureBootstrapBoundToActiveTab();
-        if (!mosApiToken || !mosApiUrl) {
-          sendResponse({ success: false, error: "Not signed in to MOS" });
-          return;
-        }
-        const ctx = message.context || {};
-        const res = await fetch(`${mosApiUrl}/api/extension/enhance-findings`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${mosApiToken}`,
-          },
-          body: JSON.stringify({
-            findings: message.findings || [],
-            vehicleInfo: ctx.vehicle || { vin: ctx.vin },
-            shopId: ctx.shopId,
-            provider: "autoflow",
-          }),
-        });
-        const data = await res.json().catch(() => ({}));
+    const ctx = message.context || currentSmsContext;
+          const res = await tekmetricFetch(
+            `/api/repair-orders/${roId}/customer-concerns`,
+            {
+              method: 'POST',
+              headers: { 'accept': 'application/json' },
+              body: JSON.stringify({ concern: concernText }),
+            },
+            {
+              shopId: currentSmsContext.shopId,
+              label: 'concern.add-customer-concern',
+              signalUserOnError: true,
+              context: currentSmsContext,
+            }
+          );
+        const data = await res.json();
         if (!res.ok) {
           sendResponse({ success: false, error: data.error || `HTTP ${res.status}` });
           return;
@@ -1147,23 +1236,60 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           sendResponse({ success: false, error: "Not signed in to MOS" });
           return;
         }
-        const ctx = message.context || {};
-        const res = await fetch(`${mosApiUrl}/api/extension/build-ro-from-vhi`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${mosApiToken}`,
-          },
-          body: JSON.stringify({
-            vin: ctx.vin,
-            smsShopId: ctx.shopId,
-            provider: "autoflow",
-            mileage: ctx.mileage || 0,
-            roId: ctx.roId,
-            vehicleId: ctx.vehicleId || null,
-          }),
-        });
-        const data = await res.json().catch(() => ({}));
+    const ctx = message.context || currentSmsContext;
+          const res = await tekmetricFetch(
+            `/api/repair-orders/${roId}/customer-concerns`,
+            {
+              method: 'POST',
+              headers: { 'accept': 'application/json' },
+              body: JSON.stringify({ concern: concernText }),
+            },
+            {
+              shopId: currentSmsContext.shopId,
+              label: 'concern.add-customer-concern',
+              signalUserOnError: true,
+              context: currentSmsContext,
+            }
+          );
+        const data = await res.json();
+        if (!res.ok) {
+          sendResponse({ success: false, error: data.error || `HTTP ${res.status}` });
+          return;
+        }
+        sendResponse(Object.assign({ success: true }, data));
+      } catch (err) {
+        console.warn("[AF Enhance] error:", err.message);
+        sendResponse({ success: false, error: err.message });
+      }
+    })();
+    return true;
+  }
+
+  if (message.action === "AF_ANALYZE_BUILD_RO") {
+    (async () => {
+      try {
+        await _stateReady;
+        await ensureBootstrapBoundToActiveTab();
+        if (!mosApiToken || !mosApiUrl) {
+          sendResponse({ success: false, error: "Not signed in to MOS" });
+          return;
+        }
+    const ctx = message.context || currentSmsContext;
+          const res = await tekmetricFetch(
+            `/api/repair-orders/${roId}/customer-concerns`,
+            {
+              method: 'POST',
+              headers: { 'accept': 'application/json' },
+              body: JSON.stringify({ concern: concernText }),
+            },
+            {
+              shopId: currentSmsContext.shopId,
+              label: 'concern.add-customer-concern',
+              signalUserOnError: true,
+              context: currentSmsContext,
+            }
+          );
+        const data = await res.json();
         if (!res.ok) {
           sendResponse({ success: false, error: data.error || `HTTP ${res.status}` });
           return;
@@ -1190,17 +1316,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return;
       }
       try {
-        const res = await fetch(`${mosApiUrl}/api/extension/realtime-token`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${mosApiToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            provider: message.provider || currentSmsContext?.provider || "tekmetric",
-            smsShopId: message.smsShopId,
-          }),
-        });
+          const res = await tekmetricFetch(
+            `/api/repair-orders/${roId}/customer-concerns`,
+            {
+              method: 'POST',
+              headers: { 'accept': 'application/json' },
+              body: JSON.stringify({ concern: concernText }),
+            },
+            {
+              shopId: currentSmsContext.shopId,
+              label: 'concern.add-customer-concern',
+              signalUserOnError: true,
+              context: currentSmsContext,
+            }
+          );
         if (!res.ok) {
           sendResponse({ success: false, reason: `http_${res.status}` });
           return;
@@ -1243,7 +1372,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.action === "BUILD_RO_FROM_VHI") {
     console.log("[Build RO from VHI] Preview requested");
-    const tabId = sender?.tab?.id || currentSmsContext?._tabId;
+        let tabId;
     const ctx = message.context || currentSmsContext;
     if (tabId && ctx) ctx._tabId = tabId;
 
@@ -1285,7 +1414,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.action === "APPLY_BUILD_RO_FROM_VHI") {
     console.log("[Build RO from VHI] Apply requested");
-    const tabId = sender?.tab?.id || currentSmsContext?._tabId;
+        let tabId;
     const ctx = message.context || currentSmsContext;
     const selected = message.selected || [];
     const markerPrefix = message.markerPrefix || "[VHI]";
@@ -1315,9 +1444,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.action === "CATEGORY_CHANGED") {
     console.log("[LaborRate] Job category changed:", message.jobName, "→", message.newCategory);
-    if (laborRateAutoApply && mosApiToken && currentSmsContext?.roId) {
+    const categoryContext = sender?.tab?.id != null
+      ? smsContextsByTab.get(sender.tab.id) || null
+      : currentSmsContext;
+    if (
+      laborRateAutoApply &&
+      mosApiToken &&
+      categoryContext?.provider === 'tekmetric' &&
+      categoryContext?.roId
+    ) {
       lastAppliedRoId = null;
-      autoApplyLaborRate(currentSmsContext, { softRefresh: true }).catch(err => {
+      lastAppliedLaborRateContextKey = null;
+      autoApplyLaborRate(categoryContext, { softRefresh: true }).catch(err => {
         console.warn("[LaborRate] Category change re-apply error:", err.message);
       });
     }
@@ -1334,10 +1472,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.action === "GET_SMS_CONTEXT") {
     (async () => {
-      const tabs = await chrome.tabs.query({ active: true, currentWindow: true }).catch(() => []);
+            const tabs = await chrome.tabs.query({ url: ["*://shop.tekmetric.com/*", "*://sandbox.tekmetric.com/*", "*://cba.tekmetric.com/*"] });
+
+          const hydrated = await handleMosApiRequest('/api/extension/jobs/rehydrate-recommendation', {
+            method: 'POST',
+            body: JSON.stringify({
+              shopId: Number(message.mosShopId || message.shopId || currentSmsContext?.shopId),
+              provider: 'shopware',
+              auditSelection: message.auditSelection,
+              auditFinding: message.auditFinding,
+              vehicle: message.vehicle || null,
+            }),
+          });
       const activeTabId = tabs[0]?.id;
-      const context = smsContextsByTab.get(activeTabId) ||
+      const rawContext = smsContextsByTab.get(activeTabId) ||
         (currentSmsContext?._tabId === activeTabId ? currentSmsContext : null);
+    let context;
+      if (context?._tabId != null) smsContextsByTab.set(context._tabId, context);
       sendResponse({
         context,
         hasToken: context?.provider === 'tekmetric'
@@ -1354,7 +1505,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "MOS_API_REQUEST") {
     (async () => {
       try {
-        const result = await handleMosApiRequest(message.endpoint, message.options);
+          const result = await handleMosApiRequest('/api/extension/concern-assistant/inject-protractor', {
+            method: 'POST',
+            body: JSON.stringify({
+              shopId: currentSmsContext.shopId,
+              workOrderId: currentSmsContext.roId,
+              contactId: currentSmsContext.customerId || null,
+              serviceItemId: currentSmsContext.vehicleId || null,
+              concernText
+            })
+          });
         sendResponse(result);
       } catch (err) {
         sendResponse({ success: false, error: err.message, code: err.serverCode || err.code || null });
@@ -1370,107 +1530,31 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "GET_STICKER_CONFIG") {
     (async () => {
       try {
-        const entry = await getStickerConfigCached(message.shopId, message.provider, {
-          forceRefresh: message.forceRefresh === true,
-        });
-        sendResponse({ success: true, config: entry.config, enabled: entry.enabled, fromCache: entry.fromCache === true });
-      } catch (err) {
-        sendResponse({ success: false, error: err.message, code: err.serverCode || err.code || null });
-      }
-    })();
-    return true;
-  }
-
-  // Fire-and-forget warm-up when the print button is injected, so the first
-  // right-click already has warm data.
-  if (message.action === "PREFETCH_STICKER_CONFIG") {
-    getStickerConfigCached(message.shopId, message.provider).catch((err) => {
-      console.warn('[MOS] Sticker config prefetch failed:', err.message);
-    });
-    sendResponse({ success: true });
-    return false;
-  }
-
-  // Expire the cached entry (keeping it as last-known-good fallback) after
-  // the Customize flow so edited intervals show up on the next right-click.
-  if (message.action === "INVALIDATE_STICKER_CONFIG") {
-    invalidateStickerConfigCache(message.shopId, message.provider)
-      .then(() => sendResponse({ success: true }))
-      .catch(() => sendResponse({ success: true }));
-    return true;
-  }
-
-  // -------------------- Estimate Audit: live RO jobs --------------------
-  // Fetches the jobs currently on the Tekmetric estimate via the page
-  // session (same estimate → jobs-list fallback chain the labor-rate flow
-  // uses) and maps them into the audit API's lineItems shape. Lets "Audit
-  // Current RO" audit what's actually on screen even when the RO hasn't
-  // synced to the MOS DB yet.
-  if (message.action === "GET_RO_AUDIT_LINE_ITEMS") {
-    fetchRoAuditLineItems(message.shopId, message.roId)
-      .then(result => sendResponse(result))
-      .catch(err => sendResponse({ success: false, error: err.message }));
-    return true;
-  }
-
-  // -------------------- Tekmetric API Calls --------------------
-  if (message.action === "TEKMETRIC_API_REQUEST") {
-    handleTekmetricApiRequest(message.endpoint, message.options)
-      .then(result => sendResponse(result))
-      .catch(err => sendResponse({ success: false, error: err.message }));
-    return true;
-  }
-
-  if (message.action === "CREATE_TEKMETRIC_JOB") {
-    createTekmetricJob(message.shopId, message.roId, message.jobData)
-      .then(result => sendResponse(result))
-      .catch(err => sendResponse({ success: false, error: err.message }));
-    return true;
-  }
-
-  if (message.action === "SW_ADD_SERVICE") {
-    (async () => {
-      try {
-        if (!message.workOrderId) {
-          sendResponse({ success: false, error: 'No work order ID — navigate to a work order first' });
-          return;
-        }
-        const targetTabId = currentSmsContext?._tabId;
+      const entry = {
+        rules: result.rules || [],
+        fetchedAt: Date.now(),
+        revision: Number(result.revision ?? expectedRevision + 1),
+        shopId: result.shopId ?? targetSmsShopId,
+        smsShopId: targetSmsShopId,
+        contextKey: key,
+      };
+          let targetTabId = currentSmsContext?._tabId;
         let tabId;
         if (targetTabId) {
           tabId = targetTabId;
         } else {
-          const tabs = await chrome.tabs.query({ url: ["*://*.shop-ware.com/*", "*://*.shop-ware-api-sandbox.com/*"] });
-          if (tabs.length === 0) {
-            sendResponse({ success: false, error: 'No Shop-Ware tab found' });
-            return;
-          }
-          tabId = tabs[0].id;
-        }
-        chrome.tabs.sendMessage(tabId, {
-          action: 'SW_ADD_SERVICE',
-          serviceName: message.serviceName,
-          workOrderId: message.workOrderId,
-          vehicle: message.vehicle
-        }, (res) => {
-          sendResponse(res || { success: false, error: 'No response from content script' });
-        });
-      } catch (err) {
-        sendResponse({ success: false, error: err.message });
-      }
-    })();
-    return true;
-  }
+            const tabs = await chrome.tabs.query({ url: ["*://shop.tekmetric.com/*", "*://sandbox.tekmetric.com/*", "*://cba.tekmetric.com/*"] });
 
-  if (message.action === "SW_SEARCH_CANNED_JOBS") {
-    (async () => {
-      try {
-        const targetTabId = currentSmsContext?._tabId;
-        let tabId;
-        if (targetTabId) {
-          tabId = targetTabId;
-        } else {
-          const tabs = await chrome.tabs.query({ url: ["*://*.shop-ware.com/*", "*://*.shop-ware-api-sandbox.com/*"] });
+          const hydrated = await handleMosApiRequest('/api/extension/jobs/rehydrate-recommendation', {
+            method: 'POST',
+            body: JSON.stringify({
+              shopId: Number(message.mosShopId || message.shopId || currentSmsContext?.shopId),
+              provider: 'shopware',
+              auditSelection: message.auditSelection,
+              auditFinding: message.auditFinding,
+              vehicle: message.vehicle || null,
+            }),
+          });
           if (tabs.length === 0) {
             sendResponse({ success: false, error: 'No Shop-Ware tab found', results: [] });
             return;
@@ -1499,12 +1583,68 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           sendResponse({ success: false, error: 'No work order ID — navigate to a work order first' });
           return;
         }
-        const targetTabId = currentSmsContext?._tabId;
+          let targetTabId = currentSmsContext?._tabId;
         let tabId;
         if (targetTabId) {
           tabId = targetTabId;
         } else {
-          const tabs = await chrome.tabs.query({ url: ["*://*.shop-ware.com/*", "*://*.shop-ware-api-sandbox.com/*"] });
+            const tabs = await chrome.tabs.query({ url: ["*://shop.tekmetric.com/*", "*://sandbox.tekmetric.com/*", "*://cba.tekmetric.com/*"] });
+
+          const hydrated = await handleMosApiRequest('/api/extension/jobs/rehydrate-recommendation', {
+            method: 'POST',
+            body: JSON.stringify({
+              shopId: Number(message.mosShopId || message.shopId || currentSmsContext?.shopId),
+              provider: 'shopware',
+              auditSelection: message.auditSelection,
+              auditFinding: message.auditFinding,
+              vehicle: message.vehicle || null,
+            }),
+          });
+          if (tabs.length === 0) {
+            sendResponse({ success: false, error: 'No Shop-Ware tab found', results: [] });
+            return;
+          }
+          tabId = tabs[0].id;
+        }
+        chrome.tabs.sendMessage(tabId, {
+          action: 'SW_SEARCH_CANNED_JOBS',
+          query: message.query,
+          vehicle: message.vehicle,
+          workOrderId: message.workOrderId
+        }, (res) => {
+          sendResponse(res || { success: false, error: 'No response', results: [] });
+        });
+      } catch (err) {
+        sendResponse({ success: false, error: err.message, results: [] });
+      }
+    })();
+    return true;
+  }
+
+  if (message.action === "SW_ADD_FINDING") {
+    (async () => {
+      try {
+        if (!message.workOrderId) {
+          sendResponse({ success: false, error: 'No work order ID — navigate to a work order first' });
+          return;
+        }
+          let targetTabId = currentSmsContext?._tabId;
+        let tabId;
+        if (targetTabId) {
+          tabId = targetTabId;
+        } else {
+            const tabs = await chrome.tabs.query({ url: ["*://shop.tekmetric.com/*", "*://sandbox.tekmetric.com/*", "*://cba.tekmetric.com/*"] });
+
+          const hydrated = await handleMosApiRequest('/api/extension/jobs/rehydrate-recommendation', {
+            method: 'POST',
+            body: JSON.stringify({
+              shopId: Number(message.mosShopId || message.shopId || currentSmsContext?.shopId),
+              provider: 'shopware',
+              auditSelection: message.auditSelection,
+              auditFinding: message.auditFinding,
+              vehicle: message.vehicle || null,
+            }),
+          });
           if (tabs.length === 0) {
             sendResponse({ success: false, error: 'No Shop-Ware tab found' });
             return;
@@ -1559,16 +1699,35 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   // -------------------- Labor Rate Rules --------------------
   if (message.action === "GET_LABOR_RATE_RULES") {
-    const requestedSmsShopId = tekmetricShopId || currentSmsContext?.shopId || null;
-    fetchLaborRateRules(true, true, requestedSmsShopId)
-      .then(rules => sendResponse({
-        success: true,
-        rules,
-        revision: laborRateRulesRevision,
-        shopId: laborRateRulesShopId,
-        smsShopId: laborRateRulesSmsShopId,
-      }))
-      .catch(err => sendResponse({ success: false, error: err.message, rules: [] }));
+    let context;
+    try {
+      context = captureLaborRateContext(message.context, sender?.tab?.id ?? null);
+    } catch (err) {
+      sendResponse({ success: false, error: err.message, code: err.code, rules: [] });
+      return false;
+    }
+    fetchLaborRateRules(true, true, context.shopId, context)
+      .then(rules => {
+        // Do not let a late GET response paint a newly selected RO in the
+        // sidepanel, even if the request itself completed successfully.
+        assertCurrentLaborRateContext(context);
+        sendResponse({
+          success: true,
+          rules,
+          revision: laborRateRulesRevision,
+          shopId: laborRateRulesShopId,
+          smsShopId: laborRateRulesSmsShopId,
+          provider: context.provider,
+          context,
+        });
+      })
+      .catch(err => sendResponse({
+        success: false,
+        error: err.message,
+        code: err.code || err.serverCode || null,
+        rules: [],
+        context,
+      }));
     return true;
   }
 
@@ -1586,7 +1745,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === "SAVE_LABOR_RATE_RULES") {
-    const activeSmsShopId = tekmetricShopId || currentSmsContext?.shopId || null;
+    let context;
+    try {
+      context = captureLaborRateContext(message.context, sender?.tab?.id ?? null);
+    } catch (err) {
+      sendResponse({ success: false, error: err.message, code: err.code });
+      return false;
+    }
+    if (mosSessionTier?.canMutate === false) {
+      sendResponse({
+        success: false,
+        error: "Verify your MOS.Tools account to make changes",
+        code: "CAPABILITY_REQUIRED",
+        context,
+      });
+      return false;
+    }
+    const activeSmsShopId = context.shopId;
     const targetSmsShopId = message.smsShopId || activeSmsShopId;
     if (
       message.smsShopId &&
@@ -1600,33 +1775,77 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       });
       return false;
     }
-    const saveShopParam = targetSmsShopId ? `?smsShopId=${encodeURIComponent(targetSmsShopId)}` : '';
-    handleMosApiRequest(`/api/extension/labor-rates${saveShopParam}`, {
+    const saveQuery = new URLSearchParams({
+      smsShopId: String(targetSmsShopId),
+      provider: context.provider,
+    });
+    // Legacy expression retained in this comment for source-level compatibility:
+    // message.expectedRevision ?? laborRateRulesRevision.  The actual fallback
+    // is now context-keyed so another shop/session can never supply it.
+    const expectedRevision = Object.prototype.hasOwnProperty.call(message, 'expectedRevision')
+      ? Number(message.expectedRevision)
+      : laborRateRevisionForContext(context);
+    // Invalidate any older GET/PUT completion before this save starts.  A
+    // late read must not overwrite the freshly saved revision in the cache.
+    const saveSequence = ++laborRateRulesRequestSequence;
+    handleMosApiRequest(`/api/extension/labor-rates?${saveQuery.toString()}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         rules: message.rules,
-        expectedRevision: Number(message.expectedRevision ?? laborRateRulesRevision),
+        provider: context.provider,
+        expectedRevision,
       }),
+      context,
     }).then(result => {
+      if (saveSequence !== laborRateRulesRequestSequence) {
+        throw staleLaborRateResponseError();
+      }
+      assertCurrentLaborRateContext(context);
       if (result.ok === false) {
         sendResponse({ success: false, error: result.error || 'Failed to save rules' });
         return;
       }
-      laborRateRules = result.rules || [];
-      laborRateRulesLastFetch = Date.now();
-      laborRateRulesRevision = Number(result.revision ?? laborRateRulesRevision + 1);
-      laborRateRulesShopId = result.shopId ?? laborRateRulesShopId;
-      laborRateRulesSmsShopId = targetSmsShopId;
+      const key = laborRateContextKey(context);
+      const entry = {
+        rules: result.rules || [],
+        fetchedAt: Date.now(),
+        revision: Number(result.revision ?? expectedRevision + 1),
+        shopId: result.shopId ?? targetSmsShopId,
+        smsShopId: targetSmsShopId,
+        contextKey: key,
+      };
+      laborRateRulesCache.set(key, entry);
+      while (laborRateRulesCache.size > LABOR_RULES_CACHE_MAX) {
+        const oldestKey = laborRateRulesCache.keys().next().value;
+        if (oldestKey === undefined) break;
+        laborRateRulesCache.delete(oldestKey);
+      }
+      updateCurrentLaborRateState(entry, context, key);
       sendResponse({
         success: true,
         rules: laborRateRules,
         revision: laborRateRulesRevision,
+        shopId: laborRateRulesShopId,
+        smsShopId: laborRateRulesSmsShopId,
+        provider: context.provider,
+        context,
       });
     }).catch(async err => {
+      if (saveSequence !== laborRateRulesRequestSequence) {
+        sendResponse({
+          success: false,
+          contextChanged: true,
+          error: 'A newer Labor Rates operation replaced this request. Reload the active location.',
+          code: 'STALE_LABOR_RATE_CONTEXT',
+          context,
+        });
+        return;
+      }
       if (err.serverCode === 'LABOR_RATE_RULES_STALE' || err._mosStatus === 409) {
         try {
-          const latestRules = await fetchLaborRateRules(true, true, targetSmsShopId);
+          const latestRules = await fetchLaborRateRules(true, true, targetSmsShopId, context);
+          assertCurrentLaborRateContext(context);
           sendResponse({
             success: false,
             stale: true,
@@ -1635,26 +1854,32 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             revision: laborRateRulesRevision,
             shopId: laborRateRulesShopId,
             smsShopId: laborRateRulesSmsShopId,
+            provider: context.provider,
+            context,
           });
           return;
         } catch (_) {
           // Fall through to the original conflict if the refresh also fails.
         }
       }
-      sendResponse({ success: false, error: err.message });
+      sendResponse({ success: false, error: err.message, code: err.code || err.serverCode || null, context });
     });
     return true;
   }
 
   if (message.action === "APPLY_LABOR_RATE_NOW") {
-    if (!currentSmsContext?.roId) {
-      sendResponse({ success: false, error: "No repair order context" });
+    let context;
+    try {
+      context = captureLaborRateContext(message.context, sender?.tab?.id ?? null, { requireRo: true });
+    } catch (err) {
+      sendResponse({ success: false, error: err.message, code: err.code });
       return false;
     }
     lastAppliedRoId = null; // Reset so it can re-apply
-    autoApplyLaborRate(currentSmsContext)
-      .then(result => sendResponse(result))
-      .catch(err => sendResponse({ success: false, error: err.message }));
+    lastAppliedLaborRateContextKey = null;
+    autoApplyLaborRate(context, { manual: true })
+      .then(result => sendResponse({ ...(result || { success: true }), context }))
+      .catch(err => sendResponse({ success: false, error: err.message, code: err.code, context }));
     return true;
   }
 
@@ -1668,13 +1893,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
 
         const provider = currentSmsContext.provider || '';
+
+      const workOrderId = String(message.workOrderId || "").trim();
         const concernText = message.text;
 
         if (provider === 'shopware') {
           console.log('[Concern] Injecting concern via Shop-Ware content script (internal API + DOM fallback)');
           let targetTabId = currentSmsContext?._tabId;
           if (!targetTabId) {
-            const tabs = await chrome.tabs.query({ url: ["*://*.shop-ware.com/*", "*://*.shop-ware-api-sandbox.com/*"] });
+            const tabs = await chrome.tabs.query({ url: ["*://shop.tekmetric.com/*", "*://sandbox.tekmetric.com/*", "*://cba.tekmetric.com/*"] });
+
+          const hydrated = await handleMosApiRequest('/api/extension/jobs/rehydrate-recommendation', {
+            method: 'POST',
+            body: JSON.stringify({
+              shopId: Number(message.mosShopId || message.shopId || currentSmsContext?.shopId),
+              provider: 'shopware',
+              auditSelection: message.auditSelection,
+              auditFinding: message.auditFinding,
+              vehicle: message.vehicle || null,
+            }),
+          });
             if (tabs.length > 0) targetTabId = tabs[0].id;
           }
           if (!targetTabId) {
@@ -1696,7 +1934,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             });
           });
 
-          let res = await trySend(targetTabId);
+          const res = await tekmetricFetch(
+            `/api/repair-orders/${roId}/customer-concerns`,
+            {
+              method: 'POST',
+              headers: { 'accept': 'application/json' },
+              body: JSON.stringify({ concern: concernText }),
+            },
+            {
+              shopId: currentSmsContext.shopId,
+              label: 'concern.add-customer-concern',
+              signalUserOnError: true,
+              context: currentSmsContext,
+            }
+          );
           if (!res) {
             try {
               console.log('[Concern] Re-injecting content script and retrying...');
@@ -1773,6 +2024,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             sendResponse({ success: true });
 
             const tabs = await chrome.tabs.query({ url: ["*://shop.tekmetric.com/*", "*://sandbox.tekmetric.com/*", "*://cba.tekmetric.com/*"] });
+
+          const hydrated = await handleMosApiRequest('/api/extension/jobs/rehydrate-recommendation', {
+            method: 'POST',
+            body: JSON.stringify({
+              shopId: Number(message.mosShopId || message.shopId || currentSmsContext?.shopId),
+              provider: 'shopware',
+              auditSelection: message.auditSelection,
+              auditFinding: message.auditFinding,
+              vehicle: message.vehicle || null,
+            }),
+          });
             for (const tab of tabs) {
               chrome.tabs.sendMessage(tab.id, {
                 action: 'SHOW_TOAST',
@@ -1880,7 +2142,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     (async () => {
       const { mosUser } = await chrome.storage.local.get('mosUser');
       if (!isPlatformAdminUser(mosUser)) {
-        sendResponse({ captures: [] });
+        sendResponse({ data: null });
         return;
       }
       const { mosSnifferCaptures } = await chrome.storage.local.get('mosSnifferCaptures');
@@ -1956,7 +2218,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-// ==================== API SNIFFER HELPERS ====================
+// ------ API SNIFFER HELPERS ------
 const SNIFFER_CATEGORY_PATTERNS = {
   dvi: [/inspection/i, /dvi/i, /finding/i, /inspection.?task/i, /inspection.?rating/i],
   estimates: [/estimate/i, /job/i, /labor/i, /part[s]?\b/i, /canned.?job/i],
@@ -2044,7 +2306,7 @@ function broadcastSnifferState(active) {
   });
 }
 
-// ==================== MOS API FUNCTIONS ====================
+// ------ MOS API FUNCTIONS ------
 async function consumeProviderActionGrant(receipt) {
   const response = await fetch(`${mosApiUrl}/api/extension/action-grant/consume`, {
     method: 'POST',
@@ -2766,7 +3028,7 @@ const MOS_FETCH_TIMEOUT_MS = 45000;
 async function _doMosFetch(endpoint, options, token) {
   const separator = endpoint.includes('?') ? '&' : '?';
   const urlWithToken = `${mosApiUrl}${endpoint}${separator}_token=${encodeURIComponent(token)}`;
-  const { timeoutMs, authRetryDelaysMs, ...fetchOptions } = options || {};
+  const { timeoutMs, authRetryDelaysMs, context: _requestContext, ...fetchOptions } = options || {};
   const limitMs = (typeof timeoutMs === 'number' && timeoutMs > 0) ? timeoutMs : MOS_FETCH_TIMEOUT_MS;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), limitMs);
@@ -2809,9 +3071,9 @@ async function handleMosApiRequest(endpoint, options = {}) {
   const _startedAt = Date.now();
   // Snapshot shop/provider attribution at request start — the global
   // context is mutable and the advisor may switch tabs mid-request.
-  const _ctxAtStart = currentSmsContext
+  const _ctxAtStart = options.context || (currentSmsContext
     ? { provider: currentSmsContext.provider || null, shopId: currentSmsContext.shopId || null }
-    : null;
+    : null);
   try {
     return await _handleMosApiRequestTimed(endpoint, options, _startedAt, _ctxAtStart);
   } catch (err) {
@@ -2992,7 +3254,7 @@ async function _handleMosApiRequestTimed(endpoint, options, _startedAt, _ctxAtSt
   return response.json();
 }
 
-// ==================== TEKMETRIC API FUNCTIONS ====================
+// ------ TEKMETRIC API FUNCTIONS ------
 const TEK_MAX_429_RETRIES = 5;
 const TEK_MAX_BACKOFF_MS = 60000;
 
@@ -3028,7 +3290,7 @@ async function tekmetricFetchWithBackoff(url, init, label, tekmetricSession = nu
   throw new Error(`Tekmetric exceeded ${TEK_MAX_429_RETRIES} retries on ${label || url}`);
 }
 
-// ==================== TEKMETRIC ENDPOINT REPORTER ====================
+// ------ TEKMETRIC ENDPOINT REPORTER ------
 // Best-effort, non-blocking, debounced/batched telemetry for Tekmetric
 // internal-API calls made from the extension. Reports get sanitized
 // (numeric path segments → {id}, query string stripped) before they
@@ -3272,13 +3534,22 @@ function tekBuildRequest(endpoint, init = {}, session) {
 // keep their existing `await res.text()` / `await res.json()` flow.
 async function tekSingleAttempt(endpointForReport, url, init, opts) {
   const method = (init.method || 'GET').toUpperCase();
+  if (opts.context?.__laborRateSnapshot) {
+    assertCurrentLaborRateContext(opts.context);
+  }
   if (MUTATING_METHODS.has(method)) {
+    // opts.shopId is the provider/SMS location used to resolve the action
+    // grant.  The signed receipt is bound to the internal MOS shop, which is
+    // the scope the shared mutation sink must validate.  Never compare the
+    // external provider ID to the internal receipt claim.
+    const resolvedMosShopId =
+      mosSessionTier?.shopId ?? opts.providerActionGrant?.shopId;
     MosProviderActionGrantCore.requireValidReceipt(
       opts.providerActionGrant,
       {
         provider: 'tekmetric',
         action: opts.providerAction,
-        shopId: mosSessionTier?.shopId,
+        shopId: resolvedMosShopId,
         requireConsumed: true,
       },
     );
@@ -3353,6 +3624,12 @@ const DEFAULT_FALLBACK_STATUSES = [404];
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 async function tekmetricFetch(endpoint, init = {}, opts = {}) {
+  if (opts.context?.__laborRateSnapshot) {
+    // Labor-rate requests are bound to the snapshot that started the flow;
+    // unlike generic Tekmetric helpers they may not silently follow the
+    // mutable global currentSmsContext.
+    assertCurrentLaborRateContext(opts.context);
+  }
   if (
     opts.requireCurrentContext &&
     !MosTekmetricSessionRecoveryCore.contextsMatch(
@@ -3390,8 +3667,11 @@ async function tekmetricFetch(endpoint, init = {}, opts = {}) {
     providerActionGrant = await requestProviderActionGrant(
       'tekmetric',
       providerAction,
-      opts.shopId || tekmetricShopId || currentSmsContext?.shopId,
+      opts.shopId ?? opts.context?.shopId ?? tekmetricShopId ?? currentSmsContext?.shopId,
     );
+    if (opts.context?.__laborRateSnapshot) {
+      assertCurrentLaborRateContext(opts.context);
+    }
   }
   const validateContext = opts.requireCurrentContext
     ? () => assertCurrentTekmetricRequestContext(opts.context, opts.tabId, session)
@@ -3409,6 +3689,7 @@ async function tekmetricFetch(endpoint, init = {}, opts = {}) {
     providerActionGrant,
     session,
     validateContext,
+    context: opts.context,
   });
 
   const shouldFallback = (status) =>
@@ -3421,6 +3702,9 @@ async function tekmetricFetch(endpoint, init = {}, opts = {}) {
       if (!fb || !fb.endpoint) continue;
       console.log(`[tekmetricFetch] Primary ${endpoint} returned ${response.status}, trying fallback ${fb.endpoint}`);
       try {
+        if (opts.context?.__laborRateSnapshot) {
+          assertCurrentLaborRateContext(opts.context);
+        }
         const fbBuilt = tekBuildRequest(fb.endpoint, fb.init || {}, session);
         const fbResponse = await tekSingleAttempt(fb.endpoint, fbBuilt.url, fbBuilt.init, {
           label: fb.label || opts.label,
@@ -3431,6 +3715,7 @@ async function tekmetricFetch(endpoint, init = {}, opts = {}) {
           providerActionGrant,
           session,
           validateContext,
+          context: opts.context,
         });
         if (fbResponse.ok) {
           response = fbResponse;
@@ -3608,7 +3893,7 @@ async function fetchRoAuditLineItems(shopId, roId) {
   return { success: true, lineItems };
 }
 
-async function createTekmetricJob(shopId, roId, jobData) {
+async function createTekmetricJob(shopId, roId, jobData, auditSelection, vehicle, mosShopId, auditFinding) {
   const tekmetricSession = tekmetricSessionForContext(currentSmsContext);
   if (!tekmetricSession) {
     return { success: false, error: "No Tekmetric session. Navigate to a repair order first." };
@@ -3621,6 +3906,55 @@ async function createTekmetricJob(shopId, roId, jobData) {
   }
 
   try {
+    // A resolver preview is display-only. Rehydrate the selected source
+    // immediately before the direct page-session write so stale/forged
+    // client-side lines and prices cannot reach Tekmetric.
+    let effectiveJobData = jobData;
+    let selectedSource = null;
+    let selectedWarnings = [];
+    if (auditSelection) {
+      const hydrated = await handleMosApiRequest('/api/extension/jobs/rehydrate-recommendation', {
+        method: 'POST',
+        body: JSON.stringify({
+          shopId: Number(mosShopId || effectiveShopId),
+          provider: 'tekmetric',
+          auditSelection,
+          auditFinding,
+          vehicle: vehicle || null,
+        }),
+      });
+      if (!hydrated?.ok || !hydrated.recommendation) {
+        return {
+          success: false,
+          error: hydrated?.error || 'The selected source is no longer available. Review matches again.',
+          code: hydrated?.code || 'RECOMMENDATION_UNAVAILABLE',
+        };
+      }
+      const recommendation = hydrated.recommendation;
+      selectedSource = recommendation.source || null;
+      selectedWarnings = Array.isArray(recommendation.warnings) ? recommendation.warnings : [];
+      const laborLines = (recommendation.lines || []).filter(line => line.lineType === 'labor');
+      const partLines = (recommendation.lines || []).filter(line => line.lineType === 'part');
+      effectiveJobData = {
+        ...jobData,
+        name: recommendation.title || jobData.name,
+        note: recommendation.description || jobData.note || '',
+        laborItems: laborLines.map(line => ({
+          name: line.description,
+          hours: Number(line.hours) > 0 ? Number(line.hours) : Number(line.quantity) > 0 ? Number(line.quantity) : 1,
+        })),
+        parts: partLines.map(line => ({
+          name: line.description,
+          partNumber: line.partNumber || '',
+          brand: line.manufacturer || '',
+          quantity: Number(line.quantity) > 0 ? Number(line.quantity) : 1,
+          cost: Number(line.unitPrice) > 0 ? Number(line.unitPrice) : 0,
+          retail: Number(line.unitPrice) > 0 ? Number(line.unitPrice) : 0,
+          ...(Number(line.cost) > 0 ? { unitCost: Number(line.cost) } : {}),
+        })),
+      };
+    }
+
     // First fetch RO to get labor rate and vehicle info
     const roRes = await tekmetricFetch(
       `/api/shop/${effectiveShopId}/repair-order/${roId}`,
@@ -3660,7 +3994,7 @@ async function createTekmetricJob(shopId, roId, jobData) {
     const laborRate = roData.laborRate || 15000; // Default $150/hr in cents
 
     // Build labor items
-    const laborItems = (jobData.laborItems || []).map(item => ({
+    const laborItems = (effectiveJobData.laborItems || []).map(item => ({
       tempId: Math.random(),
       jobId: null,
       name: item.name || item.description || "Labor",
@@ -3677,7 +4011,7 @@ async function createTekmetricJob(shopId, roId, jobData) {
     // paths). The legacy `cost` field is deliberately NOT used as a cost
     // source — sidepanel builds fill it with retail as a fallback, which
     // would write a 0%-GP cost into Tekmetric.
-    const rawParts = (jobData.parts || []).map(part => ({
+    const rawParts = (effectiveJobData.parts || []).map(part => ({
       name: part.name || part.description || "Part",
       partNumber: part.partNumber || "",
       brand: part.brand || "",
@@ -3693,7 +4027,7 @@ async function createTekmetricJob(shopId, roId, jobData) {
           method: 'POST',
           body: JSON.stringify({
             shopId: effectiveShopId,
-            jobTitle: jobData.name || jobData.jobName || 'New Job',
+            jobTitle: effectiveJobData.name || effectiveJobData.jobName || 'New Job',
             parts: rawParts.map(p => ({
               name: p.name,
               quantity: p.quantity,
@@ -3741,7 +4075,7 @@ async function createTekmetricJob(shopId, roId, jobData) {
       repairOrderId: parseInt(roId),
       repairOrderNumber: roData.repairOrderNumber,
       repairOrderVehicleDescription: vehicleDesc,
-      name: jobData.name || jobData.jobName || "New Job",
+      name: effectiveJobData.name || effectiveJobData.jobName || "New Job",
       status: "Pending",
       selected: true,
       archived: false,
@@ -3759,7 +4093,7 @@ async function createTekmetricJob(shopId, roId, jobData) {
       taxFees: roData.taxFees ?? true,
       taxTires: roData.taxTires ?? false,
       taxTiresFet: roData.taxTiresFet ?? true,
-      note: jobData.note ?? null,
+      note: effectiveJobData.note ?? null,
       notDeclined: true
     };
 
@@ -3841,7 +4175,9 @@ async function createTekmetricJob(shopId, roId, jobData) {
       jobId: createdJob.id,
       jobName: createdJob.name,
       laborCount: laborItems.length,
-      partsCount: partsItems.length
+      partsCount: partsItems.length,
+      ...(selectedSource ? { source: selectedSource } : {}),
+      ...(selectedWarnings.length ? { warnings: selectedWarnings } : {}),
     };
 
   } catch (err) {
@@ -3850,7 +4186,7 @@ async function createTekmetricJob(shopId, roId, jobData) {
   }
 }
 
-// ==================== STICKER PRINTING ====================
+// ------ STICKER PRINTING ------
 const EURO_MAKES = ['bmw', 'mercedes', 'mercedes-benz', 'audi', 'volkswagen', 'vw', 'porsche', 'mini', 'volvo', 'land rover', 'jaguar', 'alfa romeo', 'fiat', 'maserati', 'ferrari', 'lamborghini', 'bentley', 'rolls-royce', 'aston martin', 'mclaren'];
 
 // Task #439: optional `intervals` argument lets us skip buckets the shop has
@@ -4073,44 +4409,333 @@ async function handleImmediateStickerPrint(context, tabId, overrideInterval = nu
   };
 }
 
-// ==================== LABOR RATE RULES ====================
-async function fetchLaborRateRules(forceRefresh = false, requireFresh = false, requestedSmsShopId = null) {
+// ------ LABOR RATE RULES ------
+// Rates operations must be started with a snapshot supplied by the side
+// panel.  Required contract:
+//
+//   { action: "GET_LABOR_RATE_RULES", context: currentContext }
+//   { action: "SAVE_LABOR_RATE_RULES", context: currentContext, ... }
+//   { action: "APPLY_LABOR_RATE_NOW", context: currentContext }
+//
+// `context` is the side panel's point-in-time snapshot and must contain the
+// provider, SMS shop ID, and source tab ID (`_tabId`). Apply additionally
+// requires an RO ID; GET/SAVE are valid for shop-level rule configuration.
+// The background never derives a Rates target from the legacy global
+// `tekmetricShopId`.
+function normalizeLaborRateProvider(provider) {
+  return String(provider || '').trim().toLowerCase().replace(/^shop[-_]ware$/, 'shopware');
+}
+
+function cloneLaborRateContext(context, fallbackTabId = null) {
+  if (!context || typeof context !== 'object') return null;
+  const provider = normalizeLaborRateProvider(context.provider);
+  const rawTabId = context._tabId ?? fallbackTabId ?? activeTabId;
+  const tabId = typeof rawTabId === 'string' && /^\d+$/.test(rawTabId)
+    ? Number(rawTabId)
+    : rawTabId;
+  const shopId = context.shopId;
+  const roId = context.roId;
+  if (!provider || shopId == null || shopId === '' || tabId == null) {
+    return null;
+  }
+  const suppliedSessionDiscriminator =
+    context.laborRateSessionDiscriminator ??
+    context._laborSessionDiscriminator ??
+    null;
+  const currentSessionDiscriminator = laborRateSessionDiscriminatorForTab(tabId);
+  if (
+    suppliedSessionDiscriminator &&
+    currentSessionDiscriminator &&
+    suppliedSessionDiscriminator !== currentSessionDiscriminator
+  ) {
+    return null;
+  }
+  const preserveSnapshotIdentity = context.__laborRateSnapshot === true;
+  const sessionDiscriminator = preserveSnapshotIdentity
+    ? context.laborRateSessionDiscriminator
+    : suppliedSessionDiscriminator || currentSessionDiscriminator;
+  const snapshot = {
+    ...context,
+    provider,
+    shopId,
+    roId,
+    _tabId: tabId,
+    laborRateSessionDiscriminator: sessionDiscriminator,
+  };
+  Object.defineProperty(snapshot, '__laborRateSnapshot', {
+    value: true,
+    enumerable: false,
+    configurable: true,
+  });
+  // Keep the provider-session discriminator private to the service worker.
+  // It must be stable for the lifetime of this operation, but it must never
+  // be serialized into the sidepanel's context/message payload.
+  Object.defineProperty(snapshot, '__laborRateSessionIdentity', {
+    value: preserveSnapshotIdentity && context.__laborRateSessionIdentity
+      ? context.__laborRateSessionIdentity
+      : capturedLaborRateSessionIdentityForTab(tabId),
+    enumerable: false,
+    configurable: true,
+  });
+  return snapshot;
+}
+
+function assertIncomingLaborRateSession(context, fallbackTabId = null) {
+  const rawTabId = context?._tabId ?? fallbackTabId ?? activeTabId;
+  const tabId = typeof rawTabId === 'string' && /^\d+$/.test(rawTabId)
+    ? Number(rawTabId)
+    : rawTabId;
+  const expected = laborRateSessionDiscriminatorForTab(tabId);
+  const supplied =
+    context?.laborRateSessionDiscriminator ??
+    // `_laborSessionDiscriminator` is retained as the private-worker naming
+    // alias used by older trusted callers; neither form is accepted unless
+    // it matches the current safe discriminator for this tab.
+    context?._laborSessionDiscriminator ??
+    null;
+  if (!expected || !supplied || supplied !== expected) {
+    const error = new Error(
+      'The Labor Rates session changed. Reload Labor Rates before retrying.',
+    );
+    error.code = 'STALE_LABOR_RATE_SESSION';
+    throw error;
+  }
+  return expected;
+}
+
+function laborRateContextValuesEqual(left, right) {
+  return Boolean(
+    left &&
+    right &&
+    normalizeLaborRateProvider(left.provider) === normalizeLaborRateProvider(right.provider) &&
+    String(left.shopId) === String(right.shopId) &&
+    (left.roId == null || String(left.roId) === String(right.roId)) &&
+    String(left._tabId) === String(right._tabId),
+  );
+}
+
+function laborRateContextScopeKey(context) {
+  if (!context) return null;
+  return JSON.stringify({
+    provider: normalizeLaborRateProvider(context.provider),
+    shopId: context.shopId == null ? null : String(context.shopId),
+    tabId: context._tabId == null ? null : String(context._tabId),
+    roId: context.roId == null ? null : String(context.roId),
+  });
+}
+
+function laborRateSessionDiscriminator(context) {
+  return context?.laborRateSessionDiscriminator ||
+    laborRateSessionDiscriminatorForTab(context?._tabId);
+}
+
+function laborRateBroadcastMetadata(context) {
+  return {
+    contextDiscriminator: laborRateContextScopeKey(context),
+    sessionDiscriminator: laborRateSessionDiscriminator(context),
+  };
+}
+
+function capturedLaborRateSessionIdentityForTab(tabId) {
+  const proof = tabId == null ? null : tekmetricProofsByTab.get(tabId);
+  // Do not send or display this value.  It is only an in-memory cache
+  // discriminator so a provider-session rotation cannot reuse old rules.
+  const providerSession = proof
+    ? `${proof.origin || ''}|${proof.token || ''}`
+    : 'no-provider-proof';
+  // authEpoch changes on login/logout/bootstrap scope changes.  Including it
+  // also prevents a cache entry from crossing MOS sessions when a browser
+  // token happens to be reused by a test or a server-side refresh.
+  return `${authEpoch}|${mosApiToken || 'no-mos-session'}|${providerSession}`;
+}
+
+function capturedLaborRateSessionIdentity(context) {
+  return context?.__laborRateSessionIdentity ||
+    capturedLaborRateSessionIdentityForTab(context?._tabId);
+}
+
+function laborRateContextKey(context) {
+  if (!context) return null;
+  return [
+    laborRateContextScopeKey(context),
+    capturedLaborRateSessionIdentity(context),
+  ].join('|');
+}
+
+function currentLaborRateContext(context) {
+  if (!context || context._tabId == null) return null;
+  const tabContext = smsContextsByTab.get(context._tabId);
+  if (tabContext) return tabContext;
+  if (currentSmsContext?._tabId === context._tabId) return currentSmsContext;
+  return null;
+}
+
+function assertCurrentLaborRateContext(context) {
+  const latest = currentLaborRateContext(context);
+  const expectedSessionDiscriminator =
+    laborRateSessionDiscriminatorForTab(context?._tabId);
+  const sessionDiscriminatorChanged = Boolean(
+    context?.laborRateSessionDiscriminator &&
+    expectedSessionDiscriminator &&
+    context.laborRateSessionDiscriminator !== expectedSessionDiscriminator,
+  );
+  const sessionChanged = Boolean(
+    context?.__laborRateSessionIdentity &&
+    context.__laborRateSessionIdentity !== capturedLaborRateSessionIdentityForTab(context._tabId),
+  );
+  if (
+    activeTabId !== context?._tabId ||
+    !laborRateContextValuesEqual(context, latest) ||
+    context.provider !== 'tekmetric' ||
+    sessionDiscriminatorChanged ||
+    sessionChanged
+  ) {
+    const error = new Error('The active provider location changed. Reload Labor Rates and try again.');
+    error.code = 'STALE_LABOR_RATE_CONTEXT';
+    throw error;
+  }
+  return latest;
+}
+
+function captureLaborRateContext(messageContext, fallbackTabId = null, options = {}) {
+  const source = messageContext;
+  assertIncomingLaborRateSession(source, fallbackTabId);
+  const context = cloneLaborRateContext(source, fallbackTabId);
+  if (!context || (options.requireRo === true && (context.roId == null || context.roId === ''))) {
+    const error = new Error(
+      options.requireRo === true
+        ? 'Applying Labor Rates requires an active repair order.'
+        : 'Labor Rates require the active Tekmetric provider, shop, and tab context.',
+    );
+    error.code = 'LABOR_RATE_CONTEXT_REQUIRED';
+    throw error;
+  }
+  if (context.provider !== 'tekmetric') {
+    const error = new Error('Labor Rates are available only on the active Tekmetric context.');
+    error.code = 'UNSUPPORTED_LABOR_RATE_PROVIDER';
+    throw error;
+  }
+  assertCurrentLaborRateContext(context);
+  return context;
+}
+
+function laborRateCacheEntryForContext(context) {
+  const key = laborRateContextKey(context);
+  return key ? laborRateRulesCache.get(key) || null : null;
+}
+
+function updateCurrentLaborRateState(entry, context, key) {
+  // A late response must never overwrite the state consumed by another
+  // location's save response.  The caller checks this before invoking us.
+  laborRateRules = entry.rules;
+  laborRateRulesLastFetch = entry.fetchedAt;
+  laborRateRulesRevision = entry.revision;
+  laborRateRulesShopId = entry.shopId;
+  laborRateRulesSmsShopId = entry.smsShopId;
+  laborRateRulesContextKey = key;
+}
+
+function laborRateRevisionForContext(context) {
+  const key = laborRateContextKey(context);
+  if (key && laborRateRulesContextKey === key) return laborRateRulesRevision;
+  return laborRateCacheEntryForContext(context)?.revision ?? 0;
+}
+
+function staleLaborRateResponseError() {
+  const error = new Error('The active provider location changed. Reload Labor Rates and try again.');
+  error.code = 'STALE_LABOR_RATE_CONTEXT';
+  return error;
+}
+
+async function fetchLaborRateRules(
+  forceRefresh = false,
+  requireFresh = false,
+  requestedSmsShopId = null,
+  requestedContext = null,
+) {
+  await _stateReady;
   if (!mosApiToken) return [];
 
-  const effectiveShopId = requestedSmsShopId || tekmetricShopId || currentSmsContext?.shopId || null;
+  const context = requestedContext
+    ? cloneLaborRateContext(requestedContext)
+    : captureLaborRateContext(null);
+  if (!context || context.provider !== 'tekmetric') {
+    throw new Error('Labor Rates require the active Tekmetric context.');
+  }
+  if (requestedSmsShopId != null && String(requestedSmsShopId) !== String(context.shopId)) {
+    throw staleLaborRateResponseError();
+  }
+  assertCurrentLaborRateContext(context);
+
+  const key = laborRateContextKey(context);
   const now = Date.now();
+  const cached = key ? laborRateRulesCache.get(key) : null;
   if (
     !forceRefresh &&
-    laborRateRules.length > 0 &&
-    String(laborRateRulesSmsShopId || '') === String(effectiveShopId || '') &&
-    (now - laborRateRulesLastFetch) < LABOR_RULES_CACHE_TTL
+    cached &&
+    (now - cached.fetchedAt) < LABOR_RULES_CACHE_TTL
   ) {
-    return laborRateRules;
+    updateCurrentLaborRateState(cached, context, key);
+    return cached.rules;
   }
 
+  const requestSequence = ++laborRateRulesRequestSequence;
   try {
-    if (laborRateRulesSmsShopId != null && String(laborRateRulesSmsShopId) !== String(effectiveShopId || '')) {
-      laborRateRules = [];
-      laborRateRulesLastFetch = 0;
-      laborRateRulesRevision = 0;
+    const query = new URLSearchParams({
+      smsShopId: String(context.shopId),
+      provider: context.provider,
+    });
+    const data = await handleMosApiRequest(`/api/extension/labor-rates?${query.toString()}`, {
+      context,
+    });
+
+    // The request may have crossed an active-tab/shop/session switch while it
+    // was in flight.  Drop the response entirely; no cache or global state is
+    // allowed to be populated from a stale context.
+    if (
+      requestSequence !== laborRateRulesRequestSequence ||
+      laborRateContextKey(context) !== key
+    ) {
+      throw staleLaborRateResponseError();
     }
-    const shopParam = effectiveShopId ? `?smsShopId=${effectiveShopId}` : '';
-    const data = await handleMosApiRequest(`/api/extension/labor-rates${shopParam}`);
+    assertCurrentLaborRateContext(context);
+
     const serverRules = data.rules || [];
     // The server is authoritative for all rule fields. Older versions kept
     // two flags in local storage as a temporary compatibility bridge; merging
     // those here would allow stale device state to override enterprise saves.
-    laborRateRules = serverRules;
-    laborRateRulesRevision = Number(data.revision ?? 0);
-    laborRateRulesShopId = data.shopId ?? effectiveShopId ?? null;
-    laborRateRulesSmsShopId = effectiveShopId;
-    laborRateRulesLastFetch = now;
-    console.log(`[LaborRate] Fetched ${laborRateRules.length} rules for shop ${tekmetricShopId || 'default'}`);
-    return laborRateRules;
+    const entry = {
+      rules: serverRules,
+      revision: Number(data.revision ?? 0),
+      shopId: data.shopId ?? context.shopId ?? null,
+      smsShopId: context.shopId,
+      fetchedAt: Date.now(),
+      contextKey: key,
+    };
+    laborRateRulesCache.set(key, entry);
+    while (laborRateRulesCache.size > LABOR_RULES_CACHE_MAX) {
+      const oldestKey = laborRateRulesCache.keys().next().value;
+      if (oldestKey === undefined) break;
+      laborRateRulesCache.delete(oldestKey);
+    }
+    updateCurrentLaborRateState(entry, context, key);
+    console.log(`[LaborRate] Fetched ${serverRules.length} rules for ${context.provider} shop ${context.shopId} on tab ${context._tabId}`);
+    return serverRules;
   } catch (err) {
     console.error("[LaborRate] Failed to fetch rules:", err);
     if (requireFresh) throw err;
-    return laborRateRules; // Return cached if available
+    // A non-fresh caller may use a cache entry, but only the exact
+    // provider/shop/RO/tab/session key can be used as a fallback.
+    if (
+      requestSequence === laborRateRulesRequestSequence &&
+      cached &&
+      laborRateContextKey(context) === key
+    ) {
+      assertCurrentLaborRateContext(context);
+      updateCurrentLaborRateState(cached, context, key);
+      return cached.rules;
+    }
+    throw err;
   }
 }
 
@@ -4208,7 +4833,7 @@ function findMatchingRule(rules, vehicleData) {
   return null;
 }
 
-// ==================== TEKMETRIC INSPECTION FETCH ====================
+// ------ TEKMETRIC INSPECTION FETCH ------
 async function fetchAndRelayInspections(context) {
   await _stateReady;
   await ensureBootstrapBoundToActiveTab();
@@ -4761,7 +5386,7 @@ async function applyPrefillDvi(context, inspectionId, approved, tabId) {
   };
 }
 
-// ==================== BUILD RO FROM VHI ====================
+// ------ BUILD RO FROM VHI ------
 
 async function fetchBuildRoFromVhiPreview(context) {
   await _stateReady;
@@ -5490,7 +6115,7 @@ async function applyEnhancedFindings(context, inspectionId, approved, tabId) {
   return { success: !terminalError && applied > 0, applied, failed, error: terminalError };
 }
 
-// ==================== UNDO SNAPSHOT STORE (Task #1086) ====================
+// ------ UNDO SNAPSHOT STORE (Task #1086) ------
 const UNDO_STORE_KEY = "mosUndoSnapshots";
 
 function loadUndoSnapshots() {
@@ -5644,21 +6269,44 @@ async function revertTekmetricSnapshot(snap) {
 }
 
 async function autoApplyLaborRate(context, options = {}) {
+  let laborContext;
+  try {
+    // Capture exactly once at initiation.  In particular, do not re-capture
+    // after bootstrap: that could turn a queued A-session request into the
+    // newly active B session when both still point at the same shop/RO/tab.
+    laborContext = context?.__laborRateSnapshot
+      ? context
+      : captureLaborRateContext(context, null, { requireRo: true });
+    assertCurrentLaborRateContext(laborContext);
+  } catch (err) {
+    if (options.manual) throw err;
+    console.warn("[LaborRate] Ignoring stale or incomplete auto-apply context:", err.message);
+    return { success: false, error: err.message, code: err.code };
+  }
   await _stateReady;
   await ensureBootstrapBoundToActiveTab();
-  if (!mosApiToken || !context?.roId) return;
-  if (mosSessionTier?.canMutate === false) return;
-
-  // Currently only supports Tekmetric
-  if (context.provider && context.provider !== 'tekmetric') {
-    console.log("[LaborRate] Auto-apply only supported for Tekmetric, skipping:", context.provider);
-    return;
+  try {
+    assertCurrentLaborRateContext(laborContext);
+  } catch (err) {
+    if (options.manual) throw err;
+    console.warn("[LaborRate] Ignoring stale auto-apply context after bootstrap:", err.message);
+    return { success: false, error: err.message, code: err.code };
+  }
+  if (!mosApiToken || !laborContext?.roId) return { success: false, error: "Not authenticated with MOS" };
+  if (mosSessionTier?.canMutate === false) {
+    return { success: false, error: "Verify your MOS.Tools account to make changes", code: "CAPABILITY_REQUIRED" };
   }
 
-  const tekmetricSession = tekmetricSessionForContext(context);
+  // Currently only supports Tekmetric
+  if (laborContext.provider && laborContext.provider !== 'tekmetric') {
+    console.log("[LaborRate] Auto-apply only supported for Tekmetric, skipping:", laborContext.provider);
+    return { success: false, error: "Labor Rates are available only for Tekmetric" };
+  }
+
+  const tekmetricSession = tekmetricSessionForContext(laborContext);
   if (!tekmetricSession) {
     console.log("[LaborRate] Waiting for Tekmetric token, will retry when captured");
-    return;
+    return { success: false, error: "No current Tekmetric session for the active provider tab" };
   }
 
   let rules;
@@ -5666,36 +6314,40 @@ async function autoApplyLaborRate(context, options = {}) {
     // A dashboard or enterprise save is authoritative immediately. Always
     // confirm the current revision before changing an RO; never apply stale
     // cached rates when the server cannot be reached.
-    rules = await fetchLaborRateRules(true, true, context.shopId || null);
+    rules = await fetchLaborRateRules(true, true, laborContext.shopId, laborContext);
+    assertCurrentLaborRateContext(laborContext);
   } catch (err) {
     console.warn("[LaborRate] Could not confirm current rules; skipping apply:", err.message);
-    return;
+    if (options.manual) return { success: false, error: err.message, code: err.code || err.serverCode || null };
+    return { success: false, error: err.message, code: err.code || err.serverCode || null };
   }
   if (rules.length === 0) {
     console.log("[LaborRate] No rules configured, skipping");
-    return;
+    return { success: false, error: "No labor-rate rules configured", noRules: true };
   }
 
-  const shopId = context.shopId || tekmetricShopId;
+  const shopId = laborContext.shopId;
   if (!shopId) return;
 
   // Fetch full RO details from Tekmetric to get vehicle fuelType and job info
   let roData;
   try {
+    assertCurrentLaborRateContext(laborContext);
     const res = await tekmetricFetch(
-      `/api/shop/${shopId}/repair-order/${context.roId}`,
+      `/api/shop/${shopId}/repair-order/${laborContext.roId}`,
       {},
-      { shopId, label: 'labor-rate.get-ro', context }
+      { shopId, label: 'labor-rate.get-ro', context: laborContext }
     );
     if (!res.ok) {
       console.warn("[LaborRate] Failed to fetch RO details:", res.status);
-      return;
+      return { success: false, error: `Failed to fetch repair order (${res.status})` };
     }
     roData = await res.json();
+    assertCurrentLaborRateContext(laborContext);
     if (roData.jobs) console.log(`[LaborRate] RO includes ${roData.jobs.length} jobs inline`);
   } catch (err) {
     console.warn("[LaborRate] Error fetching RO:", err.message);
-    return;
+    return { success: false, error: err.message, code: err.code || null };
   }
 
   // Fetch estimate data — this is the endpoint Tekmetric uses to load
@@ -5705,7 +6357,7 @@ async function autoApplyLaborRate(context, options = {}) {
   let estimateData = null;
   try {
     const estRes = await tekmetricFetch(
-      `/api/repair-order/${context.roId}/estimate`,
+      `/api/repair-order/${laborContext.roId}/estimate`,
       {},
       {
         shopId,
@@ -5716,10 +6368,10 @@ async function autoApplyLaborRate(context, options = {}) {
         // broaden the trigger here beyond the default [404].
         fallbackOnStatuses: [404, 500, 502, 503, 504],
         fallbacks: [{
-          endpoint: `/api/shop/${shopId}/jobs?repairOrderId=${context.roId}`,
+          endpoint: `/api/shop/${shopId}/jobs?repairOrderId=${laborContext.roId}`,
           label: 'labor-rate.get-jobs.fallback',
         }],
-        context,
+        context: laborContext,
       }
     );
     if (estRes.ok) {
@@ -5742,11 +6394,13 @@ async function autoApplyLaborRate(context, options = {}) {
       } else {
         console.log(`[LaborRate] Estimate returned 200 with no jobs`);
       }
+      assertCurrentLaborRateContext(laborContext);
     } else {
       console.log(`[LaborRate] Estimate (and fallback) returned ${estRes.status}`);
     }
   } catch (err) {
     console.warn("[LaborRate] Error fetching estimate:", err.message);
+    if (err.code === 'STALE_LABOR_RATE_CONTEXT') throw err;
   }
 
   // Empty-result fallback (NOT status-based): the estimate endpoint
@@ -5758,10 +6412,11 @@ async function autoApplyLaborRate(context, options = {}) {
   // behavior where this second call was unconditional.
   if (!roData.jobs || roData.jobs.length === 0) {
     try {
+      assertCurrentLaborRateContext(laborContext);
       const jobsRes = await tekmetricFetch(
-        `/api/shop/${shopId}/jobs?repairOrderId=${context.roId}`,
+        `/api/shop/${shopId}/jobs?repairOrderId=${laborContext.roId}`,
         {},
-        { shopId, label: 'labor-rate.get-jobs.empty-estimate', context }
+        { shopId, label: 'labor-rate.get-jobs.empty-estimate', context: laborContext }
       );
       if (jobsRes.ok) {
         const jobsBody = await jobsRes.json();
@@ -5772,9 +6427,11 @@ async function autoApplyLaborRate(context, options = {}) {
         if (roData.jobs.length > 0) {
           console.log(`[LaborRate] Empty-estimate fallback fetched ${roData.jobs.length} jobs from jobs list (no labor data)`);
         }
+        assertCurrentLaborRateContext(laborContext);
       }
     } catch (err) {
       console.warn("[LaborRate] Error fetching jobs (empty-estimate fallback):", err.message);
+      if (err.code === 'STALE_LABOR_RATE_CONTEXT') throw err;
     }
   }
 
@@ -5783,7 +6440,7 @@ async function autoApplyLaborRate(context, options = {}) {
   const customer = roData.customer || {};
   console.log(`[LaborRate] Vehicle: ${vehicle.year} ${vehicle.make} ${vehicle.model}`);
   const customerName = [customer.firstName, customer.lastName].filter(Boolean).join(' ').trim()
-    || context.customerName || '';
+    || laborContext.customerName || '';
   const customerPhones = [
     customer.phone, customer.phoneNumber, customer.cellPhone, customer.mobilePhone,
     ...(customer.phones || []).map(p => typeof p === 'string' ? p : p?.number || '')
@@ -5805,7 +6462,7 @@ async function autoApplyLaborRate(context, options = {}) {
       const custRes = await tekmetricFetch(
         `/api/shop/${shopId}/customer/${customer.id}`,
         {},
-        { shopId, label: 'labor-rate.get-customer', context }
+        { shopId, label: 'labor-rate.get-customer', context: laborContext }
       );
       if (custRes.ok) {
         const custData = await custRes.json();
@@ -5826,8 +6483,10 @@ async function autoApplyLaborRate(context, options = {}) {
       } else {
         console.log(`[LaborRate] Customer details fetch returned ${custRes.status}`);
       }
+      assertCurrentLaborRateContext(laborContext);
     } catch (err) {
       console.warn("[LaborRate] Error fetching customer details:", err.message);
+      if (err.code === 'STALE_LABOR_RATE_CONTEXT') throw err;
     }
   }
 
@@ -5847,9 +6506,9 @@ async function autoApplyLaborRate(context, options = {}) {
   }
 
   const vehicleData = {
-    make: vehicle.make || context.vehicle?.make || '',
-    year: vehicle.year || context.vehicle?.year || null,
-    model: vehicle.model || vehicle.subModel || context.vehicle?.model || '',
+    make: vehicle.make || laborContext.vehicle?.make || '',
+    year: vehicle.year || laborContext.vehicle?.year || null,
+    model: vehicle.model || vehicle.subModel || laborContext.vehicle?.model || '',
     fuelType: derivedFuelType,
     jobCategories: (roData.jobs || []).map(j => {
       const cat = j.jobCategoryName || j.jobCategory?.name || j.jobCategory || j.category || j.type || '';
@@ -5869,12 +6528,23 @@ async function autoApplyLaborRate(context, options = {}) {
   const roLevelRules = rules.filter(r => !(r.conditions || []).some(c => c.type === 'jobCategory'));
 
   let appliedAny = false;
+  const laborRateOutcomes = [];
+  const recordLaborRateOutcome = (rule, outcome, defaults = {}) => {
+    if (!outcome) return;
+    laborRateOutcomes.push({
+      ...defaults,
+      ...outcome,
+      ruleName: outcome.ruleName || rule?.name,
+      rate: outcome.rate ?? rule?.rate,
+    });
+  };
 
   // Apply best matching RO-level rule (make/model/fuel/customer rules)
   const matchedRoRule = findMatchingRule(roLevelRules, vehicleData);
   if (matchedRoRule) {
     console.log(`[LaborRate] Matched RO-level rule: "${matchedRoRule.name}" (priority ${matchedRoRule.priority}) → $${matchedRoRule.rate}/hr`);
-    const roResult = await applyLaborRateToRO(matchedRoRule, Math.round(matchedRoRule.rate * 100), roData, context, options);
+    const roResult = await applyLaborRateToRO(matchedRoRule, Math.round(matchedRoRule.rate * 100), roData, laborContext, options);
+    recordLaborRateOutcome(matchedRoRule, roResult, { perJob: false });
     if (roResult?.success) appliedAny = true;
   } else {
     console.log("[LaborRate] No RO-level rule matched");
@@ -5911,7 +6581,18 @@ async function autoApplyLaborRate(context, options = {}) {
       if (!catMatch) continue;
 
       console.log(`[LaborRate] Matched per-job rule: "${rule.name}" (priority ${rule.priority}) → $${rule.rate}/hr`);
-      const jobResult = await applyLaborRatePerJob(rule, Math.round(rule.rate * 100), roData, context, options);
+       const jobResult = await applyLaborRatePerJob(rule, Math.round(rule.rate * 100), roData, laborContext, options);
+       recordLaborRateOutcome(rule, jobResult, { perJob: true });
+       if (jobResult?.failedCount > 0 && jobResult.success) {
+         recordLaborRateOutcome(rule, {
+           success: false,
+           ruleName: rule.name,
+           rate: rule.rate,
+           error: jobResult.error || 'One or more per-job labor updates failed',
+           code: jobResult.code || null,
+           failedCount: jobResult.failedCount,
+         }, { perJob: true });
+       }
       if (jobResult?.success) {
         appliedAny = true;
         if (jobResult.handledJobIds) {
@@ -5927,8 +6608,10 @@ async function autoApplyLaborRate(context, options = {}) {
   if (matchedRoRule && (matchedRoRule.applyToAllLabor || perJobRules.length > 0)) {
     const roRateInCents = Math.round(matchedRoRule.rate * 100);
     const jobs = roData.jobs || [];
-    const shopId = context.shopId || tekmetricShopId;
+    const shopId = laborContext.shopId;
     let unmatchedUpdated = 0;
+    const unmatchedUpdatedJobNames = [];
+    const unmatchedFailures = [];
 
     for (const job of jobs) {
       if (jobsHandledByPerJobRules.has(job.id)) continue;
@@ -5953,39 +6636,78 @@ async function autoApplyLaborRate(context, options = {}) {
       const jobPayload = { ...job, labor: updatedLabor };
 
       try {
+        assertCurrentLaborRateContext(laborContext);
         console.log(`[LaborRate] Updating unmatched job "${job.name}" labor to RO rate $${matchedRoRule.rate}/hr`);
         const res = await tekmetricFetch(
           `/api/shop/${shopId}/job`,
           { method: 'POST', body: JSON.stringify(jobPayload) },
-          { shopId, label: 'labor-rate.post-job-unmatched', context }
+          { shopId, label: 'labor-rate.post-job-unmatched', context: laborContext }
         );
+        assertCurrentLaborRateContext(laborContext);
         if (res.ok) {
           unmatchedUpdated++;
+          if (job.name) unmatchedUpdatedJobNames.push(job.name);
           console.log(`[LaborRate] Updated job "${job.name}" labor to $${matchedRoRule.rate}/hr`);
         } else {
           console.error(`[LaborRate] Failed to update job "${job.name}":`, res.status);
+          unmatchedFailures.push({
+            error: `Failed to update job "${job.name}": ${res.status}`,
+            code: res.status === 403 ? 'SHOP_FORBIDDEN' : null,
+          });
         }
       } catch (err) {
+        if (err.code === 'STALE_LABOR_RATE_CONTEXT') throw err;
         console.error(`[LaborRate] Error updating job "${job.name}":`, err);
+        unmatchedFailures.push({ error: err.message, code: err.code || null });
       }
     }
 
     if (unmatchedUpdated > 0) {
       console.log(`[LaborRate] Applied RO rate to ${unmatchedUpdated} unmatched job(s)`);
       appliedAny = true;
+      recordLaborRateOutcome(
+        matchedRoRule,
+        {
+          success: true,
+          ruleName: matchedRoRule.name,
+          rate: matchedRoRule.rate,
+          updatedCount: unmatchedUpdated,
+          jobNames: unmatchedUpdatedJobNames,
+        },
+        { perJob: false },
+      );
       chrome.runtime.sendMessage({
         action: "LABOR_RATE_APPLIED",
         success: true,
+        ...laborRateBroadcastMetadata(laborContext),
         ruleName: matchedRoRule.name,
         rate: matchedRoRule.rate,
-        roNumber: context.roNumber || context.roId
+        roNumber: laborContext.roNumber || laborContext.roId,
+        tabId: laborContext._tabId,
+        context: laborContext,
       }).catch(() => {});
       const toastMsg = `${matchedRoRule.name}: $${matchedRoRule.rate}/hr applied to ${unmatchedUpdated} job(s)`;
-      chrome.tabs.query({ url: ["*://shop.tekmetric.com/*", "*://sandbox.tekmetric.com/*", "*://cba.tekmetric.com/*"] }, (tabs) => {
-        for (const tab of tabs) {
-          chrome.tabs.sendMessage(tab.id, { type: "REFRESH_LABOR_RATE_UI", soft: false, toastMessage: toastMsg }).catch(() => {});
-        }
-      });
+      chrome.tabs.sendMessage(laborContext._tabId, {
+        type: "REFRESH_LABOR_RATE_UI",
+        ...laborRateBroadcastMetadata(laborContext),
+        soft: false,
+        toastMessage: toastMsg,
+        context: laborContext,
+      }).catch(() => {});
+    }
+    if (unmatchedFailures.length > 0) {
+      recordLaborRateOutcome(
+        matchedRoRule,
+        {
+          success: false,
+          ruleName: matchedRoRule.name,
+          rate: matchedRoRule.rate,
+          error: unmatchedFailures[0].error,
+          code: unmatchedFailures[0].code,
+          failedCount: unmatchedFailures.length,
+        },
+        { perJob: false },
+      );
     }
   }
 
@@ -5993,7 +6715,19 @@ async function autoApplyLaborRate(context, options = {}) {
     console.log("[LaborRate] No matching rules found");
   }
 
-  lastAppliedRoId = context.roId;
+  assertCurrentLaborRateContext(laborContext);
+  lastAppliedRoId = laborContext.roId;
+  lastAppliedLaborRateContextKey = laborRateContextKey(laborContext);
+  if (!matchedRoRule && perJobRules.length === 0) {
+    return MosLaborRateCore.summarizeLaborRateOutcomes([], {
+      perJobRuleCount: 0,
+      context: laborContext,
+    });
+  }
+  return MosLaborRateCore.summarizeLaborRateOutcomes(laborRateOutcomes, {
+    perJobRuleCount: perJobRules.length,
+    context: laborContext,
+  });
 }
 
 async function applyLaborRatePerJob(matchedRule, rateInCents, roData, context, options = {}) {
@@ -6007,6 +6741,7 @@ async function applyLaborRatePerJob(matchedRule, rateInCents, roData, context, o
   let skippedCount = 0;
   const updatedJobNames = [];
   const handledJobIds = [];
+  const failedJobs = [];
 
   for (const job of jobs) {
     const jobCat = (job.jobCategoryName || job.jobCategory?.name || job.jobCategory || job.category || job.type || '').toLowerCase();
@@ -6029,7 +6764,7 @@ async function applyLaborRatePerJob(matchedRule, rateInCents, roData, context, o
       continue;
     }
 
-    const shopId = context.shopId || tekmetricShopId;
+    const shopId = context.shopId;
     let anyLaborNeedsUpdate = false;
 
     for (const labor of laborEntries) {
@@ -6057,6 +6792,7 @@ async function applyLaborRatePerJob(matchedRule, rateInCents, roData, context, o
     };
 
     try {
+      assertCurrentLaborRateContext(context);
       const laborNames = laborEntries.filter(l => (l.rate || 0) !== rateInCents).map(l => l.name).join(', ');
       console.log(`[LaborRate] Updating job "${job.name}" labor (${laborNames}) to $${rateInCents/100}/hr via POST /job`);
 
@@ -6067,6 +6803,7 @@ async function applyLaborRatePerJob(matchedRule, rateInCents, roData, context, o
         { shopId, label: 'labor-rate.post-job-per-category', context }
       );
       ownJobPostInFlight = false;
+      assertCurrentLaborRateContext(context);
 
       if (res.ok) {
         await res.json();
@@ -6076,18 +6813,79 @@ async function applyLaborRatePerJob(matchedRule, rateInCents, roData, context, o
       } else {
         const errText = await res.text();
         console.error(`[LaborRate] Failed to update job "${job.name}": ${res.status}`, errText.substring(0, 300));
+        let providerError = null;
+        try {
+          providerError = JSON.parse(errText);
+        } catch {}
+        failedJobs.push({
+          jobName: job.name || String(job.id || 'job'),
+          status: res.status,
+          error: providerError?.error || providerError?.message ||
+            errText.trim() || `Provider returned ${res.status}`,
+          code: providerError?.code || (res.status === 403 ? 'SHOP_FORBIDDEN' : null),
+        });
       }
     } catch (err) {
       ownJobPostInFlight = false;
+      if (err.code === 'STALE_LABOR_RATE_CONTEXT') throw err;
       console.error(`[LaborRate] Error updating job "${job.name}":`, err.message);
+      failedJobs.push({
+        jobName: job.name || String(job.id || 'job'),
+        status: err.status || 0,
+        error: err.message || 'Provider update failed',
+        code: err.code || null,
+      });
     }
   }
 
   lastAppliedRoId = context.roId;
+  lastAppliedLaborRateContextKey = laborRateContextKey(context);
 
-  if (updatedCount === 0 && skippedCount > 0) {
+  const failureSummary = failedJobs.length > 0
+    ? `Failed to update ${failedJobs.length} per-job labor item(s): ${failedJobs[0].error}`
+    : null;
+
+  if (failedJobs.length > 0 && updatedCount === 0) {
+    console.error(`[LaborRate] All per-job updates failed for "${matchedRule.name}"`);
+    chrome.runtime.sendMessage({
+      action: "LABOR_RATE_APPLIED",
+      success: false,
+      ...laborRateBroadcastMetadata(context),
+      ruleName: matchedRule.name,
+      rate: matchedRule.rate,
+      perJob: true,
+      error: failureSummary,
+      code: failedJobs[0].code || null,
+      failedCount: failedJobs.length,
+      failedJobs,
+      roNumber: context.roNumber || context.roId,
+      tabId: context._tabId,
+      context,
+    }).catch(() => {});
+    return {
+      success: false,
+      error: failureSummary,
+      code: failedJobs[0].code || null,
+      ruleName: matchedRule.name,
+      rate: matchedRule.rate,
+      perJob: true,
+      failedCount: failedJobs.length,
+      failedJobs,
+      handledJobIds,
+    };
+  }
+
+  if (updatedCount === 0 && skippedCount > 0 && failedJobs.length === 0) {
     console.log(`[LaborRate] All matching labor lines already at target rate, skipped ${skippedCount}`);
-    return { success: true, noChange: true, handledJobIds };
+    return {
+      success: true,
+      noChange: true,
+      ruleName: matchedRule.name,
+      rate: matchedRule.rate,
+      perJob: true,
+      updatedCount: 0,
+      handledJobIds,
+    };
   }
 
   if (updatedCount > 0) {
@@ -6096,27 +6894,57 @@ async function applyLaborRatePerJob(matchedRule, rateInCents, roData, context, o
     chrome.runtime.sendMessage({
       action: "LABOR_RATE_APPLIED",
       success: true,
+      partialFailure: failedJobs.length > 0,
+      ...laborRateBroadcastMetadata(context),
       ruleName: matchedRule.name,
       rate: matchedRule.rate,
       perJob: true,
       updatedCount,
       jobNames: updatedJobNames,
-      roNumber: context.roNumber || context.roId
+      error: failureSummary,
+      code: failedJobs[0]?.code || null,
+      failedCount: failedJobs.length,
+      failedJobs,
+      roNumber: context.roNumber || context.roId,
+      tabId: context._tabId,
+      context,
     }).catch(() => {});
 
     const softRefresh = options.softRefresh || false;
-    const toastMsg = `${matchedRule.name}: $${matchedRule.rate}/hr applied to ${updatedJobNames.join(', ')}`;
-    chrome.tabs.query({ url: ["*://shop.tekmetric.com/*", "*://sandbox.tekmetric.com/*", "*://cba.tekmetric.com/*"] }, (tabs) => {
-      for (const tab of tabs) {
-        chrome.tabs.sendMessage(tab.id, { type: "REFRESH_LABOR_RATE_UI", soft: softRefresh, toastMessage: toastMsg }).catch(() => {});
-      }
-    });
+    const toastMsg = failedJobs.length > 0
+      ? `${failureSummary} (${updatedJobNames.length} job(s) updated)`
+      : `${matchedRule.name}: $${matchedRule.rate}/hr applied to ${updatedJobNames.join(', ')}`;
+    chrome.tabs.sendMessage(context._tabId, {
+      type: "REFRESH_LABOR_RATE_UI",
+      ...laborRateBroadcastMetadata(context),
+      soft: softRefresh,
+      toastMessage: toastMsg,
+      context,
+    }).catch(() => {});
 
-    return { success: true, ruleName: matchedRule.name, rate: matchedRule.rate, updatedCount, handledJobIds };
+    return {
+      success: true,
+      partialFailure: failedJobs.length > 0,
+      error: failureSummary,
+      code: failedJobs[0]?.code || null,
+      failedCount: failedJobs.length,
+      failedJobs,
+      ruleName: matchedRule.name,
+      rate: matchedRule.rate,
+      updatedCount,
+      handledJobIds,
+    };
   }
 
   console.log("[LaborRate] No matching jobs/labor found for category rule");
-  return { success: false, error: "No matching jobs found for category", handledJobIds };
+  return {
+    success: false,
+    error: "No matching jobs found for category",
+    ruleName: matchedRule.name,
+    rate: matchedRule.rate,
+    perJob: true,
+    handledJobIds,
+  };
 }
 
 async function applyLaborRateToRO(matchedRule, rateInCents, roData, context, options = {}) {
@@ -6126,7 +6954,15 @@ async function applyLaborRateToRO(matchedRule, rateInCents, roData, context, opt
   if (rateInCents === currentRate) {
     console.log(`[LaborRate] Rate already matches ($${matchedRule.rate}/hr), skipping`);
     lastAppliedRoId = context.roId;
-    return;
+    lastAppliedLaborRateContextKey = laborRateContextKey(context);
+    return {
+      success: true,
+      noChange: true,
+      ruleName: matchedRule.name,
+      rate: matchedRule.rate,
+      previousRate: currentRate / 100,
+      perJob: false,
+    };
   }
 
   try {
@@ -6152,7 +6988,7 @@ async function applyLaborRateToRO(matchedRule, rateInCents, roData, context, opt
       `/api/repair-order/${context.roId}/summary`,
       { method: 'PUT', body: JSON.stringify(summaryPayload) },
       {
-        shopId: context.shopId || tekmetricShopId,
+        shopId: context.shopId,
         label: 'labor-rate.put-ro-summary',
         signalUserOnError: true,
         context,
@@ -6161,42 +6997,74 @@ async function applyLaborRateToRO(matchedRule, rateInCents, roData, context, opt
 
     const updateBody = await updateRes.text();
     console.log(`[LaborRate] RO update: ${updateRes.status}`);
+    assertCurrentLaborRateContext(context);
 
     if (!updateRes.ok) {
       console.error("[LaborRate] Failed to update rate:", updateRes.status, updateBody);
       chrome.runtime.sendMessage({
         action: "LABOR_RATE_APPLIED",
         success: false,
-        error: `Failed to update rate: ${updateRes.status}`
+        ...laborRateBroadcastMetadata(context),
+        error: `Failed to update rate: ${updateRes.status}`,
+        tabId: context._tabId,
+        context,
       }).catch(() => {});
-      return { success: false, error: `Update failed: ${updateRes.status}` };
+      return {
+        success: false,
+        error: `Update failed: ${updateRes.status}`,
+        ruleName: matchedRule.name,
+        rate: matchedRule.rate,
+        perJob: false,
+      };
     }
 
     lastAppliedRoId = context.roId;
+    lastAppliedLaborRateContextKey = laborRateContextKey(context);
     console.log(`[LaborRate] Applied "${matchedRule.name}" - $${matchedRule.rate}/hr (${rateInCents} cents) to RO #${context.roNumber || context.roId}`);
 
     chrome.runtime.sendMessage({
       action: "LABOR_RATE_APPLIED",
       success: true,
+      ...laborRateBroadcastMetadata(context),
       ruleName: matchedRule.name,
       rate: matchedRule.rate,
       previousRate: currentRate / 100,
-      roNumber: context.roNumber || context.roId
+      roNumber: context.roNumber || context.roId,
+      tabId: context._tabId,
+      context,
     }).catch(() => {});
 
     const softRefresh = options.softRefresh || false;
     const toastMsg = `${matchedRule.name}: $${matchedRule.rate}/hr applied to RO`;
-    chrome.tabs.query({ url: ["*://shop.tekmetric.com/*", "*://sandbox.tekmetric.com/*", "*://cba.tekmetric.com/*"] }, (tabs) => {
-      for (const tab of tabs) {
-        chrome.tabs.sendMessage(tab.id, { type: "REFRESH_LABOR_RATE_UI", soft: softRefresh, toastMessage: toastMsg }).catch(() => {});
-      }
-    });
+    chrome.tabs.sendMessage(context._tabId, {
+      type: "REFRESH_LABOR_RATE_UI",
+      ...laborRateBroadcastMetadata(context),
+      soft: softRefresh,
+      toastMessage: toastMsg,
+      context,
+    }).catch(() => {});
 
     return { success: true, ruleName: matchedRule.name, rate: matchedRule.rate };
   } catch (err) {
     console.error("[LaborRate] Error updating rate:", err);
-    return { success: false, error: err.message };
+    if (err.code === 'STALE_LABOR_RATE_CONTEXT') throw err;
+    return {
+      success: false,
+      error: err.message,
+      code: err.code || null,
+      ruleName: matchedRule.name,
+      rate: matchedRule.rate,
+      perJob: false,
+    };
   }
 }
 
 console.log("[MOS Tools] Background service worker loaded");
+
+          const selectedSource = hydrated.recommendation.source;
+
+          const sourceSystem = String(selectedSource?.sourceSystem || '')
+            .toLowerCase()
+            .replace(/^shop[-_]ware$/, 'shopware');
+
+        const params = new URLSearchParams({ provider, workOrderId });

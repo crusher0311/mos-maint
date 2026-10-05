@@ -33,6 +33,7 @@ const HARD_TIMEOUT_MS = 30_000;
 const POOL_SIZE = 3; // mirrors pLimit(3) in client.ts
 
 const config: ProtractorConfig = {
+  shopId: 1,
   connectionId: "test-conn",
   apiKey: "test-key",
   authentication: "test-auth",

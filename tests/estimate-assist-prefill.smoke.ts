@@ -140,6 +140,20 @@ function main() {
     !/String\(initialWorkOrderId \?\? ""\)\.trim\(\)/.test(panelSrc),
     "panel must not reintroduce inline prefill coercion",
   );
+  assert.ok(
+    dashSrc.includes("initialProvider={estimateAssist.provider}") &&
+      dashSrc.includes("initialStatusWorkOrderId={estimateAssist.statusWorkOrderId}"),
+    "dashboard Estimate Assist modal must pass explicit provider and provider RO identity to status reads",
+  );
+  assert.ok(
+    dashSrc.includes("const auditContext = dashboardAuditContext(r)") &&
+      dashSrc.includes("statusWorkOrderId: auditContext?.workOrderId"),
+    "dashboard status context must use explicitly projected provider identity separately from normalized audit id",
+  );
+  assert.ok(
+    panelSrc.includes("Saved-audit provider") && panelSrc.includes("Check saved audit"),
+    "manually typed ROs must offer an explicit provider-scoped saved-audit read",
+  );
 
   console.log("estimate-assist-prefill smoke: all assertions passed");
 }

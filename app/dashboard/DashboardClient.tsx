@@ -23,6 +23,12 @@ import {
 } from "@/lib/sticker-defaults";
 import { resolveVehicleFields, splitDisplayVehicle } from "@/lib/vehicle-display";
 import { hasAuditableIdentifier, pickEstimateAssistIdentifier } from "@/lib/estimate-assist-prefill";
+import {
+  dashboardAuditContext,
+  dashboardAuditStatusKey,
+  dashboardAuditStatusVisual,
+  type DashboardAuditStatus,
+} from "@/lib/dashboard-audit-status";
 
 function getRowMake(r: any): string | undefined {
   const direct = r?.vehicle?.make || r?.vehicleMake || r?.make;
@@ -71,6 +77,7 @@ type DashboardData = {
 };
 
 const PAGE_SIZE = 100;
+const VISIBLE_AUDIT_STATUS_LIMIT = 12;
 
 // Map Protractor workflow stages to display names, colors, and icons
 const WORKFLOW_STAGE_MAP: Record<string, { label: string; color: string; icon: ReactNode }> = {
@@ -209,12 +216,76 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
   } | null>(null);
   const [estimateAssist, setEstimateAssist] = useState<{
     workOrderId: string;
+    /** Provider identity is required by the persisted automatic-audit read. */
+    provider?: string;
+    /** Stable upstream RO id; the manual audit can still use normalizedId. */
+    statusWorkOrderId?: string;
     roDisplay?: string;
     vin: string;
     vehicleDisplay: string;
     customerName?: string;
     mileage?: number;
   } | null>(null);
+  const [rowAuditStatuses, setRowAuditStatuses] = useState<Record<string, DashboardAuditStatus>>({});
+  const rowAuditStatusRequest = useRef(0);
+  const rowAuditStatusInFlight = useRef(false);
+
+  // Keep dashboard list status reads deliberately bounded: only the first
+  // visible page slice is checked, at most once per 30 seconds while this tab
+  // is visible. Opening a row still performs its own exact status read.
+  useEffect(() => {
+    if (!data.enabledFeatures?.includes("estimate_assist") || showArchived) {
+      setRowAuditStatuses({});
+      return;
+    }
+    const contexts = (data.rows || [])
+      .map(row => dashboardAuditContext(row))
+      .filter((context): context is NonNullable<typeof context> => Boolean(context))
+      .slice(0, VISIBLE_AUDIT_STATUS_LIMIT);
+    if (!contexts.length) {
+      setRowAuditStatuses({});
+      return;
+    }
+    let cancelled = false;
+    const refresh = async () => {
+      if (document.visibilityState === "hidden" || rowAuditStatusInFlight.current) return;
+      rowAuditStatusInFlight.current = true;
+      const request = ++rowAuditStatusRequest.current;
+      try {
+        const entries = await Promise.all(contexts.map(async context => {
+          try {
+            const query = new URLSearchParams({ provider: context.provider, workOrderId: context.workOrderId });
+            const response = await fetch(`/api/estimate-assist/audit/status?${query}`);
+            const result = await response.json();
+            if (!response.ok || !result?.status) return null;
+            return [dashboardAuditStatusKey(context), {
+              status: result.status,
+              report: result.report,
+              reason: result.reason,
+            } as DashboardAuditStatus] as const;
+          } catch {
+            return [dashboardAuditStatusKey(context), {
+              status: "unavailable",
+              reason: "Status could not be read.",
+            } as DashboardAuditStatus] as const;
+          }
+        }));
+        if (cancelled || request !== rowAuditStatusRequest.current) return;
+        setRowAuditStatuses(Object.fromEntries(entries.filter((entry): entry is readonly [string, DashboardAuditStatus] => Boolean(entry))));
+      } finally {
+        rowAuditStatusInFlight.current = false;
+      }
+    };
+    void refresh();
+    const timer = window.setInterval(refresh, 30000);
+    const onVisibility = () => { if (document.visibilityState !== "hidden") void refresh(); };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [data.rows, data.smsType, data.enabledFeatures, showArchived]);
 
   const handleVehicleAdded = (row: any) => {
     setData(prev => ({
@@ -1150,6 +1221,10 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                   const vin = r.displayVin || "";
                   const statusText = r.displayStatus || r.af?.status || "Unknown";
                   const rowKey = r.displayRo ? `${vin}-${r.displayRo}` : `${vin}-${index}`;
+                  const auditContext = dashboardAuditContext(r);
+                  const auditStatusVisual = auditContext
+                    ? dashboardAuditStatusVisual(rowAuditStatuses[dashboardAuditStatusKey(auditContext)])
+                    : null;
                   
                   return (
                     <tr key={rowKey} className="hover:bg-gray-50 transition-colors">
@@ -1402,8 +1477,14 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                                   // displayRo from the legacy data route crashed the
                                   // modal prefill's .trim()).
                                   const picked = pickEstimateAssistIdentifier(r);
+                                  const auditContext = dashboardAuditContext(r);
                                   setEstimateAssist({
                                     workOrderId: picked.workOrderId,
+                                    // The modal's manual audit can resolve normalizedId,
+                                    // but saved status must use only the row's explicitly
+                                    // projected provider identity. Never guess from displayRo.
+                                    provider: auditContext?.provider,
+                                    statusWorkOrderId: auditContext?.workOrderId,
                                     roDisplay: picked.roDisplay,
                                     vin,
                                     vehicleDisplay: r.displayVehicle || '',
@@ -1411,10 +1492,19 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                                     mileage: r.displayMiles ?? undefined,
                                   });
                                 }}
-                                className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded transition-colors"
-                                title="Estimate Assist — audit this RO or smart-build jobs"
+                                className="relative p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded transition-colors"
+                                title={`Estimate Assist — ${auditStatusVisual?.label || "audit this RO or smart-build jobs"}`}
+                                aria-label={`Estimate Assist — ${auditStatusVisual?.label || "audit this RO or smart-build jobs"}`}
                               >
                                 <FileSearch className="w-4 h-4" />
+                                {auditStatusVisual && (
+                                  <span
+                                    className={`absolute -right-1 -top-1 min-w-3.5 h-3.5 px-0.5 rounded-full text-[9px] leading-3.5 text-center font-bold ring-2 ring-white ${auditStatusVisual.className}`}
+                                    aria-hidden="true"
+                                  >
+                                    {auditStatusVisual.symbol}
+                                  </span>
+                                )}
                               </button>
                             ) : (
                               <span
@@ -1736,6 +1826,8 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
               <EstimateAssistPanel
                 embedded
                 initialWorkOrderId={estimateAssist.workOrderId}
+                initialProvider={estimateAssist.provider}
+                initialStatusWorkOrderId={estimateAssist.statusWorkOrderId}
                 initialRoDisplay={estimateAssist.roDisplay}
                 initialVin={estimateAssist.vin}
               />

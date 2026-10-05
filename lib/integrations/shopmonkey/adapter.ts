@@ -31,6 +31,8 @@ import type { ShopmonkeyOrder, ShopmonkeyServiceItem } from "./types";
 import { resolveShopDistanceUnit } from "@/lib/shop-distance-unit";
 import { PROGRESS_COLLECTION } from "./inflight-lock";
 import { NormalizedIngestionService } from "@/lib/integrations/core/normalized-ingestion";
+import { auditAutomationEnabled } from "@/lib/estimate-assist/audit-automation";
+import { scheduleNormalizedAuditReceipt } from "@/lib/data/repositories/estimate-audit-receipts";
 
 /**
  * Resolve the normalized odometer unit for a Shopmonkey shop via the central
@@ -128,6 +130,20 @@ export class ShopmonkeyAdapter implements IIntegrationAdapter {
       ]);
       // Shopmonkey orders don't embed line items; fetch them separately.
       const serviceItems = await getOrderServiceItems(shopId, order);
+      // The caller already paid for the detail + line-item reads. Hand the
+      // assembled complete receipt to the scheduler without any additional
+      // Shopmonkey request; [] is an intentional zero-job ticket.
+      if (auditAutomationEnabled(shopId) && Array.isArray(serviceItems)) {
+        const receipt = { ...order, serviceItems };
+        void scheduleNormalizedAuditReceipt(
+          shopId,
+          "shopmonkey",
+          receipt,
+          "live",
+        ).catch((error: any) =>
+          console.warn(`[Shopmonkey] audit receipt handoff failed for live order ${order.id}:`, error?.message || error),
+        );
+      }
       return { ok: true, data: transformOrder(order, { mileageUnit }, serviceItems) };
     } catch (err: any) {
       return { ok: false, error: err.message ?? "Work order not found" };

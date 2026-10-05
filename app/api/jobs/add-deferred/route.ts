@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { addDeferredWorkToWorkOrder } from "@/lib/integrations/protractor";
+import { runWithProtractorInteractiveTransport } from "@/lib/integrations/protractor/interactive-context";
 import { trackPushToRO } from "@/lib/extension-analytics";
 
 export const dynamic = "force-dynamic";
@@ -34,7 +35,10 @@ export async function POST(req: NextRequest) {
 
   console.log(`[Add Deferred] Shop ${shopId}: Adding deferred ${deferredId} to WO ${workOrderGuid}`);
 
-  const result = await addDeferredWorkToWorkOrder(shopId, workOrderGuid, deferredId, vin);
+  const result = await runWithProtractorInteractiveTransport(
+    shopId,
+    () => addDeferredWorkToWorkOrder(shopId, workOrderGuid, deferredId, vin),
+  );
 
   if (!result.ok) {
     console.log(`[Add Deferred] Failed: ${result.error}`);

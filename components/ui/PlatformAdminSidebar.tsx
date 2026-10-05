@@ -213,6 +213,7 @@ export function PlatformAdminSidebar({ userEmail, isMobile, onClose }: PlatformA
           <NavLink href="/platform-admin/dvi-links" icon={ClipboardCheck} label="DVI Links" />
           <NavLink href="/platform-admin/concern-skip-stats" icon={MessageCircle} label="Concern Skip Stats" />
           <NavLink href="/platform-admin/tekmetric-migrations" icon={ArrowRightLeft} label="Tek Migrations" />
+          <NavLink href="/platform-admin/protractor-operator-stop" icon={Shield} label="Protractor Trial" />
           <NavLink href="/platform-admin/api-usage" icon={Activity} label="API Traffic" />
           <NavLink href="/platform-admin/slow-queries" icon={Database} label="Slow Queries" />
           <NavLink href="/platform-admin/extension-telemetry" icon={Activity} label="Ext Telemetry" />

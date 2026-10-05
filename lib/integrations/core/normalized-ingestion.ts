@@ -35,6 +35,12 @@ import { SupabaseDualWriter } from '@/lib/supabase-dual-writer';
 import { shouldShadowWriteMongo } from './normalized-write-mode';
 import { bumpMongoWrites, bumpPgWrites } from '@/lib/backfill-metrics/write-counters';
 import { enrichVinWithAces, enrichVinsWithAcesAllVins, extractShopWarePcdb, extractTekmetricPcdb, type AcesEnrichment } from '@/lib/job-index-aces';
+import {
+  auditAutomationEnabled,
+  scheduleAuditFromReceipt,
+  type AuditProvider,
+  type AuditReceiptSource,
+} from '@/lib/estimate-assist/audit-automation';
 
 // Bounded concurrency for per-entity child writes during work-order
 // ingestion (task #946). High enough to collapse the serial round-trip
@@ -74,6 +80,9 @@ export interface IngestionOptions {
   dualWriteToJobIndex?: boolean;
   dualWriteToRepairPatterns?: boolean;
   dualWriteToSupabase?: boolean;
+  /** A caller that already handed off the same complete raw receipt can avoid
+   * duplicate snapshot mapping in the normalized write path. */
+  suppressAutomaticAuditReceipt?: boolean;
   /**
    * Code path that triggered this ingestion (e.g. "poll", "webhook", "backfill").
    * When set, each work_order doc gets two stamps:
@@ -86,10 +95,36 @@ export interface IngestionOptions {
   ingestionVia?: string;
 }
 
-// =============================================================================
-// NORMALIZED INGESTION SERVICE
-// =============================================================================
-
+/**
+ * Audit receipts are an opt-in, live-data feature. In particular, do not
+ * infer "live" for old callers that have no attribution: the oldest
+ * normalization callers are historical import paths and a feature enable must
+ * never turn one of those into an audit queue storm.
+ */
+export function auditReceiptSourceForIngestion(
+  ingestionVia?: string,
+  syncRunId?: string,
+): AuditReceiptSource | null {
+  const via = String(ingestionVia || '').trim().toLowerCase();
+  const run = String(syncRunId || '').trim().toLowerCase();
+  // The callback drain's exact marker is not a historical replay: it fetches
+  // the current provider WorkOrder after a delivery recovery and should retain
+  // webhook semantics. Do not widen this exception to arbitrary "replay"
+  // labels, which are historical/import paths.
+  const isCurrentWebhookRecovery = via === 'webhook-queue-replay';
+  // Some older import callers only identify themselves in syncRunId. Keep
+  // this guard even after all known callers have explicit ingestionVia.
+  if (
+    /(backfill|historical|history|full[-_ ]?page|rebuild|migration|catchup|replay)/.test(`${via} ${run}`) &&
+    !(isCurrentWebhookRecovery && !/(backfill|historical|history|full[-_ ]?page|rebuild|migration|catchup|replay)/.test(run))
+  ) {
+    return null;
+  }
+  if (via === 'webhook' || via.startsWith('webhook-')) return 'webhook';
+  if (via === 'poll' || via.includes('incremental')) return 'poll';
+  if (via === 'live' || via === 'create-work-order') return 'live';
+  return null;
+}
 export class NormalizedIngestionService {
   private db: Db;
   private adapter: INormalizedAdapter;
@@ -1402,6 +1437,17 @@ export class NormalizedIngestionService {
       payments.push(...payResults);
       inspections.push(...inspResults);
       recommendations.push(...recResults);
+
+      // Task #1279: receipt-driven automatic audits are a *separate*,
+      // deliberately lightweight handoff. Do not await it here: a state/Redis
+      // hiccup must never delay an ingestion acknowledgement, and it never
+      // fetches, invokes AI, or schedules a backfill. The state scheduler
+      // deduplicates content and re-drives pending work on a later receipt.
+      // A duplicate complete receipt is also valuable: the scheduler can
+      // re-drive a pending/failed audit without evaluating it here.
+      if (workOrderResult.action !== 'error' && !this.options.suppressAutomaticAuditReceipt) {
+        void this.scheduleAutomaticAuditReceipt(sourceData, workOrderResult.entityId);
+      }
     }
     
     return {
@@ -1962,6 +2008,34 @@ export class NormalizedIngestionService {
       }
     }
   }
+
+  /**
+   * Build a minimal evaluator snapshot only after a successful complete-ticket
+   * normalization. All four supported providers use this path when they have a
+   * normalized adapter; Shop-Ware uses the equivalent direct cache hook.
+   */
+  private async scheduleAutomaticAuditReceipt(sourceData: any, _normalizedWorkOrderId?: string): Promise<void> {
+    // Keep this no-I/O admission gate ahead of all receipt mapping. Automatic
+    // audits are off by default, so ordinary ingestion must not pay for
+    // adapter mapping or state work unless a shop is explicitly enabled.
+    if (!auditAutomationEnabled(this.shopId)) return;
+    const source = auditReceiptSourceForIngestion(this.options.ingestionVia, this.options.syncRunId);
+    if (!source) return;
+    const provider = this.adapter.sourceSystem as AuditProvider;
+    if (!["tekmetric", "protractor", "shopmonkey", "shopware"].includes(provider)) return;
+    try {
+      await scheduleAuditReceiptForNormalizedPayload(
+        this.db,
+        this.shopId,
+        provider,
+        sourceData,
+        source,
+        this.enterpriseId,
+      );
+    } catch (err: any) {
+      console.warn(`[EstimateAuditSchedule] receipt handoff failed shop=${this.shopId} provider=${provider}: ${err?.message || err}`);
+    }
+  }
   
   // ---------------------------------------------------------------------------
   // HELPER METHODS
@@ -2143,4 +2217,198 @@ export function createIngestionService(
   options?: IngestionOptions
 ): NormalizedIngestionService {
   return new NormalizedIngestionService(db, sourceSystem, shopId, enterpriseId, options);
+}
+
+export function auditReceiptUpstreamUpdatedAt(provider: AuditProvider, sourceData: any): string | Date | null {
+  // Use only provider-declared source timestamps. Do not substitute local
+  // cache/ingestion `updatedAt`: it would make a stale replay look newer.
+  const value = provider === 'protractor'
+    ? sourceData?.Header?.LastModifiedTime
+    : provider === 'tekmetric' || provider === 'shopmonkey'
+      ? sourceData?.updatedDate
+      : null;
+  if (value === null || value === undefined || value === '') return null;
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) ? value : null;
+}
+
+/**
+ * Pure receipt handoff for callers that already hold a complete provider
+ * payload (notably webhook handlers). It deliberately performs no upstream
+ * request; mapping begins only after the off-by-default feature gate and
+ * completeness/identity checks succeed.
+ */
+export async function scheduleAuditReceiptForNormalizedPayload(
+  db: Db,
+  shopId: number,
+  provider: AuditProvider,
+  sourceData: any,
+  source: AuditReceiptSource,
+  enterpriseId?: string,
+): Promise<void> {
+  if (!auditAutomationEnabled(shopId)) return;
+  const stableWorkOrderId = auditReceiptPrimaryId(provider, sourceData);
+  if (!stableWorkOrderId || !hasCompleteAuditTicket(provider, sourceData)) return;
+
+  const adapter = getAdapter(provider);
+  if (!adapter) return;
+  const vehicle = adapter.extractVehicleFromWorkOrder(sourceData) || {};
+  const mapped = adapter.mapWorkOrder(shopId, sourceData, enterpriseId);
+  const lineItems = provider === 'tekmetric'
+    ? mapTekmetricAuditReceiptLineItems(sourceData)
+    : (adapter.extractRawServiceJobsFromWorkOrder(sourceData) || [])
+      .map((job: any) => adapter.mapServiceJob(shopId, '', job))
+      .filter((job: any) => job?.title)
+      .map((job: any) => ({
+        title: job.title,
+        description: job.description,
+        type: job.jobType,
+        laborHours: job.laborHoursBilled ?? job.laborHoursActual ?? job.laborHoursEstimated,
+        laborTotal: job.laborTotal,
+        partsTotal: job.partsTotal,
+        total: job.total,
+      }));
+
+  await scheduleAuditFromReceipt(db, {
+    shopId,
+    provider,
+    workOrderId: stableWorkOrderId,
+    workOrderNumber: mapped.workOrderNumber != null ? String(mapped.workOrderNumber) : undefined,
+    smsWorkOrderId: stableWorkOrderId,
+    lineItems,
+    vehicleInfo: {
+      vin: vehicle.vin ? String(vehicle.vin).toUpperCase() : undefined,
+      year: vehicle.year,
+      make: vehicle.make,
+      model: vehicle.model,
+      mileage: sourceData.MileageIn ?? sourceData.mileageIn ?? sourceData.odometerIn,
+      drivetrain: vehicle.drivetrain,
+    },
+    vehicleVin: vehicle.vin ? String(vehicle.vin).toUpperCase() : null,
+    canUseMaintenance: false,
+    completeTicket: true,
+    source,
+    upstreamUpdatedAt: auditReceiptUpstreamUpdatedAt(provider, sourceData),
+  });
+}
+
+/** Stable provider-side primary identity; never fall back to a display number
+ * or normalized/MOS-generated id. */
+export function auditReceiptPrimaryId(provider: AuditProvider, sourceData: any): string | null {
+  const id = provider === 'protractor' ? sourceData?.ID : sourceData?.id;
+  return id === null || id === undefined || String(id).trim() === ''
+    ? null
+    : String(id);
+}
+
+function tekmetricCents(value: unknown): number {
+  const cents = Number(value);
+  return Number.isFinite(cents) ? cents / 100 : 0;
+}
+
+/**
+ * Tekmetric's job monetary fields are cents, unlike the normalized adapter's
+ * generic numeric representation. Keep receipt values aligned with the
+ * canonical job-index mapping so audit fingerprints and pricing rules receive
+ * dollars, whether totals are supplied under *Total, *Amount, or *Price.
+ */
+export function mapTekmetricAuditReceiptLineItems(sourceData: any): Array<{
+  title: string;
+  description?: string;
+  type?: string;
+  laborHours?: number;
+  laborTotal?: number;
+  partsTotal?: number;
+  parts?: Array<{ description: string; quantity: number; unitPrice: number }>;
+  total?: number;
+}> {
+  if (!Array.isArray(sourceData?.jobs)) return [];
+  return sourceData.jobs
+    .map((job: any) => {
+      const nestedLaborHours = Array.isArray(job.labor)
+        ? job.labor.reduce((total: number, entry: any) => total + (Number(entry?.hours) || 0), 0)
+        : 0;
+      const laborHours = Number(
+        job.laborHours ?? job.billedHours ?? job.hours ?? nestedLaborHours,
+      );
+      const nestedLaborTotal = Array.isArray(job.labor)
+        ? job.labor.reduce(
+          (total: number, entry: any) =>
+            total + (Number(entry?.hours) || 0) * tekmetricCents(entry?.rate),
+          0,
+        )
+        : 0;
+      const topLevelLaborTotal = tekmetricFirstCents(
+        job.laborTotal,
+        job.laborAmount,
+        job.laborPrice,
+      );
+      const nestedPartsTotal = Array.isArray(job.parts)
+        ? job.parts.reduce(
+          (total: number, part: any) =>
+            total +
+            (Number(part?.quantity) || 1) *
+              tekmetricFirstCents(part?.retail, part?.cost),
+          0,
+        )
+        : 0;
+      const laborTotal = topLevelLaborTotal || nestedLaborTotal;
+      const topLevelPartsTotal = tekmetricFirstCents(
+        job.partsTotal,
+        job.partsAmount,
+        job.partsPrice,
+      );
+      const partsTotal = topLevelPartsTotal || nestedPartsTotal;
+      const total = tekmetricFirstCents(
+        job.subtotal,
+        job.totalAmount,
+        job.total,
+      ) || laborTotal + partsTotal;
+      const parts = Array.isArray(job.parts)
+        ? job.parts.map((part: any) => ({
+          description: String(part.name || part.description || ""),
+          quantity: Number(part.quantity) || 1,
+          unitPrice: tekmetricFirstCents(part.retail, part.cost),
+        }))
+        : undefined;
+
+      return {
+        title: String(job.name || job.description || "").trim(),
+        description: job.description || job.note || undefined,
+        type: job.cannedJobId ? "canned" : "custom",
+        laborHours: Number.isFinite(laborHours) ? laborHours : undefined,
+        laborTotal,
+        partsTotal,
+        parts,
+        total,
+      };
+    })
+    .filter((item: { title: string }) => item.title);
+}
+
+/**
+ * A missing job collection is a sparse event/list projection, not an empty
+ * ticket. Explicit empty collections are complete and intentionally schedule
+ * an audit so prior warnings may clear.
+ */
+export function hasCompleteAuditTicket(provider: AuditProvider, sourceData: any): boolean {
+  const hasCollection = (value: any) =>
+    Array.isArray(value) || Array.isArray(value?.ItemCollection);
+  if (provider === 'tekmetric') return Array.isArray(sourceData?.jobs);
+  if (provider === 'protractor') {
+    return hasCollection(sourceData?.ServicePackages) ||
+      hasCollection(sourceData?.DeferredServicePackages);
+  }
+  if (provider === 'shopmonkey') {
+    return Array.isArray(sourceData?.services) || Array.isArray(sourceData?.serviceItems);
+  }
+  return false;
+}
+
+function tekmetricFirstCents(...values: unknown[]): number {
+  for (const value of values) {
+    const number = Number(value);
+    if (Number.isFinite(number) && number !== 0) return number / 100;
+  }
+  return 0;
 }
