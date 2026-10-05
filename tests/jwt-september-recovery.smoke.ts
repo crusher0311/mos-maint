@@ -1,6 +1,22 @@
 import assert from "node:assert/strict";
-import {advanceRecovery,initialRecoveryState,recoveryCandidates,recoverySourcePath,type RecoveryDeps} from "../lib/jwt-september-recovery";
+import {advanceRecovery,initialRecoveryState,recoveryCandidates,recoverySourcePath,readRecoverySourceWithQueueRetry,RECOVERY_QUEUE_BUSY,type RecoveryDeps} from "../lib/jwt-september-recovery";
 async function main() {
+  let attempts=0;
+  const waits:number[]=[];
+  const busy={ok:false,error:RECOVERY_QUEUE_BUSY};
+  const admitted=await readRecoverySourceWithQueueRetry(async()=>++attempts===6?{ok:true}:busy,async ms=>{waits.push(ms);});
+  assert.equal(admitted.ok,true);
+  assert.equal(attempts,6);
+  assert.deepEqual(waits,[1000,2000,4000,8000,16000]);
+  attempts=0;
+  assert.equal(await readRecoverySourceWithQueueRetry(async()=>{attempts++;return busy;},async()=>{}),busy);
+  assert.equal(attempts,6,"persistent contention is bounded");
+  for(const error of ["HTTP 429","Network error","upstream_response_too_large","Protractor provider circuit breaker open","Current production policy blocks recovery reads"]) {
+    attempts=0;
+    await readRecoverySourceWithQueueRetry(async()=>{attempts++;return {ok:false,error};},async()=>assert.fail("non-admission errors must not retry"));
+    assert.equal(attempts,1);
+  }
+  await assert.rejects(readRecoverySourceWithQueueRetry(async()=>{throw new Error("transport exception");},async()=>assert.fail("thrown errors must not retry")));
   assert.equal(recoveryCandidates.length,235);
   assert.ok(recoveryCandidates.every(n=>n.date>="2026-09-02"&&n.date<"2026-10-01"));
   assert.equal(new Set(recoveryCandidates.map(n=>n.wo)).size,235);

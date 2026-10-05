@@ -70,6 +70,8 @@ export async function recoveryStep(readPage:RecoveryDeps["readPage"],recover:Rec
     await jobs.updateOne({_id:JWT_RECOVERY_ID,leaseToken:token},{$set:{pauseRequested:true,
       error:code==="source_too_large"
         ?"A single day's invoice response exceeds the relay size limit. Recovery is paused; saved progress is retained and the size limit has not been bypassed."
+        :code==="source_queue_busy"
+          ?"The shared Protractor request queue remained busy after six bounded admission attempts. No invoice request was sent by those attempts. Progress is saved; resume retries the unfinished day."
         :code==="source_unavailable"
           ?"Protractor did not return a usable invoice response. Recovery is paused and saved progress is retained."
           :"Recovery paused after a source, policy, database or lease failure. Progress is saved; resume retries the unfinished step."}});

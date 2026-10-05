@@ -2,7 +2,7 @@ import { NextRequest,NextResponse } from "next/server";
 import { deps } from "../jwt-invoice-preview/deps";
 import { recoveryDeps } from "./deps";
 import { resolveProtractorConfig,protractorFetch } from "@/lib/integrations/protractor/client";
-import { recoverySourcePath } from "@/lib/jwt-september-recovery";
+import { recoverySourcePath,readRecoverySourceWithQueueRetry,RECOVERY_QUEUE_BUSY } from "@/lib/jwt-september-recovery";
 
 export const dynamic="force-dynamic";
 export const maxDuration=300;
@@ -39,12 +39,12 @@ export async function POST(req:NextRequest) {
           throw new Error("Current production policy blocks recovery reads");
         const config=await resolveProtractorConfig(227);
         if(!config.configured || config.shopId!==227) throw new Error("Shop configuration unavailable");
-        const result=await protractorFetch<{ItemCollection:unknown[]}>(
+        const result=await readRecoverySourceWithQueueRetry(()=>protractorFetch<{ItemCollection:unknown[]}>(
           recoverySourcePath(day),
-          config,{method:"GET"},0,227,{priority:true,maxRetries:0,timeoutMs:20000});
+          config,{method:"GET"},0,227,{priority:true,maxRetries:0,timeoutMs:20000}));
         if(!result.ok || !Array.isArray(result.data?.ItemCollection)) {
           const tooLarge=JSON.stringify(result).includes("upstream_response_too_large");
-          throw Object.assign(new Error("Source unavailable"),{recoveryCode:tooLarge?"source_too_large":"source_unavailable"});
+          throw Object.assign(new Error("Source unavailable"),{recoveryCode:tooLarge?"source_too_large":result.error===RECOVERY_QUEUE_BUSY?"source_queue_busy":"source_unavailable"});
         }
         return result.data.ItemCollection;
       });

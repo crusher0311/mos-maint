@@ -3,6 +3,18 @@ import candidates from "@/docs/reporting/jwt-701-september-recovery-candidates.j
 
 export const JWT_RECOVERY_ID="jwt-701-september-2026-v1";
 export const JWT_RECOVERY_PAGE_SIZE=25;
+// Only this pre-dispatch rejection proves no request reached Protractor.
+export const RECOVERY_QUEUE_BUSY="Protractor fleet transport pacer deadline expired";
+export async function readRecoverySourceWithQueueRetry<T extends {ok:boolean;error?:string}>(
+  read:()=>Promise<T>,
+  wait:(ms:number)=>Promise<void>=ms=>new Promise(resolve=>setTimeout(resolve,ms)),
+):Promise<T> {
+  for(let attempt=0;;attempt++) {
+    const result=await read();
+    if(result.ok || result.error!==RECOVERY_QUEUE_BUSY || attempt===5) return result;
+    await wait(1000*2**attempt);
+  }
+}
 export function recoverySourcePath(day:number) {
   if(!Number.isInteger(day)||day<2||day>30) throw new Error("Invalid recovery day");
   const start=`2026-09-${String(day).padStart(2,"0")}`;
