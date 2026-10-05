@@ -5,10 +5,8 @@ import {
   ingestPartnerCarfaxReport,
   validateCarfaxIngestionBody,
 } from "@/lib/external-api/carfax-ingestion";
-import {
-  AppFueledMappingValidationError,
-  resolveActiveAppFueledMapping,
-} from "@/lib/data/repositories/appfueled-shop-mappings";
+import { findShopByShopId } from "@/lib/data/repositories/shops";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
 import { buildPartnerVhiResponse } from "@/lib/external-api/partner-vhi-service";
 import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
 
@@ -71,21 +69,25 @@ export const POST = createExternalEndpoint(
         { status: 400 },
       );
     }
-    let shop;
-    try {
-      shop = await resolveActiveAppFueledMapping(String(body.smsShopId));
-    } catch (error) {
-      if (error instanceof AppFueledMappingValidationError) {
-        return NextResponse.json({ error: error.message, requestId }, { status: 409 });
-      }
-      throw error;
+    // AppFueled is a system-wide partner; live_api identifiers are MOS IDs.
+    // Never interpret them as provider IDs or require a per-shop integration.
+    const id = String(body.smsShopId).trim();
+    const mosShopId = Number(id);
+    if (!/^[1-9]\d*$/.test(id) || !Number.isSafeInteger(mosShopId)) {
+      return NextResponse.json({ error: "smsShopId must be a positive MOS shop ID", requestId }, { status: 400 });
     }
-    if (!shop) {
+    const targetShop = await findShopByShopId(mosShopId, { shopId: 1 });
+    if (!targetShop || Number(targetShop.shopId) !== mosShopId) {
       return NextResponse.json(
-        { error: `No active AppFueled live_api mapping for external shop ID: ${body.smsShopId}`, requestId },
+        { error: `MOS shop not found: ${mosShopId}`, requestId },
         { status: 404 },
       );
     }
+    const entitlements = await getFeatureEntitlements(mosShopId, { throwIfMissing: true });
+    if (!entitlements.canUseFeature("maintenance")) {
+      return NextResponse.json({ error: "Feature not enabled", requestId }, { status: 403 });
+    }
+    const shop = { mosShopId };
     const result = await ingestPartnerCarfaxReport({
       partnerId,
       shopId: shop.mosShopId,

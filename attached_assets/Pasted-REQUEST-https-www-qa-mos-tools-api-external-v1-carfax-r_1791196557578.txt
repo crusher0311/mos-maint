@@ -1,0 +1,508 @@
+REQUEST:
+https://www.qa.mos.tools/api/external/v1/carfax/reports
+Accept: application/json
+Content-Type: application/json
+X-API-Key: mos_partner_096fde560a1295310906b2379b3586e4ffc38a9d8c98a7eec337fd2a7a3c43e9
+X-Request-Id: af-carfax-20261005_063431_ebe03b-1FMCU0F76EUC02231
+
+{
+    "vin": "1FMCU0F76EUC02231",
+    "sms": "live_api",
+    "smsShopId": "25",
+    "deliveryId": "558631c1c8dc022358f2d616",
+    "retrievedAt": "2026-10-05T10:34:31.509Z",
+    "report": {
+        "vin": "1FMCU0F76EUC02231",
+        "reportDate": "2026-10-05",
+        "serviceHistory": {
+            "numberOfRecallRecords": 0,
+            "displayRecords": [
+                {
+                    "displayDate": "12/09/2013",
+                    "odometer": "7",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Pre-delivery inspection completed",
+                        "Maintenance inspection completed",
+                        "Safety inspection performed"
+                    ]
+                },
+                {
+                    "displayDate": "08/29/2014",
+                    "odometer": "10,553",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Tires serviced",
+                        "Oil and filter changed",
+                        "Tires rotated"
+                    ]
+                },
+                {
+                    "displayDate": "04/28/2015",
+                    "odometer": "20,231",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Oil and filter changed"
+                    ]
+                },
+                {
+                    "displayDate": "08/27/2015",
+                    "odometer": "24,730",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Oil and filter changed",
+                        "Tires rotated"
+                    ]
+                },
+                {
+                    "displayDate": "08/31/2015",
+                    "odometer": "24,731",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed",
+                        "Oil and filter changed",
+                        "Tires rotated"
+                    ]
+                },
+                {
+                    "displayDate": "10/12/2015",
+                    "odometer": "30,977",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Air intake system serviced",
+                        "Tires serviced",
+                        "Recommended maintenance performed",
+                        "Air filter replaced",
+                        "Emissions or safety inspection performed",
+                        "Oil and filter changed",
+                        "Tires rotated"
+                    ]
+                },
+                {
+                    "displayDate": "10/23/2015",
+                    "odometer": "33,019",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Safety inspection performed"
+                    ]
+                },
+                {
+                    "displayDate": "12/26/2015",
+                    "odometer": "40,384",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Tires serviced",
+                        "Brakes serviced",
+                        "Brakes checked",
+                        "Oil and filter changed",
+                        "Tires rotated"
+                    ]
+                },
+                {
+                    "displayDate": "03/16/2016",
+                    "odometer": "50,809",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Tires serviced",
+                        "Brakes serviced",
+                        "Brakes checked",
+                        "Glass checked",
+                        "Oil and filter changed",
+                        "Tires rotated",
+                        "Wipers/washers checked",
+                        "Wiper(s) replaced"
+                    ]
+                },
+                {
+                    "displayDate": "06/07/2016",
+                    "odometer": "60,233",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Brakes serviced",
+                        "Air intake system serviced",
+                        "Tires serviced",
+                        "Air filter replaced",
+                        "Brakes checked",
+                        "Oil and filter changed",
+                        "Tires rotated"
+                    ]
+                },
+                {
+                    "displayDate": "08/11/2016",
+                    "odometer": "69,984",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Engine serviced",
+                        "Tires serviced",
+                        "Four tires balanced",
+                        "Oil and filter changed",
+                        "Oil pan drain plug replaced",
+                        "Tire(s) balanced",
+                        "Tire(s) replaced",
+                        "Tires rotated"
+                    ]
+                },
+                {
+                    "displayDate": "09/06/2016",
+                    "odometer": "73,383",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Tires serviced",
+                        "Tire condition and pressure checked",
+                        "Tire(s) balanced",
+                        "Tire(s) replaced"
+                    ]
+                },
+                {
+                    "displayDate": "06/03/2017",
+                    "odometer": "80,115",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Oil and filter changed",
+                        "Transmission serviced"
+                    ]
+                },
+                {
+                    "displayDate": "10/12/2017",
+                    "odometer": "81,341",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Emissions inspection performed",
+                        "Oil and filter changed"
+                    ]
+                },
+                {
+                    "displayDate": "11/10/2017",
+                    "odometer": "81,674",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Tire condition and pressure checked"
+                    ]
+                },
+                {
+                    "displayDate": "10/04/2018",
+                    "odometer": "84,037",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed",
+                        "Emissions inspection performed",
+                        "Emissions or safety inspection performed",
+                        "Light bulb(s) replaced",
+                        "Oil and filter changed",
+                        "Tires rotated",
+                        "Turn signal bulb(s) replaced",
+                        "Turn signal(s) repaired",
+                        "Wiper(s) replaced"
+                    ]
+                },
+                {
+                    "displayDate": "03/15/2019",
+                    "odometer": "89,704",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Oil and filter changed"
+                    ]
+                },
+                {
+                    "displayDate": "05/30/2019",
+                    "odometer": "93,368",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed",
+                        "Oil and filter changed",
+                        "Tires rotated"
+                    ]
+                },
+                {
+                    "displayDate": "10/16/2019",
+                    "odometer": "96,584",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed",
+                        "Brakes checked",
+                        "Emissions or safety inspection performed",
+                        "Light bulb(s) replaced",
+                        "Oil and filter changed",
+                        "Safety inspection performed",
+                        "Tire condition and pressure checked",
+                        "Tires rotated"
+                    ]
+                },
+                {
+                    "displayDate": "05/07/2020",
+                    "odometer": "100,583",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed",
+                        "Oil and filter changed",
+                        "Tire condition and pressure checked",
+                        "Tires rotated"
+                    ]
+                },
+                {
+                    "displayDate": "10/01/2020",
+                    "odometer": "102,752",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed",
+                        "Brakes checked",
+                        "Emissions or safety inspection performed",
+                        "Oil and filter changed",
+                        "Safety inspection performed",
+                        "Spark plug(s) replaced",
+                        "Tires rotated"
+                    ]
+                },
+                {
+                    "displayDate": "02/25/2021",
+                    "odometer": "104,585",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Battery replaced"
+                    ]
+                },
+                {
+                    "displayDate": "04/14/2021",
+                    "odometer": "104,696",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed",
+                        "Alignment checked",
+                        "Four wheel alignment performed",
+                        "Oil and filter changed",
+                        "Tires rotated"
+                    ]
+                },
+                {
+                    "displayDate": "08/09/2021",
+                    "odometer": "105,555",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Alignment performed",
+                        "Four tires balanced",
+                        "Four tires mounted",
+                        "Four wheel alignment performed"
+                    ]
+                },
+                {
+                    "displayDate": "10/20/2021",
+                    "odometer": "105,888",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Oil and filter changed",
+                        "Safety inspection performed"
+                    ]
+                },
+                {
+                    "displayDate": "05/20/2022",
+                    "odometer": "106,680",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed",
+                        "Oil and filter changed",
+                        "Tires rotated"
+                    ]
+                },
+                {
+                    "displayDate": "10/03/2022",
+                    "odometer": "107,334",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed",
+                        "Oil and filter changed",
+                        "Safety inspection performed",
+                        "Shifter cable  replaced",
+                        "Tires rotated"
+                    ]
+                },
+                {
+                    "displayDate": "05/23/2023",
+                    "odometer": "108,655",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed",
+                        "Oil and filter changed"
+                    ]
+                },
+                {
+                    "displayDate": "10/20/2023",
+                    "odometer": "109,323",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed",
+                        "Brakes checked",
+                        "Oil and filter changed",
+                        "Safety inspection performed",
+                        "Tires rotated"
+                    ]
+                },
+                {
+                    "displayDate": "04/26/2024",
+                    "odometer": "110,185",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Oil and filter changed"
+                    ]
+                },
+                {
+                    "displayDate": "10/18/2024",
+                    "odometer": "111,274",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Air filter replaced",
+                        "Oil and filter changed",
+                        "Safety inspection performed"
+                    ]
+                },
+                {
+                    "displayDate": "05/02/2025",
+                    "odometer": "112,583",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Oil and filter changed"
+                    ]
+                },
+                {
+                    "displayDate": "10/17/2025",
+                    "odometer": "114,098",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Oil and filter changed",
+                        "Safety inspection performed"
+                    ]
+                },
+                {
+                    "displayDate": "12/08/2025",
+                    "odometer": "114,659",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Maintenance inspection completed",
+                        "Battery/charging system checked",
+                        "No-start/hard start condition checked"
+                    ]
+                },
+                {
+                    "displayDate": "02/27/2026",
+                    "odometer": "115,838",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Oil and filter changed"
+                    ]
+                },
+                {
+                    "displayDate": "05/22/2026",
+                    "odometer": "116,294",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Oil and filter changed"
+                    ]
+                },
+                {
+                    "displayDate": "10/02/2026",
+                    "odometer": "117,162",
+                    "type": "service",
+                    "text": [
+                        "Vehicle serviced",
+                        "Oil and filter changed",
+                        "Safety inspection performed"
+                    ]
+                }
+            ],
+            "serviceCategories": [
+                {
+                    "serviceName": "Air filter replacement",
+                    "dateOfLastService": "10/18/2024",
+                    "odometerOfLastService": 111274
+                },
+                {
+                    "serviceName": "Battery Replacement",
+                    "dateOfLastService": "02/25/2021",
+                    "odometerOfLastService": 104585
+                },
+                {
+                    "serviceName": "Safety test",
+                    "dateOfLastService": "10/02/2026",
+                    "odometerOfLastService": 117162
+                },
+                {
+                    "serviceName": "Tire rotation",
+                    "dateOfLastService": "10/20/2023",
+                    "odometerOfLastService": 109323
+                },
+                {
+                    "serviceName": "Emissions test",
+                    "dateOfLastService": "10/04/2018",
+                    "odometerOfLastService": 84037
+                },
+                {
+                    "serviceName": "Transmission fluid exchange",
+                    "dateOfLastService": "06/03/2017",
+                    "odometerOfLastService": 80115
+                },
+                {
+                    "serviceName": "Oil change/Engine oil filter",
+                    "dateOfLastService": "10/02/2026",
+                    "odometerOfLastService": 117162
+                }
+            ]
+        }
+    }
+}
+
+RESPONSE:
+HTTP/2 404 
+date: Mon, 05 Oct 2026 10:34:31 GMT
+content-type: application/json
+cf-cache-status: DYNAMIC
+rndr-id: 144df21d-8a63-470d
+server: cloudflare
+vary: RSC, Next-Router-State-Tree, Next-Router-Prefetch
+vary: Accept-Encoding
+x-ratelimit-limit: 1000
+x-ratelimit-remaining: 999
+x-ratelimit-reset: 2026-10-05T10:35:31.728Z
+x-render-origin-server: Render
+x-request-id: af-carfax-20261005_063431_ebe03b-1FMCU0F76EUC02231
+cf-ray: a45bc63b4be71ae0-CMH
+alt-svc: h3=":443"; ma=86400
+
+{
+    "error": "No active AppFueled live_api mapping for external shop ID: 25",
+    "requestId": "af-carfax-20261005_063431_ebe03b-1FMCU0F76EUC02231"
+}
