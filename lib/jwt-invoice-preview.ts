@@ -37,9 +37,11 @@ export async function previewJwtInvoices(deps: InvoicePreviewDeps) {
         ? record.InvoiceTime.slice(0, 10) : null;
       const type = ["Invoice", "CreditInvoice", "WorkOrder", "Appointment"].includes(record?.Type) ? record.Type : "unknown";
       const match = native.find(n => n.wo === workOrderNumber && n.invoice === invoiceNumber);
-      const comparison = match && invoiceDate === "2026-09-01" && type === "Invoice"
-        ? `Native identity matched; stored snapshot: ${match.classification}`
-        : "Unverified: identity, date or type does not match the September 1 native sample";
+      // Object Type is not proof of invoice closure. Match the native identity
+      // and date independently; this preview never certifies terminal status.
+      const comparison = match && invoiceDate === "2026-09-01"
+        ? `Native identity and date matched; stored snapshot: ${match.classification}. Closure not verified by this preview.`
+        : "Unverified: identity or date does not match the September 1 native sample. Closure not verified by this preview.";
       return { workOrderNumber, invoiceNumber, invoiceDate, type, comparison };
     });
     return { status: 200, body: { ok: true, partial: true, rows, nativeCount: native.length, returnedCount: rows.length } };

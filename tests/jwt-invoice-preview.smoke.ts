@@ -28,6 +28,25 @@ async function main() {
   assert.equal(reads,1);
   assert.match(JSON.stringify(success.body), /absent_by_both_numbers/);
   assert.ok(!JSON.stringify(success.body).includes("PRIVATE"));
+  for (const type of ["WorkOrder", "Invoice", "CreditInvoice", "Appointment", "unrecognized"]) {
+    const run = (overrides: Record<string, unknown> = {}) => previewJwtInvoices({
+      ...deps, read: async () => ({ok:true,data:{ItemCollection:[{
+        WorkOrderNumber:"701008329", InvoiceNumber:"701006622",
+        InvoiceTime:"2026-09-01T12:00:00", Type:type, ...overrides,
+      }]}}),
+    });
+    const matched = await run();
+    assert.match(JSON.stringify(matched.body), /Native identity and date matched/);
+    assert.match(JSON.stringify(matched.body), /Closure not verified/);
+    for (const change of [
+      {InvoiceNumber:"999"}, {WorkOrderNumber:"999"},
+      {InvoiceTime:"2026-09-02T12:00:00"}, {InvoiceTime:null},
+    ]) {
+      const unmatched = await run(change);
+      assert.match(JSON.stringify(unmatched.body), /Unverified: identity or date/);
+      assert.doesNotMatch(JSON.stringify(unmatched.body), /Native identity and date matched/);
+    }
+  }
   const oversized = await previewJwtInvoices({...deps,read:async()=>({ok:true,data:{ItemCollection:Array(26).fill({})}})});
   assert.equal(oversized.status,502);
   const failed = await previewJwtInvoices({...deps,read:async()=>({ok:false,error:"SECRET PROVIDER RESPONSE"})});
