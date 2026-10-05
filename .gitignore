@@ -85,3 +85,6 @@ data/db/
 data/mongodb.log
 .cache/
 tsconfig.tsbuildinfo
+
+# Local browser captures may contain production credentials and customer data.
+attached_assets/*.har
