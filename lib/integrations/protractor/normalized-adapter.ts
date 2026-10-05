@@ -161,10 +161,10 @@ export class ProtractorAdapter implements INormalizedAdapter {
   }
   
   mapCustomer(shopId: number, sourceData: any, enterpriseId?: string): Partial<NormalizedCustomer> {
-    const c = sourceData.Customer || sourceData;
+    const c = sourceData.Customer || sourceData.Contact || sourceData;
     
-    const firstName = cleanString(c.FirstName);
-    const lastName = cleanString(c.LastName);
+    const firstName = cleanString(c.FirstName ?? c.Name?.FirstName);
+    const lastName = cleanString(c.LastName ?? c.Name?.LastName);
     const companyName = cleanString(c.CompanyName || c.Company);
     
     return {
@@ -173,7 +173,7 @@ export class ProtractorAdapter implements INormalizedAdapter {
       customerType: companyName ? 'business' : 'individual',
       firstName,
       lastName,
-      fullName: [firstName, lastName].filter(Boolean).join(' ') || companyName,
+      fullName: [firstName, lastName].filter(Boolean).join(' ') || cleanString(c.FileAs) || companyName,
       companyName,
       contacts: [],
       taxExempt: false,
@@ -249,14 +249,14 @@ export class ProtractorAdapter implements INormalizedAdapter {
       serviceJobs: [],
       inspections: [],
       recommendations: [],
-      subtotal: parseNumber(inv.Subtotal) || 0,
-      taxTotal: parseNumber(inv.TaxTotal || inv.Tax) || 0,
+      subtotal: parseNumber(inv.Summary?.NetTotal ?? inv.Subtotal) ?? 0,
+      taxTotal: parseNumber(inv.Summary?.TaxTotal ?? inv.TaxTotal ?? inv.Tax) ?? 0,
       discountTotal: parseNumber(inv.DiscountTotal || inv.Discount) || 0,
-      grandTotal: parseNumber(inv.Total || inv.GrandTotal) || 0,
-      laborTotal: parseNumber(inv.LaborTotal || inv.TotalLabor) || 0,
-      partsTotal: parseNumber(inv.PartsTotal || inv.TotalParts) || 0,
-      subletTotal: parseNumber(inv.SubletTotal) || 0,
-      feesTotal: parseNumber(inv.FeesTotal || inv.ShopSupplies) || 0,
+      grandTotal: parseNumber(inv.Summary?.GrandTotal ?? inv.Total ?? inv.GrandTotal) ?? 0,
+      laborTotal: parseNumber(inv.Summary?.LaborTotal ?? inv.LaborTotal ?? inv.TotalLabor) ?? 0,
+      partsTotal: parseNumber(inv.Summary?.PartsTotal ?? inv.PartsTotal ?? inv.TotalParts) ?? 0,
+      subletTotal: parseNumber(inv.Summary?.SubletTotal ?? inv.SubletTotal) ?? 0,
+      feesTotal: parseNumber(inv.Summary?.OtherChargeTotal ?? inv.FeesTotal ?? inv.ShopSupplies) ?? 0,
       laborHoursTotal: parseNumber(inv.TotalHours) || 0,
       laborHoursBilled: parseNumber(inv.BilledHours) || 0,
       payments: [],
@@ -675,4 +675,3 @@ export class ProtractorAdapter implements INormalizedAdapter {
     return 'new_aftermarket';
   }
 }
-
