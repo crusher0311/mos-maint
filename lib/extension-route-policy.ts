@@ -69,6 +69,8 @@ const POLICY_MAP: Record<string, PolicyTier[]> = {
   // Rate limited, never reveals account existence; the code is exchanged at
   // /api/extension/auth which enforces attempts/TTL.
   "/api/extension/auth/request-code|POST": ["public"],
+  "/api/extension/auth/switch-location|POST": ["read"],
+  "/api/extension/auth/switch-location|OPTIONS": ["preflight"],
   "/api/extension/auth/request-code|OPTIONS": ["preflight"],
 
   // ── bootstrap ────────────────────────────────────────────────────────────

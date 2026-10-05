@@ -79,7 +79,7 @@ function rememberRoContext(ctx) {
       : (ctx[field] || prior[field] || null);
   }
   merged._apiKeys = apiKeys;
-  roContextCache.set(ctx.roId, merged);
+  roContextCache.set(key, merged);
   return merged;
 }
 
@@ -986,6 +986,9 @@ async function showIntervalDropdown(event, buttonElement) {
       });
     });
     
+    if (context.provider === 'tekmetric' && (!result?.config || result?.error)) {
+      throw new Error(result?.error || 'Tekmetric sticker settings are unavailable. Please try again.');
+    }
     if (result && result.config) {
       useKilometers = result.config.useKilometers === true;
       const unitLabel = useKilometers ? 'km' : 'mi';
@@ -1017,6 +1020,11 @@ async function showIntervalDropdown(event, buttonElement) {
     }
   } catch (err) {
     console.error('[MOS] Failed to fetch sticker config:', err);
+    if (context.provider === 'tekmetric') {
+      dropdown.remove();
+      showToast(err.message || 'Tekmetric sticker settings are unavailable. Please try again.', 'error');
+      return;
+    }
   }
   
   // Fallback to defaults if no intervals fetched
@@ -1056,6 +1064,12 @@ async function showIntervalDropdown(event, buttonElement) {
     
     item.addEventListener('click', () => {
       dropdown.remove();
+      const current = detectContext();
+      if (String(context.shopId) !== String(current.shopId) ||
+          String(context.roId) !== String(current.roId)) {
+        showToast('Tekmetric location or repair order changed. Reopen the interval menu.', 'error');
+        return;
+      }
       if (interval.action === 'customize') {
         openStickerPanel();
       } else {
@@ -1182,6 +1196,15 @@ function openStickerPanel() {
 }
 
 function printStickerFromContentScript(sticker) {
+  const bound = sticker?.mosPrintContext;
+  if (bound) {
+    const current = detectContext();
+    if (String(bound.shopId) !== String(current.shopId) ||
+        (bound.roId && String(bound.roId) !== String(current.roId))) {
+      showToast('Tekmetric location or repair order changed. Please print again.', 'error');
+      return;
+    }
+  }
   const iframe = document.createElement('iframe');
   iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:none;';
   document.body.appendChild(iframe);
@@ -1214,6 +1237,15 @@ function printStickerFromContentScript(sticker) {
   const img = doc.getElementById('sticker');
   const doPrint = () => {
     setTimeout(() => {
+      if (bound) {
+        const current = detectContext();
+        if (String(bound.shopId) !== String(current.shopId) ||
+            (bound.roId && String(bound.roId) !== String(current.roId))) {
+          iframe.remove();
+          showToast('Tekmetric location or repair order changed. Please print again.', 'error');
+          return;
+        }
+      }
       iframe.contentWindow.print();
       setTimeout(() => iframe.remove(), 1000);
     }, 100);

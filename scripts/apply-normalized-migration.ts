@@ -38,6 +38,7 @@ const drizzleMigrationFiles = [
   "0026_task1000_support_tickets.sql",
   "0028_task1023_raw_data.sql",
   "0030_extension_sessions.sql",
+  "0036_extension_location_sessions.sql",
   "0031_task1161_slow_queries.sql",
   "0032_task1183_nwo_close_date_idx.sql",
   "0033_task1188_prod_index_parity.sql",

@@ -380,6 +380,7 @@ async function _POST(request: NextRequest) {
       shopId: scopeShopId,
       provider: scopeProvider,
       assurance: "verified",
+      authenticationMethod: password ? "password" : "login_code",
       userId: user._id.toString(),
       isAdmin:
         user.isPlatformAdmin === true ||

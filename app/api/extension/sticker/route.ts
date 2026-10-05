@@ -504,6 +504,12 @@ async function resolveMosShopId(
     authResult.principal?.isLegacy !== true
       ? authResult.principal?.provider
       : null;
+  if (principalProvider && requestedProvider &&
+      String(requestedProvider).toLowerCase().replace(/^shop[-_]ware$/, "shopware") !== principalProvider) {
+    return { mosShopId: null, shop: null, resolvedProvider: null, lookupFailure: {
+      status: 403, error: "The sticker's provider does not match this session. Please use the current location's session.",
+    } };
+  }
   // A first-class session's provider is server-issued and authoritative. For
   // legacy tokens, normalize the request hint but do not invent "tekmetric"
   // when it is omitted: an absent hint lets the lookup detect AutoFlow claims.
@@ -520,12 +526,20 @@ async function resolveMosShopId(
   // knows the page's subdomain (e.g. "harrells-nc87"), so this is the only
   // identifier available to bridge back to a MOS shop.
   if (smsShopId) {
-    const result = await findShopBySmsIdDetailed(String(smsShopId), {
+    const providerLabel = ({ tekmetric: "Tekmetric", autoflow: "AutoFlow", protractor: "Protractor", shopware: "Shop-Ware", shopmonkey: "Shopmonkey" } as Record<string, string>)[effectiveProvider || ""] || "provider";
+    let result;
+    try {
+      result = await findShopBySmsIdDetailed(String(smsShopId), {
       userShopIds,
       isPlatformAdmin,
       providerHint: effectiveProvider,
-      providerHintIsAuthoritative: Boolean(principalProvider),
+      providerHintIsAuthoritative: Boolean(principalProvider) || effectiveProvider === "tekmetric",
     });
+    } catch {
+      return { mosShopId: null, shop: null, resolvedProvider: null, lookupFailure: {
+        status: 503, error: `${providerLabel} location lookup is temporarily unavailable. Please try again; printing is blocked.`,
+      } };
+    }
     if (result.status === "resolved") {
       console.log(`[Extension Sticker] Found MOS shop ${result.mosShopId} for SMS shop ${smsShopId}, provider: ${result.provider}`);
       return { mosShopId: result.mosShopId, shop: result.shopDoc, resolvedProvider: result.provider };
@@ -537,7 +551,7 @@ async function resolveMosShopId(
         resolvedProvider: null,
         lookupFailure: {
           status: 409,
-          error: `AutoFlow shop identifier "${result.identifier}" has conflicting mappings. Printing is blocked until a platform admin repairs the mapping.`,
+          error: `${providerLabel} shop identifier "${result.identifier}" has conflicting mappings. Printing is blocked until a platform admin repairs the mapping.`,
         },
       };
     }
@@ -548,7 +562,7 @@ async function resolveMosShopId(
         resolvedProvider: null,
         lookupFailure: {
           status: 403,
-          error: "This AutoFlow shop is linked in MOS, but your account does not have access to it.",
+          error: `This ${providerLabel} shop is linked in MOS, but your account does not have access to it.`,
         },
       };
     }
@@ -558,7 +572,9 @@ async function resolveMosShopId(
     // logo/phone onto every unrecognized shop's sticker (wrong-shop branding).
     // Refuse instead so the caller returns 404.
     console.warn(`[Extension Sticker] No MOS shop matches smsShopId=${smsShopId}; refusing primary-shop fallback to avoid wrong-shop branding`);
-    return { mosShopId: null, shop: null, resolvedProvider: null };
+    return { mosShopId: null, shop: null, resolvedProvider: null, lookupFailure: {
+      status: 404, error: `This ${providerLabel} shop isn't linked in MOS yet, so printing was blocked to avoid another shop's branding.`,
+    } };
   }
 
   // No explicit shop context (e.g. side panel opened without a page): fall

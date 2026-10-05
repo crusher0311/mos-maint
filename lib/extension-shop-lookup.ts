@@ -29,7 +29,7 @@ export type ShopLookupOutcome =
     }
   | {
       status: 'access_denied' | 'not_found';
-      provider?: 'autoflow';
+      provider?: ResolvedShopLookup["provider"];
       identifier?: string;
       ownerShopId?: string | number;
     };
@@ -218,6 +218,7 @@ export async function findShopBySmsIdDetailed(
     if (!owner) {
       return {
         status: "not_found",
+        provider: authoritativeProvider,
         ...(authoritativeProvider === "autoflow"
           ? {
               provider: "autoflow" as const,
@@ -229,6 +230,7 @@ export async function findShopBySmsIdDetailed(
     if (!isShopAccessible(owner, userShopIds, isPlatformAdmin)) {
       return {
         status: "access_denied",
+        provider: authoritativeProvider,
         ...(authoritativeProvider === "autoflow"
           ? {
               provider: "autoflow" as const,

@@ -5054,6 +5054,9 @@ async function handleApplyLaborRateNow() {
 
 // ==================== STICKER & KEYTAG ====================
 let stickerConfig = null;
+let stickerConfigContextKey = null;
+let stickerConfigRequest = 0;
+const stickerContextKey = (ctx) => `${ctx?._tabId}:${ctx?.provider}:${ctx?.shopId}`;
 let keytagEnabled = false;
 // Oil-sticker entitlement as last seen from /api/extension/sticker.
 //   true  = enabled, false = definitively disabled, null = unknown/transient.
@@ -5138,6 +5141,22 @@ function updatePrintDisabledMessage() {
 }
 
 async function loadStickerConfig() {
+  const snapshot = currentContext ? { ...currentContext } : null;
+  const key = stickerContextKey(snapshot);
+  const sequence = ++stickerConfigRequest;
+  stickerConfig = null;
+  stickerConfigContextKey = null;
+  if (elements.stickerPrintBtn) elements.stickerPrintBtn.disabled = true;
+  elements.stickerError?.classList.add('hidden');
+  const showSettingsError = (message) => {
+    // Keep the error visible even if the previous location had stickers off.
+    elements.stickerSection?.classList.remove('hidden');
+    if (elements.stickerError) {
+      elements.stickerError.textContent = message;
+      elements.stickerError.classList.remove('hidden');
+    }
+    if (elements.stickerPrintBtn) elements.stickerPrintBtn.disabled = true;
+  };
   try {
     // Build endpoint with shop context if available
     let endpoint = '/api/extension/sticker';
@@ -5148,21 +5167,20 @@ async function loadStickerConfig() {
     
     const result = await sendMessage({
       action: 'MOS_API_REQUEST',
-      endpoint
+      endpoint,
+      context: snapshot,
     });
+    if (sequence !== stickerConfigRequest || key !== stickerContextKey(currentContext)) return;
     
     if (result.error) {
-      // Transient fetch failure (e.g. backend slowness): do NOT render the
-      // permanent "not enabled — contact your administrator" notice, which
-      // wrongly implies the shop lost the feature. Keep the last-known-good
-      // sticker state and still refresh the (independent) keytag section.
-      console.error('[MOS] Sticker config error (transient — keeping last-known state):', result.error);
+      showSettingsError(result.error);
       loadKeytagSection();
-      updatePrintDisabledMessage();
       return;
     }
     
     stickerConfig = result.config;
+    stickerConfigContextKey = key;
+    if (elements.stickerPrintBtn) elements.stickerPrintBtn.disabled = result.enabled !== true;
     stickerEnabled = result.enabled === true;
     
     if (!stickerEnabled) {
@@ -5179,9 +5197,7 @@ async function loadStickerConfig() {
     if (elements.stickerSection) elements.stickerSection.classList.remove('hidden');
     
     // Set default unit based on config
-    if (stickerConfig.useKilometers) {
-      elements.stickerUnit.value = 'km';
-    }
+    elements.stickerUnit.value = stickerConfig.useKilometers ? 'km' : 'mi';
 
     // Task #439: populate the Oil Type dropdown from the shop's interval
     // config — skip hidden buckets, prefer the per-shop custom label, and
@@ -5201,6 +5217,9 @@ async function loadStickerConfig() {
     
   } catch (err) {
     console.error('[MOS] Failed to load sticker config:', err);
+    if (sequence === stickerConfigRequest && key === stickerContextKey(currentContext)) {
+      showSettingsError(err.message || 'Sticker settings are temporarily unavailable. Please reopen the Sticker tab to try again.');
+    }
   }
 }
 
@@ -5516,6 +5535,12 @@ function printKeytagViaWindow(keytag) {
 }
 
 async function handleStickerPrint() {
+  if (currentContext?.provider === 'tekmetric' &&
+      (!stickerConfig || stickerConfigContextKey !== stickerContextKey(currentContext))) {
+    showNotification('Load sticker settings for this Tekmetric location before printing.', 'error');
+    await loadStickerConfig();
+    return;
+  }
   const mileageStr = elements.stickerMileage.value.replace(/,/g, '');
   const currentMileage = parseInt(mileageStr, 10);
   
@@ -5580,6 +5605,7 @@ async function handleStickerPrint() {
     const result = await sendMessage({
       action: 'MOS_API_REQUEST',
       endpoint: '/api/extension/sticker',
+      context: currentContext ? { ...currentContext } : null,
       options: {
         method: 'POST',
         body: JSON.stringify(body)
@@ -5619,6 +5645,10 @@ function printStickerImage(sticker) {
     if (response?.success) {
       console.log('[MOS] Print initiated via content script');
     } else {
+      if (sticker?.mosPrintContext) {
+        showNotification(response?.error || 'The originating Tekmetric tab changed. Please print again.', 'error');
+        return;
+      }
       console.log('[MOS] Content script print failed, falling back to window.open');
       printStickerViaWindow(sticker);
     }

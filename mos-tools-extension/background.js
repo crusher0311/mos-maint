@@ -2,6 +2,7 @@
 // Manages SMS session tokens, MOS authentication, and message routing
 
 import { createStickerConfigCache } from './lib/sticker-config-cache.js';
+import { createStickerLocationRequest } from './lib/sticker-location-session.js';
 // Side-effect import: sets globalThis.MosUndoCore (pure undo-snapshot logic,
 // shared with the content scripts which load it as a classic script).
 import './undo-core.js';
@@ -42,6 +43,7 @@ let bootstrapInFlight = null;
 let bootstrapInFlightToken = null;
 let bootstrapInFlightKey = null;
 const smsContextsByTab = new Map();
+const stickerTabRevisions = new Map();
 const tekmetricProofsByTab = new Map();
 // Safe, non-secret provider-session generation used only as a UI/broadcast
 // discriminator. The credential itself never leaves this worker.
@@ -56,7 +58,7 @@ function rotateLaborRateProviderSession(tabId) {
 // Shopmonkey per-user browser bearer, captured from the SPA's own API calls.
 // Memory-only, same lifecycle rules as tekmetricProofsByTab.
 const shopmonkeyProofsByTab = new Map();
-      const activeTabId = tabs[0]?.id;
+let activeTabId = null;
 chrome.tabs.query({ active: true, currentWindow: true })
   .then((tabs) => { activeTabId = tabs[0]?.id ?? null; })
   .catch(() => {});
@@ -496,6 +498,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (!changeInfo.url) return;
+  stickerTabRevisions.set(tabId, (stickerTabRevisions.get(tabId) || 0) + 1);
   let supportedProviderPage = false;
   let nextOrigin = null;
   try {
@@ -1505,16 +1508,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "MOS_API_REQUEST") {
     (async () => {
       try {
-          const result = await handleMosApiRequest('/api/extension/concern-assistant/inject-protractor', {
-            method: 'POST',
-            body: JSON.stringify({
-              shopId: currentSmsContext.shopId,
-              workOrderId: currentSmsContext.roId,
-              contactId: currentSmsContext.customerId || null,
-              serviceItemId: currentSmsContext.vehicleId || null,
-              concernText
-            })
-          });
+        await _stateReady;
+        const result = await handleMosApiRequest(message.endpoint, {
+          ...message.options,
+          context: message.context || message.options?.context,
+          sourceTabId: sender.tab?.id,
+        });
         sendResponse(result);
       } catch (err) {
         sendResponse({ success: false, error: err.message, code: err.serverCode || err.code || null });
@@ -1530,45 +1529,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "GET_STICKER_CONFIG") {
     (async () => {
       try {
-      const entry = {
-        rules: result.rules || [],
-        fetchedAt: Date.now(),
-        revision: Number(result.revision ?? expectedRevision + 1),
-        shopId: result.shopId ?? targetSmsShopId,
-        smsShopId: targetSmsShopId,
-        contextKey: key,
-      };
-          let targetTabId = currentSmsContext?._tabId;
-        let tabId;
-        if (targetTabId) {
-          tabId = targetTabId;
-        } else {
-            const tabs = await chrome.tabs.query({ url: ["*://shop.tekmetric.com/*", "*://sandbox.tekmetric.com/*", "*://cba.tekmetric.com/*"] });
-
-          const hydrated = await handleMosApiRequest('/api/extension/jobs/rehydrate-recommendation', {
-            method: 'POST',
-            body: JSON.stringify({
-              shopId: Number(message.mosShopId || message.shopId || currentSmsContext?.shopId),
-              provider: 'shopware',
-              auditSelection: message.auditSelection,
-              auditFinding: message.auditFinding,
-              vehicle: message.vehicle || null,
-            }),
+        await _stateReady;
+        if (message.provider === 'tekmetric' && mosAuthSource === 'explicit') {
+          const scoped = await stickerLocationRequest({
+            provider: 'tekmetric', shopId: message.shopId,
+            _tabId: sender.tab?.id ?? message.context?._tabId,
           });
-          if (tabs.length === 0) {
-            sendResponse({ success: false, error: 'No Shop-Ware tab found', results: [] });
-            return;
-          }
-          tabId = tabs[0].id;
+          sendResponse(await scoped.request(`/api/extension/sticker?shopId=${encodeURIComponent(message.shopId)}&provider=tekmetric`));
+        } else {
+          sendResponse(await getStickerConfigCached(message.shopId, message.provider));
         }
-        chrome.tabs.sendMessage(tabId, {
-          action: 'SW_SEARCH_CANNED_JOBS',
-          query: message.query,
-          vehicle: message.vehicle,
-          workOrderId: message.workOrderId
-        }, (res) => {
-          sendResponse(res || { success: false, error: 'No response', results: [] });
-        });
       } catch (err) {
         sendResponse({ success: false, error: err.message, results: [] });
       }
@@ -2069,12 +2039,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "OPEN_STICKER_PANEL") {
     // Open side panel and notify it to switch to sticker tab
     if (sender.tab?.id) {
+      const panelContext = { ...message.context, _tabId: sender.tab.id };
       chrome.sidePanel.open({ tabId: sender.tab.id }).then(() => {
         // Give panel time to load, then tell it to switch to sticker tab
         setTimeout(() => {
           chrome.runtime.sendMessage({ 
             action: 'SWITCH_TO_STICKER_TAB',
-            context: message.context
+            context: panelContext
           }).catch(() => {});
         }, 500);
       }).catch(err => console.error('[MOS] Failed to open side panel:', err));
@@ -2085,6 +2056,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   // Forward print request from sidepanel to content script
   if (message.action === "PRINT_STICKER_VIA_CONTENT") {
+    if (message.sticker?.mosPrintContext) {
+      const context = message.sticker.mosPrintContext;
+      chrome.tabs.sendMessage(context._tabId, {
+        action: 'PRINT_STICKER_FROM_PANEL', sticker: message.sticker,
+      }, (response) => sendResponse(response || { success: false, error: 'The originating Tekmetric tab is unavailable.' }));
+      return true;
+    }
     // Get the active tab to send the sticker to
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       if (tabs[0]?.id) {
@@ -3056,6 +3034,20 @@ async function _doMosFetch(endpoint, options, token) {
 
 async function handleMosApiRequest(endpoint, options = {}) {
   await _stateReady;
+  if (String(endpoint).split('?')[0] === '/api/extension/sticker' && mosAuthSource === 'explicit') {
+    const body = options.body ? JSON.parse(options.body) : {};
+    const query = new URL(endpoint, 'https://mos.invalid').searchParams;
+    const provider = body.provider || query.get('provider');
+    if (provider === 'tekmetric') {
+      const context = options.context;
+      const shopId = body.smsShopId || query.get('shopId');
+      if (!context || String(context.shopId) !== String(shopId)) {
+        throw new Error('Current Tekmetric tab context is required. Please retry from the location page.');
+      }
+      const scoped = await stickerLocationRequest({ ...context, _tabId: options.sourceTabId ?? context._tabId });
+      return scoped.request(endpoint, options);
+    }
+  }
   await ensureBootstrapBoundToActiveTab();
   if (!mosApiToken) {
     throw new Error("Not authenticated with MOS");
@@ -4187,6 +4179,18 @@ async function createTekmetricJob(shopId, roId, jobData, auditSelection, vehicle
 }
 
 // ------ STICKER PRINTING ------
+async function stickerLocationRequest(context) {
+  await _stateReady;
+  if (!context?._tabId || !context.shopId || context.provider !== 'tekmetric') {
+    throw new Error('Current Tekmetric tab and location are required to print.');
+  }
+  return createStickerLocationRequest(context, {
+    identity: () => ({ token: mosApiToken, apiUrl: mosApiUrl, epoch: authEpoch }),
+    getTab: (id) => chrome.tabs.get(id),
+    revision: (id) => stickerTabRevisions.get(id) || 0,
+    fetch: (...args) => fetch(...args),
+  });
+}
 const EURO_MAKES = ['bmw', 'mercedes', 'mercedes-benz', 'audi', 'volkswagen', 'vw', 'porsche', 'mini', 'volvo', 'land rover', 'jaguar', 'alfa romeo', 'fiat', 'maserati', 'ferrari', 'lamborghini', 'bentley', 'rolls-royce', 'aston martin', 'mclaren'];
 
 // Task #439: optional `intervals` argument lets us skip buckets the shop has
@@ -4297,6 +4301,10 @@ function invalidateStickerConfigCache(shopId, provider) {
 }
 
 async function handleImmediateStickerPrint(context, tabId, overrideInterval = null) {
+  await _stateReady;
+  context = { ...context, _tabId: tabId ?? context?._tabId };
+  const scoped = context.provider === 'tekmetric' && mosAuthSource === 'explicit'
+    ? await stickerLocationRequest(context) : null;
   if (!mosApiToken) {
     throw new Error("Not authenticated with MOS. Please login first.");
   }
@@ -4326,13 +4334,16 @@ async function handleImmediateStickerPrint(context, tabId, overrideInterval = nu
     // served instantly (no network round trip) and a cold miss is bounded by
     // the cache's short fetch timeout. The config is optional (defaults
     // exist), so any failure degrades instead of stalling the print.
-    const cachedEntry = await getStickerConfigCached(context.shopId, context.provider || 'tekmetric');
+    const cachedEntry = scoped
+      ? await scoped.request(`/api/extension/sticker?shopId=${encodeURIComponent(context.shopId)}&provider=tekmetric`)
+      : await getStickerConfigCached(context.shopId, context.provider || 'tekmetric');
     if (cachedEntry && cachedEntry.config) {
       if (context.useKilometers == null && cachedEntry.config.useKilometers) unit = 'km';
       shopIntervals = cachedEntry.config.intervals;
       shopDefaultOilType = cachedEntry.config.defaultOilType;
     }
   } catch (err) {
+    if (scoped) throw err;
     console.warn('[MOS] Could not fetch sticker config for unit/intervals, using defaults:', err.message);
   }
 
@@ -4372,6 +4383,14 @@ async function handleImmediateStickerPrint(context, tabId, overrideInterval = nu
   const postController = new AbortController();
   const postTimer = setTimeout(() => postController.abort(), 45000);
   let response;
+  if (scoped) {
+    clearTimeout(postTimer);
+    const data = await scoped.request('/api/extension/sticker', {
+      method: 'POST', body: JSON.stringify(requestBody),
+    });
+    if (!data.success || !data.sticker) throw new Error('Failed to generate sticker');
+    return { success: true, sticker: data.sticker, oilType: overrideInterval ? 'custom' : requestBody.intervalType };
+  }
   try {
     response = await fetch(`${mosApiUrl}/api/extension/sticker?_token=${encodeURIComponent(mosApiToken)}`, {
       method: 'POST',

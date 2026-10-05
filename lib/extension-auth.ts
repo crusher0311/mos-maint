@@ -47,6 +47,8 @@ export type ExtensionAuthCode =
   | "AUTH_LOOKUP_FAILED";
 
 export interface ExtensionAuthResult {
+  /** Current matched identity before the downstream single-shop projection. */
+  accountUser?: any;
   user: any | null;
   authorized: boolean;
   error: string | null;
@@ -250,6 +252,7 @@ export async function validateExtensionToken(
       }
 
       const principal = lookup.principal;
+      let accountUser: any;
       let sessionUser: any;
       if (principal.assurance === "basic") {
         // Never trust persisted capability drift to elevate a Basic row.
@@ -321,6 +324,7 @@ export async function validateExtensionToken(
         // Role/read-only changes therefore take effect immediately instead of
         // leaving stale write/admin claims valid until token expiry.
         principal.capabilities = capabilitiesForVerifiedUser(sessionUser);
+        accountUser = { ...sessionUser };
 
         // Re-check assignment on every request so removing a user from a shop
         // takes effect without mutating or revoking the user record itself.
@@ -369,6 +373,7 @@ export async function validateExtensionToken(
       }
 
       const authorizedResult: ExtensionAuthResult = {
+        accountUser,
         user: sessionUser,
         authorized: true,
         error: null,

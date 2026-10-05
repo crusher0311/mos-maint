@@ -596,6 +596,8 @@ export interface ExtensionSessionRow {
   shopId: number;
   provider: string;
   assurance: string;
+  authenticationMethod?: string | null;
+  parentTokenHash?: string | null;
   capabilities: unknown[];
   expiresAt: Date;
   lastUsedAt: Date | null;
@@ -619,6 +621,8 @@ export async function insertExtensionSession(
       shopId: row.shopId,
       provider: row.provider,
       assurance: row.assurance,
+      authenticationMethod: row.authenticationMethod ?? null,
+      parentTokenHash: row.parentTokenHash ?? null,
       capabilities: row.capabilities,
       expiresAt: row.expiresAt,
       lastUsedAt: row.lastUsedAt ?? new Date(),

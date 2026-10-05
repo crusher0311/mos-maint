@@ -30,6 +30,8 @@ export interface ExtensionSessionPrincipal {
   capabilities: ExtensionCapability[];
   expiresAt: Date;
   isLegacy?: boolean;
+  authenticationMethod?: string;
+  parentTokenHash?: string;
 }
 
 export type ExtensionSessionLookup =
@@ -82,6 +84,8 @@ export async function issueExtensionSession(input: {
   isAdmin?: boolean;
   canWrite?: boolean;
   expiresAt?: Date;
+  authenticationMethod?: "password" | "login_code";
+  parentTokenHash?: string;
 }): Promise<{ token: string; principal: ExtensionSessionPrincipal }> {
   if (input.assurance === "verified" && !input.userId) {
     throw new Error("Verified extension sessions require a user identity");
@@ -114,6 +118,8 @@ export async function issueExtensionSession(input: {
     shopId: input.shopId,
     provider: input.provider,
     assurance: input.assurance,
+    authenticationMethod: input.authenticationMethod ?? null,
+    parentTokenHash: input.parentTokenHash ?? null,
     capabilities,
     expiresAt,
     createdAt: now,
@@ -132,6 +138,8 @@ export async function issueExtensionSession(input: {
       assurance: row.assurance as ExtensionAssurance,
       capabilities: row.capabilities as ExtensionCapability[],
       expiresAt: row.expiresAt,
+      authenticationMethod: row.authenticationMethod ?? undefined,
+      parentTokenHash: row.parentTokenHash ?? undefined,
     },
   };
 }
@@ -161,6 +169,8 @@ function rowToPrincipal(row: ExtensionSessionRow): ExtensionSessionPrincipal {
     assurance: row.assurance as ExtensionAssurance,
     capabilities: row.capabilities as ExtensionCapability[],
     expiresAt: row.expiresAt,
+    authenticationMethod: row.authenticationMethod ?? undefined,
+    parentTokenHash: row.parentTokenHash ?? undefined,
   };
 }
 
@@ -170,6 +180,17 @@ export async function lookupExtensionSession(token: string): Promise<ExtensionSe
   if (!row) return { status: "invalid" };
   if (row.revokedAt) return { status: "revoked" };
   if (row.expiresAt.getTime() <= Date.now()) return { status: "expired" };
+  if (row.parentTokenHash) {
+    const parent = await __deps.findExtensionSessionByTokenHash(row.parentTokenHash);
+    if (!parent || parent.parentTokenHash || parent.userId !== row.userId ||
+        parent.assurance !== "verified" ||
+        !["password", "login_code"].includes(parent.authenticationMethod || "")) {
+      return { status: "invalid" };
+    }
+    if (parent.revokedAt) return { status: "revoked" };
+    if (parent.expiresAt.getTime() <= Date.now()) return { status: "expired" };
+    if (row.expiresAt > parent.expiresAt) return { status: "invalid" };
+  }
   void __deps.touchExtensionSession(row.id)
     .catch((error) => console.warn("[Extension Session] unable to update use timestamp", error));
   return { status: "active", principal: rowToPrincipal(row) };

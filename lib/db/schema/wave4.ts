@@ -246,6 +246,8 @@ export const extensionSessions = pgTable(
     shopId: integer("shop_id").notNull().references(() => shops.mosShopId, { onDelete: "cascade" }),
     provider: text("provider").notNull(),
     assurance: text("assurance").notNull(),
+    authenticationMethod: text("authentication_method"),
+    parentTokenHash: text("parent_token_hash"),
     capabilities: jsonb("capabilities").notNull().default([]),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
