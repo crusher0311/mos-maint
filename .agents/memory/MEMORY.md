@@ -145,3 +145,4 @@
 - [Protractor contact rate writes](protractor-contact-rate-write.md) — Contact POST returned 200 but numeric and existing-code LaborRateCode changes did not persist; require read-back verification.
 - [Protractor labor writes](protractor-labor-write-behavior.md) — explicit creation prices and independent hours persist; rate-code-only lines price at zero, existing price edits can silently fail.
 - [Protractor onboarding safety](protractor-onboarding-safety.md) — foreground validation does not authorize history imports; preserve reconnect state and recover cross-store writer guards conservatively.
+- [Chrome Web Store submission checks](cws-submission-checks.md) — draft uploadState can become NOT_FOUND after a successful upload; distinguish upload, submission, and public availability.
