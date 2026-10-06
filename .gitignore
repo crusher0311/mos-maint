@@ -88,3 +88,11 @@ tsconfig.tsbuildinfo
 
 # Local browser captures may contain production credentials and customer data.
 attached_assets/*.har
+# Private JWT source evidence is not part of the application release.
+attached_assets/0_Aug-Sept_Service_Package_Sales_Data_1791197597073.csv
+attached_assets/0_Aug-Sept_Service_Package_Sales_Data_1791197679178.csv
+attached_assets/jwt-701-approved-recovery-source_1791211851558.json
+# Native sales exports include customer contact/vehicle details; retain locally only.
+attached_assets/*_Service_Package_Sales_Data_*.csv
+# Authenticated invoice source captures contain customer and vehicle details.
+attached_assets/jwt-701-approved-recovery-source*.json
