@@ -1074,7 +1074,7 @@ export async function acquireProtractorPhysicalTransportLease(
       if (malformed) return null;
       if (timedTrial && !validTimedScopePair) return null;
       if (live && state?.operatorStop?.active !== false) return null;
-      if (!timedTrial && canary.consumedAdmissions >= canary.maxAdmissions) return null;
+      if (!live && !timedTrial && canary.consumedAdmissions >= canary.maxAdmissions) return null;
     }
     const remaining = deadlineMs - Date.now();
     if (remaining <= 0) return null;

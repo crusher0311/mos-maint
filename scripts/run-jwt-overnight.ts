@@ -11,24 +11,28 @@ import {verifyOvernightHeader} from "../lib/jwt-overnight-header-guard";
 import {JwtRecoveryHold,recoveryHoldReason} from "../lib/jwt-overnight-holds";
 import {loadActivityProfileMap} from "../lib/data/repositories/activity-profiles";
 import {decideQuietWindowGate} from "../lib/integrations/activity-profile/profile";
+import {JWT_RESUME_PARENT,resumeWindows} from "../lib/jwt-overnight-resume";
 
-const JOB="jwt-overnight-2026-10-05", RATE="protractor-physical-transport-v1";
-const START=new Date("2026-10-06T03:00:00Z"), END=new Date("2026-10-06T10:00:00Z");
+const RESUME=process.argv.includes("--resume-2026-10-06");
+const JOB=RESUME?"jwt-overnight-2026-10-06":"jwt-overnight-2026-10-05", RATE="protractor-physical-transport-v1";
+const START=new Date(RESUME?"2026-10-07T03:00:00Z":"2026-10-06T03:00:00Z"),
+ END=new Date(RESUME?"2026-10-07T10:00:00Z":"2026-10-06T10:00:00Z");
 const sleep=(ms:number)=>new Promise(r=>setTimeout(r,ms));
 const digest=(v:string)=>createHash("sha256").update(v).digest("hex");
 async function main(){
  if(!process.env.RENDER||process.env.REPLIT_DEV_DOMAIN)throw Error("Production execution required");
+ if(Date.now()>=END.getTime())throw Error("Approved overnight window expired");
  const bytes=readFileSync("docs/reporting/jwt-overnight-native-manifest.json","utf8");
  if(digest(bytes)!=="2ce9dc85edc9a2d2d849e4831111977f12c20ee6edff1adc7aab96d4ca87f615")throw Error("Manifest mismatch");
  const native=JSON.parse(bytes), db=await getDb(), jobs=db.collection<{
    _id:string; holds?:any[]; results?:any[]; status:string; start:Date; expires:Date;
    cursor:number; page:number; runId:string; manifestHash:string; createdAt:Date;
    stopped?:boolean; owner?:string; leaseUntil?:Date; startedAt?:Date; endedAt?:Date;
-   reason?:string; outcomes?:Record<string,number>
+   reason?:string; outcomes?:Record<string,number>; parentJobId?:string
  }>("operator_invoice_recovery_jobs");
  const rates=db.collection<any>("api_rate_limits"), sources=db.collection<any>("operator_invoice_recovery_sources");
  await jobs.updateOne({_id:JOB},{$setOnInsert:{status:"scheduled",start:START,expires:END,cursor:0,page:0,
-   runId:randomUUID(),manifestHash:digest(bytes),createdAt:new Date()}},{upsert:true});
+   runId:randomUUID(),manifestHash:digest(bytes),createdAt:new Date(),...(RESUME?{parentJobId:JWT_RESUME_PARENT}:{})}},{upsert:true});
  while(Date.now()<START.getTime()){if((await jobs.findOne({_id:JOB}))?.stopped)return;await sleep(30_000);}
  const owner=randomUUID();
  const leased=await jobs.findOneAndUpdate({_id:JOB,status:{$in:["scheduled","running"]},stopped:{$ne:true},
@@ -37,29 +41,43 @@ async function main(){
  if(!leased)return;
  const pg=postgres(process.env.SUPABASE_PROD_DATABASE_URL||process.env.DATAONE_DATABASE_URL||process.env.DATABASE_URL!,{
    max:1,connect_timeout:10,connection:{options:"-c statement_timeout=5000 -c lock_timeout=2000 -c timezone=UTC"}});
- const windows=[...native.windowKeys].sort((a:string,b:string)=>{
+ let windows=[...native.windowKeys].sort((a:string,b:string)=>{
    const rank=(k:string)=>k==="233:2026-09-01"?0:k.includes("2026-09")?1:2;
    return rank(a)-rank(b)||a.localeCompare(b);
  });
  try{
+ if(RESUME)windows=resumeWindows(await jobs.findOne({_id:JWT_RESUME_PARENT}),windows,digest(bytes));
+ const verifyWorkers=async()=>{
+   if(process.env.WORKER_SCHEDULE_DISABLED!=="true")throw Error("General-worker scheduler must stay disabled");
+   for(const id of ["srv-d86qipd7vvec73ahur00","srv-d8g15v3eo5us73fvajhg"]){
+     const response=await fetch(`https://api.render.com/v1/services/${id}`,{
+       headers:{Authorization:`Bearer ${process.env.RENDER_API_KEY_PROD}`},signal:AbortSignal.timeout(8000)});
+     if(!response.ok||(await response.json()).suspended!=="suspended")throw Error("General worker suspension not verified");
+   }
+ };
+ await verifyWorkers();
  const state=await rates.findOne({_id:RATE});
  if(state?.operatorStop?.active||state?.canary?.mode!=="live"||!state.canary.workersSuspendedConfirmed)
    throw Error("Provider safety state disallows recovery");
  const grant={version:1 as const,runId:leased.runId,canaryGeneration:state.canary.generation,
-   manifestHash:digest(bytes),notBefore:START,expiresAt:END,windowKeys:windows,maxRequests:1000,consumedRequests:0,stopped:false};
+   manifestHash:digest(bytes),notBefore:START,expiresAt:END,windowKeys:windows,maxRequests:1000,consumedRequests:RESUME?23:0,stopped:false};
+ if(RESUME && (state.jwtOvernight?.runId!=="fa7377a4-5f91-4d75-b1a6-14eb24920b3e" ||
+    state.jwtOvernight?.consumedRequests!==23 || !state.jwtOvernight?.stopped))throw Error("Previous permit changed");
  validateJwtOvernightGrant(grant);
  const registered=await rates.updateOne({_id:RATE,"canary.generation":grant.canaryGeneration,
    "canary.mode":"live","operatorStop.active":{$ne:true},
+   ...(RESUME?{"jwtOvernight.runId":state.jwtOvernight.runId,"jwtOvernight.consumedRequests":23,"jwtOvernight.stopped":true}:{}),
    $or:[{jwtOvernight:{$exists:false}},{"jwtOvernight.expiresAt":{$lte:new Date()}}]},{$set:{jwtOvernight:grant}});
  if(!registered.modifiedCount)throw Error("Existing permit must not be replaced or refunded");
  for(let cursor=leased.cursor;cursor<windows.length;cursor++){
    if(Date.now()>=END.getTime())break;
+   await verifyWorkers();
    const [shop,day]=windows[cursor].split(":"),shopId=Number(shop);
    const enterprise=await getEnterpriseByShopId(shopId);
    if(enterprise?.name!=="JWT"||!enterprise.shopIds.map(Number).includes(shopId))throw Error("Membership changed");
    const profiles=await loadActivityProfileMap([shopId]);
    const quiet=decideQuietWindowGate({profile:profiles.get(shopId),now:new Date(),minConfidence:.7});
-   if(!quiet.eligible){await jobs.updateOne({_id:JOB,owner},{$push:{holds:{shopId,day,reason:"outside shop quiet window"}}});continue;}
+   if(!quiet.eligible){await sleep(Math.min(60_000,Math.max(0,END.getTime()-Date.now())));cursor--;continue;}
    const config=await resolveProtractorConfig(shopId);
    const request={runId:grant.runId,shopId,day,operation:"invoice-day" as const,method:"GET" as const};
    for(let page=cursor===leased.cursor?leased.page:0;page<5;page++){
@@ -71,7 +89,7 @@ async function main(){
      const result=await runWithJwtOvernightTransport(live.jwtOvernight,request,()=>protractorFetch<any>(
        compileJwtOvernightInvoiceRequest(request,page).endpoint,config,{method:"GET"},0,shopId,
        transportOptions));
-     if(!result.ok)throw Error("Provider read failed; checkpoint retained");
+     if(!result.ok)throw Error(`Provider read failed; checkpoint retained: ${String(result.error??"unknown").slice(0,180)}`);
      const invoices=Array.isArray(result.data)?result.data:result.data?.ItemCollection;
      if(!Array.isArray(invoices)||invoices.length>100)throw Error("Unexpected invoice envelope");
      // A source page is durably retained before any financial write.
