@@ -1,4 +1,5 @@
 import {createHash,randomUUID} from "node:crypto";
+import {AssertionError} from "node:assert";
 import {readFileSync} from "node:fs";
 import postgres from "postgres";
 import {getDb,getMongoClient} from "../lib/mongo";
@@ -7,6 +8,7 @@ import {resolveProtractorConfig,protractorFetch} from "../lib/integrations/protr
 import {runWithJwtOvernightTransport} from "../lib/integrations/protractor/jwt-overnight-context";
 import {compileJwtOvernightInvoiceRequest,validateJwtOvernightGrant} from "../lib/protractor-jwt-overnight-policy";
 import {verifyOvernightHeader} from "../lib/jwt-overnight-header-guard";
+import {JwtRecoveryHold,recoveryHoldReason} from "../lib/jwt-overnight-holds";
 import {loadActivityProfileMap} from "../lib/data/repositories/activity-profiles";
 import {decideQuietWindowGate} from "../lib/integrations/activity-profile/profile";
 
@@ -80,14 +82,21 @@ async function main(){
        const n=native.orders.find((n:any)=>n.shopId===shopId&&n.date===day&&n.wo===String(source.WorkOrderNumber));
        if(!n)continue; // Credits and non-native records never qualify.
        let outcome="held";
+       let holdReason:string|undefined;
        try{
          await pg.begin(async tx=>{
            const rows=await tx.unsafe(`SELECT *,to_char(coalesce(closed_date,completed_date),'YYYY-MM-DD') business_date
              FROM normalized_work_orders WHERE shop_id=$1 AND
              work_order_number=ANY($2::text[]) LIMIT 4 FOR UPDATE`,
              [shopId,[n.wo,n.invoice,String(source.ID)]]);
-           if(rows.length!==1)throw Error("Missing or ambiguous existing identity");
-           const row=rows[0],amount=verifyOvernightHeader(row,n,source,shopId);
+           if(rows.length!==1)throw new JwtRecoveryHold("Missing or ambiguous existing identity");
+           const row=rows[0];
+           let amount:number;
+           try{amount=verifyOvernightHeader(row,n,source,shopId);}
+           catch(error){
+             if(error instanceof AssertionError)throw new JwtRecoveryHold(error.message.slice(0,500));
+             throw error;
+           }
            if(Number(row.labor_total)===amount){outcome="already-matches";return;}
            if(Date.now()>=END.getTime()-10_000)throw Error("Morning stop");
            const updated=await tx.unsafe(`UPDATE normalized_work_orders SET labor_total=$1,
@@ -97,9 +106,9 @@ async function main(){
            if(updated.length!==1)throw Error("Guarded update failed");
            outcome="corrected";
          });
-       }catch{outcome="held";}
+       }catch(error){holdReason=recoveryHoldReason(error);outcome="held";}
        await jobs.updateOne({_id:JOB,owner},{$inc:{[`outcomes.${outcome}`]:1},
-         $push:{results:{shopId,wo:n.wo,day,outcome}}});
+         $push:{results:{shopId,wo:n.wo,day,outcome,...(holdReason?{holdReason}:{})}}});
      }
      if(invoices.length<100){await jobs.updateOne({_id:JOB,owner},{$set:{cursor:cursor+1,page:0}});break;}
      if(page===4)throw Error("Day exceeds safe pagination bound");

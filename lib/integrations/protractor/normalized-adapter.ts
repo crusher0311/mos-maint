@@ -1,3 +1,4 @@
+import { protractorInvoiceLaborEvidence } from "./labor-evidence";
 import {
   INormalizedAdapter,
   SourceSystem,
@@ -265,7 +266,7 @@ export class ProtractorAdapter implements INormalizedAdapter {
       isInternal: Boolean(inv.IsInternal),
       isComeback: Boolean(inv.IsComeback),
       tags: [],
-      customFields: {},
+      customFields: { laborReporting: isTerminal ? protractorInvoiceLaborEvidence(inv) : null },
     };
   }
   

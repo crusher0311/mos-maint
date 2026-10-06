@@ -2,7 +2,13 @@ import { protractorLaborLineEvidence, recordedNumber } from "../../labor-reporti
 import { extractProtractorServicePackages, getProtractorPackageLines, normalizeProtractorServiceJobStatus } from "./package-normalization";
 
 /** Sold evidence and complete presentation evidence have independent coverage. */
+export function isFinalProtractorInvoice(invoice:any):boolean {
+  if(!invoice || !["Invoice","WorkOrder"].includes(invoice.Type)) return false;
+  if(invoice.WorkflowStage !== "Invoice") return false;
+  return invoice.Status==null || ["Invoice","Invoiced","Paid","Closed"].includes(invoice.Status);
+}
 export function protractorInvoiceLaborEvidence(invoice: any) {
+  if(!isFinalProtractorInvoice(invoice)) return null;
   const collection = (x: any) => Array.isArray(x) || Array.isArray(x?.ItemCollection);
   if (!collection(invoice.ServicePackages)) return null;
   const completeDispositions = collection(invoice.DeferredServicePackages);

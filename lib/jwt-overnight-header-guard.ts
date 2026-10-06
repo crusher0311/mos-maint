@@ -13,6 +13,7 @@ export function verifyOvernightHeader(row:any, native:any, source:any, shopId:nu
   assert.ok(["WorkOrder","Invoice"].includes(source.Type));
   assert.equal(source.WorkflowStage,"Invoice");
   assert.ok(source.Status==null||["Invoice","Invoiced","Paid","Closed"].includes(source.Status));
+  assert.ok(Number.isFinite(Date.parse(source.InvoiceTime)),"Missing or invalid source invoice date");
   assert.equal(new Date(source.InvoiceTime).toISOString().slice(0,10),native.date);
   assert.equal(row.business_date,native.date);
   assert.ok(["closed","paid","invoiced"].includes(row.status));

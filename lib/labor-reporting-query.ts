@@ -47,11 +47,8 @@ SELECT o.shop_id, o.id, o.provider, o.business_date::text,
       AND (p.status IN ('refunded','partially_refunded','chargeback') OR p.refunded_amount<>0)) has_refund,
   CASE WHEN o.provider='protractor' THEN
     CASE WHEN jsonb_typeof(o.custom_fields->'laborReporting'->'sold')='number'
-      THEN (o.custom_fields->'laborReporting'->>'sold')::numeric
-      WHEN t.eligible>0 AND t.missing_sold=0 THEN t.sold END END sold,
-  CASE WHEN o.provider='protractor' AND t.eligible>0 AND t.missing_presented=0
-    AND o.custom_fields->'laborReporting'->>'dispositionsComplete'='true' THEN t.presented
-    WHEN o.provider='protractor' AND jsonb_typeof(o.custom_fields->'laborReporting'->'presented')='number'
+      THEN (o.custom_fields->'laborReporting'->>'sold')::numeric END END sold,
+  CASE WHEN o.provider='protractor' AND jsonb_typeof(o.custom_fields->'laborReporting'->'presented')='number'
     THEN (o.custom_fields->'laborReporting'->>'presented')::numeric END presented,
   CASE WHEN o.provider='protractor'
     AND jsonb_typeof(o.custom_fields->'laborReporting'->'net')='number'

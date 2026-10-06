@@ -17,6 +17,10 @@ export function aggregateLaborFacts(facts: LaborFact[]) {
     // historical terminal invoice. Invalid/missing dates stay unknown.
     if (f.provider !== "protractor" || !date || !Number.isFinite(date.getTime()) ||
         date.toISOString().slice(0,10) !== f.business_date) return f;
+    if(Number(f.cached_source?.shopId)!==f.shop_id ||
+       typeof raw.ID!=="string" || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(raw.ID) ||
+       !f.source_ids?.some(s=>s.system==="protractor"&&
+         String(s.idValue).toLowerCase()===raw.ID.toLowerCase())) return f;
     const evidence = protractorInvoiceLaborEvidence(raw);
     return evidence ? { ...f, sold: evidence.sold,
       presented: evidence.presented,
