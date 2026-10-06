@@ -149,3 +149,4 @@
 - [Shop-Ware shared tenant evidence](shopware-shared-tenant-evidence.md) — duplicate slugs may be sibling locations; sandbox credentials cannot establish production ownership.
 - [Labor pilot evidence](labor-pilot-evidence.md) — stored JWT history is not complete labor coverage; native discount/cost evidence is required; ADP remains the final phase.
 - [Merge marker verification](merge-marker-verifier.md) — decorative equals-sign comment dividers can falsely block conflict completion.
+- [Offline release checks](offline-release-checks.md) — success banners can precede hanging test processes; busy workspaces can change which short-deadline stage expires.

@@ -63,6 +63,9 @@ function expression(value: any, row: Row, now: Date): any {
   const [operator, argument] = entries[0];
   const args = () => expression(argument, row, now);
   switch (operator) {
+    case "$isArray": return Array.isArray(expression(argument, row, now));
+    case "$isNumber": return typeof expression(argument, row, now) === "number";
+    case "$trunc": return Math.trunc(expression(argument, row, now));
     // MongoDB does not promise short-circuit evaluation for these boolean
     // operators. Evaluate every operand so malformed-record tests catch any
     // arithmetic that was left outside a type/range guard.

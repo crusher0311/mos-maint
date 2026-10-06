@@ -1,5 +1,9 @@
 // Note: "server-only" import removed to allow standalone script usage
 import { AsyncLocalStorage } from "node:async_hooks";
+import {
+  getJwtOvernightContext, jwtOvernightContextError, jwtOvernightDispatchError,
+} from "./jwt-overnight-context";
+import type { JwtOvernightRequest } from "@/lib/protractor-jwt-overnight-policy";
 import crypto from "node:crypto";
 import https from "node:https";
 import pLimit from "p-limit";
@@ -187,6 +191,7 @@ export const __protractorClientTestHooks: {
       requireTimedTrial?: boolean;
       callbackReceivedAt?: Date;
       interactiveShopId?: number;
+      overnightRequest?: JwtOvernightRequest;
       transport?: "direct" | "relay";
       environment?: "production" | "development" | "test" | "unknown";
     },
@@ -207,7 +212,7 @@ export const __protractorClientTestHooks: {
   getDb: typeof getDb;
   getShopPartCostRatio: typeof getShopPartCostRatio;
   getOperatorStop: typeof getProtractorOperatorStop;
-  onFetchStart: ((endpoint: string, opts?: { priority?: boolean; maxRetries?: number }) => void) | null;
+  onFetchStart: ((endpoint: string, opts?: { priority?: boolean; maxRetries?: number; deadlineAtMs?: number }) => void) | null;
   acquireOutboundGate: (connectionId: string) => Promise<ProtractorGateDecision>;
   recordResponse: (connectionId: string, statusCode: number, retryAfterMs?: number) => Promise<void>;
   sleep: (ms: number) => Promise<void>;
@@ -228,6 +233,7 @@ export const __protractorClientTestHooks: {
         requireTimedTrial?: boolean;
         callbackReceivedAt?: Date;
         interactiveShopId?: number;
+        overnightRequest?: JwtOvernightRequest;
         transport?: "direct" | "relay";
         environment?: "production" | "development" | "test" | "unknown";
       },
@@ -1015,6 +1021,11 @@ function localPolicyError(context: string): { ok: false; error: string } | null 
     return null;
   }
   const decision = getProtractorOutboundPolicy();
+  const overnight = getJwtOvernightContext();
+  if (overnight && !["rest", "transport_attempt", "transport_dispatch"].includes(context)) {
+    return {ok: false, error: "JWT overnight permission only supports daily invoice REST reads"};
+  }
+  if (decision.allowed && overnight?.active && Date.now() < overnight.expiresAtMs) return null;
   if (decision.allowed && !decision.callbackOnly) return null;
   if (decision.allowed && decision.callbackOnly && callbackTransportStorage.getStore()) {
     return null;
@@ -1114,6 +1125,8 @@ async function runFleetGuardedTransportAttempt<T>(
 ): Promise<{ ok: true; response: T } | { ok: false; error: string }> {
   const earlyLocal = localPolicyError("transport_attempt");
   if (earlyLocal) return earlyLocal;
+  const overnightError = jwtOvernightContextError(actualShopId);
+  if (overnightError) return {ok: false, error: overnightError};
   const earlyInteractive = interactiveContextForShop(actualShopId);
   if (earlyInteractive.error) {
     return { ok: false, error: earlyInteractive.error };
@@ -1204,6 +1217,7 @@ async function runFleetGuardedTransportAttempt<T>(
     if (
       callbackContext !== undefined ||
       interactiveAtAdmission.context !== undefined ||
+      getJwtOvernightContext() !== undefined ||
       finalPolicy.requireTimedTrial === true
     ) {
       // The local env flag cannot encode the persisted scope or whether the
@@ -1259,6 +1273,11 @@ async function runFleetGuardedTransportAttempt<T>(
     if (interactiveBeforeConfirm.error) {
       return { ok: false, error: interactiveBeforeConfirm.error };
     }
+    const overnightBeforeConfirm = jwtOvernightContextError(actualShopId);
+    if (overnightBeforeConfirm) return {ok: false, error: overnightBeforeConfirm};
+    if (getJwtOvernightContext() && !leaseToken) {
+      return {ok: false, error: "JWT overnight transport requires the fleet lease"};
+    }
     if (leaseToken) {
       const ownershipAdmission = await settleBefore(
         __protractorClientTestHooks.confirmPhysicalTransportLease(leaseToken, {
@@ -1267,6 +1286,7 @@ async function runFleetGuardedTransportAttempt<T>(
             callbackContext?.requireTimedTrial === true,
           callbackReceivedAt: callbackContext?.callbackReceivedAt,
           interactiveShopId: interactiveBeforeConfirm.context?.shopId,
+          overnightRequest: getJwtOvernightContext()?.request,
           transport: dispatchTransport,
           environment: resolveProtractorEnvironment(process.env),
         }),
@@ -1290,6 +1310,8 @@ async function runFleetGuardedTransportAttempt<T>(
     if (interactiveAtDispatch.error) {
       return { ok: false, error: interactiveAtDispatch.error };
     }
+    const overnightAtDispatch = jwtOvernightContextError(actualShopId);
+    if (overnightAtDispatch) return {ok: false, error: overnightAtDispatch};
 
     if (leaseToken) {
       const token = leaseToken;
@@ -1466,6 +1488,25 @@ export async function protractorFetch<T>(
   shopId?: number,
   opts?: { priority?: boolean; maxRetries?: number; timeoutMs?: number; deadlineAtMs?: number }
 ): Promise<{ ok: boolean; data?: T; error?: string }> {
+  const overnightDispatchError = jwtOvernightDispatchError(
+    endpoint, options.method ?? "GET", Number(shopId), options.body,
+  );
+  if (overnightDispatchError) return {ok: false, error: overnightDispatchError};
+  if (getJwtOvernightContext()) {
+    if (options.headers !== undefined || opts?.priority === true) {
+      return {ok: false, error: "JWT overnight reads cannot override credentials or use interactive priority"};
+    }
+    // Freeze the permitted effective shape before any await. A caller retaining
+    // and mutating its RequestInit must not turn this read into another request.
+    options = {method: "GET"};
+    const expiresAtMs = getJwtOvernightContext()!.expiresAtMs;
+    opts = {
+      ...opts,
+      priority: false,
+      deadlineAtMs: typeof opts?.deadlineAtMs === "number" && Number.isFinite(opts.deadlineAtMs)
+        ? Math.min(opts.deadlineAtMs, expiresAtMs) : expiresAtMs,
+    };
+  }
   const local = localPolicyError("rest");
   if (local) return local;
   const normalizedShopId = Number(shopId);

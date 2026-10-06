@@ -6,6 +6,11 @@
 // queries.
 import type { Collection, Document, Filter, ObjectId } from "mongodb";
 import { randomUUID } from "node:crypto";
+import {
+  jwtOvernightAdmissionExpression,
+  jwtOvernightConsumptionFields,
+  type JwtOvernightRequest,
+} from "@/lib/protractor-jwt-overnight-policy";
 import { getDb } from "@/lib/data/db";
 import { shadowWriteMongoIntegrationOps } from "@/lib/db/integration-ops-write-mode";
 import {
@@ -1082,6 +1087,7 @@ export interface ProtractorPhysicalTransportConfirmationContext {
   requireTimedTrial?: boolean;
   callbackReceivedAt?: Date;
   interactiveShopId?: number;
+  overnightRequest?: JwtOvernightRequest;
   transport?: "direct" | "relay";
   environment?: "production" | "development" | "test" | "unknown";
 }
@@ -1122,6 +1128,17 @@ export async function confirmProtractorPhysicalTransportLease(
   // predate the persisted requiresRelay field.  Do not infer an opt-out from
   // an absent/false marker: the shared trial feature is relay-only.
   const relayRequiredExpression = { $eq: [transport, "relay"] };
+  const overnightAdmissionExpression = context.overnightRequest
+    ? {
+      $and: [
+        jwtOvernightAdmissionExpression(context.overnightRequest),
+        { $eq: ["$canary.mode", "live"] },
+        { $eq: [environment, "production"] },
+        relayRequiredExpression,
+        { $literal: context.callbackReceivedAt === undefined && context.interactiveShopId === undefined },
+      ],
+    }
+    : { $literal: false };
   const timedTrialAdmissionExpression = {
     $cond: [
       validTimedTrialCanaryAccountingExpression,
@@ -1172,6 +1189,7 @@ export async function confirmProtractorPhysicalTransportLease(
                 ],
               },
               { $gt: [interactiveShopId, 0] },
+              overnightAdmissionExpression,
             ],
           },
         ],
@@ -1252,6 +1270,9 @@ export async function confirmProtractorPhysicalTransportLease(
       $expr: {
         $and: [
           { $gt: ["$leaseExpiresAt", "$$NOW"] },
+          // A background context must never fall through to an unrelated
+          // callback, interactive, bounded or legacy unscoped permission.
+          ...(context.overnightRequest ? [overnightAdmissionExpression] : []),
           {
             $or: [
               { $ne: ["$canary.mode", "live"] },
@@ -1264,6 +1285,7 @@ export async function confirmProtractorPhysicalTransportLease(
     },
     [{
       $set: {
+        ...(context.overnightRequest ? jwtOvernightConsumptionFields(context.overnightRequest) : {}),
         physicalAdmissionStartedAt: "$$NOW",
         physicalAdmissionOwnerToken: { $literal: ownerToken },
         "canary.consumedAdmissions": {

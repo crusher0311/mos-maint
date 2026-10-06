@@ -51,6 +51,10 @@ localPort = 5000
 externalPort = 80
 
 [[ports]]
+localPort = 5101
+externalPort = 3003
+
+[[ports]]
 localPort = 5904
 externalPort = 3001
 
@@ -99,4 +103,4 @@ VHI_REALTIME_PUSH_ENABLED = "true"
 
 [postMerge]
 path = "scripts/post-merge.sh"
-timeoutMs = 120000
+timeoutMs = 600000
