@@ -12,6 +12,10 @@ async function main() {
   let lookupOptions: any;
   const sandbox: any = {
     console: { log() {}, warn() {} },
+    findAutoflowStickerShop: async () => {
+      if (outcome instanceof Error) throw outcome;
+      return outcome;
+    },
     findShopBySmsIdDetailed: async (_id: string, options: any) => {
       lookupOptions = options;
       assert.equal(options.providerHintIsAuthoritative, true);

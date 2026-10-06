@@ -9,7 +9,7 @@ import { Storage } from "@google-cloud/storage";
 import { getStickerRedirectUrl } from "@/lib/sticker-utils";
 import { triggerAutoBookingFromSticker, StickerBookingData } from "@/lib/auto-booking/scheduler";
 import { estimateMileageFromCarfax } from "@/lib/integrations/carfax";
-import { findShopBySmsIdDetailed } from "@/lib/extension-shop-lookup";
+import { findShopBySmsIdDetailed, findAutoflowStickerShop } from "@/lib/extension-shop-lookup";
 import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
 import { parseMileageInput, parseMonthsInput, isAbsurdMileage, MAX_PLAUSIBLE_MILEAGE, logStickerMileageReject } from "@/lib/sticker-mileage";
 import { shouldRunStickerSideEffects } from "@/lib/extension-basic-tools";
@@ -530,7 +530,11 @@ async function resolveMosShopId(
     const providerLabel = ({ tekmetric: "Tekmetric", autoflow: "AutoFlow", protractor: "Protractor", shopware: "Shop-Ware", shopmonkey: "Shopmonkey" } as Record<string, string>)[effectiveProvider || ""] || "provider";
     let result;
     try {
-      result = await findShopBySmsIdDetailed(String(smsShopId), {
+      // Provider authority does not imply canonical-only partner validation.
+      // Printing may read an existing AutoFlow v4 association, never create one.
+      result = effectiveProvider === "autoflow"
+        ? await findAutoflowStickerShop(String(smsShopId), { userShopIds, isPlatformAdmin })
+        : await findShopBySmsIdDetailed(String(smsShopId), {
       userShopIds,
       isPlatformAdmin,
       providerHint: effectiveProvider,

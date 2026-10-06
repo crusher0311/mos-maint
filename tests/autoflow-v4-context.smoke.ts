@@ -183,6 +183,35 @@ async function run() {
 
   const g: any = sandbox;
 
+  // Inline and floating placement share createPrintButton and its handlers.
+  // Execute their context senders for both generations of AutoFlow URLs.
+  for (const [url, shopId] of [
+    ["https://fixture.autotext.me/tickets/42", "fixture"],
+    ["https://app.autoflow.com/shop/1360/dvi/42", "1360"],
+  ]) {
+    setPage(url, "", []);
+    state.messages = [];
+    const listeners: Record<string, Function> = {};
+    const originalCreate = fakeDocument.createElement;
+    fakeDocument.createElement = (() => ({
+      style: {}, addEventListener: (event: string, fn: Function) => { listeners[event] = fn; },
+    })) as any;
+    sandbox.chrome.runtime.getURL = (value: string) => value;
+    g.showToast = () => {};
+    g.createPrintButton();
+    listeners.click({ preventDefault() {}, stopPropagation() {} });
+    g.handleImmediatePrintWithInterval(4000, 4, false);
+    g.openStickerPanel();
+    for (const message of state.messages) {
+      ok("print/customize preserves originating AutoFlow identity", message.context?.shopId === shopId && message.context?.provider === "autoflow");
+    }
+    ok("immediate, interval and customization all sent", state.messages.length === 3);
+    fakeDocument.createElement = originalCreate;
+  }
+  const placement = src.slice(src.indexOf("function injectPrintButton()"), src.indexOf("function injectPrintButton()") + 9000);
+  ok("floating and inline placements share button factory", (placement.match(/createPrintButton\(\)/g) || []).length >= 2);
+  ok("bottom-right fallback is intentional", placement.includes("bottom: '80px'") && placement.includes("right: '20px'"));
+
   // Create RO visibility: legacy workflow boards are valid dashboard views,
   // DVI pages remain excluded, and visibility cannot be permanently shadowed
   // by the historical tenant-local dismissal key.

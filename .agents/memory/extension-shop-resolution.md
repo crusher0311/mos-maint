@@ -58,6 +58,17 @@ isolation for server-issued non-AutoFlow principals; only legacy/untrusted
 provider hints require global AutoFlow canonical protection.
 
 ## Rule: server-managed partner mappings require a read-only exact resolver
+Interactive sticker resolution and exact partner mapping validation are separate
+contracts even when both use a server-issued AutoFlow principal. Interactive
+printing may read uniquely owned existing numeric aliases, but must never learn
+an unknown number as a side effect.
+
+**Why:** treating provider authority as canonical-only identity caused linked v4
+numeric contexts to fail for first-class sessions while legacy sessions worked.
+
+**How to apply:** preserve canonical precedence and session scope in interactive
+tools; do not broaden exact partner validation to repair an interactive miss.
+
 Do not validate a server-managed external-shop mapping through the extension's
 compatibility resolver. Mapping validation must query only the declared
 provider's canonical identity fields, reject malformed or ambiguous IDs, and

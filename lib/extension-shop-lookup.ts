@@ -145,6 +145,42 @@ async function recordUnresolvedAutoflowIdentifier(
   }
 }
 
+/**
+ * Interactive AutoFlow stickers accept already-associated numeric v4 aliases.
+ * Unlike compatibility lookup this never learns associations, and unlike exact
+ * partner validation it accepts stored aliases after global canonical ownership.
+ */
+export async function findAutoflowStickerShop(
+  identifier: string,
+  options: { userShopIds?: number[]; isPlatformAdmin?: boolean } = {},
+): Promise<ShopLookupOutcome> {
+  const db = await __deps.getDb();
+  const docs = await db.collection("shops").find(buildAutoflowClaimQuery(identifier), {
+    collation: { locale: "en", strength: 2 },
+  }).toArray();
+  const claims = classifyAutoflowIdentifierClaims(docs, identifier);
+  const canonical = claims.canonicalClaims.length > 0;
+  const owners = canonical ? claims.canonicalClaims
+    : isAutoflowV4ShopNumber(identifier) ? claims.aliasClaims : [];
+  if (owners.length > 1) return {
+    status: "conflict", provider: "autoflow", identifier: claims.identifier,
+    conflictType: canonical ? "canonical" : "alias",
+    shopIds: owners.map(owner => owner.shopId),
+  };
+  if (!owners.length) return {
+    status: "not_found", provider: "autoflow", identifier: claims.identifier,
+  };
+  const owner = docs.find((doc: any) => String(doc.shopId) === String(owners[0].shopId));
+  if (!owner) throw new Error("AutoFlow owner document is unavailable");
+  if (!isShopAccessible(owner, options.userShopIds || [], options.isPlatformAdmin === true)) {
+    return {
+      status: "access_denied", provider: "autoflow",
+      identifier: claims.identifier, ownerShopId: owner.shopId,
+    };
+  }
+  return resolvedShop(owner, "autoflow");
+}
+
 export async function findShopBySmsIdDetailed(
   smsShopId: string,
   options: {
