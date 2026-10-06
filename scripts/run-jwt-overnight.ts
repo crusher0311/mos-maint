@@ -81,6 +81,8 @@ async function main(){
    const config=await resolveProtractorConfig(shopId);
    const request={runId:grant.runId,shopId,day,operation:"invoice-day" as const,method:"GET" as const};
    for(let page=cursor===leased.cursor?leased.page:0;page<5;page++){
+     if(!decideQuietWindowGate({profile:profiles.get(shopId),now:new Date(),minConfidence:.7}).eligible)
+       throw Error("Shop quiet window ended; checkpoint retained");
      const live=await rates.findOne({_id:RATE});
      if(Date.now()>=END.getTime()||live?.operatorStop?.active||live?.jwtOvernight?.stopped||
        (await jobs.findOne({_id:JOB}))?.stopped)throw Error("Stopped");
@@ -97,6 +99,8 @@ async function main(){
        jobId:JOB,shopId,day,page,invoices,sourceDigest:digest(JSON.stringify(invoices)),capturedAt:new Date()}},{upsert:true});
      for(const source of invoices){
        if(Date.now()>=END.getTime())throw Error("Morning stop");
+       if(!decideQuietWindowGate({profile:profiles.get(shopId),now:new Date(),minConfidence:.7}).eligible)
+         throw Error("Shop quiet window ended; checkpoint retained");
        const n=native.orders.find((n:any)=>n.shopId===shopId&&n.date===day&&n.wo===String(source.WorkOrderNumber));
        if(!n)continue; // Credits and non-native records never qualify.
        let outcome="held";
