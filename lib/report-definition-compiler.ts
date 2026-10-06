@@ -32,6 +32,7 @@ import {
   normalizeReportingRange,
 } from "@/lib/reporting-kpi-service";
 import type { ResolvedReportingScope } from "@/lib/reporting-scope";
+import { LABOR_METRIC_KEYS } from "@/lib/labor-reporting-contract";
 
 export class ReportDefinitionError extends Error {
   constructor(message: string, readonly field?: string) {
@@ -136,6 +137,13 @@ export function compileReportDefinition(
   const metrics = uniqueEnumArray(source.metrics, REPORT_METRICS, "metrics", REPORT_METRICS.length);
   const dimensions = uniqueEnumArray(source.dimensions, REPORT_DIMENSIONS, "dimensions", 1);
   const dimension = dimensions[0];
+  const hasLaborMetric = metrics.some(metric => (LABOR_METRIC_KEYS as readonly string[]).includes(metric));
+  if (hasLaborMetric && !["none", "date", "location", "soldLaborHoursBand"].includes(dimension)) {
+    throw new ReportDefinitionError("Labor metrics support summary, date, location or sold-hours bands only", "dimensions");
+  }
+  if (dimension === "soldLaborHoursBand" && metrics.some(metric => !(LABOR_METRIC_KEYS as readonly string[]).includes(metric))) {
+    throw new ReportDefinitionError("Sold-hours bands support labor metrics only; legacy KPI populations differ", "metrics");
+  }
 
   const filters = source.filters === undefined ? [] : (() => {
     if (!Array.isArray(source.filters) || source.filters.length > 10) {
@@ -222,7 +230,7 @@ export function compileReportDefinition(
     "opportunityConversionRate", "laborPartsMix",
   ]);
   const hasBusinessMetric = metrics.some((metric) => businessMetrics.has(metric));
-  const hasEventMetric = metrics.some((metric) => !businessMetrics.has(metric));
+  const hasEventMetric = metrics.some((metric) => !businessMetrics.has(metric) && !(LABOR_METRIC_KEYS as readonly string[]).includes(metric));
   const execution: ReportExecutionPlan = (() => {
     switch (dimension) {
       case "technician":
@@ -235,6 +243,7 @@ export function compileReportDefinition(
         const stages: ReportExecutionPlan["stages"] = [];
         if (hasBusinessMetric) stages.push("business");
         if (hasEventMetric) stages.push("events");
+        if (hasLaborMetric) stages.push("labor");
         return {
           stages,
           dimensions: [dimension === "none" ? "summary" : dimension],
@@ -275,14 +284,14 @@ export function compileReportDefinition(
 
 const projectValues = (values: ReportingMetricValues, metrics: ReportMetric[]) =>
   Object.fromEntries(metrics.flatMap((metric) =>
-    REPORT_METRIC_VALUE_KEYS[metric].map((key) => [key, values[key]]),
+    REPORT_METRIC_VALUE_KEYS[metric].map((key) => [key, values[key] ?? null]),
   ));
 
 function groups(response: ReportingKpiResponse, dimension: ReportDimension): ReportingGroup[] {
   if (dimension === "none") {
     return [{ key: "summary", label: "Summary", metrics: response.summary, availability: response.availability }];
   }
-  return response[REPORT_DIMENSION_TO_KPI_FIELD[dimension]!];
+  return response[REPORT_DIMENSION_TO_KPI_FIELD[dimension]!] ?? [];
 }
 
 function selected(row: ReportingGroup, operator: ReportFilterOperator, raw: string | string[]) {

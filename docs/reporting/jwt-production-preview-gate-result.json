@@ -1,0 +1,14 @@
+{
+  "jobStatus": "succeeded",
+  "results": [
+    {
+      "event": "jwt_invoice_preview",
+      "outcome": "blocked",
+      "reason": "allowed"
+    }
+  ],
+  "interpretation": "The scoped-policy guard blocked before credentials lookup or provider dispatch. Original reason allowed referred only to broad local policy, not permission for this standalone recovery operation.",
+  "providerRequests": 0,
+  "businessDataWrites": 0,
+  "configurationChanges": 0
+}

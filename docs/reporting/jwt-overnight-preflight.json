@@ -1,0 +1,374 @@
+{
+  "checkedAt": "2026-10-05T22:29:39.907Z",
+  "readOnly": true,
+  "shopIds": [
+    227,
+    228,
+    229,
+    230,
+    231,
+    232,
+    233,
+    234,
+    235,
+    236
+  ],
+  "activity": {
+    "windowHours": 24,
+    "sampled": 5202,
+    "truncated": false,
+    "newest": "2026-10-05T22:29:12.911Z",
+    "oldest": "2026-10-04T23:50:49.382Z",
+    "maxRecordedEventsPerMinute": 21,
+    "statuses": {
+      "200": 5202
+    },
+    "transport": {
+      "relay": 5202
+    },
+    "p95LatencyMs": 2691,
+    "note": "Telemetry events are not necessarily unique physical requests. Capped samples and logging gaps cannot prove spare capacity."
+  },
+  "transportPolicy": {
+    "operatorStop": {
+      "active": false,
+      "updatedAt": "2026-09-15T11:52:46.690Z"
+    },
+    "canary": {
+      "mode": "live",
+      "scope": "callbacks_and_interactive",
+      "startedAt": "2026-09-15T11:52:46.690Z",
+      "maxAdmissions": null,
+      "remainingAdmissions": null,
+      "consumedAdmissions": 111147,
+      "workersSuspendedConfirmed": true
+    }
+  },
+  "jwtBackfill": [
+    {
+      "shopId": 227,
+      "lastActivityAt": "2026-07-12T02:40:31.128Z",
+      "completed": true,
+      "lastRunAt": "2026-07-12T02:40:30.934Z"
+    },
+    {
+      "shopId": 228,
+      "lastActivityAt": "2026-07-12T04:30:04.374Z",
+      "completed": true,
+      "lastRunAt": "2026-07-12T04:30:04.149Z"
+    },
+    {
+      "shopId": 229,
+      "lastActivityAt": "2026-07-12T05:32:30.053Z",
+      "completed": true,
+      "lastRunAt": "2026-07-12T05:32:29.873Z"
+    },
+    {
+      "shopId": 230,
+      "lastActivityAt": "2026-07-12T05:17:58.045Z",
+      "completed": true,
+      "lastRunAt": "2026-07-12T05:17:57.869Z"
+    },
+    {
+      "shopId": 231,
+      "lastActivityAt": "2026-07-12T02:53:17.869Z",
+      "completed": true,
+      "lastRunAt": "2026-07-12T02:53:17.682Z"
+    },
+    {
+      "shopId": 232,
+      "lastActivityAt": "2026-07-12T02:57:55.287Z",
+      "completed": true,
+      "lastRunAt": "2026-07-12T02:57:55.078Z"
+    },
+    {
+      "shopId": 233,
+      "lastActivityAt": "2026-07-12T07:00:57.231Z",
+      "completed": true,
+      "lastRunAt": "2026-07-12T07:00:57.057Z"
+    },
+    {
+      "shopId": 234,
+      "lastActivityAt": "2026-07-12T00:54:32.179Z",
+      "completed": true,
+      "lastRunAt": "2026-07-12T00:54:32.005Z"
+    },
+    {
+      "shopId": 235,
+      "lastActivityAt": "2026-07-12T02:30:45.561Z",
+      "completed": true,
+      "lastRunAt": "2026-07-12T02:30:45.373Z"
+    },
+    {
+      "shopId": 236,
+      "lastActivityAt": "2026-07-12T00:06:32.038Z",
+      "completed": true,
+      "lastRunAt": "2026-07-12T00:06:31.831Z"
+    }
+  ],
+  "breaker": {
+    "updatedAt": "2026-10-05T22:29:37.010Z"
+  },
+  "hostLoad": [
+    {
+      "sampledAt": "2026-10-05T22:29:34.088Z",
+      "host": "srv-d55jaqkhg0os73a5dd8g-66cd454c74-w74zx",
+      "cpu": {
+        "percent": 0.28,
+        "loadavg1": 4.13
+      },
+      "eventLoopLagMs": {
+        "p50": 20.12,
+        "p95": 20.709,
+        "p99": 21.889,
+        "max": 102.236
+      },
+      "mongo": {
+        "connections": {
+          "current": 199,
+          "available": 5801
+        }
+      },
+      "pg": {
+        "active": 1,
+        "waiting": 0,
+        "idleInTransaction": 0
+      },
+      "captureError": null
+    },
+    {
+      "sampledAt": "2026-10-05T22:29:33.374Z",
+      "host": "srv-d55jaqkhg0os73a5dd8g-66cd454c74-mg4wl",
+      "cpu": {
+        "percent": 0.41,
+        "loadavg1": 8.27
+      },
+      "eventLoopLagMs": {
+        "p50": 20.12,
+        "p95": 20.873,
+        "p99": 22.184,
+        "max": 85.918
+      },
+      "mongo": {
+        "connections": {
+          "current": 199,
+          "available": 5801
+        }
+      },
+      "pg": {
+        "active": 1,
+        "waiting": 0,
+        "idleInTransaction": 0
+      },
+      "captureError": null
+    },
+    {
+      "sampledAt": "2026-10-05T22:29:04.088Z",
+      "host": "srv-d55jaqkhg0os73a5dd8g-66cd454c74-w74zx",
+      "cpu": {
+        "percent": 0.3,
+        "loadavg1": 3.62
+      },
+      "eventLoopLagMs": {
+        "p50": 20.103,
+        "p95": 20.873,
+        "p99": 22.135,
+        "max": 81.068
+      },
+      "mongo": {
+        "connections": {
+          "current": 196,
+          "available": 5804
+        }
+      },
+      "pg": {
+        "active": 1,
+        "waiting": 0,
+        "idleInTransaction": 0
+      },
+      "captureError": null
+    },
+    {
+      "sampledAt": "2026-10-05T22:29:03.374Z",
+      "host": "srv-d55jaqkhg0os73a5dd8g-66cd454c74-mg4wl",
+      "cpu": {
+        "percent": 0.34,
+        "loadavg1": 4.57
+      },
+      "eventLoopLagMs": {
+        "p50": 20.103,
+        "p95": 20.857,
+        "p99": 22.053,
+        "max": 129.892
+      },
+      "mongo": {
+        "connections": {
+          "current": 196,
+          "available": 5804
+        }
+      },
+      "pg": {
+        "active": 1,
+        "waiting": 0,
+        "idleInTransaction": 0
+      },
+      "captureError": null
+    },
+    {
+      "sampledAt": "2026-10-05T22:28:34.089Z",
+      "host": "srv-d55jaqkhg0os73a5dd8g-66cd454c74-w74zx",
+      "cpu": {
+        "percent": 0.29,
+        "loadavg1": 2.89
+      },
+      "eventLoopLagMs": {
+        "p50": 20.12,
+        "p95": 20.824,
+        "p99": 21.529,
+        "max": 25.362
+      },
+      "mongo": {
+        "connections": {
+          "current": 194,
+          "available": 5806
+        }
+      },
+      "pg": {
+        "active": 1,
+        "waiting": 0,
+        "idleInTransaction": 0
+      },
+      "captureError": null
+    },
+    {
+      "sampledAt": "2026-10-05T22:28:33.374Z",
+      "host": "srv-d55jaqkhg0os73a5dd8g-66cd454c74-mg4wl",
+      "cpu": {
+        "percent": 0.25,
+        "loadavg1": 4.22
+      },
+      "eventLoopLagMs": {
+        "p50": 20.12,
+        "p95": 20.808,
+        "p99": 21.447,
+        "max": 59.31
+      },
+      "mongo": {
+        "connections": {
+          "current": 194,
+          "available": 5806
+        }
+      },
+      "pg": {
+        "active": 1,
+        "waiting": 0,
+        "idleInTransaction": 0
+      },
+      "captureError": null
+    },
+    {
+      "sampledAt": "2026-10-05T22:28:04.088Z",
+      "host": "srv-d55jaqkhg0os73a5dd8g-66cd454c74-w74zx",
+      "cpu": {
+        "percent": 0.4,
+        "loadavg1": 2.71
+      },
+      "eventLoopLagMs": {
+        "p50": 20.103,
+        "p95": 20.922,
+        "p99": 23.118,
+        "max": 71.303
+      },
+      "mongo": {
+        "connections": {
+          "current": 200,
+          "available": 5800
+        }
+      },
+      "pg": {
+        "active": 1,
+        "waiting": 0,
+        "idleInTransaction": 0
+      },
+      "captureError": null
+    },
+    {
+      "sampledAt": "2026-10-05T22:28:03.373Z",
+      "host": "srv-d55jaqkhg0os73a5dd8g-66cd454c74-mg4wl",
+      "cpu": {
+        "percent": 0.34,
+        "loadavg1": 5.13
+      },
+      "eventLoopLagMs": {
+        "p50": 20.103,
+        "p95": 20.857,
+        "p99": 22.364,
+        "max": 94.306
+      },
+      "mongo": {
+        "connections": {
+          "current": 200,
+          "available": 5800
+        }
+      },
+      "pg": {
+        "active": 1,
+        "waiting": 0,
+        "idleInTransaction": 0
+      },
+      "captureError": null
+    },
+    {
+      "sampledAt": "2026-10-05T22:27:34.089Z",
+      "host": "srv-d55jaqkhg0os73a5dd8g-66cd454c74-w74zx",
+      "cpu": {
+        "percent": 0.4,
+        "loadavg1": 3.29
+      },
+      "eventLoopLagMs": {
+        "p50": 20.12,
+        "p95": 20.873,
+        "p99": 22.102,
+        "max": 170
+      },
+      "mongo": {
+        "connections": {
+          "current": 195,
+          "available": 5805
+        }
+      },
+      "pg": {
+        "active": 1,
+        "waiting": 0,
+        "idleInTransaction": 0
+      },
+      "captureError": null
+    },
+    {
+      "sampledAt": "2026-10-05T22:27:33.373Z",
+      "host": "srv-d55jaqkhg0os73a5dd8g-66cd454c74-mg4wl",
+      "cpu": {
+        "percent": 0.78,
+        "loadavg1": 6.29
+      },
+      "eventLoopLagMs": {
+        "p50": 20.103,
+        "p95": 21.594,
+        "p99": 44.237,
+        "max": 171.966
+      },
+      "mongo": {
+        "connections": {
+          "current": 195,
+          "available": 5805
+        }
+      },
+      "pg": {
+        "active": 1,
+        "waiting": 0,
+        "idleInTransaction": 0
+      },
+      "captureError": null
+    }
+  ]
+}

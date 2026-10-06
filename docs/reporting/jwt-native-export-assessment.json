@@ -1,0 +1,1083 @@
+{
+  "sha256": "28623f513b1371f313054b71f62f20c5bb77dd7a8c4a450da032d0dfba0764d6",
+  "total_export_rows": 350027,
+  "location_row_counts": {
+    "101": 5743,
+    "102": 4323,
+    "103": 4440,
+    "104": 5409,
+    "105": 4628,
+    "106": 3279,
+    "107": 3026,
+    "108": 3805,
+    "109": 2401,
+    "110": 5371,
+    "111": 2811,
+    "112": 5601,
+    "113": 4660,
+    "114": 4259,
+    "115": 4306,
+    "116": 4076,
+    "117": 4402,
+    "118": 13822,
+    "119": 5016,
+    "120": 2394,
+    "121": 2720,
+    "122": 2800,
+    "123": 4122,
+    "124": 5548,
+    "201": 3120,
+    "202": 2416,
+    "203": 3411,
+    "204": 3469,
+    "205": 4721,
+    "206": 4070,
+    "207": 3987,
+    "208": 2387,
+    "301": 2074,
+    "302": 1900,
+    "401": 7886,
+    "402": 1804,
+    "403": 2768,
+    "404": 4379,
+    "405": 951,
+    "406": 978,
+    "407": 5717,
+    "408": 8687,
+    "409": 7670,
+    "410": 4252,
+    "411": 7031,
+    "412": 4818,
+    "413": 6671,
+    "414": 1567,
+    "501": 2010,
+    "502": 2720,
+    "503": 1943,
+    "504": 1568,
+    "505": 1750,
+    "506": 4506,
+    "601": 5641,
+    "602": 4913,
+    "603": 4409,
+    "604": 3439,
+    "605": 4693,
+    "606": 2103,
+    "607": 3450,
+    "608": 2587,
+    "701": 4575,
+    "702": 6359,
+    "703": 5746,
+    "704": 6318,
+    "705": 6136,
+    "706": 4588,
+    "707": 6621,
+    "708": 3734,
+    "709": 4341,
+    "710": 2912,
+    "801": 3145,
+    "802": 2675,
+    "803": 2478,
+    "804": 4914,
+    "805": 2873,
+    "806": 3673,
+    "807": 2396,
+    "808": 3421,
+    "809": 3435,
+    "810": 3189,
+    "811": 2940,
+    "812": 5373,
+    "813": 3407,
+    "814": 2160,
+    "815": 728,
+    "816": 462
+  },
+  "jwt_type_counts": {
+    "Invoice": 51107,
+    "Credit Invoice": 223
+  },
+  "jwt_invalid_dates": 0,
+  "cells": [
+    {
+      "location": "701",
+      "month": "2026-08",
+      "type": "Invoice",
+      "package_rows": 2315,
+      "distinct_invoice_numbers": 581,
+      "distinct_work_order_numbers": 581,
+      "missing_invoice_id_rows": 0,
+      "raw_package_sums": {
+        "Labor Hours Billed": "697.66",
+        "Labor Total": "69476.5800",
+        "Labor Cost": "3223.1100"
+      },
+      "missing_fields": {},
+      "negative_fields": {
+        "Labor Hours Billed": 0,
+        "Labor Total": 74,
+        "Labor Cost": 2
+      },
+      "zero_fields": {
+        "Labor Hours Billed": 1198,
+        "Labor Total": 1598,
+        "Labor Cost": 2223
+      }
+    },
+    {
+      "location": "701",
+      "month": "2026-09",
+      "type": "Credit Invoice",
+      "package_rows": 9,
+      "distinct_invoice_numbers": 4,
+      "distinct_work_order_numbers": 4,
+      "missing_invoice_id_rows": 0,
+      "raw_package_sums": {
+        "Labor Hours Billed": "-3.6",
+        "Labor Total": "-539.9800",
+        "Labor Cost": "0.0000"
+      },
+      "missing_fields": {},
+      "negative_fields": {
+        "Labor Hours Billed": 3,
+        "Labor Total": 3,
+        "Labor Cost": 0
+      },
+      "zero_fields": {
+        "Labor Hours Billed": 6,
+        "Labor Total": 6,
+        "Labor Cost": 9
+      }
+    },
+    {
+      "location": "701",
+      "month": "2026-09",
+      "type": "Invoice",
+      "package_rows": 2251,
+      "distinct_invoice_numbers": 598,
+      "distinct_work_order_numbers": 598,
+      "missing_invoice_id_rows": 0,
+      "raw_package_sums": {
+        "Labor Hours Billed": "583.55",
+        "Labor Total": "53158.7500",
+        "Labor Cost": "956.3700"
+      },
+      "missing_fields": {},
+      "negative_fields": {
+        "Labor Hours Billed": 0,
+        "Labor Total": 99,
+        "Labor Cost": 3
+      },
+      "zero_fields": {
+        "Labor Hours Billed": 1351,
+        "Labor Total": 1576,
+        "Labor Cost": 2187
+      }
+    },
+    {
+      "location": "702",
+      "month": "2026-08",
+      "type": "Credit Invoice",
+      "package_rows": 22,
+      "distinct_invoice_numbers": 10,
+      "distinct_work_order_numbers": 10,
+      "missing_invoice_id_rows": 0,
+      "raw_package_sums": {
+        "Labor Hours Billed": "-3.80",
+        "Labor Total": "-529.9400",
+        "Labor Cost": "0.0000"
+      },
+      "missing_fields": {},
+      "negative_fields": {
+        "Labor Hours Billed": 8,
+        "Labor Total": 10,
+        "Labor Cost": 0
+      },
+      "zero_fields": {
+        "Labor Hours Billed": 14,
+        "Labor Total": 12,
+        "Labor Cost": 22
+      }
+    },
+    {
+      "location": "702",
+      "month": "2026-08",
+      "type": "Invoice",
+      "package_rows": 3432,
+      "distinct_invoice_numbers": 700,
+      "distinct_work_order_numbers": 700,
+      "missing_invoice_id_rows": 0,
+      "raw_package_sums": {
+        "Labor Hours Billed": "1164.40",
+        "Labor Total": "120967.4300",
+        "Labor Cost": "-460.9000"
+      },
+      "missing_fields": {},
+      "negative_fields": {
+        "Labor Hours Billed": 0,
+        "Labor Total": 103,
+        "Labor Cost": 2
+      },
+      "zero_fields": {
+        "Labor Hours Billed": 1688,
+        "Labor Total": 2226,
+        "Labor Cost": 3430
+      }
+    },
+    {
+      "location": "702",
+      "month": "2026-09",
+      "type": "Credit Invoice",
+      "package_rows": 10,
+      "distinct_invoice_numbers": 7,
+      "distinct_work_order_numbers": 7,
+      "missing_invoice_id_rows": 0,
+      "raw_package_sums": {
+        "Labor Hours Billed": "-2.25",
+        "Labor Total": "-304.9800",
+        "Labor Cost": "0.0000"
+      },
+      "missing_fields": {},
+      "negative_fields": {
+        "Labor Hours Billed": 4,
+        "Labor Total": 5,
+        "Labor Cost": 0
+      },
+      "zero_fields": {
+        "Labor Hours Billed": 6,
+        "Labor Total": 5,
+        "Labor Cost": 10
+      }
+    },
+    {
+      "location": "702",
+      "month": "2026-09",
+      "type": "Invoice",
+      "package_rows": 2895,
+      "distinct_invoice_numbers": 650,
+      "distinct_work_order_numbers": 650,
+      "missing_invoice_id_rows": 0,
+      "raw_package_sums": {
+        "Labor Hours Billed": "1006.80",
+        "Labor Total": "96839.5700",
+        "Labor Cost": "0.0000"
+      },
+      "missing_fields": {},
+      "negative_fields": {
+        "Labor Hours Billed": 0,
+        "Labor Total": 173,
+        "Labor Cost": 0
+      },
+      "zero_fields": {
+        "Labor Hours Billed": 1557,
+        "Labor Total": 1807,
+        "Labor Cost": 2895
+      }
+    },
+    {
+      "location": "703",
+      "month": "2026-08",
+      "type": "Credit Invoice",
+      "package_rows": 10,
+      "distinct_invoice_numbers": 3,
+      "distinct_work_order_numbers": 3,
+      "missing_invoice_id_rows": 0,
+      "raw_package_sums": {
+        "Labor Hours Billed": "-1.9",
+        "Labor Total": "-54.7000",
+        "Labor Cost": "0.0000"
+      },
+      "missing_fields": {},
+      "negative_fields": {
+        "Labor Hours Billed": 6,
+        "Labor Total": 2,
+        "Labor Cost": 0
+      },
+      "zero_fields": {
+        "Labor Hours Billed": 4,
+        "Labor Total": 8,
+        "Labor Cost": 10
+      }
+    },
+    {
+      "location": "703",
+      "month": "2026-08",
+      "type": "Invoice",
+      "package_rows": 3105,
+      "distinct_invoice_numbers": 720,
+      "distinct_work_order_numbers": 720,
+      "missing_invoice_id_rows": 0,
+      "raw_package_sums": {
+        "Labor Hours Billed": "854.13",
+        "Labor Total": "85898.1600",
+        "Labor Cost": "-207.0700"
+      },
+      "missing_fields": {},
+      "negative_fields": {
+        "Labor Hours Billed": 0,
+        "Labor Total": 31,
+        "Labor Cost": 1
+      },
+      "zero_fields": {
+        "Labor Hours Billed": 1538,
+        "Labor Total": 2123,
+        "Labor Cost": 3104
+      }
+    },
+    {
+      "location": "703",
+      "month": "2026-09",
+      "type": "Credit Invoice",
+      "package_rows": 5,
+      "distinct_invoice_numbers": 3,
+      "distinct_work_order_numbers": 3,
+      "missing_invoice_id_rows": 0,
+      "raw_package_sums": {
+        "Labor Hours Billed": "-4.52",
+        "Labor Total": "-229.9900",
+        "Labor Cost": "0.0000"
+      },
+      "missing_fields": {},
+      "negative_fields": {
+        "Labor Hours Billed": 3,
+        "Labor Total": 3,
+        "Labor Cost": 0
+      },
+      "zero_fields": {
+        "Labor Hours Billed": 2,
+        "Labor Total": 2,
+        "Labor Cost": 5
+      }
+    },
+    {
+      "location": "703",
+      "month": "2026-09",
+      "type": "Invoice",
+      "package_rows": 2626,
+      "distinct_invoice_numbers": 683,
+      "distinct_work_order_numbers": 683,
+      "missing_invoice_id_rows": 0,
+      "raw_package_sums": {
+        "Labor Hours Billed": "655.21000000000000009",
+        "Labor Total": "65259.4100",
+        "Labor Cost": "0.0000"
+      },
+      "missing_fields": {},
+      "negative_fields": {
+        "Labor Hours Billed": 0,
+        "Labor Total": 47,
+        "Labor Cost": 0
+      },
+      "zero_fields": {
+        "Labor Hours Billed": 1464,
+        "Labor Total": 1707,
+        "Labor Cost": 2626
+      }
+    },
+    {
+      "location": "704",
+      "month": "2026-08",
+      "type": "Credit Invoice",
+      "package_rows": 31,
+      "distinct_invoice_numbers": 18,
+      "distinct_work_order_numbers": 18,
+      "missing_invoice_id_rows": 0,
+      "raw_package_sums": {
+        "Labor Hours Billed": "-4.86",
+        "Labor Total": "-603.3200",
+        "Labor Cost": "0.0000"
+      },
+      "missing_fields": {},
+      "negative_fields": {
+        "Labor Hours Billed": 9,
+        "Labor Total": 8,
+        "Labor Cost": 0
+      },
+      "zero_fields": {
+        "Labor Hours Billed": 22,
+        "Labor Total": 23,
+        "Labor Cost": 31
+      }
+    },
+    {
+      "location": "704",
+      "month": "2026-08",
+      "type": "Invoice",
+      "package_rows": 3578,
+      "distinct_invoice_numbers": 820,
+      "distinct_work_order_numbers": 820,
+      "missing_invoice_id_rows": 0,
+      "raw_package_sums": {
+        "Labor Hours Billed": "1008.50",
+        "Labor Total": "104571.2200",
+        "Labor Cost": "295.0500"
+      },
+      "missing_fields": {},
+      "negative_fields": {
+        "Labor Hours Billed": 0,
+        "Labor Total": 35,
+        "Labor Cost": 0
+      },
+      "zero_fields": {
+        "Labor Hours Billed": 1826,
+        "Labor Total": 2384,
+        "Labor Cost": 3571
+      }
+    },
+    {
+      "location": "704",
+      "month": "2026-09",
+      "type": "Credit Invoice",
+      "package_rows": 16,
+      "distinct_invoice_numbers": 12,
+      "distinct_work_order_numbers": 12,
+      "missing_invoice_id_rows": 0,
+      "raw_package_sums": {
+        "Labor Hours Billed": "-3.3",
+        "Labor Total": "-409.4600",
+        "Labor Cost": "0.0000"
+      },
+      "missing_fields": {},
+      "negative_fields": {
+        "Labor Hours Billed": 6,
+        "Labor Total": 6,
+        "Labor Cost": 0
+      },
+      "zero_fields": {
+        "Labor Hours Billed": 10,
+        "Labor Total": 10,
+        "Labor Cost": 16
+      }
+    },
+    {
+      "location": "704",
+      "month": "2026-09",
+      "type": "Invoice",
+      "package_rows": 2693,
+      "distinct_invoice_numbers": 694,
+      "distinct_work_order_numbers": 694,
+      "missing_invoice_id_rows": 0,
+      "raw_package_sums": {
+        "Labor Hours Billed": "735.40",
+        "Labor Total": "77824.0400",
+        "Labor Cost": "-639.0000"
+      },
+      "missing_fields": {},
+      "negative_fields": {
+        "Labor Hours Billed": 0,
+        "Labor Total": 68,
+        "Labor Cost": 2
+      },
+      "zero_fields": {
+        "Labor Hours Billed": 1577,
+        "Labor Total": 1758,
+        "Labor Cost": 2691
+      }
+    },
+    {
+      "location": "705",
+      "month": "2026-08",
+      "type": "Credit Invoice",
+      "package_rows": 9,
+      "distinct_invoice_numbers": 6,
+      "distinct_work_order_numbers": 6,
+      "missing_invoice_id_rows": 0,
+      "raw_package_sums": {
+        "Labor Hours Billed": "-2.31",
+        "Labor Total": "-587.0000",
+        "Labor Cost": "0.0000"
+      },
+      "missing_fields": {},
+      "negative_fields": {
+        "Labor Hours Billed": 4,
+        "Labor Total": 4,
+        "Labor Cost": 0
+      },
+      "zero_fields": {
+        "Labor Hours Billed": 5,
+        "Labor Total": 5,
+        "Labor Cost": 9
+      }
+    },
+    {
+      "location": "705",
+      "month": "2026-08",
+      "type": "Invoice",
+      "package_rows": 3018,
+      "distinct_invoice_numbers": 880,
+      "distinct_work_order_numbers": 880,
+      "missing_invoice_id_rows": 0,
+      "raw_package_sums": {
+        "Labor Hours Billed": "1076.3299999999999998",
+        "Labor Total": "111660.0900",
+        "Labor Cost": "-703.2900"
+      },
+      "missing_fields": {},
+      "negative_fields": {
+        "Labor Hours Billed": 0,
+        "Labor Total": 6,
+        "Labor Cost": 5
+      },
+      "zero_fields": {
+        "Labor Hours Billed": 1232,
+        "Labor Total": 1809,
+        "Labor Cost": 3013
+      }
+    },
+    {
+      "location": "705",
+      "month": "2026-09",
+      "type": "Credit Invoice",
+      "package_rows": 23,
+      "distinct_invoice_numbers": 7,
+      "distinct_work_order_numbers": 7,
+      "missing_invoice_id_rows": 0,
+      "raw_package_sums": {
+        "Labor Hours Billed": "-6.2",
+        "Labor Total": "-824.9300",
+        "Labor Cost": "0.0000"
+      },
+      "missing_fields": {},
+      "negative_fields": {
+        "Labor Hours Billed": 10,
+        "Labor Total": 10,
+        "Labor Cost": 0
+      },
+      "zero_fields": {
+        "Labor Hours Billed": 13,
+        "Labor Total": 12,
+        "Labor Cost": 23
+      }
+    },
+    {
+      "location": "705",
+      "month": "2026-09",
+      "type": "Invoice",
+      "package_rows": 3086,
+      "distinct_invoice_numbers": 822,
+      "distinct_work_order_numbers": 822,
+      "missing_invoice_id_rows": 0,
+      "raw_package_sums": {
+        "Labor Hours Billed": "893.50000000000000020",
+        "Labor Total": "87727.8100",
+        "Labor Cost": "-239.9800"
+      },
+      "missing_fields": {},
+      "negative_fields": {
+        "Labor Hours Billed": 0,
+        "Labor Total": 73,
+        "Labor Cost": 2
+      },
+      "zero_fields": {
+        "Labor Hours Billed": 1763,
+        "Labor Total": 2004,
+        "Labor Cost": 3084
+      }
+    },
+    {
+      "location": "706",
+      "month": "2026-08",
+      "type": "Credit Invoice",
+      "package_rows": 7,
+      "distinct_invoice_numbers": 4,
+      "distinct_work_order_numbers": 4,
+      "missing_invoice_id_rows": 0,
+      "raw_package_sums": {
+        "Labor Hours Billed": "-2.6",
+        "Labor Total": "-338.4000",
+        "Labor Cost": "0.0000"
+      },
+      "missing_fields": {},
+      "negative_fields": {
+        "Labor Hours Billed": 4,
+        "Labor Total": 4,
+        "Labor Cost": 0
+      },
+      "zero_fields": {
+        "Labor Hours Billed": 3,
+        "Labor Total": 3,
+        "Labor Cost": 7
+      }
+    },
+    {
+      "location": "706",
+      "month": "2026-08",
+      "type": "Invoice",
+      "package_rows": 2338,
+      "distinct_invoice_numbers": 564,
+      "distinct_work_order_numbers": 564,
+      "missing_invoice_id_rows": 0,
+      "raw_package_sums": {
+        "Labor Hours Billed": "611.56",
+        "Labor Total": "65557.5100",
+        "Labor Cost": "-375.0000"
+      },
+      "missing_fields": {},
+      "negative_fields": {
+        "Labor Hours Billed": 0,
+        "Labor Total": 45,
+        "Labor Cost": 1
+      },
+      "zero_fields": {
+        "Labor Hours Billed": 1209,
+        "Labor Total": 1473,
+        "Labor Cost": 2337
+      }
+    },
+    {
+      "location": "706",
+      "month": "2026-09",
+      "type": "Credit Invoice",
+      "package_rows": 11,
+      "distinct_invoice_numbers": 6,
+      "distinct_work_order_numbers": 6,
+      "missing_invoice_id_rows": 0,
+      "raw_package_sums": {
+        "Labor Hours Billed": "-8.5",
+        "Labor Total": "-450.0000",
+        "Labor Cost": "0.0000"
+      },
+      "missing_fields": {},
+      "negative_fields": {
+        "Labor Hours Billed": 4,
+        "Labor Total": 7,
+        "Labor Cost": 0
+      },
+      "zero_fields": {
+        "Labor Hours Billed": 7,
+        "Labor Total": 4,
+        "Labor Cost": 11
+      }
+    },
+    {
+      "location": "706",
+      "month": "2026-09",
+      "type": "Invoice",
+      "package_rows": 2232,
+      "distinct_invoice_numbers": 572,
+      "distinct_work_order_numbers": 572,
+      "missing_invoice_id_rows": 0,
+      "raw_package_sums": {
+        "Labor Hours Billed": "576.16",
+        "Labor Total": "59519.0200",
+        "Labor Cost": "0.0000"
+      },
+      "missing_fields": {},
+      "negative_fields": {
+        "Labor Hours Billed": 0,
+        "Labor Total": 142,
+        "Labor Cost": 0
+      },
+      "zero_fields": {
+        "Labor Hours Billed": 1334,
+        "Labor Total": 1359,
+        "Labor Cost": 2232
+      }
+    },
+    {
+      "location": "707",
+      "month": "2026-08",
+      "type": "Credit Invoice",
+      "package_rows": 12,
+      "distinct_invoice_numbers": 7,
+      "distinct_work_order_numbers": 7,
+      "missing_invoice_id_rows": 0,
+      "raw_package_sums": {
+        "Labor Hours Billed": "-4.5",
+        "Labor Total": "-534.7000",
+        "Labor Cost": "0.0000"
+      },
+      "missing_fields": {},
+      "negative_fields": {
+        "Labor Hours Billed": 6,
+        "Labor Total": 4,
+        "Labor Cost": 0
+      },
+      "zero_fields": {
+        "Labor Hours Billed": 6,
+        "Labor Total": 8,
+        "Labor Cost": 12
+      }
+    },
+    {
+      "location": "707",
+      "month": "2026-08",
+      "type": "Invoice",
+      "package_rows": 3151,
+      "distinct_invoice_numbers": 997,
+      "distinct_work_order_numbers": 997,
+      "missing_invoice_id_rows": 0,
+      "raw_package_sums": {
+        "Labor Hours Billed": "1106.39",
+        "Labor Total": "135701.5100",
+        "Labor Cost": "0.0000"
+      },
+      "missing_fields": {},
+      "negative_fields": {
+        "Labor Hours Billed": 0,
+        "Labor Total": 20,
+        "Labor Cost": 0
+      },
+      "zero_fields": {
+        "Labor Hours Billed": 1599,
+        "Labor Total": 1758,
+        "Labor Cost": 3151
+      }
+    },
+    {
+      "location": "707",
+      "month": "2026-09",
+      "type": "Credit Invoice",
+      "package_rows": 23,
+      "distinct_invoice_numbers": 11,
+      "distinct_work_order_numbers": 11,
+      "missing_invoice_id_rows": 0,
+      "raw_package_sums": {
+        "Labor Hours Billed": "-5.42",
+        "Labor Total": "-462.3800",
+        "Labor Cost": "0.0000"
+      },
+      "missing_fields": {},
+      "negative_fields": {
+        "Labor Hours Billed": 8,
+        "Labor Total": 7,
+        "Labor Cost": 0
+      },
+      "zero_fields": {
+        "Labor Hours Billed": 15,
+        "Labor Total": 16,
+        "Labor Cost": 23
+      }
+    },
+    {
+      "location": "707",
+      "month": "2026-09",
+      "type": "Invoice",
+      "package_rows": 3435,
+      "distinct_invoice_numbers": 1033,
+      "distinct_work_order_numbers": 1033,
+      "missing_invoice_id_rows": 0,
+      "raw_package_sums": {
+        "Labor Hours Billed": "1051.5500000000000005",
+        "Labor Total": "116771.3700",
+        "Labor Cost": "0.0000"
+      },
+      "missing_fields": {},
+      "negative_fields": {
+        "Labor Hours Billed": 0,
+        "Labor Total": 95,
+        "Labor Cost": 0
+      },
+      "zero_fields": {
+        "Labor Hours Billed": 1964,
+        "Labor Total": 2019,
+        "Labor Cost": 3435
+      }
+    },
+    {
+      "location": "708",
+      "month": "2026-08",
+      "type": "Credit Invoice",
+      "package_rows": 4,
+      "distinct_invoice_numbers": 1,
+      "distinct_work_order_numbers": 1,
+      "missing_invoice_id_rows": 0,
+      "raw_package_sums": {
+        "Labor Hours Billed": "-0.7",
+        "Labor Total": "-34.7000",
+        "Labor Cost": "0.0000"
+      },
+      "missing_fields": {},
+      "negative_fields": {
+        "Labor Hours Billed": 2,
+        "Labor Total": 1,
+        "Labor Cost": 0
+      },
+      "zero_fields": {
+        "Labor Hours Billed": 2,
+        "Labor Total": 3,
+        "Labor Cost": 4
+      }
+    },
+    {
+      "location": "708",
+      "month": "2026-08",
+      "type": "Invoice",
+      "package_rows": 1873,
+      "distinct_invoice_numbers": 444,
+      "distinct_work_order_numbers": 444,
+      "missing_invoice_id_rows": 0,
+      "raw_package_sums": {
+        "Labor Hours Billed": "563.45",
+        "Labor Total": "64119.2900",
+        "Labor Cost": "0.0000"
+      },
+      "missing_fields": {},
+      "negative_fields": {
+        "Labor Hours Billed": 0,
+        "Labor Total": 54,
+        "Labor Cost": 0
+      },
+      "zero_fields": {
+        "Labor Hours Billed": 990,
+        "Labor Total": 1121,
+        "Labor Cost": 1873
+      }
+    },
+    {
+      "location": "708",
+      "month": "2026-09",
+      "type": "Credit Invoice",
+      "package_rows": 9,
+      "distinct_invoice_numbers": 5,
+      "distinct_work_order_numbers": 5,
+      "missing_invoice_id_rows": 0,
+      "raw_package_sums": {
+        "Labor Hours Billed": "-1.4",
+        "Labor Total": "-74.7000",
+        "Labor Cost": "0.0000"
+      },
+      "missing_fields": {},
+      "negative_fields": {
+        "Labor Hours Billed": 4,
+        "Labor Total": 3,
+        "Labor Cost": 0
+      },
+      "zero_fields": {
+        "Labor Hours Billed": 5,
+        "Labor Total": 6,
+        "Labor Cost": 9
+      }
+    },
+    {
+      "location": "708",
+      "month": "2026-09",
+      "type": "Invoice",
+      "package_rows": 1848,
+      "distinct_invoice_numbers": 450,
+      "distinct_work_order_numbers": 450,
+      "missing_invoice_id_rows": 0,
+      "raw_package_sums": {
+        "Labor Hours Billed": "498.15",
+        "Labor Total": "55768.9600",
+        "Labor Cost": "0.0000"
+      },
+      "missing_fields": {},
+      "negative_fields": {
+        "Labor Hours Billed": 0,
+        "Labor Total": 79,
+        "Labor Cost": 0
+      },
+      "zero_fields": {
+        "Labor Hours Billed": 1084,
+        "Labor Total": 1060,
+        "Labor Cost": 1848
+      }
+    },
+    {
+      "location": "709",
+      "month": "2026-08",
+      "type": "Credit Invoice",
+      "package_rows": 1,
+      "distinct_invoice_numbers": 1,
+      "distinct_work_order_numbers": 1,
+      "missing_invoice_id_rows": 0,
+      "raw_package_sums": {
+        "Labor Hours Billed": "-0.25",
+        "Labor Total": "-30.0000",
+        "Labor Cost": "0.0000"
+      },
+      "missing_fields": {},
+      "negative_fields": {
+        "Labor Hours Billed": 1,
+        "Labor Total": 1,
+        "Labor Cost": 0
+      },
+      "zero_fields": {
+        "Labor Hours Billed": 0,
+        "Labor Total": 0,
+        "Labor Cost": 1
+      }
+    },
+    {
+      "location": "709",
+      "month": "2026-08",
+      "type": "Invoice",
+      "package_rows": 2230,
+      "distinct_invoice_numbers": 542,
+      "distinct_work_order_numbers": 542,
+      "missing_invoice_id_rows": 0,
+      "raw_package_sums": {
+        "Labor Hours Billed": "667.09",
+        "Labor Total": "71192.9600",
+        "Labor Cost": "-1900.0000"
+      },
+      "missing_fields": {},
+      "negative_fields": {
+        "Labor Hours Billed": 0,
+        "Labor Total": 54,
+        "Labor Cost": 6
+      },
+      "zero_fields": {
+        "Labor Hours Billed": 1067,
+        "Labor Total": 1347,
+        "Labor Cost": 2224
+      }
+    },
+    {
+      "location": "709",
+      "month": "2026-09",
+      "type": "Credit Invoice",
+      "package_rows": 10,
+      "distinct_invoice_numbers": 3,
+      "distinct_work_order_numbers": 3,
+      "missing_invoice_id_rows": 0,
+      "raw_package_sums": {
+        "Labor Hours Billed": "-7.1",
+        "Labor Total": "-929.7000",
+        "Labor Cost": "0.0000"
+      },
+      "missing_fields": {},
+      "negative_fields": {
+        "Labor Hours Billed": 4,
+        "Labor Total": 3,
+        "Labor Cost": 0
+      },
+      "zero_fields": {
+        "Labor Hours Billed": 6,
+        "Labor Total": 6,
+        "Labor Cost": 10
+      }
+    },
+    {
+      "location": "709",
+      "month": "2026-09",
+      "type": "Invoice",
+      "package_rows": 2100,
+      "distinct_invoice_numbers": 524,
+      "distinct_work_order_numbers": 524,
+      "missing_invoice_id_rows": 0,
+      "raw_package_sums": {
+        "Labor Hours Billed": "594.11",
+        "Labor Total": "61650.6100",
+        "Labor Cost": "-880.0000"
+      },
+      "missing_fields": {},
+      "negative_fields": {
+        "Labor Hours Billed": 0,
+        "Labor Total": 153,
+        "Labor Cost": 6
+      },
+      "zero_fields": {
+        "Labor Hours Billed": 1147,
+        "Labor Total": 1189,
+        "Labor Cost": 2094
+      }
+    },
+    {
+      "location": "710",
+      "month": "2026-08",
+      "type": "Credit Invoice",
+      "package_rows": 7,
+      "distinct_invoice_numbers": 4,
+      "distinct_work_order_numbers": 4,
+      "missing_invoice_id_rows": 0,
+      "raw_package_sums": {
+        "Labor Hours Billed": "-1",
+        "Labor Total": "-140.0000",
+        "Labor Cost": "0.0000"
+      },
+      "missing_fields": {},
+      "negative_fields": {
+        "Labor Hours Billed": 1,
+        "Labor Total": 1,
+        "Labor Cost": 0
+      },
+      "zero_fields": {
+        "Labor Hours Billed": 6,
+        "Labor Total": 6,
+        "Labor Cost": 7
+      }
+    },
+    {
+      "location": "710",
+      "month": "2026-08",
+      "type": "Invoice",
+      "package_rows": 1438,
+      "distinct_invoice_numbers": 355,
+      "distinct_work_order_numbers": 355,
+      "missing_invoice_id_rows": 0,
+      "raw_package_sums": {
+        "Labor Hours Billed": "422.17",
+        "Labor Total": "41985.3000",
+        "Labor Cost": "0.0000"
+      },
+      "missing_fields": {},
+      "negative_fields": {
+        "Labor Hours Billed": 0,
+        "Labor Total": 42,
+        "Labor Cost": 0
+      },
+      "zero_fields": {
+        "Labor Hours Billed": 700,
+        "Labor Total": 927,
+        "Labor Cost": 1438
+      }
+    },
+    {
+      "location": "710",
+      "month": "2026-09",
+      "type": "Credit Invoice",
+      "package_rows": 4,
+      "distinct_invoice_numbers": 3,
+      "distinct_work_order_numbers": 3,
+      "missing_invoice_id_rows": 0,
+      "raw_package_sums": {
+        "Labor Hours Billed": "-0.2",
+        "Labor Total": "-20.0000",
+        "Labor Cost": "0.0000"
+      },
+      "missing_fields": {},
+      "negative_fields": {
+        "Labor Hours Billed": 1,
+        "Labor Total": 1,
+        "Labor Cost": 0
+      },
+      "zero_fields": {
+        "Labor Hours Billed": 3,
+        "Labor Total": 3,
+        "Labor Cost": 4
+      }
+    },
+    {
+      "location": "710",
+      "month": "2026-09",
+      "type": "Invoice",
+      "package_rows": 1463,
+      "distinct_invoice_numbers": 366,
+      "distinct_work_order_numbers": 366,
+      "missing_invoice_id_rows": 0,
+      "raw_package_sums": {
+        "Labor Hours Billed": "363.81",
+        "Labor Total": "35033.6600",
+        "Labor Cost": "0.0000"
+      },
+      "missing_fields": {},
+      "negative_fields": {
+        "Labor Hours Billed": 0,
+        "Labor Total": 102,
+        "Labor Cost": 0
+      },
+      "zero_fields": {
+        "Labor Hours Billed": 865,
+        "Labor Total": 886,
+        "Labor Cost": 1463
+      }
+    }
+  ],
+  "limitations": [
+    "Raw package sums, not certified net sales or deduplicated technician allocations.",
+    "Invoice Total is repeated per package and was not summed.",
+    "No explicit discount allocation, refund allocation or declined disposition columns.",
+    "Scope restricted to canonical JWT locations 701-710; other locations excluded.",
+    "Native invoice dates have no timezone; UTC-close-date parity remains unverified."
+  ]
+}

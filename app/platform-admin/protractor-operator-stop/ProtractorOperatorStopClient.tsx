@@ -431,6 +431,9 @@ export default function ProtractorOperatorStopClient() {
         <h1 className="text-2xl font-bold text-gray-900">Protractor Live Controls</h1>
             <a href="/platform-admin/jwt-invoice-preview" className="text-sm text-blue-700 underline">JWT invoice recovery preview</a>
         <p className="mt-2 text-sm text-gray-600">Loading operator-stop status…</p>
+        <a href="/platform-admin/jwt-invoice-preview" className="mt-3 inline-block text-sm font-medium text-blue-700 underline underline-offset-4 hover:text-blue-800">
+          Read-only JWT invoice recovery preview
+        </a>
         {error && <ErrorNotice message={error} />}
       </div>
     );
@@ -447,6 +450,9 @@ export default function ProtractorOperatorStopClient() {
               Production-only control for continuous relay-only operation, a 30-minute trial,
               and the emergency stop. Continuous mode stays active until stopped.
             </p>
+            <a href="/platform-admin/jwt-invoice-preview" className="mt-3 inline-block text-sm font-medium text-blue-700 underline underline-offset-4 hover:text-blue-800">
+              Read-only JWT invoice recovery preview
+            </a>
           </div>
           <button
             type="button"

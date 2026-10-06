@@ -10,3 +10,16 @@ Rule: mirror upserts must never hand raw extract values to drizzle's sql templat
 
 **Why:** confirmed 2026-08-02 — every legacy-mirror row failed against prod Supabase while direct SQL succeeded; purely script-side binding.
 **How to apply:** shared helpers in `scripts/backfill-mirror-utils.ts` (mirrorParam/buildMirrorUpsert/safeEnum, tested by tests/backfill-mirror-utils.smoke.ts); route any new mirror through them.
+
+For raw postgres-js queries, bind pre-serialized JSON as TEXT and then cast to
+JSONB (`$1::text::jsonb`), rather than binding the string directly as JSONB.
+
+**Why:** Raw postgres-js JSONB serialization can double-encode a string, whereas
+initializing Drizzle on that client changes JSON serializers to pass through.
+Identical-looking parameters can therefore behave differently between scripts.
+This affected new recovery-reference identity arrays and was corrected and
+verified without changing personal fields.
+
+**How to apply:** Verify `jsonb_typeof` after structured writes and use explicit
+text binding consistently for JSON strings. Do not assume a successful UPDATE
+means the JSON has the intended array/object shape.

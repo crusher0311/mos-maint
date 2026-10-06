@@ -1,0 +1,12 @@
+{
+  "candidates": 256,
+  "classifications": {
+    "nonterminal": 29,
+    "absent_by_both_numbers": 226,
+    "invoice_number_only_match": 1
+  },
+  "native_candidate_hours": "259.71",
+  "native_candidate_labor_total": "24998.6300",
+  "provider_verified": false,
+  "writes_authorized": false
+}

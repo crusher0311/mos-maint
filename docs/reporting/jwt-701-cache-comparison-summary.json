@@ -1,0 +1,27 @@
+{
+  "scope": {
+    "shopId": 227,
+    "nativeLocation": "701",
+    "month": "2026-09"
+  },
+  "checkedNativeIdentities": 256,
+  "returnedCacheRowsIncludingNumberCollisions": 53,
+  "matches": [
+    {
+      "normalizedClassification": "absent_by_both_numbers",
+      "matchedByWorkOrder": false,
+      "count": 226
+    },
+    {
+      "normalizedClassification": "invoice_number_only_match",
+      "matchedByWorkOrder": false,
+      "count": 1
+    },
+    {
+      "normalizedClassification": "nonterminal",
+      "matchedByWorkOrder": true,
+      "count": 29
+    }
+  ],
+  "caveat": "Number-field lookup only; no provider GUID lookup or upstream requests. Raw snapshot types were WorkOrder/Appointment, not final Invoice; all exact matches carried sentinel invoice dates."
+}

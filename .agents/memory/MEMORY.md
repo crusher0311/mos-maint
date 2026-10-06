@@ -147,3 +147,5 @@
 - [Protractor onboarding safety](protractor-onboarding-safety.md) — foreground validation does not authorize history imports; preserve reconnect state and recover cross-store writer guards conservatively.
 - [Chrome Web Store submission checks](cws-submission-checks.md) — draft uploadState can become NOT_FOUND after a successful upload; distinguish upload, submission, and public availability.
 - [Shop-Ware shared tenant evidence](shopware-shared-tenant-evidence.md) — duplicate slugs may be sibling locations; sandbox credentials cannot establish production ownership.
+- [Labor pilot evidence](labor-pilot-evidence.md) — stored JWT history is not complete labor coverage; native discount/cost evidence is required; ADP remains the final phase.
+- [Merge marker verification](merge-marker-verifier.md) — decorative equals-sign comment dividers can falsely block conflict completion.

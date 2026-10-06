@@ -31,3 +31,26 @@ listings can be truncated despite a requested output budget.
 
 **How to apply:** Compare the full local manifest with GitHub's recursive tree,
 upload only changed blobs, and retain the exact-tree SHA check before pushing.
+
+GitHub connector permissions and the repository's existing Git publishing
+credentials can differ. A healthy connector may read the repository but reject
+Git Data API writes with `Resource not accessible by integration`, while the
+already-configured Git push path remains authorized.
+
+**Why:** A narrow production release was blocked at API tree creation but
+succeeded through a normal, non-force Git push without permission changes.
+
+**How to apply:** Do not assume that reconnecting OAuth will fix an installation
+permission restriction. Check the existing authorized Git publishing path
+without reading credentials or changing helpers. Preserve concurrent upstream
+changes and never force-push to work around a rejected update.
+
+Pin a release to the fetched remote branch's commit, not a later read of
+`FETCH_HEAD`, and verify the resulting tree changes exactly the intended paths.
+
+**Why:** This workspace has concurrent task-remote fetches; `FETCH_HEAD` is
+shared transient state and can cease to refer to the production branch.
+
+**How to apply:** Resolve `origin/main` to an immutable SHA, preserve its other
+files, check the release diff against an explicit allowlist, and use a normal
+non-force push so concurrent production changes reject rather than disappear.

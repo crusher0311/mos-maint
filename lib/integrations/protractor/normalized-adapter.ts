@@ -39,6 +39,8 @@ import {
   cleanString,
 } from '@/lib/integrations/core/normalized-adapter';
 import { ObjectId } from 'mongodb';
+import { protractorLaborLineEvidence } from "@/lib/labor-reporting-contract";
+import { protractorInvoiceLaborEvidence } from "./labor-evidence";
 import {
   extractProtractorServicePackages,
   getProtractorPackageLines,
@@ -71,7 +73,7 @@ export function sumLaborLineHours(sp: any): number | undefined {
     const type = String(line?.Type || line?.LineType || '').toLowerCase();
     if (!type.includes('labor')) continue;
     const hours = parseNumber(
-      line?.EstimatedHours ?? line?.Hours ?? line?.LaborHours ?? line?.Quantity,
+      line?.BilledHours ?? line?.Hours ?? line?.LaborHours ?? line?.Quantity ?? line?.EstimatedHours,
     );
     if (hours && hours > 0) total += hours;
   }
@@ -79,9 +81,9 @@ export function sumLaborLineHours(sp: any): number | undefined {
   return Math.round(total * 100) / 100;
 }
 
-// =============================================================================
+// -----------------------------------------------------------------------------
 // PROTRACTOR ADAPTER
-// =============================================================================
+// -----------------------------------------------------------------------------
 
 export class ProtractorAdapter implements INormalizedAdapter {
   sourceSystem: SourceSystem = 'protractor';
@@ -265,7 +267,7 @@ export class ProtractorAdapter implements INormalizedAdapter {
       isInternal: Boolean(inv.IsInternal),
       isComeback: Boolean(inv.IsComeback),
       tags: [],
-      customFields: {},
+      customFields: { laborReporting: isTerminal ? protractorInvoiceLaborEvidence(inv) : null },
     };
   }
   
@@ -329,7 +331,7 @@ export class ProtractorAdapter implements INormalizedAdapter {
        total: pricing.total,
       laborHoursEstimated: parseNumber(sp.EstimatedHours),
       laborHoursActual: parseNumber(sp.ActualHours),
-      laborHoursBilled: parseNumber(sp.BilledHours || sp.Hours) ?? laborLineHours,
+      laborHoursBilled: parseNumber(sp.BilledHours ?? sp.Hours) ?? laborLineHours,
       isWarranty: Boolean(sp.IsWarranty),
       isSublet: Boolean(sp.IsSublet),
       subletVendor: cleanString(sp.SubletVendor),
@@ -364,7 +366,7 @@ export class ProtractorAdapter implements INormalizedAdapter {
        unitPrice: normalized.unitPrice,
        extendedPrice: normalized.extendedPrice,
       discountPercent: parseNumber(li.DiscountPercent),
-      discountAmount: parseNumber(li.DiscountAmount),
+      discountAmount: parseNumber(li.DiscountAmount ?? li.Discount),
       taxable: li.Taxable !== false,
       taxRate: parseNumber(li.TaxRate),
       taxAmount: parseNumber(li.TaxAmount),
@@ -380,7 +382,7 @@ export class ProtractorAdapter implements INormalizedAdapter {
       warrantyEligible: Boolean(li.WarrantyEligible),
       serialNumber: cleanString(li.SerialNumber),
       notes: cleanString(li.Notes),
-      customFields: {},
+      customFields: lineType === 'labor' ? { laborReporting: protractorLaborLineEvidence(li) } : {},
     };
   }
   

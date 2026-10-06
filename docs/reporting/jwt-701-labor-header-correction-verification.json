@@ -1,0 +1,15 @@
+{
+  "verifiedAt": "2026-10-05T21:38:31.097Z",
+  "readOnly": true,
+  "appliedCount": 216,
+  "correctionCents": 2816012,
+  "includedInvoices": 580,
+  "laborHeaderCents": 5230684,
+  "includedNativeLaborCents": 5230684,
+  "mismatches": 0,
+  "heldInvoices": 18,
+  "heldNativeLaborCents": 85191,
+  "creditsNotResolved": 4,
+  "creditsNativeLaborCents": -53998,
+  "limitations": "Header labor is reconciled for included ordinary invoices only; this does not certify net discounts, hours, credits or the complete pilot."
+}

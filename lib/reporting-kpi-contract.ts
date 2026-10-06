@@ -14,11 +14,15 @@ export interface MetricDefinition {
   definition: string;
   denominator: string | null;
   timestampBasis: string;
-  moneyUnit: "USD" | "count" | "percent";
+  moneyUnit: "USD" | "count" | "percent" | "hours";
   availability: string;
 }
 
 export const REPORTING_KPI_CATALOG: readonly MetricDefinition[] = [
+  { key: "laborClosedROCount", label: "Labor population: closed ROs", definition: "Labor v1: distinct non-deleted terminal closed/invoiced/paid ROs. Separate from legacy Repair orders.", denominator: null, timestampBasis: "UTC closed_date, completed_date fallback", moneyUnit: "count", availability: "A zero count means no stored ROs, not verified complete history." },
+  { key: "soldLaborHours", label: "Sold labor hours (supported)", definition: "Supported subtotal of billed labor hours on sold jobs; includes covered-RO count. Unknown hours are not zero.", denominator: null, timestampBasis: "Parent terminal RO close date, UTC", moneyUnit: "hours", availability: "Protractor evidence only; other providers unavailable. Missing hours make that RO unknown." },
+  { key: "presentedLaborHours", label: "Presented labor hours (supported)", definition: "Sold plus explicitly declined/deferred hours, package-deduplicated, excluding drafts. Includes covered-RO count.", denominator: null, timestampBasis: "Parent terminal RO close date, UTC", moneyUnit: "hours", availability: "Requires verified complete dispositions and hours. Historical decline ingestion may be incomplete." },
+  { key: "netLaborSales", label: "Net labor sales (supported)", definition: "Labor-only sales less verified labor discounts exactly once. Signed credits use original close date. Includes covered-RO count.", denominator: null, timestampBasis: "Parent terminal RO close date, UTC", moneyUnit: "USD", availability: "Missing/unallocated discounts or refunds are unavailable, not zero. Excludes parts, sublet, supplies and tax. Not native-report reconciled." },
   { key: "repairOrderCount", label: "Repair orders", definition: "Distinct non-deleted work orders closed in the selected range.", denominator: null, timestampBasis: "normalized_work_orders.closed_date (completed_date fallback)", moneyUnit: "count", availability: "Requires normalized closed work orders." },
   { key: "billedRevenue", label: "Billed revenue", definition: "Provider-normalized work-order grand total less recorded refunds; voided work orders are excluded.", denominator: null, timestampBasis: "work-order close date", moneyUnit: "USD", availability: "Requires normalized work-order totals; refund adjustment requires normalized payments." },
   { key: "averageRepairOrder", label: "Average repair order", definition: "Billed revenue divided by repair-order count.", denominator: "repairOrderCount", timestampBasis: "work-order close date", moneyUnit: "USD", availability: "Available when repair-order count and billed revenue are available." },
@@ -32,6 +36,13 @@ export const REPORTING_KPI_CATALOG: readonly MetricDefinition[] = [
 ] as const;
 
 export interface ReportingMetricValues {
+  laborClosedROCount?: number | null;
+  soldLaborHours?: number | null;
+  soldLaborCoveredROs?: number | null;
+  presentedLaborHours?: number | null;
+  presentedLaborCoveredROs?: number | null;
+  netLaborSales?: number | null;
+  netLaborCoveredROs?: number | null;
   repairOrderCount: number;
   billedRevenue: number | null;
   averageRepairOrder: number | null;
@@ -81,6 +92,7 @@ export interface ReportingKpiResponse {
   byAdvisor: ReportingGroup[];
   byTechnician: ReportingGroup[];
   byRecommendationSource: ReportingGroup[];
+  bySoldLaborHours?: ReportingGroup[];
   dataQuality: {
     unknownAdvisorRepairOrders: number;
     unknownTechnicianJobs: number;

@@ -1,0 +1,18 @@
+[
+  {
+    "id": "srv-d55jaqkhg0os73a5dd8g",
+    "settings": {
+      "PROTRACTOR_OUTBOUND_DISABLED": "false",
+      "PROTRACTOR_CALLBACK_TRIAL_ENABLED": "true",
+      "PROTRACTOR_RELAY_MODE": "relay"
+    }
+  },
+  {
+    "id": "srv-d86qipd7vvec73ahur00",
+    "settings": {}
+  },
+  {
+    "id": "srv-d8g15v3eo5us73fvajhg",
+    "settings": {}
+  }
+]

@@ -98,3 +98,24 @@ Render exposes service environment variables during `npm run build`, including e
 **Why:** A Protractor isolation release failed its prebuild because the live `PROTRACTOR_OUTBOUND_DISABLED=true` setting blocked an “allowed replica” mocked-transport assertion and unrelated cron smoke tests.
 
 **How to apply:** Sanitize runtime-only provider policy variables at the outer prebuild boundary. Policy-specific tests must set the values they exercise explicitly and opt mocked transports back into policy enforcement; production runtime evaluation must remain fail-closed.
+
+Local release tests also inherit Replit's preview-domain signal, which can block
+fully mocked Protractor cron fixtures even when Node is in production mode.
+Conversely, making all tests use production React breaks `act()`-based UI tests.
+
+**Why:** Both environmental mismatches can masquerade as release regressions.
+
+**How to apply:** Keep React in development/test mode. Supply explicit provider
+environment fixtures only to isolated, fully mocked test processes when matching
+Render build behavior. Never change the running app's provider controls to make
+tests pass.
+
+Service-level Render environment-variable listings do not establish the full
+runtime environment: shared environment-group values can be absent from that
+listing but present in a one-off job.
+
+**Why:** A required management key appeared absent in the complete service-level
+listing, but a presence-only runtime probe confirmed it was inherited.
+
+**How to apply:** Before changing credentials, verify only the required key's
+presence in the actual service/job runtime; never print its value.

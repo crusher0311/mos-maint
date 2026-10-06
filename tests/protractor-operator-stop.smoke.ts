@@ -709,7 +709,20 @@ async function main(): Promise<void> {
   );
   collection.row.operatorStop = pristineLiveStop;
   now = new Date(now.getTime() + 1_001);
-  const liveLease = await acquireProtractorPhysicalTransportLease(Date.now() + 20);
+  // A live policy uses null, not zero, for its non-bounded allowance.
+  // Force one ordinary contention miss; the next CAS must still be attempted.
+  let contendOnce = true;
+  const beforeContention = collection.findOneAndUpdate.bind(collection);
+  collection.findOneAndUpdate = async (filter:any, update:any, options:any={}) => {
+    if(contendOnce && filter.$expr && Array.isArray(update) && update[0]?.$set?.ownerToken){
+      contendOnce=false;
+      return null;
+    }
+    return beforeContention(filter,update,options);
+  };
+  const liveLease = await acquireProtractorPhysicalTransportLease(Date.now() + 1000);
+  collection.findOneAndUpdate = beforeContention;
+  assert.equal(contendOnce,false,"contended admission path exercised");
   assert.ok(liveLease);
   const liveLeaseFilter = collection.calls.at(-1)?.filter;
   assert.match(

@@ -1,0 +1,227 @@
+{
+  "checkedAt": "2026-10-05T22:31:24.017Z",
+  "readOnly": true,
+  "limitation": "Counts use UTC business dates; native date timezone remains unconfirmed. Counts alone do not identify missing invoices, resolve credits, or authorize writes.",
+  "cells": [
+    {
+      "location": "701",
+      "shopId": 227,
+      "month": "2026-08",
+      "nativeInvoices": 581,
+      "storedTerminalROs": 526,
+      "netCountShortfall": 55,
+      "nativeLabor": 69476.58,
+      "storedHeaderLabor": 0,
+      "storedZeroLabor": 526
+    },
+    {
+      "location": "701",
+      "shopId": 227,
+      "month": "2026-09",
+      "nativeInvoices": 598,
+      "storedTerminalROs": 580,
+      "netCountShortfall": 18,
+      "nativeLabor": 53158.75,
+      "storedHeaderLabor": 52306.84,
+      "storedZeroLabor": 204
+    },
+    {
+      "location": "702",
+      "shopId": 228,
+      "month": "2026-08",
+      "nativeInvoices": 700,
+      "storedTerminalROs": 651,
+      "netCountShortfall": 49,
+      "nativeLabor": 120967.43,
+      "storedHeaderLabor": 0,
+      "storedZeroLabor": 651
+    },
+    {
+      "location": "702",
+      "shopId": 228,
+      "month": "2026-09",
+      "nativeInvoices": 650,
+      "storedTerminalROs": 374,
+      "netCountShortfall": 276,
+      "nativeLabor": 96839.57,
+      "storedHeaderLabor": 0,
+      "storedZeroLabor": 374
+    },
+    {
+      "location": "703",
+      "shopId": 229,
+      "month": "2026-08",
+      "nativeInvoices": 720,
+      "storedTerminalROs": 668,
+      "netCountShortfall": 52,
+      "nativeLabor": 85898.16,
+      "storedHeaderLabor": 0,
+      "storedZeroLabor": 668
+    },
+    {
+      "location": "703",
+      "shopId": 229,
+      "month": "2026-09",
+      "nativeInvoices": 683,
+      "storedTerminalROs": 393,
+      "netCountShortfall": 290,
+      "nativeLabor": 65259.41,
+      "storedHeaderLabor": 0,
+      "storedZeroLabor": 393
+    },
+    {
+      "location": "704",
+      "shopId": 230,
+      "month": "2026-08",
+      "nativeInvoices": 820,
+      "storedTerminalROs": 742,
+      "netCountShortfall": 78,
+      "nativeLabor": 104571.22,
+      "storedHeaderLabor": 0,
+      "storedZeroLabor": 742
+    },
+    {
+      "location": "704",
+      "shopId": 230,
+      "month": "2026-09",
+      "nativeInvoices": 694,
+      "storedTerminalROs": 398,
+      "netCountShortfall": 296,
+      "nativeLabor": 77824.04,
+      "storedHeaderLabor": 0,
+      "storedZeroLabor": 398
+    },
+    {
+      "location": "705",
+      "shopId": 231,
+      "month": "2026-08",
+      "nativeInvoices": 880,
+      "storedTerminalROs": 785,
+      "netCountShortfall": 95,
+      "nativeLabor": 111660.09,
+      "storedHeaderLabor": 0,
+      "storedZeroLabor": 785
+    },
+    {
+      "location": "705",
+      "shopId": 231,
+      "month": "2026-09",
+      "nativeInvoices": 822,
+      "storedTerminalROs": 445,
+      "netCountShortfall": 377,
+      "nativeLabor": 87727.81,
+      "storedHeaderLabor": 0,
+      "storedZeroLabor": 445
+    },
+    {
+      "location": "706",
+      "shopId": 232,
+      "month": "2026-08",
+      "nativeInvoices": 564,
+      "storedTerminalROs": 519,
+      "netCountShortfall": 45,
+      "nativeLabor": 65557.51,
+      "storedHeaderLabor": 0,
+      "storedZeroLabor": 519
+    },
+    {
+      "location": "706",
+      "shopId": 232,
+      "month": "2026-09",
+      "nativeInvoices": 572,
+      "storedTerminalROs": 356,
+      "netCountShortfall": 216,
+      "nativeLabor": 59519.02,
+      "storedHeaderLabor": 0,
+      "storedZeroLabor": 356
+    },
+    {
+      "location": "707",
+      "shopId": 233,
+      "month": "2026-08",
+      "nativeInvoices": 997,
+      "storedTerminalROs": 924,
+      "netCountShortfall": 73,
+      "nativeLabor": 135701.51,
+      "storedHeaderLabor": 0,
+      "storedZeroLabor": 924
+    },
+    {
+      "location": "707",
+      "shopId": 233,
+      "month": "2026-09",
+      "nativeInvoices": 1033,
+      "storedTerminalROs": 553,
+      "netCountShortfall": 480,
+      "nativeLabor": 116771.37,
+      "storedHeaderLabor": 0,
+      "storedZeroLabor": 553
+    },
+    {
+      "location": "708",
+      "shopId": 234,
+      "month": "2026-08",
+      "nativeInvoices": 444,
+      "storedTerminalROs": 402,
+      "netCountShortfall": 42,
+      "nativeLabor": 64119.29,
+      "storedHeaderLabor": 0,
+      "storedZeroLabor": 402
+    },
+    {
+      "location": "708",
+      "shopId": 234,
+      "month": "2026-09",
+      "nativeInvoices": 450,
+      "storedTerminalROs": 242,
+      "netCountShortfall": 208,
+      "nativeLabor": 55768.96,
+      "storedHeaderLabor": 0,
+      "storedZeroLabor": 242
+    },
+    {
+      "location": "709",
+      "shopId": 235,
+      "month": "2026-08",
+      "nativeInvoices": 542,
+      "storedTerminalROs": 498,
+      "netCountShortfall": 44,
+      "nativeLabor": 71192.96,
+      "storedHeaderLabor": 0,
+      "storedZeroLabor": 498
+    },
+    {
+      "location": "709",
+      "shopId": 235,
+      "month": "2026-09",
+      "nativeInvoices": 524,
+      "storedTerminalROs": 276,
+      "netCountShortfall": 248,
+      "nativeLabor": 61650.61,
+      "storedHeaderLabor": 0,
+      "storedZeroLabor": 276
+    },
+    {
+      "location": "710",
+      "shopId": 236,
+      "month": "2026-08",
+      "nativeInvoices": 355,
+      "storedTerminalROs": 320,
+      "netCountShortfall": 35,
+      "nativeLabor": 41985.3,
+      "storedHeaderLabor": 0,
+      "storedZeroLabor": 320
+    },
+    {
+      "location": "710",
+      "shopId": 236,
+      "month": "2026-09",
+      "nativeInvoices": 366,
+      "storedTerminalROs": 205,
+      "netCountShortfall": 161,
+      "nativeLabor": 35033.66,
+      "storedHeaderLabor": 0,
+      "storedZeroLabor": 205
+    }
+  ]
+}

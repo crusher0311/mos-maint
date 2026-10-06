@@ -24,6 +24,7 @@ export const REPORT_DIMENSIONS = [
   "advisor",
   "technician",
   "recommendationSource",
+  "soldLaborHoursBand",
 ] as const;
 export const REPORT_FILTER_OPERATORS = ["eq", "notEq", "in", "notIn"] as const;
 export const REPORT_PRESENTATIONS = ["scorecard", "table", "timeSeries"] as const;
@@ -32,14 +33,15 @@ export type ReportMetric = (typeof REPORTING_KPI_CATALOG)[number]["key"];
 export type ReportDimension = (typeof REPORT_DIMENSIONS)[number];
 export type ReportFilterOperator = (typeof REPORT_FILTER_OPERATORS)[number];
 export type ReportPresentationKind = (typeof REPORT_PRESENTATIONS)[number];
-export type ReportExecutionStage = "business" | "technician" | "events";
+export type ReportExecutionStage = "business" | "technician" | "events" | "labor";
 export type ReportExecutionDimension =
   | "summary"
   | "date"
   | "location"
   | "advisor"
   | "technician"
-  | "recommendationSource";
+  | "recommendationSource"
+  | "soldLaborHoursBand";
 
 export interface ReportExecutionPlan {
   stages: ReportExecutionStage[];
@@ -128,16 +130,21 @@ export interface DeclarativeReportResult {
 }
 
 export const REPORT_DIMENSION_TO_KPI_FIELD: Readonly<
-  Partial<Record<ReportDimension, "timeSeries" | "byLocation" | "byAdvisor" | "byTechnician" | "byRecommendationSource">>
+  Partial<Record<ReportDimension, "timeSeries" | "byLocation" | "byAdvisor" | "byTechnician" | "byRecommendationSource" | "bySoldLaborHours">>
 > = {
   date: "timeSeries",
   location: "byLocation",
   advisor: "byAdvisor",
   technician: "byTechnician",
   recommendationSource: "byRecommendationSource",
+  soldLaborHoursBand: "bySoldLaborHours",
 };
 
 export const REPORT_METRIC_VALUE_KEYS: Readonly<Record<ReportMetric, Array<keyof ReportingMetricValues>>> = {
+  laborClosedROCount: ["laborClosedROCount"],
+  soldLaborHours: ["soldLaborHours", "soldLaborCoveredROs", "laborClosedROCount"],
+  presentedLaborHours: ["presentedLaborHours", "presentedLaborCoveredROs", "laborClosedROCount"],
+  netLaborSales: ["netLaborSales", "netLaborCoveredROs", "laborClosedROCount"],
   repairOrderCount: ["repairOrderCount"],
   billedRevenue: ["billedRevenue"],
   averageRepairOrder: ["averageRepairOrder"],

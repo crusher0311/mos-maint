@@ -1,0 +1,19 @@
+{
+  "status": "live",
+  "anonymousPreviewStatus": 401,
+  "providerRequestsByInvestigation": 0,
+  "businessDataWritesByInvestigation": 0,
+  "configurationChanges": 0,
+  "signedInUiVerified": false,
+  "authenticatedProviderReadVerified": false,
+  "workers": [
+    {
+      "name": "mos-maint-background-v2",
+      "suspended": "suspended"
+    },
+    {
+      "name": "backfill-drain-worker",
+      "suspended": "suspended"
+    }
+  ]
+}
