@@ -30,8 +30,8 @@ async function fixture(handler, overrides = {}) {
     upstream: new URL(upstreamUrl),
     requestBodyLimit: 4096,
     responseBodyLimit: 4096,
-    timeoutMs: 100,
-    requestTimeoutMs: 1000,
+    timeoutMs: 10_000,
+    requestTimeoutMs: 15_000,
     upstreamMinIntervalMs: 0,
     maxCallerDeadlineMs: 180_000,
     clockSkewSeconds: 60,
@@ -41,7 +41,7 @@ async function fixture(handler, overrides = {}) {
     ...overrides
   };
   const relay = createRelayServer(config);
-  return { url: await listen(relay), config };
+  return { url: await listen(relay), config, relay };
 }
 
 function auth(body, secret, changes = {}) {
@@ -360,13 +360,13 @@ test("enforces the signed caller deadline during an active upstream response", a
   let calls = 0;
   const { url, config } = await fixture((_req, res) => {
     calls++;
-    setTimeout(() => res.end("late"), 80);
+    // Deliberately keep the response open: only the signed deadline may end it.
   });
   const response = await relayFetch(url, config, {
     type: "rest",
     method: "GET",
     path: "/IntegrationServices/1.0/x",
-    deadlineAtMs: Date.now() + 30,
+    deadlineAtMs: Date.now() + 2_000,
   });
   assert.equal(response.status, 504);
   assert.equal((await response.json()).error, "caller_deadline_expired");
@@ -407,9 +407,13 @@ test("serializes actual upstream dispatches and cools down after completion", as
 
 test("drops queued work whose signed caller deadline expires before dispatch", async () => {
   let calls = 0;
+  let releaseFirst;
+  let markStarted;
+  const started = new Promise(resolve => { markStarted = resolve; });
   const { url, config } = await fixture((_req, res) => {
     calls++;
-    setTimeout(() => res.end("ok"), 40);
+    releaseFirst = () => res.end("ok");
+    markStarted();
   }, {
     upstreamMinIntervalMs: 20,
     maxConcurrentUpstreams: 8,
@@ -418,17 +422,21 @@ test("drops queued work whose signed caller deadline expires before dispatch", a
     type: "rest",
     method: "GET",
     path: "/IntegrationServices/2.0/Invoice/first",
-    deadlineAtMs: Date.now() + 1_000,
+    deadlineAtMs: Date.now() + 30_000,
   });
-  await new Promise(resolve => setTimeout(resolve, 5));
+  await started;
   const second = relayFetch(url, config, {
     type: "soap",
     method: "POST",
     path: "/IntegrationServices/1.0/WorkOrderServices.asmx",
-    deadlineAtMs: Date.now() + 15,
+    deadlineAtMs: Date.now() + 2_000,
   });
-  assert.equal((await first).status, 200);
+  // Queue expiry is checked when its turn arrives, not by a queue timer.
+  // Hold the first request beyond the second deadline, then allow dispatch.
+  await new Promise(resolve => setTimeout(resolve, 2_100));
+  releaseFirst();
   const expired = await second;
+  assert.equal((await first).status, 200);
   assert.equal(expired.status, 504);
   assert.equal((await expired.json()).error, "caller_deadline_expired");
   assert.equal(calls, 1, "expired queued work must never create an upstream socket");
@@ -436,9 +444,17 @@ test("drops queued work whose signed caller deadline expires before dispatch", a
 
 test("drops queued work when its caller disconnects before dispatch", async () => {
   let calls = 0;
-  const { url, config } = await fixture((_req, res) => {
+  let releaseFirst;
+  let markStarted;
+  const started = new Promise(resolve => { markStarted = resolve; });
+  const { url, config, relay } = await fixture((_req, res) => {
     calls++;
-    setTimeout(() => res.end("ok"), 40);
+    if (calls === 1) {
+      releaseFirst = () => res.end("ok");
+      markStarted();
+    } else {
+      res.end("ok");
+    }
   }, {
     upstreamMinIntervalMs: 20,
     maxConcurrentUpstreams: 8,
@@ -447,28 +463,34 @@ test("drops queued work when its caller disconnects before dispatch", async () =
     type: "rest",
     method: "GET",
     path: "/IntegrationServices/2.0/Invoice/first",
-    deadlineAtMs: Date.now() + 1_000,
+    deadlineAtMs: Date.now() + 30_000,
   });
-  await new Promise(resolve => setTimeout(resolve, 5));
+  await started;
   const controller = new AbortController();
   const value = {
     type: "rest",
     method: "GET",
     path: "/IntegrationServices/2.0/Invoice/disconnected",
-    deadlineAtMs: Date.now() + 1_000,
+    deadlineAtMs: Date.now() + 30_000,
   };
   const body = JSON.stringify(value);
+  // Abort after the request body has arrived, while the first upstream is held.
+  relay.once("request", req => req.once("end", () => setImmediate(() => controller.abort())));
   const disconnected = fetch(`${url}/relay`, {
     method: "POST",
     headers: auth(body, config.secret),
     body,
     signal: controller.signal,
   });
-  setTimeout(() => controller.abort(), 10);
   await assert.rejects(disconnected, /abort/i);
+  releaseFirst();
   assert.equal((await first).status, 200);
-  await new Promise(resolve => setTimeout(resolve, 30));
-  assert.equal(calls, 1, "disconnected queued work must never create an upstream socket");
+  // A subsequent completed request proves that the queue has drained.
+  const barrier = await relayFetch(url, config, {
+    type: "rest", method: "GET", path: "/IntegrationServices/2.0/Invoice/barrier",
+  });
+  assert.equal(barrier.status, 200);
+  assert.equal(calls, 2, "only the first request and barrier may create upstream sockets");
 });
 
 test("requires bounded signed caller deadlines", async () => {
