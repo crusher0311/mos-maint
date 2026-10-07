@@ -1,3 +1,4 @@
 # Auto detect text files and perform LF normalization
 * text=auto
 attached_assets/burnett.sockettime.com_1790891495799.har filter=lfs diff=lfs merge=lfs -text
+attached_assets/Service-Advisor-Snap-Shot_(1)_1791412816350.zip filter=lfs diff=lfs merge=lfs -text
