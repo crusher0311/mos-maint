@@ -7,11 +7,12 @@ import {getDb,getMongoClient} from "../lib/mongo";
 import {verifyOvernightHeader} from "../lib/jwt-overnight-header-guard";
 import {cents} from "../lib/jwt-labor-header-correction-guard";
 import {resumeWindows} from "../lib/jwt-overnight-resume";
+import {oct7Resume} from "../lib/jwt-overnight-resume-oct7";
 async function main(){
  const db=await getDb(),jobId=process.argv.find(a=>a.startsWith("--job="))?.slice(6)??"jwt-overnight-2026-10-05";
- if(!["jwt-overnight-2026-10-05","jwt-overnight-2026-10-06"].includes(jobId))throw Error("Unapproved reconciliation job");
+ if(!["jwt-overnight-2026-10-05","jwt-overnight-2026-10-06","jwt-overnight-2026-10-07"].includes(jobId))throw Error("Unapproved reconciliation job");
  const job=await db.collection("operator_invoice_recovery_jobs").findOne({_id:jobId as any},{maxTimeMS:5000});
- if(!job||job.status!=="paused")throw Error("Expected paused run");
+ if(!job||!["paused","completed","morning-stop"].includes(job.status))throw Error("Expected inactive run");
  const bytes=readFileSync("docs/reporting/jwt-overnight-native-manifest.json","utf8");
  const hash=createHash("sha256").update(bytes).digest("hex");
  assert.equal(hash,job.manifestHash,"Manifest changed");
@@ -32,7 +33,10 @@ async function main(){
  });
  if(job.parentJobId){
   const parent=await db.collection("operator_invoice_recovery_jobs").findOne({_id:job.parentJobId},{maxTimeMS:5000});
-  windows=resumeWindows(parent,windows,hash);
+  if(jobId==="jwt-overnight-2026-10-07"){
+   const grandparent=await db.collection("operator_invoice_recovery_jobs").findOne({_id:"jwt-overnight-2026-10-05" as any},{maxTimeMS:5000});
+   windows=oct7Resume(parent,grandparent,windows,hash).windows;
+  }else windows=resumeWindows(parent,windows,hash);
  }
  const checkpointWindow=windows[job.cursor];
  const partial:Record<string,number>={recorded:0,unrecordedNeedsCorrection:0,unrecordedAlreadyMatches:0,unrecordedHeld:0};

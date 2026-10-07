@@ -47,11 +47,12 @@ const clock = new Intl.DateTimeFormat("en-GB", {
   second: "2-digit", hourCycle: "h23",
 });
 
-/** First release only permits the explicitly proposed 22:00–05:00 CT window. */
+/** Regular 22:00–05:00 CT window, plus one explicitly approved early start. */
 function validNight(start: Date, end: Date): boolean {
   if (!(start instanceof Date) || !(end instanceof Date) ||
       !Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) return false;
   const duration = end.getTime() - start.getTime();
+  if(start.toISOString()==="2026-10-07T23:00:00.000Z"&&end.toISOString()==="2026-10-08T10:00:00.000Z")return true;
   // Includes the fall DST transition; never an all-day or open-ended grant.
   return duration >= 6 * 3600_000 && duration <= 8 * 3600_000 &&
     start.getUTCMilliseconds() === 0 && end.getUTCMilliseconds() === 0 &&
@@ -70,6 +71,8 @@ export function validateJwtOvernightGrant(grant: JwtOvernightGrant): void {
       new Set(grant.windowKeys).size !== grant.windowKeys.length ||
       !Number.isSafeInteger(grant.maxRequests) || grant.maxRequests < 1 ||
       grant.maxRequests > JWT_OVERNIGHT_MAX_REQUESTS ||
+      (grant.notBefore.toISOString()==="2026-10-07T23:00:00.000Z"&&
+       (grant.maxRequests!==1000||grant.consumedRequests<65)) ||
       !Number.isSafeInteger(grant.consumedRequests) || grant.consumedRequests < 0 ||
       grant.consumedRequests > grant.maxRequests ||
       typeof grant.stopped !== "boolean") {

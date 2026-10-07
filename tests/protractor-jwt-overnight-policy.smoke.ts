@@ -16,6 +16,15 @@ const grant: JwtOvernightGrant = {
 const request: JwtOvernightRequest = {
   runId: grant.runId, shopId: 233, day: "2026-09-01", operation: "invoice-day", method: "GET",
 };
+const early:JwtOvernightGrant={...grant,notBefore:new Date("2026-10-07T23:00:00Z"),
+ expiresAt:new Date("2026-10-08T10:00:00Z"),maxRequests:1000,consumedRequests:65};
+validate(early);
+for(const patch of [
+ {notBefore:new Date("2026-10-07T22:00:00Z")},
+ {notBefore:new Date("2026-10-08T23:00:00Z"),expiresAt:new Date("2026-10-09T10:00:00Z")},
+ {expiresAt:new Date("2026-10-08T11:00:00Z")},
+ {maxRequests:1001},{consumedRequests:64}
+])assert.throws(()=>validate({...early,...patch}),/Invalid JWT/);
 const context = {
   now: new Date("2026-10-06T04:00:00Z"), canaryGeneration: grant.canaryGeneration,
   relay: true, production: true, operatorStopped: false,
