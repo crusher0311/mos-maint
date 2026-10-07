@@ -59,7 +59,9 @@ const ids = ['mos-print-button', 'mos-prefill-dvi-btn', 'mos-enhance-notes-btn',
               if (mode === 'throw') throw new Error('Extension context invalidated');
               if (mode === 'reject') return Promise.reject(new Error('transport'));
               cb?.(mode === 'fail' ? { success: false } : structuredClone(answer));
-            } else if (m.action === 'GET_STICKER_CONFIG') cb?.({ success: true, intervals: [] });
+            } else if (m.action === 'GET_STICKER_CONFIG') cb?.({ success: true, config: { intervals: {
+              synthetic: { mileage: 5000, months: 6 }
+            } } });
             else cb?.({ success: true, snapshots: [] });
           },
         },

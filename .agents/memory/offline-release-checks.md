@@ -12,3 +12,14 @@ Short real-time deadlines in local relay tests can expire before the intended di
 **Why:** Under workspace load, a queued-expiry test received an ingress-expiry response instead, and an active-response test expired before its upstream saw a request.
 
 **How to apply:** Inspect the failing stage and test timing. Keep network isolation and credentials removed. Repair test coordination/cleanup rather than relaxing production admission or deadline enforcement; never report an assertion banner alone as a completed suite.
+
+Extension DOM tests with mocked successful background replies do not validate the
+real message handler.
+
+**Why:** The floating-launcher regression passed mocked UI coverage while the
+shared settings handler rejected successful responses. Its separate handler
+test also had a stale extraction delimiter.
+
+**How to apply:** Exercise both the real handler and browser lifecycle before
+packaging. Assert source-extraction boundaries explicitly; don't weaken hidden
+preferences to compensate for a broken settings transport.

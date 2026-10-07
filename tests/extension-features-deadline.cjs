@@ -4,7 +4,8 @@ const vm = require('node:vm');
 const fs = require('node:fs');
 const source = fs.readFileSync('mos-tools-extension/background.js', 'utf8');
 const start = source.indexOf('  if (message.action === "GET_SHOP_FEATURES")');
-const end = source.indexOf('// ==================== UNDO SNAPSHOTS', start);
+const end = source.indexOf('// ------ UNDO SNAPSHOTS', start);
+assert.ok(start >= 0 && end > start, 'feature-handler extraction boundaries must exist');
 const branch = `(function() { ${source.slice(start, end)} })()`;
 const flush = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
 
@@ -37,6 +38,12 @@ async function scenario(overrides = {}) {
   assert.equal(good.replies[0].buttonVisibility.tekmetric.oil_sticker, false);
   assert.equal(good.replies[0].floatingButtonEnabled, false);
   assert.equal(good.replies[0].writeProvider, 'tekmetric');
+  const visible = await scenario({fetch:async()=>({ok:true,json:async()=>({
+    features:{},floatingButtonEnabled:true
+  })})});
+  assert.equal(visible.replies[0].floatingButtonEnabled,true);
+  good.timeout();await flush();
+  assert.equal(good.replies.length,1,'successful reply settles once');
   for (const overrides of [
     {fetch: () => new Promise(() => {})},
     {fetch: async () => ({ok:true, json: () => new Promise(() => {})})},
@@ -69,6 +76,8 @@ async function scenario(overrides = {}) {
     const s = await scenario(overrides);
     assert.equal(s.replies[0].success, false);
     assert.equal(s.replies[0].features, undefined, 'failure is not an authoritative denial');
+    s.timeout();await flush();
+    assert.equal(s.replies.length,1,'failed reply settles once');
   }
   console.log('PASS shared features: deadlines, late responses, identity, failure shapes and existing fields');
 })().catch(e => { console.error(e); process.exitCode = 1; });

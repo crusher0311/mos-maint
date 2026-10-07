@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const archiver = require('archiver');
+const { execFileSync } = require('node:child_process');
 
 const EXT_DIR = path.join(__dirname, '..', 'mos-tools-extension');
 const DIST_DIR = path.join(__dirname, '..', 'dist');
@@ -51,6 +52,11 @@ async function getAccessToken() {
 }
 
 function buildZip() {
+  // Every upload path uses this packager, including the automatic publisher.
+  // Run the actual shared feature handler, not a mocked successful response.
+  execFileSync(process.execPath, [path.join(__dirname, '..', 'tests', 'extension-features-deadline.cjs')], {
+    cwd: path.join(__dirname, '..'), stdio: 'pipe',
+  });
   return new Promise((resolve, reject) => {
     if (!fs.existsSync(DIST_DIR)) {
       fs.mkdirSync(DIST_DIR, { recursive: true });

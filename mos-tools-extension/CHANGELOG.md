@@ -1,3 +1,10 @@
+# 1.35.6
+
+- Fixed successful shop-settings requests being rejected by an undefined
+  session snapshot, which left the Tekmetric floating Detect Dog hidden.
+- Settings requests settle once, abort on timeout, and reject stale sessions.
+  Explicit owner/user hidden preferences remain respected.
+
 # 1.35.2
 
 - Existing job labor is protected by default in automatic application and Apply

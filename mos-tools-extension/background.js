@@ -829,18 +829,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         // on every attempt (Task: AutoFlow v4 feature-fetch loop).
         await _stateReady;
         await ensureBootstrapBoundToActiveTab();
+        if (settled) return;
+        const requestEpoch = authEpoch;
+        const requestToken = mosApiToken;
         const shopId = message.shopId || currentSmsContext?.shopId;
-        if (!mosApiToken || !shopId) {
-          sendResponse({ success: false, features: {} });
+        if (!requestToken || !shopId) {
+          respond({ success: false, transient: true });
           return;
         }
         const apiBase = mosApiUrl || 'https://mos.tools';
         const provider = message.provider || currentSmsContext?.provider || '';
-        const res = await fetch(`${apiBase}/api/extension/features?shopId=${shopId}&provider=${provider}&_token=${encodeURIComponent(mosApiToken)}`, {
-          headers: { 'Authorization': `Bearer ${mosApiToken}` }
+        const res = await fetch(`${apiBase}/api/extension/features?shopId=${shopId}&provider=${provider}&_token=${encodeURIComponent(requestToken)}`, {
+          headers: { 'Authorization': `Bearer ${requestToken}` },
+          signal: controller.signal,
         });
         if (!res.ok) {
-          sendResponse({ success: false, features: {} });
+          respond({ success: false, transient: true });
           return;
         }
         const data = await res.json();
