@@ -12,6 +12,7 @@ import {JwtRecoveryHold,recoveryHoldReason} from "../lib/jwt-overnight-holds";
 import {loadActivityProfileMap} from "../lib/data/repositories/activity-profiles";
 import {decideQuietWindowGate} from "../lib/integrations/activity-profile/profile";
 import {JWT_RESUME_PARENT,resumeWindows} from "../lib/jwt-overnight-resume";
+import {overnightTransaction} from "../lib/jwt-overnight-transaction";
 
 const RESUME=process.argv.includes("--resume-2026-10-06");
 const JOB=RESUME?"jwt-overnight-2026-10-06":"jwt-overnight-2026-10-05", RATE="protractor-physical-transport-v1";
@@ -106,11 +107,34 @@ async function main(){
        let outcome="held";
        let holdReason:string|undefined;
        try{
-         await pg.begin(async tx=>{
-           const rows=await tx.unsafe(`SELECT *,to_char(coalesce(closed_date,completed_date),'YYYY-MM-DD') business_date
+         outcome=await overnightTransaction<string>({
+          transaction:body=>pg.begin(async tx=>body(tx)),
+          beforeAttempt:async(attempt)=>{
+           if(Date.now()>=END.getTime()-20_000)throw Error("Morning stop; insufficient transaction headroom");
+           // The page already verified authority. Recheck it before every retry,
+           // without multiplying Render API requests for ordinary invoices.
+           if(attempt===1)return;
+           await verifyWorkers();
+           const [currentRate,currentJob,currentProfiles]=await Promise.all([
+            rates.findOne({_id:RATE}),jobs.findOne({_id:JOB}),loadActivityProfileMap([shopId])
+           ]);
+           if(currentJob?.owner!==owner||currentJob.stopped||currentJob.status!=="running"||
+              !currentJob.leaseUntil||currentJob.leaseUntil.getTime()<=Date.now()||
+              currentRate?.operatorStop?.active||currentRate?.jwtOvernight?.stopped||
+              currentRate?.jwtOvernight?.runId!==grant.runId||
+              currentRate?.canary?.mode!=="live"||currentRate?.canary?.generation!==grant.canaryGeneration)
+            throw Error("Recovery authority changed; checkpoint retained");
+           if(!decideQuietWindowGate({profile:currentProfiles.get(shopId),now:new Date(),minConfidence:.7}).eligible)
+            throw Error("Shop quiet window ended; checkpoint retained");
+           if(Date.now()>=END.getTime()-20_000)throw Error("Morning stop; insufficient transaction headroom");
+          },
+          log:event=>console.error(JSON.stringify({event:"jwt_recovery_transaction_failed",jobId:JOB,shopId,day,page,cursor,
+           invoiceIndex:invoices.indexOf(source),...event})),
+          operation:async(tx,statement)=>{
+           const rows=await statement<any[]>("lookup",()=>tx.unsafe(`SELECT *,to_char(coalesce(closed_date,completed_date),'YYYY-MM-DD') business_date
              FROM normalized_work_orders WHERE shop_id=$1 AND
              work_order_number=ANY($2::text[]) LIMIT 4 FOR UPDATE`,
-             [shopId,[n.wo,n.invoice,String(source.ID)]]);
+             [shopId,[n.wo,n.invoice,String(source.ID)]]));
            if(rows.length!==1)throw new JwtRecoveryHold("Missing or ambiguous existing identity");
            const row=rows[0];
            let amount:number;
@@ -119,14 +143,15 @@ async function main(){
              if(error instanceof AssertionError)throw new JwtRecoveryHold(error.message.slice(0,500));
              throw error;
            }
-           if(Number(row.labor_total)===amount){outcome="already-matches";return;}
+           if(Number(row.labor_total)===amount)return "already-matches";
            if(Date.now()>=END.getTime()-10_000)throw Error("Morning stop");
-           const updated=await tx.unsafe(`UPDATE normalized_work_orders SET labor_total=$1,
+           const updated=await statement<any[]>("update",()=>tx.unsafe(`UPDATE normalized_work_orders SET labor_total=$1,
              raw_data=jsonb_set(coalesce(raw_data,'{}'::jsonb),'{laborTotal}',to_jsonb($1::numeric))
              WHERE id=$2 AND shop_id=$3 AND labor_total=$4 RETURNING id`,
-             [amount,row.id,shopId,row.labor_total]);
+             [amount,row.id,shopId,row.labor_total]));
            if(updated.length!==1)throw Error("Guarded update failed");
-           outcome="corrected";
+           return "corrected";
+          }
          });
        }catch(error){holdReason=recoveryHoldReason(error);outcome="held";}
        await jobs.updateOne({_id:JOB,owner},{$inc:{[`outcomes.${outcome}`]:1},
