@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import {overnightTransaction} from "../lib/jwt-overnight-transaction";
+import {overnightTransaction,JwtRolledBackTimeout} from "../lib/jwt-overnight-transaction";
 
 async function main() {
  for(const phase of ["lookup","update"] as const){
@@ -35,7 +35,10 @@ async function main() {
      {code:mode==="connection"?"CONNECTION_CLOSED":mode==="lock"?"55P03":"57014"});});
    },
    log:e=>events.push(e),sleep:async()=>{}
-  }));
+  }),error=>{
+   assert.equal(error instanceof JwtRolledBackTimeout,["exhausted","lock"].includes(mode),mode);
+   return true;
+  });
   assert.equal(calls,["exhausted","lock"].includes(mode)?3:1,mode);
   assert.equal(events.at(-1)?.retry,mode==="stop",mode);
   if(mode==="commit")assert.equal(events[0].phase,"commit");

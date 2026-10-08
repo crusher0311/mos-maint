@@ -1,5 +1,12 @@
 type Phase = "begin" | "lookup" | "update" | "commit";
 
+/** Only constructed after the transaction has propagated the original statement
+ * timeout through rollback. Never use for connection, commit or rollback errors. */
+export class JwtRolledBackTimeout extends Error {
+ constructor(readonly phase: "lookup"|"update",readonly sqlState:string) {
+  super("Invoice transaction timed out after bounded retries; rolled back");
+ }
+}
 /** Retry only a statement failure propagated unchanged after a completed rollback.
  * Connection/commit/rollback failures have ambiguous outcomes and must pause.
  */
@@ -32,7 +39,12 @@ export async function overnightTransaction<T>(options: {
         (sqlState === "55P03" && message === "canceling statement due to lock timeout");
       const retry = error === statementFailure && timeout && attempt < 3;
       options.log({attempt, phase, sqlState, retry});
-      if (!retry) throw error;
+      if (!retry) {
+        const failedPhase=phase as Phase;
+        if(error===statementFailure&&timeout&&(failedPhase==="lookup"||failedPhase==="update"))
+          throw new JwtRolledBackTimeout(failedPhase,sqlState);
+        throw error;
+      }
       await (options.sleep ?? (ms => new Promise(resolve => setTimeout(resolve, ms))))(attempt * 500);
     }
   }

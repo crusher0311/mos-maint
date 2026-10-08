@@ -12,7 +12,7 @@ async function main(){
  const db=await getDb(),jobId=process.argv.find(a=>a.startsWith("--job="))?.slice(6)??"jwt-overnight-2026-10-05";
  if(!["jwt-overnight-2026-10-05","jwt-overnight-2026-10-06","jwt-overnight-2026-10-07"].includes(jobId))throw Error("Unapproved reconciliation job");
  const job=await db.collection("operator_invoice_recovery_jobs").findOne({_id:jobId as any},{maxTimeMS:5000});
- if(!job||!["paused","completed","morning-stop"].includes(job.status))throw Error("Expected inactive run");
+ if(!job||!["paused","completed","morning-stop","needs-attention"].includes(job.status))throw Error("Expected inactive run");
  const bytes=readFileSync("docs/reporting/jwt-overnight-native-manifest.json","utf8");
  const hash=createHash("sha256").update(bytes).digest("hex");
  assert.equal(hash,job.manifestHash,"Manifest changed");
@@ -38,7 +38,12 @@ async function main(){
    windows=oct7Resume(parent,grandparent,windows,hash).windows;
   }else windows=resumeWindows(parent,windows,hash);
  }
- const checkpointWindow=windows[job.cursor];
+ // With eligible-first scheduling, cursor is the earliest incomplete window,
+ // not necessarily the window that was processing when the run stopped.
+ const checkpointWindow=job.activeWindow&&!job.completedWindowKeys?.includes(job.activeWindow)
+  ?job.activeWindow:windows[job.cursor];
+ assert.ok(windows.includes(checkpointWindow),"Invalid active checkpoint");
+ const checkpointPage=job.windowPages?.[checkpointWindow]??job.page;
  const partial:Record<string,number>={recorded:0,unrecordedNeedsCorrection:0,unrecordedAlreadyMatches:0,unrecordedHeld:0};
  let checkpointSeen=false;
  const pg=postgres(process.env.SUPABASE_PROD_DATABASE_URL!,{max:1,connect_timeout:10,
@@ -48,7 +53,7 @@ async function main(){
   for await(const page of db.collection("operator_invoice_recovery_sources").find({jobId},{maxTimeMS:10000}).limit(1001).batchSize(1)){
    if(++pages>1000)throw Error("Unexpected source page count");
    assert.equal(createHash("sha256").update(JSON.stringify(page.invoices)).digest("hex"),page.sourceDigest,"Archived source changed");
-   const isCheckpoint=`${page.shopId}:${page.day}`===checkpointWindow&&page.page===job.page;
+   const isCheckpoint=`${page.shopId}:${page.day}`===checkpointWindow&&page.page===checkpointPage;
    if(isCheckpoint)checkpointSeen=true;
    const candidates=page.invoices.filter((s:any)=>target.has(`${page.shopId}:${page.day}:${s.WorkOrderNumber}`)||
      (isCheckpoint&&native.orders.some((n:any)=>n.shopId===page.shopId&&n.date===page.day&&n.wo===String(s.WorkOrderNumber))));
