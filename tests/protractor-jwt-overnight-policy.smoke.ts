@@ -19,6 +19,8 @@ const request: JwtOvernightRequest = {
 const early:JwtOvernightGrant={...grant,notBefore:new Date("2026-10-07T23:00:00Z"),
  expiresAt:new Date("2026-10-08T10:00:00Z"),maxRequests:1000,consumedRequests:65};
 validate(early);
+validate({...early,notBefore:new Date("2026-10-08T23:00:00Z"),
+ expiresAt:new Date("2026-10-09T10:00:00Z"),consumedRequests:419});
 for(const patch of [
  {notBefore:new Date("2026-10-07T22:00:00Z")},
  {notBefore:new Date("2026-10-08T23:00:00Z"),expiresAt:new Date("2026-10-09T10:00:00Z")},
