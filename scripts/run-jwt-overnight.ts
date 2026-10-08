@@ -12,7 +12,8 @@ import {JwtRecoveryHold,recoveryHoldReason} from "../lib/jwt-overnight-holds";
 import {loadActivityProfileMap} from "../lib/data/repositories/activity-profiles";
 import {decideQuietWindowGate} from "../lib/integrations/activity-profile/profile";
 import {JWT_RESUME_PARENT,resumeWindows} from "../lib/jwt-overnight-resume";
-import {overnightTransaction} from "../lib/jwt-overnight-transaction";
+import {overnightTransaction,JwtRolledBackTimeout} from "../lib/jwt-overnight-transaction";
+import {deferRecoveryWindow,windowReady,type RecoveryDeferral} from "../lib/jwt-recovery-deferrals";
 import {oct7Resume,OCT7_PARENT,OCT7_PARENT_RUN,OCT7_CONSUMED} from "../lib/jwt-overnight-resume-oct7";
 import {validateEligibleHandoff,recoveryGrantDigest,recoverySchedule,nextEligibleWindow,scheduleCheckpoint} from "../lib/jwt-overnight-scheduler";
 
@@ -23,13 +24,13 @@ const PARENT=OCT7?OCT7_PARENT:JWT_RESUME_PARENT;
 const PARENT_RUN=OCT7?OCT7_PARENT_RUN:"fa7377a4-5f91-4d75-b1a6-14eb24920b3e";
 const CONSUMED=OCT7?OCT7_CONSUMED:RESUME?23:0;
 const JOB=OCT7?"jwt-overnight-2026-10-07":RESUME?"jwt-overnight-2026-10-06":"jwt-overnight-2026-10-05", RATE="protractor-physical-transport-v1";
-const START=new Date(OCT7?"2026-10-07T23:00:00Z":RESUME?"2026-10-07T03:00:00Z":"2026-10-06T03:00:00Z"),
+let START=new Date(OCT7?"2026-10-07T23:00:00Z":RESUME?"2026-10-07T03:00:00Z":"2026-10-06T03:00:00Z"),
  END=new Date(OCT7?"2026-10-08T10:00:00Z":RESUME?"2026-10-07T10:00:00Z":"2026-10-06T10:00:00Z");
 const sleep=(ms:number)=>new Promise(r=>setTimeout(r,ms));
 const digest=(v:string)=>createHash("sha256").update(v).digest("hex");
 async function main(){
  if(!process.env.RENDER||process.env.REPLIT_DEV_DOMAIN)throw Error("Production execution required");
- if(Date.now()>=END.getTime())throw Error("Approved overnight window expired");
+ if(!ELIGIBLE_RESUME&&Date.now()>=END.getTime())throw Error("Approved overnight window expired");
  const bytes=readFileSync("docs/reporting/jwt-overnight-native-manifest.json","utf8");
  if(digest(bytes)!=="2ce9dc85edc9a2d2d849e4831111977f12c20ee6edff1adc7aab96d4ca87f615")throw Error("Manifest mismatch");
  const native=JSON.parse(bytes), db=await getDb(), jobs=db.collection<{
@@ -37,15 +38,23 @@ async function main(){
    cursor:number; page:number; runId:string; manifestHash:string; createdAt:Date;
    stopped?:boolean; owner?:string; leaseUntil?:Date; startedAt?:Date; endedAt?:Date;
    reason?:string; outcomes?:Record<string,number>; parentJobId?:string;
-   eligibleResume?:any;completedWindowKeys?:string[];windowPages?:Record<string,number>;completedWindows?:number
+   eligibleResume?:any;completedWindowKeys?:string[];windowPages?:Record<string,number>;completedWindows?:number;
+   deferredWindows?:Record<string,RecoveryDeferral>
  }>("operator_invoice_recovery_jobs");
  const rates=db.collection<any>("api_rate_limits"), sources=db.collection<any>("operator_invoice_recovery_sources");
  if(ELIGIBLE_RESUME){
   const [job,rate]=await Promise.all([jobs.findOne({_id:JOB}),rates.findOne({_id:RATE})]);
   validateEligibleHandoff(job,rate?.jwtOvernight);
+  // Only the digest-bound, operator-approved permit can authorize a later
+  // night. Never infer a new window or reset consumed requests automatically.
+  START=rate.jwtOvernight.notBefore;END=rate.jwtOvernight.expiresAt;
   const previous=await fetch(`https://api.render.com/v1/services/srv-d55jaqkhg0os73a5dd8g/jobs/${job!.eligibleResume.renderJobId}`,{
    headers:{Authorization:`Bearer ${process.env.RENDER_API_KEY_PROD}`},signal:AbortSignal.timeout(8000)});
-  if(!previous.ok||(await previous.json()).status!=="canceled")throw Error("Prior Render process has not been confirmed canceled");
+  if(!previous.ok)throw Error("Prior Render process cannot be verified");
+  const prior=await previous.json();
+  if(!["canceled","failed","succeeded"].includes(prior.status)||
+     !prior.startCommand?.includes("scripts/run-jwt-overnight.ts"))
+   throw Error("Prior recovery process has not been confirmed terminated");
  }
  await jobs.updateOne({_id:JOB},{$setOnInsert:{status:"scheduled",start:START,expires:END,cursor:0,page:0,
    runId:randomUUID(),manifestHash:digest(bytes),createdAt:new Date(),...(RESUME?{parentJobId:PARENT}:{})}},{upsert:true});
@@ -56,7 +65,8 @@ async function main(){
    {_id:JOB,status:{$in:["scheduled","running"]},stopped:{$ne:true},
     $or:[{leaseUntil:{$exists:false}},{leaseUntil:{$lt:new Date()}}]},
    {$set:{owner,leaseUntil:END,status:"running",startedAt:new Date(),
-    ...(ELIGIBLE_RESUME?{stopped:false,"eligibleResume.claimedBy":owner}: {})}},{returnDocument:"after"});
+    ...(ELIGIBLE_RESUME?{stopped:false,"eligibleResume.claimedBy":owner}: {})},
+    $unset:{reason:"",endedAt:""}},{returnDocument:"after"});
  if(!leased)return;
  const pg=postgres(process.env.SUPABASE_PROD_DATABASE_URL||process.env.DATAONE_DATABASE_URL||process.env.DATABASE_URL!,{
    max:1,connect_timeout:10,connection:{options:"-c statement_timeout=5000 -c lock_timeout=2000 -c timezone=UTC"}});
@@ -102,6 +112,8 @@ async function main(){
    $or:[{jwtOvernight:{$exists:false}},{"jwtOvernight.expiresAt":{$lte:new Date()}}]},{$set:{jwtOvernight:grant}});
  if(!registered.modifiedCount)throw Error("Existing permit must not be replaced or refunded");
  const schedule=recoverySchedule(windows,leased);
+ const deferredWindows:Record<string,RecoveryDeferral>={...(leased.deferredWindows??{})};
+ let consecutiveTimeouts=0;
  while(schedule.completed.size<windows.length){
    if(Date.now()>=END.getTime())break;
    const [control,authority]=await Promise.all([jobs.findOne({_id:JOB}),rates.findOne({_id:RATE})]);
@@ -112,8 +124,10 @@ async function main(){
    const pendingShops=[...new Set(windows.filter(k=>!schedule.completed.has(k)).map(k=>Number(k.split(":")[0])))];
    const profiles=await loadActivityProfileMap(pendingShops);
    const cursor=nextEligibleWindow(windows,schedule.completed,
-    shopId=>decideQuietWindowGate({profile:profiles.get(shopId),now:new Date(),minConfidence:.7}).eligible);
+    (shopId,key)=>windowReady(deferredWindows[key])&&
+     decideQuietWindowGate({profile:profiles.get(shopId),now:new Date(),minConfidence:.7}).eligible);
    if(cursor<0){
+    if(windows.filter(k=>!schedule.completed.has(k)).every(k=>deferredWindows[k]?.exhausted))break;
     await jobs.updateOne({_id:JOB,owner},{$set:{waitingForQuietWindow:true,lastCheckedAt:new Date(),
      ...scheduleCheckpoint(windows,schedule.completed,schedule.pages)}});
     await sleep(Math.min(60_000,Math.max(0,END.getTime()-Date.now())));continue;
@@ -127,6 +141,8 @@ async function main(){
    const config=await resolveProtractorConfig(shopId);
    const request={runId:grant.runId,shopId,day,operation:"invoice-day" as const,method:"GET" as const};
    for(let page=schedule.pages[windows[cursor]]??0;page<5;page++){
+     let pageTimeout:JwtRolledBackTimeout|undefined;
+     let pendingInvoices=0;
      if(!decideQuietWindowGate({profile:profiles.get(shopId),now:new Date(),minConfidence:.7}).eligible)
        throw Error("Shop quiet window ended; checkpoint retained");
      const live=await rates.findOne({_id:RATE});
@@ -205,24 +221,53 @@ async function main(){
            return "corrected";
           }
          });
-       }catch(error){holdReason=recoveryHoldReason(error);outcome="held";}
+       }catch(error){
+        if(error instanceof JwtRolledBackTimeout){
+         pageTimeout=error;pendingInvoices++;consecutiveTimeouts++;
+         // Persist the page before continuing. Never count a timeout as a hold,
+         // record its invoice as completed, or advance past its source page.
+         schedule.pages[windows[cursor]]=page;
+         const deferred=deferRecoveryWindow(deferredWindows[windows[cursor]],page,pendingInvoices,error.phase,error.sqlState);
+         const saved=await jobs.updateOne({_id:JOB,owner,status:"running",stopped:{$ne:true}},{$set:{
+          [`deferredWindows.${windows[cursor]}`]:deferred,
+          ...scheduleCheckpoint(windows,schedule.completed,schedule.pages)}});
+         if(saved.matchedCount!==1)throw Error("Deferred checkpoint ownership lost");
+         if(consecutiveTimeouts>=3)break; // cool down a database-wide brownout
+         continue;
+        }
+        holdReason=recoveryHoldReason(error);outcome="held";
+       }
+       consecutiveTimeouts=0;
        await jobs.updateOne({_id:JOB,owner},{$inc:{[`outcomes.${outcome}`]:1},
          $push:{results:{shopId,wo:n.wo,day,outcome,...(holdReason?{holdReason}:{})}}});
        recorded.add(outcomeKey);
      }
+     if(pageTimeout){
+      deferredWindows[windows[cursor]]=deferRecoveryWindow(deferredWindows[windows[cursor]],page,pendingInvoices,pageTimeout.phase,pageTimeout.sqlState);
+      await jobs.updateOne({_id:JOB,owner},{$set:{deferredWindows}});
+      console.info(JSON.stringify({event:"jwt_recovery_window_deferred",jobId:JOB,shopId,day,page,
+       ...deferredWindows[windows[cursor]]}));
+      if(consecutiveTimeouts>=3){
+       await sleep(Math.min(60_000,Math.max(0,END.getTime()-Date.now())));consecutiveTimeouts=0;
+      }
+      break; // other eligible windows continue; this page remains pending
+     }
+     delete deferredWindows[windows[cursor]];
      if(invoices.length<100){
       schedule.completed.add(windows[cursor]);delete schedule.pages[windows[cursor]];
-      await jobs.updateOne({_id:JOB,owner},{$set:{...scheduleCheckpoint(windows,schedule.completed,schedule.pages),lastProgressAt:new Date()}});
+      await jobs.updateOne({_id:JOB,owner},{$set:{...scheduleCheckpoint(windows,schedule.completed,schedule.pages),deferredWindows,lastProgressAt:new Date()}});
       break;
      }
      if(page===4)throw Error("Day exceeds safe pagination bound");
      schedule.pages[windows[cursor]]=page+1;
-     await jobs.updateOne({_id:JOB,owner},{$set:scheduleCheckpoint(windows,schedule.completed,schedule.pages)});
+     await jobs.updateOne({_id:JOB,owner},{$set:{...scheduleCheckpoint(windows,schedule.completed,schedule.pages),deferredWindows}});
      await sleep(5000);
    }
    await sleep(5000);
  }
- await jobs.updateOne({_id:JOB,owner},{$set:{status:Date.now()>=END.getTime()?"morning-stop":"completed",endedAt:new Date()}});
+ await jobs.updateOne({_id:JOB,owner},{$set:{status:Date.now()>=END.getTime()?"morning-stop":
+  schedule.completed.size===windows.length?"completed":"needs-attention",endedAt:new Date(),
+  pendingWindows:windows.length-schedule.completed.size,deferredWindows}});
  }catch(e){await jobs.updateOne({_id:JOB,owner},{$set:{status:"paused",reason:(e as Error).message,endedAt:new Date()}});throw e;}
  finally{await rates.updateOne({_id:RATE,"jwtOvernight.runId":leased.runId},{$set:{"jwtOvernight.stopped":true}});await pg.end({timeout:5});}
 }

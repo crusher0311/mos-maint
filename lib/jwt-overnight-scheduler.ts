@@ -5,7 +5,8 @@ export function recoveryCheckpointDigest(job:any):string {
  return createHash("sha256").update(JSON.stringify({
   runId:job.runId,manifestHash:job.manifestHash,cursor:job.cursor,page:job.page,
   outcomes:job.outcomes??{},results:job.results??[],
-  completedWindowKeys:job.completedWindowKeys??[],windowPages:job.windowPages??{}
+  completedWindowKeys:job.completedWindowKeys??[],windowPages:job.windowPages??{},
+  deferredWindows:job.deferredWindows??{}
  })).digest("hex");
 }
 export function recoveryGrantDigest(grant:JwtOvernightGrant):string {
@@ -46,8 +47,8 @@ export function recoverySchedule(windows:string[],job:any) {
  return {completed,pages};
 }
 
-export function nextEligibleWindow(windows:string[],completed:Set<string>,eligible:(shopId:number)=>boolean):number {
- return windows.findIndex(key=>!completed.has(key)&&eligible(Number(key.split(":")[0])));
+export function nextEligibleWindow(windows:string[],completed:Set<string>,eligible:(shopId:number,key:string)=>boolean):number {
+ return windows.findIndex(key=>!completed.has(key)&&eligible(Number(key.split(":")[0]),key));
 }
 
 export function scheduleCheckpoint(windows:string[],completed:Set<string>,pages:Record<string,number>) {
