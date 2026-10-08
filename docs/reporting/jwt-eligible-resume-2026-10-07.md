@@ -16,3 +16,13 @@ own page checkpoint. Archived pages and recorded outcomes are reused.
 
 Validation: scheduler/handoff tests, existing overnight suite, and TypeScript
 typecheck passed. Activation must be verified separately after production build.
+
+## Activation verified
+
+Production release `654f14ddbec8395ff408dc677e46dedf1ee5cbb2` went live.
+Replacement Render job `job-db3eiobtqb8s73dm1n5g` started successfully.
+At 2026-10-08 00:54:27 UTC (October 7, 7:54 PM Central), the same recovery
+record was running on shop 227 / August 5, with 65 of 403 windows completed,
+861 corrected, 314 already matching, and 622 held. Requests increased from
+125 to 129 of 1,000, with the original 10:00 UTC cutoff unchanged.
+Provider logs confirmed a successful invoice GET for shop 227.
