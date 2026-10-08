@@ -168,7 +168,7 @@ async function main(){
        jobId:JOB,shopId,day,page,invoices,sourceDigest:digest(JSON.stringify(invoices)),capturedAt:new Date()}},{upsert:true});
      for(const source of invoices){
        if(Date.now()>=END.getTime())throw Error("Morning stop");
-       if(!decideQuietWindowGate({profile:profiles.get(shopId),now:new Date(),minConfidence:.7}).eligible)
+       if(!closedShopApproval&&!decideQuietWindowGate({profile:profiles.get(shopId),now:new Date(),minConfidence:.7}).eligible)
          throw Error("Shop quiet window ended; checkpoint retained");
        const n=native.orders.find((n:any)=>n.shopId===shopId&&n.date===day&&n.wo===String(source.WorkOrderNumber));
        if(!n)continue; // Credits and non-native records never qualify.
@@ -194,7 +194,7 @@ async function main(){
               currentRate?.jwtOvernight?.runId!==grant.runId||
               currentRate?.canary?.mode!=="live"||currentRate?.canary?.generation!==grant.canaryGeneration)
             throw Error("Recovery authority changed; checkpoint retained");
-           if(!decideQuietWindowGate({profile:currentProfiles.get(shopId),now:new Date(),minConfidence:.7}).eligible)
+           if(!closedShopApproval&&!decideQuietWindowGate({profile:currentProfiles.get(shopId),now:new Date(),minConfidence:.7}).eligible)
             throw Error("Shop quiet window ended; checkpoint retained");
            if(Date.now()>=END.getTime()-20_000)throw Error("Morning stop; insufficient transaction headroom");
           },

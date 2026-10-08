@@ -27,7 +27,7 @@ async function main(){
    windows:["233:2026-08-25"],schedule:{pages:{},completed:new Set()},
    deferredWindows:{},consecutiveTimeouts:0,recorded,owner:"owner",JOB:"synthetic",RATE:"rate",
    END:new Date(Date.now()+3600_000),profiles:new Map(),grant:{runId:"run",canaryGeneration:"generation"},
-   decideQuietWindowGate:()=>({eligible:true}),verifyWorkers:async()=>{},
+   closedShopApproval:true,decideQuietWindowGate:()=>({eligible:false}),verifyWorkers:async()=>{},
    loadActivityProfileMap:async()=>new Map(),
    rates:{findOne:async()=>({jwtOvernight:{runId:"run"},canary:{mode:"live",generation:"generation"}})},
    jobs:{
