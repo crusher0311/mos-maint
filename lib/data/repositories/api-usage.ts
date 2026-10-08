@@ -1083,11 +1083,14 @@ export async function acquireProtractorPhysicalTransportLease(
   return null;
 }
 
+import {historyAdmissionExpression,type ShopHistoryRequest} from "@/lib/protractor-shop-history-policy";
 export interface ProtractorPhysicalTransportConfirmationContext {
   requireTimedTrial?: boolean;
   callbackReceivedAt?: Date;
   interactiveShopId?: number;
   overnightRequest?: JwtOvernightRequest;
+  historyRequest?: ShopHistoryRequest;
+  historyBindingDigest?: string;
   transport?: "direct" | "relay";
   environment?: "production" | "development" | "test" | "unknown";
 }
@@ -1128,6 +1131,11 @@ export async function confirmProtractorPhysicalTransportLease(
   // predate the persisted requiresRelay field.  Do not infer an opt-out from
   // an absent/false marker: the shared trial feature is relay-only.
   const relayRequiredExpression = { $eq: [transport, "relay"] };
+  const historyAdmission=context.historyRequest?{$and:[
+    historyAdmissionExpression(context.historyRequest,context.historyBindingDigest),
+    {$eq:["$canary.mode","live"]},{$eq:[environment,"production"]},relayRequiredExpression,
+    {$literal:context.callbackReceivedAt===undefined && context.interactiveShopId===undefined && context.overnightRequest===undefined},
+  ]}:{$literal:false};
   const overnightAdmissionExpression = context.overnightRequest
     ? {
       $and: [
@@ -1190,6 +1198,7 @@ export async function confirmProtractorPhysicalTransportLease(
               },
               { $gt: [interactiveShopId, 0] },
               overnightAdmissionExpression,
+              historyAdmission,
             ],
           },
         ],
@@ -1273,6 +1282,7 @@ export async function confirmProtractorPhysicalTransportLease(
           // A background context must never fall through to an unrelated
           // callback, interactive, bounded or legacy unscoped permission.
           ...(context.overnightRequest ? [overnightAdmissionExpression] : []),
+          ...(context.historyRequest ? [historyAdmission] : []),
           {
             $or: [
               { $ne: ["$canary.mode", "live"] },
@@ -1286,6 +1296,7 @@ export async function confirmProtractorPhysicalTransportLease(
     [{
       $set: {
         ...(context.overnightRequest ? jwtOvernightConsumptionFields(context.overnightRequest) : {}),
+        ...(context.historyRequest ? {"shopHistory.consumedRequests":{$add:["$shopHistory.consumedRequests",1]}} : {}),
         physicalAdmissionStartedAt: "$$NOW",
         physicalAdmissionOwnerToken: { $literal: ownerToken },
         "canary.consumedAdmissions": {
