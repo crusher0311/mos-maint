@@ -23,3 +23,13 @@ test also had a stale extraction delimiter.
 **How to apply:** Exercise both the real handler and browser lifecycle before
 packaging. Assert source-extraction boundaries explicitly; don't weaken hidden
 preferences to compensate for a broken settings transport.
+
+Isolated release worktrees sharing workspace node_modules can fail native canvas
+loading on missing Nix libraries even when Render's build environment passes.
+
+**Why:** The full smoke suite stopped on missing libuuid.so.1 locally; Render
+subsequently completed the full build with the same release source.
+
+**How to apply:** Separate environment failures from assertion failures. Preserve
+network isolation, do not weaken tests, and require Render's successful build and
+live commit verification before reporting a release as deployed.
