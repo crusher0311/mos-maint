@@ -21,7 +21,7 @@ export async function saveDispatchBoard(shopId:number,expectedRevision:number,bo
     try{await collection.insertOne({_id,...board},{writeConcern:{w:"majority",wtimeoutMS:5000}});return true;}
     catch(error){if((error as {code?:number}).code===11000)return false;throw error;}
   }
-  const result=await collection.replaceOne({_id,revision:expectedRevision},{_id,...board},{writeConcern:{w:"majority",wtimeoutMS:5000}});
+  const result=await collection.replaceOne({_id,revision:expectedRevision},board,{writeConcern:{w:"majority",wtimeoutMS:5000}});
   return result.modifiedCount===1;
 }
 export async function readDispatchEnterpriseBrand(enterpriseId:string):Promise<EnterpriseBrandDoc>{

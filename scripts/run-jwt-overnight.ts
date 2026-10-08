@@ -245,7 +245,7 @@ async function main(){
      if(pageTimeout){
       deferredWindows[windows[cursor]]=deferRecoveryWindow(deferredWindows[windows[cursor]],page,pendingInvoices,pageTimeout.phase,pageTimeout.sqlState);
       await jobs.updateOne({_id:JOB,owner},{$set:{deferredWindows}});
-      console.info(JSON.stringify({event:"jwt_recovery_window_deferred",jobId:JOB,shopId,day,page,
+      console.info(JSON.stringify({event:"jwt_recovery_window_deferred",jobId:JOB,shopId,day,
        ...deferredWindows[windows[cursor]]}));
       if(consecutiveTimeouts>=3){
        await sleep(Math.min(60_000,Math.max(0,END.getTime()-Date.now())));consecutiveTimeouts=0;
