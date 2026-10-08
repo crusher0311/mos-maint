@@ -14,8 +14,10 @@ import {decideQuietWindowGate} from "../lib/integrations/activity-profile/profil
 import {JWT_RESUME_PARENT,resumeWindows} from "../lib/jwt-overnight-resume";
 import {overnightTransaction} from "../lib/jwt-overnight-transaction";
 import {oct7Resume,OCT7_PARENT,OCT7_PARENT_RUN,OCT7_CONSUMED} from "../lib/jwt-overnight-resume-oct7";
+import {validateEligibleHandoff,recoveryGrantDigest,recoverySchedule,nextEligibleWindow,scheduleCheckpoint} from "../lib/jwt-overnight-scheduler";
 
-const OCT7=process.argv.includes("--resume-2026-10-07");
+const ELIGIBLE_RESUME=process.argv.includes("--resume-eligible-2026-10-07");
+const OCT7=ELIGIBLE_RESUME||process.argv.includes("--resume-2026-10-07");
 const RESUME=OCT7||process.argv.includes("--resume-2026-10-06");
 const PARENT=OCT7?OCT7_PARENT:JWT_RESUME_PARENT;
 const PARENT_RUN=OCT7?OCT7_PARENT_RUN:"fa7377a4-5f91-4d75-b1a6-14eb24920b3e";
@@ -34,16 +36,27 @@ async function main(){
    _id:string; holds?:any[]; results?:any[]; status:string; start:Date; expires:Date;
    cursor:number; page:number; runId:string; manifestHash:string; createdAt:Date;
    stopped?:boolean; owner?:string; leaseUntil?:Date; startedAt?:Date; endedAt?:Date;
-   reason?:string; outcomes?:Record<string,number>; parentJobId?:string
+   reason?:string; outcomes?:Record<string,number>; parentJobId?:string;
+   eligibleResume?:any;completedWindowKeys?:string[];windowPages?:Record<string,number>;completedWindows?:number
  }>("operator_invoice_recovery_jobs");
  const rates=db.collection<any>("api_rate_limits"), sources=db.collection<any>("operator_invoice_recovery_sources");
+ if(ELIGIBLE_RESUME){
+  const [job,rate]=await Promise.all([jobs.findOne({_id:JOB}),rates.findOne({_id:RATE})]);
+  validateEligibleHandoff(job,rate?.jwtOvernight);
+  const previous=await fetch(`https://api.render.com/v1/services/srv-d55jaqkhg0os73a5dd8g/jobs/${job!.eligibleResume.renderJobId}`,{
+   headers:{Authorization:`Bearer ${process.env.RENDER_API_KEY_PROD}`},signal:AbortSignal.timeout(8000)});
+  if(!previous.ok||(await previous.json()).status!=="canceled")throw Error("Prior Render process has not been confirmed canceled");
+ }
  await jobs.updateOne({_id:JOB},{$setOnInsert:{status:"scheduled",start:START,expires:END,cursor:0,page:0,
    runId:randomUUID(),manifestHash:digest(bytes),createdAt:new Date(),...(RESUME?{parentJobId:PARENT}:{})}},{upsert:true});
  while(Date.now()<START.getTime()){if((await jobs.findOne({_id:JOB}))?.stopped)return;await sleep(30_000);}
  const owner=randomUUID();
- const leased=await jobs.findOneAndUpdate({_id:JOB,status:{$in:["scheduled","running"]},stopped:{$ne:true},
-   $or:[{leaseUntil:{$exists:false}},{leaseUntil:{$lt:new Date()}}]},
-   {$set:{owner,leaseUntil:END,status:"running",startedAt:new Date()}},{returnDocument:"after"});
+ const leased=await jobs.findOneAndUpdate(ELIGIBLE_RESUME?
+   {_id:JOB,status:"paused",stopped:true,"eligibleResume.claimedBy":{$exists:false},"eligibleResume.approval":"eligible-shops-first"}:
+   {_id:JOB,status:{$in:["scheduled","running"]},stopped:{$ne:true},
+    $or:[{leaseUntil:{$exists:false}},{leaseUntil:{$lt:new Date()}}]},
+   {$set:{owner,leaseUntil:END,status:"running",startedAt:new Date(),
+    ...(ELIGIBLE_RESUME?{stopped:false,"eligibleResume.claimedBy":owner}: {})}},{returnDocument:"after"});
  if(!leased)return;
  const pg=postgres(process.env.SUPABASE_PROD_DATABASE_URL||process.env.DATAONE_DATABASE_URL||process.env.DATABASE_URL!,{
    max:1,connect_timeout:10,connection:{options:"-c statement_timeout=5000 -c lock_timeout=2000 -c timezone=UTC"}});
@@ -70,28 +83,50 @@ async function main(){
  const state=await rates.findOne({_id:RATE});
  if(state?.operatorStop?.active||state?.canary?.mode!=="live"||!state.canary.workersSuspendedConfirmed)
    throw Error("Provider safety state disallows recovery");
- const grant={version:1 as const,runId:leased.runId,canaryGeneration:state.canary.generation,
+ const grant=ELIGIBLE_RESUME?{...state.jwtOvernight,stopped:false}:{version:1 as const,runId:leased.runId,canaryGeneration:state.canary.generation,
    manifestHash:digest(bytes),notBefore:START,expiresAt:END,windowKeys:windows,maxRequests:1000,consumedRequests:CONSUMED,stopped:false};
- if(RESUME && (state.jwtOvernight?.runId!==PARENT_RUN ||
+ if(ELIGIBLE_RESUME&&(leased.eligibleResume.grantDigest!==recoveryGrantDigest(state.jwtOvernight)||
+    state.jwtOvernight?.runId!==leased.runId||state.jwtOvernight?.stopped!==true||
+    state.canary.generation!==grant.canaryGeneration||
+    JSON.stringify(grant.windowKeys)!==JSON.stringify(windows)))throw Error("Handoff permit changed");
+ if(RESUME && !ELIGIBLE_RESUME && (state.jwtOvernight?.runId!==PARENT_RUN ||
     state.jwtOvernight?.consumedRequests!==CONSUMED || !state.jwtOvernight?.stopped))throw Error("Previous permit changed");
  validateJwtOvernightGrant(grant);
- const registered=await rates.updateOne({_id:RATE,"canary.generation":grant.canaryGeneration,
+ const registered=ELIGIBLE_RESUME?
+ await rates.updateOne({_id:RATE,jwtOvernight:state.jwtOvernight,"canary.generation":grant.canaryGeneration,
+   "canary.mode":"live","canary.workersSuspendedConfirmed":true,"operatorStop.active":{$ne:true}},
+  {$set:{"jwtOvernight.stopped":false}}):
+ await rates.updateOne({_id:RATE,"canary.generation":grant.canaryGeneration,
    "canary.mode":"live","operatorStop.active":{$ne:true},
    ...(RESUME?{"jwtOvernight.runId":PARENT_RUN,"jwtOvernight.consumedRequests":CONSUMED,"jwtOvernight.stopped":true}:{}),
    $or:[{jwtOvernight:{$exists:false}},{"jwtOvernight.expiresAt":{$lte:new Date()}}]},{$set:{jwtOvernight:grant}});
  if(!registered.modifiedCount)throw Error("Existing permit must not be replaced or refunded");
- for(let cursor=leased.cursor;cursor<windows.length;cursor++){
+ const schedule=recoverySchedule(windows,leased);
+ while(schedule.completed.size<windows.length){
    if(Date.now()>=END.getTime())break;
+   const [control,authority]=await Promise.all([jobs.findOne({_id:JOB}),rates.findOne({_id:RATE})]);
+   if(control?.owner!==owner||control.stopped||control.status!=="running"||
+      authority?.operatorStop?.active||authority?.jwtOvernight?.stopped||
+      authority?.jwtOvernight?.runId!==grant.runId)throw Error("Stopped; checkpoint retained");
    await verifyWorkers();
+   const pendingShops=[...new Set(windows.filter(k=>!schedule.completed.has(k)).map(k=>Number(k.split(":")[0])))];
+   const profiles=await loadActivityProfileMap(pendingShops);
+   const cursor=nextEligibleWindow(windows,schedule.completed,
+    shopId=>decideQuietWindowGate({profile:profiles.get(shopId),now:new Date(),minConfidence:.7}).eligible);
+   if(cursor<0){
+    await jobs.updateOne({_id:JOB,owner},{$set:{waitingForQuietWindow:true,lastCheckedAt:new Date(),
+     ...scheduleCheckpoint(windows,schedule.completed,schedule.pages)}});
+    await sleep(Math.min(60_000,Math.max(0,END.getTime()-Date.now())));continue;
+   }
    const [shop,day]=windows[cursor].split(":"),shopId=Number(shop);
    const enterprise=await getEnterpriseByShopId(shopId);
    if(enterprise?.name!=="JWT"||!enterprise.shopIds.map(Number).includes(shopId))throw Error("Membership changed");
-   const profiles=await loadActivityProfileMap([shopId]);
    const quiet=decideQuietWindowGate({profile:profiles.get(shopId),now:new Date(),minConfidence:.7});
-   if(!quiet.eligible){await sleep(Math.min(60_000,Math.max(0,END.getTime()-Date.now())));cursor--;continue;}
+   if(!quiet.eligible)continue;
+   await jobs.updateOne({_id:JOB,owner},{$set:{activeWindow:windows[cursor],waitingForQuietWindow:false,lastCheckedAt:new Date()}});
    const config=await resolveProtractorConfig(shopId);
    const request={runId:grant.runId,shopId,day,operation:"invoice-day" as const,method:"GET" as const};
-   for(let page=cursor===leased.cursor?leased.page:0;page<5;page++){
+   for(let page=schedule.pages[windows[cursor]]??0;page<5;page++){
      if(!decideQuietWindowGate({profile:profiles.get(shopId),now:new Date(),minConfidence:.7}).eligible)
        throw Error("Shop quiet window ended; checkpoint retained");
      const live=await rates.findOne({_id:RATE});
@@ -99,8 +134,8 @@ async function main(){
        (await jobs.findOne({_id:JOB}))?.stopped)throw Error("Stopped");
      if(!live?.canary?.workersSuspendedConfirmed)throw Error("Worker safety state changed");
      // Reuse the reconciled partial page, rather than refetching changing data.
-     const archived=OCT7&&cursor===0&&page===0?
-       await sources.findOne({_id:`${PARENT}:${shopId}:${day}:${page}`}):null;
+     const archived=await sources.findOne({_id:`${JOB}:${shopId}:${day}:${page}`})||
+       (OCT7&&cursor===0&&page===0?await sources.findOne({_id:`${PARENT}:${shopId}:${day}:${page}`}):null);
      if(OCT7&&cursor===0&&page===0&&!archived)throw Error("Reconciled source page missing");
      if(archived&&digest(JSON.stringify(archived.invoices))!==archived.sourceDigest)throw Error("Archived source changed");
      const transportOptions={priority:false,maxRetries:0,timeoutMs:45_000,deadlineAtMs:Math.min(Date.now()+50_000,END.getTime())};
@@ -175,9 +210,14 @@ async function main(){
          $push:{results:{shopId,wo:n.wo,day,outcome,...(holdReason?{holdReason}:{})}}});
        recorded.add(outcomeKey);
      }
-     if(invoices.length<100){await jobs.updateOne({_id:JOB,owner},{$set:{cursor:cursor+1,page:0}});break;}
+     if(invoices.length<100){
+      schedule.completed.add(windows[cursor]);delete schedule.pages[windows[cursor]];
+      await jobs.updateOne({_id:JOB,owner},{$set:{...scheduleCheckpoint(windows,schedule.completed,schedule.pages),lastProgressAt:new Date()}});
+      break;
+     }
      if(page===4)throw Error("Day exceeds safe pagination bound");
-     await jobs.updateOne({_id:JOB,owner},{$set:{cursor,page:page+1}});
+     schedule.pages[windows[cursor]]=page+1;
+     await jobs.updateOne({_id:JOB,owner},{$set:scheduleCheckpoint(windows,schedule.completed,schedule.pages)});
      await sleep(5000);
    }
    await sleep(5000);
