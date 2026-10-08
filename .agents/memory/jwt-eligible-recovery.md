@@ -32,3 +32,13 @@ is only ten shops, with several more Protractor shops needing recovery.
 **How to apply:** Preserve per-window pages, bound delayed retries, keep
 exhausted work visibly unresolved, and never renew a night or refund requests
 without explicit operator authorization.
+
+During reconciliation, intersect candidate business numbers with the exact
+Protractor source GUID before requiring a unique row.
+
+**Why:** A newly imported October work-order number equaled an older August
+invoice number, falsely making an already-corrected GUID-keyed row ambiguous.
+
+**How to apply:** Keep all matching-provenance duplicates ambiguous; never select
+the first row or relax source/date/header validation. This is a read-only
+disambiguation rule, not permission to merge or delete records.

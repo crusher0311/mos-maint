@@ -8,6 +8,7 @@ import {verifyOvernightHeader} from "../lib/jwt-overnight-header-guard";
 import {cents} from "../lib/jwt-labor-header-correction-guard";
 import {resumeWindows} from "../lib/jwt-overnight-resume";
 import {oct7Resume} from "../lib/jwt-overnight-resume-oct7";
+import {reconciliationMatches} from "../lib/jwt-reconciliation-identity";
 async function main(){
  const db=await getDb(),jobId=process.argv.find(a=>a.startsWith("--job="))?.slice(6)??"jwt-overnight-2026-10-05";
  if(!["jwt-overnight-2026-10-05","jwt-overnight-2026-10-06","jwt-overnight-2026-10-07"].includes(jobId))throw Error("Unapproved reconciliation job");
@@ -66,7 +67,7 @@ async function main(){
     const n=native.orders.find((x:any)=>x.shopId===page.shopId&&x.date===page.day&&x.wo===String(s.WorkOrderNumber));
     assert.ok(n,"Missing native evidence");
     const key=`${page.shopId}:${page.day}:${s.WorkOrderNumber}`;
-    const matches=rows.filter(r=>[n.wo,n.invoice,s.ID].includes(r.work_order_number));
+    const matches=reconciliationMatches(rows,n,s);
     if(isCheckpoint&&allKeys.has(key))partial.recorded++;
     if(!target.has(key)){
      if(allKeys.has(key))continue;
@@ -77,7 +78,7 @@ async function main(){
      }catch(error){if(!(error instanceof AssertionError))throw error;partial.unrecordedHeld++;}
      continue;
     }
-    if(matches.length!==1)throw Error("Correction identity no longer unique");
+    if(matches.length!==1)throw Error(`Correction identity no longer unique: shop=${page.shopId} day=${page.day} matches=${matches.length} source=${createHash("sha256").update(String(s.ID)).digest("hex").slice(0,12)}`);
     verifyOvernightHeader(matches[0],n,s,page.shopId);
     if(cents(matches[0].labor_total)!==n.laborCents)throw Error("Recorded totals differ");
     if(cents(matches[0].raw_labor)!==n.laborCents){
