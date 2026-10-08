@@ -152,4 +152,5 @@
 - [Offline release checks](offline-release-checks.md) — success banners can precede hanging test processes; busy workspaces can change which short-deadline stage expires.
 - [Recovery accounting gap](recovery-accounting-gap.md) — financial commits and outcome bookkeeping are separate; current matches do not prove when an unrecorded correction occurred.
 - [JWT eligible-first recovery](jwt-eligible-recovery.md) — defer closed shops without blocking eligible ones; handoffs preserve budgets, holds, and per-window checkpoints.
+- [Scoped Protractor history](protractor-scoped-history.md) — shop 538 needs 14 months; concurrent JWT recovery shares fleet pacing but retains separate budgets.
 - [Shop workflow prototype](shop-workflow-prototype-scope.md) — vehicle visits contain multi-technician jobs; UI evaluation does not authorize production scheduling or live integrations.

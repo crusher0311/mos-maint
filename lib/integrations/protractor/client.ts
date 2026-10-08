@@ -4,6 +4,8 @@ import {
   getJwtOvernightContext, jwtOvernightContextError, jwtOvernightDispatchError,
 } from "./jwt-overnight-context";
 import type { JwtOvernightRequest } from "@/lib/protractor-jwt-overnight-policy";
+import type { ShopHistoryRequest } from "@/lib/protractor-shop-history-policy";
+import {getShopHistoryContext,historyContextError,historyDispatchError} from "./shop-history-context";
 import crypto from "node:crypto";
 import https from "node:https";
 import pLimit from "p-limit";
@@ -192,6 +194,8 @@ export const __protractorClientTestHooks: {
       callbackReceivedAt?: Date;
       interactiveShopId?: number;
       overnightRequest?: JwtOvernightRequest;
+      historyRequest?: ShopHistoryRequest;
+      historyBindingDigest?: string;
       transport?: "direct" | "relay";
       environment?: "production" | "development" | "test" | "unknown";
     },
@@ -234,6 +238,8 @@ export const __protractorClientTestHooks: {
         callbackReceivedAt?: Date;
         interactiveShopId?: number;
         overnightRequest?: JwtOvernightRequest;
+        historyRequest?: ShopHistoryRequest;
+        historyBindingDigest?: string;
         transport?: "direct" | "relay";
         environment?: "production" | "development" | "test" | "unknown";
       },
@@ -1022,6 +1028,10 @@ function localPolicyError(context: string): { ok: false; error: string } | null 
   }
   const decision = getProtractorOutboundPolicy();
   const overnight = getJwtOvernightContext();
+  const history = getShopHistoryContext();
+  if(history && !["rest","transport_attempt","transport_dispatch"].includes(context))
+    return {ok:false,error:"Shop history permits only daily invoice REST reads"};
+  if(decision.allowed && history?.active && Date.now()<history.expiresAtMs)return null;
   if (overnight && !["rest", "transport_attempt", "transport_dispatch"].includes(context)) {
     return {ok: false, error: "JWT overnight permission only supports daily invoice REST reads"};
   }
@@ -1125,6 +1135,8 @@ async function runFleetGuardedTransportAttempt<T>(
 ): Promise<{ ok: true; response: T } | { ok: false; error: string }> {
   const earlyLocal = localPolicyError("transport_attempt");
   if (earlyLocal) return earlyLocal;
+  const historyError=historyContextError(actualShopId,config.connectionId);
+  if(historyError)return {ok:false,error:historyError};
   const overnightError = jwtOvernightContextError(actualShopId);
   if (overnightError) return {ok: false, error: overnightError};
   const earlyInteractive = interactiveContextForShop(actualShopId);
@@ -1218,6 +1230,7 @@ async function runFleetGuardedTransportAttempt<T>(
       callbackContext !== undefined ||
       interactiveAtAdmission.context !== undefined ||
       getJwtOvernightContext() !== undefined ||
+      getShopHistoryContext() !== undefined ||
       finalPolicy.requireTimedTrial === true
     ) {
       // The local env flag cannot encode the persisted scope or whether the
@@ -1274,6 +1287,9 @@ async function runFleetGuardedTransportAttempt<T>(
       return { ok: false, error: interactiveBeforeConfirm.error };
     }
     const overnightBeforeConfirm = jwtOvernightContextError(actualShopId);
+    const historyBeforeConfirm=historyContextError(actualShopId,config.connectionId);
+    if(historyBeforeConfirm)return {ok:false,error:historyBeforeConfirm};
+    if(getShopHistoryContext() && !leaseToken)return {ok:false,error:"Shop history requires fleet lease"};
     if (overnightBeforeConfirm) return {ok: false, error: overnightBeforeConfirm};
     if (getJwtOvernightContext() && !leaseToken) {
       return {ok: false, error: "JWT overnight transport requires the fleet lease"};
@@ -1287,6 +1303,8 @@ async function runFleetGuardedTransportAttempt<T>(
           callbackReceivedAt: callbackContext?.callbackReceivedAt,
           interactiveShopId: interactiveBeforeConfirm.context?.shopId,
           overnightRequest: getJwtOvernightContext()?.request,
+          historyRequest: getShopHistoryContext()?.request,
+          historyBindingDigest: getShopHistoryContext()?.bindingDigest,
           transport: dispatchTransport,
           environment: resolveProtractorEnvironment(process.env),
         }),
@@ -1311,6 +1329,8 @@ async function runFleetGuardedTransportAttempt<T>(
       return { ok: false, error: interactiveAtDispatch.error };
     }
     const overnightAtDispatch = jwtOvernightContextError(actualShopId);
+    const historyAtDispatch=historyContextError(actualShopId,config.connectionId);
+    if(historyAtDispatch)return {ok:false,error:historyAtDispatch};
     if (overnightAtDispatch) return {ok: false, error: overnightAtDispatch};
 
     if (leaseToken) {
@@ -1488,6 +1508,16 @@ export async function protractorFetch<T>(
   shopId?: number,
   opts?: { priority?: boolean; maxRetries?: number; timeoutMs?: number; deadlineAtMs?: number }
 ): Promise<{ ok: boolean; data?: T; error?: string }> {
+  const historyError=historyDispatchError(endpoint,options.method??"GET",Number(shopId),options.body);
+  if(historyError)return {ok:false,error:historyError};
+  if(getShopHistoryContext()){
+    if(options.headers!==undefined || opts?.priority===true || getJwtOvernightContext())
+      return {ok:false,error:"Invalid history transport options"};
+    options={method:"GET"};
+    const end=getShopHistoryContext()!.expiresAtMs;
+    opts={...opts,priority:false,maxRetries:0,timeoutMs:Math.min(opts?.timeoutMs??45000,45000),
+      deadlineAtMs:Math.min(opts?.deadlineAtMs??end,end)};
+  }
   const overnightDispatchError = jwtOvernightDispatchError(
     endpoint, options.method ?? "GET", Number(shopId), options.body,
   );

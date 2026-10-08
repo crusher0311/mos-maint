@@ -18,7 +18,11 @@ async function main(){
  assert.ok(job&&["paused","morning-stop","needs-attention"].includes(job.status));
  const previous=state?.jwtOvernight;
  assert.equal(previous?.runId,job.runId);assert.equal(previous.stopped,true);
- assert.ok(previous.expiresAt.getTime()<=Date.now(),"Previous permit must expire before a new night");
+ const early=process.argv.includes("--approved-closed-shops-oct8");
+ assert.ok(previous.expiresAt.getTime()<=Date.now() ||
+   (early && job.stopped===true && !job.eligibleResume?.claimedBy &&
+    previous.notBefore.toISOString()==="2026-10-09T03:00:00.000Z"),
+   "Previous permit must expire or be an unclaimed approved continuation");
  validateJwtOvernightGrant(previous);
  const done=new Set<string>(job.completedWindowKeys??[]);
  const remaining:string[]=previous.windowKeys.filter((k:string)=>!done.has(k));
@@ -40,7 +44,10 @@ async function main(){
  const notBefore=new Date(arg("start")??""),expiresAt=new Date(arg("end")??"");
  const grant={...previous,notBefore,expiresAt}; // consumedRequests is NEVER reset
  validateJwtOvernightGrant(grant);
- assert.ok(notBefore.getTime()>=Date.now(),"Approve a future window explicitly");
+ assert.ok(notBefore.getTime()>=Date.now() || (early &&
+   notBefore.toISOString()==="2026-10-08T23:00:00.000Z" &&
+   expiresAt.toISOString()==="2026-10-09T10:00:00.000Z" && Date.now()<expiresAt.getTime()),
+   "Approve a future window or the explicit closed-shop exception");
  assert.ok(!state.operatorStop?.active&&state.canary?.mode==="live"&&state.canary.workersSuspendedConfirmed);
  assert.equal(state.canary.generation,grant.canaryGeneration);
  // This subprocess is read-only and verifies both stores and archived pages.
