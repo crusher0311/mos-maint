@@ -66,6 +66,7 @@ interface ShopFeatures {
   dvi_prefill?: boolean;
   enhance_notes?: boolean;
   sales_coach?: boolean;
+  shop_workflow?: boolean;
 }
 
 interface IntegrationDetails {
@@ -1196,7 +1197,7 @@ export default function PlatformShopsPage() {
                         // overrides are intentionally never written (see the
                         // updateShopSettings call below), so skip it.
                         if (newPlan !== "detect_dog_founder") {
-                          setFeatureEdits(featuresForPlan(newPlan) as ShopFeatures);
+                          setFeatureEdits(previous => ({ ...featuresForPlan(newPlan), shop_workflow: previous.shop_workflow === true }) as ShopFeatures);
                         }
                       }}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#3c81c3] text-sm"
@@ -1336,8 +1337,9 @@ export default function PlatformShopsPage() {
                     { key: "enhance_notes", label: "Enhance Notes (AI)", desc: "AI-powered rewriting of technician notes into customer-facing language" },
                     { key: "estimate_assist", label: "Estimate Assist", desc: "AI-powered estimate audits and smart job building" },
                     { key: "sales_coach", label: "Sales Coach", desc: "Review open estimates and generate customer-ready sales scripts" },
+                    { key: "shop_workflow", label: "Shop Workflow (pilot)", desc: "Enable only this location. Hidden for all other shops; not inherited from plans or enterprise." },
                   ].map(feature => {
-                    const isFounder = billingEdits.plan === "detect_dog_founder";
+                    const isFounder = billingEdits.plan === "detect_dog_founder" && feature.key !== "shop_workflow";
                     const checked = isFounder
                       ? true
                       : featureEdits[feature.key as keyof ShopFeatures] === true;
@@ -1385,7 +1387,7 @@ export default function PlatformShopsPage() {
                   // Founder plan = wildcard. Don't write per-feature
                   // overrides so changing the plan later doesn't leave
                   // stale toggles behind.
-                  billingEdits.plan === "detect_dog_founder" ? undefined : featureEdits
+                  billingEdits.plan === "detect_dog_founder" ? { shop_workflow: featureEdits.shop_workflow === true } : featureEdits
                 )}
                 disabled={actionLoading !== null}
                 className="px-4 py-2 bg-[rgba(60,129,195,0.75)] text-white rounded-lg hover:bg-[#3c81c3] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"

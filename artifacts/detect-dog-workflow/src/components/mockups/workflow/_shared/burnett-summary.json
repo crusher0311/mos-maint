@@ -1,0 +1,2612 @@
+{
+  "sourceLabel": "Burnett location \u00b7 YTD service-package sales",
+  "from": "2026-01-02",
+  "through": "2026-10-07",
+  "rawRows": 28110,
+  "invoiceNumbers": 8259,
+  "assignedRows": 23232,
+  "creditRows": 46,
+  "duplicateRows": 72,
+  "positiveHoursRows": 19345,
+  "matchingHoursRows": 19302,
+  "hoursMatchPercent": 99.78,
+  "aliases": [
+    [
+      "Ethan Englehorn",
+      "Ethan Engelhorn"
+    ],
+    [
+      "Issac Bluemel",
+      "Isaac Bluemel"
+    ]
+  ],
+  "technicians": [
+    {
+      "name": "Austin Foutch",
+      "firstDate": "2026-01-05",
+      "lastDate": "2026-08-31",
+      "invoiceCount": 167,
+      "categories": [
+        {
+          "name": "Tires",
+          "count": 9
+        },
+        {
+          "name": "Driveability (Fuel, Ignition & Emission Systems)",
+          "count": 4
+        },
+        {
+          "name": "Diagnostics",
+          "count": 3
+        },
+        {
+          "name": "Batteries",
+          "count": 3
+        },
+        {
+          "name": "HVAC (Heating, Ventilation & Air Conditioning)",
+          "count": 2
+        },
+        {
+          "name": "Flushes & Fluid Exchange Services",
+          "count": 2
+        },
+        {
+          "name": "Accessories (Gauges, Power Accessories, Vision & Air Bag)",
+          "count": 2
+        },
+        {
+          "name": "Wheels, Tubes & Tire Products",
+          "count": 2
+        },
+        {
+          "name": "Steering & Suspension",
+          "count": 1
+        },
+        {
+          "name": "Brakes",
+          "count": 1
+        },
+        {
+          "name": "Transmission & Clutch",
+          "count": 1
+        },
+        {
+          "name": "Electrical (Belts, Lighting, Starting & Charging Systems)",
+          "count": 1
+        }
+      ],
+      "packages": [
+        {
+          "name": "Driveability Testing Labor (S700)",
+          "count": 3
+        },
+        {
+          "name": "Mount, Install & Balance - 4 Tires",
+          "count": 2
+        },
+        {
+          "name": "Engine Air Filter Service",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "Cade Funk",
+      "firstDate": "2026-05-18",
+      "lastDate": "2026-10-07",
+      "invoiceCount": 637,
+      "categories": [
+        {
+          "name": "Tire Repair & Tire Rotations",
+          "count": 441
+        },
+        {
+          "name": "Tires",
+          "count": 155
+        },
+        {
+          "name": "Oil, Lube & Maintenance Service",
+          "count": 139
+        },
+        {
+          "name": "Flushes & Fluid Exchange Services",
+          "count": 109
+        },
+        {
+          "name": "Driveability (Fuel, Ignition & Emission Systems)",
+          "count": 21
+        },
+        {
+          "name": "HVAC (Heating, Ventilation & Air Conditioning)",
+          "count": 20
+        },
+        {
+          "name": "Electrical (Belts, Lighting, Starting & Charging Systems)",
+          "count": 19
+        },
+        {
+          "name": "Accessories (Gauges, Power Accessories, Vision & Air Bag)",
+          "count": 15
+        },
+        {
+          "name": "Batteries",
+          "count": 14
+        },
+        {
+          "name": "Diagnostics",
+          "count": 8
+        },
+        {
+          "name": "Brakes",
+          "count": 7
+        },
+        {
+          "name": "GY - Tire Repair & Tire Rotations (P&LT)",
+          "count": 6
+        },
+        {
+          "name": "Wheels, Tubes & Tire Products",
+          "count": 3
+        },
+        {
+          "name": "GY - E-Commerce Codes",
+          "count": 2
+        },
+        {
+          "name": "GY - MISC Parts / Labor",
+          "count": 1
+        },
+        {
+          "name": "GY - Oil, Lube & Maintenance Service",
+          "count": 1
+        },
+        {
+          "name": "FS - Oil, Lube & Maintenance Service",
+          "count": 1
+        },
+        {
+          "name": "Alignments",
+          "count": 1
+        }
+      ],
+      "packages": [
+        {
+          "name": "Tire Repair With Rebalance - Standard Tire/Wheel",
+          "count": 153
+        },
+        {
+          "name": "Tire Rotation - No Charge",
+          "count": 120
+        },
+        {
+          "name": "\u2022Oil Change - Full Synthetic",
+          "count": 100
+        },
+        {
+          "name": "BG Engine Performance Restoration EPR/ MOA Kit",
+          "count": 68
+        },
+        {
+          "name": "Mount, Install & Balance - 4 Tires",
+          "count": 38
+        },
+        {
+          "name": "Engine Air Filter Service",
+          "count": 21
+        },
+        {
+          "name": "Cabin Air Filter Service",
+          "count": 20
+        },
+        {
+          "name": "Battery Installation with Purchase",
+          "count": 13
+        },
+        {
+          "name": "Full Service Oil Change",
+          "count": 11
+        },
+        {
+          "name": "Tire Rotation - Full Service Oil Change",
+          "count": 11
+        },
+        {
+          "name": "Front Disc Brake Service",
+          "count": 3
+        },
+        {
+          "name": "BG Brake Fluid Exchange",
+          "count": 3
+        },
+        {
+          "name": "Balance 4 Tires Warranty Wheel Balance",
+          "count": 2
+        },
+        {
+          "name": "Basic Vehicle Inspection - No Fluid Service",
+          "count": 2
+        },
+        {
+          "name": "Cooling System Performance Test",
+          "count": 1
+        },
+        {
+          "name": "Rear Disc Brake Service",
+          "count": 1
+        },
+        {
+          "name": "Brake Inspection",
+          "count": 1
+        },
+        {
+          "name": "All Wheel Alignment",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "Caitlin Swanson",
+      "firstDate": "2026-01-05",
+      "lastDate": "2026-06-22",
+      "invoiceCount": 10,
+      "categories": [
+        {
+          "name": "Tires",
+          "count": 3
+        },
+        {
+          "name": "Flushes & Fluid Exchange Services",
+          "count": 2
+        },
+        {
+          "name": "Batteries",
+          "count": 1
+        }
+      ],
+      "packages": [
+        {
+          "name": "Mount, Install & Balance - 4 Tires",
+          "count": 2
+        },
+        {
+          "name": "Battery Installation with Purchase",
+          "count": 1
+        },
+        {
+          "name": "BG Engine Performance Restoration EPR/ MOA Kit",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "Dakota Campbell",
+      "firstDate": "2026-01-02",
+      "lastDate": "2026-10-07",
+      "invoiceCount": 1099,
+      "categories": [
+        {
+          "name": "Flushes & Fluid Exchange Services",
+          "count": 603
+        },
+        {
+          "name": "Diagnostics",
+          "count": 308
+        },
+        {
+          "name": "Brakes",
+          "count": 299
+        },
+        {
+          "name": "Driveability (Fuel, Ignition & Emission Systems)",
+          "count": 170
+        },
+        {
+          "name": "HVAC (Heating, Ventilation & Air Conditioning)",
+          "count": 123
+        },
+        {
+          "name": "Electrical (Belts, Lighting, Starting & Charging Systems)",
+          "count": 103
+        },
+        {
+          "name": "Engine",
+          "count": 88
+        },
+        {
+          "name": "Cooling System",
+          "count": 87
+        },
+        {
+          "name": "Accessories (Gauges, Power Accessories, Vision & Air Bag)",
+          "count": 86
+        },
+        {
+          "name": "Alignments",
+          "count": 75
+        },
+        {
+          "name": "Tire Repair & Tire Rotations",
+          "count": 74
+        },
+        {
+          "name": "Tires",
+          "count": 70
+        },
+        {
+          "name": "Oil, Lube & Maintenance Service",
+          "count": 56
+        },
+        {
+          "name": "Batteries",
+          "count": 45
+        },
+        {
+          "name": "Steering & Suspension",
+          "count": 25
+        },
+        {
+          "name": "Transmission & Clutch",
+          "count": 21
+        },
+        {
+          "name": "Exhaust",
+          "count": 11
+        },
+        {
+          "name": "Drive Train (Final Drive, Transaxle, Differential & Transfer Case)",
+          "count": 10
+        },
+        {
+          "name": "Wheels, Tubes & Tire Products",
+          "count": 4
+        },
+        {
+          "name": "GY - Oil, Lube & Maintenance Service",
+          "count": 3
+        },
+        {
+          "name": "GY - Tire Repair & Tire Rotations (P&LT)",
+          "count": 2
+        },
+        {
+          "name": "FS - Engine",
+          "count": 1
+        },
+        {
+          "name": "GY - Commercial Alignments",
+          "count": 1
+        },
+        {
+          "name": "GY - Brakes",
+          "count": 1
+        }
+      ],
+      "packages": [
+        {
+          "name": "BG Brake Fluid Exchange",
+          "count": 145
+        },
+        {
+          "name": "BG Cooling System Fluid Exchange",
+          "count": 116
+        },
+        {
+          "name": "Spark Plug(s)",
+          "count": 87
+        },
+        {
+          "name": "Driveability Testing Labor (S700)",
+          "count": 81
+        },
+        {
+          "name": "Concern Testing & Inspecting (S700B)",
+          "count": 57
+        },
+        {
+          "name": "Front Disc Brake Service",
+          "count": 53
+        },
+        {
+          "name": "Rear Disc Brake Service",
+          "count": 51
+        },
+        {
+          "name": "All Wheel Alignment",
+          "count": 44
+        },
+        {
+          "name": "Cooling System Performance Test",
+          "count": 42
+        },
+        {
+          "name": "Battery Installation with Purchase",
+          "count": 42
+        },
+        {
+          "name": "Brake Inspection - No Charge",
+          "count": 36
+        },
+        {
+          "name": "BG Engine Performance Restoration EPR/ MOA Kit",
+          "count": 30
+        },
+        {
+          "name": "Engine Air Filter Service",
+          "count": 27
+        },
+        {
+          "name": "Check Alignment - No Charge",
+          "count": 24
+        },
+        {
+          "name": "Complete Electrical System Check",
+          "count": 22
+        },
+        {
+          "name": "Tire Rotation - No Charge",
+          "count": 21
+        },
+        {
+          "name": "Water Pump",
+          "count": 19
+        },
+        {
+          "name": "Basic Electrical System Check",
+          "count": 19
+        },
+        {
+          "name": "Mount, Install & Balance - 4 Tires",
+          "count": 16
+        },
+        {
+          "name": "Brake Inspection",
+          "count": 16
+        },
+        {
+          "name": "Suspension/Steering Testing and Replacement",
+          "count": 16
+        },
+        {
+          "name": "Tire Repair With Rebalance - Standard Tire/Wheel",
+          "count": 16
+        },
+        {
+          "name": "Starter Motor",
+          "count": 13
+        },
+        {
+          "name": "Full Service Oil Change",
+          "count": 10
+        },
+        {
+          "name": "Cabin Air Filter Service",
+          "count": 7
+        },
+        {
+          "name": "Tire Rotation - Full Service Oil Change",
+          "count": 5
+        },
+        {
+          "name": "\u2022Oil Change - Full Synthetic",
+          "count": 4
+        },
+        {
+          "name": "Basic Vehicle Inspection - No Fluid Service",
+          "count": 3
+        },
+        {
+          "name": "Balance 4 Tires Warranty Wheel Balance",
+          "count": 2
+        },
+        {
+          "name": "Strut Assembly, Front",
+          "count": 1
+        },
+        {
+          "name": "Suspension Control Arm, Lower",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "Daniel Brownlee",
+      "firstDate": "2026-01-02",
+      "lastDate": "2026-10-07",
+      "invoiceCount": 1268,
+      "categories": [
+        {
+          "name": "Oil, Lube & Maintenance Service",
+          "count": 911
+        },
+        {
+          "name": "Tire Repair & Tire Rotations",
+          "count": 895
+        },
+        {
+          "name": "Flushes & Fluid Exchange Services",
+          "count": 543
+        },
+        {
+          "name": "Tires",
+          "count": 307
+        },
+        {
+          "name": "Electrical (Belts, Lighting, Starting & Charging Systems)",
+          "count": 50
+        },
+        {
+          "name": "Accessories (Gauges, Power Accessories, Vision & Air Bag)",
+          "count": 43
+        },
+        {
+          "name": "GY - Tire Repair & Tire Rotations (P&LT)",
+          "count": 40
+        },
+        {
+          "name": "HVAC (Heating, Ventilation & Air Conditioning)",
+          "count": 35
+        },
+        {
+          "name": "Driveability (Fuel, Ignition & Emission Systems)",
+          "count": 32
+        },
+        {
+          "name": "GY - Oil, Lube & Maintenance Service",
+          "count": 26
+        },
+        {
+          "name": "Diagnostics",
+          "count": 12
+        },
+        {
+          "name": "Batteries",
+          "count": 9
+        },
+        {
+          "name": "GY - E-Commerce Codes",
+          "count": 9
+        },
+        {
+          "name": "Alignments",
+          "count": 6
+        },
+        {
+          "name": "GY - Tire & Wheel (P&LT)",
+          "count": 6
+        },
+        {
+          "name": "Wheels, Tubes & Tire Products",
+          "count": 3
+        },
+        {
+          "name": "Brakes",
+          "count": 2
+        },
+        {
+          "name": "FS - Tires & Wheels (P&LT)",
+          "count": 1
+        }
+      ],
+      "packages": [
+        {
+          "name": "Tire Rotation - No Charge",
+          "count": 539
+        },
+        {
+          "name": "BG Engine Performance Restoration EPR/ MOA Kit",
+          "count": 411
+        },
+        {
+          "name": "\u2022Oil Change - Full Synthetic",
+          "count": 279
+        },
+        {
+          "name": "Full Service Oil Change",
+          "count": 236
+        },
+        {
+          "name": "Tire Rotation - Full Service Oil Change",
+          "count": 228
+        },
+        {
+          "name": "Mount, Install & Balance - 4 Tires",
+          "count": 134
+        },
+        {
+          "name": "Cabin Air Filter Service",
+          "count": 34
+        },
+        {
+          "name": "Tire Repair With Rebalance - Standard Tire/Wheel",
+          "count": 29
+        },
+        {
+          "name": "Engine Air Filter Service",
+          "count": 25
+        },
+        {
+          "name": "Balance 4 Tires Warranty Wheel Balance",
+          "count": 16
+        },
+        {
+          "name": "Battery Installation with Purchase",
+          "count": 8
+        },
+        {
+          "name": "Check Alignment - No Charge",
+          "count": 3
+        },
+        {
+          "name": "Basic Electrical System Check",
+          "count": 2
+        },
+        {
+          "name": "Brake Inspection - No Charge",
+          "count": 2
+        },
+        {
+          "name": "All Wheel Alignment",
+          "count": 2
+        },
+        {
+          "name": "Basic Vehicle Inspection - No Fluid Service",
+          "count": 2
+        },
+        {
+          "name": "BG Cooling System Fluid Exchange",
+          "count": 1
+        },
+        {
+          "name": "Rear Disc Brake Service",
+          "count": 1
+        },
+        {
+          "name": "BG Brake Fluid Exchange",
+          "count": 1
+        },
+        {
+          "name": "Suspension/Steering Testing and Replacement",
+          "count": 1
+        },
+        {
+          "name": "Driveability Testing Labor (S700)",
+          "count": 1
+        },
+        {
+          "name": "Spark Plug(s)",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "Eric Hudson",
+      "firstDate": "2026-01-16",
+      "lastDate": "2026-07-24",
+      "invoiceCount": 5,
+      "categories": [
+        {
+          "name": "Batteries",
+          "count": 2
+        }
+      ],
+      "packages": []
+    },
+    {
+      "name": "Ethan Engelhorn",
+      "firstDate": "2026-08-10",
+      "lastDate": "2026-10-07",
+      "invoiceCount": 263,
+      "categories": [
+        {
+          "name": "Tire Repair & Tire Rotations",
+          "count": 184
+        },
+        {
+          "name": "Oil, Lube & Maintenance Service",
+          "count": 176
+        },
+        {
+          "name": "Flushes & Fluid Exchange Services",
+          "count": 138
+        },
+        {
+          "name": "Tires",
+          "count": 70
+        },
+        {
+          "name": "GY - Oil, Lube & Maintenance Service",
+          "count": 12
+        },
+        {
+          "name": "Alignments",
+          "count": 8
+        },
+        {
+          "name": "Electrical (Belts, Lighting, Starting & Charging Systems)",
+          "count": 8
+        },
+        {
+          "name": "Driveability (Fuel, Ignition & Emission Systems)",
+          "count": 7
+        },
+        {
+          "name": "Accessories (Gauges, Power Accessories, Vision & Air Bag)",
+          "count": 6
+        },
+        {
+          "name": "HVAC (Heating, Ventilation & Air Conditioning)",
+          "count": 6
+        },
+        {
+          "name": "GY - Tire Repair & Tire Rotations (P&LT)",
+          "count": 6
+        },
+        {
+          "name": "Batteries",
+          "count": 3
+        },
+        {
+          "name": "GY - E-Commerce Codes",
+          "count": 3
+        },
+        {
+          "name": "Cooling System",
+          "count": 1
+        }
+      ],
+      "packages": [
+        {
+          "name": "\u2022Oil Change - Full Synthetic",
+          "count": 159
+        },
+        {
+          "name": "Tire Rotation - No Charge",
+          "count": 153
+        },
+        {
+          "name": "BG Engine Performance Restoration EPR/ MOA Kit",
+          "count": 87
+        },
+        {
+          "name": "Mount, Install & Balance - 4 Tires",
+          "count": 35
+        },
+        {
+          "name": "All Wheel Alignment",
+          "count": 6
+        },
+        {
+          "name": "Cabin Air Filter Service",
+          "count": 5
+        },
+        {
+          "name": "Engine Air Filter Service",
+          "count": 5
+        },
+        {
+          "name": "Tire Repair With Rebalance - Standard Tire/Wheel",
+          "count": 5
+        },
+        {
+          "name": "Battery Installation with Purchase",
+          "count": 3
+        },
+        {
+          "name": "BG Cooling System Fluid Exchange",
+          "count": 2
+        },
+        {
+          "name": "Check Alignment - No Charge",
+          "count": 2
+        },
+        {
+          "name": "Spark Plug(s)",
+          "count": 1
+        },
+        {
+          "name": "BG Brake Fluid Exchange",
+          "count": 1
+        },
+        {
+          "name": "Balance 4 Tires Warranty Wheel Balance",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "Ethan Englehorn",
+      "firstDate": "2026-02-10",
+      "lastDate": "2026-08-13",
+      "invoiceCount": 787,
+      "categories": [
+        {
+          "name": "Tire Repair & Tire Rotations",
+          "count": 551
+        },
+        {
+          "name": "Oil, Lube & Maintenance Service",
+          "count": 508
+        },
+        {
+          "name": "Flushes & Fluid Exchange Services",
+          "count": 331
+        },
+        {
+          "name": "Tires",
+          "count": 176
+        },
+        {
+          "name": "Driveability (Fuel, Ignition & Emission Systems)",
+          "count": 61
+        },
+        {
+          "name": "Accessories (Gauges, Power Accessories, Vision & Air Bag)",
+          "count": 34
+        },
+        {
+          "name": "HVAC (Heating, Ventilation & Air Conditioning)",
+          "count": 32
+        },
+        {
+          "name": "Electrical (Belts, Lighting, Starting & Charging Systems)",
+          "count": 23
+        },
+        {
+          "name": "GY - Tire Repair & Tire Rotations (P&LT)",
+          "count": 17
+        },
+        {
+          "name": "GY - Oil, Lube & Maintenance Service",
+          "count": 16
+        },
+        {
+          "name": "Batteries",
+          "count": 12
+        },
+        {
+          "name": "GY - E-Commerce Codes",
+          "count": 7
+        },
+        {
+          "name": "Diagnostics",
+          "count": 4
+        },
+        {
+          "name": "GY - Tire & Wheel (P&LT)",
+          "count": 4
+        },
+        {
+          "name": "Wheels, Tubes & Tire Products",
+          "count": 3
+        },
+        {
+          "name": "Brakes",
+          "count": 2
+        },
+        {
+          "name": "Alignments",
+          "count": 1
+        },
+        {
+          "name": "GY - MISC Parts / Labor",
+          "count": 1
+        }
+      ],
+      "packages": [
+        {
+          "name": "Tire Rotation - No Charge",
+          "count": 289
+        },
+        {
+          "name": "BG Engine Performance Restoration EPR/ MOA Kit",
+          "count": 273
+        },
+        {
+          "name": "Full Service Oil Change",
+          "count": 144
+        },
+        {
+          "name": "Tire Rotation - Full Service Oil Change",
+          "count": 132
+        },
+        {
+          "name": "\u2022Oil Change - Full Synthetic",
+          "count": 123
+        },
+        {
+          "name": "Mount, Install & Balance - 4 Tires",
+          "count": 59
+        },
+        {
+          "name": "Engine Air Filter Service",
+          "count": 59
+        },
+        {
+          "name": "Tire Repair With Rebalance - Standard Tire/Wheel",
+          "count": 44
+        },
+        {
+          "name": "Cabin Air Filter Service",
+          "count": 30
+        },
+        {
+          "name": "Battery Installation with Purchase",
+          "count": 12
+        },
+        {
+          "name": "Balance 4 Tires Warranty Wheel Balance",
+          "count": 12
+        },
+        {
+          "name": "BG Brake Fluid Exchange",
+          "count": 4
+        },
+        {
+          "name": "Brake Inspection",
+          "count": 1
+        },
+        {
+          "name": "Rear Disc Brake Service",
+          "count": 1
+        },
+        {
+          "name": "BG Cooling System Fluid Exchange",
+          "count": 1
+        },
+        {
+          "name": "Suspension/Steering Testing and Replacement",
+          "count": 1
+        },
+        {
+          "name": "All Wheel Alignment",
+          "count": 1
+        },
+        {
+          "name": "Brake Inspection - No Charge",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "Hagedorn, Brandon",
+      "firstDate": "2026-01-02",
+      "lastDate": "2026-10-07",
+      "invoiceCount": 947,
+      "categories": [
+        {
+          "name": "Diagnostics",
+          "count": 589
+        },
+        {
+          "name": "Driveability (Fuel, Ignition & Emission Systems)",
+          "count": 247
+        },
+        {
+          "name": "HVAC (Heating, Ventilation & Air Conditioning)",
+          "count": 231
+        },
+        {
+          "name": "Flushes & Fluid Exchange Services",
+          "count": 97
+        },
+        {
+          "name": "Electrical (Belts, Lighting, Starting & Charging Systems)",
+          "count": 91
+        },
+        {
+          "name": "Tire Repair & Tire Rotations",
+          "count": 68
+        },
+        {
+          "name": "Oil, Lube & Maintenance Service",
+          "count": 55
+        },
+        {
+          "name": "Accessories (Gauges, Power Accessories, Vision & Air Bag)",
+          "count": 47
+        },
+        {
+          "name": "Tires",
+          "count": 30
+        },
+        {
+          "name": "Batteries",
+          "count": 27
+        },
+        {
+          "name": "Brakes",
+          "count": 26
+        },
+        {
+          "name": "Engine",
+          "count": 22
+        },
+        {
+          "name": "Cooling System",
+          "count": 11
+        },
+        {
+          "name": "Alignments",
+          "count": 10
+        },
+        {
+          "name": "Transmission & Clutch",
+          "count": 9
+        },
+        {
+          "name": "Steering & Suspension",
+          "count": 8
+        },
+        {
+          "name": "GY - Commercial Alignments",
+          "count": 3
+        },
+        {
+          "name": "Exhaust",
+          "count": 2
+        },
+        {
+          "name": "FS - Engine",
+          "count": 1
+        },
+        {
+          "name": "GY - HVAC (Heating, Ventilation & Air Conditioning)",
+          "count": 1
+        },
+        {
+          "name": "Drive Train (Final Drive, Transaxle, Differential & Transfer Case)",
+          "count": 1
+        },
+        {
+          "name": "GY - E-Commerce Codes",
+          "count": 1
+        }
+      ],
+      "packages": [
+        {
+          "name": "Driveability Testing Labor (S700)",
+          "count": 453
+        },
+        {
+          "name": "Spark Plug(s)",
+          "count": 67
+        },
+        {
+          "name": "Concern Testing & Inspecting (S700B)",
+          "count": 30
+        },
+        {
+          "name": "Engine Air Filter Service",
+          "count": 27
+        },
+        {
+          "name": "Battery Installation with Purchase",
+          "count": 24
+        },
+        {
+          "name": "Complete Electrical System Check",
+          "count": 22
+        },
+        {
+          "name": "Tire Repair With Rebalance - Standard Tire/Wheel",
+          "count": 20
+        },
+        {
+          "name": "Tire Rotation - No Charge",
+          "count": 16
+        },
+        {
+          "name": "BG Engine Performance Restoration EPR/ MOA Kit",
+          "count": 16
+        },
+        {
+          "name": "BG Cooling System Fluid Exchange",
+          "count": 13
+        },
+        {
+          "name": "All Wheel Alignment",
+          "count": 9
+        },
+        {
+          "name": "Tire Rotation - Full Service Oil Change",
+          "count": 8
+        },
+        {
+          "name": "BG Brake Fluid Exchange",
+          "count": 8
+        },
+        {
+          "name": "Cabin Air Filter Service",
+          "count": 8
+        },
+        {
+          "name": "Starter Motor",
+          "count": 6
+        },
+        {
+          "name": "Basic Electrical System Check",
+          "count": 6
+        },
+        {
+          "name": "\u2022Oil Change - Full Synthetic",
+          "count": 6
+        },
+        {
+          "name": "Full Service Oil Change",
+          "count": 5
+        },
+        {
+          "name": "Rear Disc Brake Service",
+          "count": 4
+        },
+        {
+          "name": "Brake Inspection - No Charge",
+          "count": 3
+        },
+        {
+          "name": "Brake Inspection",
+          "count": 3
+        },
+        {
+          "name": "Water Pump",
+          "count": 3
+        },
+        {
+          "name": "Basic Vehicle Inspection - No Fluid Service",
+          "count": 3
+        },
+        {
+          "name": "Front Disc Brake Service",
+          "count": 3
+        },
+        {
+          "name": "Mount, Install & Balance - 4 Tires",
+          "count": 2
+        },
+        {
+          "name": "Suspension/Steering Testing and Replacement",
+          "count": 2
+        },
+        {
+          "name": "Cooling System Performance Test",
+          "count": 1
+        },
+        {
+          "name": "Check Alignment - No Charge",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "Isaac Bluemel",
+      "firstDate": "2026-01-12",
+      "lastDate": "2026-02-05",
+      "invoiceCount": 75,
+      "categories": [
+        {
+          "name": "Tire Repair & Tire Rotations",
+          "count": 40
+        },
+        {
+          "name": "Oil, Lube & Maintenance Service",
+          "count": 27
+        },
+        {
+          "name": "Tires",
+          "count": 23
+        },
+        {
+          "name": "Flushes & Fluid Exchange Services",
+          "count": 9
+        },
+        {
+          "name": "Batteries",
+          "count": 9
+        },
+        {
+          "name": "Electrical (Belts, Lighting, Starting & Charging Systems)",
+          "count": 4
+        },
+        {
+          "name": "Diagnostics",
+          "count": 4
+        },
+        {
+          "name": "Accessories (Gauges, Power Accessories, Vision & Air Bag)",
+          "count": 3
+        },
+        {
+          "name": "GY - Tire Repair & Tire Rotations (P&LT)",
+          "count": 2
+        },
+        {
+          "name": "GY - Oil, Lube & Maintenance Service",
+          "count": 1
+        },
+        {
+          "name": "Driveability (Fuel, Ignition & Emission Systems)",
+          "count": 1
+        },
+        {
+          "name": "Alignments",
+          "count": 1
+        }
+      ],
+      "packages": [
+        {
+          "name": "Tire Rotation - No Charge",
+          "count": 11
+        },
+        {
+          "name": "Battery Installation with Purchase",
+          "count": 9
+        },
+        {
+          "name": "BG Engine Performance Restoration EPR/ MOA Kit",
+          "count": 8
+        },
+        {
+          "name": "Full Service Oil Change",
+          "count": 8
+        },
+        {
+          "name": "Tire Rotation - Full Service Oil Change",
+          "count": 8
+        },
+        {
+          "name": "Tire Repair With Rebalance - Standard Tire/Wheel",
+          "count": 5
+        },
+        {
+          "name": "Mount, Install & Balance - 4 Tires",
+          "count": 5
+        },
+        {
+          "name": "Basic Electrical System Check",
+          "count": 2
+        },
+        {
+          "name": "Engine Air Filter Service",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "Issac Bluemel",
+      "firstDate": "2026-01-05",
+      "lastDate": "2026-04-24",
+      "invoiceCount": 360,
+      "categories": [
+        {
+          "name": "Tire Repair & Tire Rotations",
+          "count": 226
+        },
+        {
+          "name": "Oil, Lube & Maintenance Service",
+          "count": 164
+        },
+        {
+          "name": "Tires",
+          "count": 86
+        },
+        {
+          "name": "Flushes & Fluid Exchange Services",
+          "count": 74
+        },
+        {
+          "name": "Batteries",
+          "count": 27
+        },
+        {
+          "name": "Driveability (Fuel, Ignition & Emission Systems)",
+          "count": 25
+        },
+        {
+          "name": "Electrical (Belts, Lighting, Starting & Charging Systems)",
+          "count": 23
+        },
+        {
+          "name": "Accessories (Gauges, Power Accessories, Vision & Air Bag)",
+          "count": 14
+        },
+        {
+          "name": "GY - Tire Repair & Tire Rotations (P&LT)",
+          "count": 9
+        },
+        {
+          "name": "HVAC (Heating, Ventilation & Air Conditioning)",
+          "count": 9
+        },
+        {
+          "name": "Diagnostics",
+          "count": 8
+        },
+        {
+          "name": "Brakes",
+          "count": 5
+        },
+        {
+          "name": "Alignments",
+          "count": 5
+        },
+        {
+          "name": "GY - Oil, Lube & Maintenance Service",
+          "count": 5
+        },
+        {
+          "name": "Cooling System",
+          "count": 2
+        },
+        {
+          "name": "GY - Batteries",
+          "count": 2
+        },
+        {
+          "name": "GY - E-Commerce Codes",
+          "count": 2
+        },
+        {
+          "name": "GY - MISC Parts / Labor",
+          "count": 1
+        },
+        {
+          "name": "GY - Tire & Wheel (P&LT)",
+          "count": 1
+        }
+      ],
+      "packages": [
+        {
+          "name": "Full Service Oil Change",
+          "count": 68
+        },
+        {
+          "name": "BG Engine Performance Restoration EPR/ MOA Kit",
+          "count": 63
+        },
+        {
+          "name": "Tire Rotation - No Charge",
+          "count": 60
+        },
+        {
+          "name": "Tire Rotation - Full Service Oil Change",
+          "count": 59
+        },
+        {
+          "name": "Tire Repair With Rebalance - Standard Tire/Wheel",
+          "count": 47
+        },
+        {
+          "name": "Battery Installation with Purchase",
+          "count": 25
+        },
+        {
+          "name": "Engine Air Filter Service",
+          "count": 25
+        },
+        {
+          "name": "Mount, Install & Balance - 4 Tires",
+          "count": 16
+        },
+        {
+          "name": "Cabin Air Filter Service",
+          "count": 9
+        },
+        {
+          "name": "All Wheel Alignment",
+          "count": 4
+        },
+        {
+          "name": "Front Disc Brake Service",
+          "count": 2
+        },
+        {
+          "name": "Basic Electrical System Check",
+          "count": 1
+        },
+        {
+          "name": "BG Brake Fluid Exchange",
+          "count": 1
+        },
+        {
+          "name": "Driveability Testing Labor (S700)",
+          "count": 1
+        },
+        {
+          "name": "Concern Testing & Inspecting (S700B)",
+          "count": 1
+        },
+        {
+          "name": "BG Cooling System Fluid Exchange",
+          "count": 1
+        },
+        {
+          "name": "Water Pump",
+          "count": 1
+        },
+        {
+          "name": "Check Alignment - No Charge",
+          "count": 1
+        },
+        {
+          "name": "Balance 4 Tires Warranty Wheel Balance",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "Jacob Spencer-Harmon",
+      "firstDate": "2026-01-02",
+      "lastDate": "2026-03-28",
+      "invoiceCount": 342,
+      "categories": [
+        {
+          "name": "Oil, Lube & Maintenance Service",
+          "count": 255
+        },
+        {
+          "name": "Tire Repair & Tire Rotations",
+          "count": 252
+        },
+        {
+          "name": "Flushes & Fluid Exchange Services",
+          "count": 122
+        },
+        {
+          "name": "Tires",
+          "count": 72
+        },
+        {
+          "name": "Accessories (Gauges, Power Accessories, Vision & Air Bag)",
+          "count": 13
+        },
+        {
+          "name": "Batteries",
+          "count": 7
+        },
+        {
+          "name": "Electrical (Belts, Lighting, Starting & Charging Systems)",
+          "count": 7
+        },
+        {
+          "name": "GY - E-Commerce Codes",
+          "count": 5
+        },
+        {
+          "name": "Driveability (Fuel, Ignition & Emission Systems)",
+          "count": 4
+        },
+        {
+          "name": "Alignments",
+          "count": 3
+        },
+        {
+          "name": "GY - Tire & Wheel (P&LT)",
+          "count": 3
+        },
+        {
+          "name": "GY - Oil, Lube & Maintenance Service",
+          "count": 2
+        },
+        {
+          "name": "GY - Tire Repair & Tire Rotations (P&LT)",
+          "count": 2
+        },
+        {
+          "name": "Diagnostics",
+          "count": 1
+        },
+        {
+          "name": "HVAC (Heating, Ventilation & Air Conditioning)",
+          "count": 1
+        }
+      ],
+      "packages": [
+        {
+          "name": "Tire Rotation - No Charge",
+          "count": 123
+        },
+        {
+          "name": "BG Engine Performance Restoration EPR/ MOA Kit",
+          "count": 115
+        },
+        {
+          "name": "Full Service Oil Change",
+          "count": 93
+        },
+        {
+          "name": "Tire Rotation - Full Service Oil Change",
+          "count": 86
+        },
+        {
+          "name": "Mount, Install & Balance - 4 Tires",
+          "count": 38
+        },
+        {
+          "name": "Tire Repair With Rebalance - Standard Tire/Wheel",
+          "count": 15
+        },
+        {
+          "name": "Battery Installation with Purchase",
+          "count": 7
+        },
+        {
+          "name": "Engine Air Filter Service",
+          "count": 4
+        },
+        {
+          "name": "All Wheel Alignment",
+          "count": 2
+        },
+        {
+          "name": "Check Alignment - No Charge",
+          "count": 1
+        },
+        {
+          "name": "Balance 4 Tires Warranty Wheel Balance",
+          "count": 1
+        },
+        {
+          "name": "Cabin Air Filter Service",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "Jaiden Weixelman",
+      "firstDate": "2026-01-02",
+      "lastDate": "2026-10-07",
+      "invoiceCount": 1016,
+      "categories": [
+        {
+          "name": "Flushes & Fluid Exchange Services",
+          "count": 681
+        },
+        {
+          "name": "Brakes",
+          "count": 404
+        },
+        {
+          "name": "Diagnostics",
+          "count": 336
+        },
+        {
+          "name": "Electrical (Belts, Lighting, Starting & Charging Systems)",
+          "count": 125
+        },
+        {
+          "name": "Batteries",
+          "count": 111
+        },
+        {
+          "name": "Tire Repair & Tire Rotations",
+          "count": 82
+        },
+        {
+          "name": "Driveability (Fuel, Ignition & Emission Systems)",
+          "count": 75
+        },
+        {
+          "name": "Oil, Lube & Maintenance Service",
+          "count": 64
+        },
+        {
+          "name": "Accessories (Gauges, Power Accessories, Vision & Air Bag)",
+          "count": 53
+        },
+        {
+          "name": "Tires",
+          "count": 42
+        },
+        {
+          "name": "Cooling System",
+          "count": 39
+        },
+        {
+          "name": "HVAC (Heating, Ventilation & Air Conditioning)",
+          "count": 22
+        },
+        {
+          "name": "Alignments",
+          "count": 16
+        },
+        {
+          "name": "Engine",
+          "count": 12
+        },
+        {
+          "name": "Steering & Suspension",
+          "count": 6
+        },
+        {
+          "name": "GY - Brakes",
+          "count": 3
+        },
+        {
+          "name": "GY - MISC Parts / Labor",
+          "count": 2
+        },
+        {
+          "name": "Wheels, Tubes & Tire Products",
+          "count": 2
+        },
+        {
+          "name": "GY - Tire Repair & Tire Rotations (P&LT)",
+          "count": 2
+        },
+        {
+          "name": "Transmission & Clutch",
+          "count": 2
+        },
+        {
+          "name": "Exhaust",
+          "count": 2
+        },
+        {
+          "name": "Inspections & Certificates (State, Provincial & Emissions)",
+          "count": 1
+        },
+        {
+          "name": "GY - Oil, Lube & Maintenance Service",
+          "count": 1
+        },
+        {
+          "name": "Drive Train (Final Drive, Transaxle, Differential & Transfer Case)",
+          "count": 1
+        },
+        {
+          "name": "GY - Tire & Wheel (P&LT)",
+          "count": 1
+        }
+      ],
+      "packages": [
+        {
+          "name": "BG Brake Fluid Exchange",
+          "count": 191
+        },
+        {
+          "name": "BG Cooling System Fluid Exchange",
+          "count": 123
+        },
+        {
+          "name": "Battery Installation with Purchase",
+          "count": 107
+        },
+        {
+          "name": "Rear Disc Brake Service",
+          "count": 90
+        },
+        {
+          "name": "Front Disc Brake Service",
+          "count": 72
+        },
+        {
+          "name": "Basic Electrical System Check",
+          "count": 61
+        },
+        {
+          "name": "Concern Testing & Inspecting (S700B)",
+          "count": 56
+        },
+        {
+          "name": "Brake Inspection",
+          "count": 55
+        },
+        {
+          "name": "Brake Inspection - No Charge",
+          "count": 51
+        },
+        {
+          "name": "Cooling System Performance Test",
+          "count": 45
+        },
+        {
+          "name": "Spark Plug(s)",
+          "count": 40
+        },
+        {
+          "name": "BG Engine Performance Restoration EPR/ MOA Kit",
+          "count": 36
+        },
+        {
+          "name": "Tire Rotation - No Charge",
+          "count": 31
+        },
+        {
+          "name": "Basic Vehicle Inspection - No Fluid Service",
+          "count": 28
+        },
+        {
+          "name": "Engine Air Filter Service",
+          "count": 25
+        },
+        {
+          "name": "Complete Electrical System Check",
+          "count": 18
+        },
+        {
+          "name": "Full Service Oil Change",
+          "count": 13
+        },
+        {
+          "name": "Tire Rotation - Full Service Oil Change",
+          "count": 12
+        },
+        {
+          "name": "Tire Repair With Rebalance - Standard Tire/Wheel",
+          "count": 12
+        },
+        {
+          "name": "Starter Motor",
+          "count": 12
+        },
+        {
+          "name": "Cabin Air Filter Service",
+          "count": 10
+        },
+        {
+          "name": "All Wheel Alignment",
+          "count": 9
+        },
+        {
+          "name": "Water Pump",
+          "count": 8
+        },
+        {
+          "name": "Check Alignment - No Charge",
+          "count": 7
+        },
+        {
+          "name": "Mount, Install & Balance - 4 Tires",
+          "count": 6
+        },
+        {
+          "name": "Driveability Testing Labor (S700)",
+          "count": 6
+        },
+        {
+          "name": "\u2022Oil Change - Full Synthetic",
+          "count": 6
+        },
+        {
+          "name": "Suspension/Steering Testing and Replacement",
+          "count": 5
+        },
+        {
+          "name": "Balance 4 Tires Warranty Wheel Balance",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "Jason Roby",
+      "firstDate": "2026-01-02",
+      "lastDate": "2026-10-07",
+      "invoiceCount": 1436,
+      "categories": [
+        {
+          "name": "Alignments",
+          "count": 1088
+        },
+        {
+          "name": "Diagnostics",
+          "count": 230
+        },
+        {
+          "name": "Steering & Suspension",
+          "count": 177
+        },
+        {
+          "name": "Flushes & Fluid Exchange Services",
+          "count": 85
+        },
+        {
+          "name": "Brakes",
+          "count": 78
+        },
+        {
+          "name": "Tire Repair & Tire Rotations",
+          "count": 69
+        },
+        {
+          "name": "Tires",
+          "count": 48
+        },
+        {
+          "name": "Oil, Lube & Maintenance Service",
+          "count": 47
+        },
+        {
+          "name": "Drive Train (Final Drive, Transaxle, Differential & Transfer Case)",
+          "count": 36
+        },
+        {
+          "name": "Electrical (Belts, Lighting, Starting & Charging Systems)",
+          "count": 32
+        },
+        {
+          "name": "Batteries",
+          "count": 26
+        },
+        {
+          "name": "Accessories (Gauges, Power Accessories, Vision & Air Bag)",
+          "count": 17
+        },
+        {
+          "name": "Driveability (Fuel, Ignition & Emission Systems)",
+          "count": 14
+        },
+        {
+          "name": "HVAC (Heating, Ventilation & Air Conditioning)",
+          "count": 14
+        },
+        {
+          "name": "Cooling System",
+          "count": 12
+        },
+        {
+          "name": "Engine",
+          "count": 10
+        },
+        {
+          "name": "GY - Tire Repair & Tire Rotations (P&LT)",
+          "count": 7
+        },
+        {
+          "name": "Wheels, Tubes & Tire Products",
+          "count": 3
+        },
+        {
+          "name": "GY - Oil, Lube & Maintenance Service",
+          "count": 3
+        },
+        {
+          "name": "GY - MISC Parts / Labor",
+          "count": 2
+        },
+        {
+          "name": "Transmission & Clutch",
+          "count": 1
+        },
+        {
+          "name": "GY - Alignments",
+          "count": 1
+        },
+        {
+          "name": "GY - Steering & Suspension",
+          "count": 1
+        },
+        {
+          "name": "Exhaust",
+          "count": 1
+        },
+        {
+          "name": "Inspections & Certificates (State, Provincial & Emissions)",
+          "count": 1
+        }
+      ],
+      "packages": [
+        {
+          "name": "All Wheel Alignment",
+          "count": 811
+        },
+        {
+          "name": "Check Alignment - No Charge",
+          "count": 165
+        },
+        {
+          "name": "Suspension/Steering Testing and Replacement",
+          "count": 144
+        },
+        {
+          "name": "Strut Assembly, Front",
+          "count": 28
+        },
+        {
+          "name": "BG Engine Performance Restoration EPR/ MOA Kit",
+          "count": 25
+        },
+        {
+          "name": "Concern Testing & Inspecting (S700B)",
+          "count": 22
+        },
+        {
+          "name": "Battery Installation with Purchase",
+          "count": 22
+        },
+        {
+          "name": "Tire Rotation - No Charge",
+          "count": 17
+        },
+        {
+          "name": "Mount, Install & Balance - 4 Tires",
+          "count": 15
+        },
+        {
+          "name": "Cooling System Performance Test",
+          "count": 15
+        },
+        {
+          "name": "Tire Repair With Rebalance - Standard Tire/Wheel",
+          "count": 14
+        },
+        {
+          "name": "Suspension Control Arm, Lower",
+          "count": 12
+        },
+        {
+          "name": "Tire Rotation - Full Service Oil Change",
+          "count": 11
+        },
+        {
+          "name": "Full Service Oil Change",
+          "count": 10
+        },
+        {
+          "name": "Cabin Air Filter Service",
+          "count": 9
+        },
+        {
+          "name": "Complete Electrical System Check",
+          "count": 8
+        },
+        {
+          "name": "Engine Air Filter Service",
+          "count": 8
+        },
+        {
+          "name": "Basic Electrical System Check",
+          "count": 8
+        },
+        {
+          "name": "Front Disc Brake Service",
+          "count": 7
+        },
+        {
+          "name": "BG Cooling System Fluid Exchange",
+          "count": 7
+        },
+        {
+          "name": "Rear Disc Brake Service",
+          "count": 6
+        },
+        {
+          "name": "BG Brake Fluid Exchange",
+          "count": 6
+        },
+        {
+          "name": "Starter Motor",
+          "count": 5
+        },
+        {
+          "name": "Driveability Testing Labor (S700)",
+          "count": 5
+        },
+        {
+          "name": "\u2022Oil Change - Full Synthetic",
+          "count": 5
+        },
+        {
+          "name": "Basic Vehicle Inspection - No Fluid Service",
+          "count": 4
+        },
+        {
+          "name": "Brake Inspection",
+          "count": 4
+        },
+        {
+          "name": "Balance 4 Tires Warranty Wheel Balance",
+          "count": 4
+        },
+        {
+          "name": "Brake Inspection - No Charge",
+          "count": 2
+        },
+        {
+          "name": "Spark Plug(s)",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "name": "Jeffery Sims",
+      "firstDate": "2026-01-06",
+      "lastDate": "2026-10-07",
+      "invoiceCount": 1310,
+      "categories": [
+        {
+          "name": "Oil, Lube & Maintenance Service",
+          "count": 1190
+        },
+        {
+          "name": "Tire Repair & Tire Rotations",
+          "count": 1085
+        },
+        {
+          "name": "Flushes & Fluid Exchange Services",
+          "count": 800
+        },
+        {
+          "name": "Driveability (Fuel, Ignition & Emission Systems)",
+          "count": 213
+        },
+        {
+          "name": "HVAC (Heating, Ventilation & Air Conditioning)",
+          "count": 154
+        },
+        {
+          "name": "Accessories (Gauges, Power Accessories, Vision & Air Bag)",
+          "count": 91
+        },
+        {
+          "name": "Electrical (Belts, Lighting, Starting & Charging Systems)",
+          "count": 51
+        },
+        {
+          "name": "Tires",
+          "count": 42
+        },
+        {
+          "name": "Batteries",
+          "count": 22
+        },
+        {
+          "name": "GY - Tire Repair & Tire Rotations (P&LT)",
+          "count": 22
+        },
+        {
+          "name": "GY - Oil, Lube & Maintenance Service",
+          "count": 18
+        },
+        {
+          "name": "Diagnostics",
+          "count": 9
+        },
+        {
+          "name": "Brakes",
+          "count": 7
+        },
+        {
+          "name": "Alignments",
+          "count": 6
+        },
+        {
+          "name": "Cooling System",
+          "count": 2
+        },
+        {
+          "name": "GY - Tire & Wheel (P&LT)",
+          "count": 2
+        },
+        {
+          "name": "Inspections & Certificates (State, Provincial & Emissions)",
+          "count": 1
+        },
+        {
+          "name": "FS - Tires & Wheels (P&LT)",
+          "count": 1
+        },
+        {
+          "name": "GY - Brakes",
+          "count": 1
+        }
+      ],
+      "packages": [
+        {
+          "name": "Tire Rotation - No Charge",
+          "count": 711
+        },
+        {
+          "name": "BG Engine Performance Restoration EPR/ MOA Kit",
+          "count": 629
+        },
+        {
+          "name": "\u2022Oil Change - Full Synthetic",
+          "count": 367
+        },
+        {
+          "name": "Full Service Oil Change",
+          "count": 309
+        },
+        {
+          "name": "Tire Rotation - Full Service Oil Change",
+          "count": 284
+        },
+        {
+          "name": "Engine Air Filter Service",
+          "count": 211
+        },
+        {
+          "name": "Cabin Air Filter Service",
+          "count": 153
+        },
+        {
+          "name": "Tire Repair With Rebalance - Standard Tire/Wheel",
+          "count": 23
+        },
+        {
+          "name": "Battery Installation with Purchase",
+          "count": 20
+        },
+        {
+          "name": "Mount, Install & Balance - 4 Tires",
+          "count": 11
+        },
+        {
+          "name": "Balance 4 Tires Warranty Wheel Balance",
+          "count": 7
+        },
+        {
+          "name": "All Wheel Alignment",
+          "count": 4
+        },
+        {
+          "name": "BG Brake Fluid Exchange",
+          "count": 4
+        },
+        {
+          "name": "Rear Disc Brake Service",
+          "count": 3
+        },
+        {
+          "name": "Brake Inspection - No Charge",
+          "count": 3
+        },
+        {
+          "name": "Check Alignment - No Charge",
+          "count": 2
+        },
+        {
+          "name": "Basic Vehicle Inspection - No Fluid Service",
+          "count": 2
+        },
+        {
+          "name": "Brake Inspection",
+          "count": 1
+        },
+        {
+          "name": "BG Cooling System Fluid Exchange",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "Jeremy Wells",
+      "firstDate": "2026-04-01",
+      "lastDate": "2026-07-30",
+      "invoiceCount": 2,
+      "categories": [
+        {
+          "name": "Driveability (Fuel, Ignition & Emission Systems)",
+          "count": 1
+        }
+      ],
+      "packages": [
+        {
+          "name": "Engine Air Filter Service",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "Logan Miley",
+      "firstDate": "2026-01-20",
+      "lastDate": "2026-10-07",
+      "invoiceCount": 113,
+      "categories": [
+        {
+          "name": "Tire Repair & Tire Rotations",
+          "count": 79
+        },
+        {
+          "name": "Tires",
+          "count": 25
+        },
+        {
+          "name": "Oil, Lube & Maintenance Service",
+          "count": 11
+        },
+        {
+          "name": "Batteries",
+          "count": 5
+        },
+        {
+          "name": "Flushes & Fluid Exchange Services",
+          "count": 5
+        },
+        {
+          "name": "Accessories (Gauges, Power Accessories, Vision & Air Bag)",
+          "count": 4
+        },
+        {
+          "name": "Electrical (Belts, Lighting, Starting & Charging Systems)",
+          "count": 4
+        },
+        {
+          "name": "Driveability (Fuel, Ignition & Emission Systems)",
+          "count": 3
+        },
+        {
+          "name": "GY - E-Commerce Codes",
+          "count": 2
+        },
+        {
+          "name": "GY - Oil, Lube & Maintenance Service",
+          "count": 1
+        },
+        {
+          "name": "GY - Tire Repair & Tire Rotations (P&LT)",
+          "count": 1
+        },
+        {
+          "name": "Alignments",
+          "count": 1
+        }
+      ],
+      "packages": [
+        {
+          "name": "Tire Repair With Rebalance - Standard Tire/Wheel",
+          "count": 38
+        },
+        {
+          "name": "Tire Rotation - No Charge",
+          "count": 7
+        },
+        {
+          "name": "Battery Installation with Purchase",
+          "count": 5
+        },
+        {
+          "name": "BG Engine Performance Restoration EPR/ MOA Kit",
+          "count": 5
+        },
+        {
+          "name": "Mount, Install & Balance - 4 Tires",
+          "count": 5
+        },
+        {
+          "name": "Full Service Oil Change",
+          "count": 4
+        },
+        {
+          "name": "Engine Air Filter Service",
+          "count": 3
+        },
+        {
+          "name": "Tire Rotation - Full Service Oil Change",
+          "count": 3
+        },
+        {
+          "name": "Check Alignment - No Charge",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "Mark Savage",
+      "firstDate": "2026-01-02",
+      "lastDate": "2026-08-06",
+      "invoiceCount": 163,
+      "categories": [
+        {
+          "name": "Tire Repair & Tire Rotations",
+          "count": 114
+        },
+        {
+          "name": "Tires",
+          "count": 36
+        },
+        {
+          "name": "Oil, Lube & Maintenance Service",
+          "count": 28
+        },
+        {
+          "name": "Flushes & Fluid Exchange Services",
+          "count": 8
+        },
+        {
+          "name": "Electrical (Belts, Lighting, Starting & Charging Systems)",
+          "count": 4
+        },
+        {
+          "name": "HVAC (Heating, Ventilation & Air Conditioning)",
+          "count": 3
+        },
+        {
+          "name": "Batteries",
+          "count": 3
+        },
+        {
+          "name": "Driveability (Fuel, Ignition & Emission Systems)",
+          "count": 2
+        },
+        {
+          "name": "GY - E-Commerce Codes",
+          "count": 2
+        },
+        {
+          "name": "Diagnostics",
+          "count": 2
+        },
+        {
+          "name": "Wheels, Tubes & Tire Products",
+          "count": 1
+        },
+        {
+          "name": "Accessories (Gauges, Power Accessories, Vision & Air Bag)",
+          "count": 1
+        }
+      ],
+      "packages": [
+        {
+          "name": "Tire Repair With Rebalance - Standard Tire/Wheel",
+          "count": 47
+        },
+        {
+          "name": "Tire Rotation - No Charge",
+          "count": 15
+        },
+        {
+          "name": "Full Service Oil Change",
+          "count": 12
+        },
+        {
+          "name": "Tire Rotation - Full Service Oil Change",
+          "count": 11
+        },
+        {
+          "name": "Mount, Install & Balance - 4 Tires",
+          "count": 8
+        },
+        {
+          "name": "BG Engine Performance Restoration EPR/ MOA Kit",
+          "count": 7
+        },
+        {
+          "name": "\u2022Oil Change - Full Synthetic",
+          "count": 5
+        },
+        {
+          "name": "Cabin Air Filter Service",
+          "count": 3
+        },
+        {
+          "name": "Battery Installation with Purchase",
+          "count": 3
+        },
+        {
+          "name": "Engine Air Filter Service",
+          "count": 2
+        },
+        {
+          "name": "Basic Electrical System Check",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "Nathan Savage",
+      "firstDate": "2026-01-09",
+      "lastDate": "2026-10-07",
+      "invoiceCount": 133,
+      "categories": [
+        {
+          "name": "Diagnostics",
+          "count": 13
+        },
+        {
+          "name": "Tire Repair & Tire Rotations",
+          "count": 10
+        },
+        {
+          "name": "Flushes & Fluid Exchange Services",
+          "count": 8
+        },
+        {
+          "name": "Tires",
+          "count": 7
+        },
+        {
+          "name": "Accessories (Gauges, Power Accessories, Vision & Air Bag)",
+          "count": 5
+        },
+        {
+          "name": "Oil, Lube & Maintenance Service",
+          "count": 4
+        },
+        {
+          "name": "Batteries",
+          "count": 4
+        },
+        {
+          "name": "Electrical (Belts, Lighting, Starting & Charging Systems)",
+          "count": 3
+        },
+        {
+          "name": "Cooling System",
+          "count": 3
+        },
+        {
+          "name": "Alignments",
+          "count": 2
+        },
+        {
+          "name": "Wheels, Tubes & Tire Products",
+          "count": 1
+        },
+        {
+          "name": "HVAC (Heating, Ventilation & Air Conditioning)",
+          "count": 1
+        }
+      ],
+      "packages": [
+        {
+          "name": "BG Engine Performance Restoration EPR/ MOA Kit",
+          "count": 4
+        },
+        {
+          "name": "Battery Installation with Purchase",
+          "count": 3
+        },
+        {
+          "name": "Tire Rotation - No Charge",
+          "count": 2
+        },
+        {
+          "name": "Tire Repair With Rebalance - Standard Tire/Wheel",
+          "count": 2
+        },
+        {
+          "name": "Complete Electrical System Check",
+          "count": 2
+        },
+        {
+          "name": "Driveability Testing Labor (S700)",
+          "count": 2
+        },
+        {
+          "name": "All Wheel Alignment",
+          "count": 2
+        },
+        {
+          "name": "BG Cooling System Fluid Exchange",
+          "count": 1
+        },
+        {
+          "name": "Brake Inspection - No Charge",
+          "count": 1
+        },
+        {
+          "name": "Brake Inspection",
+          "count": 1
+        }
+      ]
+    }
+  ],
+  "catalog": [
+    {
+      "name": "Tire Rotation - No Charge",
+      "count": 2115
+    },
+    {
+      "name": "BG Engine Performance Restoration EPR/ MOA Kit",
+      "count": 1778
+    },
+    {
+      "name": "\u2022Oil Change - Full Synthetic",
+      "count": 1054
+    },
+    {
+      "name": "Full Service Oil Change",
+      "count": 923
+    },
+    {
+      "name": "All Wheel Alignment",
+      "count": 895
+    },
+    {
+      "name": "Tire Rotation - Full Service Oil Change",
+      "count": 858
+    },
+    {
+      "name": "Driveability Testing Labor (S700)",
+      "count": 552
+    },
+    {
+      "name": "Tire Repair With Rebalance - Standard Tire/Wheel",
+      "count": 470
+    },
+    {
+      "name": "Engine Air Filter Service",
+      "count": 445
+    },
+    {
+      "name": "Mount, Install & Balance - 4 Tires",
+      "count": 392
+    },
+    {
+      "name": "BG Brake Fluid Exchange",
+      "count": 364
+    },
+    {
+      "name": "Battery Installation with Purchase",
+      "count": 304
+    },
+    {
+      "name": "Cabin Air Filter Service",
+      "count": 289
+    },
+    {
+      "name": "BG Cooling System Fluid Exchange",
+      "count": 266
+    },
+    {
+      "name": "Check Alignment - No Charge",
+      "count": 207
+    },
+    {
+      "name": "Spark Plug(s)",
+      "count": 198
+    },
+    {
+      "name": "Suspension/Steering Testing and Replacement",
+      "count": 169
+    },
+    {
+      "name": "Concern Testing & Inspecting (S700B)",
+      "count": 166
+    },
+    {
+      "name": "Rear Disc Brake Service",
+      "count": 157
+    },
+    {
+      "name": "Front Disc Brake Service",
+      "count": 140
+    },
+    {
+      "name": "Cooling System Performance Test",
+      "count": 104
+    },
+    {
+      "name": "Basic Electrical System Check",
+      "count": 100
+    },
+    {
+      "name": "Brake Inspection - No Charge",
+      "count": 99
+    },
+    {
+      "name": "Brake Inspection",
+      "count": 82
+    },
+    {
+      "name": "Complete Electrical System Check",
+      "count": 72
+    },
+    {
+      "name": "Balance 4 Tires Warranty Wheel Balance",
+      "count": 47
+    },
+    {
+      "name": "Basic Vehicle Inspection - No Fluid Service",
+      "count": 44
+    },
+    {
+      "name": "Starter Motor",
+      "count": 36
+    },
+    {
+      "name": "Water Pump",
+      "count": 31
+    },
+    {
+      "name": "Strut Assembly, Front",
+      "count": 29
+    },
+    {
+      "name": "Suspension Control Arm, Lower",
+      "count": 13
+    }
+  ]
+}

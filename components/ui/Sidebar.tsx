@@ -269,6 +269,12 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
       icon: <LayoutDashboard className="w-5 h-5" />
     },
     {
+      name: "Shop workflow",
+      href: "/dashboard/shop-workflow",
+      featureId: "shop_workflow",
+      icon: <Wrench className="w-5 h-5" />
+    },
+    {
       name: "Booking Review",
       href: "/dashboard/settings/auto-booking/queue",
       icon: <CalendarCheck className="w-5 h-5" />,

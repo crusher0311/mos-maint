@@ -441,6 +441,14 @@ export async function PATCH(
 
     if (features) {
       if (isFounderPlan(effectivePlan)) {
+        // The location pilot is an explicit opt-in even for founder shops.
+        if (typeof features.shop_workflow === "boolean") {
+          await updateShopFeatures(shopId as number, { shop_workflow: features.shop_workflow });
+          await db.collection("audit_logs").insertOne({
+            type: "shop_workflow_pilot_updated", shopId, adminEmail: session.email,
+            enabled: features.shop_workflow, createdAt: new Date(),
+          });
+        }
         // Founder plan is a wildcard — every feature is on regardless of
         // per-shop overrides. Skip writing overrides so changing the plan
         // later doesn't leave stale `enabledFeatures` toggles behind.

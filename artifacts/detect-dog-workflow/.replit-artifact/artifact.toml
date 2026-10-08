@@ -1,0 +1,19 @@
+kind = "design"
+previewPath = "/"
+title = "Detect Dog Shop Workflow"
+description = "Isolated fictional dispatch and technician workflow prototype"
+version = "1.0.0"
+id = "artifacts/detect-dog-workflow"
+router = "path"
+
+[[services]]
+name = "Component Preview Server"
+paths = [ "/" ]
+localPort = 24087
+
+[services.development]
+run = "npm run dev"
+
+[services.env]
+PORT = "24087"
+BASE_PATH = "/"

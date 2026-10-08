@@ -92,6 +92,7 @@ export interface FeatureEntitlements {
 }
 
 export const FEATURE_METADATA: Record<FeatureKey, { name: string; description: string }> = {
+  shop_workflow: { name: "Shop Workflow (pilot)", description: "Location-only opt-in for dispatch, technician work and customer transportation. Not included automatically in any plan." },
   maintenance:        { name: "Maintenance Tracking",       description: "Track vehicle maintenance schedules, DVI insights, and recommendations" },
   job_lookup:         { name: "Job Lookup",                  description: "Search historical jobs with smart autocomplete across your shop and enterprise" },
   common_failures:    { name: "Common Failures Advisor",     description: "Predict common repairs by vehicle, powertrain, and mileage" },
@@ -139,6 +140,7 @@ const FEATURE_SLUG_TO_KEY: Record<string, FeatureKey> = {
   "auto_dvi": "auto_dvi",
   "sales-coach": "sales_coach",
   "sales_coach": "sales_coach",
+  "shop_workflow": "shop_workflow",
 };
 
 /**
@@ -308,6 +310,10 @@ export async function getFeatureEntitlements(
         shopFeatures[key] ?? enterpriseFeatures[key] ?? planFeatures[key] ?? false;
     }
   }
+
+  // Operator-controlled location pilot: never inherit enterprise, tier or
+  // founder wildcard grants. Only this shop's explicit boolean opt-in counts.
+  effectiveFeatures.shop_workflow = shopFeatures.shop_workflow === true;
 
   const billing: ShopBilling = {
     plan,
