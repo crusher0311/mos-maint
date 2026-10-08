@@ -65,8 +65,8 @@ try {
     `got ${JSON.stringify(all[SYNTHETIC])}`,
   );
   ok(
-    "all baseline keys still enabled",
-    FEATURE_KEYS.every((k) => all[k] === true),
+    "baseline keys enabled except explicitly opt-in shop workflow",
+    FEATURE_KEYS.every((k) => all[k] === (k !== "shop_workflow")),
   );
 
   section("getFeatureEntitlements — founder shop");
@@ -107,8 +107,8 @@ try {
 
     ok("plan resolved as founder", ent.billing.plan === FOUNDER_PLAN);
     ok(
-      "every FEATURE_KEYS entry is on (incl. synthetic)",
-      FEATURE_KEYS.every((k) => eff[k] === true),
+      "founder keys enabled except explicitly opt-in shop workflow",
+      FEATURE_KEYS.every((k) => eff[k] === (k !== "shop_workflow")),
       `eff = ${JSON.stringify(eff)}`,
     );
     ok(
