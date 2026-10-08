@@ -74,6 +74,8 @@ export function validateJwtOvernightGrant(grant: JwtOvernightGrant): void {
       grant.maxRequests > JWT_OVERNIGHT_MAX_REQUESTS ||
       (grant.notBefore.toISOString()==="2026-10-07T23:00:00.000Z"&&
        (grant.maxRequests!==1000||grant.consumedRequests<65)) ||
+      (grant.notBefore.toISOString()==="2026-10-08T23:00:00.000Z"&&
+       (grant.maxRequests!==1000||grant.consumedRequests<419)) ||
       !Number.isSafeInteger(grant.consumedRequests) || grant.consumedRequests < 0 ||
       grant.consumedRequests > grant.maxRequests ||
       typeof grant.stopped !== "boolean") {
