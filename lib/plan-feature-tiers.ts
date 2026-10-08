@@ -24,6 +24,7 @@ export const FEATURE_KEYS = [
   "enhance_notes",
   "auto_dvi",
   "sales_coach",
+  "shop_workflow",
 ] as const;
 
 // Task #991: `auto_dvi` ships dark — OFF everywhere (every tier, every plan
@@ -31,7 +32,7 @@ export const FEATURE_KEYS = [
 // founder wildcard (buildAllFeaturesEnabled) still turns it on for founder
 // shops, which is the intended dev/test path. Keep any newly-dark features
 // in this list so the `[...FEATURE_KEYS]` tier fallbacks don't leak them on.
-export const DARK_LAUNCH_KEYS: readonly string[] = ["auto_dvi", "sales_coach"];
+export const DARK_LAUNCH_KEYS: readonly string[] = ["auto_dvi", "sales_coach", "shop_workflow"];
 const LAUNCHED_KEYS = FEATURE_KEYS.filter((k) => !DARK_LAUNCH_KEYS.includes(k));
 
 export type FeatureKey = typeof FEATURE_KEYS[number];
@@ -57,12 +58,13 @@ export function isFounderPlan(plan: string | null | undefined): boolean {
 
 /**
  * Build a FeatureSettings object that has every key in FEATURE_KEYS set
- * to `true`. Reads `FEATURE_KEYS` at call time so newly added features
+ * to `true`, except the explicitly location-opt-in shop_workflow pilot.
+ * Reads `FEATURE_KEYS` at call time so newly added features
  * are picked up automatically (the whole point of the founder wildcard).
  */
 export function buildAllFeaturesEnabled(): FeatureSettings {
   const out = {} as FeatureSettings;
-  for (const k of FEATURE_KEYS) out[k] = true;
+  for (const k of FEATURE_KEYS) out[k] = k !== "shop_workflow";
   return out;
 }
 
@@ -88,7 +90,7 @@ export const PLAN_FALLBACK_KEYS: Record<BillingPlan, readonly FeatureKey[]> = {
   // on. The fallback list is computed dynamically in featureResolver's
   // `getPlanFeaturesFromDatabase` / `getFeatureEntitlements`, but we
   // include all current keys here for callers that read this map directly.
-  detect_dog_founder: [...FEATURE_KEYS],
+  detect_dog_founder: FEATURE_KEYS.filter(k => k !== "shop_workflow"),
 };
 
 export const FALLBACK_PLAN_FEATURES: Record<BillingPlan, FeatureSettings> = Object.fromEntries(

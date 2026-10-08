@@ -38,6 +38,7 @@
   ],
   "exclude": [
     "node_modules",
-    "zink-print-agent"
+    "zink-print-agent",
+    "artifacts/detect-dog-workflow"
   ]
 }

@@ -271,7 +271,7 @@ async function main() {
     const e = await eff(5);
     ok(
       "founder shop: every feature key still on despite false overrides",
-      FEATURE_KEYS.every((k: FeatureKey) => e[k] === true),
+      FEATURE_KEYS.every((k: FeatureKey) => e[k] === (k !== "shop_workflow")),
       JSON.stringify(e),
     );
   }
