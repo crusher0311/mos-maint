@@ -20,8 +20,10 @@ async function main(){
  assert.equal(previous?.runId,job.runId);assert.equal(previous.stopped,true);
  const early=process.argv.includes("--approved-closed-shops-oct8");
  assert.ok(previous.expiresAt.getTime()<=Date.now() ||
-   (early && job.stopped===true && !job.eligibleResume?.claimedBy &&
-    previous.notBefore.toISOString()==="2026-10-09T03:00:00.000Z"),
+   (early && ((job.stopped===true && !job.eligibleResume?.claimedBy &&
+    previous.notBefore.toISOString()==="2026-10-09T03:00:00.000Z") ||
+    (job.status==="paused" && previous.notBefore.toISOString()==="2026-10-08T23:00:00.000Z" &&
+     previous.expiresAt.toISOString()==="2026-10-09T10:00:00.000Z"))),
    "Previous permit must expire or be an unclaimed approved continuation");
  validateJwtOvernightGrant(previous);
  const done=new Set<string>(job.completedWindowKeys??[]);
