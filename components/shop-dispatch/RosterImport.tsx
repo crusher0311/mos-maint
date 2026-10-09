@@ -1,0 +1,68 @@
+"use client";
+import { useRef, useState } from "react";
+import { CommandForm } from "./CommandForm";
+import type { WorkProps } from "./JobCard";
+import styles from "./pilot.module.css";
+
+interface ProviderEmployee { id: string; name: string; active: boolean }
+interface Roster { employees: ProviderEmployee[]; truncated: boolean }
+
+export function RosterImport({ board, busy, mutate }: Pick<WorkProps, "board" | "busy" | "mutate">) {
+  const [roster, setRoster] = useState<Roster | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const inFlight = useRef(false);
+  async function load() {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setLoading(true); setError("");
+    try {
+      // Explicit manager click only: never mount-fetch, poll or auto-import staff.
+      const response = await fetch("/api/shop-dispatch/roster", { credentials: "include", cache: "no-store" });
+      const data: unknown = await response.json();
+      if (!response.ok) {
+        const message = data && typeof data === "object" && "error" in data && typeof data.error === "string" ? data.error : "Provider staff could not be loaded. Try again.";
+        throw new Error(message);
+      }
+      if (!data || typeof data !== "object" || !("employees" in data) || !Array.isArray(data.employees) ||
+        !("truncated" in data) || typeof data.truncated !== "boolean" ||
+        !data.employees.every((employee: unknown) => employee && typeof employee === "object" &&
+          "id" in employee && typeof employee.id === "string" && "name" in employee && typeof employee.name === "string" &&
+          "active" in employee && typeof employee.active === "boolean")) throw new Error("Provider staff response was invalid. Try loading again.");
+      setRoster(data as Roster);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Provider staff could not be loaded. Try again."); }
+    finally { inFlight.current = false; setLoading(false); }
+  }
+  return <div className={styles.rosterReview}>
+    <div className={styles.eyebrow}>Manager review · read-only upstream</div><h3>Review provider staff</h3>
+    <p><small>Provider names are not proof of a technician role or availability. Review active and inactive staff, then explicitly select and save each technician. Nothing is selected by default. No MOS accounts are created.</small></p>
+    <button type="button" data-testid="roster-load" disabled={busy || loading} onClick={() => void load()}>{loading ? "Loading provider staff…" : error ? "Retry loading provider staff" : roster ? "Reload provider staff" : "Load provider staff"}</button>
+    {loading && <div className={styles.skeleton} role="status" aria-label="Loading provider staff" />}
+    {error && <p className={styles.notice} role="alert">{error}</p>}
+    {roster && !loading && <>
+      {roster.truncated && <p className={styles.notice} role="status">This provider response is truncated. Staff not listed here may still exist upstream. Add missing technicians by name if needed.</p>}
+      {!roster.employees.length && <div className={styles.empty}>No provider staff returned. You can still add technicians by name above.</div>}
+      {roster.employees.map(employee => <ReviewedEmployee key={employee.id} employee={employee} board={board} busy={busy} mutate={mutate} />)}
+    </>}
+  </div>;
+}
+
+function ReviewedEmployee({ employee, board, busy, mutate }: Pick<WorkProps, "board" | "busy" | "mutate"> & { employee: ProviderEmployee }) {
+  const linked = board.technicians.find(technician => technician.sourceId === employee.id);
+  return <div className={styles.reviewEntry}>
+    <div className={styles.row}><strong>{employee.name}</strong><span className={styles.chip}>{employee.active ? "Active upstream" : "Inactive upstream"}</span></div>
+    {linked && <p><small>Already linked to {linked.name}. Existing login and assignments are preserved.</small></p>}
+    <CommandForm revision={board.revision} testId={`roster-review-${employee.id}`} busy={busy} creation label="Save reviewed technician"
+      submit={(data, expectedRevision) => {
+        if (data.get("reviewed") !== "on") throw new Error("Select this staff member only after reviewing their technician role.");
+        return mutate({ type: "importTechnician", sourceId: employee.id, id: String(data.get("technicianId")) || String(data.get("creationId")) }, expectedRevision);
+      }}>
+      <label className={styles.check}><input type="checkbox" name="reviewed" required />I reviewed this staff member and want them on the technician roster</label>
+      <label>Local technician lane<select name="technicianId" defaultValue={linked?.id ?? ""}>
+        <option value="">Create a new technician lane</option>
+        {board.technicians.map(technician => <option key={technician.id} value={technician.id}>{technician.name}{technician.active ? "" : " · inactive"}</option>)}
+      </select></label>
+      <small>Choose an existing lane to avoid duplicates. Saving revalidates provider staff and preserves the lane’s login and assignments; it does not grant account access. Inactive staff remain subject to manager review.</small>
+    </CommandForm>
+  </div>;
+}

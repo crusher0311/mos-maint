@@ -6,6 +6,7 @@ import { emptyBoard, type Board } from "../lib/shop-dispatch/model";
 const loader=Module as unknown as {_load:(id:string,...args:unknown[])=>unknown};
 const original=loader._load;
 let session:unknown=null,reads=0,enterprise:unknown=null;
+let rosterReads=0;
 let enterpriseBrand={_id:"enterprise",revision:0,brand:null as unknown,receipts:[] as any[],audit:[] as any[]};
 const boards=new Map<number,Board>();
 const fakeRepo={
@@ -17,6 +18,10 @@ const fakeRepo={
 loader._load=function(id,...args){
  if(id==="next/server")return {NextResponse:{json:(value:unknown,init?:ResponseInit)=>Response.json(value,init)}};
  if(id==="@/lib/auth")return {getSession:async()=>session};
+ if(id==="@/lib/shop-dispatch/roster")return {
+   loadDispatchRoster:async(shopId:number)=>{assert.equal(shopId,10);rosterReads++;return {employees:[],truncated:false};},
+   fetchDispatchEmployee:async(shopId:number,id:string)=>{assert.equal(shopId,10);rosterReads++;return {id,name:"Provider Tech",active:true};}
+ };
  if(id==="@/lib/featureResolver")return {getFeatureEntitlements:async(id:number)=>({isFeatureEnabled:(key:string)=>key==="shop_workflow"&&id===10})};
  if(id==="@/lib/enterprise")return {getEnterpriseByShopId:async()=>enterprise};
  if(id==="@/lib/data/repositories/shop-dispatch")return fakeRepo;
@@ -31,9 +36,21 @@ loader._load=function(id,...args){
 const route=require("../app/api/shop-dispatch/route");
 const brandRoute=require("../app/api/shop-dispatch/enterprise-brand/route");
 const http=require("../lib/shop-dispatch/http");
+const rosterRoute=require("../app/api/shop-dispatch/roster/route");
 function req(body:unknown,origin="https://pilot.test"){
  return new Request("https://pilot.test/api/shop-dispatch",{method:"POST",headers:{"content-type":"application/json",origin},body:JSON.stringify(body)});
 }
+test("provider roster review is shop-scoped and manager-only before provider access",async()=>{
+ session=null;
+ assert.equal((await rosterRoute.GET()).status,401);
+ session={shopId:10,email:"tech@example.test",role:"user",token:"real-session"};
+ assert.equal((await rosterRoute.GET()).status,403);
+ assert.equal(rosterReads,0);
+ session={shopId:10,email:"manager@example.test",role:"manager",token:"real-session"};
+ assert.equal((await rosterRoute.GET()).status,200);
+ assert.equal(rosterReads,1);
+ session=null;reads=0;
+});
 test("HTTP auth, operator gate, CSRF, strict tenant scope and role enforcement",async()=>{
  assert.equal((await route.GET()).status,401);assert.equal(reads,0);
  session={shopId:11,email:"manager@example.test",role:"manager",token:"real-session"};

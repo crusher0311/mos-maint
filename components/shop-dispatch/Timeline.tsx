@@ -1,6 +1,6 @@
 "use client";
 import type { Board, Job, Visit } from "@/lib/shop-dispatch/model";
-import { blockers } from "@/lib/shop-dispatch/model";
+import { blockers, resourcesFor } from "@/lib/shop-dispatch/model";
 import { dateLabel } from "./helpers";
 import styles from "./pilot.module.css";
 
@@ -12,7 +12,11 @@ export function Timeline({ board, visits, now, select }: { board: Board; visits:
   const lanes = [
     ...board.technicians.filter(t => t.active || jobs.some(j => j.technicianId === t.id)).map(t => ({ id: t.id, title: t.name, note: t.active ? "Local assignments" : "Inactive · history", jobs: jobs.filter(j => j.technicianId === t.id) })),
     { id: "unassigned", title: "Unassigned", note: "Manager assignment needed", jobs: jobs.filter(j => !j.technicianId) },
-    { id: "rack", title: "Alignment rack", note: board.jobs.some(j => j.resource === "rack" && j.status === "active") ? "Local session occupied" : "No local active session", jobs: jobs.filter(j => j.resource === "rack") },
+    ...resourcesFor(board).filter(r => r.active || jobs.some(j => j.resource === r.id)).map(r => ({
+      id: `resource:${r.id}`, title: r.name,
+      note: !r.active ? "Inactive · history" : board.jobs.some(j => j.resource === r.id && j.status === "active") ? "Local session occupied" : "No local active session",
+      jobs: jobs.filter(j => j.resource === r.id),
+    })),
   ];
   function block(job: Job, timed: boolean) {
     const visit = board.visits.find(v => v.id === job.visitId)!;
@@ -38,6 +42,6 @@ export function Timeline({ board, visits, now, select }: { board: Board; visits:
           {!!outside.length && <div className={styles.queue}><small style={{ width: "100%" }}>Unscheduled / outside today’s window</small>{outside.map(job => block(job, false))}</div>}
         </div></div>;
       })}
-    </div><p><small>Each row is an individual job. Width shows only the manual planned estimate; unknown durations use a labelled marker, not a prediction. Rack work appears in both technician and resource lanes. No provider availability or optimized scheduler is implied.</small></p>
+    </div><p><small>Each row is an individual job. Width shows only the manual planned estimate; unknown durations use a labelled marker, not a prediction. Shared-resource work appears in both technician and resource lanes. No provider availability or optimized scheduler is implied.</small></p>
   </>;
 }

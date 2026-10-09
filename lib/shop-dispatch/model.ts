@@ -30,12 +30,16 @@ export const transportSchema = z.object({
   pickupAt: timestamp.nullable(), notes: z.string().trim().max(500),
 }).strict().refine(v => v.loaner !== "assigned" || !!v.loanerId, "Assigned loaners need an identifier");
 export type Transport = z.infer<typeof transportSchema>;
-export interface Technician { id: string; name: string; email: string; active: boolean }
+export interface Technician { id: string; name: string; email: string; active: boolean; sourceId?:string }
+export interface Resource {id:string;name:string;active:boolean}
+export function resourcesFor(board:Board):Resource[]{
+  return board.resources ?? [{id:"rack",name:"Alignment rack",active:true}];
+}
 export type JobStatus = "idle" | "active" | "paused" | "completed";
 export interface Job {
   id: string; visitId: string; title: string; technicianId: string | null;
   plannedStart: string | null; estimatedMinutes: number | null; bookMinutes: number | null;
-  prerequisites: string[]; resource: "rack" | null; status: JobStatus;
+  prerequisites: string[]; resource: string | null; status: JobStatus;
   activeMs: number; waitingMs: number; since: string | null; pauseReason: string | null;
   sourceId: string | null; sourceRemoved: boolean; authorized: boolean;
 }
@@ -52,6 +56,7 @@ export interface Board {
   visits: Visit[]; jobs: Job[]; audit: Audit[]; receipts: Receipt[];
   locationBrand: Brand | null;
   sourceStatuses?: string[];
+  resources?:Resource[];
 }
 export interface Actor { email: string; manager: boolean; technicianId: string | null }
 export const intakeSchema = z.object({
@@ -61,11 +66,13 @@ export const intakeSchema = z.object({
 }).strict();
 export type Intake = z.infer<typeof intakeSchema>;
 export const commandSchema = z.discriminatedUnion("type", [
-  z.object({type:z.literal("technician"), id:idSchema, name:text, email:z.string().trim().email().max(160), active:z.boolean()}).strict(),
+  z.object({type:z.literal("technician"), id:idSchema, name:text, email:z.union([z.string().trim().email().max(160),z.literal("")]).default(""), active:z.boolean()}).strict(),
+  z.object({type:z.literal("resource"),id:idSchema,name:text,active:z.boolean()}).strict(),
+  z.object({type:z.literal("importTechnician"),id:idSchema,sourceId:idSchema}).strict(),
   z.object({type:z.literal("visit"), id:idSchema, ro:text, vehicle:text, customer:z.string().trim().max(160)}).strict(),
   z.object({type:z.literal("transport"), visitId:idSchema, transport:transportSchema, arrivalAt:timestamp.nullable(), promiseAt:timestamp.nullable()}).strict(),
   z.object({type:z.literal("job"), id:idSchema, visitId:idSchema, title:text, bookMinutes:z.number().min(0).max(10000).nullable()}).strict(),
-  z.object({type:z.literal("plan"), jobId:idSchema, technicianId:idSchema.nullable(), plannedStart:timestamp.nullable(), estimatedMinutes:z.number().int().min(1).max(1440).nullable(), prerequisites:z.array(idSchema).max(20), resource:z.enum(["rack"]).nullable(), authorized:z.boolean()}).strict(),
+  z.object({type:z.literal("plan"), jobId:idSchema, technicianId:idSchema.nullable(), plannedStart:timestamp.nullable(), estimatedMinutes:z.number().int().min(1).max(1440).nullable(), prerequisites:z.array(idSchema).max(20), resource:idSchema.nullable(), authorized:z.boolean()}).strict(),
   z.object({type:z.literal("start"), jobId:idSchema, pauseCurrent:z.boolean().default(false)}).strict(),
   z.object({type:z.literal("pause"), jobId:idSchema, reason:z.string().trim().min(1).max(160)}).strict(),
   z.object({type:z.literal("complete"), jobId:idSchema}).strict(),
@@ -91,7 +98,7 @@ export function requireThat(value:unknown, message:string, status=422): asserts 
 }
 export function actorFor(board:Board,email:string,role:string):Actor {
   return {email:email.toLowerCase(),manager:["owner","admin","manager"].includes(role),
-    technicianId:board.technicians.find(t=>t.active && t.email===email.toLowerCase())?.id ?? null};
+    technicianId:board.technicians.find(t=>t.active && !!email && !!t.email && t.email===email.toLowerCase())?.id ?? null};
 }
 export function elapsed(job:Job,now:number) {
   const delta=job.since ? Math.max(0,now-Date.parse(job.since)) : 0;
@@ -103,7 +110,7 @@ export function blockers(board:Board,job:Job):string[] {
   if (job.sourceRemoved) reasons.push("Package no longer present upstream");
   return reasons;
 }
-export function applyCommand(input:Board,command:Command,actor:Actor,now:string,intake?:Intake):Board {
+export function applyCommand(input:Board,command:Command,actor:Actor,now:string,intake?:Intake,employee?:{id:string;name:string;active:boolean}):Board {
   const board:Board=structuredClone(input);
   const managerOnly=!["start","pause","complete"].includes(command.type);
   requireThat(!managerOnly || actor.manager,"Manager access required",403);
@@ -111,12 +118,32 @@ export function applyCommand(input:Board,command:Command,actor:Actor,now:string,
   const visit=(id:string)=>{const v=board.visits.find(v=>v.id===id);requireThat(v && !v.closed,"Visit not found or closed",404);return v;};
   const settle=(j:Job)=>{Object.assign(j,elapsed(j,Date.parse(now)));j.since=null;};
   let target="board", detail="";
-  if(command.type==="technician"){
-    requireThat(!board.technicians.some(t=>t.id!==command.id&&t.email===command.email.toLowerCase()),"Email is already mapped");
+  if(command.type==="importTechnician"){
+    requireThat(employee&&employee.id===command.sourceId,"Provider employee was not verified",502);
+    requireThat(employee.active,"Inactive provider employees cannot be imported",409);
+    const existing=board.technicians.find(t=>t.id===command.id);
+    requireThat(!board.technicians.some(t=>t.sourceId===command.sourceId&&t.id!==command.id),"This provider employee already has a lane",409);
+    requireThat(!existing?.sourceId||existing.sourceId===command.sourceId,"This lane belongs to another provider employee",409);
+    if(existing){existing.name=employee.name;existing.sourceId=employee.id;}
+    else{
+      requireThat(board.technicians.length<40,"Pilot supports up to 40 technicians");
+      board.technicians.push({id:command.id,name:employee.name,email:"",active:true,sourceId:employee.id});
+    }
+    target=command.id;
+  }else if(command.type==="resource"){
+    const resources=resourcesFor(board);
+    requireThat(!resources.some(r=>r.id!==command.id&&r.name.toLowerCase()===command.name.toLowerCase()),"A lane with this name already exists");
+    requireThat(command.active||!board.jobs.some(j=>j.resource===command.id&&j.status!=="completed"),"Reassign unfinished jobs before deactivating this lane",409);
+    const index=resources.findIndex(r=>r.id===command.id);
+    if(index<0){requireThat(resources.length<40,"Supports up to 40 resource lanes");resources.push({id:command.id,name:command.name,active:command.active});}
+    else resources[index]={id:command.id,name:command.name,active:command.active};
+    board.resources=resources;target=command.id;
+  }else if(command.type==="technician"){
+    requireThat(!command.email||!board.technicians.some(t=>t.id!==command.id&&t.email===command.email.toLowerCase()),"Email is already mapped");
     requireThat(command.active || !board.jobs.some(j=>j.technicianId===command.id&&j.status!=="completed"),"Reassign unfinished jobs before deactivating");
     const tech={id:command.id,name:command.name,email:command.email.toLowerCase(),active:command.active};
     const index=board.technicians.findIndex(t=>t.id===tech.id);
-    if(index<0){requireThat(board.technicians.length<40,"Pilot supports up to 40 technicians");board.technicians.push(tech);}else board.technicians[index]=tech;
+    if(index<0){requireThat(board.technicians.length<40,"Pilot supports up to 40 technicians");board.technicians.push(tech);}else board.technicians[index]={...board.technicians[index],...tech};
     target=tech.id;
   }else if(command.type==="visit"){
     requireThat(!board.visits.some(v=>v.id===command.id),"Visit already exists",409);
@@ -172,6 +199,7 @@ export function applyCommand(input:Board,command:Command,actor:Actor,now:string,
     if(command.type==="plan"){
       requireThat(!["active","completed"].includes(job.status),"Pause active work before editing; completed work is locked");
       requireThat(!command.technicianId || board.technicians.some(t=>t.id===command.technicianId&&t.active),"Choose an active technician");
+      requireThat(!command.resource||resourcesFor(board).some(r=>r.id===command.resource&&r.active),"Choose an active bay or equipment lane");
       requireThat(new Set(command.prerequisites).size===command.prerequisites.length,"Duplicate prerequisites");
       requireThat(command.prerequisites.every(id=>id!==job.id&&board.jobs.some(j=>j.id===id&&j.visitId===job.visitId)),"Prerequisites must be other jobs in this visit");
       const reaches=(id:string,seen=new Set<string>()):boolean=>{
@@ -184,7 +212,8 @@ export function applyCommand(input:Board,command:Command,actor:Actor,now:string,
       requireThat(job.status==="idle"||job.status==="paused","Job is already active or completed",409);
       requireThat(blockers(board,job).length===0,`Blocked: ${blockers(board,job).join(", ")}`,409);
       requireThat(board.technicians.some(t=>t.id===job.technicianId&&t.active),"Assign an active technician before starting");
-      requireThat(!job.resource || !board.jobs.some(j=>j.id!==job.id&&j.resource===job.resource&&j.status==="active"),"Alignment rack is occupied",409);
+      requireThat(!job.resource||resourcesFor(board).some(r=>r.id===job.resource&&r.active),"The assigned resource lane is inactive",409);
+      requireThat(!job.resource || !board.jobs.some(j=>j.id!==job.id&&j.resource===job.resource&&j.status==="active"),`${resourcesFor(board).find(r=>r.id===job.resource)?.name??"Resource"} is occupied`,409);
       const current=board.jobs.find(j=>j.technicianId===job.technicianId&&j.status==="active");
       requireThat(!current||command.pauseCurrent,"Another job is active. Confirm pausing it before starting this one.",409);
       if(current){settle(current);current.status="paused";current.since=now;current.pauseReason="Switched to another job";detail=`Paused ${current.id}`;}

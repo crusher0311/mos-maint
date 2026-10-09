@@ -7,6 +7,12 @@ The scheduling concept is a vehicle visit containing individual jobs and multi-t
 
 Workflow visibility must be configurable by upstream provider stage, independently of dashboard preferences. Advisors search and import by the human RO number, never a required provider UUID.
 
+Technician roster identity is independent of MOS login access. Shops need to schedule technicians before accounts exist, and managers need named bay/equipment lanes.
+
+**Why:** The user confirmed that the shop's technicians do not yet have MOS logins and explicitly requested additional lanes/bays.
+
+**How to apply:** Permit name-only roster entries, link logins later without changing technician identity, and review provider staff before adding or matching lanes. Never create placeholder emails or infer account access from provider employment.
+
 **Why:** The user explicitly wants dashboard-like stage selection on the workflow board and RO-number intake. Provider-stage visibility is not technician job progress.
 
 **How to apply:** Use callback-cached orders for automatic intake, preserve local assignments and inspections when stages change, and retain access to hidden assigned work. Do not turn board refreshes into upstream polling.

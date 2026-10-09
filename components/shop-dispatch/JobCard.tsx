@@ -1,5 +1,5 @@
 "use client";
-import { blockers, elapsed, type Actor, type Board, type Command, type Job } from "@/lib/shop-dispatch/model";
+import { blockers, elapsed, resourcesFor, type Actor, type Board, type Command, type Job } from "@/lib/shop-dispatch/model";
 import { CommandForm } from "./CommandForm";
 import { canControl, dateLabel, iso, localDate, minutes, nullableNumber } from "./helpers";
 import styles from "./pilot.module.css";
@@ -11,7 +11,10 @@ export function JobCard({ job, board, actor, now, busy, mutate }: WorkProps & { 
   const closed = board.visits.find(v => v.id === job.visitId)?.closed;
   const controls = canControl(board, job, actor.manager, actor.technicianId);
   const tech = board.technicians.find(t => t.id === job.technicianId);
-  const rackOccupied = job.resource === "rack" && board.jobs.some(j => j.id !== job.id && j.resource === "rack" && j.status === "active");
+  const resources = resourcesFor(board);
+  const resource = resources.find(r => r.id === job.resource);
+  const resourceOccupied = !!job.resource && board.jobs.some(j => j.id !== job.id && j.resource === job.resource && j.status === "active");
+  const resourceUnavailable = !!job.resource && !resource?.active;
   async function start() {
     const current = board.jobs.find(j => j.technicianId === job.technicianId && j.status === "active" && j.id !== job.id);
     if (current && !window.confirm(`Pause “${current.title}” and start “${job.title}”? Waiting time will begin for the paused job.`)) return;
@@ -19,7 +22,7 @@ export function JobCard({ job, board, actor, now, busy, mutate }: WorkProps & { 
   }
   return <article className={styles.job} data-testid={`job-${job.id}`}>
     <div className={styles.row}><h3>{job.title}</h3><span className={`${styles.chip} ${styles[job.status] || ""}`}>{job.status === "paused" ? "Paused · waiting" : job.status}</span></div>
-    <small>{tech?.name ?? "Unassigned"} · Planned start {dateLabel(job.plannedStart)}{job.resource && " · Alignment rack"}</small>
+    <small>{tech?.name ?? "Unassigned"} · Planned start {dateLabel(job.plannedStart)}{job.resource && ` · ${resource?.name ?? job.resource}${resourceUnavailable ? " (inactive or unavailable)" : ""}`}</small>
     <div className={`${styles.metrics} ${styles.mono}`}>
       <div><small>Active work</small><strong>{minutes(times.activeMs)}</strong></div>
       <div><small>Paused waiting</small><strong>{minutes(times.waitingMs)}</strong></div>
@@ -28,10 +31,11 @@ export function JobCard({ job, board, actor, now, busy, mutate }: WorkProps & { 
     </div>
     {job.pauseReason && <p className={styles.warning}>Waiting: {job.pauseReason}</p>}
     {blocked.length > 0 && <p className={styles.warning}>Blocked: {blocked.join(" · ")}</p>}
-    {rackOccupied && <p className={styles.warning}>Rack occupied by another local active session.</p>}
+    {resourceOccupied && <p className={styles.warning}>{resource?.name ?? "Shared resource"} occupied by another local active session.</p>}
+    {resourceUnavailable && job.status !== "completed" && <p className={styles.warning}>This resource is inactive or unavailable. A manager must reassign the job’s resource before starting work.</p>}
     {job.prerequisites.length > 0 && <p><small>Dependencies: {job.prerequisites.map(id => board.jobs.find(j => j.id === id)?.title ?? "Missing job").join(" → ")}</small></p>}
     {controls && <div className={styles.actions}>
-      {["idle", "paused"].includes(job.status) && <button data-testid={`start-${job.id}`} className={styles.primary} disabled={busy || !!blocked.length || !tech?.active || rackOccupied} onClick={() => void start()}>{job.status === "paused" ? "Resume work" : "Start work"}</button>}
+      {["idle", "paused"].includes(job.status) && <button data-testid={`start-${job.id}`} className={styles.primary} disabled={busy || !!blocked.length || !tech?.active || resourceOccupied || resourceUnavailable} onClick={() => void start()}>{job.status === "paused" ? "Resume work" : "Start work"}</button>}
       {job.status === "active" && <button data-testid={`complete-${job.id}`} disabled={busy} onClick={() => { if (window.confirm(`Complete “${job.title}”? The session will stop and completed work is locked.`)) void mutate({ type: "complete", jobId: job.id }); }}>Complete job</button>}
     </div>}
     {controls && job.status === "active" && <details><summary>Pause with a reason</summary>
@@ -44,14 +48,14 @@ export function JobCard({ job, board, actor, now, busy, mutate }: WorkProps & { 
         <CommandForm revision={board.revision} busy={busy} testId={`plan-form-${job.id}`} label="Save plan" submit={(data, expectedRevision) => mutate({
           type: "plan", jobId: job.id, technicianId: String(data.get("technicianId")) || null,
           plannedStart: iso(data.get("plannedStart")), estimatedMinutes: nullableNumber(data.get("estimatedMinutes")),
-          prerequisites: data.getAll("prerequisites").map(String), resource: data.get("resource") === "rack" ? "rack" : null,
+          prerequisites: data.getAll("prerequisites").map(String), resource: String(data.get("resource") ?? "") || null,
           authorized: data.get("authorized") === "on",
         }, expectedRevision)}>
           <div className={styles.fields}>
             <label>Active technician<select name="technicianId" defaultValue={job.technicianId ?? ""}><option value="">Unassigned</option>{board.technicians.filter(t => t.active).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></label>
             <label>Planned work start<input type="datetime-local" name="plannedStart" defaultValue={localDate(job.plannedStart)} /></label>
             <label>Manual planned estimate (minutes)<input type="number" name="estimatedMinutes" min={1} max={1440} step={1} defaultValue={job.estimatedMinutes ?? ""} placeholder="Unknown" /></label>
-            <label>Shared resource<select name="resource" defaultValue={job.resource ?? ""}><option value="">None</option><option value="rack">Alignment rack</option></select></label>
+            <label>Shared resource<select name="resource" defaultValue={job.resource ?? ""}><option value="">None</option>{resources.filter(r => r.active || r.id === job.resource).map(r => <option key={r.id} value={r.id} disabled={!r.active}>{r.name}{r.active ? "" : " · inactive"}</option>)}{job.resource && !resource && <option value={job.resource} disabled>{job.resource} · unavailable</option>}</select></label>
           </div>
           <label className={styles.check}><input type="checkbox" name="authorized" defaultChecked={job.authorized} />Manager authorizes this work</label>
           <div><small>Prerequisites · other jobs on this visit only</small>{board.jobs.filter(j => j.visitId === job.visitId && j.id !== job.id).map(j => <label className={styles.check} key={j.id}><input type="checkbox" name="prerequisites" value={j.id} defaultChecked={job.prerequisites.includes(j.id)} />{j.title} · {j.status}</label>)}</div>

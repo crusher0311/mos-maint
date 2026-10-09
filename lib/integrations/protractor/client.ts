@@ -6505,6 +6505,9 @@ export async function getProtractorEmployees(
   params: {
     skip?: number;
     top?: number;
+    timeoutMs?:number;
+    maxRetries?:number;
+    priority?:boolean;
   } = {}
 ): Promise<{ ok: boolean; employees?: ProtractorEmployee[]; error?: string }> {
   const config = await resolveProtractorConfig(shopId);
@@ -6523,13 +6526,16 @@ export async function getProtractorEmployees(
     config,
     {},
     0,
-    shopId
+    shopId,
+    params.timeoutMs ? {timeoutMs:params.timeoutMs,maxRetries:params.maxRetries??0,priority:params.priority??true} : undefined
   );
 
   if (!result.ok) {
     return { ok: false, error: result.error };
   }
 
+  if(params.timeoutMs&&!Array.isArray(result.data?.ItemCollection))
+    return {ok:false,error:"Provider response omitted the employee list"};
   return { ok: true, employees: result.data?.ItemCollection || [] };
 }
 
