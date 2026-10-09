@@ -3,6 +3,7 @@ import { readDispatchBoard } from "@/lib/data/repositories/shop-dispatch";
 import { dispatchFailure,dispatchJson,dispatchSession } from "@/lib/shop-dispatch/http";
 import { actorFor,requireThat } from "@/lib/shop-dispatch/model";
 import { loadDispatchRoster } from "@/lib/shop-dispatch/roster";
+import { runWithProtractorInteractiveTransport } from "@/lib/integrations/protractor/interactive-context";
 export const dynamic="force-dynamic";
 export const runtime="nodejs";
 export async function GET(){
@@ -10,6 +11,6 @@ export async function GET(){
     const session=await dispatchSession(await getSession());
     const board=await readDispatchBoard(session.shopId);
     requireThat(actorFor(board,session.email,session.role).manager,"Only managers may review provider staff",403);
-    return dispatchJson(await loadDispatchRoster(session.shopId));
+    return dispatchJson(await runWithProtractorInteractiveTransport(session.shopId,()=>loadDispatchRoster(session.shopId)));
   }catch(error){return dispatchFailure(error);}
 }

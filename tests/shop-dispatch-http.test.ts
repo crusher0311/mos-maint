@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import Module from "node:module";
 import { randomUUID } from "node:crypto";
 import { emptyBoard, type Board } from "../lib/shop-dispatch/model";
+import { getProtractorInteractiveTransportContext } from "../lib/integrations/protractor/interactive-context";
 const loader=Module as unknown as {_load:(id:string,...args:unknown[])=>unknown};
 const original=loader._load;
 let session:unknown=null,reads=0,enterprise:unknown=null;
@@ -19,8 +20,8 @@ loader._load=function(id,...args){
  if(id==="next/server")return {NextResponse:{json:(value:unknown,init?:ResponseInit)=>Response.json(value,init)}};
  if(id==="@/lib/auth")return {getSession:async()=>session};
  if(id==="@/lib/shop-dispatch/roster")return {
-   loadDispatchRoster:async(shopId:number)=>{assert.equal(shopId,10);rosterReads++;return {employees:[],truncated:false};},
-   fetchDispatchEmployee:async(shopId:number,id:string)=>{assert.equal(shopId,10);rosterReads++;return {id,name:"Provider Tech",active:true};}
+   loadDispatchRoster:async(shopId:number)=>{assert.equal(shopId,10);assert.equal(getProtractorInteractiveTransportContext()?.shopId,shopId);rosterReads++;return {employees:[],truncated:false};},
+   fetchDispatchEmployee:async(shopId:number,id:string)=>{assert.equal(shopId,10);assert.equal(getProtractorInteractiveTransportContext()?.shopId,shopId);rosterReads++;return {id,name:"Provider Tech",active:true};}
  };
  if(id==="@/lib/featureResolver")return {getFeatureEntitlements:async(id:number)=>({isFeatureEnabled:(key:string)=>key==="shop_workflow"&&id===10})};
  if(id==="@/lib/enterprise")return {getEnterpriseByShopId:async()=>enterprise};
@@ -49,7 +50,20 @@ test("provider roster review is shop-scoped and manager-only before provider acc
  session={shopId:10,email:"manager@example.test",role:"manager",token:"real-session"};
  assert.equal((await rosterRoute.GET()).status,200);
  assert.equal(rosterReads,1);
+ assert.equal(getProtractorInteractiveTransportContext(),undefined);
  session=null;reads=0;
+});
+test("roster import revalidation is manager-only and uses shop-bound interactive transport",async()=>{
+ const before=rosterReads;
+ const body={requestId:randomUUID(),revision:0,command:{type:"importTechnician",id:"provider-tech",sourceId:"provider-employee"}};
+ session={shopId:10,email:"viewer@example.test",role:"user",token:"real-session"};
+ assert.equal((await route.POST(req(body))).status,403);
+ assert.equal(rosterReads,before);
+ session={shopId:10,email:"manager@example.test",role:"manager",token:"real-session"};
+ assert.equal((await route.POST(req(body))).status,200);
+ assert.equal(rosterReads,before+1);
+ assert.equal(getProtractorInteractiveTransportContext(),undefined);
+ boards.clear();session=null;reads=0;
 });
 test("HTTP auth, operator gate, CSRF, strict tenant scope and role enforcement",async()=>{
  assert.equal((await route.GET()).status,401);assert.equal(reads,0);
