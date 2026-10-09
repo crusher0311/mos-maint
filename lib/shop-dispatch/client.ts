@@ -1,8 +1,10 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Actor, Board, Brand, Command } from "./model";
+import type { WorkflowBranding } from "./branding";
 export interface DispatchSnapshot {
   board:Board; actor:Actor; serverNow:string; shopId:number;
+  branding:WorkflowBranding;
   enterprise:{id:string;name:string;revision:number;brand:Brand|null;canEdit:boolean}|null;
 }
 export function useDispatchBoard() {
@@ -20,6 +22,7 @@ export function useDispatchBoard() {
       current.current=value;setSnapshot(value);setLastReceived(Date.now());
     }else if(mounted.current&&previous&&value.shopId!==previous.shopId){
       // A dashboard shop switch must not reuse another location's edit forms.
+      current.current=null;setSnapshot(null);setLastReceived(null);retryRef.current=null;
       window.location.reload();
     }
   };

@@ -194,7 +194,7 @@ export function applyCommand(input:Board,command:Command,actor:Actor,now:string,
   }
   requireThat(board.visits.length<=500&&board.jobs.length<=2500,"Pilot capacity reached; arrange archival before adding work",409);
   if(!detail)detail=command.type==="brand"?
-    JSON.stringify(command.brand?{name:command.brand.name,primary:command.brand.primary,accent:command.brand.accent,hasLogo:!!command.brand.logo}:"inherit enterprise"):
+    JSON.stringify(command.brand?{name:command.brand.name,primary:command.brand.primary,accent:command.brand.accent,hasLogo:!!command.brand.logo}:"automatic shop branding"):
     JSON.stringify(command);
   board.audit.push({at:now,actor:actor.email,action:command.type,target,detail});
   board.revision++;board.updatedAt=now;return board;

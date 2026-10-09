@@ -413,6 +413,11 @@ export async function updateShopFields(
           // whole-container replace
           expr = sql`${JSON.stringify(w.value)}::jsonb`;
         } else {
+          // jsonb_set does not create intermediate objects. Shared branding
+          // may be absent on shops created before the branding settings page.
+          if (bucket === "settings" && w.path[0] === "branding" && w.path.length > 1) {
+            expr = sql`jsonb_set(${expr}, '{branding}'::text[], CASE WHEN jsonb_typeof(${expr}->'branding') = 'object' THEN ${expr}->'branding' ELSE '{}'::jsonb END, true)`;
+          }
           const pathLit = `{${w.path.map((p) => p.replace(/"/g, '\\"')).join(",")}}`;
           expr = sql`jsonb_set(${expr}, ${pathLit}::text[], ${JSON.stringify(w.value)}::jsonb, true)`;
         }

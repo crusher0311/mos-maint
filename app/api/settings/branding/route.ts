@@ -1,38 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import { readShopBranding, replaceSharedSettingsForShop } from "@/lib/data/repositories/shops";
 
 export async function GET() {
   try {
     const session = await requireSession();
-    const db = await getDb();
     const shopId = Number(session.shopId);
-
-    const shop = await db.collection("shops").findOne(
-      { shopId },
-      { projection: { branding: 1, locationIdentifier: 1, tekmetric: 1, protractor: 1 } }
-    );
+    const shop = await readShopBranding(shopId);
 
     // Determine SMS type for fallback logo
     let smsType = "none";
-    if (shop?.tekmetric?.configured || shop?.tekmetric?.shopId) {
+    if (shop.smsType === "tekmetric") {
       smsType = "tekmetric";
-    } else if (shop?.protractor?.configured) {
+    } else if (shop.smsType === "protractor") {
       smsType = "protractor";
     }
 
     // Use Tekmetric logo as fallback only if: Tekmetric integration + no custom logo
-    const hasCustomLogo = Boolean(shop?.branding?.logo);
+    const hasCustomLogo = Boolean(shop.logo);
     const isTekmetric = smsType === "tekmetric";
     const fallbackLogo = (!hasCustomLogo && isTekmetric) ? "/tekmetric-logo.png" : null;
 
     return NextResponse.json({
-      logo: shop?.branding?.logo || null,
+      logo: shop.logo,
       fallbackLogo,
-      shopName: shop?.branding?.displayName || null,
+      shopName: shop.displayName,
       locationIdentifier: shop?.locationIdentifier || null,
       smsType,
-    });
+    }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (err: any) {
     console.error("Error fetching branding:", err);
     return NextResponse.json({ error: err.message }, { status: 500 });
@@ -42,7 +37,6 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const session = await requireSession();
-    const db = await getDb();
     const shopId = Number(session.shopId);
 
     const body = await req.json();
@@ -70,10 +64,8 @@ export async function POST(req: NextRequest) {
       updateFields["locationIdentifier"] = locationIdentifier;
     }
 
-    await db.collection("shops").updateOne(
-      { shopId },
-      { $set: updateFields }
-    );
+    const result = await replaceSharedSettingsForShop(shopId, updateFields);
+    if (result.matchedCount !== 1) return NextResponse.json({ error: "Shop not found" }, { status: 404 });
 
     return NextResponse.json({ success: true });
   } catch (err: any) {
@@ -85,13 +77,10 @@ export async function POST(req: NextRequest) {
 export async function DELETE() {
   try {
     const session = await requireSession();
-    const db = await getDb();
     const shopId = Number(session.shopId);
 
-    await db.collection("shops").updateOne(
-      { shopId },
-      { $unset: { "branding.logo": "" } }
-    );
+    const result = await replaceSharedSettingsForShop(shopId, { "branding.logo": null });
+    if (result.matchedCount !== 1) return NextResponse.json({ error: "Shop not found" }, { status: 404 });
 
     return NextResponse.json({ success: true });
   } catch (err: any) {

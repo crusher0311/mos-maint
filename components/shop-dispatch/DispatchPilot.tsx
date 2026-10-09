@@ -1,14 +1,14 @@
 "use client";
 import { useEffect, useState, type CSSProperties } from "react";
 import { useDispatchBoard } from "@/lib/shop-dispatch/client";
-import { DEFAULT_BRAND, elapsed } from "@/lib/shop-dispatch/model";
+import { elapsed } from "@/lib/shop-dispatch/model";
 import { AuditView } from "./AuditView";
 import { BrandSettings } from "./BrandSettings";
 import { JobCard } from "./JobCard";
 import { Management } from "./Management";
 import { Timeline } from "./Timeline";
 import { VisitDetail } from "./VisitDetail";
-import { contrast, dateLabel, minutes, projection } from "./helpers";
+import { contrast, dateLabel, minutes, projection, resolvedBranding } from "./helpers";
 import styles from "./pilot.module.css";
 
 type View = "dispatch" | "work" | "manage" | "settings" | "audit";
@@ -25,7 +25,7 @@ export default function DispatchPilot() {
   const [history, setHistory] = useState(false);
   // Clock display only. Fetch polling and visibility refresh belong to useDispatchBoard.
   useEffect(() => { const timer = window.setInterval(() => setTick(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
-  const brand = snapshot?.board.locationBrand ?? snapshot?.enterprise?.brand ?? DEFAULT_BRAND;
+  const brand = resolvedBranding(snapshot).brand;
   const theme = { "--primary": brand.primary, "--accent": brand.accent, "--on-primary": contrast(brand.primary), "--on-accent": contrast(brand.accent) } as CSSProperties;
   const age = lastReceived ? Math.max(0, tick - lastReceived) : null;
   const stale = age !== null && age > 30000;
@@ -111,7 +111,7 @@ export default function DispatchPilot() {
             </>}
         </section>}
         {view === "manage" && snapshot.actor.manager && work && <Management {...work} />}
-        {view === "settings" && work && <BrandSettings snapshot={snapshot} {...work} saveEnterpriseBrand={api.saveEnterpriseBrand} />}
+        {view === "settings" && work && <BrandSettings key={snapshot.shopId} snapshot={snapshot} {...work} saveEnterpriseBrand={api.saveEnterpriseBrand} />}
         {view === "audit" && <AuditView board={snapshot.board} />}
         <footer><small>Server-backed pilot · revision {snapshot.board.revision} · board saved {dateLabel(snapshot.board.updatedAt)}. Protractor intake is read-only and verified per fetched work order, not by this board connection.</small></footer>
       </>}

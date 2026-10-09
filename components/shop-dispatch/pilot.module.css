@@ -22,11 +22,11 @@
 .root p { line-height: 1.6; }
 .root button, .root input, .root select, .root textarea { font: inherit; }
 .root button { min-height: 44px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); padding: 10px 14px; cursor: pointer; font-weight: 600; }
-.root button:hover:not(:disabled) { border-color: var(--primary); }
+.root button:hover:not(:disabled) { border-color: #285746; }
 .root button:disabled { opacity: .5; cursor: not-allowed; }
-.root :focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.root :focus-visible { outline: 3px solid #174f85; outline-offset: 3px; box-shadow: 0 0 0 3px #fbfcf7; }
 .root input, .root select, .root textarea { width: 100%; min-height: 44px; padding: 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
-.root input[type=checkbox] { width: 20px; min-height: 20px; accent-color: var(--primary); }
+.root input[type=checkbox] { width: 20px; min-height: 20px; accent-color: #285746; }
 .root label { display: grid; gap: 7px; font-size: 12px; font-weight: 600; }
 .root small { color: var(--muted); font-size: 12px; line-height: 1.6; }
 .root details { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 14px; }
@@ -43,6 +43,9 @@
 .nav button { background: transparent; border-color: transparent; }
 .nav button[aria-current=page] { background: var(--primary); color: var(--on-primary); }
 .notice { padding: 15px 18px; border: 1px solid #d1a17b; border-radius: 8px; background: #fff0df; color: #674020; margin: 14px 0; line-height: 1.6; }
+.brandingInfo { padding: 15px 18px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); margin: 14px 0; line-height: 1.6; }
+.brandingInfo p { margin: 8px 0; }
+.brandingLink { display: inline-block; color: #174f85; font-weight: 600; text-underline-offset: 3px; }
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 22px; margin-bottom: 18px; }
 .stats { display: flex; flex-wrap: wrap; border-block: 1px solid var(--line); margin: 20px 0 25px; }
 .stat { flex: 1; min-width: 150px; padding: 18px 22px 18px 0; }
@@ -52,11 +55,11 @@
 .fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .check { display: flex !important; align-items: center; gap: 10px; min-height: 35px; }
 .chip { display: inline-flex; align-items: center; border-radius: 5px; background: #e4eae0; color: #344e40; padding: 4px 8px; font-size: 11px; font-weight: 700; }
-.active { background: var(--primary); color: var(--on-primary); }
+.active { background: #285746; color: #fbfcf7; }
 .paused { background: #f5e1c8; color: #784718; }
 .completed { background: #dde6e1; color: #41604e; }
-.warning { color: #9b3e24; }
-.job { padding: 16px; border: 1px solid var(--line); border-left: 4px solid var(--primary); border-radius: 8px; margin-top: 12px; background: var(--panel); }
+.root .warning { color: #9b3e24; }
+.job { padding: 16px; border: 1px solid var(--line); border-left: 4px solid #285746; border-radius: 8px; margin-top: 12px; background: var(--panel); }
 .job p { margin: 7px 0; }
 .mono { font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-variant-numeric: tabular-nums; }
 .metrics { display: flex; gap: 20px; flex-wrap: wrap; margin: 12px 0; }
@@ -71,10 +74,10 @@
 .timeline { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; margin: 15px 0; background: var(--panel); }
 .track { position: relative; padding: 8px 0; background: repeating-linear-gradient(90deg, transparent 0, transparent calc(100% / 12 - 1px), #e4e9df calc(100% / 12 - 1px), #e4e9df calc(100% / 12)); }
 .trackRow { position: relative; height: 68px; margin: 5px 0; }
-.block { position: absolute; min-width: 100px; height: 66px; overflow: hidden; text-align: left; padding: 6px 9px !important; border-left: 3px solid var(--primary) !important; font-size: 12px !important; }
+.block { position: absolute; min-width: 100px; height: 66px; overflow: hidden; text-align: left; padding: 6px 9px !important; border-left: 3px solid #285746 !important; font-size: 12px !important; }
 .block strong, .block small { display: block; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
 .axis { display: flex; justify-content: space-between; padding: 12px; font-size: 11px; color: var(--muted); }
-.now { position: absolute; top: 0; bottom: 0; border-left: 2px solid var(--accent); pointer-events: none; opacity: .75; }
+.now { position: absolute; top: 0; bottom: 0; border-left: 2px solid #9b3e24; pointer-events: none; opacity: .75; }
 .queue { padding: 9px; display: flex; gap: 8px; flex-wrap: wrap; }
 .queue button { text-align: left; font-size: 12px; }
 .audit { overflow: auto; }

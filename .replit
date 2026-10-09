@@ -19,6 +19,10 @@ args = "MOS Maintenance MVP"
 task = "workflow.run"
 args = "typecheck"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Shop Workflow offline checks"
+
 [[workflows.workflow]]
 name = "MOS Maintenance MVP"
 author = "agent"
@@ -41,6 +45,18 @@ args = "npm run typecheck"
 
 [workflows.workflow.metadata]
 isValidation = true
+
+[[workflows.workflow]]
+name = "Shop Workflow offline checks"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "node artifacts/detect-dog-workflow/node_modules/vite/bin/vite.js --config tests/shop-dispatch-browser/vite.config.mjs"
+waitForPort = 24100
+
+[workflows.workflow.metadata]
+outputType = "webview"
 
 [[ports]]
 localPort = 3000

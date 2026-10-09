@@ -64,6 +64,31 @@ export const __sharedSettingsDeps = {
   getCollection: collection,
 };
 
+export const __shopBrandingDeps = {
+  isIdentityPgCanonical,
+  findPgShop: pg.findShopByMosShopId,
+  getCollection: collection,
+};
+
+/** Narrow branding read; PG projections are not enforced by the generic
+ * repository, so never return its full shop document across the API boundary. */
+export async function readShopBranding(shopId: number | string) {
+  const shop = __shopBrandingDeps.isIdentityPgCanonical()
+    ? await __shopBrandingDeps.findPgShop(shopId)
+    : await (await __shopBrandingDeps.getCollection()).findOne(shopIdFilter(shopId), {
+      projection: { branding: 1, locationIdentifier: 1, tekmetric: 1, protractor: 1 },
+      maxTimeMS: 5000,
+    });
+  const branding = shop?.branding as { logo?: unknown; displayName?: unknown } | undefined;
+  return {
+    logo: typeof branding?.logo === "string" ? branding.logo : null,
+    displayName: typeof branding?.displayName === "string" ? branding.displayName : null,
+    locationIdentifier: typeof shop?.locationIdentifier === "string" ? shop.locationIdentifier : null,
+    smsType: (shop?.tekmetric as any)?.configured || (shop?.tekmetric as any)?.shopId ? "tekmetric"
+      : (shop?.protractor as any)?.configured ? "protractor" : "none",
+  };
+}
+
 /** Complete-path replacement used by the shared enterprise settings catalog. */
 export async function replaceSharedSettingsForShop(
   shopId: number,

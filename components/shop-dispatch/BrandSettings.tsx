@@ -3,13 +3,13 @@ import { useState } from "react";
 import { brandSchema, DEFAULT_BRAND, type Brand } from "@/lib/shop-dispatch/model";
 import type { DispatchSnapshot } from "@/lib/shop-dispatch/client";
 import { CommandForm } from "./CommandForm";
-import { contrast } from "./helpers";
+import { brandSourceLabel, contrast, manualBrandDraft, resolvedBranding } from "./helpers";
 import type { WorkProps } from "./JobCard";
 import styles from "./pilot.module.css";
 
-function BrandEditor({ initial, fallback, revision, title, canEdit, busy, save, inherited, testId }: {
+function BrandEditor({ initial, fallback, revision, title, canEdit, busy, save, inherited, testId, location = false }: {
   initial: Brand; fallback: Brand; title: string; canEdit: boolean; busy: boolean;
-  revision: number; save: (brand: Brand | null, expectedRevision?: number) => Promise<boolean>; inherited: string; testId: string;
+  revision: number; save: (brand: Brand | null, expectedRevision?: number) => Promise<boolean>; inherited: string; testId: string; location?: boolean;
 }) {
   const [draft, setDraft] = useState(initial);
   const [baseRevision, setBaseRevision] = useState(revision);
@@ -57,27 +57,33 @@ function BrandEditor({ initial, fallback, revision, title, canEdit, busy, save, 
         <label>Local raster logo · up to 120 KB<input type="file" accept="image/png,image/jpeg,image/webp" onChange={e => void upload(e.target.files?.[0])} /></label>
         {fileError && <p role="alert" className={styles.warning}>{fileError}</p>}
         <button type="button" disabled={!draft.logo} onClick={() => setDraft({ ...draft, logo: null })}>Remove logo from draft</button>
-        <small>Changes above are a preview until saved. Text contrast is calculated automatically. Save to persist a removed logo.</small>
+        <small>Changes above are a preview until saved. Text contrast is calculated automatically. Save to persist a removed logo. {location && "Shared logos are not copied into this editor. A location override saves only a logo uploaded here (or its existing manual logo); without one it saves no logo."}</small>
       </CommandForm>
       <button style={{ marginTop: 14 }} disabled={busy || uploading} onClick={async () => {
-        if (window.confirm("Remove this brand override and restore inheritance? This change is persisted on the server.")) {
+        if (window.confirm(location ? "Remove this location override and restore automatic shop branding? This change is persisted on the server." : "Remove this brand override and restore inheritance? This change is persisted on the server.")) {
           if (await save(null, baseRevision)) {
             setDraft(fallback);
             setBaseRevision(baseRevision + 1);
           }
         }
-      }}>Revert to inheritance</button>
+      }}>{location ? "Restore automatic shop branding" : "Revert to inheritance"}</button>
     </> : <p><small>You do not have permission to edit this brand.</small></p>}
   </section>;
 }
 export function BrandSettings({ snapshot, saveEnterpriseBrand, ...work }: WorkProps & { snapshot: DispatchSnapshot; saveEnterpriseBrand: (brand: Brand | null, expectedRevision?: number) => Promise<boolean> }) {
-  const effective = work.board.locationBrand ?? snapshot.enterprise?.brand ?? DEFAULT_BRAND;
-  return <><div className={styles.notice}>Pilot branding is persisted through the server API. It does not change the existing mockup. Location override wins; otherwise enterprise branding, then Detect Dog defaults. Drafts remain intact on failed saves.</div>
+  const branding = resolvedBranding(snapshot);
+  const effective = work.board.locationBrand ?? manualBrandDraft(branding.brand);
+  return <><div className={styles.brandingInfo}>
+    <strong>Current source: {brandSourceLabel(branding.source)}</strong>
+    <p>A location override replaces the entire brand. Without an override, each saved shop field and color takes precedence over enterprise branding, then Detect Dog defaults. Shared colors are resolved by the server: {branding.palette === "derived" ? "derived palette" : "fallback palette"}.</p>
+    <p>Manage shared shop branding in dashboard settings. This editor saves a separate manual location override; drafts remain intact on failed saves. Restoring automatic branding removes that override and follows shared shop settings again.</p>
+    <a className={styles.brandingLink} href="/dashboard/settings/branding">Open shared branding settings</a>
+  </div>
     <div className={styles.grid}>
-      <BrandEditor initial={effective} fallback={snapshot.enterprise?.brand ?? DEFAULT_BRAND} revision={work.board.revision} title={`Location ${snapshot.shopId}`} canEdit={work.actor.manager} busy={work.busy} save={(brand, expectedRevision) => work.mutate({ type: "brand", brand }, expectedRevision)} testId="location-brand-form"
-        inherited={work.board.locationBrand ? "This location has its own override." : `Inheriting ${snapshot.enterprise?.brand ? "enterprise branding" : "Detect Dog defaults"}.`} />
+      <BrandEditor location initial={effective} fallback={manualBrandDraft(branding.inherited)} revision={work.board.revision} title={`Location ${snapshot.shopId}`} canEdit={work.actor.manager} busy={work.busy} save={(brand, expectedRevision) => work.mutate({ type: "brand", brand }, expectedRevision)} testId="location-brand-form"
+        inherited={work.board.locationBrand ? "This location has a full manual override, including its saved logo." : `Following ${brandSourceLabel(branding.source).toLowerCase()}. The draft starts with resolved name and colors, but no shared logo.`} />
       {snapshot.enterprise ? <BrandEditor key={snapshot.enterprise.id} initial={snapshot.enterprise.brand ?? DEFAULT_BRAND} fallback={DEFAULT_BRAND} revision={snapshot.enterprise.revision} title={snapshot.enterprise.name} canEdit={snapshot.enterprise.canEdit} busy={work.busy} save={saveEnterpriseBrand} testId="enterprise-brand-form"
-        inherited="Enterprise permissions come from the server. Locations without an override inherit this brand; reverting restores Detect Dog defaults." /> : <section className={styles.panel}><h2>No enterprise context</h2><p><small>There is no enterprise brand available for this signed-in location.</small></p></section>}
+        inherited="Enterprise permissions come from the server. Without a location override, enterprise fields fill gaps in shared shop settings; reverting restores Detect Dog defaults for those gaps." /> : <section className={styles.panel}><h2>No enterprise context</h2><p><small>There is no enterprise brand available for this signed-in location. Shared shop fields still take precedence over Detect Dog defaults.</small></p></section>}
     </div>
   </>;
 }

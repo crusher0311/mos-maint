@@ -1,4 +1,31 @@
-import { blockers, elapsed, type Board, type Job, type Visit } from "@/lib/shop-dispatch/model";
+import { blockers, DEFAULT_BRAND, elapsed, type Board, type Brand, type Job, type Visit } from "@/lib/shop-dispatch/model";
+import type { DispatchSnapshot } from "@/lib/shop-dispatch/client";
+import type { WorkflowBranding } from "@/lib/shop-dispatch/branding";
+
+export type ResolvedBranding = WorkflowBranding;
+
+/** Resolution and shared palette derivation belong to the server, not the editor. */
+export function resolvedBranding(snapshot: (DispatchSnapshot & { branding?: ResolvedBranding }) | null): ResolvedBranding {
+  if (snapshot?.branding) return snapshot.branding;
+  // Defensive compatibility while the server/client branding contract rolls out.
+  const inherited = snapshot?.enterprise?.brand ?? DEFAULT_BRAND;
+  return {
+    brand: snapshot?.board.locationBrand ?? inherited,
+    inherited,
+    source: snapshot?.board.locationBrand ? "location" : snapshot?.enterprise?.brand ? "enterprise" : "default",
+    palette: "fallback",
+  };
+}
+
+export const brandSourceLabel = (source: ResolvedBranding["source"]) => ({
+  location: "Location override",
+  shop: "Shared shop branding",
+  enterprise: "Enterprise branding",
+  default: "Detect Dog defaults",
+})[source];
+
+/** Shared logos are display-only here; only a manual upload may enter a new override. */
+export const manualBrandDraft = (brand: Brand): Brand => ({ ...brand, logo: null });
 
 export const localDate = (value: string | null) => value ? new Date(Date.parse(value) - new Date(value).getTimezoneOffset() * 60000).toISOString().slice(0, 16) : "";
 export const iso = (value: FormDataEntryValue | null) => value ? new Date(String(value)).toISOString() : null;
