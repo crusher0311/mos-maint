@@ -1,5 +1,6 @@
 import { idSchema, requireThat } from "./model";
 import type { ProtractorEmployee } from "@/lib/integrations/protractor/client";
+import { loadHistoricalRoster } from "./historical-roster";
 
 export function mapRoster(employees:ProtractorEmployee[]){
   const seen=new Set<string>();
@@ -15,7 +16,10 @@ export async function loadDispatchRoster(shopId:number){
   const {getProtractorEmployees}=await import("@/lib/integrations/protractor/client");
   const result=await getProtractorEmployees(shopId,{top:100,timeoutMs:8000,maxRetries:0,priority:true});
   requireThat(result.ok&&Array.isArray(result.employees),"Could not read this location's Protractor staff. No roster entries changed.",502);
-  return {employees:mapRoster(result.employees),truncated:result.employees.length>=100};
+  const employees=mapRoster(result.employees);
+  if(employees.length)return {employees,truncated:result.employees.length>=100,source:"provider" as const};
+  const history=await loadHistoricalRoster(shopId);
+  return {...history,source:"history" as const,warning:"No usable current staff were returned. These suggestions come from archived repair-order history and may include former employees. Review each person before adding a local lane; current employment is unknown."};
 }
 export async function fetchDispatchEmployee(shopId:number,id:string){
   const {employees}=await loadDispatchRoster(shopId);

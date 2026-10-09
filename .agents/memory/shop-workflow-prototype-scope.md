@@ -37,6 +37,12 @@ Nonempty normalized technician fields do not establish usable assignment
 coverage. Check nested technician identities in archived provider payloads
 before requesting another import or a CSV.
 
+Historical technician identities may be shown as manager-reviewed roster suggestions when the current provider list has no usable entries; never treat them as evidence of current employment.
+
+**Why:** The user approved this fallback for Burnett after the live roster remained empty despite named technician evidence in imported repair orders.
+
+**How to apply:** Label historical candidates, leave them unselected, revalidate identity on import, preserve existing lanes/logins, and do not create accounts or automatically activate historical staff.
+
 **Why:** Read-only inspection of Burnett's imported history found
 `[object Object]` placeholders where the original API supplied structured
 technician IDs and names on service-package lines. Sampled packages also
