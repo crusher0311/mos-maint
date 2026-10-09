@@ -57,7 +57,7 @@ export async function dispatchSnapshot(session:SessionInfo,board?:Board){
   const branding = resolveWorkflowBranding(value.locationBrand, { name, ...logo }, enterprise?.brand ?? null);
   const {stored,...publicEnterprise}=enterprise ?? {stored:null};
   return {board:{...value,receipts:[],audit:actor.manager?value.audit:[],
-    technicians:value.technicians.map(t=>({...t,email:actor.manager||t.id===actor.technicianId?t.email:""}))},
+    technicians:value.technicians.map(t=>({...t,email:actor.manager||t.id===actor.technicianId?t.email:"",skills:actor.manager?t.skills:undefined}))},
     actor,branding,sourceSyncWarning,shopId:session.shopId,serverNow:new Date().toISOString(),enterprise:enterprise?publicEnterprise:null};
 }
 export function dispatchJson(value:unknown,status=200){return NextResponse.json(value,{status,headers:{"Cache-Control":"private, no-store"}});}
