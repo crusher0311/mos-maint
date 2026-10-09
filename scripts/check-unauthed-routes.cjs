@@ -150,6 +150,8 @@ const AUTH_PATTERNS = [
 
   // External API key middleware — call syntax required
   /\bcreateExternalEndpoint\s*\(/,
+  // VHI links only: bounded AppFueled connection authentication + legacy key path.
+  /\bcreateAppFueledLinkEndpoint\s*\(/,
 
   // Stripe webhook signature header (specific header name)
   /stripe-signature/i,

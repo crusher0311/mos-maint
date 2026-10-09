@@ -20,6 +20,12 @@ const { AUTH_PATTERNS, sanitizeForAuthCheck, findLocalAuthHelperNames } = requir
 let passed = 0;
 let failed = 0;
 
+// Guard recognition must require invocation, not an import or comment.
+assert("AppFueled native wrapper call is guarded",
+  guardMatches("export const POST = createAppFueledLinkEndpoint(legacy, deps);"));
+assert("AppFueled native import alone is not guarded",
+  !guardMatches('import { createAppFueledLinkEndpoint } from "./helper"; export const POST = handler;'));
+
 function guardMatches(content) {
   const sanitized = sanitizeForAuthCheck(content);
   return AUTH_PATTERNS.some((pat) => pat.test(sanitized));

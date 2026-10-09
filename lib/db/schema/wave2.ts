@@ -423,6 +423,25 @@ export const shopMedia = pgTable(
   }),
 );
 
+export const appfueledConnections = pgTable("appfueled_connections", {
+  shopId: integer("shop_id").primaryKey(),
+  connectionHash: text("connection_hash").notNull(),
+  credentialsCiphertext: text("credentials_ciphertext").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  createdBy: text("created_by").notNull(),
+  updatedBy: text("updated_by").notNull(),
+  disabledBy: text("disabled_by"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  disabledAt: timestamp("disabled_at", { withTimezone: true }),
+}, t => ({ connectionUnique: uniqueIndex("appfueled_connections_hash_unique").on(t.connectionHash) }));
+
+export const appfueledWebhookLimits = pgTable("appfueled_webhook_limits", {
+  bucket: text("bucket").primaryKey(),
+  windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+  count: integer("count").notNull(),
+});
+
 /** Explicit, operator-managed AppFueled external SMS identity bindings. */
 export const appfueledShopMappings = pgTable(
   "appfueled_shop_mappings",

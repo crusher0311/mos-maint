@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import AppFueledConnections from "./appfueled-connections";
 import {
   KeyRound,
   Plus,
@@ -406,6 +407,8 @@ export default function PartnerKeysPage() {
           </div>
         </div>
       )}
+
+      <AppFueledConnections />
 
       {showCreateModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">

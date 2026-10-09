@@ -43,6 +43,7 @@ const drizzleMigrationFiles = [
   "0032_task1183_nwo_close_date_idx.sql",
   "0033_task1188_prod_index_parity.sql",
     "0035_task1251_appfueled_shop_mappings.sql",
+  "0038_appfueled_connections.sql",
 ];
 
 // Concurrent index migrations must be sent one statement at a time. A

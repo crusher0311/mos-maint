@@ -31,11 +31,13 @@ export function parseVhiLink(body: any): Omit<PartnerVhiLink, "_id" | "partnerId
   } catch { return null; }
 }
 
-export async function receiveVhiLink(req: NextRequest, context: ExternalApiContext, deps: {
+export interface VhiLinkDependencies {
   getDb: () => Promise<Db>;
   shopExists: (id: number) => Promise<boolean>;
   canUseVhi: (id: number) => Promise<boolean>;
-}) {
+}
+
+export async function receiveVhiLink(req: NextRequest, context: ExternalApiContext, deps: VhiLinkDependencies) {
   const { requestId } = context;
   const error = (message: string, status: number) => NextResponse.json({ error: message, requestId }, { status });
   if (!context.isPartner || context.partnerId?.toLowerCase() !== "appfueled") return error("AppFueled partner API key required", 403);
@@ -59,17 +61,25 @@ export async function receiveVhiLink(req: NextRequest, context: ExternalApiConte
   if (!link) return error("Provide a positive MOS shopId, valid VIN, deliveryId (1–128 safe characters), and public HTTPS vhiUrl", 400);
   if (!await deps.shopExists(link.shopId)) return error("Shop not found", 404);
   if (!await deps.canUseVhi(link.shopId)) return error("Maintenance feature not enabled", 403);
+  return persistVhiLink(link, requestId, deps);
+}
+
+export async function persistVhiLink(
+  link: NonNullable<ReturnType<typeof parseVhiLink>>, requestId: string,
+  deps: Pick<VhiLinkDependencies, "getDb">,
+  provenance?: { source: "appfueled_native"; eventName: "vhi_url"; deduplicationVersion: number },
+) {
   // Durable inbox, one immutable delivery per partner/shop/VIN/id. No external
   // URL is fetched, logged, or returned. Never allow a retry to overwrite a link.
-  const _id = createHash("sha256").update(JSON.stringify(["appfueled", link.shopId, link.vin, link.deliveryId])).digest("hex");
+  const _id = createHash("sha256").update(JSON.stringify([provenance ? "appfueled-native-v1" : "appfueled", link.shopId, link.vin, link.deliveryId])).digest("hex");
   const collection = (await deps.getDb()).collection<PartnerVhiLink>("partner_vhi_links");
   let duplicate = false;
   try {
-    await collection.insertOne({ _id, partnerId: "appfueled", ...link, receivedAt: new Date() });
+    await collection.insertOne({ _id, partnerId: "appfueled", ...link, ...provenance, receivedAt: new Date() }, { writeConcern: { w: "majority" } });
   } catch (err: any) {
     if (err?.code !== 11000) throw err;
     const existing = await collection.findOne({ _id });
-    if (!existing || existing.vhiUrl !== link.vhiUrl) return error("deliveryId already used with different content", 409);
+    if (!existing || existing.vhiUrl !== link.vhiUrl) return NextResponse.json({ error: "deliveryId already used with different content", requestId }, { status: 409 });
     duplicate = true;
   }
   return NextResponse.json({ success: true, requestId, shopId: link.shopId, vin: link.vin, deliveryId: link.deliveryId, duplicate }, { headers: { "Cache-Control": "no-store" } });
