@@ -701,7 +701,8 @@ export async function GET(request: NextRequest) {
           },
           displayVin: "$vin",
           displayMiles: {
-            $cond: [{ $gt: ["$odometer", 0] }, "$odometer", null]
+            $cond: [{ $gt: ["$odometer", 0] }, "$odometer",
+              { $cond: [{ $gt: ["$vehicle.odometer", 0] }, "$vehicle.odometer", null] }]
           },
           displayRo: "$workOrderNumber",
           workOrderGuid: "$workOrderGuid",

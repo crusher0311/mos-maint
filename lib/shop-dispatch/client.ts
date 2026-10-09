@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Actor, Board, Brand, Command } from "./model";
 import type { WorkflowBranding } from "./branding";
 export interface DispatchSnapshot {
+  sourceSyncWarning?:string;
   board:Board; actor:Actor; serverNow:string; shopId:number;
   branding:WorkflowBranding;
   enterprise:{id:string;name:string;revision:number;brand:Brand|null;canEdit:boolean}|null;

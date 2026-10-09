@@ -5,6 +5,7 @@ export interface DispatchDependencies {
   read:(shopId:number)=>Promise<Board>;
   save:(shopId:number,revision:number,board:Board)=>Promise<boolean>;
   intake:(shopId:number,workOrderId:string)=>Promise<Intake>;
+  intakeByNumber?:(shopId:number,roNumber:string)=>Promise<Intake>;
   now:()=>string;
 }
 export function digest(value:unknown):string{return createHash("sha256").update(JSON.stringify(value)).digest("hex");}
@@ -21,8 +22,10 @@ export async function executeDispatchMutation(principal:Principal,raw:unknown,de
   }
   requireThat(board.revision===revision,"Another user changed the workflow. Refresh, review the latest state and submit again.",409);
   requireThat(board.receipts.length<5000,"Pilot receipt capacity reached; arrange archival before continuing.",409);
-  if(command.type==="sync")requireThat(actor.manager,"Only managers may import repair orders",403);
-  const intake=command.type==="sync"?await deps.intake(principal.shopId,command.workOrderId):undefined;
+  if(command.type==="sync"||command.type==="syncNumber")requireThat(actor.manager,"Only managers may import repair orders",403);
+  if(command.type==="syncNumber")requireThat(deps.intakeByNumber,"RO number lookup is unavailable",503);
+  const intake=command.type==="sync"?await deps.intake(principal.shopId,command.workOrderId):
+    command.type==="syncNumber"?await deps.intakeByNumber!(principal.shopId,command.roNumber):undefined;
   const result=applyCommand(board,command,actor,deps.now(),intake);
   result.receipts.push({id:requestId,actor:actor.email,digest:hash});
   requireThat(Buffer.byteLength(JSON.stringify(result),"utf8")<=8*1024*1024,"Pilot storage capacity reached. Export and arrange archival.",409);

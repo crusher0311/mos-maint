@@ -20,6 +20,7 @@ loader._load=function(id,...args){
  if(id==="@/lib/featureResolver")return {getFeatureEntitlements:async(id:number)=>({isFeatureEnabled:(key:string)=>key==="shop_workflow"&&id===10})};
  if(id==="@/lib/enterprise")return {getEnterpriseByShopId:async()=>enterprise};
  if(id==="@/lib/data/repositories/shop-dispatch")return fakeRepo;
+ if(id==="@/lib/data/repositories/protractor-work-orders")return {listWorkflowWorkOrders:async()=>[]};
  if(id==="@/lib/data/repositories/shops")return {readShopBranding:async(id:number)=>{
    assert.equal(id,10);
    return {displayName:"Saved shop",logo:null};

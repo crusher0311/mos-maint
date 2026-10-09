@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import type { SessionInfo } from "@/lib/auth";
 import { getFeatureEntitlements } from "@/lib/featureResolver";
 import { getEnterpriseByShopId } from "@/lib/enterprise";
-import { readDispatchBoard, readDispatchEnterpriseBrand } from "@/lib/data/repositories/shop-dispatch";
+import { readDispatchBoard, saveDispatchBoard, readDispatchEnterpriseBrand } from "@/lib/data/repositories/shop-dispatch";
+import { listWorkflowWorkOrders } from "@/lib/data/repositories/protractor-work-orders";
+import { syncCachedSources } from "./source-sync";
 import { actorFor, DispatchError, requireThat, type Board } from "./model";
 import { readShopBranding } from "@/lib/data/repositories/shops";
 import { readLogoPalette } from "./logo-palette";
@@ -39,9 +41,16 @@ export async function enterpriseContext(session:SessionInfo){
     canEdit:session.role==="owner"||session.role==="admin",stored};
 }
 export async function dispatchSnapshot(session:SessionInfo,board?:Board){
-  const value=board ?? await readDispatchBoard(session.shopId);
+  let value=board ?? await readDispatchBoard(session.shopId);
   const actor=actorFor(value,session.email,session.role),enterprise=await enterpriseContext(session);
   requireThat(actor.manager||actor.technicianId,"Your login has not been mapped to an active technician. Ask a manager to update the roster.",403);
+  // Access is established before cache intake. Mutation responses must acknowledge
+  // their committed revision without a second, unrelated write.
+  let sourceSyncWarning:string|undefined;
+  if(!board){
+    const result=await syncCachedSources(session.shopId,value,{list:listWorkflowWorkOrders,read:readDispatchBoard,save:saveDispatchBoard});
+    value=result.board;sourceSyncWarning=result.sourceSyncWarning;
+  }
   const saved = await readShopBranding(session.shopId);
   const name = saved.displayName?.trim().slice(0, 60) || null;
   const logo = await readLogoPalette(saved.logo);
@@ -49,7 +58,7 @@ export async function dispatchSnapshot(session:SessionInfo,board?:Board){
   const {stored,...publicEnterprise}=enterprise ?? {stored:null};
   return {board:{...value,receipts:[],audit:actor.manager?value.audit:[],
     technicians:value.technicians.map(t=>({...t,email:actor.manager||t.id===actor.technicianId?t.email:""}))},
-    actor,branding,shopId:session.shopId,serverNow:new Date().toISOString(),enterprise:enterprise?publicEnterprise:null};
+    actor,branding,sourceSyncWarning,shopId:session.shopId,serverNow:new Date().toISOString(),enterprise:enterprise?publicEnterprise:null};
 }
 export function dispatchJson(value:unknown,status=200){return NextResponse.json(value,{status,headers:{"Cache-Control":"private, no-store"}});}
 export function dispatchFailure(error:unknown){

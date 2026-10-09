@@ -1,7 +1,7 @@
 import { dispatchFailure, dispatchJson, dispatchSession, dispatchSnapshot, requestBody } from "@/lib/shop-dispatch/http";
 import { executeDispatchMutation } from "@/lib/shop-dispatch/service";
 import { readDispatchBoard, saveDispatchBoard } from "@/lib/data/repositories/shop-dispatch";
-import { fetchDispatchWorkOrder } from "@/lib/shop-dispatch/protractor";
+import { fetchDispatchWorkOrder, fetchDispatchWorkOrderByNumber } from "@/lib/shop-dispatch/protractor";
 import { getSession } from "@/lib/auth";
 export const dynamic="force-dynamic";
 export const runtime="nodejs";
@@ -17,7 +17,7 @@ export async function POST(req:Request){
     const authenticated=await getSession();
     if(!authenticated)return dispatchJson({error:"Sign in to use shop workflow"},401);
     const session=await dispatchSession(authenticated),body=await requestBody(req);
-    const board=await executeDispatchMutation(session,body,{read:readDispatchBoard,save:saveDispatchBoard,intake:fetchDispatchWorkOrder,now:()=>new Date().toISOString()});
+    const board=await executeDispatchMutation(session,body,{read:readDispatchBoard,save:saveDispatchBoard,intake:fetchDispatchWorkOrder,intakeByNumber:fetchDispatchWorkOrderByNumber,now:()=>new Date().toISOString()});
     return dispatchJson(await dispatchSnapshot(session,board));
   }catch(e){return dispatchFailure(e);}
 }

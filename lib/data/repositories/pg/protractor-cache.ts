@@ -180,6 +180,16 @@ export async function listOpenWorkOrdersWithPricing(
   return rows.map(reconstructWorkOrder);
 }
 
+export async function listWorkflowWorkOrders(shopId:number,trackedIds:string[],limit=501):Promise<AnyDoc[]> {
+  return withStatementTimeout(4000,async db=>{
+    const rows=await db.select().from(protractorWorkOrders).where(and(
+      eq(protractorWorkOrders.shopId,shopId),
+      sql`(${protractorWorkOrders.completed} IS DISTINCT FROM TRUE OR ${trackedIds.length ? inArray(protractorWorkOrders.workOrderId,trackedIds.slice(0,500)) : sql`FALSE`})`,
+    )).orderBy(desc(protractorWorkOrders.fetchedAt)).limit(Math.min(limit,501));
+    return rows.map(reconstructWorkOrder);
+  });
+}
+
 export async function findCachedWorkOrderById(
   shopId: number,
   workOrderId: string,

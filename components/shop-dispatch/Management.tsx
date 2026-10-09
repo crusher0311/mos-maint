@@ -1,6 +1,8 @@
 "use client";
 import { CommandForm } from "./CommandForm";
 import type { WorkProps } from "./JobCard";
+import { SourceStatusPreferences } from "./SourceStatusPreferences";
+import { normalizeRoNumber } from "./ro-number";
 import styles from "./pilot.module.css";
 
 export function Management({ board, busy, mutate }: WorkProps) {
@@ -21,16 +23,20 @@ export function Management({ board, busy, mutate }: WorkProps) {
         </CommandForm>
       </details>
     </section>
-    <section><div className={styles.panel}><div className={styles.eyebrow}>Local intake</div><h2>Create a manual visit</h2>
+    <section><SourceStatusPreferences board={board} busy={busy} mutate={mutate} /><div className={styles.panel}><div className={styles.eyebrow}>Local intake</div><h2>Create a manual visit</h2>
       <CommandForm testId="visit-create-form" busy={busy} label="Create visit" reset creation submit={data => mutate({ type: "visit", id: String(data.get("creationId")), ro: String(data.get("ro")), vehicle: String(data.get("vehicle")), customer: String(data.get("customer")) })}>
         <label>Repair order number<input name="ro" required maxLength={160} /></label>
         <label>Vehicle<input name="vehicle" required maxLength={160} /></label>
         <label>Customer · optional<input name="customer" maxLength={160} /></label>
       </CommandForm>
     </div><div className={styles.panel}><div className={styles.eyebrow}>Read-only upstream</div><h2>Protractor intake</h2>
-      <p><small>Explicitly fetch a verified work order. This pilot does not write to Protractor. New imported jobs must be authorized and assigned by a manager before work starts. Connection remains unverified until intake succeeds.</small></p>
-      <CommandForm testId="sync-form" busy={busy} label="Fetch work order" submit={data => mutate({ type: "sync", workOrderId: String(data.get("workOrderId")).trim() })}>
-        <label>Work order ID · UUID<input required name="workOrderId" pattern="[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" /></label>
+      <p><small>Visits arrive automatically through provider callbacks. To recover a missing visit, fetch its RO number in the current shop. This pilot does not write to Protractor. New imported jobs must be authorized and assigned by a manager before work starts. Connection remains unverified until intake succeeds.</small></p>
+      <CommandForm testId="sync-form" busy={busy} label="Fetch by RO number" submit={data => {
+        const roNumber = normalizeRoNumber(String(data.get("roNumber")));
+        if (!roNumber) throw new Error("Enter an RO number after the optional # or RO prefix.");
+        return mutate({ type: "syncNumber", roNumber });
+      }}>
+        <label>RO number<input required name="roNumber" maxLength={160} placeholder="e.g. 18427 or RO #18427" /></label>
       </CommandForm>
     </div></section>
   </div>;

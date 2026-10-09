@@ -3003,6 +3003,33 @@ export async function createProtractorWorkOrder(
   };
 }
 
+/** Interactive number lookup when no callback snapshot exists yet. Deliberately
+ * bounded; never run the unbounded history/active-order enumerator from a form. */
+export async function findActiveWorkOrderByNumber(
+  shopId:number, roNumber:number
+):Promise<{ok:boolean;workOrderId?:string;error?:string}> {
+  if(!Number.isSafeInteger(shopId)||shopId<=0||!Number.isSafeInteger(roNumber)||roNumber<0)
+    return {ok:false,error:"Invalid shop or RO number"};
+  const config=await __protractorClientTestHooks.resolveProtractorConfig(shopId);
+  if(!config.configured)return {ok:false,error:"Protractor is not configured for this location"};
+  const deadline=Date.now()+18000;
+  for(let page=0;page<3;page++){
+    const remaining=deadline-Date.now();
+    if(remaining<=0)return {ok:false,error:"RO lookup timed out. Save the order in Protractor to send a callback, then retry."};
+    const result=await protractorFetch<{ItemCollection?:ProtractorWorkOrder[]}>(
+      `/WorkOrder/?readInProgress=true&take=100&skip=${page*100}`,config,{},0,shopId,
+      {priority:true,timeoutMs:Math.min(6000,remaining),maxRetries:0}
+    );
+    if(!result.ok)return {ok:false,error:"Protractor RO lookup is unavailable. Please retry."};
+    const orders=result.data?.ItemCollection;
+    if(!Array.isArray(orders))return {ok:false,error:"Protractor returned an incomplete order list"};
+    const match=orders.find(order=>Number(order.WorkOrderNumber)===roNumber);
+    if(match?.ID)return {ok:true,workOrderId:match.ID};
+    if(orders.length<100)return {ok:false,error:"No active RO with that number was found at this location"};
+  }
+  return {ok:false,error:"RO not found within the first 300 active orders. Save the order in Protractor to send a callback, then retry."};
+}
+
 export async function fetchActiveWorkOrders(
   shopId: number,
   options?: { startDate?: string; endDate?: string; readInProgress?: boolean }

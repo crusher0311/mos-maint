@@ -2,6 +2,7 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { useDispatchBoard } from "@/lib/shop-dispatch/client";
 import { elapsed } from "@/lib/shop-dispatch/model";
+import { isVisitVisible } from "@/lib/shop-dispatch/source-preferences";
 import { AuditView } from "./AuditView";
 import { BrandSettings } from "./BrandSettings";
 import { JobCard } from "./JobCard";
@@ -9,6 +10,7 @@ import { Management } from "./Management";
 import { Timeline } from "./Timeline";
 import { VisitDetail } from "./VisitDetail";
 import { contrast, dateLabel, minutes, projection, resolvedBranding } from "./helpers";
+import { normalizeRoNumber } from "./ro-number";
 import styles from "./pilot.module.css";
 
 type View = "dispatch" | "work" | "manage" | "settings" | "audit";
@@ -23,6 +25,7 @@ export default function DispatchPilot() {
   const [ride, setRide] = useState("all");
   const [loaner, setLoaner] = useState("all");
   const [history, setHistory] = useState(false);
+  const [showHiddenStatuses, setShowHiddenStatuses] = useState(false);
   // Clock display only. Fetch polling and visibility refresh belong to useDispatchBoard.
   useEffect(() => { const timer = window.setInterval(() => setTick(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
   const brand = resolvedBranding(snapshot).brand;
@@ -34,8 +37,12 @@ export default function DispatchPilot() {
   const open = snapshot?.board.visits.filter(v => !v.closed) ?? [];
   const activeJobs = snapshot?.board.jobs.filter(j => j.status === "active") ?? [];
   const pausedJobs = snapshot?.board.jobs.filter(j => j.status === "paused") ?? [];
+  const searchTerm = search.trim().toLowerCase();
+  const roSearch = normalizeRoNumber(search).toLowerCase();
   const visits = (snapshot?.board.visits ?? []).filter(v => v.closed === history &&
-    `${v.ro} ${v.vehicle} ${v.customer}`.toLowerCase().includes(search.toLowerCase()) &&
+    (showHiddenStatuses && snapshot?.actor.manager || isVisitVisible(v, snapshot?.board.sourceStatuses)) &&
+    (`${v.ro} ${v.vehicle} ${v.customer}`.toLowerCase().includes(searchTerm) ||
+      (!!roSearch && normalizeRoNumber(v.ro).toLowerCase().includes(roSearch))) &&
     (customerPlan === "all" || v.transport.customerPlan === customerPlan) &&
     (ride === "all" || v.transport.ride === ride) && (loaner === "all" || v.transport.loaner === loaner));
   const detail = snapshot?.board.visits.find(v => v.id === selected);
@@ -58,6 +65,7 @@ export default function DispatchPilot() {
       <div className={styles.actions}><button disabled={busy} data-testid="pilot-retry" onClick={() => void retry()}>Retry unconfirmed save</button></div>
     </div>}
     {stale && <div className={styles.notice} role="status">This snapshot is over 30 seconds old. Session clocks are local projections from the last server time, not proof of a live connection. Refresh before changing work.</div>}
+    {snapshot?.sourceSyncWarning && <div className={styles.notice} role="alert" data-testid="source-sync-warning"><strong>Source intake needs attention</strong><p>{snapshot.sourceSyncWarning}</p><small>The local board may not include every provider update. Existing visits and My work assignments remain available; refreshing does not guarantee source recovery.</small></div>}
     {!snapshot ? error ? <section className={styles.empty}><h2>Pilot data unavailable</h2><p>Nothing has been loaded or changed. Contact a manager if this location is not enabled.</p><button onClick={() => void refresh()}>Try fetching again</button></section> :
       <section aria-busy="true" aria-label="Loading pilot data"><p>Connecting to the signed-in location…</p><div className={styles.skeleton} /><div className={styles.skeleton} /><div className={styles.skeleton} /></section> :
       <>
@@ -78,11 +86,13 @@ export default function DispatchPilot() {
           <section className={styles.panel}>
             <div className={styles.row}><h2>{history ? "Closed visit history" : "Today’s shop"}</h2><button data-testid="pilot-history" aria-pressed={history} onClick={() => setHistory(!history)}>{history ? "Show open visits" : "View closed history"}</button></div>
             <div className={styles.fields}>
-              <label>Find vehicle, customer or RO<input data-testid="pilot-search" type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search live visits…" /></label>
+              <label>Find vehicle, customer or RO number<input data-testid="pilot-search" type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="RO number, vehicle or customer…" /></label>
               <label>Customer plan<select value={customerPlan} onChange={e => setCustomerPlan(e.target.value)}><option value="all">All plans</option>{["unknown", "waiting", "drop-off", "returning"].map(p => <option key={p}>{p}</option>)}</select></label>
               <label>Ride filter<select value={ride} onChange={e => setRide(e.target.value)}><option value="all">All ride states</option>{["none", "needed", "arranged", "completed"].map(p => <option key={p}>{p}</option>)}</select></label>
               <label>Loaner filter<select value={loaner} onChange={e => setLoaner(e.target.value)}><option value="all">All loaner states</option>{["none", "requested", "assigned", "returned"].map(p => <option key={p}>{p}</option>)}</select></label>
             </div>
+            {snapshot.actor.manager && <label className={styles.check}><input data-testid="pilot-show-hidden-statuses" type="checkbox" checked={showHiddenStatuses} onChange={e => setShowHiddenStatuses(e.target.checked)} />Show hidden statuses · this view only</label>}
+            <small>Source status visibility applies to Dispatch only, not technician job states or My work.</small>
           </section>
           <Timeline board={snapshot.board} visits={visits} now={now} select={setSelected} />
           <section className={styles.panel}><h2>Vehicle journeys <small>/ {visits.length}</small></h2>
@@ -92,10 +102,11 @@ export default function DispatchPilot() {
                 <div className={styles.row}><div><strong>{visit.vehicle}</strong><small>#{visit.ro} · {visit.customer || "Customer not supplied"} · {visit.provider}</small></div><div><strong>{jobs.filter(j => j.status === "completed").length}/{jobs.length} complete</strong><small>Promise {dateLabel(visit.promiseAt)}</small></div></div>
                 <div className={styles.actions}><span className={styles.chip}>{visit.transport.customerPlan}</span><span className={styles.chip}>Ride: {visit.transport.ride}</span><span className={styles.chip}>Loaner: {visit.transport.loaner}{visit.transport.loanerId ? ` · ${visit.transport.loanerId}` : ""}</span></div>
                 <small>{projection(snapshot.board, visit, now)}</small>
+                {visit.sourceStatus && <small>Source status: {visit.sourceStatus}{!isVisitVisible(visit, snapshot.board.sourceStatuses) ? " · hidden by saved preferences" : ""}</small>}
                 {jobs.some(j => j.sourceRemoved) && <small className={styles.warning}>Warning: a package was removed upstream. Manager review required.</small>}
               </button>;
             })}
-            {!visits.length && <div className={styles.empty}><h3>No {history ? "closed" : "open"} visits match this view.</h3><p>{snapshot.actor.manager ? "Use Roster & intake to create a visit or fetch an explicit Protractor work order." : "A manager adds and assigns work. Your assigned jobs will appear in My work."}</p><button onClick={() => { setSearch(""); setCustomerPlan("all"); setRide("all"); setLoaner("all"); }}>Clear filters</button></div>}
+            {!visits.length && <div className={styles.empty}><h3>No {history ? "closed" : "open"} visits match this view.</h3><p>{snapshot.actor.manager ? "Provider callbacks feed visits automatically. Check Show hidden statuses or source preferences in Roster & intake; recover a missing visit by RO number, or create a manual visit if needed." : "Provider callbacks feed visits automatically. A manager reviews and assigns work. Your assigned jobs remain available in My work even when their source status is hidden here."}</p><button onClick={() => { setSearch(""); setCustomerPlan("all"); setRide("all"); setLoaner("all"); }}>Clear search & transport filters</button></div>}
           </section>
         </>)}
         {view === "work" && work && <section data-testid="pilot-my-work"><div className={styles.row}><div><h2>My work</h2><p><small>Assigned to your signed-in login only. Active and paused time are separate; estimates are manually entered.</small></p></div><span className={`${styles.mono} ${styles.chip}`}>{new Date(now).toLocaleTimeString()}</span></div>

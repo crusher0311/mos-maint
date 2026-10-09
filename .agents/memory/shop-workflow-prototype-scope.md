@@ -5,6 +5,12 @@ description: Product model and isolation boundary for Detect Dog scheduling expl
 
 The scheduling concept is a vehicle visit containing individual jobs and multi-technician handoffs, not one appointment block per vehicle.
 
+Workflow visibility must be configurable by upstream provider stage, independently of dashboard preferences. Advisors search and import by the human RO number, never a required provider UUID.
+
+**Why:** The user explicitly wants dashboard-like stage selection on the workflow board and RO-number intake. Provider-stage visibility is not technician job progress.
+
+**How to apply:** Use callback-cached orders for automatic intake, preserve local assignments and inspections when stages change, and retain access to hidden assigned work. Do not turn board refreshes into upstream polling.
+
 **Why:** The user wants to evaluate the workflow experience before committing to a production scheduling system.
 
 **How to apply:** Preserve separate arrival, work, and promise times and distinguish book labor, illustrative predicted technician time, active time, and waiting time.

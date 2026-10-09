@@ -20,6 +20,7 @@
 import {
   __protractorClientTestHooks,
   resolveWorkOrderGuid,
+  findActiveWorkOrderByNumber,
   type ProtractorConfig,
 } from "../lib/integrations/protractor/client";
 
@@ -161,6 +162,24 @@ async function main() {
     ok("no fetch-by-ID attempted", calls.byId === 0, `byId=${calls.byId}`);
   }
 
+  console.log("Bounded interactive RO lookup");
+  {
+    const calls=stubUpstream({});
+    const result=await findActiveWorkOrderByNumber(SHOP_ID,RO);
+    ok("interactive lookup finds human RO number",result.ok&&result.workOrderId===SCAN_GUID);
+    ok("interactive lookup stops at matching page",calls.scan===1);
+    let pages=0;
+    __protractorClientTestHooks.httpsRequest=async()=>{
+      pages++;
+      return {statusCode:200,body:JSON.stringify({ItemCollection:Array.from({length:100},(_,i)=>({ID:SCAN_GUID,WorkOrderNumber:i+1}))})};
+    };
+    const missing=await findActiveWorkOrderByNumber(SHOP_ID,RO);
+    ok("interactive lookup never scans more than three pages",pages===3);
+    ok("truncated scan reports its limit explicitly",!missing.ok&&!!missing.error?.includes("300"));
+    pages=0;
+    await findActiveWorkOrderByNumber(SHOP_ID,NaN);
+    ok("invalid number never fetches upstream",pages===0);
+  }
   if (failed > 0) {
     console.error(`\n${failed} assertion(s) FAILED`);
     process.exit(1);

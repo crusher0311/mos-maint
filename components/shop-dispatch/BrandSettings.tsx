@@ -5,6 +5,7 @@ import type { DispatchSnapshot } from "@/lib/shop-dispatch/client";
 import { CommandForm } from "./CommandForm";
 import { brandSourceLabel, contrast, manualBrandDraft, resolvedBranding } from "./helpers";
 import type { WorkProps } from "./JobCard";
+import { prepareLogo } from "./logo-upload";
 import styles from "./pilot.module.css";
 
 function BrandEditor({ initial, fallback, revision, title, canEdit, busy, save, inherited, testId, location = false }: {
@@ -15,36 +16,26 @@ function BrandEditor({ initial, fallback, revision, title, canEdit, busy, save, 
   const [baseRevision, setBaseRevision] = useState(revision);
   const [fileError, setFileError] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState("");
   async function upload(file?: File) {
-    setFileError("");
-    if (!file) return;
-    if (file.size > 120 * 1024 || !["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
-      setFileError("Choose a PNG, JPEG or WebP up to 120 KB. SVGs and external URLs are not allowed."); return;
-    }
+    if (!file || !canEdit || busy || uploading) return;
+    setFileError(""); setUploadProgress("");
     setUploading(true);
     try {
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      const isPng = bytes[0] === 137 && bytes[1] === 80 && bytes[2] === 78 && bytes[3] === 71 && bytes[4] === 13 && bytes[5] === 10 && bytes[6] === 26 && bytes[7] === 10;
-      const isJpeg = bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255;
-      const isWebp = String.fromCharCode(...bytes.slice(0, 4)) === "RIFF" && String.fromCharCode(...bytes.slice(8, 12)) === "WEBP";
-      if (!(file.type === "image/png" && isPng || file.type === "image/jpeg" && isJpeg || file.type === "image/webp" && isWebp)) throw new Error("The image content does not match its raster file type.");
-      const data = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = () => reject(new Error("Could not read the logo.")); reader.readAsDataURL(file);
-      });
-      const decoded = new Image(); decoded.src = data;
-      await decoded.decode();
-      setDraft(old => ({ ...old, logo: data }));
-    } catch (error) { setFileError(error instanceof Error ? error.message : "Invalid image."); }
+      const result = await prepareLogo(file, setUploadProgress);
+      setDraft(old => ({ ...old, logo: result.dataUrl }));
+      setUploadProgress(`Logo ready · ${result.width} × ${result.height} pixels · ${(result.bytes / 1024).toFixed(1)} KB. Preview updated; save branding to persist.`);
+    } catch (error) { setUploadProgress(""); setFileError(`${error instanceof Error ? error.message : "Invalid image."} Your previous draft logo is unchanged.`); }
     finally { setUploading(false); }
   }
   return <section className={styles.panel}><h2>{title}</h2><p><small>{inherited}</small></p>
     <div className={styles.row} style={{ background: draft.primary, color: contrast(draft.primary), padding: 16, borderRadius: 8 }}>
-      <div className={styles.identity}>{draft.logo && <img className={styles.logo} src={draft.logo} alt="" />}<strong>{draft.name}</strong></div>
+      <div className={styles.identity}>{draft.logo && <img className={styles.logo} src={draft.logo} alt="Draft logo preview" />}<strong>{draft.name}</strong></div>
       <span className={styles.chip} style={{ background: draft.accent, color: contrast(draft.accent) }}>Accent preview</span>
     </div>
     {canEdit ? <>
       <CommandForm testId={testId} revision={revision} pinnedRevision={baseRevision} onPinRevision={setBaseRevision}
-        onReload={() => { setDraft(initial); setFileError(""); }} busy={busy || uploading} label="Save branding" submit={async (_data, expectedRevision) => {
+        onReload={() => { setDraft(initial); setFileError(""); setUploadProgress(""); }} busy={busy || uploading} label="Save branding" submit={async (_data, expectedRevision) => {
         const parsed = brandSchema.safeParse(draft);
         if (!parsed.success) throw new Error("Use a name up to 60 characters and six-digit hex colors.");
         return save(parsed.data, expectedRevision);
@@ -54,9 +45,15 @@ function BrandEditor({ initial, fallback, revision, title, canEdit, busy, save, 
           <label>Primary · hex<input pattern="#[0-9a-fA-F]{6}" required value={draft.primary} onChange={e => setDraft({ ...draft, primary: e.target.value })} /></label>
           <label>Accent · hex<input pattern="#[0-9a-fA-F]{6}" required value={draft.accent} onChange={e => setDraft({ ...draft, accent: e.target.value })} /></label>
         </div>
-        <label>Local raster logo · up to 120 KB<input type="file" accept="image/png,image/jpeg,image/webp" onChange={e => void upload(e.target.files?.[0])} /></label>
+        <label>Local raster logo · PNG, JPEG or WebP up to 10 MB<input type="file" accept="image/png,image/jpeg,image/webp" onChange={e => {
+          const file = e.target.files?.[0];
+          e.target.value = "";
+          void upload(file);
+        }} /></label>
+        <small>Images are resized locally to fit the saved logo limit of 120 KB. Transparent PNG and WebP backgrounds are preserved. SVGs and external URLs are not allowed.</small>
+        {uploadProgress && <p role="status" aria-live="polite" aria-busy={uploading}>{uploadProgress}</p>}
         {fileError && <p role="alert" className={styles.warning}>{fileError}</p>}
-        <button type="button" disabled={!draft.logo} onClick={() => setDraft({ ...draft, logo: null })}>Remove logo from draft</button>
+        <button type="button" disabled={!draft.logo} onClick={() => { setDraft({ ...draft, logo: null }); setUploadProgress(""); }}>Remove logo from draft</button>
         <small>Changes above are a preview until saved. Text contrast is calculated automatically. Save to persist a removed logo. {location && "Shared logos are not copied into this editor. A location override saves only a logo uploaded here (or its existing manual logo); without one it saves no logo."}</small>
       </CommandForm>
       <button style={{ marginTop: 14 }} disabled={busy || uploading} onClick={async () => {

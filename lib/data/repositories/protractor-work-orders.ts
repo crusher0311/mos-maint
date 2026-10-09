@@ -129,11 +129,22 @@ export async function findCachedWorkOrderByRoNumber(
   const col = await collection();
   return col.findOne(
     {
-      shopId,
-      $or: [{ workOrderNumber: roNumber }, { "data.WorkOrderNumber": roNumber }],
+      shopId: { $in: [shopId, String(shopId)] } as any,
+      $or: [{ workOrderNumber: { $in: [roNumber, String(roNumber)] } as any }, { "data.WorkOrderNumber": roNumber }],
     } as Filter<ProtractorWorkOrderCacheDoc>,
     { projection: { rawPayload: 0, servicePackages: 0 }, sort: { fetchedAt: -1 } },
   );
+}
+
+/** Cache-only workflow intake; includes tracked terminal orders so visibility
+ * follows later callbacks. No upstream polling, credentials, or history scan. */
+export async function listWorkflowWorkOrders(shopId:number,trackedIds:string[],limit=501):Promise<ProtractorWorkOrderCacheDoc[]> {
+  if(isProtractorCachePgCanonical())return await pg.listWorkflowWorkOrders(shopId,trackedIds,limit) as ProtractorWorkOrderCacheDoc[];
+  const col=await collection();
+  return col.find({
+    shopId:{$in:[shopId,String(shopId)]},
+    $or:[{completed:{$ne:true}},{workOrderId:{$in:trackedIds.slice(0,500)}}],
+  } as Filter<ProtractorWorkOrderCacheDoc>,{maxTimeMS:4000}).sort({fetchedAt:-1}).limit(limit).toArray();
 }
 
 // Open (non-completed) WOs in a sellable workflow stage that carry pricing —

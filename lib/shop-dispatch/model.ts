@@ -51,6 +51,7 @@ export interface Board {
   revision: number; updatedAt: string | null; technicians: Technician[];
   visits: Visit[]; jobs: Job[]; audit: Audit[]; receipts: Receipt[];
   locationBrand: Brand | null;
+  sourceStatuses?: string[];
 }
 export interface Actor { email: string; manager: boolean; technicianId: string | null }
 export const intakeSchema = z.object({
@@ -71,6 +72,8 @@ export const commandSchema = z.discriminatedUnion("type", [
   z.object({type:z.literal("correct"), jobId:idSchema, activeMinutes:z.number().min(0).max(100000), waitingMinutes:z.number().min(0).max(100000), reason:text}).strict(),
   z.object({type:z.literal("close"), visitId:idSchema}).strict(),
   z.object({type:z.literal("brand"), brand:brandSchema.nullable()}).strict(),
+  z.object({type:z.literal("sourceStatuses"), statuses:z.array(z.string().trim().min(1).max(80)).max(80)}).strict(),
+  z.object({type:z.literal("syncNumber"), roNumber:z.string().trim().regex(/^(?:RO\s*#?\s*|#\s*)?\d{1,15}$/i)}).strict(),
   z.object({type:z.literal("sync"), workOrderId:z.string().uuid()}).strict(),
 ]);
 export type Command = z.infer<typeof commandSchema>;
@@ -130,14 +133,18 @@ export function applyCommand(input:Board,command:Command,actor:Actor,now:string,
     visit(command.visitId);requireThat(!board.jobs.some(j=>j.id===command.id),"Job already exists",409);
     board.jobs.push(newJob(command.id,command.visitId,command.title,command.bookMinutes));target=command.id;
   }else if(command.type==="brand"){board.locationBrand=command.brand;}
+  else if(command.type==="sourceStatuses"){board.sourceStatuses=[...new Set(command.statuses)];}
   else if(command.type==="close"){
     const v=visit(command.visitId);
     requireThat(board.jobs.filter(j=>j.visitId===v.id).every(j=>j.status==="completed"),"Complete all jobs before closing");
     requireThat(!["assigned","requested"].includes(v.transport.loaner)&&!["needed","arranged"].includes(v.transport.ride),"Resolve transportation and return the loaner first");
     v.closed=true;target=v.id;
-  }else if(command.type==="sync"){
+  }else if(command.type==="sync"||command.type==="syncNumber"){
     requireThat(intake,"Integration did not return a verified work order",502);
-    requireThat(intake.sourceId.toLowerCase()===command.workOrderId.toLowerCase(),"Upstream work order identity mismatch",502);
+    requireThat(command.type==="sync"
+      ? intake.sourceId.toLowerCase()===command.workOrderId.toLowerCase()
+      : Number(intake.ro)===Number(command.roNumber.replace(/^(?:RO\s*#?\s*|#\s*)/i,"")),
+    "Upstream work order identity mismatch",502);
     const sourceId=intake.sourceId.toLowerCase();
     let v=board.visits.find(v=>v.provider==="protractor"&&v.sourceId===sourceId);
     requireThat(!v?.closed,"This visit was closed locally; it will not be reopened by sync",409);
