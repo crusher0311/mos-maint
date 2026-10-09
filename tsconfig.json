@@ -39,6 +39,7 @@
   "exclude": [
     "node_modules",
     "zink-print-agent",
-    "artifacts/detect-dog-workflow"
+    "artifacts/detect-dog-workflow",
+    "artifacts/enterprise-tire-dvi"
   ]
 }

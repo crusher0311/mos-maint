@@ -1,0 +1,19 @@
+kind = "design"
+previewPath = "/tire-dvi/"
+title = "Enterprise Tire DVI Demo"
+description = "Isolated interactive tire and battery inspection presentation with advisor ticket and customer report previews."
+version = "1.0.0"
+id = "artifacts/enterprise-tire-dvi"
+router = "path"
+
+[[services]]
+name = "Component Preview Server"
+paths = [ "/tire-dvi/" ]
+localPort = 26170
+
+[services.development]
+run = "npm run dev"
+
+[services.env]
+PORT = "26170"
+BASE_PATH = "/tire-dvi/"

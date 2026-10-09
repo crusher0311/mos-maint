@@ -66,6 +66,10 @@ externalPort = 4200
 localPort = 24100
 externalPort = 3002
 
+[[ports]]
+localPort = 26170
+externalPort = 5000
+
 [nix]
 channel = "stable-25_05"
 packages = ["mongodb", "unzip", "libuuid", "chromium", "glib"]

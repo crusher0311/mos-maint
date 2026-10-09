@@ -154,3 +154,4 @@
 - [JWT eligible-first recovery](jwt-eligible-recovery.md) — defer closed shops without blocking eligible ones; handoffs preserve budgets, holds, and per-window checkpoints.
 - [Scoped Protractor history](protractor-scoped-history.md) — shop 538 needs 14 months; concurrent JWT recovery shares fleet pacing but retains separate budgets.
 - [Shop workflow prototype](shop-workflow-prototype-scope.md) — vehicle visits contain multi-technician jobs; UI evaluation does not authorize production scheduling or live integrations.
+- [Tire DVI demo scope](tire-dvi-demo-scope.md) — fictional manual-measurement presentation; green documentation is required; no production rollout or video-task dependency.

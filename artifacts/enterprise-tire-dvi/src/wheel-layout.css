@@ -1,0 +1,7 @@
+/* Keep status labels inside the diagram tracks at narrow desktop widths. */
+.vehicle-map {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  column-gap: 18px;
+}
+.wheel-btn { min-width: 0; padding: 7px 4px; }
+.wheel-btn .badge { white-space: normal; text-align: center; overflow-wrap: anywhere; }
