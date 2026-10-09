@@ -17,7 +17,18 @@ started or a more comprehensive inspection becomes necessary.
 
 **How to apply:** Treat these as product requirements, not authorization to enable
 enterprise sharing or reinterpret historical findings as freshly inspected results.
-Implementation destination (production DVI versus demo first) still needs alignment.
+The user selected production Auto DVI, using the tire demo as the starting
+interface and workflow, and explicitly confirmed that it must retain everything
+Auto DVI already offers. It must not become a reduced tire-only replacement.
+
+**Why:** The user asked whether the tire-style DVI would still have all Auto DVI
+capabilities. Vehicle-specific generation, custom items, voice/media assistance
+and provider integrations are part of that requirement, not optional follow-ups.
+
+**How to apply:** Never send a new visit's results through legacy VIN-only
+results/push handlers. Preserve existing inspections while making each feature
+visit-aware; keeping legacy controls visible is preservation, not completed
+feature parity or a completed unified workflow.
 
 **Why:** owner's stated direction (July 2026) — declined AutoFlow sheet write-back for Auto DVI.
 

@@ -7,6 +7,95 @@ import { Readable } from "stream";
 import { GridFSBucket, ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongo";
 import { resolveOpenRoMileage } from "@/lib/plan-build/open-ro-mileage";
+import { randomUUID } from "node:crypto";
+import { applyVisitAction, BUILTIN_SHEETS, validateSheet, VisitError, type VisitRecord, type Sheet, type Media } from "@/lib/auto-dvi/visit-model";
+
+// Separate versioned visit store: legacy VIN-only inspections remain unchanged.
+const VISITS_COLLECTION = "auto_dvi_visit_records";
+export async function readDviVisits(shopId:number,vin:string):Promise<VisitRecord>{
+  const db=await getDb();
+  const row=await db.collection(VISITS_COLLECTION).findOne({_id:`${shopId}:${vin}`} as any,{maxTimeMS:5000});
+  return row?{revision:row.revision,visits:row.visits}:{revision:0,visits:[]};
+}
+async function commitDviVisits(shopId:number,vin:string,revision:number,next:VisitRecord,actor:string){
+  const db=await getDb();const coll=db.collection(VISITS_COLLECTION);
+  const id=`${shopId}:${vin}`;
+  if(revision===0){
+    try{await coll.insertOne({_id:id,shopId,vin,...next,updatedBy:actor,updatedAt:new Date()} as any);}
+    catch(e:any){if(e.code===11000)throw new VisitError("Inspection changed. Refresh before saving.",409);throw e;}
+  }else{
+    const result=await coll.updateOne({_id:id,revision} as any,{$set:{...next,updatedBy:actor,updatedAt:new Date()}});
+    if(result.matchedCount!==1)throw new VisitError("Inspection changed. Refresh before saving.",409);
+  }
+  return next;
+}
+export async function mutateDviVisits(shopId:number,vin:string,revision:number,action:any,actor:string){
+  const record=await readDviVisits(shopId,vin);
+  if(record.revision!==revision)throw new VisitError("Inspection changed. Refresh before saving.",409);
+  if(action.action==="selectSheet"){
+    const templates=await readDviSheets(shopId);
+    const sheet=templates.templates.find(t=>t.id===action.sheet?.id);
+    if(!sheet)throw new VisitError("Sheet no longer exists; refresh",409);
+    action={...action,sheet}; // Never accept client-authored completion requirements.
+  }
+  const next=applyVisitAction(record,action,new Date().toISOString(),randomUUID());
+  return commitDviVisits(shopId,vin,revision,next,actor);
+}
+export async function readDviSheets(shopId:number):Promise<{templateRevision:number;templates:Sheet[]}>{
+  const db=await getDb();
+  const row=await db.collection("auto_dvi_sheet_templates").findOne({_id:String(shopId)} as any,{maxTimeMS:5000});
+  return {templateRevision:row?.revision??0,templates:[...BUILTIN_SHEETS,...(row?.sheets??[])]};
+}
+export async function mutateDviSheets(shopId:number,revision:number,action:any){
+  const current=await readDviSheets(shopId);
+  if(current.templateRevision!==revision)throw new VisitError("Sheets changed; refresh",409);
+  const id=action.action==="templateDelete"?action.sheetId:action.sheet?.id;
+  if(BUILTIN_SHEETS.some(s=>s.id===id))throw new VisitError("Built-in sheets cannot be changed");
+  let sheets=current.templates.filter(s=>!BUILTIN_SHEETS.some(b=>b.id===s.id));
+  if(action.action==="templateDelete"){
+    if(!sheets.some(s=>s.id===id))throw new VisitError("Sheet not found",404);
+    sheets=sheets.filter(s=>s.id!==id);
+  }else{
+    const sheet=validateSheet(action.sheet);
+    sheets=sheets.filter(s=>s.id!==id);sheets.push(sheet);
+    if(sheets.length>20)throw new VisitError("Maximum 20 custom sheets");
+  }
+  const db=await getDb();const coll=db.collection("auto_dvi_sheet_templates");
+  if(revision===0){
+    try{await coll.insertOne({_id:String(shopId),revision:1,sheets} as any);}
+    catch(e:any){if(e.code===11000)throw new VisitError("Sheets changed; refresh",409);throw e;}
+  }else{
+    const r=await coll.updateOne({_id:String(shopId),revision} as any,{$set:{sheets,revision:revision+1}});
+    if(r.matchedCount!==1)throw new VisitError("Sheets changed; refresh",409);
+  }
+  return {templateRevision:revision+1,templates:[...BUILTIN_SHEETS,...sheets]};
+}
+export async function attachDviVisitMedia(opts:{shopId:number;vin:string;visitId:string;itemId:string;revision:number;filename:string;contentType:string;kind:"photo"|"video";buffer:Buffer;actor:string}){
+  const record=await readDviVisits(opts.shopId,opts.vin);
+  if(record.revision!==opts.revision)throw new VisitError("Inspection changed; refresh",409);
+  const visit=record.visits.find(v=>v.id===opts.visitId);
+  if(!visit||visit.status!=="in_progress"||!visit.sheet.itemIds.includes(opts.itemId))throw new VisitError("No editable inspection item",409);
+  const item=visit.results[opts.itemId]??{rating:null,notes:"",recommendation:"",values:{},media:[]};
+  if(item.media.length>=6)throw new VisitError("Maximum six attachments per item");
+  const db=await getDb();const bucket=new GridFSBucket(db as any,{bucketName:"auto_dvi_visit_media"});
+  const upload=bucket.openUploadStream(opts.filename,{metadata:{shopId:opts.shopId,vin:opts.vin,visitId:opts.visitId,itemId:opts.itemId,contentType:opts.contentType}});
+  await new Promise<void>((resolve,reject)=>Readable.from(opts.buffer).pipe(upload).on("finish",resolve).on("error",reject));
+  const ref:Media={mediaId:String(upload.id),kind:opts.kind,filename:opts.filename};
+  item.media.push(ref);visit.results[opts.itemId]=item;record.revision++;
+  try{return await commitDviVisits(opts.shopId,opts.vin,opts.revision,record,opts.actor);}
+  catch(e){await bucket.delete(upload.id).catch(()=>{});throw e;}
+}
+export async function readDviVisitMedia(shopId:number,vin:string,visitId:string,mediaId:string){
+  if(!ObjectId.isValid(mediaId))throw new VisitError("Media not found",404);
+  const record=await readDviVisits(shopId,vin);
+  const visit=record.visits.find(v=>v.id===visitId);
+  if(!visit||!Object.values(visit.results).some(r=>r.media.some(m=>m.mediaId===mediaId)))throw new VisitError("Media not found",404);
+  const db=await getDb();const bucket=new GridFSBucket(db as any,{bucketName:"auto_dvi_visit_media"});
+  const file=await db.collection("auto_dvi_visit_media.files").findOne({_id:new ObjectId(mediaId),"metadata.shopId":shopId,"metadata.vin":vin,"metadata.visitId":visitId},{maxTimeMS:5000});
+  if(!file||file.length>40*1024*1024)throw new VisitError("Media not found",404);
+  const chunks:Buffer[]=[];for await(const chunk of bucket.openDownloadStream(file._id))chunks.push(Buffer.from(chunk));
+  return {buffer:Buffer.concat(chunks),contentType:file.metadata?.contentType as string};
+}
 
 const AI_CACHE_COLLECTION = "auto_dvi_ai_key_cache";
 const APPLICATIONS_COLLECTION = "auto_dvi_applications";

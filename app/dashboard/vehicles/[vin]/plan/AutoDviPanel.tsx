@@ -10,6 +10,7 @@
 // the WO package note; line titles stay "Inspected: …" for anchor safety.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import VisitInspectionPanel from "@/components/auto-dvi/VisitInspectionPanel";
 import {
   ClipboardCheck,
   Loader2,
@@ -64,7 +65,18 @@ const RATING_STYLES: Record<Rating, { on: string; off: string; label: string }> 
   red: { on: "bg-red-600 text-white border-red-600", off: "bg-white text-red-700 border-red-300 hover:bg-red-50", label: "Attention" },
 };
 
-export default function AutoDviPanel({
+export default function AutoDviPanel(props:{vin:string;mileage:number|null;isProtractor:boolean}){
+  return <div className="space-y-4">
+    <VisitInspectionPanel vin={props.vin} mileage={props.mileage} />
+    <div className="rounded-lg border border-slate-200 p-3">
+      <p className="text-sm font-semibold">Existing Auto DVI tools</p>
+      <p className="mb-2 text-xs text-slate-600">Vehicle-specific generation, voice capture, existing findings and repair-order integrations remain available below. They use the existing inspection record, not the new visit sheets.</p>
+      <ExistingAutoDviPanel {...props}/>
+    </div>
+  </div>;
+}
+
+function ExistingAutoDviPanel({
   vin,
   mileage,
   isProtractor,
