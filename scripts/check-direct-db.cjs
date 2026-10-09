@@ -56,7 +56,7 @@ const ALLOWLIST = new Set([
   // alert-state collections plus the `mos` cron DB; mirrors the other
   // allowlisted sync-health routes above. Strictly read-only.
   "app/api/admin/sync-health/triage/route.ts",
-  "app/api/admin/tekmetric-endpoint-health/route.ts",
+  "app/api/admin/tekmetric-endpoint-health/route-handler.ts",
   "app/api/auth/change-password/route.ts",
   "app/api/auth/complete-setup/route.ts",
   "app/api/auth/forgot/route.ts",
@@ -66,7 +66,7 @@ const ALLOWLIST = new Set([
   "app/api/auth/invite/route.ts",
   "app/api/auth/login/route.ts",
   "app/api/auth/me/route.ts",
-  "app/api/auth/reset/route.ts",
+  "app/api/auth/reset/route-handler.ts",
   "app/api/auth/setup-complete/route.ts",
   "app/api/auth/setup/route.ts",
   "app/api/auth/setup-shop/route.ts",
@@ -81,8 +81,8 @@ const ALLOWLIST = new Set([
   "app/api/autovitals/vehicles/route.ts",
   "app/api/carfax/debug/[vin]/route.ts",
   "app/api/communications/caller-lookup/route.ts",
-  "app/api/cron/backfill-chunk-speed-health/route.ts",
-  "app/api/cron/backfill-load-alerter/route.ts",
+  "app/api/cron/backfill-chunk-speed-health/route-handler.ts",
+  "app/api/cron/backfill-load-alerter/route-handler.ts",
   "app/api/cron/backfill-reconcile/route.ts",
   // Task #757 — dashboard read-model drift backstop, moved off the hot
   // `/api/dashboard/data-v2` read path into a cron. It resolves the shop list
@@ -91,7 +91,7 @@ const ALLOWLIST = new Set([
   // not call getDb itself). Same operational-sweep precedent as the other
   // reconcile/alerter/health crons above; the shared lib routes ingestion
   // through the existing NormalizedIngestionService, not raw repositories.
-  "app/api/cron/drift-reconcile/route.ts",
+  "app/api/cron/drift-reconcile/route-handler.ts",
   "app/api/cron/catchup-status/route.ts",
   "app/api/cron/cron-health-alerter/route.ts",
   // Task #568 — whole-pipeline backfill stall alerter. Reads per-shop
@@ -99,7 +99,7 @@ const ALLOWLIST = new Set([
   // alert-dedup state in operational-only collections
   // (`pipeline_progress_heartbeat`, `pipeline_stall_alerts`). Same
   // operational-telemetry precedent as the other alerter/health crons.
-  "app/api/cron/pipeline-stall-alerter/route.ts",
+  "app/api/cron/pipeline-stall-alerter/route-handler.ts",
   // Task #512 — synthetic prod smoke. The runner writes per-run records
   // to a synthetic-only collection (`synthetic_runs`) and tracks
   // alert-dedup state in `synthetic_state`. Both collections are
@@ -121,44 +121,44 @@ const ALLOWLIST = new Set([
   // `extension_telemetry`). Like the synthetic-smoke collections above, this
   // is operational telemetry, not entity data — it has no place in
   // `lib/data/repositories/`. Same precedent as the alerter/health crons.
-  "app/api/extension/telemetry/route.ts",
+  "app/api/extension/telemetry/route-handler.ts",
   "app/admin/extension-telemetry/page.tsx",
   "app/api/cron/data-quality/route.ts",
   "app/api/cron/invoice-cache-refresh/route.ts",
   "app/api/cron/protractor-af-log-tail/route.ts",
   "app/api/cron/protractor-stage-refresh/route.ts",
-  "app/api/cron/protractor-webhook-health/route.ts",
+  "app/api/cron/protractor-webhook-health/route-handler.ts",
   "app/api/cron/protractor-sync/route.ts",
   "app/api/cron/shopware-backfill/route.ts",
   "app/api/cron/shopware-enrich/route.ts",
   "app/api/cron/shopware-sync/route.ts",
-  "app/api/cron/tekmetric-backfill-health/route.ts",
+  "app/api/cron/tekmetric-backfill-health/route-handler.ts",
   "app/api/cron/tekmetric-backfill/route.ts",
   "app/api/cron/tekmetric-fullpage-backfill/route.ts",
   "app/api/platform-admin/shops/[shopId]/fullpage-reindex/route.ts",
-  "app/api/cron/tekmetric-endpoint-health/route.ts",
+  "app/api/cron/tekmetric-endpoint-health/route-handler.ts",
   "app/api/cron/tekmetric-incremental-sync/route.ts",
   "app/api/cron/tekmetric-probe/route.ts",
   "app/api/cron/tekmetric-ro-retry/route.ts",
   "app/api/cron/tekmetric-sync/route.ts",
-  "app/api/cron/tekmetric-webhook-health/route.ts",
+  "app/api/cron/tekmetric-webhook-health/route-handler.ts",
   // Task #587 — Shopmonkey webhook-health cron. Reads/writes the operational
   // `shopmonkey_webhook_logs` / `shopmonkey_webhook_health_alerts` collections
   // (webhook delivery telemetry, not entity data), mirroring the already-
   // allowlisted tekmetric-webhook-health cron above.
-  "app/api/cron/shopmonkey-webhook-health/route.ts",
+  "app/api/cron/shopmonkey-webhook-health/route-handler.ts",
   // Task #569 — daily webhook-subscription sweep. Verifies/repairs each
   // shop's provider webhook subscription and reads/writes the operational
   // `protractor_webhook_subscriptions` collection (subscription bookkeeping,
   // not entity data). Same operational-telemetry precedent as the other
   // webhook-health crons above and the tekmetric webhook-subscribe helper.
-  "app/api/cron/webhook-subscription-sweep/route.ts",
+  "app/api/cron/webhook-subscription-sweep/route-handler.ts",
   "app/api/cron/trial-check/route.ts",
-  "app/api/customers/[customerId]/inspect/route.ts",
-  "app/api/customers/[customerId]/route.ts",
+  "app/api/customers/[customerId]/inspect/route-handler.ts",
+  "app/api/customers/[customerId]/route-handler.ts",
   "app/api/dashboard/concern-assistant/route.ts",
   "app/api/dashboard/data/route.ts",
-  "app/api/dashboard/data-v2/route.ts",
+  "app/api/dashboard/data-v2/route-handler.ts",
   "app/api/dashboard/enterprise-users/route.ts",
   "app/api/dashboard/protractor/canned-jobs/route.ts",
   "app/api/dashboard/protractor/contacts/route.ts",
@@ -183,22 +183,22 @@ const ALLOWLIST = new Set([
   "app/api/enterprise/shops/route.ts",
   "app/api/enterprise/users/route.ts",
   "app/api/estimate-assist/audit/history/route.ts",
-  "app/api/estimate-assist/audit/route.ts",
-  "app/api/extension/auth/route.ts",
+  "app/api/estimate-assist/audit/route-handler.ts",
+  "app/api/extension/auth/route-handler.ts",
   "app/api/extension/auth-token/route.ts",
-  "app/api/extension/build-ro-from-vhi/route.ts",
+  "app/api/extension/build-ro-from-vhi/route-handler.ts",
   "app/api/extension/canned-jobs/route.ts",
   "app/api/extension/concern-assistant/route.ts",
   "app/api/extension/inspections/route.ts",
   "app/api/extension/jobs/add-to-ro/route.ts",
   "app/api/extension/jobs/search/route.ts",
   "app/api/extension/keytag/route.ts",
-  "app/api/extension/plan/route.ts",
+  "app/api/extension/plan/route-handler.ts",
   "app/api/extension/preferences/route.ts",
   "app/api/extension/ro-context/route.ts",
-  "app/api/extension/specs/route.ts",
-  "app/api/extension/sticker/route.ts",
-  "app/api/extension/tek-endpoint-report/route.ts",
+  "app/api/extension/specs/route-handler.ts",
+  "app/api/extension/sticker/route-handler.ts",
+  "app/api/extension/tek-endpoint-report/route-handler.ts",
   "app/api/external/appointments/route.ts",
   "app/api/external/recommendations/[vin]/route.ts",
   "app/api/external/shops/route.ts",
@@ -286,7 +286,7 @@ const ALLOWLIST = new Set([
   "app/api/protractor/apply-canned-job/route.ts",
   "app/api/protractor/debug/route.ts",
   "app/api/protractor/sync/route.ts",
-  "app/api/recommended/analyze/route.ts",
+  "app/api/recommended/analyze/route-handler.ts",
   "app/api/recommended/analyze-stream/route.ts",
   "app/api/report/[vin]/route.ts",
   "app/api/settings/auto-booking/pending-count/route.ts",
@@ -334,7 +334,7 @@ const ALLOWLIST = new Set([
   "app/api/stripe/invoices/route.ts",
   "app/api/stripe/payment-methods/route.ts",
   "app/api/stripe/plans/route.ts",
-  "app/api/stripe/webhook/route.ts",
+  "app/api/stripe/webhook/route-handler.ts",
   "app/api/tekmetric/apply-canned-job/route.ts",
   "app/api/tekmetric/canned-jobs/route.ts",
   "app/api/tekmetric/job-categories/route.ts",
@@ -346,24 +346,24 @@ const ALLOWLIST = new Set([
   "app/api/vehicle-analyzer/route.ts",
   "app/api/vehicle/common-failures/route.ts",
   "app/api/vehicle/driving-stats/route.ts",
-  "app/api/vehicles/check-closed-orders/route.ts",
+  "app/api/vehicles/check-closed-orders/route-handler.ts",
   "app/api/vehicles/close-work-order/route.ts",
   "app/api/vehicles/manual/route.ts",
   "app/api/vehicles/[vin]/components/route.ts",
   "app/api/vehicles/[vin]/declined/route.ts",
   "app/api/vehicles/[vin]/oil-duty/route.ts",
-  "app/api/vehicles/[vin]/refresh/route.ts",
+  "app/api/vehicles/[vin]/refresh/route-handler.ts",
   "app/api/vehicles/[vin]/vhi/route.ts",
   "app/api/webhooks/autoflow/[token]/route.ts",
   // Single-source AutoFlow webhook receiver: one URL for all locations, shop
   // resolved from the payload's shop.domain (mirrors the allowlisted Tekmetric
   // and per-token AutoFlow webhook receivers above).
   "app/api/webhooks/autoflow/route.ts",
-  "app/api/webhooks/protractor/[token]/route.ts",
+  "app/api/webhooks/protractor/[token]/route-handler.ts",
   "app/api/webhooks/tekmetric/route.ts",
   // Task #587 — Shopmonkey inbound webhook receiver, mirroring the allowlisted
   // tekmetric webhook route above.
-  "app/api/webhooks/shopmonkey/route.ts",
+  "app/api/webhooks/shopmonkey/route-handler.ts",
   "app/api/workflows/runs/route.ts",
   "app/dashboard/parts/page.tsx",
   "app/dashboard/settings/autoflow/page.tsx",

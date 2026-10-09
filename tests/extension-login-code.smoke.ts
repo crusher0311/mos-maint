@@ -18,7 +18,7 @@
 import crypto from "node:crypto";
 import type { Db } from "mongodb";
 import { NextRequest } from "next/server";
-import { POST, __deps } from "../app/api/extension/auth/route";
+import { POST, __deps } from "../app/api/extension/auth/route-handler";
 
 let failed = 0;
 function ok(name: string, cond: boolean, detail?: string) {

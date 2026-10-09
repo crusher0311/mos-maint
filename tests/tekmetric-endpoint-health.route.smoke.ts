@@ -24,7 +24,7 @@ import { NextRequest } from "next/server";
 import {
   GET,
   __deps,
-} from "../app/api/cron/tekmetric-endpoint-health/route";
+} from "../app/api/cron/tekmetric-endpoint-health/route-handler";
 import { makeFakeDb } from "./utils/fake-mongo";
 
 let failed = 0;

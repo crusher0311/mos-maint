@@ -17,7 +17,7 @@
 
 import { NextRequest } from "next/server";
 
-import { POST as buildRoFromVhiPOST } from "../app/api/extension/build-ro-from-vhi/route";
+import { POST as buildRoFromVhiPOST } from "../app/api/extension/build-ro-from-vhi/route-handler";
 import { POST as prefillDviPOST } from "../app/api/extension/prefill-dvi/route";
 import { POST as vhiCoachPOST } from "../app/api/extension/vhi-coach/route";
 import { GET as roContextGET } from "../app/api/extension/ro-context/route";

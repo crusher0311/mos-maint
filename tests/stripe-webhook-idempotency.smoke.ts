@@ -3,7 +3,7 @@
  *
  * Run: `npx tsx tests/stripe-webhook-idempotency.smoke.ts`
  *
- * The route at `app/api/stripe/webhook/route.ts` defends against duplicate
+ * The route at `app/api/stripe/webhook/route-handler.ts` defends against duplicate
  * delivery from Stripe by checking `stripe_webhook_events` for a record with
  * `status: "processed"` matching the incoming `event.id` BEFORE any side
  * effects run. If that guard regresses, a re-delivered `invoice.paid` would
@@ -27,7 +27,7 @@
 
 import { NextRequest } from "next/server";
 import { makeFakeDb } from "./utils/fake-mongo";
-import { __deps, POST } from "../app/api/stripe/webhook/route";
+import { __deps, POST } from "../app/api/stripe/webhook/route-handler";
 
 let failed = 0;
 function ok(name: string, cond: boolean, detail?: string) {

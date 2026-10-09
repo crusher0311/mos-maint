@@ -69,7 +69,7 @@ test("generation persists unguessable shop-scoped references, never tokens or ra
 test("all QR generation paths use first-party targets and isolate vehicle caches", () => {
   for (const path of [
     "app/api/sticker/generate/route.ts", "app/api/sticker/qr/route.ts",
-    "app/api/sticker/regenerate-qr/route.ts", "app/api/extension/sticker/route.ts",
+    "app/api/sticker/regenerate-qr/route.ts", "app/api/extension/sticker/route-handler.ts",
   ]) {
     const src = readFileSync(path, "utf8");
     assert.match(src, /await createStickerQrTarget\(/, path);

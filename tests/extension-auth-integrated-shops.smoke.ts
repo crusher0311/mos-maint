@@ -5,7 +5,7 @@
 import bcrypt from "bcryptjs";
 import type { Db } from "mongodb";
 import { NextRequest } from "next/server";
-import { __deps, POST } from "../app/api/extension/auth/route";
+import { __deps, POST } from "../app/api/extension/auth/route-handler";
 
 type Doc = Record<string, any>;
 const password = "correct-horse";

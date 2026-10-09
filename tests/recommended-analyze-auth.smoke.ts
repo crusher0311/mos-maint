@@ -18,7 +18,7 @@
 import {
   POST,
   __deps,
-} from "../app/api/recommended/analyze/route";
+} from "../app/api/recommended/analyze/route-handler";
 import { ObjectId } from "mongodb";
 
 // ---------------------------------------------------------------------------

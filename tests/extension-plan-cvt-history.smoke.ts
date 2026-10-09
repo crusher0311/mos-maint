@@ -137,7 +137,7 @@ async function verifyActualAnalyzer() {
   } as any;
 
   const { __deps, runOnDemandAnalysis } =
-    await import("../app/api/extension/plan/route");
+    await import("../app/api/extension/plan/route-handler");
   const runAt = async (
     currentMiles: number,
     intervalMiles = 24_855,
@@ -221,7 +221,7 @@ async function verifyActualAnalyzer() {
 
 // Pin the route-level stale predicate wiring, not only the pure detector.
 const routeSource = readFileSync(
-  new URL("../app/api/extension/plan/route.ts", import.meta.url),
+  new URL("../app/api/extension/plan/route-handler.ts", import.meta.url),
   "utf8",
 );
 assert.match(

@@ -78,7 +78,7 @@ eq("0 rejected", parseMonthsInput(0), null);
 
 console.log("route wiring — entry points must go through the helper");
 {
-  const extRoute = readFileSync("app/api/extension/sticker/route.ts", "utf8");
+  const extRoute = readFileSync("app/api/extension/sticker/route-handler.ts", "utf8");
   ok(
     "extension route imports sticker-mileage helper",
     extRoute.includes('from "@/lib/sticker-mileage"'),

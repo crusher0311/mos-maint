@@ -51,9 +51,9 @@ const protractorBackendMutation = fs.readFileSync(
   "utf8",
 );
 const extensionBackendReads = [
-  "app/api/estimate-assist/audit/route.ts",
-  "app/api/estimate-assist/job-builder/route.ts",
-  "app/api/estimate-assist/resolve-recommendation/route.ts",
+  "app/api/estimate-assist/audit/route-handler.ts",
+  "app/api/estimate-assist/job-builder/route-handler.ts",
+  "app/api/estimate-assist/resolve-recommendation/route-handler.ts",
 ].map((path) => fs.readFileSync(path, "utf8"));
 
 const tekmetricFetch = background.slice(

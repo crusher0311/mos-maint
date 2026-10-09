@@ -485,7 +485,7 @@ for (const abs of walk(API_DIR)) {
 
   let content;
   try {
-    content = fs.readFileSync(abs, 'utf8');
+    content = require("./route-source.cjs").readRouteSource(abs);
   } catch {
     continue;
   }

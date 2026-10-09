@@ -130,7 +130,7 @@ assert.equal(
 
 const dashboardSource = readFileSync("app/dashboard/DashboardClient.tsx", "utf8");
 const dashboardDataSource = readFileSync("app/api/dashboard/data/route.ts", "utf8");
-const dashboardDataV2Source = readFileSync("app/api/dashboard/data-v2/route.ts", "utf8");
+const dashboardDataV2Source = readFileSync("app/api/dashboard/data-v2/route-handler.ts", "utf8");
 const panelSource = readFileSync("components/EstimateAssistPanel.tsx", "utf8");
 assert.match(
   dashboardSource,

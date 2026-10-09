@@ -4,7 +4,7 @@
  *
  * Run: `npx tsx tests/plan-build-task-649.smoke.ts`
  *
- * The plan endpoint (app/api/extension/plan/route.ts) composes the existing
+ * The plan endpoint (app/api/extension/plan/route-handler.ts) composes the existing
  * Task #391 helpers exactly as exercised below: it feeds the advisor-entered
  * odometer as `currentMiles` and the best already-known readings (the prior
  * open-RO/cached WO odometer as shop history, plus the vehicles snapshot /
@@ -38,7 +38,7 @@ function ok(name: string, cond: boolean, detail?: string) {
   }
 }
 
-// Mirror the route's composition (app/api/extension/plan/route.ts Task #649).
+// Mirror the route's composition (app/api/extension/plan/route-handler.ts Task #649).
 function buildPlanMileageFlag(opts: {
   enteredOdometer: number | null;
   priorKnownMileage: number | null;

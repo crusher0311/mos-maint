@@ -61,7 +61,7 @@ function makeReq(events: any[]): NextRequest {
 async function run() {
   console.log("extension-telemetry new events (Task #1112)");
 
-  const routeMod = await import("../app/api/extension/telemetry/route");
+  const routeMod = await import("../app/api/extension/telemetry/route-handler");
   const { POST, __deps } = routeMod as any;
 
   __deps.validateExtensionToken = async () => ({

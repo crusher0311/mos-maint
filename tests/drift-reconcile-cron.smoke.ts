@@ -26,7 +26,7 @@
 
 import { NextRequest } from "next/server";
 import { makeFakeDb, type FakeDb } from "./utils/fake-mongo";
-import * as cronRoute from "../app/api/cron/drift-reconcile/route";
+import * as cronRoute from "../app/api/cron/drift-reconcile/route-handler";
 import * as driftLib from "../lib/dashboard/drift-reconcile";
 
 let failed = 0;

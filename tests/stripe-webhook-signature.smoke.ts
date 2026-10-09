@@ -20,7 +20,7 @@
  */
 
 import { NextRequest } from "next/server";
-import { POST } from "../app/api/stripe/webhook/route";
+import { POST } from "../app/api/stripe/webhook/route-handler";
 
 let failed = 0;
 function ok(name: string, cond: boolean, detail?: string) {

@@ -81,7 +81,7 @@ function walk(dir, files = []) {
 }
 
 function classify(file) {
-  const src = fs.readFileSync(file, "utf8");
+  const src = require("./route-source.cjs").readRouteSource(file);
   const importsShopLookup = src.includes(SHOP_LOOKUP_IMPORT);
   const importsGuard = src.includes(GUARD_IMPORT);
   const callsGuard = GUARD_CALL.test(src);

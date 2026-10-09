@@ -19,15 +19,15 @@ import { NextRequest } from "next/server";
 import {
   GET as customerGET,
   __deps as customerDeps,
-} from "../app/api/customers/[customerId]/route";
+} from "../app/api/customers/[customerId]/route-handler";
 import {
   GET as inspectGET,
   __deps as inspectDeps,
-} from "../app/api/customers/[customerId]/inspect/route";
+} from "../app/api/customers/[customerId]/inspect/route-handler";
 import {
   POST as checkOrdersPOST,
   __deps as checkOrdersDeps,
-} from "../app/api/vehicles/check-closed-orders/route";
+} from "../app/api/vehicles/check-closed-orders/route-handler";
 
 import { makeFakeDb } from "./utils/fake-mongo";
 
@@ -290,7 +290,7 @@ import {
   GET as refreshGET,
   POST as refreshPOST,
   __deps as refreshDeps,
-} from "../app/api/vehicles/[vin]/refresh/route";
+} from "../app/api/vehicles/[vin]/refresh/route-handler";
 
 const ORIG_REFRESH = { ...refreshDeps };
 
@@ -394,7 +394,7 @@ async function testVehicleRefreshRoute() {
 import {
   POST as closePOST,
   __deps as closeDeps,
-} from "../app/api/vehicle/close/[vin]/route";
+} from "../app/api/vehicle/close/[vin]/route-handler";
 
 const ORIG_CLOSE = { ...closeDeps };
 
@@ -467,7 +467,7 @@ async function testVehicleCloseRoute() {
 import {
   POST as pushToROPOST,
   __deps as pushDeps,
-} from "../app/api/extension/analytics/push-to-ro/route";
+} from "../app/api/extension/analytics/push-to-ro/route-handler";
 
 const ORIG_PUSH = { ...pushDeps };
 

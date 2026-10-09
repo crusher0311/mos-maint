@@ -30,8 +30,8 @@
 
 import { NextRequest } from "next/server";
 import { makeFakeDb, type FakeDb } from "./utils/fake-mongo";
-import * as webhookRoute from "../app/api/webhooks/protractor/[token]/route";
-import * as dashboardRoute from "../app/api/dashboard/data-v2/route";
+import * as webhookRoute from "../app/api/webhooks/protractor/[token]/route-handler";
+import * as dashboardRoute from "../app/api/dashboard/data-v2/route-handler";
 
 let failed = 0;
 function ok(name: string, cond: boolean, detail?: string) {

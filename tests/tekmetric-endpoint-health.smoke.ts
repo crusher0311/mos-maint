@@ -34,8 +34,8 @@ require.cache[serverOnlyPath] = {
   exports: {},
 } as any;
 
-const ingestModule = require("../app/api/extension/tek-endpoint-report/route");
-const healthModule = require("../app/api/admin/tekmetric-endpoint-health/route");
+const ingestModule = require("../app/api/extension/tek-endpoint-report/route-handler");
+const healthModule = require("../app/api/admin/tekmetric-endpoint-health/route-handler");
 const { POST, OPTIONS, __deps: ingestDeps } = ingestModule;
 const { GET: healthGET, __deps: healthDeps } = healthModule;
 

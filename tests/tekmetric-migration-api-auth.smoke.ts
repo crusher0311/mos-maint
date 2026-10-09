@@ -31,7 +31,7 @@ import { isSuperAdmin, SUPER_ADMIN_EMAILS } from "../lib/super-admins";
 import {
   GET as tokenStatusGET,
   __deps as tokenStatusDeps,
-} from "../app/api/extension/tekmetric-migration/token-status/route";
+} from "../app/api/extension/tekmetric-migration/token-status/route-handler";
 import type { TokenStatus } from "../lib/tekmetric-migration/tokenCache";
 
 interface FakeUser {

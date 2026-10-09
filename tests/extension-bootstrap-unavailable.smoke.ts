@@ -10,7 +10,7 @@
  * Run: npx tsx tests/extension-bootstrap-unavailable.smoke.ts
  */
 import { NextRequest } from "next/server";
-import { __deps, POST } from "../app/api/extension/bootstrap/route";
+import { __deps, POST } from "../app/api/extension/bootstrap/route-handler";
 import { __deps as proofDeps, verifyProviderSessionProof } from "../lib/extension-provider-proof";
 
 let failed = 0;

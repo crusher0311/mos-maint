@@ -20,7 +20,7 @@
  */
 import { NextRequest } from "next/server";
 import bcrypt from "bcryptjs";
-import { __deps, POST } from "../app/api/extension/auth/route";
+import { __deps, POST } from "../app/api/extension/auth/route-handler";
 
 let failed = 0;
 function ok(name: string, cond: boolean, detail?: string) {

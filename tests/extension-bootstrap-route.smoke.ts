@@ -4,7 +4,7 @@
  * Run: npx tsx tests/extension-bootstrap-route.smoke.ts
  */
 import { NextRequest } from "next/server";
-import { __deps, POST } from "../app/api/extension/bootstrap/route";
+import { __deps, POST } from "../app/api/extension/bootstrap/route-handler";
 
 let failed = 0;
 function ok(name: string, condition: boolean, detail?: string) {

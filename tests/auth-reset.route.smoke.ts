@@ -16,7 +16,7 @@
 
 import assert from "node:assert/strict";
 
-import { POST, __deps } from "../app/api/auth/reset/route";
+import { POST, __deps } from "../app/api/auth/reset/route-handler";
 import { makeFakeDb } from "./utils/fake-mongo";
 
 let failed = 0;

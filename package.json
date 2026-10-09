@@ -16,7 +16,7 @@
     "predev": "node scripts/dev-cache-guard.cjs",
     "dev": "next dev -p 5000 -H 0.0.0.0",
     "test:customer-source-index": "tsx --test tests/customer-source-index.test.ts",
-    "prebuild": "npm run test:customer-source-index && env -u PROTRACTOR_OUTBOUND_DISABLED -u PROTRACTOR_OUTBOUND_DENIED_INSTANCE_IDS -u PROTRACTOR_CALLBACK_CANARY_UNTIL -u PROTRACTOR_CALLBACK_REPLAY_NOT_BEFORE -u PROTRACTOR_CALLBACK_TRIAL_ENABLED npm run prebuild:checks",
+    "prebuild": "npm run test:route-entrypoints && npm run test:customer-source-index && env -u PROTRACTOR_OUTBOUND_DISABLED -u PROTRACTOR_OUTBOUND_DENIED_INSTANCE_IDS -u PROTRACTOR_CALLBACK_CANARY_UNTIL -u PROTRACTOR_CALLBACK_REPLAY_NOT_BEFORE -u PROTRACTOR_CALLBACK_TRIAL_ENABLED npm run prebuild:checks",
     "prebuild:checks": "npm run test:protractor-resilience && npm run test:protractor-relay-transport && npm run test:report-share-contract && npm run test:partner-carfax-ingestion && npm run test:platform-admin-notifications && npm run test:typecheck-behavior-regressions && npm run test:enterprise-labor-rates && npm run test:enterprise-settings && npm run test:custom-reports && npm run test:plan-build && npm run test:smoke",
     "test:enterprise-labor-rates": "tsx tests/labor-rate-rules-task-1232.smoke.ts && tsx tests/extension-labor-consent.smoke.ts && tsx tests/extension-labor-consent-ui-task-1292.smoke.ts",
     "test:enterprise-settings": "tsx tests/enterprise-settings-task-1235.smoke.ts",
@@ -274,12 +274,12 @@
     "test:extension-provider-proof": "tsx tests/extension-provider-proof.smoke.ts",
     "test:extension-login-code": "tsx tests/extension-login-code.smoke.ts",
     "test:protractor-relay-transport": "tsx tests/protractor-relay-transport.smoke.ts",
-    "test:partner-vhi-fast-mode": "NODE_OPTIONS='--require ./scripts/_stubs/server-only-stub.cjs' tsx tests/partner-vhi-fast-mode.smoke.ts",
     "test:dvi-engagement": "tsx tests/dvi-engagement.smoke.ts && tsx tests/dvi-engagement-persistence.smoke.ts && tsx tests/dvi-engagement-webhook.smoke.ts && tsx tests/dvi-engagement-ui.smoke.tsx",
     "test:extension-auto-bootstrap": "tsx tests/extension-auto-bootstrap.smoke.ts && tsx tests/tekmetric-session-recovery.smoke.ts",
     "test:jwt-invoice-preview": "tsx tests/jwt-invoice-preview.smoke.ts && tsx --require ./scripts/_stubs/server-only-stub.cjs tests/jwt-invoice-preview-route.smoke.ts && tsx tests/jwt-september-recovery.smoke.ts && tsx tests/jwt-september-recovery-store.smoke.ts && tsx --require ./scripts/_stubs/server-only-stub.cjs tests/jwt-september-recovery-route.smoke.ts && tsx tests/jwt-recovery-vehicle-resolution.smoke.ts && tsx --test app/platform-admin/jwt-invoice-preview/JwtBulkRecoveryClient.test.ts && npm run test:jwt-overnight",
     "test:jwt-overnight": "node --import tsx tests/jwt-recovery-runner-deferral.smoke.ts && node --import tsx tests/jwt-recovery-deferrals.smoke.ts && node --import tsx tests/jwt-overnight-scheduler.smoke.ts && node --import tsx tests/jwt-overnight-transaction.smoke.ts && node --import tsx tests/jwt-overnight-failure.smoke.ts && node --import tsx tests/jwt-overnight-header-guard.smoke.ts && node --import tsx tests/jwt-overnight-resume.smoke.ts",
-    "test:labor-reporting": "NODE_OPTIONS='--require ./scripts/_stubs/server-only-stub.cjs' tsx tests/labor-reporting.smoke.ts"
+    "test:labor-reporting": "NODE_OPTIONS='--require ./scripts/_stubs/server-only-stub.cjs' tsx tests/labor-reporting.smoke.ts",
+    "test:route-entrypoints": "node --test tests/route-entrypoints.test.cjs"
   },
   "dependencies": {
     "@deepgram/sdk": "^5.0.0",

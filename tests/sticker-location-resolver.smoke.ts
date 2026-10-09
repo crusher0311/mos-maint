@@ -5,7 +5,7 @@ import ts from "typescript";
 
 // Execute the actual shared GET/POST resolver without loading native canvas or
 // any side-effecting renderer dependencies.
-const source = fs.readFileSync("app/api/extension/sticker/route.ts", "utf8");
+const source = fs.readFileSync("app/api/extension/sticker/route-handler.ts", "utf8");
 const resolver = source.slice(source.indexOf("async function resolveMosShopId("), source.indexOf("async function _GET("));
 async function main() {
   let outcome: any;

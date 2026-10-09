@@ -21,16 +21,16 @@ import {
   GET as listNotifications,
   POST as mutateNotifications,
   __deps as listDeps,
-} from "../app/api/platform-admin/notifications/route";
+} from "../app/api/platform-admin/notifications/route-handler";
 import {
   GET as countNotifications,
   __deps as countDeps,
-} from "../app/api/platform-admin/notifications/count/route";
+} from "../app/api/platform-admin/notifications/count/route-handler";
 import {
   PATCH as patchNotification,
   DELETE as deleteNotification,
   __deps as itemDeps,
-} from "../app/api/platform-admin/notifications/[id]/route";
+} from "../app/api/platform-admin/notifications/[id]/route-handler";
 
 type Doc = Record<string, any>;
 

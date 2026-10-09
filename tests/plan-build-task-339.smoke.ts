@@ -6,7 +6,7 @@
  * Tasks #333 and #336 wired the shop's preferred distance unit through
  * both the dashboard plan path (`lib/plan-build/triage.ts`) and the
  * extension on-demand analyzer (`runOnDemandAnalysis` in
- * `app/api/extension/plan/route.ts`). OEM intervals from DataOne are
+ * `app/api/extension/plan/route-handler.ts`). OEM intervals from DataOne are
  * always real miles; for a Canadian (kilometers) shop they must be
  * converted at intake so anchors against the shop-unit odometer + last
  * performed mileage produce correct dueAt + milesToGo, and so the user
@@ -33,7 +33,7 @@ import {
 } from "../lib/engine-risk";
 import { makeFakeDb } from "./utils/fake-mongo";
 
-type RouteModule = typeof import("../app/api/extension/plan/route");
+type RouteModule = typeof import("../app/api/extension/plan/route-handler");
 
 const MILES_TO_KM = 1.60934;
 const OEM_OIL_MILES = 5_000;
@@ -65,7 +65,7 @@ require.cache[serverOnlyPath] = {
   exports: {},
 } as any;
 
-const routeModule: RouteModule = await import("../app/api/extension/plan/route");
+const routeModule: RouteModule = await import("../app/api/extension/plan/route-handler");
 const { __deps, convertCachedPlanItemForSidePanel, runOnDemandAnalysis } = routeModule;
 
 console.log("Task #339 regression checks (km display for Canadian shops)");

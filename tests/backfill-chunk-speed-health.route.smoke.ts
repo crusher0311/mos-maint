@@ -25,7 +25,7 @@ import {
 import {
   GET,
   __deps,
-} from "../app/api/cron/backfill-chunk-speed-health/route";
+} from "../app/api/cron/backfill-chunk-speed-health/route-handler";
 import { makeFakeDb } from "./utils/fake-mongo";
 
 let failed = 0;

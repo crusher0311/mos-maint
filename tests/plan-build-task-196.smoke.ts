@@ -42,7 +42,7 @@ import { makeFakeDb } from "./utils/fake-mongo";
 
 // Type-only import: the runtime module is loaded lazily inside main()
 // after the require.cache shim is installed (see comment there).
-type RouteModule = typeof import("../app/api/extension/plan/route");
+type RouteModule = typeof import("../app/api/extension/plan/route-handler");
 
 let failed = 0;
 
@@ -72,7 +72,7 @@ require.cache[serverOnlyPath] = {
   exports: {},
 } as any;
 
-const routeModule: RouteModule = await import("../app/api/extension/plan/route");
+const routeModule: RouteModule = await import("../app/api/extension/plan/route-handler");
 const { __deps, convertCachedPlanItemForSidePanel, runOnDemandAnalysis } = routeModule;
 
 console.log("Task #196 regression checks");

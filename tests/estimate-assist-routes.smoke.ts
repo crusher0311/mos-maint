@@ -20,9 +20,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { makeFakeDb } from "./utils/fake-mongo";
 import { ESTIMATE_COLLECTIONS } from "../lib/estimate-assist/job-knowledge-base";
 import { NORMALIZED_COLLECTIONS } from "../lib/normalized-schema";
-import { POST as auditPOST, __deps as auditDeps } from "../app/api/estimate-assist/audit/route";
-import { POST as builderPOST, __deps as builderDeps } from "../app/api/estimate-assist/job-builder/route";
-import { POST as languagePOST, __deps as languageDeps } from "../app/api/estimate-assist/language/route";
+import { POST as auditPOST, __deps as auditDeps } from "../app/api/estimate-assist/audit/route-handler";
+import { POST as builderPOST, __deps as builderDeps } from "../app/api/estimate-assist/job-builder/route-handler";
+import { POST as languagePOST, __deps as languageDeps } from "../app/api/estimate-assist/language/route-handler";
 import { GET as historyGET } from "../app/api/estimate-assist/audit/history/route";
 import { historyDeps } from "../app/api/estimate-assist/audit/history/deps";
 

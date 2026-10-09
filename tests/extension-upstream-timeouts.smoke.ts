@@ -74,7 +74,7 @@ async function main() {
 
   // ---- 2. /api/extension/plan wraps every slow upstream call ----
   console.log("\n[2] /api/extension/plan upstream timeouts");
-  const planSrc = readFileSync("app/api/extension/plan/route.ts", "utf8");
+  const planSrc = readFileSync("app/api/extension/plan/route-handler.ts", "utf8");
 
   assert(
     planSrc.includes('from "@/lib/with-upstream-timeout"'),

@@ -87,7 +87,7 @@ function makeReq(events: any[], extra: Record<string, unknown> = {}): NextReques
 async function run() {
   console.log("extension-telemetry sanitizer + rate limit (Task #516)");
 
-  const routeMod = await import("../app/api/extension/telemetry/route");
+  const routeMod = await import("../app/api/extension/telemetry/route-handler");
   const { POST, __deps } = routeMod as any;
 
   // Authorized user on every request.

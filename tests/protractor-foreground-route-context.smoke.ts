@@ -113,8 +113,8 @@ for (const route of [
 // Protractor: the plan response reads normalized/cached rows and specs reads
 // DataOne.  There is no live Protractor request to admit here.
 for (const route of [
-  "app/api/extension/plan/route.ts",
-  "app/api/extension/specs/route.ts",
+  "app/api/extension/plan/route-handler.ts",
+  "app/api/extension/specs/route-handler.ts",
   "app/api/extension/tekmetric/resolve-part-costs/route.ts",
 ]) {
   assert.doesNotMatch(read(route), /interactive-context/, `${route} should remain cache/local-data only`);

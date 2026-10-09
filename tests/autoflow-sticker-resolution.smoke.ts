@@ -10,7 +10,7 @@ import { getStickerRedirectUrl } from "../lib/sticker-utils";
 
 process.env.NEXT_PUBLIC_BASE_URL = "https://fixture.test";
 
-const source = fs.readFileSync("app/api/extension/sticker/route.ts", "utf8");
+const source = fs.readFileSync("app/api/extension/sticker/route-handler.ts", "utf8");
 const owner = {
   shopId: 33, integrationProvider: "protractor",
   autoflowDomain: "fixture.autotext.me", autoflow: { shopNumbers: ["1360", 1361] },

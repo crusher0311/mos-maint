@@ -131,7 +131,7 @@ for (const [path, method] of [
 }
 
 const stickerRoute = readFileSync(
-  new URL("../app/api/extension/sticker/route.ts", import.meta.url),
+  new URL("../app/api/extension/sticker/route-handler.ts", import.meta.url),
   "utf8",
 );
 assert.match(

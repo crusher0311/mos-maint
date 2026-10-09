@@ -17,7 +17,7 @@ import { NextRequest } from "next/server";
 import {
   GET,
   __deps,
-} from "../app/api/cron/webhook-subscription-sweep/route";
+} from "../app/api/cron/webhook-subscription-sweep/route-handler";
 import { makeFakeDb } from "./utils/fake-mongo";
 
 let failed = 0;

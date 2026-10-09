@@ -219,21 +219,21 @@ ok("external VHI and maintenance APIs enforce the target shop's Maintenance prod
   }
   const externalVehicle = source("app/api/external/vehicles/[vin]/route.ts");
   assert.match(externalVehicle, /shopId:\s*\{\s*\$in:\s*\[Number\(shopId\),\s*String\(shopId\)\]\s*\}/);
-  const extensionSpecs = source("app/api/extension/specs/route.ts");
+  const extensionSpecs = source("app/api/extension/specs/route-handler.ts");
   assert.match(extensionSpecs, /checkShopFeatureGate\(shopId,\s*\["maintenance"\]/);
 });
 
 ok("recommendation surfaces require Maintenance and Estimate Assist cannot leak cached VHI", () => {
   for (const file of [
     "app/dashboard/recommended/page.tsx",
-    "app/api/recommended/analyze/route.ts",
+    "app/api/recommended/analyze/route-handler.ts",
     "app/api/recommended/analyze-stream/route.ts",
     "app/api/recommended/cache/route.ts",
   ]) {
     const text = source(file);
     assert.match(text, /canAccessShopFeature\([\s\S]{0,100}"maintenance"\)/, file);
   }
-  const audit = source("app/api/estimate-assist/audit/route.ts");
+  const audit = source("app/api/estimate-assist/audit/route-handler.ts");
   assert.match(audit, /const canUseMaintenance = canAccessShopFeature\(/);
   assert.match(audit, /if \(vehicleVin && canUseMaintenance\)/);
   const legacyAnalyze = source("app/api/analyze/route.ts");
@@ -294,7 +294,7 @@ ok("Maintenance analytics, lifecycle writes, and schedule settings require Maint
   const enrollment = source("app/api/protection-plan/enrollment/route.ts");
   assert.ok((enrollment.match(/canUseMaintenance\(sess\)/g) ?? []).length >= 3);
   const dashboardData = source("app/api/dashboard/data/route.ts");
-  const dashboardDataV2 = source("app/api/dashboard/data-v2/route.ts");
+  const dashboardDataV2 = source("app/api/dashboard/data-v2/route-handler.ts");
   assert.match(dashboardData, /if \(maintenanceEnabled\) await batchEstimateMileage/);
   assert.ok((dashboardDataV2.match(/if \(maintenanceEnabled\) await batchEstimateMileage/g) ?? []).length >= 2);
   const carfaxSettings = source("app/api/settings/carfax/route.ts");
