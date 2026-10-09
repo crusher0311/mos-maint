@@ -58,7 +58,13 @@ function isPasswordChangeAllowedPath(pathname: string) {
   return false;
 }
 
-function isPublicPath(pathname: string) {
+function isPublicPath(pathname: string, method: string) {
+  // Printed sticker scans are public, but sticker management is not.
+  // Leave shop/reference validation, entitlements and report signing to the handler.
+  if (
+    (method === "GET" || method === "HEAD") &&
+    /^\/api\/sticker\/redirect\/[^/]+\/?$/.test(pathname)
+  ) return true;
   if (PUBLIC_PATHS.has(pathname)) return true;
   if (pathname.startsWith("/api/webhooks/")) return true;
   if (pathname.startsWith("/api/callbacks/")) return true;
@@ -202,7 +208,7 @@ export async function middleware(req: NextRequest) {
     }
 
     // Allow public paths
-    if (isPublicPath(pathname)) {
+    if (isPublicPath(pathname, req.method)) {
       return NextResponse.next();
     }
 
