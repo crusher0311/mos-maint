@@ -45,3 +45,17 @@ subsequently completed the full build with the same release source.
 **How to apply:** Separate environment failures from assertion failures. Preserve
 network isolation, do not weaken tests, and require Render's successful build and
 live commit verification before reporting a release as deployed.
+
+Credential-free build environments must retain the workspace's native-library
+search paths.
+
+**Why:** Canvas loaded in the ordinary workspace process but failed on
+`libuuid.so.1` under `env -i`; the library was not actually missing from the
+workspace. Clearing loader configuration caused a false dependency failure.
+
+**How to apply:** Preserve only noncredential runtime paths such as
+`LD_AUDIT`, `REPLIT_LD_LIBRARY_PATH`, `LD_LIBRARY_PATH`,
+`NIX_LD_LIBRARY_PATH`, `NIX_LD` and font configuration when
+constructing isolated test environments. Keep external network denial and
+credentials excluded. Do not install packages or weaken a test before comparing
+native module loading in the ordinary and sanitized processes.
