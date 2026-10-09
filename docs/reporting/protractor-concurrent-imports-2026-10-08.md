@@ -4,7 +4,8 @@ The operator approved a 14-month history import for MOS 538 and explicitly
 requested concurrent JWT recovery rather than postponement. The operator then
 confirmed all included shops closed and approved immediate early starts.
 
-Runtime release: `3eff57539eda6f22476b17b011f4f72795771444`.
+History runtime release: `3eff57539eda6f22476b17b011f4f72795771444`.
+JWT early-start completion release: `210d62b167a6d7b4fe3d2346926363eabbe2a984`.
 Both jobs stop by October 9, 2026 at 05:00 America/Chicago.
 No fleet-wide horizon, rate limit, general-worker suspension or background
 scope was widened.
@@ -16,9 +17,11 @@ scope was widened.
   State: `operator_history_import_jobs`, ID `shop538-history-2026-10-08`.
   Permission: `api_rate_limits` physical transport document, `shopHistory`.
   First observed progress: 11 imported invoices, zero reported failures.
-- JWT: Render continuation `job-db42m2qjnfac73bagi10`.
+- JWT: Render continuation `job-db4309vavr4c739krfp0`.
+  The preceding attempt stopped at an inner quiet-hour guard; the completion
+  release applies the dated exception at invoice and transaction boundaries.
   Existing job/checkpoint `jwt-overnight-2026-10-07` retained.
-  At handoff: 354 completed batches, 49 pending, 419/1,000 requests consumed,
+  At latest handoff: 354 completed batches, 49 pending, 420/1,000 requests consumed,
   5,908 corrected, 1,528 already matching, 1,929 held.
   Earlier waiting jobs were canceled before creating this immediate replacement.
 

@@ -63,7 +63,9 @@ async function main(){
  const permit=await rates.updateOne({_id:RATE,jwtOvernight:previous,"operatorStop.active":{$ne:true},
   "canary.mode":"live","canary.workersSuspendedConfirmed":true,"canary.generation":grant.canaryGeneration},
   {$set:{jwtOvernight:grant}});
- assert.equal(permit.modifiedCount,1,"Permit changed; no resume");
+ // Reauthorizing a stopped run inside the same approved window can be a
+ // no-op on the permit. Matching the full old permit still proves the CAS.
+ assert.equal(permit.matchedCount,1,"Permit changed; no resume");
  const prepared=await jobs.updateOne({_id:JOB,status:job.status,owner:job.owner,
   outcomes:job.outcomes,eligibleResume:job.eligibleResume},{$set:{
    status:"paused",stopped:true,eligibleResume:proof,start:notBefore,expires:expiresAt,
