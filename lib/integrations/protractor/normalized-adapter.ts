@@ -39,6 +39,7 @@ import {
   cleanString,
 } from '@/lib/integrations/core/normalized-adapter';
 import { ObjectId } from 'mongodb';
+import { protractorTechnician } from "./technician";
 import { protractorLaborLineEvidence } from "@/lib/labor-reporting-contract";
 import { protractorInvoiceLaborEvidence } from "./labor-evidence";
 import {
@@ -321,7 +322,7 @@ export class ProtractorAdapter implements INormalizedAdapter {
       cannedJobCode: cleanString(sp.CannedJobCode),
       cannedJobName: cleanString(sp.CannedJobName),
       laborOperationCodes: [],
-      technicianName: cleanString(sp.TechnicianName || sp.Technician),
+      ...protractorTechnician(sp.Technician, sp.TechnicianName),
       lineItems: [],
        laborTotal: pricing.laborTotal,
        partsTotal: pricing.partsTotal,
@@ -373,7 +374,7 @@ export class ProtractorAdapter implements INormalizedAdapter {
       laborType: lineType === 'labor' ? 'flat_rate' : undefined,
        laborHours: lineType === 'labor' ? normalized.quantity : undefined,
        laborRate: lineType === 'labor' ? normalized.unitPrice : undefined,
-      technicianName: cleanString(li.Technician),
+      ...protractorTechnician(li.Technician, li.TechnicianName),
       vendorName: cleanString(li.Vendor || li.Supplier),
       vendorPartNumber: cleanString(li.VendorPartNumber),
       vendorCost: parseNumber(li.VendorCost),
@@ -509,7 +510,7 @@ export class ProtractorAdapter implements INormalizedAdapter {
       inspectionType: 'multi_point',
       templateName: cleanString(i.TemplateName || i.Name),
       status: this.mapInspectionStatus(i.Status),
-      technicianName: cleanString(i.TechnicianName || i.Technician),
+      ...protractorTechnician(i.Technician, i.TechnicianName),
       startedAt: parseDate(i.StartedAt || i.StartDate),
       completedAt: parseDate(i.CompletedAt || i.EndDate),
       overallCondition: this.mapInspectionFinding(i.OverallCondition),
