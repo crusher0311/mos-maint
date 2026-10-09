@@ -4,8 +4,8 @@ import { CommandForm } from "./CommandForm";
 import type { WorkProps } from "./JobCard";
 import styles from "./pilot.module.css";
 
-interface ProviderEmployee { id: string; name: string; active: boolean }
-interface Roster { employees: ProviderEmployee[]; truncated: boolean }
+interface ProviderEmployee { id: string; name: string; active: boolean; historical?: boolean }
+interface Roster { employees: ProviderEmployee[]; truncated: boolean; source: "provider" | "history"; warning?: string }
 
 export function RosterImport({ board, busy, mutate }: Pick<WorkProps, "board" | "busy" | "mutate">) {
   const [roster, setRoster] = useState<Roster | null>(null);
@@ -26,31 +26,36 @@ export function RosterImport({ board, busy, mutate }: Pick<WorkProps, "board" | 
       }
       if (!data || typeof data !== "object" || !("employees" in data) || !Array.isArray(data.employees) ||
         !("truncated" in data) || typeof data.truncated !== "boolean" ||
+        !("source" in data) || (data.source !== "provider" && data.source !== "history") ||
+        ("warning" in data && data.warning !== undefined && typeof data.warning !== "string") ||
         !data.employees.every((employee: unknown) => employee && typeof employee === "object" &&
           "id" in employee && typeof employee.id === "string" && "name" in employee && typeof employee.name === "string" &&
-          "active" in employee && typeof employee.active === "boolean")) throw new Error("Provider staff response was invalid. Try loading again.");
+          "active" in employee && typeof employee.active === "boolean" &&
+          (!("historical" in employee) || employee.historical === undefined || typeof employee.historical === "boolean"))) throw new Error("Provider staff response was invalid. Try loading again.");
       setRoster(data as Roster);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Provider staff could not be loaded. Try again."); }
     finally { inFlight.current = false; setLoading(false); }
   }
   return <div className={styles.rosterReview}>
     <div className={styles.eyebrow}>Manager review · read-only upstream</div><h3>Review provider staff</h3>
-    <p><small>Provider names are not proof of a technician role or availability. Review active and inactive staff, then explicitly select and save each technician. Nothing is selected by default. No MOS accounts are created.</small></p>
+    <p><small>Provider names are not proof of a technician role or availability. Historical names are not proof of current employment. Review each candidate, then explicitly select and save each technician. Nothing is selected by default. No MOS accounts are created.</small></p>
     <button type="button" data-testid="roster-load" disabled={busy || loading} onClick={() => void load()}>{loading ? "Loading provider staff…" : error ? "Retry loading provider staff" : roster ? "Reload provider staff" : "Load provider staff"}</button>
     {loading && <div className={styles.skeleton} role="status" aria-label="Loading provider staff" />}
     {error && <p className={styles.notice} role="alert">{error}</p>}
     {roster && !loading && <>
+      {(roster.source === "history" || roster.employees.some(employee => employee.historical)) && <p className={styles.notice} role="status">Fallback repair-order history may include former employees. Current employment status is unknown; selectable historical candidates are not confirmed active upstream.</p>}
+      {roster.warning && <p className={styles.notice} role="status">{roster.warning}</p>}
       {roster.truncated && <p className={styles.notice} role="status">This provider response is truncated. Staff not listed here may still exist upstream. Add missing technicians by name if needed.</p>}
       {!roster.employees.length && <div className={styles.empty}>No provider staff returned. You can still add technicians by name above.</div>}
-      {roster.employees.map(employee => <ReviewedEmployee key={employee.id} employee={employee} board={board} busy={busy} mutate={mutate} />)}
+      {roster.employees.map(employee => <ReviewedEmployee key={employee.id} employee={employee} historical={roster.source === "history" || employee.historical === true} board={board} busy={busy} mutate={mutate} />)}
     </>}
   </div>;
 }
 
-function ReviewedEmployee({ employee, board, busy, mutate }: Pick<WorkProps, "board" | "busy" | "mutate"> & { employee: ProviderEmployee }) {
+function ReviewedEmployee({ employee, historical, board, busy, mutate }: Pick<WorkProps, "board" | "busy" | "mutate"> & { employee: ProviderEmployee; historical: boolean }) {
   const linked = board.technicians.find(technician => technician.sourceId === employee.id);
   return <div className={styles.reviewEntry}>
-    <div className={styles.row}><strong>{employee.name}</strong><span className={styles.chip}>{employee.active ? "Active upstream" : "Inactive upstream"}</span></div>
+    <div className={styles.row}><strong>{employee.name}</strong><span className={styles.chip}>{historical ? "Historical · current status unknown" : employee.active ? "Active upstream" : "Inactive upstream"}</span></div>
     {linked && <p><small>Already linked to {linked.name}. Existing login and assignments are preserved.</small></p>}
     <CommandForm revision={board.revision} testId={`roster-review-${employee.id}`} busy={busy} creation label="Save reviewed technician"
       submit={(data, expectedRevision) => {
@@ -62,7 +67,7 @@ function ReviewedEmployee({ employee, board, busy, mutate }: Pick<WorkProps, "bo
         <option value="">Create a new technician lane</option>
         {board.technicians.map(technician => <option key={technician.id} value={technician.id}>{technician.name}{technician.active ? "" : " · inactive"}</option>)}
       </select></label>
-      <small>Choose an existing lane to avoid duplicates. Saving revalidates provider staff and preserves the lane’s login and assignments; it does not grant account access. Inactive staff remain subject to manager review.</small>
+      <small>Choose an existing lane to avoid duplicates. Saving revalidates the candidate and preserves the lane’s login and assignments; it does not grant account access. {historical ? "Historical candidates are selectable locally, not confirmed current provider employees." : "Inactive staff remain subject to manager review."}</small>
     </CommandForm>
   </div>;
 }
