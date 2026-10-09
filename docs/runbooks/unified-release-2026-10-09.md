@@ -3,6 +3,7 @@
 ## Source and exclusions
 
 Candidate branch: `release/catchup-2026-10-09`.
+**Status: blocked; do not push to QA or production yet.**
 It starts from the complete workspace, preserves both GitHub branch ancestries,
 and includes the technician fix and the merged QR/AppFueled work.
 Production's remote-only commits were verified patch-equivalent before ancestry
@@ -34,7 +35,11 @@ Application builds no longer invoke the extension publishing script.
 - All prebuild regression commands passed in credential-free, network-denied
   processes. The smoke suite resumed at the print-queue test after correcting
   the local native-loader environment; earlier successful suites were unchanged.
-- Explicit TypeScript checking passed.
+- Initial TypeScript checking passed before the production build regenerated
+  all route declarations. The required **post-build** typecheck then failed
+  with 39 invalid API-route exports (test helpers such as `__deps`).
+  These must move to companion modules and their tests must be updated without
+  changing handler behavior. Do not suppress the generated checks.
 - 32 additional targeted tests passed, including DVI release holds, technician
   mapping, branding, workflow roles, QR targets and the AppFueled VHI webhook.
 - Enterprise-history service and UI regressions passed.
@@ -42,7 +47,12 @@ Application builds no longer invoke the extension publishing script.
   passed. Existing stale database-allowlist warnings are not new violations.
 - Shop Workflow rendered in an offline fixture. Authenticated live QA flows
   have not been checked for this candidate.
-- The production bundle must complete successfully before the promotion steps.
+- The optimized production bundle completed successfully. This is not sufficient
+  for release: Next is configured to skip build-time TypeScript errors, and the
+  explicit post-build typecheck above remains a blocking gate.
+- No QA/main push, candidate tag, production promotion, or local-main
+  fast-forward was performed. Finish the route-export repair and revalidate
+  before freezing the candidate and proceeding below.
 
 ## Promotion procedure — user-initiated pushes only
 
