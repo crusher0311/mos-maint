@@ -5,7 +5,9 @@ const loader=Module as unknown as {_load:(id:string,...args:any[])=>any},origina
 let session:any={shopId:1,email:"test@example.invalid",role:"technician"},denied=false,revoked=false,reads:number[]=[],writes:number[]=[];
 let scopeCalls=0;
 const record={revision:0,visits:[]};
+const release={VISIT_DVI_RELEASE_ENABLED:true};
 loader._load=function(id,...args){
+  if(id==="./visit-release")return release;
   if(id==="next/server")return {NextResponse:class extends Response{static json(v:any,i?:ResponseInit){return Response.json(v,i);}}};
   if(id==="@/lib/auth")return {getSession:async()=>session};
   if(id==="@/lib/extension-route-guard")return {checkShopFeatureGate:async()=>denied?Response.json({error:"denied"}):null};
@@ -27,6 +29,12 @@ function req(body?:any,origin="https://app.invalid"){
   return Object.assign(r,{nextUrl:new URL(url)});
 }
 test("visits require session, entitlement, same-origin mutation and server-derived shop",async()=>{
+  release.VISIT_DVI_RELEASE_ENABLED=false;
+  assert.equal((await route.GET(req())).status,403);
+  assert.equal((await route.POST(req({action:"start"}))).status,403);
+  assert.deepEqual(reads,[]);
+  assert.deepEqual(writes,[]);
+  release.VISIT_DVI_RELEASE_ENABLED=true;
   session=null;assert.equal((await route.GET(req())).status,401);
   session={shopId:1,email:"test@example.invalid",role:"technician"};
   denied=true;assert.equal((await route.GET(req())).status,403);denied=false;

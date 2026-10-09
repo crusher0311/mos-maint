@@ -233,7 +233,6 @@
     "ext:publish:test": "node scripts/publish-extension.js publish",
     "ext:publish": "node scripts/publish-extension.js publish --public",
     "ext:auto-publish": "tsx scripts/auto-publish-extension.ts",
-    "postbuild": "EXT_AUTOPUBLISH_TRIGGER=postbuild tsx scripts/auto-publish-extension.ts",
     "db:generate": "npx drizzle-kit generate",
     "db:push": "npx drizzle-kit push --force",
     "db:migrate:normalized": "tsx scripts/apply-normalized-migration.ts",

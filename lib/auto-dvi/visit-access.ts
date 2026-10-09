@@ -4,11 +4,13 @@ import { checkShopFeatureGate } from "@/lib/extension-route-guard";
 import { resolveHistoryScope, type HistoryPrincipal } from "@/lib/vehicle-history/service";
 import { readDviVisits } from "@/lib/data/repositories/auto-dvi";
 import { VisitError, type HistoryEntry } from "./visit-model";
+import { VISIT_DVI_RELEASE_ENABLED } from "./visit-release";
 
 export const visitHeaders={"Cache-Control":"private, no-store"};
 export async function visitGate(req:NextRequest,write=false){
   const session=await getSession();
   if(!session)throw new VisitError("Unauthorized",401);
+  if(!VISIT_DVI_RELEASE_ENABLED)throw new VisitError("Visit-based DVI is not released",403);
   if(write){
     const origin=req.headers.get("origin");
     let originHost="";try{originHost=origin?new URL(origin).host:"";}catch{}

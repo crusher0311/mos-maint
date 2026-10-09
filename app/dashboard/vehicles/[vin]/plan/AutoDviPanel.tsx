@@ -11,6 +11,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import VisitInspectionPanel from "@/components/auto-dvi/VisitInspectionPanel";
+import { VISIT_DVI_RELEASE_ENABLED } from "@/lib/auto-dvi/visit-release";
 import {
   ClipboardCheck,
   Loader2,
@@ -66,6 +67,7 @@ const RATING_STYLES: Record<Rating, { on: string; off: string; label: string }> 
 };
 
 export default function AutoDviPanel(props:{vin:string;mileage:number|null;isProtractor:boolean}){
+  if(!VISIT_DVI_RELEASE_ENABLED)return <ExistingAutoDviPanel {...props}/>;
   return <div className="space-y-4">
     <VisitInspectionPanel vin={props.vin} mileage={props.mileage} />
     <div className="rounded-lg border border-slate-200 p-3">
