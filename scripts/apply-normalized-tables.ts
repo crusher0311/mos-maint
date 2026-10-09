@@ -1,6 +1,19 @@
 import { getClient } from "../lib/db/drizzle";
 
 const alterSql = `
+-- Enterprise vehicle history is operator-enabled separately from DB cutovers.
+CREATE TABLE IF NOT EXISTS enterprise_vehicle_history_policies (
+  enterprise_id text PRIMARY KEY,
+  enabled boolean NOT NULL DEFAULT false,
+  stage text NOT NULL DEFAULT 'performed' CHECK (stage IN ('performed', 'deferred', 'reconcile')),
+  shop_ids jsonb NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(shop_ids) = 'array'),
+  revision integer NOT NULL DEFAULT 1 CHECK (revision > 0),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS nwo_history_shop_vin_closed_idx
+  ON normalized_work_orders (shop_id, (vehicle->>'vin'), closed_date DESC, id);
+CREATE INDEX IF NOT EXISTS nsj_history_shop_work_order_idx
+  ON normalized_service_jobs (shop_id, work_order_id, id);
 DO $$
 BEGIN
   -- Add source_system column to all normalized tables if missing

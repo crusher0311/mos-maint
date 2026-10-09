@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import VehicleHistorySharingSettings from "@/components/vehicle-history-sharing-settings";
 import { Settings, Loader2, Check, Globe, List, Eye, Car, Tag, Building2 } from "lucide-react";
 
 const WORKFLOW_STAGES = [
@@ -638,6 +639,7 @@ export default function PreferencesPage() {
             These settings apply to your shop and affect what appears on the dashboard and vehicle pages.
           </p>
         </div>
+        <VehicleHistorySharingSettings />
       </div>
     </div>
   );

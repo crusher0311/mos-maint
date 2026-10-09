@@ -50,6 +50,8 @@ export type PolicyTier =
 // Dynamic tekmetric-migration run IDs ([id]) are listed explicitly so the
 // lint script can match any numeric segment in their place.
 const POLICY_MAP: Record<string, PolicyTier[]> = {
+  "/api/extension/vehicle-history|GET": ["read"],
+  "/api/extension/vehicle-history|OPTIONS": ["preflight"],
   // ── action-grant ─────────────────────────────────────────────────────────
   // POST: write + provider_action — issues a short-lived signed grant token
   // authorising a specific provider action for an authenticated shop session.

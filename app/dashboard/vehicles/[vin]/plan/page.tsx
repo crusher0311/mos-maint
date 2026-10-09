@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import EnterpriseVehicleHistory from "@/components/enterprise-vehicle-history";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import OilDutyToggle from "@/components/plan/OilDutyToggle";
@@ -4113,6 +4114,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
         })()}
 
         {/* Debug */}
+        <EnterpriseVehicleHistory key={`${shopId}:${vin}`} vin={vin} currentShopId={Number(shopId)} />
         <details className="mt-6">
           <summary className="cursor-pointer">Debug (inputs)</summary>
           <pre className="mt-2 text-xs bg-gray-50 p-3 rounded overflow-auto max-h-72">

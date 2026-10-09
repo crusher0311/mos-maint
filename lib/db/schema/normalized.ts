@@ -456,6 +456,8 @@ export const normalizedWorkOrders = pgTable("normalized_work_orders", {
   sourceSystemIdx: index("nwo_source_system_idx").on(sql`(provenance->>'sourceSystem')`),
   createdAtIdx: index("nwo_created_at_idx").on(table.createdAt),
   updatedAtIdx: index("nwo_updated_at_idx").on(table.updatedAt),
+  historyShopVinClosedIdx: index("nwo_history_shop_vin_closed_idx")
+    .on(table.shopId, sql`(vehicle->>'vin')`, table.closedDate.desc(), table.id),
   // Task #552 — GIN index supporting the W3a PG-canonical change-detection
   // `provenance->'sourceIds' @> [...]` containment lookup (shopId-scoped).
   provenanceSourceIdsIdx: index("nwo_provenance_source_ids_idx").using("gin", sql`(provenance -> 'sourceIds') jsonb_path_ops`),
@@ -536,6 +538,7 @@ export const normalizedServiceJobs = pgTable("normalized_service_jobs", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (table) => ({
   workOrderIdIdx: index("nsj_work_order_id_idx").on(table.workOrderId),
+  historyShopWorkOrderIdx: index("nsj_history_shop_work_order_idx").on(table.shopId, table.workOrderId, table.id),
   workOrderSeqIdx: index("nsj_work_order_seq_idx").on(table.workOrderId, table.sequence),
   shopIdIdx: index("nsj_shop_id_idx").on(table.shopId),
   enterpriseIdIdx: index("nsj_enterprise_id_idx").on(table.enterpriseId),

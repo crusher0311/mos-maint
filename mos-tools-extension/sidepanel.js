@@ -79,6 +79,115 @@ let currentUserCanWrite = false;
 let currentContext = null;
 let currentTab = 'plan';
 
+// Vehicle evidence is deliberately not part of planCache or chrome.storage.
+let vehicleHistorySequence = 0;
+let vehicleHistoryTimer = null;
+let vehicleHistoryActiveKey = null;
+
+function vehicleHistoryContextKey(context) {
+  return JSON.stringify([context?.provider || '', context?.shopId ?? '', String(context?.vin || '').trim().toUpperCase(), context?.roId ?? '']);
+}
+
+function vehicleHistoryEligible() {
+  return isAuthenticated && currentTab === 'plan' && document.visibilityState !== 'hidden' &&
+    !document.getElementById('main-state')?.classList.contains('hidden') &&
+    currentContext?.provider && currentContext?.shopId != null && currentContext?.vin;
+}
+
+function clearVehicleHistory() {
+  vehicleHistorySequence++;
+  vehicleHistoryActiveKey = null;
+  const body = document.getElementById('vehicle-history-body');
+  if (body) body.replaceChildren();
+  document.getElementById('enterprise-vehicle-history')?.classList.add('hidden');
+}
+
+function historyDate(value, time = false) {
+  const date = value ? new Date(value) : null;
+  return date && Number.isFinite(date.getTime())
+    ? (time ? date.toLocaleString() : date.toLocaleDateString()) : 'Date unavailable';
+}
+
+function renderVehicleHistory(payload, error) {
+  const section = document.getElementById('enterprise-vehicle-history');
+  const body = document.getElementById('vehicle-history-body');
+  if (!section || !body) return;
+  section.classList.remove('hidden');
+  const escape = value => escEstimate(String(value ?? ''));
+  const readOnly = '<p style="padding:8px;border:1px solid #dbeafe;border-radius:6px;background:#eff6ff;color:#1e40af;font-size:11px;line-height:1.5;">Read-only evidence. Other locations’ jobs cannot be added, edited, or resolved here. Existing RO actions are unchanged.</p>';
+  if (error) {
+    body.innerHTML = `${readOnly}<p role="alert" style="padding:10px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;font-size:12px;">Vehicle history unavailable. Coverage could not be verified; this does not mean no work exists. Refresh history to retry.</p>`;
+    return;
+  }
+  if (!payload) {
+    body.innerHTML = `${readOnly}<div role="status"><p style="font-size:12px;color:#6b7280;">Checking evidence and location coverage…</p><div style="height:32px;background:#f3f4f6;border-radius:6px;margin:8px 0;"></div><div style="height:48px;background:#f3f4f6;border-radius:6px;"></div></div>`;
+    return;
+  }
+  if (!payload.enabled) {
+    body.innerHTML = `${readOnly}<p style="font-size:12px;padding:10px;border:1px solid #e5e7eb;border-radius:6px;"><strong>Vehicle history sharing is off</strong><br>${escape(payload.reason || 'An authorized owner or admin must explicitly enable sharing.')}</p>`;
+    return;
+  }
+  const partial = !payload.locations.length || payload.locations.some(location => location.state !== 'available' || location.hasMore);
+  const coverage = payload.locations.map(location => `<li style="padding:8px 0;border-bottom:1px solid #e5e7eb;"><strong>${escape(location.name)}</strong> · ${escape(location.state)}${location.hasMore ? ' · More records not shown' : ''}<br><span style="color:#6b7280;">${location.reason ? `${escape(location.reason)} · ` : ''}${location.fetchedAt ? `Fetched ${escape(historyDate(location.fetchedAt, true))}` : 'No fetch verified'}</span></li>`).join('');
+  const events = payload.events.map(event => {
+    const label = event.status === 'completed' ? 'Performed' : event.status === 'declined' ? 'Deferred / declined' : 'Status unknown';
+    const resolution = event.resolution;
+    const resolutionHtml = resolution ? `<div style="margin-top:6px;padding:8px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;"><strong>${resolution.state === 'completed_elsewhere' ? 'Completed elsewhere' : resolution.state === 'partial' ? 'Partially completed elsewhere' : 'Outstanding'}</strong>${resolution.completedBy.length ? `<br>Completion evidence: ${escape(resolution.completedBy.join(', '))}` : ''}${resolution.remainingComponents.length ? `<br>Remaining: ${escape(resolution.remainingComponents.join(', '))}` : ''}<br><span style="color:#6b7280;">Evidence only. The original job and this RO are unchanged.</span></div>` : '';
+    return `<li style="padding:10px 0;border-bottom:1px solid #e5e7eb;overflow-wrap:anywhere;"><div style="display:flex;justify-content:space-between;gap:8px;"><strong>${escape(event.title)}</strong><span style="flex-shrink:0;font-size:10px;color:${event.status === 'completed' ? '#166534' : '#92400e'};">${label}</span></div><p style="margin:5px 0;color:#4b5563;">${escape(event.location)} · ${escape(event.provider)} · ${escape(historyDate(event.date))}<br>${event.mileage == null ? 'Mileage unavailable' : `${escape(event.mileage.toLocaleString())} ${event.mileageUnit === 'kilometers' ? 'km' : event.mileageUnit === 'miles' ? 'mi' : '(unit unknown)'}`}</p><p style="font-size:10px;color:#6b7280;">Source: ${escape(event.origin)} · ${event.workOrderId ? `RO ${escape(event.workOrderId)}` : 'RO unavailable'} · Job ${escape(event.jobId)} · Read-only</p>${resolutionHtml}</li>`;
+  }).join('');
+  body.innerHTML = `${readOnly}<div style="font-size:11px;line-height:1.5;margin-top:10px;"><strong>${partial ? 'Partial location coverage' : 'Location coverage'}</strong><p style="color:#6b7280;">Checked ${escape(historyDate(payload.checkedAt, true))} · Policy ${escape(payload.policyRevision)}</p>${payload.reason ? `<p>${escape(payload.reason)}</p>` : ''}<ul style="list-style:none;padding:0;">${coverage || '<li>No locations were verified. This is not evidence of an empty history.</li>'}</ul><h4 style="margin-top:12px;">Performed and deferred evidence</h4><ul style="list-style:none;padding:0;">${events || `<li style="padding:10px;background:#f9fafb;border-radius:6px;">${partial ? 'No evidence returned from the verified coverage. Other work may exist.' : 'No records returned from the locations shown. This is not a complete lifetime history.'}</li>`}</ul></div>`;
+}
+
+async function fetchVehicleHistory() {
+  if (!vehicleHistoryEligible()) { clearVehicleHistory(); return; }
+  const context = { ...currentContext };
+  const key = vehicleHistoryContextKey(context);
+  const sequence = ++vehicleHistorySequence;
+  vehicleHistoryActiveKey = key;
+  renderVehicleHistory(null); // Remove old evidence before every read, even cached-plan views.
+  const vin = String(context.vin).trim().toUpperCase();
+  const params = new URLSearchParams({ vin, shopId: String(context.shopId), provider: context.provider });
+  try {
+    const payload = await sendMessage({
+      action: 'MOS_API_REQUEST',
+      endpoint: `/api/extension/vehicle-history?${params}`,
+      context,
+      options: { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } },
+    }, 20000);
+    if (sequence !== vehicleHistorySequence || key !== vehicleHistoryContextKey(currentContext) || !vehicleHistoryEligible()) return;
+    if (payload?.error || payload?.success === false || typeof payload?.enabled !== 'boolean' ||
+        !Array.isArray(payload.locations) || !Array.isArray(payload.events) ||
+        (payload.vin !== vin && !(payload.enabled === false && payload.vin === null)) ||
+        !Number.isFinite(payload.currentShopId) || payload.events.some(event => event.readOnly !== true)) {
+      throw new Error('Unavailable or mismatched vehicle evidence');
+    }
+    // Extension context.shopId is the SMS ID; currentShopId in the response is
+    // the resolved MOS shop ID. The worker/API must bind their authorized mapping.
+    renderVehicleHistory(payload);
+  } catch {
+    if (sequence === vehicleHistorySequence && key === vehicleHistoryContextKey(currentContext) && vehicleHistoryEligible()) renderVehicleHistory(null, true);
+  }
+}
+
+function syncVehicleHistoryRefresh() {
+  if (vehicleHistoryTimer) clearInterval(vehicleHistoryTimer);
+  vehicleHistoryTimer = null;
+  if (!vehicleHistoryEligible()) { clearVehicleHistory(); return; }
+  vehicleHistoryTimer = setInterval(() => { void fetchVehicleHistory(); }, 30000);
+}
+
+window.addEventListener('focus', () => {
+  if (vehicleHistoryEligible()) void fetchVehicleHistory();
+  syncVehicleHistoryRefresh();
+});
+document.addEventListener('visibilitychange', () => {
+  if (vehicleHistoryEligible()) void fetchVehicleHistory();
+  syncVehicleHistoryRefresh();
+});
+document.addEventListener('click', event => {
+  if (event.target.closest?.('#vehicle-history-refresh')) void fetchVehicleHistory();
+});
+
 // Estimate-audit requests can outlive both a rerun and the page context that
 // started them.  Keep a monotonic generation alongside the request's context
 // identity so a late response can never repaint a newer audit slot (the slot
@@ -809,6 +918,11 @@ async function init() {
 }
 
 function applyAuthenticatedState(authStatus) {
+  // A different principal/assurance may have different sharing permissions,
+  // even when the SMS VIN/shop looks unchanged. Never carry evidence across auth.
+  clearVehicleHistory();
+  if (vehicleHistoryTimer) clearInterval(vehicleHistoryTimer);
+  vehicleHistoryTimer = null;
   isAuthenticated = true;
   updateLaborRateSession(authStatus);
   mosShops = authStatus.shops || [];
@@ -821,6 +935,8 @@ function applyAuthenticatedState(authStatus) {
   }
   applySessionTier(authStatus.sessionTier);
   showMainState();
+  if (vehicleHistoryEligible()) void fetchVehicleHistory();
+  syncVehicleHistoryRefresh();
 }
 
 function showBootstrapOutcome(outcome) {
@@ -1129,12 +1245,18 @@ function formatMileageInput(value) {
 
 // ==================== STATE MANAGEMENT ====================
 function showLoadingState() {
+  clearVehicleHistory();
+  if (vehicleHistoryTimer) clearInterval(vehicleHistoryTimer);
+  vehicleHistoryTimer = null;
   elements.loadingState.classList.remove('hidden');
   elements.loginState.classList.add('hidden');
   elements.mainState.classList.add('hidden');
 }
 
 function showLoginState() {
+  clearVehicleHistory();
+  if (vehicleHistoryTimer) clearInterval(vehicleHistoryTimer);
+  vehicleHistoryTimer = null;
   elements.loadingState.classList.add('hidden');
   elements.loginState.classList.remove('hidden');
   elements.mainState.classList.add('hidden');
@@ -1376,6 +1498,7 @@ function switchJobsSubTab(subtab) {
 }
 
 function switchTab(tab) {
+  clearVehicleHistory();
   if (tab === 'lookup') { tab = 'jobs'; switchJobsSubTab('lookup'); }
   else if (tab === 'canned') { tab = 'jobs'; switchJobsSubTab('canned'); }
 
@@ -1401,6 +1524,7 @@ function switchTab(tab) {
   }
 
   currentTab = tab;
+  syncVehicleHistoryRefresh();
   
   elements.tabBtns.forEach(btn => {
     btn.classList.toggle('active', btn.dataset.tab === tab);
@@ -1548,6 +1672,10 @@ function updateContext(context) {
   }
   
   const prevContext = currentContext;
+  const historyContextChanged =
+    vehicleHistoryContextKey(prevContext) !== vehicleHistoryContextKey(context);
+  // Clear before publishing the next context or starting any other render.
+  if (historyContextChanged) clearVehicleHistory();
   const estimateAuditContextChanged =
     estimateAuditContextKey(prevContext) !== estimateAuditContextKey(context);
   const laborRateContextChanged =
@@ -1580,7 +1708,7 @@ function updateContext(context) {
     if (shareBtn) shareBtn.classList.add('hidden');
   }
   
-  if (prevContext && context && prevContext.roId === context.roId && prevContext.shopId === context.shopId) {
+  if (prevContext && context && prevContext.provider === context.provider && prevContext.roId === context.roId && prevContext.shopId === context.shopId) {
     if (prevContext.vehicle && !context.vehicle) currentContext.vehicle = prevContext.vehicle;
     if (prevContext.vehicleDisplay && !context.vehicleDisplay) currentContext.vehicleDisplay = prevContext.vehicleDisplay;
     if (prevContext.vin && !context.vin) currentContext.vin = prevContext.vin;
@@ -1673,6 +1801,10 @@ function updateContext(context) {
     document.getElementById('undo-bar')?.classList.add('hidden');
   }
   syncEstimateAuditStatusRefresh();
+  if (historyContextChanged || vehicleHistoryContextKey(prevContext) !== vehicleHistoryContextKey(currentContext)) {
+    if (vehicleHistoryEligible()) void fetchVehicleHistory();
+  }
+  syncVehicleHistoryRefresh();
 }
 
 // Features can fail to load transiently (a brief DB / shop-resolution blip on
@@ -2008,6 +2140,9 @@ async function handleLogin(e) {
 }
 
 async function handleLogout() {
+  clearVehicleHistory();
+  if (vehicleHistoryTimer) clearInterval(vehicleHistoryTimer);
+  vehicleHistoryTimer = null;
   // Invalidate before awaiting the worker so an in-flight Rates request cannot
   // paint or merge into the old session while logout is still being handled.
   invalidateLaborRateState('session ended');
@@ -2028,6 +2163,9 @@ async function handleLogout() {
 
 // ==================== PLAN ====================
 async function loadPlan(forceRefresh = false) {
+  // Independent read: never return history from a locally cached plan.
+  void fetchVehicleHistory();
+  syncVehicleHistoryRefresh();
   if (!currentContext || !currentContext.roId) {
     elements.planLoading.classList.add('hidden');
     elements.planEmpty.classList.remove('hidden');
@@ -2051,7 +2189,7 @@ async function loadPlan(forceRefresh = false) {
   if (!forceRefresh && cacheKey) {
     const entry = planCache.get(cacheKey);
     if (entry) {
-      renderPlan(entry.data, reqRoId, reqShopId);
+      renderPlan(entry.data, reqRoId, reqShopId, reqProvider, reqVin);
       servedFromCache = true;
       // Fresh enough → skip the network entirely (truly instant revisit).
       if (Date.now() - entry.ts < PLAN_CACHE_TTL_MS) return;
@@ -2099,7 +2237,7 @@ async function loadPlan(forceRefresh = false) {
     if (result.error) throw new Error(result.error);
 
     setPlanCache(cacheKey, result);
-    renderPlan(result, reqRoId, reqShopId);
+    renderPlan(result, reqRoId, reqShopId, reqProvider, reqVin);
   } catch (err) {
     // The user already moved on to another RO/shop — drop this stale failure.
     if (currentContext?.roId !== reqRoId || currentContext?.shopId !== reqShopId) return;
@@ -2145,7 +2283,7 @@ function renderMileageWarning(data) {
   el.classList.remove('hidden');
 }
 
-function renderPlan(data, reqRoId, reqShopId) {
+function renderPlan(data, reqRoId, reqShopId, reqProvider, reqVin) {
   // Stale-response guard: if the user has switched to a different RO (or shop —
   // roIds can collide across shops/providers) while this response or background
   // refresh was in flight, drop it so we don't paint the wrong vehicle or
@@ -2154,6 +2292,8 @@ function renderPlan(data, reqRoId, reqShopId) {
       (currentContext.roId !== reqRoId || currentContext.shopId !== reqShopId)) {
     return;
   }
+  if (reqProvider != null && (currentContext?.provider || '') !== reqProvider) return;
+  if (reqVin && String(currentContext?.vin || '').toUpperCase() !== reqVin.toUpperCase()) return;
   elements.planLoading.classList.add('hidden');
   
   // Update vehicle/mileage display from API response (more reliable than page scraping)
@@ -2176,9 +2316,14 @@ function renderPlan(data, reqRoId, reqShopId) {
     } else if (v.vin) {
       elements.vehicleDisplay.textContent = `VIN: ${v.vin.slice(-6)}`;
     }
-    if (v.vin && currentContext) {
+    if (v.vin && currentContext && (!currentContext.vin || currentContext.vin.toUpperCase() === v.vin.toUpperCase())) {
       currentContext.vin = v.vin.toUpperCase();
       console.log('[MOS] Updated VIN from API:', currentContext.vin);
+      if (vehicleHistoryContextKey(currentContext) !== vehicleHistoryActiveKey) {
+        clearVehicleHistory();
+        void fetchVehicleHistory();
+        syncVehicleHistoryRefresh();
+      }
     }
   }
   console.log('[MOS] Plan response mileage:', data.mileage, 'estimated:', data.mileageEstimated, 'fromCache:', data.fromDashboardCache);

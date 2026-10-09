@@ -7,6 +7,7 @@
     "npm": ">=10.0.0 <11.0.0"
   },
   "scripts": {
+    "test:enterprise-vehicle-history": "NODE_OPTIONS='--require ./tests/helpers/deny-network-egress.cjs --require ./scripts/_stubs/server-only-stub.cjs' node --import tsx tests/enterprise-vehicle-history.smoke.ts && node components/vehicle-history-ui.regression.cjs",
     "test:shop-dispatch": "tsx --test tests/shop-dispatch.test.ts tests/shop-dispatch-http.test.ts tests/shop-workflow-feature.test.ts",
     "test:protractor-callback-normalization-timing": "NODE_OPTIONS='--require ./tests/helpers/deny-network-egress.cjs' PROTRACTOR_OFFLINE_ALLOW_LOOPBACK=true tsx tests/protractor-callback-normalization-timing.smoke.ts",
     "test:protractor-callback-normalization-runtime": "NODE_OPTIONS='--require ./tests/helpers/deny-network-egress.cjs' PROTRACTOR_OFFLINE_ALLOW_LOOPBACK=true tsx tests/protractor-callback-normalization-runtime.smoke.ts",
