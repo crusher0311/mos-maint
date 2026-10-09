@@ -21,6 +21,20 @@ Historical service-package CSV evidence is authorized for a customer-facing pres
 
 **How to apply:** Use employee labels and reviewed aggregate service evidence, not customer identities, VINs, or real RO identifiers. Clearly distinguish historical evidence from simulated assignments and timing. Separate assigned/invoiced work from manager-confirmed independent capability. Verify the meaning of “Technician Hours” before treating it as clocked time: sales exports can closely mirror billed hours. Confirm name aliases and classify specific service packages rather than relying solely on broad categories.
 
+Nonempty normalized technician fields do not establish usable assignment
+coverage. Check nested technician identities in archived provider payloads
+before requesting another import or a CSV.
+
+**Why:** Read-only inspection of Burnett's imported history found
+`[object Object]` placeholders where the original API supplied structured
+technician IDs and names on service-package lines. Sampled packages also
+included multiple technicians; package-level names alone would lose evidence.
+
+**How to apply:** Reject object-string placeholders, retain provider employee
+identity and line-level attribution, and distinguish sampled raw-data coverage
+from fleet-wide validation. Repairing stored data needs separate authorization;
+history is still evidence for manager review, not proof of independent skill.
+
 Brand customization should support enterprise defaults and location-level overrides.
 
 **Why:** The user explicitly requested that locations and/or enterprises can easily make the UI match their own brand.

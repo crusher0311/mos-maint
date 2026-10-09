@@ -83,8 +83,7 @@
 - [Tekmetric posted ROs reject job adds](tekmetric-posted-ro-rejects-adds.md) — fetch-ro 200 + post-job 400 = posted (closed) RO, not a payload bug…
 - [Tekmetric money field variants](tekmetric-money-field-variants.md) — estimate endpoint uses partsPrice/laborPrice (not *Total/*Amount)…
 - [Declined-add thin lines](declined-add-thin-lines.md) — pre-May-2026 job_index rows have right totals but $0/no-labor lines…
-- [Protractor callback processing wedge](protractor-callback-processing-wedge.md) — webhooks can arrive while processing silently wedges (attempts=0, zero logs)…
-- [Protractor callback amplification](protractor-callback-amplification.md) — callback floods fan out into detail reads; use a shared-client kill switch, coalescing, fleet budget, and circuit breaker.
+- [Callback processing](protractor-callback-processing-wedge.md) — silent stalls; [flood controls](protractor-callback-amplification.md) cover coalescing, fleet budgets and circuit breakers.
 - [Callback history evidence](protractor-callback-history-evidence.md) — history evidence is separate from queue completion; indexing failures keep existing retry semantics and legacy rows stay unknown.
 - [DVI share-link pipeline](dvi-share-link-pipeline.md) — all OFF behind DVI_LINK_INGEST_ENABLED; links expire at provider; findings are advisory-only (never history anchors)…
 - [Repo migrations must keep test seams](repo-migration-test-seams.md) — moving db access into repositories bypasses smoke-test fake-db seams → prebuild fails → prod deploys silently blocked…
@@ -142,8 +141,7 @@
 - [AutoFlow notification recovery](autoflow-notification-retry-semantics.md) — accept bounded duplicate refreshes after ambiguous completion; never repair a missing marker by replaying upstream work.
 - [Settings save acknowledgment](settings-cas-acknowledgment.md) — committed revisioned saves return their new revision even when a downstream dashboard notification fails.
 - [Labor repricing consent](labor-repricing-consent.md) — category consent never authorizes unrelated labor; default-only writes need a verified provider non-cascade contract.
-- [Protractor contact rate writes](protractor-contact-rate-write.md) — Contact POST returned 200 but numeric and existing-code LaborRateCode changes did not persist; require read-back verification.
-- [Protractor labor writes](protractor-labor-write-behavior.md) — explicit creation prices and independent hours persist; rate-code-only lines price at zero, existing price edits can silently fail.
+- [Protractor labor writes](protractor-labor-write-behavior.md) — read back prices; [contact rate writes](protractor-contact-rate-write.md) can return 200 without persisting.
 - [Protractor onboarding safety](protractor-onboarding-safety.md) — foreground validation does not authorize history imports; preserve reconnect state and recover cross-store writer guards conservatively.
 - [Chrome Web Store submission checks](cws-submission-checks.md) — draft uploadState can become NOT_FOUND after a successful upload; distinguish upload, submission, and public availability.
 - [Shop-Ware shared tenant evidence](shopware-shared-tenant-evidence.md) — duplicate slugs may be sibling locations; sandbox credentials cannot establish production ownership.
@@ -151,8 +149,7 @@
 - [Merge marker verification](merge-marker-verifier.md) — decorative equals-sign comment dividers can falsely block conflict completion.
 - [Offline release checks](offline-release-checks.md) — success banners can precede hanging test processes; busy workspaces can change which short-deadline stage expires.
 - [Recovery accounting gap](recovery-accounting-gap.md) — financial commits and outcome bookkeeping are separate; current matches do not prove when an unrecorded correction occurred.
-- [JWT eligible-first recovery](jwt-eligible-recovery.md) — defer closed shops without blocking eligible ones; handoffs preserve budgets, holds, and per-window checkpoints.
-- [Scoped Protractor history](protractor-scoped-history.md) — shop 538 needs 14 months; concurrent JWT recovery shares fleet pacing but retains separate budgets.
+- [JWT recovery](jwt-eligible-recovery.md) — eligible-first, budget-preserving handoffs; [scoped history](protractor-scoped-history.md) covers concurrent shop imports and separate budgets.
 - [Shop workflow prototype](shop-workflow-prototype-scope.md) — vehicle visits contain multi-technician jobs; UI evaluation does not authorize production scheduling or live integrations.
 - [Tire DVI demo scope](tire-dvi-demo-scope.md) — fictional manual-measurement presentation; green documentation is required; no production rollout or video-task dependency.
 - [Workflow shared branding](workflow-shared-branding.md) — inherited display logos stay separate from stricter manual-upload drafts; keep deliberate overrides intact.
