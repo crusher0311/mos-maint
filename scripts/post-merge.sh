@@ -3,6 +3,15 @@ set -e
 
 npm install --legacy-peer-deps
 
+# These standalone previews are not root npm workspaces. Root installation
+# alone leaves their managed workflows without Vite after a task merge.
+for artifact in artifacts/detect-dog-workflow artifacts/enterprise-tire-dvi; do
+  if [ -f "$artifact/package-lock.json" ]; then
+    echo "[artifact-setup] installing locked dependencies for $artifact"
+    npm ci --prefix "$artifact" --no-audit --no-fund
+  fi
+done
+
 # Release-gating lint checks (Task: catch prebuild gate failures at merge
 # time instead of at Render deploy). These are the fast lints from the
 # "prebuild" chain that have twice killed prod builds after a merge

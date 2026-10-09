@@ -3,6 +3,18 @@ name: Offline release checks
 description: Interpreting elapsed-time failures and non-exiting smoke tests during release verification.
 ---
 
+Managed standalone artifact previews can fail after an otherwise successful
+root post-merge setup because their dependency graphs are independent. Verify
+each artifact's installation and build separately from the main application.
+
+**Why:** Root setup reported success while both managed previews lacked Vite.
+A working development preview also did not establish that its standalone
+production bundle could complete.
+
+**How to apply:** Keep setup scoped to locked artifact dependencies, wait for
+Next cache cleanup before typechecking, and report an unfinished artifact build
+separately rather than conflating it with the production application's tests.
+
 A smoke test's success message is not proof that its process exits cleanly. Keep an outer timeout and verify the process exit, especially for tests importing provider clients with timers.
 
 **Why:** A JWT admission test finished its assertions but remained alive until the release command timed out, preventing later checks from running.
