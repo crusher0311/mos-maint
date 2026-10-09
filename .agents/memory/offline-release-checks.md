@@ -59,3 +59,15 @@ workspace. Clearing loader configuration caused a false dependency failure.
 constructing isolated test environments. Keep external network denial and
 credentials excluded. Do not install packages or weaken a test before comparing
 native module loading in the ordinary and sanitized processes.
+
+Temporary filesystem quotas can stop a build without a useful compiler log,
+even when `df` reports ample free disk.
+
+**Why:** A subsequent tooling write surfaced EDQUOT (`-122`) while repeated
+Webpack builds had retained both previous cache packs and unfinished replacement
+packs. The build log stopped before either a compiler error or an exit marker.
+
+**How to apply:** Check quota errors and the isolated checkout's generated cache
+size before repeating compilation. Remove only disposable generated caches,
+preserving source, worktrees and logs. Prefer a managed console workflow for
+long-running verification and record its explicit exit result.

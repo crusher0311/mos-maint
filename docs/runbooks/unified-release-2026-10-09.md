@@ -3,7 +3,7 @@
 ## Source and exclusions
 
 Candidate branch: `release/catchup-2026-10-09`.
-**Status: blocked; do not push to QA or production yet.**
+**Status: route-export repair complete; QA deployment and live verification remain separate gates.**
 It starts from the complete workspace, preserves both GitHub branch ancestries,
 and includes the technician fix and the merged QR/AppFueled work.
 Production's remote-only commits were verified patch-equivalent before ancestry
@@ -32,14 +32,18 @@ Application builds no longer invoke the extension publishing script.
 
 ## Verification
 
-- All prebuild regression commands passed in credential-free, network-denied
-  processes. The smoke suite resumed at the print-queue test after correcting
-  the local native-loader environment; earlier successful suites were unchanged.
+- All prebuild regression commands passed after the route repair in
+  credential-free, network-denied processes.
 - Initial TypeScript checking passed before the production build regenerated
   all route declarations. The required **post-build** typecheck then failed
   with 39 invalid API-route exports (test helpers such as `__deps`).
-  These must move to companion modules and their tests must be updated without
-  changing handler behavior. Do not suppress the generated checks.
+  These have now moved into companion implementations, byte-identical to the
+  original handlers; thin entrypoints preserve every HTTP method and literal
+  configuration value. Tests use the companion modules. Generated checks remain
+  enabled for the explicit verification step.
+- Route-adapter regressions prove that auth inventory follows actual handlers
+  and rejects unguarded, missing and malformed delegates. Existing extension
+  policies and direct-database access boundaries are unchanged.
 - 32 additional targeted tests passed, including DVI release holds, technician
   mapping, branding, workflow roles, QR targets and the AppFueled VHI webhook.
 - Enterprise-history service and UI regressions passed.
@@ -47,12 +51,15 @@ Application builds no longer invoke the extension publishing script.
   passed. Existing stale database-allowlist warnings are not new violations.
 - Shop Workflow rendered in an offline fixture. Authenticated live QA flows
   have not been checked for this candidate.
-- The optimized production bundle completed successfully. This is not sufficient
-  for release: Next is configured to skip build-time TypeScript errors, and the
-  explicit post-build typecheck above remains a blocking gate.
-- No QA/main push, candidate tag, production promotion, or local-main
-  fast-forward was performed. Finish the route-export repair and revalidate
-  before freezing the candidate and proceeding below.
+- The optimized production bundle and explicit post-build typecheck are verified
+  separately: Next is configured to skip build-time TypeScript errors, so both
+  must pass. A managed, credential-free console workflow handles long builds.
+  Disposable Webpack caches may need clearing when temporary-storage quota
+  errors occur despite apparent free disk.
+- No remote QA/main push or production promotion is part of local verification.
+  After successful checks, freeze the release candidate and fast-forward local
+  main. QA and production must receive the same frozen commit through the
+  user-initiated sequence below.
 
 ## Promotion procedure — user-initiated pushes only
 
