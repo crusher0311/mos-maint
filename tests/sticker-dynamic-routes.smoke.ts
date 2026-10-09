@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { NextRequest } from "next/server";
+import { middleware } from "../src/middleware";
 
 // Load actual route handlers with strictly in-memory dependencies.
 const Module = require("node:module");
@@ -8,6 +9,7 @@ process.env.NEXT_PUBLIC_BASE_URL = "https://stickers.example.test";
 process.env.REPORT_SHARE_SECRET = "offline-route-test-only";
 process.env.HOVERCODE_API_TOKEN = "offline";
 process.env.HOVERCODE_WORKSPACE_ID = "offline";
+process.env.DEV_AUTO_LOGIN = "false";
 const vin = "1HGCM82633A004352";
 const shop: any = { shopId: 42, name: "Fixture", websiteUrl: "https://site.example.test", stickerConfig: {
   appointmentUrl: "https://booking.example.test",
@@ -95,11 +97,16 @@ async function main() {
   assert.equal(references.length, 2);
   assert.notEqual(createdTargets[0], createdTargets[1]);
   assert.equal(shop.stickerConfig.hovercodeQRId, "old-direct-code");
-  const scan = await redirect.GET(new NextRequest(createdTargets[0]), params);
+  const scanRequest = new NextRequest(createdTargets[0]);
+  assert.equal((await middleware(scanRequest)).headers.get("x-middleware-next"), "1");
+  const scan = await redirect.GET(scanRequest, params);
   assert.equal(scan.status, 302);
   assert.match(scan.headers.get("location")!, new RegExp(`/report/${vin}\\?token=`));
   assert.equal(scan.headers.get("cache-control"), "private, no-store");
   assert.equal(scans.at(-1).destinationKind, "vhi");
+  const genericRequest = new NextRequest("https://stickers.example.test/api/sticker/redirect/42");
+  assert.equal((await middleware(genericRequest)).headers.get("x-middleware-next"), "1");
+  assert.equal((await redirect.GET(genericRequest, params)).headers.get("location"), "https://booking.example.test/");
   entitled = false;
   const denied = await redirect.GET(new NextRequest(createdTargets[0]), params);
   assert.equal(denied.headers.get("location"), "https://booking.example.test/");
