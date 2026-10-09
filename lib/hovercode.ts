@@ -1,4 +1,5 @@
 import { trackApiRequest } from "@/lib/api-usage-tracker";
+import { getStickerRedirectUrl } from "@/lib/sticker-utils";
 
 const HOVERCODE_API_BASE = "https://hovercode.com/api/v2";
 
@@ -176,8 +177,7 @@ export async function createHovercodeQR(options: CreateQRCodeOptions): Promise<{
     return { success: false, error: "HoverCode API not configured" };
   }
 
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://mos.tools";
-  const destinationUrl = `${baseUrl}/sticker/redirect/${options.shopId}`;
+  const destinationUrl = getStickerRedirectUrl(Number(options.shopId));
 
   const startTime = Date.now();
   
@@ -317,6 +317,25 @@ export async function updateHovercodeDestination(
   newDestination: string,
   shopId?: number
 ): Promise<{ success: boolean; error?: string }> {
+  // Keep old direct-booking HoverCodes editable, but never turn a first-party
+  // redirect back into a static target (including codes created at onboarding).
+  const apiToken = process.env.HOVERCODE_API_TOKEN;
+  if (!apiToken) return { success: false, error: "HoverCode API not configured" };
+  try {
+    const response = await fetch(`${HOVERCODE_API_BASE}/hovercode/${hovercodeId}/`, {
+      headers: { Authorization: `Token ${apiToken}` },
+    });
+    if (!response.ok) return { success: false, error: "Cannot verify existing QR destination" };
+    const record = await response.json();
+    const current = new URL(record.qr_data);
+    const canonical = new URL(getStickerRedirectUrl(Number(shopId)));
+    if (current.origin === canonical.origin &&
+        [canonical.pathname, `/sticker/redirect/${shopId}`].includes(current.pathname)) {
+      return { success: true };
+    }
+  } catch {
+    return { success: false, error: "Cannot verify existing QR destination" };
+  }
   return patchHovercode(hovercodeId, { qr_data: newDestination }, shopId, "update-destination");
 }
 

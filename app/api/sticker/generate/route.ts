@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
+import { createStickerQrTarget } from "@/lib/sticker-qr-target";
+import { retainLegacyStickerHovercode } from "@/lib/sticker-legacy-hovercode";
 import { getStickerRedirectUrl } from "@/lib/sticker-utils";
 import { scaleLayoutToSize, getStickerSize } from "@/lib/sticker-designer-types";
 import { Storage } from "@google-cloud/storage";
@@ -103,7 +105,7 @@ async function fetchImageAsDataUri(imageUrl: string): Promise<string | null> {
   }
 }
 
-async function getExistingHovercodeQR(hovercodeId: string): Promise<{ dataUri: string | null; svg: string | null }> {
+async function getExistingHovercodeQR(hovercodeId: string, target: string): Promise<{ dataUri: string | null; svg: string | null }> {
   if (!HOVERCODE_API_TOKEN) {
     console.error("[Sticker Generate] HoverCode API token not configured");
     return { dataUri: null, svg: null };
@@ -123,6 +125,7 @@ async function getExistingHovercodeQR(hovercodeId: string): Promise<{ dataUri: s
     }
 
     const data = await response.json();
+    if (data.qr_data !== target) return { dataUri: null, svg: null };
     
     if (data.png) {
       const dataUri = await fetchImageAsDataUri(data.png);
@@ -259,6 +262,7 @@ interface StickerConfig {
   useKilometers?: boolean;
   hovercodeQRId?: string;
   cachedQrCodeDataUri?: string;
+  qrTargetUrl?: string;
   roundMileage?: boolean;
 }
 
@@ -392,7 +396,13 @@ export async function POST(req: NextRequest) {
     }
 
     const dbConfig: StickerConfig = shop.stickerConfig || {};
-    const config: StickerConfig = body.previewConfig ? { ...dbConfig, ...body.previewConfig } : dbConfig;
+    const config: StickerConfig = body.previewConfig ? {
+      ...dbConfig, ...body.previewConfig,
+      // Cache authority is server-owned, never supplied by a preview caller.
+      hovercodeQRId: dbConfig.hovercodeQRId,
+      cachedQrCodeDataUri: dbConfig.cachedQrCodeDataUri,
+      qrTargetUrl: dbConfig.qrTargetUrl,
+    } : dbConfig;
     const dimensions = SIZE_DIMENSIONS[size] || SIZE_DIMENSIONS["2x2.5"];
 
     let logoDataUrl: string | null = null;
@@ -403,18 +413,20 @@ export async function POST(req: NextRequest) {
 
     let qrDataUrl: string | null = null;
     if (includeQR) {
-      const redirectUrl = config.appointmentUrl || getStickerRedirectUrl(shopId);
+      const redirectUrl = await createStickerQrTarget(db, shopId, body.vin);
+      const genericQr = redirectUrl === getStickerRedirectUrl(shopId);
       const qrColor = config.colors?.primary || "#111111";
       const qrBgColor = config.colors?.background || "#ffffff";
       const shopName = shop.name || `Shop ${shopId}`;
       
       // First, check shop_media cache (unified QR cache with proper logo)
-      if (config.hovercodeQRId) {
+      if (genericQr && config.hovercodeQRId) {
         try {
           const mediaDoc = await db.collection("shop_media").findOne({
             shopId,
             type: "qr_code",
             hovercodeId: config.hovercodeQRId,
+            targetUrl: redirectUrl,
           });
           if (mediaDoc?.dataUri) {
             console.log("[Sticker Generate] Using QR from shop_media cache");
@@ -426,21 +438,21 @@ export async function POST(req: NextRequest) {
       }
       
       // Fallback to old config cache
-      if (!qrDataUrl && config.cachedQrCodeDataUri) {
+      if (genericQr && !qrDataUrl && config.qrTargetUrl === redirectUrl && config.cachedQrCodeDataUri) {
         console.log("[Sticker Generate] Using cached QR code from config");
         qrDataUrl = config.cachedQrCodeDataUri;
       }
       
       // If no cached QR, try existing HoverCode
-      if (!qrDataUrl && config.hovercodeQRId) {
+      if (genericQr && !qrDataUrl && config.hovercodeQRId) {
         console.log(`[Sticker Generate] Fetching HoverCode QR: ${config.hovercodeQRId}`);
-        const existingQR = await getExistingHovercodeQR(config.hovercodeQRId);
+        const existingQR = await getExistingHovercodeQR(config.hovercodeQRId, redirectUrl);
         if (existingQR.dataUri) {
           qrDataUrl = existingQR.dataUri;
           // Cache it for next time
           await db.collection("shops").updateOne(
             { shopId },
-            { $set: { "stickerConfig.cachedQrCodeDataUri": qrDataUrl } }
+            { $set: { "stickerConfig.cachedQrCodeDataUri": qrDataUrl, "stickerConfig.qrTargetUrl": redirectUrl } }
           );
           console.log("[Sticker Generate] Cached HoverCode QR for future use");
         }
@@ -459,11 +471,14 @@ export async function POST(req: NextRequest) {
         if (newQR?.dataUri) {
           qrDataUrl = newQR.dataUri;
           
-          // Save both the HoverCode ID and cache the QR image
+          // Vehicle QRs must never overwrite the shop-generic cache.
+          if (genericQr) {
+          await retainLegacyStickerHovercode(db, shopId, dbConfig);
           const updateFields: Record<string, string> = {
             "stickerConfig.cachedQrCodeDataUri": qrDataUrl,
+            "stickerConfig.qrTargetUrl": redirectUrl,
           };
-          if (newQR.id && !config.hovercodeQRId) {
+          if (newQR.id) {
             updateFields["stickerConfig.hovercodeQRId"] = newQR.id;
           }
           await db.collection("shops").updateOne(
@@ -471,6 +486,7 @@ export async function POST(req: NextRequest) {
             { $set: updateFields }
           );
           console.log(`[Sticker Generate] Created and cached new HoverCode QR: ${newQR.id}`);
+          }
         }
       }
       

@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { updateHovercodeLogo } from "@/lib/hovercode";
+import { getStickerRedirectUrl } from "@/lib/sticker-utils";
+import { retainLegacyStickerHovercode } from "@/lib/sticker-legacy-hovercode";
+import { GET as generateVehicleQR, POST as generateVehicleQRData } from "@/app/api/sticker/qr/route";
 
 function getAppointmentLogoUrl(): string {
   const baseUrl = (process.env.NEXT_PUBLIC_BASE_URL || "https://mos.tools").replace(/\/$/, "");
@@ -170,11 +173,16 @@ async function downloadAndCacheQR(pngUrlOrDataUri: string, shopId: number, qrId:
           type: "qr_code",
           dataUri,
           hovercodeId: qrId,
+          targetUrl: getStickerRedirectUrl(shopId),
           contentType: "image/png",
           updatedAt: new Date(),
         },
       },
       { upsert: true }
+    );
+    await db.collection("shops").updateOne(
+      { shopId, "stickerConfig.hovercodeQRId": qrId },
+      { $set: { "stickerConfig.qrTargetUrl": getStickerRedirectUrl(shopId), "stickerConfig.cachedQrCodeDataUri": dataUri } },
     );
 
     return dataUri;
@@ -263,7 +271,7 @@ async function svgToPngDataUri(svgContent: string, size: number = 300, externalL
   }
 }
 
-async function fetchExistingQR(hovercodeId: string): Promise<string | null> {
+async function fetchExistingQR(hovercodeId: string, target: string): Promise<string | null> {
   if (!HOVERCODE_API_TOKEN) {
     console.log("[QR Cache] No API token for fetching existing QR");
     return null;
@@ -284,6 +292,7 @@ async function fetchExistingQR(hovercodeId: string): Promise<string | null> {
     }
 
     const data = await response.json();
+    if (data.qr_data !== target) return null;
     console.log("[QR Cache] Existing QR data - has png:", !!data.png, "has svg:", !!data.svg, "has svg_file:", !!data.svg_file, "has logo:", !!data.logo);
 
     if (data.png) {
@@ -324,6 +333,7 @@ async function fetchExistingQR(hovercodeId: string): Promise<string | null> {
 
 // GET - Retrieve cached QR code or generate new one
 export async function GET(req: NextRequest) {
+  if (req.nextUrl.searchParams.get("vin")) return generateVehicleQR(req);
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -340,11 +350,11 @@ export async function GET(req: NextRequest) {
     // Get shop config first to check for configured hovercodeQRId
     const shop = await db.collection("shops").findOne(
       { shopId },
-      { projection: { "stickerConfig.appointmentUrl": 1, "stickerConfig.hovercodeQRId": 1, "stickerConfig.qrLogoPatchedAt": 1 } }
+      { projection: { stickerConfig: 1 } }
     );
 
     const configuredQRId = shop?.stickerConfig?.hovercodeQRId;
-    const appointmentUrl = shop?.stickerConfig?.appointmentUrl;
+    const appointmentUrl = getStickerRedirectUrl(shopId);
     const qrLogoPatchedAt = shop?.stickerConfig?.qrLogoPatchedAt;
 
     // One-time: patch the existing HoverCode QR with the calendar logo so
@@ -363,7 +373,7 @@ export async function GET(req: NextRequest) {
     // If there's a configured QR ID in platform admin, use that
     if (configuredQRId) {
       // Check if cache matches the configured ID
-      if (cached?.dataUri && cached?.hovercodeId === configuredQRId) {
+      if (cached?.dataUri && cached?.hovercodeId === configuredQRId && cached?.targetUrl === appointmentUrl) {
         console.log("[QR Cache GET] Using cached QR matching configured ID:", configuredQRId);
         const matches = cached.dataUri.match(/^data:([^;]+);base64,(.+)$/);
         if (matches) {
@@ -379,7 +389,7 @@ export async function GET(req: NextRequest) {
 
       // Cache doesn't match configured ID - fetch and cache the configured QR
       console.log("[QR Cache GET] Fetching configured QR ID:", configuredQRId);
-      const existingPngUrl = await fetchExistingQR(configuredQRId);
+      const existingPngUrl = await fetchExistingQR(configuredQRId, appointmentUrl);
       if (existingPngUrl) {
         const dataUri = await downloadAndCacheQR(existingPngUrl, shopId, configuredQRId, db);
         if (dataUri) {
@@ -398,7 +408,7 @@ export async function GET(req: NextRequest) {
       console.warn("[QR Cache GET] Failed to fetch configured QR ID from HoverCode:", configuredQRId);
     }
 
-    if (cached?.dataUri) {
+    if (cached?.dataUri && cached?.targetUrl === appointmentUrl && (!configuredQRId || cached.hovercodeId === configuredQRId)) {
       console.log("[QR Cache GET] Using existing cached QR");
       const matches = cached.dataUri.match(/^data:([^;]+);base64,(.+)$/);
       if (matches) {
@@ -434,9 +444,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Failed to cache QR code" }, { status: 500 });
     }
 
+    await retainLegacyStickerHovercode(db, shopId, shop?.stickerConfig || {});
     await db.collection("shops").updateOne(
       { shopId },
-      { $set: { "stickerConfig.hovercodeQRId": result.qrId } }
+      { $set: { "stickerConfig.hovercodeQRId": result.qrId, "stickerConfig.qrTargetUrl": appointmentUrl, "stickerConfig.cachedQrCodeDataUri": dataUri } }
     );
 
     const matches = dataUri.match(/^data:([^;]+);base64,(.+)$/);
@@ -472,6 +483,8 @@ export async function POST(req: NextRequest) {
   if (!["owner", "admin", "manager"].includes(session.role)) {
     return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
   }
+  const body = await req.clone().json().catch(() => ({}));
+  if (body.vin) return generateVehicleQRData(req);
 
   try {
     const db = await getDb();
@@ -479,11 +492,11 @@ export async function POST(req: NextRequest) {
     // Get shop's config
     const shop = await db.collection("shops").findOne(
       { shopId },
-      { projection: { "stickerConfig.appointmentUrl": 1, "stickerConfig.hovercodeQRId": 1, "stickerConfig.qrLogoPatchedAt": 1 } }
+      { projection: { stickerConfig: 1 } }
     );
 
     const configuredQRId = shop?.stickerConfig?.hovercodeQRId;
-    const appointmentUrl = shop?.stickerConfig?.appointmentUrl;
+    const appointmentUrl = getStickerRedirectUrl(shopId);
 
     await db.collection("shop_media").deleteOne({ shopId, type: "qr_code" });
     console.log("[QR Cache POST] Cleared cached QR for fresh re-fetch");
@@ -496,7 +509,7 @@ export async function POST(req: NextRequest) {
 
     if (configuredQRId) {
       console.log("[QR Cache POST] Re-fetching configured QR ID:", configuredQRId);
-      const existingPngUrl = await fetchExistingQR(configuredQRId);
+      const existingPngUrl = await fetchExistingQR(configuredQRId, appointmentUrl);
       if (existingPngUrl) {
         const dataUri = await downloadAndCacheQR(existingPngUrl, shopId, configuredQRId, db);
         if (dataUri) {
@@ -538,11 +551,14 @@ export async function POST(req: NextRequest) {
     }
 
     // Update shop's hovercodeQRId for reference
+    await retainLegacyStickerHovercode(db, shopId, shop?.stickerConfig || {});
     await db.collection("shops").updateOne(
       { shopId },
       {
         $set: {
           "stickerConfig.hovercodeQRId": result.qrId.toString(),
+          "stickerConfig.qrTargetUrl": appointmentUrl,
+          "stickerConfig.cachedQrCodeDataUri": dataUri,
           "stickerConfig.qrCachedAt": new Date(),
         },
       }

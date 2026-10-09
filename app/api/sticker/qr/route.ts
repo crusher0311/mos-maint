@@ -3,7 +3,7 @@ import QRCode from "qrcode";
 import { createCanvas, loadImage } from "canvas";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
-import { getStickerRedirectUrl } from "@/lib/sticker-utils";
+import { createStickerQrTarget } from "@/lib/sticker-qr-target";
 import path from "path";
 import fs from "fs";
 
@@ -51,7 +51,7 @@ async function convertSvgToPng(svgText: string, size: number, addLogo: boolean =
   }
 }
 
-async function getHovercodeQRImage(hovercodeId: string): Promise<Buffer | null> {
+async function getHovercodeQRImage(hovercodeId: string, target: string): Promise<Buffer | null> {
   if (!HOVERCODE_API_TOKEN) {
     console.error("[Sticker QR] No API token configured");
     return null;
@@ -71,6 +71,7 @@ async function getHovercodeQRImage(hovercodeId: string): Promise<Buffer | null> 
     }
     
     const data = await response.json();
+    if (data.qr_data !== target) return null;
     console.log(`[Sticker QR] HoverCode response keys:`, Object.keys(data));
     console.log(`[Sticker QR] png value:`, data.png);
     console.log(`[Sticker QR] svg value:`, data.svg);
@@ -279,6 +280,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const db = await getDb();
+    const redirectUrl = await createStickerQrTarget(db, shopId, searchParams.get("vin"));
     const shop = await db.collection("shops").findOne(
       { shopId: { $in: [shopId, String(shopId)] } },
       { projection: { "stickerConfig.hovercodeQRId": 1 } }
@@ -287,8 +289,8 @@ export async function GET(req: NextRequest) {
     const hovercodeQRId = shop?.stickerConfig?.hovercodeQRId;
     console.log(`[Sticker QR] Shop ${shopId} hovercodeQRId:`, hovercodeQRId || "not set");
     
-    if (hovercodeQRId) {
-      const hovercodeImage = await getHovercodeQRImage(hovercodeQRId);
+    if (hovercodeQRId && !searchParams.get("vin")) {
+      const hovercodeImage = await getHovercodeQRImage(hovercodeQRId, redirectUrl);
       if (hovercodeImage) {
         console.log(`[Sticker QR] Using HoverCode QR for shop ${shopId}`);
         return new NextResponse(new Uint8Array(hovercodeImage), {
@@ -301,8 +303,6 @@ export async function GET(req: NextRequest) {
         console.log(`[Sticker QR] HoverCode fetch failed, falling back to generated QR`);
       }
     }
-
-    const redirectUrl = getStickerRedirectUrl(shopId);
 
     const pngBuffer = await generateStyledQR(redirectUrl, {
       size,
@@ -337,14 +337,14 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const {
-      customUrl,
+      vin,
       size = 300,
       color = "#111111",
       backgroundColor = "#ffffff",
       includeLogo = true,
     } = body;
 
-    const redirectUrl = customUrl || getStickerRedirectUrl(shopId);
+    const redirectUrl = await createStickerQrTarget(await getDb(), shopId, vin);
 
     const pngBuffer = await generateStyledQR(redirectUrl, {
       size,

@@ -21,9 +21,10 @@ const UNIT_OPTIONS: { value: UnitType; label: string }[] = [
 interface QuickStickerModalProps {
   isOpen: boolean;
   onClose: () => void;
+  vin?: string;
 }
 
-export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModalProps) {
+export default function QuickStickerModal({ isOpen, onClose, vin }: QuickStickerModalProps) {
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [currentMileage, setCurrentMileage] = useState<string>("");
@@ -186,6 +187,7 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           size: stickerSize,
+          vin,
           currentMileage: parseInt(currentMileage.replace(/,/g, ""), 10),
           nextServiceMileage,
           nextServiceDate,
@@ -236,6 +238,7 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               size: stickerSize,
+              vin,
               currentMileage: parseInt(currentMileage.replace(/,/g, ""), 10),
               nextServiceMileage,
               nextServiceDate,
@@ -297,6 +300,7 @@ export default function QuickStickerModal({ isOpen, onClose }: QuickStickerModal
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           size: stickerSize,
+          vin,
           currentMileage: parseInt(currentMileage.replace(/,/g, ""), 10),
           nextServiceMileage,
           nextServiceDate,

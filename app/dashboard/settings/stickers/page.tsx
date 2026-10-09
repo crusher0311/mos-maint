@@ -1,4 +1,5 @@
 "use client";
+import StickerScanDestinationSetting from "@/components/stickers/StickerScanDestinationSetting";
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Loader2, Check, Download, Calendar, Settings2, Upload, ChevronDown, ChevronRight, RefreshCw, Save, Copy, Building2 } from "lucide-react";
@@ -32,6 +33,7 @@ interface StickerDataConfig {
   usePredictiveDate: boolean;
   defaultSize: string;
   appointmentUrl: string;
+  scanDestination: "appointment" | "website" | "vhi";
   useKilometers: boolean;
   intervals: IntervalsConfig;
   defaultOilType: keyof IntervalsConfig;
@@ -72,6 +74,7 @@ const DEFAULT_CONFIG: StickerDataConfig = {
   usePredictiveDate: false,
   defaultSize: DEFAULT_STICKER_SIZE,
   appointmentUrl: "",
+  scanDestination: "appointment",
   useKilometers: false,
   intervals: DEFAULT_INTERVALS,
   defaultOilType: "synthetic",
@@ -163,6 +166,7 @@ export default function StickerSettingsPage() {
             usePredictiveDate: config.usePredictiveDate,
             defaultSize: currentSize,
             appointmentUrl: config.appointmentUrl,
+            scanDestination: config.scanDestination,
             useKilometers: config.useKilometers,
             intervals: config.intervals,
             defaultOilType: config.defaultOilType,
@@ -207,6 +211,7 @@ export default function StickerSettingsPage() {
             usePredictiveDate: data.config.usePredictiveDate ?? DEFAULT_CONFIG.usePredictiveDate,
             defaultSize: data.config.defaultSize ?? DEFAULT_CONFIG.defaultSize,
             appointmentUrl: data.config.appointmentUrl ?? DEFAULT_CONFIG.appointmentUrl,
+            scanDestination: data.config.scanDestination ?? "appointment",
             useKilometers: data.config.useKilometers ?? DEFAULT_CONFIG.useKilometers,
             intervals: {
               diesel: data.config.intervals?.diesel ?? DEFAULT_INTERVALS.diesel,
@@ -364,6 +369,7 @@ export default function StickerSettingsPage() {
           usePredictiveDate: config.usePredictiveDate,
           defaultSize: currentSize,
           appointmentUrl: config.appointmentUrl,
+          scanDestination: config.scanDestination,
           useKilometers: config.useKilometers,
           intervals: config.intervals,
           designerLayout: designerLayout,
@@ -659,6 +665,7 @@ export default function StickerSettingsPage() {
               </div>
 
               <div>
+                <StickerScanDestinationSetting value={config.scanDestination} onChange={(scanDestination) => setConfig({ ...config, scanDestination })} />
                 <label className="block text-sm font-medium text-gray-700 mb-1">Appointment URL</label>
                 <input
                   type="url"

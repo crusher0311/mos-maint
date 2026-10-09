@@ -109,6 +109,7 @@ interface StickerConfig {
   };
   defaultSize?: "1.5x2.25" | "2x2" | "2x2.5" | "2x3" | "2x3.5";
   appointmentUrl?: string;
+  scanDestination?: "appointment" | "website" | "vhi";
   useKilometers?: boolean;
   intervals?: Partial<IntervalsConfig>;
   defaultOilType?: "diesel" | "euro" | "synthetic" | "conventional";
@@ -186,6 +187,9 @@ export async function PUT(req: NextRequest) {
 
   try {
     const body: Partial<StickerConfig> = await req.json();
+    if (body.scanDestination !== undefined && !["appointment", "website", "vhi"].includes(body.scanDestination)) {
+      return NextResponse.json({ error: "Invalid scan destination" }, { status: 400 });
+    }
 
     const allowedFields = [
       "enabled",
@@ -201,11 +205,11 @@ export async function PUT(req: NextRequest) {
       "colors",
       "defaultSize",
       "appointmentUrl",
+      "scanDestination",
       "useKilometers",
       "intervals",
       "defaultOilType",
       "hovercodeQRId",
-      "cachedQrCodeDataUri",
       "designerLayout",
     ];
 
@@ -232,18 +236,22 @@ export async function PUT(req: NextRequest) {
     if (body.appointmentUrl) {
       const existingShop = await db.collection("shops").findOne(
         { shopId },
-        { projection: { "stickerConfig.hovercodeQRId": 1, "stickerConfig.appointmentUrl": 1 } }
+        { projection: { "stickerConfig.hovercodeQRId": 1, "stickerConfig.appointmentUrl": 1, "stickerConfig.qrTargetUrl": 1, "stickerConfig.legacyHovercodeQRIds": 1 } }
       );
       
       const existingUrl = existingShop?.stickerConfig?.appointmentUrl;
       const hovercodeId = existingShop?.stickerConfig?.hovercodeQRId;
       
       // Only update HoverCode if the URL actually changed and we have a HoverCode ID
-      if (hovercodeId && body.appointmentUrl !== existingUrl) {
+      if (body.appointmentUrl !== existingUrl) {
+        const legacyIds: string[] = (existingShop?.stickerConfig?.legacyHovercodeQRIds || []).filter((id: unknown): id is string => typeof id === "string" && !!id);
+        if (hovercodeId && !existingShop?.stickerConfig?.qrTargetUrl) legacyIds.push(hovercodeId);
         console.log(`[Sticker Settings] Appointment URL changed from "${existingUrl}" to "${body.appointmentUrl}"`);
+        for (const hovercodeId of new Set(legacyIds)) {
         const updated = await updateHovercodeDestination(hovercodeId, body.appointmentUrl, shopId);
         if (!updated) {
           console.warn("[Sticker Settings] Failed to update HoverCode destination, but continuing with save");
+        }
         }
       }
     }

@@ -50,7 +50,7 @@ function captureFetch() {
     return new Response(
       JSON.stringify({
         id: "hc_test_1",
-        qr_data: body?.qr_data || "https://mos.tools/sticker/redirect/100",
+        qr_data: body?.qr_data || "https://mos.tools/api/sticker/redirect/100",
         logo_url: "any",
       }),
       { status: 200, headers: { "content-type": "application/json" } },
@@ -88,7 +88,7 @@ async function run() {
         createCall?.body?.logo_url === "https://example.com/custom-logo.png",
       );
       // Other contract fields the QR depends on.
-      ok("qr_data set to redirect URL", createCall?.body?.qr_data === "https://mos.tools/sticker/redirect/100");
+      ok("qr_data set to redirect URL", createCall?.body?.qr_data === "https://mos.tools/api/sticker/redirect/100");
       ok("workspace id forwarded", createCall?.body?.workspace === "ws-test");
       ok("dynamic flag stays true", createCall?.body?.dynamic === true);
       ok("generate_png flag stays true", createCall?.body?.generate_png === true);

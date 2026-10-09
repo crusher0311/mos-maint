@@ -66,6 +66,7 @@ const AVAILABLE_PERMISSIONS = [
   "keytags:generate",
   "vehicles:read",
   "carfax:write",
+  "vhi:write",
   "recommendations:read",
   "customers:read",
   "maintenance:read",

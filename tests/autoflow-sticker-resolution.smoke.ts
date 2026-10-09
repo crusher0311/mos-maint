@@ -5,6 +5,10 @@ import ts from "typescript";
 import { __deps, findAutoflowStickerShop, findShopBySmsIdDetailed } from "../lib/extension-shop-lookup";
 import { requireExtensionPrincipalScope, getAuthErrorStatus, buildAuthErrorBody } from "../lib/extension-auth";
 import { makeFakeDb } from "./utils/fake-mongo";
+import { createStickerQrTarget } from "../lib/sticker-qr-target";
+import { getStickerRedirectUrl } from "../lib/sticker-utils";
+
+process.env.NEXT_PUBLIC_BASE_URL = "https://fixture.test";
 
 const source = fs.readFileSync("app/api/extension/sticker/route.ts", "utf8");
 const owner = {
@@ -38,7 +42,7 @@ async function main() {
     STICKER_LOGO_TIMEOUT_MS: 5000,
     withUpstreamTimeout: async (promise: Promise<any>) => promise,
     fetchLogoAsBase64: async (_url: string, _path: string, shopId: string) => `logo-${shopId}`,
-    getStickerRedirectUrl: (id: number) => `https://fixture.test/${id}`,
+    createStickerQrTarget,
     fallbackQRGeneration: async (url: string) => url,
     shouldRunStickerSideEffects: () => false,
     renderStickerStandard: async (config: any) => Buffer.from(JSON.stringify(config)),
@@ -58,6 +62,14 @@ async function main() {
   for (const legacy of [true, false]) {
     auth = { authorized: true, user: { shopId: 33, shopIds: [33, 44] },
       principal: { isLegacy: legacy, shopId: 33, provider: "autoflow", assurance: "verified", capabilities: ["read", "shop_tool"] } };
+    const malformedRequest = request("1360");
+    const originalBody = await malformedRequest.json();
+    malformedRequest.json = async () => ({ ...originalBody, vin: "INCOMPLETE" });
+    let qrTarget = "";
+    sandbox.fallbackQRGeneration = async (url: string) => { qrTarget = url; return url; };
+    const malformedResponse = await sandbox._POST(malformedRequest);
+    assert.equal(malformedResponse.status, 200, "extension prints incomplete VIN records");
+    assert.equal(qrTarget, getStickerRedirectUrl(33), "extension uses generic target for malformed VIN");
     for (const id of ["fixture", "fixture.autotext.me", "1360", "1361"]) {
       const get = await sandbox._GET(request(id));
       assert.equal(get.status, 200);

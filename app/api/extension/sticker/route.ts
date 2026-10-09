@@ -6,7 +6,7 @@ import { checkShopFeatureGate } from "@/lib/extension-route-guard";
 import { renderStickerStandard, renderStickerDesigner } from "@/lib/canvas-renderer";
 import QRCode from "qrcode";
 import { Storage } from "@google-cloud/storage";
-import { getStickerRedirectUrl } from "@/lib/sticker-utils";
+import { createStickerQrTarget } from "@/lib/sticker-qr-target";
 import { triggerAutoBookingFromSticker, StickerBookingData } from "@/lib/auto-booking/scheduler";
 import { estimateMileageFromCarfax } from "@/lib/integrations/carfax";
 import { findShopBySmsIdDetailed, findAutoflowStickerShop } from "@/lib/extension-shop-lookup";
@@ -217,7 +217,7 @@ async function svgToPngDataUri(svgContent: string, size: number = 300, externalL
   }
 }
 
-async function getExistingHovercodeQR(hovercodeId: string): Promise<string | null> {
+async function getExistingHovercodeQR(hovercodeId: string, target: string): Promise<string | null> {
   if (!HOVERCODE_API_TOKEN) return null;
 
   try {
@@ -229,6 +229,7 @@ async function getExistingHovercodeQR(hovercodeId: string): Promise<string | nul
     if (!response.ok) return null;
 
     const data = await response.json();
+    if (data.qr_data !== target) return null;
     
     if (data.png) {
       return await fetchImageAsDataUri(data.png);
@@ -299,6 +300,7 @@ interface StickerConfig {
   appointmentUrl?: string;
   useKilometers?: boolean;
   hovercodeQRId?: string;
+  qrTargetUrl?: string;
   roundMileage?: boolean;
   usePredictiveDate?: boolean;
   defaultSize?: string;
@@ -910,15 +912,16 @@ async function _POST(request: NextRequest) {
     };
 
     let qrDataUrl: string | null = null;
-    const redirectUrl = stickerConfig.appointmentUrl || getStickerRedirectUrl(mosShopId!);
+    const redirectUrl = excludeQR ? "" : await createStickerQrTarget(db, mosShopId!, vin);
     const qrColor = stickerConfig.colors?.primary || "#111111";
 
-    if (stickerConfig.hovercodeQRId && mosShopId) {
+    if (!vin && !excludeQR && stickerConfig.hovercodeQRId && mosShopId) {
       try {
         const mediaDoc = await db.collection("shop_media").findOne({
           shopId: mosShopId,
           type: "qr_code",
           hovercodeId: stickerConfig.hovercodeQRId,
+          targetUrl: redirectUrl,
         });
         if (mediaDoc?.dataUri) {
           console.log("[Extension Sticker] Using QR from shop_media cache");
@@ -928,15 +931,15 @@ async function _POST(request: NextRequest) {
         console.warn("[Extension Sticker] shop_media lookup failed:", e);
       }
     }
-    if (!qrDataUrl && stickerConfig.hovercodeQRId) {
+    if (!vin && !excludeQR && !qrDataUrl && stickerConfig.hovercodeQRId && stickerConfig.qrTargetUrl === redirectUrl) {
       qrDataUrl = await withUpstreamTimeout(
-        getExistingHovercodeQR(stickerConfig.hovercodeQRId),
+        getExistingHovercodeQR(stickerConfig.hovercodeQRId, redirectUrl),
         STICKER_QR_TIMEOUT_MS,
         `sticker.hovercodeQR shop=${mosShopId}`,
         null,
       );
     }
-    if (!qrDataUrl) {
+    if (!excludeQR && !qrDataUrl) {
       qrDataUrl = await fallbackQRGeneration(redirectUrl, qrColor);
     }
 

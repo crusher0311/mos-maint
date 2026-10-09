@@ -157,3 +157,4 @@
 - [Tire DVI demo scope](tire-dvi-demo-scope.md) — fictional manual-measurement presentation; green documentation is required; no production rollout or video-task dependency.
 - [Workflow shared branding](workflow-shared-branding.md) — inherited display logos stay separate from stricter manual-upload drafts; keep deliberate overrides intact.
 - [Enterprise history sharing boundary](enterprise-history-sharing.md) — shared reads never widen current-shop writes; signed/partner redistribution needs its own grant.
+- [Sticker QR compatibility](sticker-qr-compatibility.md) — preserve printed HoverCode targets; publish cached images and target metadata together.

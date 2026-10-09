@@ -203,6 +203,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
       <QuickStickerModal 
         isOpen={quickStickerOpen} 
+        vin={pathname?.match(/^\/dashboard\/(?:vehicles|analyzer)\/([A-HJ-NPR-Z0-9]{17})(?:\/|$)/i)?.[1]}
         onClose={() => setQuickStickerOpen(false)} 
       />
 

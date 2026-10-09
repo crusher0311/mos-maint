@@ -21,6 +21,6 @@ export function getBaseUrl(): string {
   );
 }
 
-export function getStickerRedirectUrl(shopId: number): string {
-  return `${getBaseUrl()}/api/sticker/redirect/${shopId}`;
+export function getStickerRedirectUrl(shopId: number, vehicleReference?: string): string {
+  return `${getBaseUrl()}/api/sticker/redirect/${shopId}${vehicleReference ? `?v=${encodeURIComponent(vehicleReference)}` : ""}`;
 }

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
-import { getStickerRedirectUrl } from "@/lib/sticker-utils";
+import { createStickerQrTarget } from "@/lib/sticker-qr-target";
+import { retainLegacyStickerHovercode } from "@/lib/sticker-legacy-hovercode";
 import { verifyHovercode } from "@/lib/hovercode";
 
 export const runtime = "nodejs";
@@ -139,7 +140,8 @@ export async function POST(req: NextRequest) {
     }
 
     const config = shop.stickerConfig || {};
-    const redirectUrl = config.appointmentUrl || getStickerRedirectUrl(shopId);
+    const body = await req.json().catch(() => ({}));
+    const redirectUrl = await createStickerQrTarget(db, shopId, body.vin);
     const qrColor = config.colors?.primary || "#111111";
     const qrBgColor = config.colors?.background || "#ffffff";
     const shopName = shop.name || `Shop ${shopId}`;
@@ -167,15 +169,6 @@ export async function POST(req: NextRequest) {
       shopId,
     });
 
-    // Save HoverCode ID even if we don't get dataUri
-    if (newQR?.id) {
-      await db.collection("shops").updateOne(
-        { shopId },
-        { $set: { "stickerConfig.hovercodeQRId": newQR.id } }
-      );
-      console.log(`[Regenerate QR] Saved new HoverCode ID: ${newQR.id}`);
-    }
-
     if (newQR?.dataUri) {
       qrDataUrl = newQR.dataUri;
     }
@@ -187,9 +180,14 @@ export async function POST(req: NextRequest) {
     }
 
     // Cache the QR code
-    await db.collection("shops").updateOne(
+    if (!body.vin) await retainLegacyStickerHovercode(db, shopId, config);
+    if (!body.vin) await db.collection("shops").updateOne(
       { shopId },
-      { $set: { "stickerConfig.cachedQrCodeDataUri": qrDataUrl } }
+      { $set: {
+        "stickerConfig.cachedQrCodeDataUri": qrDataUrl,
+        "stickerConfig.hovercodeQRId": newQR!.id,
+        "stickerConfig.qrTargetUrl": redirectUrl,
+      } }
     );
 
     console.log("[Regenerate QR] Successfully cached QR code");
@@ -198,6 +196,8 @@ export async function POST(req: NextRequest) {
       success: true,
       message: "QR code regenerated and cached",
       qrPreview: qrDataUrl.substring(0, 100) + "...",
+      dataUrl: qrDataUrl,
+      url: redirectUrl,
     });
   } catch (error) {
     console.error("[Regenerate QR] Error:", error);
