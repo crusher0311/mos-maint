@@ -4,6 +4,21 @@ description: MOS Auto DVI is a native DVI replacement; where inspections can(not
 ---
 MOS Auto DVI is positioned as a REPLACEMENT for third-party DVI providers (AutoFlow/AutoVitals/AS1), not an integrator with them — the inspection lives natively in MOS (checklist, G/Y/R ratings, notes/recommendations, GridFS media) and reaches CARFAX via the $0 "Inspected: …" WO package.
 
+## Historical findings and multiple sheets
+
+The user wants prior DVI findings to return on subsequent visits and to be shared
+across enterprise locations like vehicle history. They also want multiple DVI
+sheets with overlapping items automatically reusing inspection work within the
+same visit, including switching from an accidentally selected sheet or upgrading
+from a basic inspection to a more detailed one.
+
+**Why:** Technicians should not repeat work just because the wrong sheet was
+started or a more comprehensive inspection becomes necessary.
+
+**How to apply:** Treat these as product requirements, not authorization to enable
+enterprise sharing or reinterpret historical findings as freshly inspected results.
+Implementation destination (production DVI versus demo first) still needs alignment.
+
 **Why:** owner's stated direction (July 2026) — declined AutoFlow sheet write-back for Auto DVI.
 
 **How to apply:**
