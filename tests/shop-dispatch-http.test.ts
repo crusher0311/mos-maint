@@ -8,6 +8,7 @@ const loader=Module as unknown as {_load:(id:string,...args:unknown[])=>unknown}
 const original=loader._load;
 let session:unknown=null,reads=0,enterprise:unknown=null;
 let rosterReads=0;
+let skillReads=0;
 let enterpriseBrand={_id:"enterprise",revision:0,brand:null as unknown,receipts:[] as any[],audit:[] as any[]};
 const boards=new Map<number,Board>();
 const fakeRepo={
@@ -17,6 +18,7 @@ const fakeRepo={
  saveDispatchEnterpriseBrand:async(value:typeof enterpriseBrand,revision:number)=>{if(enterpriseBrand.revision!==revision)return false;enterpriseBrand=structuredClone(value);return true;},
 };
 loader._load=function(id,...args){
+ if(id==="@/lib/shop-dispatch/skills")return {loadSkillProfiles:async(shopId:number)=>{assert.equal(shopId,10);skillReads++;return {profiles:[],truncated:false};}};
  if(id==="next/server")return {NextResponse:{json:(value:unknown,init?:ResponseInit)=>Response.json(value,init)}};
  if(id==="@/lib/auth")return {getSession:async()=>session};
  if(id==="@/lib/shop-dispatch/roster")return {
@@ -38,6 +40,15 @@ const route=require("../app/api/shop-dispatch/route");
 const brandRoute=require("../app/api/shop-dispatch/enterprise-brand/route");
 const http=require("../lib/shop-dispatch/http");
 const rosterRoute=require("../app/api/shop-dispatch/roster/route");
+const skillsRoute=require("../app/api/shop-dispatch/skills/route");
+test("skill history requires manager authorization and is session-shop scoped",async()=>{
+ session=null;assert.equal((await skillsRoute.GET()).status,401);
+ session={shopId:10,email:"user@example.test",role:"user",token:"real-session"};
+ assert.equal((await skillsRoute.GET()).status,403);assert.equal(skillReads,0);
+ session={shopId:10,email:"manager@example.test",role:"manager",token:"real-session"};
+ assert.equal((await skillsRoute.GET()).status,200);assert.equal(skillReads,1);
+ session=null;reads=0;
+});
 function req(body:unknown,origin="https://pilot.test"){
  return new Request("https://pilot.test/api/shop-dispatch",{method:"POST",headers:{"content-type":"application/json",origin},body:JSON.stringify(body)});
 }

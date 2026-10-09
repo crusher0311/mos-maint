@@ -30,7 +30,8 @@ export const transportSchema = z.object({
   pickupAt: timestamp.nullable(), notes: z.string().trim().max(500),
 }).strict().refine(v => v.loaner !== "assigned" || !!v.loanerId, "Assigned loaners need an identifier");
 export type Transport = z.infer<typeof transportSchema>;
-export interface Technician { id: string; name: string; email: string; active: boolean; sourceId?:string }
+export interface TechnicianSkill {key:string;title:string;status:"confirmed"|"not-qualified";notes:string;reviewedAt:string;reviewedBy:string}
+export interface Technician { id: string; name: string; email: string; active: boolean; sourceId?:string;skills?:TechnicianSkill[] }
 export interface Resource {id:string;name:string;active:boolean}
 export function resourcesFor(board:Board):Resource[]{
   return board.resources ?? [{id:"rack",name:"Alignment rack",active:true}];
@@ -66,6 +67,7 @@ export const intakeSchema = z.object({
 }).strict();
 export type Intake = z.infer<typeof intakeSchema>;
 export const commandSchema = z.discriminatedUnion("type", [
+  z.object({type:z.literal("skill"),technicianId:idSchema,key:text,title:text,status:z.enum(["confirmed","not-qualified","remove"]),notes:z.string().trim().max(500)}).strict(),
   z.object({type:z.literal("technician"), id:idSchema, name:text, email:z.union([z.string().trim().email().max(160),z.literal("")]).default(""), active:z.boolean()}).strict(),
   z.object({type:z.literal("resource"),id:idSchema,name:text,active:z.boolean()}).strict(),
   z.object({type:z.literal("importTechnician"),id:idSchema,sourceId:idSchema}).strict(),
@@ -118,7 +120,17 @@ export function applyCommand(input:Board,command:Command,actor:Actor,now:string,
   const visit=(id:string)=>{const v=board.visits.find(v=>v.id===id);requireThat(v && !v.closed,"Visit not found or closed",404);return v;};
   const settle=(j:Job)=>{Object.assign(j,elapsed(j,Date.parse(now)));j.since=null;};
   let target="board", detail="";
-  if(command.type==="importTechnician"){
+  if(command.type==="skill"){
+    const tech=board.technicians.find(t=>t.id===command.technicianId);
+    requireThat(tech,"Technician not found",404);
+    const key=command.key.trim().toLowerCase().replace(/\s+/g," ");
+    const skills=(tech.skills??[]).filter(s=>s.key!==key);
+    if(command.status!=="remove"){
+      requireThat(skills.length<100,"Technician skill capacity reached",409);
+      skills.push({key,title:command.title,status:command.status,notes:command.notes,reviewedAt:now,reviewedBy:actor.email});
+    }
+    tech.skills=skills;target=tech.id;detail=`${command.status}: ${command.title}`;
+  }else if(command.type==="importTechnician"){
     requireThat(employee&&employee.id===command.sourceId,"Provider employee was not verified",502);
     requireThat(employee.active,"Inactive provider employees cannot be imported",409);
     const existing=board.technicians.find(t=>t.id===command.id);

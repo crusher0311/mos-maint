@@ -4,6 +4,7 @@ import type { WorkProps } from "./JobCard";
 import { ResourceManagement } from "./ResourceManagement";
 import { RosterImport } from "./RosterImport";
 import { SourceStatusPreferences } from "./SourceStatusPreferences";
+import { TechnicianSkills } from "./TechnicianSkills";
 import { normalizeRoNumber } from "./ro-number";
 import styles from "./pilot.module.css";
 
@@ -26,6 +27,7 @@ export function Management({ board, actor, busy, mutate }: WorkProps) {
         </CommandForm>
       </details>
       <RosterImport board={board} busy={busy} mutate={mutate} />
+      <TechnicianSkills board={board} actor={actor} busy={busy} mutate={mutate} />
     </section>
     <section><ResourceManagement board={board} busy={busy} mutate={mutate} /><SourceStatusPreferences board={board} busy={busy} mutate={mutate} /><div className={styles.panel}><div className={styles.eyebrow}>Local intake</div><h2>Create a manual visit</h2>
       <CommandForm testId="visit-create-form" busy={busy} label="Create visit" reset creation submit={data => mutate({ type: "visit", id: String(data.get("creationId")), ro: String(data.get("ro")), vehicle: String(data.get("vehicle")), customer: String(data.get("customer")) })}>

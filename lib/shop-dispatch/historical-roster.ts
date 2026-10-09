@@ -23,6 +23,10 @@ export async function loadHistoricalRoster(shopId:number){
   return readHistoricalRoster(shopId,await getDb());
 }
 export async function readHistoricalRoster(shopId:number,db:Pick<Db,"collection">){
+  const {pages,truncated}=await readArchivedTechnicianHistory(shopId,db);
+  return {employees:historicalCandidates(pages),truncated};
+}
+export async function readArchivedTechnicianHistory(shopId:number,db:Pick<Db,"collection">){
   if(!Number.isSafeInteger(shopId)||shopId<=0)throw Error("Invalid history shop");
   const jobs=await db.collection<{_id:string;shopId:number;status:string}>("operator_history_import_jobs")
     .find({shopId,status:"completed"},{projection:{_id:1,shopId:1},limit:6}).maxTimeMS(3000).toArray();
@@ -36,10 +40,10 @@ export async function readHistoricalRoster(shopId:number,db:Pick<Db,"collection"
     if(remaining<=0||Date.now()>=deadline){truncated=true;break;}
     const rows=await db.collection("operator_history_import_pages").find(
       {_id:{$gte:prefix,$lt:prefix+"\uffff"}} as any,
-      {projection:{"invoices.ServicePackages":1},limit:remaining},
+      {projection:{"invoices.ServicePackages":1,"invoices.ID":1,"invoices.Type":1,"invoices.InvoiceTime":1,"invoices.WorkOrderNumber":1,"invoices.Completed":1},limit:remaining},
     ).maxTimeMS(Math.max(1,deadline-Date.now())).toArray();
     pages.push(...rows);
     if(pages.length>500){truncated=true;break;}
   }
-  return {employees:historicalCandidates(pages.slice(0,500)),truncated};
+  return {pages:pages.slice(0,500),truncated};
 }

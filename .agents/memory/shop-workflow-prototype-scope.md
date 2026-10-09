@@ -5,6 +5,18 @@ description: Product model and isolation boundary for Detect Dog scheduling expl
 
 The scheduling concept is a vehicle visit containing individual jobs and multi-technician handoffs, not one appointment block per vehicle.
 
+Technician skill profiles must distinguish history-supported experience from manager-confirmed independent capability.
+
+**Why:** The user wants capabilities derived from previously performed work, with manager confirmation and corrections; multi-technician work is not proof of independent proficiency.
+
+**How to apply:** Attribute by employee identity on labor lines, retain shared-job caveats and invoice evidence, and keep manual assessments separate from history. Do not infer related skills from vague title similarity.
+
+Protractor's archived Invoice results can retain `Type=WorkOrder` and `Completed=false` even for invoiced work.
+
+**Why:** Read-only Burnett archive verification found this combination on its dated invoice history; treating the workflow checkbox as invoice completion would suppress all evidence.
+
+**How to apply:** Use invoice-endpoint provenance and a real invoice timestamp as historical evidence, exclude credits, and describe it as invoiced work rather than verified task clock completion.
+
 Workflow visibility must be configurable by upstream provider stage, independently of dashboard preferences. Advisors search and import by the human RO number, never a required provider UUID.
 
 Technician roster identity is independent of MOS login access. Shops need to schedule technicians before accounts exist, and managers need named bay/equipment lanes.
