@@ -4,8 +4,32 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const ts = require("typescript");
+const { spawnSync } = require("node:child_process");
 const { readRouteSource } = require("../scripts/route-source.cjs");
 const HTTP = new Set(["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]);
+
+test("auth inventory rejects unauthenticated, missing and malformed delegates", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "route-auth-"));
+  const dir = path.join(root, "app/api/private");
+  const script = path.resolve("scripts/check-unauthed-routes.cjs");
+  fs.mkdirSync(dir, { recursive: true });
+  const route = path.join(dir, "route.ts"), handler = path.join(dir, "route-handler.ts");
+  const status = () => {
+    const result = spawnSync(process.execPath, [script], { cwd: root, encoding: "utf8", timeout: 15000 });
+    assert.equal(result.signal, null);
+    return result.status;
+  };
+  try {
+    fs.writeFileSync(route, 'export { GET } from "./route-handler";');
+    assert.equal(status(), 1, "missing delegate");
+    fs.writeFileSync(handler, 'import { getSession } from "@/lib/auth";\nexport function GET() { return "private"; }');
+    assert.equal(status(), 1, "an import alone is not authorization");
+    fs.writeFileSync(handler, 'export async function GET() { const session = await getSession(); if (!session) return new Response("Unauthorized", { status: 401 }); return session; }');
+    assert.equal(status(), 0, "real handler has authorization");
+    fs.writeFileSync(route, 'export { GET } from "./route-handler";\nexport function POST() { return "private"; }');
+    assert.equal(status(), 1, "extra unguarded handler must not be skipped");
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
 
 test("route security scanner follows real implementations, never import-only guards", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "route-entry-"));

@@ -487,6 +487,9 @@ for (const abs of walk(API_DIR)) {
   try {
     content = require("./route-source.cjs").readRouteSource(abs);
   } catch {
+    // A missing or malformed delegate must fail closed, not disappear from
+    // the auth inventory as though it were an unreadable optional file.
+    offenders.push(rel);
     continue;
   }
 
