@@ -1,0 +1,20 @@
+{
+  "assessedAt": "2026-10-09T10:55:43.188Z",
+  "shopId": 538,
+  "mode": "read-only source assessment",
+  "pages": 427,
+  "invoices": 9319,
+  "packages": 35021,
+  "lines": 45371,
+  "laborLines": 24982,
+  "recoverableLines": 45351,
+  "recoverableLaborLines": 24982,
+  "missingLineIds": 0,
+  "packagesWithTechnicians": 24070,
+  "multiTechnicianPackages": 57,
+  "distinctEmployeeIds": 28,
+  "missingOrMalformedTechnicians": 20,
+  "identityNameConflicts": 0,
+  "targetRowsReconciled": false,
+  "productionWrites": 0
+}
