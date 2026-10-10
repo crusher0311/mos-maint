@@ -11,6 +11,12 @@ Integrator scheduling is authorized for availability and temporary MOS holds, no
 
 **How to apply:** Keep shop-scoped authorization and shared capacity checks. Do not present a MOS hold as a confirmed provider booking or route existing appointment-creation calls through it without a separately approved confirmation contract.
 
+Operational additions prioritize readiness/owned blockers, manager-confirmed dependencies, promise-risk warnings, advisory next-job recommendations and handoff/final checks. Parts arrival automation is deferred pending Protractor evidence.
+
+**Why:** The user requested beginning the operational improvements but explicitly saved the parts-callback investigation for later. Generic line status and listed parts do not prove receipt.
+
+**How to apply:** Keep parts readiness manual until before/after receipt evidence establishes partial-delivery semantics and callback behavior. Recommendations must not silently reassign work or replace shop-approved repair procedures.
+
 Technician skill profiles must distinguish history-supported experience from manager-confirmed independent capability.
 
 **Why:** The user wants capabilities derived from previously performed work, with manager confirmation and corrections; multi-technician work is not proof of independent proficiency.

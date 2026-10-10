@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { actorFor, applyCommand, DispatchError, mutationSchema, requireThat, type Board, type Intake } from "./model";
 import { assertHeldCapacityPreserved, assertLocalPlanAvailable } from "./schedule-engine";
+import {assertDependencyPlans,assertStartReservations} from "./operations-scheduling";
 export interface Principal {shopId:number;email:string;role:string}
 export interface DispatchDependencies {
   read:(shopId:number)=>Promise<Board>;
@@ -37,6 +38,8 @@ export async function executeDispatchMutation(principal:Principal,raw:unknown,de
   const result=applyCommand(board,command,actor,deps.now(),intake,employee);
   assertHeldCapacityPreserved(board,result,Date.parse(deps.now()));
   if(command.type==="plan")assertLocalPlanAvailable(board,result,command.jobId,Date.parse(deps.now()));
+  if(command.type==="plan")assertDependencyPlans(result,command.jobId,Date.parse(deps.now()));
+  if(command.type==="start")assertStartReservations(board,command.jobId,Date.parse(deps.now()));
   result.receipts.push({id:requestId,actor:actor.email,digest:hash});
   requireThat(Buffer.byteLength(JSON.stringify(result),"utf8")<=8*1024*1024,"Pilot storage capacity reached. Export and arrange archival.",409);
   if(!await deps.save(principal.shopId,revision,result)){

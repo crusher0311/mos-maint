@@ -7,6 +7,7 @@ import { AuditView } from "./AuditView";
 import { BrandSettings } from "./BrandSettings";
 import { JobCard } from "./JobCard";
 import { Management } from "./Management";
+import { OperationsPanel } from "./OperationsPanel";
 import { ScheduleCalendar } from "./ScheduleCalendar";
 import { Timeline } from "./Timeline";
 import { VisitDetail } from "./VisitDetail";
@@ -14,12 +15,13 @@ import { contrast, dateLabel, minutes, projection, resolvedBranding } from "./he
 import { normalizeRoNumber } from "./ro-number";
 import styles from "./pilot.module.css";
 
-type View = "dispatch" | "work" | "manage" | "settings" | "audit" | "schedule";
+type View = "dispatch" | "work" | "manage" | "settings" | "audit" | "schedule" | "operations";
 export default function DispatchPilot() {
   const api = useDispatchBoard();
   const { snapshot, error, busy, lastReceived, refresh, needsRetry, retry } = api;
   const [view, setView] = useState<View>("dispatch");
   const [selected, setSelected] = useState<string | null>(null);
+  const [selectedJob, setSelectedJob] = useState<string | null>(null);
   const [tick, setTick] = useState(() => Date.now());
   const [search, setSearch] = useState("");
   const [customerPlan, setCustomerPlan] = useState("all");
@@ -47,7 +49,13 @@ export default function DispatchPilot() {
     (customerPlan === "all" || v.transport.customerPlan === customerPlan) &&
     (ride === "all" || v.transport.ride === ride) && (loaner === "all" || v.transport.loaner === loaner));
   const detail = snapshot?.board.visits.find(v => v.id === selected);
-  function navigate(next: View) { setView(next); setSelected(null); }
+  useEffect(() => {
+    if (view === "dispatch" && selected && selectedJob) {
+      document.getElementById(`job-${selectedJob}`)?.scrollIntoView?.({ block: "center" });
+      setSelectedJob(null);
+    }
+  }, [view, selected, selectedJob]);
+  function navigate(next: View) { setView(next); setSelected(null); setSelectedJob(null); }
   return <main className={styles.root} style={theme} data-testid="dispatch-pilot">
     <header className={styles.header}>
       <div className={styles.identity}>{brand.logo && <img className={styles.logo} src={brand.logo} alt={`${brand.name} logo`} />}
@@ -74,6 +82,7 @@ export default function DispatchPilot() {
           <button data-testid="pilot-dispatch" aria-current={view === "dispatch" ? "page" : undefined} onClick={() => navigate("dispatch")}>Dispatch</button>
           <button data-testid="pilot-work" aria-current={view === "work" ? "page" : undefined} onClick={() => navigate("work")}>My work</button>
           {snapshot.actor.manager && <button data-testid="pilot-manage" aria-current={view === "manage" ? "page" : undefined} onClick={() => navigate("manage")}>Roster & intake</button>}
+          {snapshot.actor.manager && <button data-testid="pilot-operations" aria-current={view === "operations" ? "page" : undefined} onClick={() => navigate("operations")}>Operations</button>}
           {snapshot.actor.manager && <button data-testid="pilot-schedule" aria-current={view === "schedule" ? "page" : undefined} onClick={() => navigate("schedule")}>Schedule</button>}
           <button data-testid="pilot-settings" aria-current={view === "settings" ? "page" : undefined} onClick={() => navigate("settings")}>Brand settings</button>
           <button data-testid="pilot-audit" aria-current={view === "audit" ? "page" : undefined} onClick={() => navigate("audit")}>Audit</button>
@@ -124,6 +133,7 @@ export default function DispatchPilot() {
             </>}
         </section>}
         {view === "manage" && snapshot.actor.manager && work && <Management {...work} />}
+        {view === "operations" && snapshot.actor.manager && work && <OperationsPanel {...work} select={(visitId, jobId) => { setView("dispatch"); setSelected(visitId); setSelectedJob(jobId ?? null); }} />}
         {view === "schedule" && snapshot.actor.manager && <ScheduleCalendar board={snapshot.board} busy={busy || needsRetry} refresh={refresh} select={visitId => { setView("dispatch"); setSelected(visitId); }} />}
         {view === "settings" && work && <BrandSettings key={snapshot.shopId} snapshot={snapshot} {...work} saveEnterpriseBrand={api.saveEnterpriseBrand} />}
         {view === "audit" && <AuditView board={snapshot.board} />}

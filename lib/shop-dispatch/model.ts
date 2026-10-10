@@ -1,4 +1,5 @@
 import { z } from "zod";
+import {operationCommands,readinessReasons,type Operations} from "./operations";
 
 export const idSchema = z.string().trim().min(1).max(100).regex(/^[\w.:@+-]+$/);
 const text = z.string().trim().min(1).max(160);
@@ -38,6 +39,7 @@ export function resourcesFor(board:Board):Resource[]{
 }
 export type JobStatus = "idle" | "active" | "paused" | "completed";
 export interface Job {
+  operations?:Operations;
   id: string; visitId: string; title: string; technicianId: string | null;
   plannedStart: string | null; estimatedMinutes: number | null; bookMinutes: number | null;
   prerequisites: string[]; resource: string | null; status: JobStatus;
@@ -54,6 +56,7 @@ export interface Visit {
 export interface Audit { at: string; actor: string; action: string; target: string; detail: string }
 export interface Receipt { id: string; actor: string; digest: string }
 export interface Board {
+  operationsEnabled?:boolean;
   schedule?:import("./schedule-types").ScheduleState;
   revision: number; updatedAt: string | null; technicians: Technician[];
   visits: Visit[]; jobs: Job[]; audit: Audit[]; receipts: Receipt[];
@@ -71,6 +74,7 @@ export const intakeSchema = z.object({
 }).strict();
 export type Intake = z.infer<typeof intakeSchema>;
 export const commandSchema = z.discriminatedUnion("type", [
+  ...operationCommands,
   z.object({type:z.literal("skill"),technicianId:idSchema,key:text,title:text,status:z.enum(["confirmed","not-qualified","remove"]),notes:z.string().trim().max(500)}).strict(),
   z.object({type:z.literal("technician"), id:idSchema, name:text, email:z.union([z.string().trim().email().max(160),z.literal("")]).default(""), active:z.boolean()}).strict(),
   z.object({type:z.literal("resource"),id:idSchema,name:text,active:z.boolean()}).strict(),
@@ -114,11 +118,12 @@ export function blockers(board:Board,job:Job):string[] {
   const reasons=job.prerequisites.filter(id=>board.jobs.find(j=>j.id===id)?.status!=="completed").map(id=>board.jobs.find(j=>j.id===id)?.title ?? "Missing prerequisite");
   if (!job.authorized) reasons.push("Manager authorization required");
   if (job.sourceRemoved) reasons.push("Package no longer present upstream");
+  if(board.operationsEnabled)reasons.push(...readinessReasons(board,job));
   return reasons;
 }
 export function applyCommand(input:Board,command:Command,actor:Actor,now:string,intake?:Intake,employee?:{id:string;name:string;active:boolean}):Board {
   const board:Board=structuredClone(input);
-  const managerOnly=!["start","pause","complete"].includes(command.type);
+  const managerOnly=!["start","pause","complete","handoff","acknowledgeHandoff","quality"].includes(command.type);
   requireThat(!managerOnly || actor.manager,"Manager access required",403);
   requireThat(board.audit.length<5000,"Pilot audit capacity reached. Export and arrange archival before continuing.",409);
   const visit=(id:string)=>{const v=board.visits.find(v=>v.id===id);requireThat(v && !v.closed,"Visit not found or closed",404);return v;};
@@ -175,11 +180,13 @@ export function applyCommand(input:Board,command:Command,actor:Actor,now:string,
   }else if(command.type==="job"){
     visit(command.visitId);requireThat(!board.jobs.some(j=>j.id===command.id),"Job already exists",409);
     board.jobs.push(newJob(command.id,command.visitId,command.title,command.bookMinutes));target=command.id;
-  }else if(command.type==="brand"){board.locationBrand=command.brand;}
+  }else if(command.type==="operationsMode"){board.operationsEnabled=command.enabled;}
+  else if(command.type==="brand"){board.locationBrand=command.brand;}
   else if(command.type==="sourceStatuses"){board.sourceStatuses=[...new Set(command.statuses)];}
   else if(command.type==="close"){
     const v=visit(command.visitId);
     requireThat(board.jobs.filter(j=>j.visitId===v.id).every(j=>j.status==="completed"),"Complete all jobs before closing");
+    if(board.operationsEnabled)requireThat(board.jobs.filter(j=>j.visitId===v.id).every(j=>j.operations&&j.operations.checks.every(c=>!!c.completedAt)),"Review readiness and finish required quality checks before closing",409);
     requireThat(!["assigned","requested"].includes(v.transport.loaner)&&!["needed","arranged"].includes(v.transport.ride),"Resolve transportation and return the loaner first");
     v.closed=true;target=v.id;
   }else if(command.type==="sync"||command.type==="syncNumber"){
@@ -212,8 +219,29 @@ export function applyCommand(input:Board,command:Command,actor:Actor,now:string,
     const job=board.jobs.find(j=>j.id===command.jobId);requireThat(job,"Job not found",404);
     visit(job.visitId);target=job.id;
     requireThat(actor.manager || (!!actor.technicianId&&actor.technicianId===job.technicianId),"You can control only your assigned jobs",403);
-    if(command.type==="plan"){
+    if(command.type==="readiness"){
+      requireThat(job.status!=="completed","Completed readiness is locked",409);
+      const input=command.readiness,previous=job.operations;
+      requireThat(new Set(input.blockers.map(b=>b.id)).size===input.blockers.length&&new Set(input.checks.map(c=>c.id)).size===input.checks.length,"Duplicate blocker or check IDs");
+      job.operations={...input,requiredSkills:[...new Set(input.requiredSkills.map(s=>s.toLowerCase()))],reviewedAt:now,reviewedBy:actor.email,
+        blockers:input.blockers.map(b=>{const old=previous?.blockers.find(x=>x.id===b.id);return {...b,openedAt:old?.openedAt??now,resolvedAt:b.resolved?(old?.resolvedAt??now):null};}),
+        checks:input.checks.map(c=>{const old=previous?.checks.find(x=>x.id===c.id&&x.label===c.label);return {...c,completedAt:old?.completedAt??null,completedBy:old?.completedBy??null};}),
+        handoff:previous?.handoff};
+    }else if(command.type==="handoff"){
+      requireThat(job.operations&&job.status!=="completed","Review readiness before recording a handoff; completed work is locked",409);
+      job.operations.handoff={note:command.note,by:actor.email,at:now,acknowledgedBy:null,acknowledgedAt:null};
+    }else if(command.type==="acknowledgeHandoff"){
+      requireThat(job.operations?.handoff&&job.status!=="completed","No editable handoff",409);
+      job.operations.handoff.acknowledgedAt=now;job.operations.handoff.acknowledgedBy=actor.email;
+    }else if(command.type==="quality"){
+      const check=job.operations?.checks.find(c=>c.id===command.checkId);
+      requireThat(check,"Quality check not found",404);
+      requireThat(!command.done||job.status==="active"||job.status==="completed","Start the job before signing off final checks",409);
+      check.completedAt=command.done?now:null;check.completedBy=command.done?actor.email:null;
+    }else if(command.type==="plan"){
       requireThat(!["active","completed"].includes(job.status),"Pause active work before editing; completed work is locked");
+      if(board.operationsEnabled&&job.technicianId&&command.technicianId!==job.technicianId)
+        requireThat(job.operations?.handoff&&!job.operations.handoff.acknowledgedAt,"Record a fresh handoff before changing the dispatch owner",409);
       requireThat(!command.technicianId || board.technicians.some(t=>t.id===command.technicianId&&t.active),"Choose an active technician");
       requireThat(!command.resource||resourcesFor(board).some(r=>r.id===command.resource&&r.active),"Choose an active bay or equipment lane");
       requireThat(new Set(command.prerequisites).size===command.prerequisites.length,"Duplicate prerequisites");
@@ -224,6 +252,7 @@ export function applyCommand(input:Board,command:Command,actor:Actor,now:string,
       };
       requireThat(!command.prerequisites.some(id=>reaches(id)),"Dependencies cannot form a cycle");
       Object.assign(job,{technicianId:command.technicianId,plannedStart:command.plannedStart,estimatedMinutes:command.estimatedMinutes,prerequisites:command.prerequisites,resource:command.resource,authorized:command.authorized});
+      if(job.operations?.handoff&&job.technicianId!==input.jobs.find(j=>j.id===job.id)?.technicianId){job.operations.handoff.acknowledgedAt=null;job.operations.handoff.acknowledgedBy=null;}
     }else if(command.type==="start"){
       requireThat(job.status==="idle"||job.status==="paused","Job is already active or completed",409);
       requireThat(blockers(board,job).length===0,`Blocked: ${blockers(board,job).join(", ")}`,409);
@@ -235,6 +264,7 @@ export function applyCommand(input:Board,command:Command,actor:Actor,now:string,
       if(current){settle(current);current.status="paused";current.since=now;current.pauseReason="Switched to another job";detail=`Paused ${current.id}`;}
       settle(job);job.status="active";job.since=now;job.pauseReason=null;
     }else if(command.type==="pause"||command.type==="complete"){
+      if(command.type==="complete"&&board.operationsEnabled)requireThat(job.operations&&job.operations.checks.every(c=>!!c.completedAt)&&!readinessReasons(board,job).length,"Resolve readiness blockers, acknowledge handoff and complete required quality checks first",409);
       requireThat(job.status==="active","Start or resume this job first",409);settle(job);
       job.status=command.type==="pause"?"paused":"completed";job.since=command.type==="pause"?now:null;
       job.pauseReason=command.type==="pause"?command.reason:null;detail=job.pauseReason ?? "";
