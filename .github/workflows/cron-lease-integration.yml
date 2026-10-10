@@ -1,0 +1,46 @@
+name: Isolated cron lease integration
+
+# Explicit opt-in only; never part of push/PR/offline checks.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-databases:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      mongo:
+        image: mongo:7.0
+        ports:
+          - 127.0.0.1:27185:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ping:1})'"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: cron_lease_test
+          POSTGRES_PASSWORD: disposable_only
+          POSTGRES_DB: cron_lease_test
+        ports:
+          - 127.0.0.1:55485:5432
+        options: >-
+          --health-cmd "pg_isready -U cron_lease_test -d cron_lease_test"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Run isolated integration and configuration safety checks
+        run: |
+          env -i PATH="$PATH" HOME="$HOME" \
+            CRON_LEASE_INTEGRATION=disposable-only \
+            CRON_LEASE_TEST_MONGO_URL=mongodb://127.0.0.1:27185/cron_lease_test \
+            CRON_LEASE_TEST_PG_URL=postgres://cron_lease_test:disposable_only@127.0.0.1:55485/cron_lease_test \
+            npm run test:cron-run-leases:integration
