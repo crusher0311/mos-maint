@@ -7,6 +7,7 @@ import { renderStickerStandard, renderStickerDesigner } from "@/lib/canvas-rende
 import QRCode from "qrcode";
 import { Storage } from "@google-cloud/storage";
 import { createStickerQrTarget } from "@/lib/sticker-qr-target";
+import { getExtensionStickerQr } from "@/lib/extension-sticker-qr";
 import { triggerAutoBookingFromSticker, StickerBookingData } from "@/lib/auto-booking/scheduler";
 import { estimateMileageFromCarfax } from "@/lib/integrations/carfax";
 import { findShopBySmsIdDetailed, findAutoflowStickerShop } from "@/lib/extension-shop-lookup";
@@ -78,9 +79,6 @@ const SIZE_INCHES: Record<string, { width: string; height: string }> = {
   "2x3.5": { width: "1.97in", height: "3.45in" },
 };
 
-const HOVERCODE_API_BASE = "https://hovercode.com/api/v2/hovercode";
-const HOVERCODE_API_TOKEN = process.env.HOVERCODE_API_TOKEN;
-
 async function fetchLogoAsBase64(logoUrl: string, logoObjectPath?: string, shopId?: string): Promise<string | null> {
   try {
     if (shopId) {
@@ -130,25 +128,13 @@ async function fetchLogoAsBase64(logoUrl: string, logoObjectPath?: string, shopI
   }
 }
 
-async function fetchImageAsDataUri(imageUrl: string): Promise<string | null> {
-  try {
-    const response = await fetch(imageUrl);
-    if (!response.ok) return null;
-    const buffer = await response.arrayBuffer();
-    const contentType = response.headers.get("content-type") || "image/png";
-    return `data:${contentType};base64,${Buffer.from(buffer).toString("base64")}`;
-  } catch (error) {
-    return null;
-  }
-}
-
 function extractSvgAttr(tag: string, attr: string): string | null {
   const re = new RegExp(`(?:^|\\s)${attr}=["']([^"']*)["']`);
   const m = tag.match(re);
   return m ? m[1] : null;
 }
 
-async function svgToPngDataUri(svgContent: string, size: number = 300, externalLogoUrl?: string | null): Promise<string | null> {
+async function svgToPngDataUri(svgContent: string, size: number = 300, externalLogoUrl?: string | null, signal?: AbortSignal): Promise<string | null> {
   try {
     const { createCanvas, loadImage } = require("canvas");
 
@@ -192,7 +178,7 @@ async function svgToPngDataUri(svgContent: string, size: number = 300, externalL
       try {
         let logoImg;
         if (externalLogoUrl) {
-          const logoResp = await fetch(externalLogoUrl);
+          const logoResp = await fetch(externalLogoUrl, { signal });
           if (logoResp.ok) {
             const logoBuf = Buffer.from(await logoResp.arrayBuffer());
             logoImg = await loadImage(logoBuf);
@@ -205,54 +191,14 @@ async function svgToPngDataUri(svgContent: string, size: number = 300, externalL
           ctx.drawImage(logoImg, logoRect.x, logoRect.y, logoRect.w, logoRect.h);
         }
       } catch (logoErr) {
-        console.warn("[Extension Sticker] Could not overlay logo:", logoErr);
+        console.warn("[Extension Sticker] Could not overlay QR logo");
       }
     }
 
     const pngBuffer = canvas.toBuffer("image/png");
     return `data:image/png;base64,${pngBuffer.toString("base64")}`;
   } catch (error) {
-    console.error("[Extension Sticker] SVG to PNG conversion error:", error);
-    return null;
-  }
-}
-
-async function getExistingHovercodeQR(hovercodeId: string, target: string): Promise<string | null> {
-  if (!HOVERCODE_API_TOKEN) return null;
-
-  try {
-    const response = await fetch(`${HOVERCODE_API_BASE}/${hovercodeId}/`, {
-      method: "GET",
-      headers: { "Authorization": `Token ${HOVERCODE_API_TOKEN}` },
-    });
-
-    if (!response.ok) return null;
-
-    const data = await response.json();
-    if (data.qr_data !== target) return null;
-    
-    if (data.png) {
-      return await fetchImageAsDataUri(data.png);
-    }
-
-    const logoUrl = data.logo || null;
-
-    if (data.svg_file) {
-      const svgResponse = await fetch(data.svg_file);
-      if (svgResponse.ok) {
-        const svgText = await svgResponse.text();
-        const pngDataUri = await svgToPngDataUri(svgText, 300, logoUrl);
-        if (pngDataUri) return pngDataUri;
-      }
-    }
-
-    if (data.svg) {
-      const pngDataUri = await svgToPngDataUri(data.svg, 300, logoUrl);
-      if (pngDataUri) return pngDataUri;
-    }
-
-    return null;
-  } catch {
+    console.error("[Extension Sticker] QR SVG conversion failed");
     return null;
   }
 }
@@ -915,29 +861,21 @@ async function _POST(request: NextRequest) {
     const redirectUrl = excludeQR ? "" : await createStickerQrTarget(db, mosShopId!, vin);
     const qrColor = stickerConfig.colors?.primary || "#111111";
 
-    if (!vin && !excludeQR && stickerConfig.hovercodeQRId && mosShopId) {
-      try {
-        const mediaDoc = await db.collection("shop_media").findOne({
-          shopId: mosShopId,
-          type: "qr_code",
-          hovercodeId: stickerConfig.hovercodeQRId,
-          targetUrl: redirectUrl,
-        });
-        if (mediaDoc?.dataUri) {
-          console.log("[Extension Sticker] Using QR from shop_media cache");
-          qrDataUrl = mediaDoc.dataUri;
-        }
-      } catch (e) {
-        console.warn("[Extension Sticker] shop_media lookup failed:", e);
-      }
-    }
-    if (!vin && !excludeQR && !qrDataUrl && stickerConfig.hovercodeQRId && stickerConfig.qrTargetUrl === redirectUrl) {
-      qrDataUrl = await withUpstreamTimeout(
-        getExistingHovercodeQR(stickerConfig.hovercodeQRId, redirectUrl),
-        STICKER_QR_TIMEOUT_MS,
-        `sticker.hovercodeQR shop=${mosShopId}`,
-        null,
-      );
+    if (!excludeQR) {
+      qrDataUrl = await getExtensionStickerQr(db, mosShopId!, redirectUrl, stickerConfig, shop.name || `Shop ${mosShopId}`, {
+        timeoutMs: STICKER_QR_TIMEOUT_MS,
+        svgToPng: svgToPngDataUri,
+        decode: async (dataUri) => {
+          try {
+            if (!dataUri.startsWith("data:image/")) return null;
+            const { loadImage, createCanvas } = require("canvas");
+            const image = await loadImage(dataUri);
+            const canvas = createCanvas(300, 300);
+            canvas.getContext("2d").drawImage(image, 0, 0, 300, 300);
+            return canvas.toDataURL("image/png");
+          } catch { return null; }
+        },
+      });
     }
     if (!excludeQR && !qrDataUrl) {
       qrDataUrl = await fallbackQRGeneration(redirectUrl, qrColor);

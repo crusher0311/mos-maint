@@ -56,3 +56,37 @@ do not overwrite first-party HoverCode destinations with raw booking URLs.
 minted tokens or the vehicle reference. No customer analytics dashboard is added.
 The public base URL and report signing configuration must already be configured
 as for existing sticker/report features. No production data migration is needed.
+
+## Extension HoverCode printing
+
+Extension printing is HoverCode-first for both vehicle and generic targets.
+Generic eligibility is determined from the resolved target, not raw VIN presence.
+Matching shop/target/ID media or config caches are reused; existing provider
+records must report the exact target. Otherwise a new dynamic HoverCode is
+created using Squares, Rounded eyes and the existing appointment/calendar logo.
+Vehicle results never replace a shop's generic image or HoverCode ID.
+
+Cache reads, provider requests, response bodies and image conversion share a
+six-second deadline. HTTP requests receive an abort signal. Images must decode
+before use; provider/image unavailability retains the extension's local QR
+fallback, encoding the same first-party target. Generic cache publication sets
+image, target and ID together with a compare-and-set guard; legacy IDs are
+retained in that same update. There is no provider retarget operation.
+`[Extension Sticker QR]` diagnostics identify cache/provider success versus
+fallback reasons without target URLs, provider response bodies or bearer links.
+
+Offline regression command:
+`node --import tsx tests/extension-sticker-hovercode.smoke.ts`.
+It runs the real extension handler and both canvas renderers against in-memory
+stores and synthetic HTTP/images, including timeouts and late responses.
+
+Repository print entry points include `PRINT_STICKER_IMMEDIATE` in the extension
+worker and the side-panel sticker POST, which use `/api/extension/sticker`.
+The supplied report screenshot shows a plain QR, but its encoded URL and exact
+entry point have not been established. Operator-only confirmation after an
+authorized release remains: verify the affected shop's effective configuration
+and a newly generated sticker's provider/image choice. Decode locally without
+following the URL (scans record analytics); confirm existing printed shortlinks
+remain unchanged. This work did not deploy, repair live data, call paid
+production QR creation, or scan production links. Per-vehicle deduplication
+remains separate work.
