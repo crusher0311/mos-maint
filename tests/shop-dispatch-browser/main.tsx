@@ -5,6 +5,7 @@ import DispatchPilot from "../../components/shop-dispatch/DispatchPilot";
 import { TechnicianSkills } from "../../components/shop-dispatch/TechnicianSkills";
 import { RosterImport } from "../../components/shop-dispatch/RosterImport";
 import { CommandForm } from "../../components/shop-dispatch/CommandForm";
+import { JobCard } from "../../components/shop-dispatch/JobCard";
 import styles from "../../components/shop-dispatch/pilot.module.css";
 import { actorFor,applyCommand,emptyBoard,type Command } from "../../lib/shop-dispatch/model";
 import { paletteFromPixels, resolveWorkflowBranding } from "../../lib/shop-dispatch/branding";
@@ -33,6 +34,12 @@ act({type:"technician",id:"tech",name:"Test Technician",email:"tech@example.test
 act({type:"visit",id:"visit",ro:"TEST-001",vehicle:"Fictional Test Vehicle",customer:"Test customer"});
 act({type:"job",id:"job",visitId:"visit",title:"Inspection",bookMinutes:30});
 act({type:"plan",jobId:"job",technicianId:"tech",estimatedMinutes:25,plannedStart:now,prerequisites:[],resource:null,authorized:true});
+if(new URLSearchParams(location.search).has("assignments")){
+ board.technicians[0].sourceId="provider-tech";
+ board.jobs[0].sourceId="provider-job";
+ board.jobs[0].sourceTechnicians=[{sourceId:"provider-tech",name:"Test Technician"}];
+ board.jobs[0].bookMinutes=90;
+}
 if (new URLSearchParams(location.search).has("warnings")) board.jobs[0].sourceRemoved = true;
 const realFetch=window.fetch.bind(window);
 window.fetch=async(input,init)=>{
@@ -61,4 +68,4 @@ function RosterPreview(){
   <RosterImport board={board} busy={false} mutate={async()=>{throw Error("The board changed. Refresh the board and try saving again.");}}/>
  </main>;
 }
-createRoot(document.getElementById("root")!).render(<><div style={{padding:12,background:"#ffe6a0",color:"#222"}}>OFFLINE UI TEST FIXTURE · synthetic data · no production connection</div>{new URLSearchParams(location.search).has("roster")?<RosterPreview/>:new URLSearchParams(location.search).has("skills")?<main className={styles.root}><TechnicianSkills board={board} actor={actor} busy={false} mutate={async()=>false}/></main>:<DispatchPilot/>}</>);
+createRoot(document.getElementById("root")!).render(<><div style={{padding:12,background:"#ffe6a0",color:"#222"}}>OFFLINE UI TEST FIXTURE · synthetic data · no production connection</div>{new URLSearchParams(location.search).has("assignments")?<main className={styles.root} style={{padding:24,maxWidth:950}}><JobCard job={board.jobs[0]} board={board} actor={actor} now={Date.now()} busy={false} mutate={async()=>false}/></main>:new URLSearchParams(location.search).has("roster")?<RosterPreview/>:new URLSearchParams(location.search).has("skills")?<main className={styles.root}><TechnicianSkills board={board} actor={actor} busy={false} mutate={async()=>false}/></main>:<DispatchPilot/>}</>);

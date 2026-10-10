@@ -19,7 +19,10 @@ export async function POST(req:Request){
     const authenticated=await getSession();
     if(!authenticated)return dispatchJson({error:"Sign in to use shop workflow"},401);
     const session=await dispatchSession(authenticated),body=await requestBody(req);
-    const board=await executeDispatchMutation(session,body,{read:readDispatchBoard,save:saveDispatchBoard,intake:fetchDispatchWorkOrder,intakeByNumber:fetchDispatchWorkOrderByNumber,employee:(shopId,id)=>runWithProtractorInteractiveTransport(shopId,()=>fetchDispatchEmployee(shopId,id)),now:()=>new Date().toISOString()});
+    const board=await executeDispatchMutation(session,body,{read:readDispatchBoard,save:saveDispatchBoard,
+      intake:(shopId,id)=>runWithProtractorInteractiveTransport(shopId,()=>fetchDispatchWorkOrder(shopId,id)),
+      intakeByNumber:(shopId,number)=>runWithProtractorInteractiveTransport(shopId,()=>fetchDispatchWorkOrderByNumber(shopId,number)),
+      employee:(shopId,id)=>runWithProtractorInteractiveTransport(shopId,()=>fetchDispatchEmployee(shopId,id)),now:()=>new Date().toISOString()});
     return dispatchJson(await dispatchSnapshot(session,board));
   }catch(e){return dispatchFailure(e);}
 }

@@ -33,7 +33,13 @@ loader._load=function(id,...args){
    assert.equal(id,10);
    return {displayName:"Saved shop",logo:null};
  }};
- if(id==="@/lib/shop-dispatch/protractor")return {fetchDispatchWorkOrder:async()=>{throw new Error("No live requests");}};
+ if(id==="@/lib/shop-dispatch/protractor"){
+  const intake=async(shopId:number,id:string)=>{
+   assert.equal(shopId,10);assert.equal(getProtractorInteractiveTransportContext()?.shopId,shopId);
+   return {sourceId:id,ro:"123",vehicle:"Test vehicle",customer:"",sourceStatus:"Unassigned",jobs:[]};
+  };
+  return {fetchDispatchWorkOrder:intake,fetchDispatchWorkOrderByNumber:(shopId:number)=>intake(shopId,"11111111-1111-4111-8111-111111111111")};
+ }
  return original.call(this,id,...args);
 };
 const route=require("../app/api/shop-dispatch/route");
@@ -41,6 +47,17 @@ const brandRoute=require("../app/api/shop-dispatch/enterprise-brand/route");
 const http=require("../lib/shop-dispatch/http");
 const rosterRoute=require("../app/api/shop-dispatch/roster/route");
 const skillsRoute=require("../app/api/shop-dispatch/skills/route");
+test("RO intake by ID and number has shop-bound interactive scope",async()=>{
+ boards.clear();
+ session={shopId:10,email:"manager@example.test",role:"manager",token:"real-session"};
+ const commands=[{type:"sync",workOrderId:"11111111-1111-4111-8111-111111111111"},{type:"syncNumber",roNumber:"123"}];
+ for(let revision=0;revision<commands.length;revision++){
+  const response=await route.POST(req({requestId:randomUUID(),revision,command:commands[revision]}));
+  assert.equal(response.status,200,JSON.stringify(await response.json()));
+  assert.equal(getProtractorInteractiveTransportContext(),undefined);
+ }
+ boards.clear();session=null;reads=0;
+});
 test("skill history requires manager authorization and is session-shop scoped",async()=>{
  session=null;assert.equal((await skillsRoute.GET()).status,401);
  session={shopId:10,email:"user@example.test",role:"user",token:"real-session"};
