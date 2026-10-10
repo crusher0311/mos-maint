@@ -1,25 +1,19 @@
 ---
 name: Post-deploy cron lock stall
-description: Why the in-process cron looks dead for ~10 min after every Render deploy, and why it's not a hang.
+description: Retained cron leases after restarts or ambiguous transport failures are not proof of a stuck scheduler.
 ---
 
 # Post-deploy cron lock stall (expected, self-healing)
 
-After a Render deploy of the web service, the in-process node-cron jobs can log
-`[Cron] Skip <job> (lock held by another instance)` on every tick for up to ~10
-minutes, with NO winning run in between. This looks like a dead scheduler but is
-normal.
+After a restart or ambiguous HTTP failure, repeated cron skips without a new
+winning run can be expected until the prior job's effective lease expires.
+Do not assume all jobs recover within ten minutes.
 
-**Why:** The cron uses a Mongo-backed lease in `cron_locks` (db `mos`) with
-`DEFAULT_LOCK_TTL_MS = 10 min`. If a tick fires on the OLD instance moments before
-the deploy swaps it out, that instance acquires the lease and is then killed
-mid-run — it never releases. New instances can only take over once the lease's
-`expiresAt` passes (the acquire query matches `expiresAt <= now`). So the job is
-blocked until the original 10-min TTL elapses, then the next tick wins and runs.
+**Why:** A killed process cannot release its lease, and an HTTP disconnect does
+not establish that its server-side work stopped. Treating either as completion
+can create duplicate work. Long-request jobs require longer exclusion windows.
 
-**How to apply:** When verifying any cron-driven fix right after a push, don't
-panic at a run of "lock held by another instance" skips — wait until ~10 min past
-the last successful pre-deploy run, then expect a clean acquire + run. Only treat
-it as a real failure if skips persist well beyond the 10-min TTL. Do NOT hand-clear
-the prod `cron_locks` doc to "speed it up" — it self-expires and a manual delete is
-an unnecessary prod write. `*/2` cron means you'll see ~4-5 skips before recovery.
+**How to apply:** Diagnose skips against the particular job's effective lease,
+not a fixed ten-minute threshold. Do not hand-clear leases to accelerate recovery.
+Old replicas must drain before claiming fleet-wide protection; mixed-version
+deployment cannot fix the admission/release behavior of binaries still running.
