@@ -43,6 +43,7 @@ export interface Job {
   prerequisites: string[]; resource: string | null; status: JobStatus;
   activeMs: number; waitingMs: number; since: string | null; pauseReason: string | null;
   sourceId: string | null; sourceRemoved: boolean; authorized: boolean;
+  sourceTechnicians?: {sourceId:string|null;name:string}[];
 }
 export interface Visit {
   id: string; ro: string; vehicle: string; customer: string;
@@ -63,7 +64,9 @@ export interface Actor { email: string; manager: boolean; technicianId: string |
 export const intakeSchema = z.object({
   sourceId: idSchema, ro: text, vehicle: text, customer: z.string().max(160),
   sourceStatus: z.string().max(80),
-  jobs: z.array(z.object({ sourceId: idSchema, title: text, bookMinutes: z.number().min(0).max(10000).nullable() }).strict()).max(80),
+  jobs: z.array(z.object({ sourceId: idSchema, title: text, bookMinutes: z.number().min(0).max(10000).nullable(),
+    sourceTechnicians:z.array(z.object({sourceId:idSchema.nullable(),name:z.string().max(160)}).strict()).max(80).optional(),
+  }).strict()).max(80),
 }).strict();
 export type Intake = z.infer<typeof intakeSchema>;
 export const commandSchema = z.discriminatedUnion("type", [
@@ -197,7 +200,7 @@ export function applyCommand(input:Board,command:Command,actor:Actor,now:string,
       const id=`${v.id}:${source.sourceId.toLowerCase()}`;
       let job=board.jobs.find(j=>j.id===id);
       if(!job){job=newJob(id,v.id,source.title,source.bookMinutes);job.authorized=false;job.sourceId=source.sourceId.toLowerCase();board.jobs.push(job);}
-      Object.assign(job,{title:source.title,bookMinutes:source.bookMinutes,sourceRemoved:false});
+      Object.assign(job,{title:source.title,bookMinutes:source.bookMinutes,sourceTechnicians:source.sourceTechnicians??[],sourceRemoved:false});
     }
     for(const job of board.jobs.filter(j=>j.visitId===v!.id&&j.sourceId)){
       job.sourceRemoved=!intake.jobs.some(s=>s.sourceId.toLowerCase()===job.sourceId);

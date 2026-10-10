@@ -1,6 +1,8 @@
 import type { ProtractorWorkOrder } from "@/lib/integrations/protractor/client";
 import { intakeSchema, requireThat, type Intake } from "./model";
 import { normalizeRoNumber, terminalSourceStatus } from "./source-preferences";
+import { protractorBookMinutes } from "./labor-time";
+import { packageTechnicians } from "./provider-technicians";
 
 /** Pure, allowlisted mapping. Upstream packages do not imply authorization or
  * actual time. No clock/assignment/customer transportation is inferred. */
@@ -14,8 +16,8 @@ export function mapProtractorWorkOrder(workOrder:ProtractorWorkOrder,expectedId:
   const contact=workOrder.Contact;
   const jobs=(packages as NonNullable<ProtractorWorkOrder["ServicePackages"]>).filter(pkg=>!/^(declined|cancelled|canceled|rejected|deleted)$/i.test(pkg.Status ?? "")).map(pkg=>({
     sourceId:pkg.ID,title:((pkg as any).ServicePackageHeader?.Title || pkg.Title || pkg.Description || "Untitled service package").slice(0,160),
-    // Do not assume line Quantity or Technician Hours equals book labor.
-    bookMinutes:null,
+    bookMinutes:protractorBookMinutes(pkg),
+    sourceTechnicians:packageTechnicians(pkg),
   }));
   requireThat(new Set(jobs.map(j=>j.sourceId?.toLowerCase())).size===jobs.length,"Provider returned duplicate service-package identities",502);
   const mapped=intakeSchema.safeParse({

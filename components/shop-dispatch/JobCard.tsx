@@ -11,6 +11,13 @@ export function JobCard({ job, board, actor, now, busy, mutate }: WorkProps & { 
   const closed = board.visits.find(v => v.id === job.visitId)?.closed;
   const controls = canControl(board, job, actor.manager, actor.technicianId);
   const tech = board.technicians.find(t => t.id === job.technicianId);
+  const sourceTechnicians = job.sourceTechnicians ?? [];
+  const sourceAssignments = sourceTechnicians.map(source => ({
+    name: source.name.trim() || "Unnamed Protractor technician",
+    matches: source.sourceId ? board.technicians.filter(t => !!t.sourceId && t.sourceId.toLowerCase() === source.sourceId!.toLowerCase() && t.active) : [],
+  }));
+  const upstreamChoice = sourceAssignments.length === 1 && sourceAssignments[0].matches.length === 1
+    ? sourceAssignments[0].matches[0] : null;
   const resources = resourcesFor(board);
   const resource = resources.find(r => r.id === job.resource);
   const resourceOccupied = !!job.resource && board.jobs.some(j => j.id !== job.id && j.resource === job.resource && j.status === "active");
@@ -22,9 +29,17 @@ export function JobCard({ job, board, actor, now, busy, mutate }: WorkProps & { 
   }
   return <article className={styles.job} data-testid={`job-${job.id}`}>
     <div className={styles.row}><h3>{job.title}</h3><span className={`${styles.chip} ${styles[job.status] || ""}`}>{job.status === "paused" ? "Paused · waiting" : job.status}</span></div>
-    <small>{tech?.name ?? "Unassigned"} · Planned start {dateLabel(job.plannedStart)}{job.resource && ` · ${resource?.name ?? job.resource}${resourceUnavailable ? " (inactive or unavailable)" : ""}`}</small>
+    <small>Dispatch owner: {tech?.name ?? "Unassigned"} · Planned start {dateLabel(job.plannedStart)}{job.resource && ` · ${resource?.name ?? job.resource}${resourceUnavailable ? " (inactive or unavailable)" : ""}`}</small>
+    {(job.sourceId || sourceAssignments.length > 0) && <div data-testid={`protractor-assignment-${job.id}`}>
+      <small><strong>Protractor assignment</strong> · read-only</small>
+      {sourceAssignments.length === 0 ? <div><small>No technician reported by Protractor.</small></div> :
+        sourceAssignments.map((source, index) => <div key={index}><small>{source.name} · {source.matches.length === 1
+          ? `Active dispatch roster match: ${source.matches[0].name.trim() || "Unnamed dispatch technician"}`
+          : "Roster review needed — no unique active source-ID match"}</small></div>)}
+      {sourceAssignments.length > 1 && <div><small>Multiple Protractor technicians. Choose the dispatch owner manually.</small></div>}
+    </div>}
     <div className={`${styles.metrics} ${styles.mono}`}>
-      <div><small>Active work</small><strong>{minutes(times.activeMs)}</strong></div>
+      <div><small>Actual active work</small><strong>{minutes(times.activeMs)}</strong></div>
       <div><small>Paused waiting</small><strong>{minutes(times.waitingMs)}</strong></div>
       <div><small>Manual estimate</small><strong>{job.estimatedMinutes === null ? "Unknown" : `${job.estimatedMinutes} min`}</strong></div>
       <div><small>Book time {job.sourceId ? "· upstream" : "· entered"}</small><strong>{job.bookMinutes === null ? "Unknown" : `${job.bookMinutes} min`}</strong></div>
@@ -52,11 +67,18 @@ export function JobCard({ job, board, actor, now, busy, mutate }: WorkProps & { 
           authorized: data.get("authorized") === "on",
         }, expectedRevision)}>
           <div className={styles.fields}>
-            <label>Active technician<select name="technicianId" defaultValue={job.technicianId ?? ""}><option value="">Unassigned</option>{board.technicians.filter(t => t.active).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></label>
+            <label>Active dispatch owner<select name="technicianId" defaultValue={job.technicianId ?? ""}><option value="">Unassigned</option>{board.technicians.filter(t => t.active).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></label>
             <label>Planned work start<input type="datetime-local" name="plannedStart" defaultValue={localDate(job.plannedStart)} /></label>
             <label>Manual planned estimate (minutes)<input type="number" name="estimatedMinutes" min={1} max={1440} step={1} defaultValue={job.estimatedMinutes ?? ""} placeholder="Unknown" /></label>
             <label>Shared resource<select name="resource" defaultValue={job.resource ?? ""}><option value="">None</option>{resources.filter(r => r.active || r.id === job.resource).map(r => <option key={r.id} value={r.id} disabled={!r.active}>{r.name}{r.active ? "" : " · inactive"}</option>)}{job.resource && !resource && <option value={job.resource} disabled>{job.resource} · unavailable</option>}</select></label>
           </div>
+          {upstreamChoice && <div className={styles.actions}>
+            <button type="button" data-testid={`select-protractor-technician-${job.id}`} onClick={event => {
+              const select = event.currentTarget.form?.elements.namedItem("technicianId");
+              if (select instanceof HTMLSelectElement) select.value = upstreamChoice.id;
+            }}>Select Protractor technician: {upstreamChoice.name.trim() || "Unnamed dispatch technician"}</button>
+            <small>Changes this draft only. Save plan to assign the dispatch owner.</small>
+          </div>}
           <label className={styles.check}><input type="checkbox" name="authorized" defaultChecked={job.authorized} />Manager authorizes this work</label>
           <div><small>Prerequisites · other jobs on this visit only</small>{board.jobs.filter(j => j.visitId === job.visitId && j.id !== job.id).map(j => <label className={styles.check} key={j.id}><input type="checkbox" name="prerequisites" value={j.id} defaultChecked={job.prerequisites.includes(j.id)} />{j.title} · {j.status}</label>)}</div>
           <small>These are local dispatch assignments, not provider technician assignments or confirmed availability. No learned speed estimates.</small>
