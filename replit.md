@@ -17,6 +17,8 @@ Built with Next.js 14.2.5, React 18, Next.js API Routes, Tailwind CSS, and TypeS
 
 **Build/Deploy guardrail:** `openapi-types` must stay a direct `dependency` in `package.json` (do not move it back to a transitive peer dep) — otherwise the Render build fails the strict lockfile guard (`scripts/check-lockfile-sync.cjs`, run at the front of `prebuild`/`test:smoke`). Do not delete that guard. After any `package.json` dependency change, run `npm install --package-lock-only` and commit `package-lock.json`. Node is pinned to `20.20.0`.
 
+**Cron leases:** Each execution owns a unique token, separate from its diagnostic process identity. Ambiguous HTTP failures retain the finite lease; disconnects do not prove work stopped. Before operator rollout or rollback, read [cron lease rollout constraints](docs/runbooks/cron-run-leases.md), especially mixed-version draining. Mongo remains the default; do not change canonical flags as part of rollout.
+
 **UI/UX:** Modern SaaS aesthetic — dark sidebar, light content areas, card-based layouts. Includes a unified integrations page, tabbed vehicle detail views, data-source badges, "My Oil Sticker"/"Quick Sticker" UIs, and a drag-and-drop keytag print designer.
 
 **Feature areas (details live in the code and `docs/runbooks/`):**

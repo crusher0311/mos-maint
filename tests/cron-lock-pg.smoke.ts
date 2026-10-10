@@ -8,7 +8,7 @@
  * contract the Mongo backend provides:
  *   - acquire on a free lock,
  *   - a second instance is blocked while the lease is live,
- *   - the same instance can refresh its own lease,
+ *   - even the same owner cannot refresh through acquisition,
  *   - a different instance takes over once the lease expires,
  *   - release is fenced on instanceId (a stale holder cannot free a
  *     successor's lock),
@@ -50,10 +50,10 @@ function makeFakeCronSql(clock: Clock) {
         const [jobName, ttlMs, instanceId] = params;
         const now = clock.now();
         const existing = store.get(jobName);
+        if (/OR\s+cron_locks\.instance_id/.test(query)) throw new Error("Owner refresh must not admit runs");
         const canTake =
           !existing ||
-          existing.expiresAt <= now ||
-          existing.instanceId === instanceId;
+          existing.expiresAt <= now;
         if (canTake) {
           store.set(jobName, { expiresAt: now + Number(ttlMs), instanceId });
           return [{ instance_id: instanceId }];
@@ -98,7 +98,7 @@ async function run() {
     ok("lock row recorded for instance A", sql.store.get("protractor-sync")?.instanceId === "instA");
   }
 
-  // 2. Second instance blocked while lease is live; same instance refreshes.
+  // 2. Second instance and repeated admission by the same owner are blocked.
   {
     const clock = makeClock(1_700_000_000_000);
     const sql = makeFakeCronSql(clock);
@@ -109,10 +109,10 @@ async function run() {
 
     clock.advance(60_000); // 1 min later, still within TTL
     const aRefresh = await tryAcquireLockPg("job", TTL, "instA", sql);
-    ok("instance A can refresh its own live lease", aRefresh === true);
+    ok("instance A cannot refresh its own live lease", aRefresh === false);
     ok(
-      "refresh extended the expiry",
-      sql.store.get("job")!.expiresAt === clock.now() + TTL,
+      "repeated admission leaves expiry unchanged",
+      sql.store.get("job")!.expiresAt === clock.now() + TTL - 60_000,
     );
   }
 

@@ -39,9 +39,9 @@ import {
  * `cron_locks` — one row per cron job name. A row's presence with
  * `expires_at > now()` means some instance currently holds the job's lock.
  * Acquire is an atomic `INSERT ... ON CONFLICT DO UPDATE` that only takes
- * over when the existing lease is expired (or already held by the same
- * instance, which simply refreshes the TTL). Release is fenced on
- * `instance_id` so a slow instance cannot delete a successor's lock.
+ * over when the existing lease is expired. The legacy-named `instance_id`
+ * contains a unique execution UUID, not the boot identity. No renewal is
+ * performed. Release is fenced on that UUID so stale runs cannot delete successors.
  */
 export const cronLocks = pgTable(
   "cron_locks",
