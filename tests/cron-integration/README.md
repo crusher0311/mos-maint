@@ -12,8 +12,32 @@ errors (Mongo 11000 / PostgreSQL 23505), live-owner reentry denial, natural
 expiry followed by concurrent takeover, stale execution release, owner release,
 and reacquisition. Mongo command monitoring also confirms actual scheduler
 upserts encounter duplicate-key responses and convert them to non-admission.
-These are storage-level contract checks, not a claim about failover or network
-partitions. Existing offline tests continue to cover orchestration.
+The same opt-in command also runs six real-driver network-fault cases (three
+per backend) through a test-owned TCP proxy:
+
+* Acquisition commits, but server response bytes are withheld and the connection
+  is cut. An independent connection proves the lease exists, the driver reports
+  failure, and repeated contenders are denied before natural expiry.
+* Release request bytes are withheld before reaching the server, then the
+  connection is cut. The retained lease excludes contenders until natural expiry.
+* Release commits, but acknowledgment bytes are withheld before the connection
+  is cut. The observed deletion permits a successor without waiting for expiry.
+
+After healing the proxy, each case races independent connections for exactly
+one successor, retries the old execution's release to prove it cannot delete
+the successor, then verifies legitimate release and recovered-client admission.
+The proxy binds an ephemeral loopback port and only forwards to the two fixed
+disposable service ports. Faults are armed after handshakes; byte counters and
+independent database observations establish fault placement without sleeps that
+guess commit timing, driver mocks, server failpoints, or application clients.
+For PostgreSQL the proxy forwards Parse/Describe replies (the driver needs them
+before sending Execute), then suppresses DataRow/CommandComplete/ReadyForQuery
+frames, handling fragmented and coalesced TCP chunks.
+Mongo helpers swallow network errors (returning false for acquisition); the PG
+storage helper rejects and the existing offline suite covers scheduler-level
+fail-closed handling. This tests standalone-server TCP interruption, not replica
+failover, rollback durability, or orchestration. The default offline suite and
+prebuild chain remain unchanged.
 
 ## Local disposable services
 
