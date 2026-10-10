@@ -43,6 +43,8 @@
 .nav button { background: transparent; border-color: transparent; }
 .nav button[aria-current=page] { background: var(--primary); color: var(--on-primary); }
 .notice { padding: 15px 18px; border: 1px solid #d1a17b; border-radius: 8px; background: #fff0df; color: #674020; margin: 14px 0; line-height: 1.6; }
+.error { padding: 15px 18px; border: 1px solid #b42332; border-left-width: 4px; border-radius: 8px; background: #fff0f0; color: #971b2b; margin: 14px 0; line-height: 1.6; overflow-wrap: anywhere; }
+.root .error small { color: inherit; }
 .brandingInfo { padding: 15px 18px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); margin: 14px 0; line-height: 1.6; }
 .brandingInfo p { margin: 8px 0; }
 .brandingLink { display: inline-block; color: #174f85; font-weight: 600; text-underline-offset: 3px; }
@@ -67,6 +69,8 @@
 .empty { padding: 35px 20px; border: 1px dashed var(--line); border-radius: 9px; color: var(--muted); text-align: center; }
 .rosterReview { border-top: 1px solid var(--line); padding-top: 18px; margin-top: 22px; }
 .reviewEntry { padding: 16px; border: 1px solid var(--line); border-radius: 8px; margin-top: 12px; background: var(--paper); }
+.rosterGroup { margin-top: 18px; }
+.rosterGroup > p { margin: 6px 0; }
 .visit { display: block; width: 100%; text-align: left; margin: 9px 0; }
 .visit strong, .visit small { display: block; }
 .visit .actions { margin-top: 8px; }

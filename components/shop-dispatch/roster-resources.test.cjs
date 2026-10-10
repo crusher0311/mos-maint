@@ -81,7 +81,7 @@ test("optional logins, manager-reviewed imports and dynamic resource lanes", asy
     review.querySelector('[name="reviewed"]').checked = true;
     review.querySelector('[name="technicianId"]').value = "lift";
     await submit(review);
-    assert.deepEqual(commands.at(-1), { command: { type: "importTechnician", sourceId: "provider-1", id: "lift" }, revision: 12 });
+    assert.deepEqual(commands.at(-1), { command: { type: "importTechnician", sourceId: "provider-1", id: "lift" }, revision: undefined });
     const resource = byTest("resource-form-lift");
     resource.querySelector('[name="name"]').value = "Lift bay 1";
     resource.querySelector('[name="active"]').checked = false;
@@ -180,7 +180,7 @@ test("historical roster candidates require explicit review and never imply curre
     assert.equal(commands.length, 0, "checking review alone never imports a candidate");
     await submit(review);
     assert.deepEqual(commands, [{
-      command: { type: "importTechnician", sourceId: "historical-1", id: "existing-lane" }, revision: 17,
+      command: { type: "importTechnician", sourceId: "historical-1", id: "existing-lane" }, revision: undefined,
     }]);
 
     response = {

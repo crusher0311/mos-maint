@@ -9,13 +9,26 @@ test("history suggestions deduplicate identities, retain multiple technicians, a
   {Technician:{ID:"DEF",Name:{FirstName:"Two",LastName:"Tech"}}},
   {Technician:"[object Object]"},
  ])]);
- assert.deepEqual(rows,[{id:"abc",name:"One",active:true,historical:true},{id:"def",name:"Two Tech",active:true,historical:true}]);
+ assert.deepEqual(rows,[{id:"abc",name:"One",active:true,historical:true,lastSeenAt:null,recentActivity:false},{id:"def",name:"Two Tech",active:true,historical:true,lastSeenAt:null,recentActivity:false}]);
 });
 test("ambiguous names and missing identities are not silently selected",()=>{
  assert.deepEqual(historicalCandidates([page([
   {Technician:{ID:"same",Name:"One"}},{Technician:{ID:"same",Name:"Other"}},
   {Technician:{Name:"No identity"}},
  ])]),[]);
+});
+test("recency uses latest valid invoice date, includes the 30-day boundary, and ignores future/credit dates",()=>{
+ const now=Date.parse("2026-10-10T12:00:00Z");
+ const invoice=(id:string,date:string,type="WorkOrder")=>({InvoiceTime:date,Type:type,ServicePackages:[{ServicePackageLines:[{Technician:{ID:id,Name:id}}]}]});
+ const rows=historicalCandidates([{invoices:[
+  invoice("recent","2026-10-09T12:00:00Z"),invoice("recent","2026-08-01T12:00:00Z"),
+  invoice("boundary","2026-09-10T12:00:00Z"),invoice("past","2026-09-10T11:59:59Z"),
+  invoice("future","2027-01-01"),invoice("credit","2026-10-10T12:00:00Z","CreditSlip"),
+  invoice("invalid","bad"),
+ ]}],now);
+ assert.deepEqual(rows.filter(x=>x.recentActivity).map(x=>x.id),["boundary","recent"]);
+ assert.equal(rows.find(x=>x.id==="recent")?.lastSeenAt,"2026-10-09T12:00:00.000Z");
+ for(const id of ["future","credit","invalid"])assert.equal(rows.find(x=>x.id===id)?.lastSeenAt,null);
 });
 test("history reads are current-shop, completed-job scoped and bounded; cross-shop rows are rejected",async()=>{
  const calls:any[]=[];

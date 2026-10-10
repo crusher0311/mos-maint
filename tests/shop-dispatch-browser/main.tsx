@@ -3,6 +3,8 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import DispatchPilot from "../../components/shop-dispatch/DispatchPilot";
 import { TechnicianSkills } from "../../components/shop-dispatch/TechnicianSkills";
+import { RosterImport } from "../../components/shop-dispatch/RosterImport";
+import { CommandForm } from "../../components/shop-dispatch/CommandForm";
 import styles from "../../components/shop-dispatch/pilot.module.css";
 import { actorFor,applyCommand,emptyBoard,type Command } from "../../lib/shop-dispatch/model";
 import { paletteFromPixels, resolveWorkflowBranding } from "../../lib/shop-dispatch/branding";
@@ -37,10 +39,26 @@ window.fetch=async(input,init)=>{
  const url=String(input);
  if(!url.startsWith("/api/shop-dispatch"))throw new Error("Offline fixture blocked unexpected request");
  try {
+  if(url==="/api/shop-dispatch/roster")return Response.json({source:"history",truncated:false,employees:[
+    {id:"recent",name:"Recent Technician",active:true,historical:true,lastSeenAt:new Date().toISOString(),recentActivity:true},
+    {id:"past",name:"Earlier Technician",active:true,historical:true,lastSeenAt:"2026-06-01T12:00:00Z",recentActivity:false},
+  ]});
   if(url==="/api/shop-dispatch/skills")return Response.json({truncated:false,profiles:[{technicianId:"tech",sourceId:"synthetic",skills:[{key:"brake service",title:"Brake service",count:12,lastCompletedAt:"2026-10-01T12:00:00Z",sharedJobCount:2,evidence:[{ro:"TEST-001",title:"Brake service",completedAt:"2026-10-01T12:00:00Z",shared:true}]}]}]});
   if(init?.method==="POST"){const body=JSON.parse(String(init.body));if(body.revision!==board.revision)return Response.json({error:"Revision conflict"},{status:409});if(body.command.type==="syncNumber")importRo(body.command.roNumber);else act(body.command);}
   return Response.json({board,branding:resolveWorkflowBranding(board.locationBrand,shared,null),actor:actorFor(board,actor.email,"manager"),shopId:999,serverNow:new Date().toISOString(),enterprise:null});
  }catch(e){return Response.json({error:e instanceof Error?e.message:"Error"},{status:422});}
 };
 void realFetch;
-createRoot(document.getElementById("root")!).render(<><div style={{padding:12,background:"#ffe6a0",color:"#222"}}>OFFLINE UI TEST FIXTURE · synthetic data · no production connection</div>{new URLSearchParams(location.search).has("skills")?<main className={styles.root}><TechnicianSkills board={board} actor={actor} busy={false} mutate={async()=>false}/></main>:<DispatchPilot/>}</>);
+function RosterPreview(){
+ const [failed,setFailed]=React.useState(false);
+ React.useEffect(()=>{document.querySelector<HTMLButtonElement>('[data-testid="roster-load"]')?.click();},[]);
+ return <main className={styles.root} style={{padding:24,maxWidth:950}}>
+  <h1>Technician roster review</h1>
+  <CommandForm testId="error-demo" busy={false} label="Save reviewed technician" submit={async()=>{setFailed(true);throw Error("The board changed. Refresh the board and try saving again.");}}>
+   <label>Technician name<input name="name" defaultValue="Example technician"/></label>
+  </CommandForm>
+  {!failed&&<p>Save above to preview the error state.</p>}
+  <RosterImport board={board} busy={false} mutate={async()=>{throw Error("The board changed. Refresh the board and try saving again.");}}/>
+ </main>;
+}
+createRoot(document.getElementById("root")!).render(<><div style={{padding:12,background:"#ffe6a0",color:"#222"}}>OFFLINE UI TEST FIXTURE · synthetic data · no production connection</div>{new URLSearchParams(location.search).has("roster")?<RosterPreview/>:new URLSearchParams(location.search).has("skills")?<main className={styles.root}><TechnicianSkills board={board} actor={actor} busy={false} mutate={async()=>false}/></main>:<DispatchPilot/>}</>);
