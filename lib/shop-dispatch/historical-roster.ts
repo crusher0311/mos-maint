@@ -3,18 +3,25 @@ import { idSchema } from "./model";
 import type { Db } from "mongodb";
 
 const list=(v:any):any[]=>Array.isArray(v)?v:Array.isArray(v?.ItemCollection)?v.ItemCollection:[];
-export function historicalCandidates(pages:any[]){
+export function historicalCandidates(pages:any[], now=Date.now()){
   const names=new Map<string,Set<string>>();
-  for(const page of pages)for(const invoice of list(page.invoices))
+  const lastSeen=new Map<string,number>();
+  for(const page of pages)for(const invoice of list(page.invoices)){
+    const date=Date.parse(invoice.InvoiceTime);
+    const validDate=Number.isFinite(date)&&date>0&&date<=now&&!/credit|estimate|quote/i.test(String(invoice.Type??""));
     for(const pkg of list(invoice.ServicePackages))for(const line of list(pkg.ServicePackageLines)){
       const tech=protractorTechnician(line.Technician,line.TechnicianName);
       const id=tech.technicianId?.toLowerCase(),name=tech.technicianName;
       if(!id||!idSchema.safeParse(id).success||!name||name.length>160)continue;
       const values=names.get(id)??new Set<string>();values.add(name);names.set(id,values);
+      if(validDate)lastSeen.set(id,Math.max(lastSeen.get(id)??0,date));
     }
+  }
   // Conflicting names need manual resolution, not an arbitrary identity merge.
   return [...names].filter(([,values])=>values.size===1).map(([id,values])=>({
     id,name:[...values][0],active:true,historical:true as const,
+    lastSeenAt:lastSeen.has(id)?new Date(lastSeen.get(id)!).toISOString():null,
+    recentActivity:lastSeen.has(id)&&lastSeen.get(id)!>=now-30*24*60*60*1000,
   })).sort((a,b)=>a.name.localeCompare(b.name));
 }
 

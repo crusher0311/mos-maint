@@ -51,6 +51,12 @@ before requesting another import or a CSV.
 
 Historical technician identities may be shown as manager-reviewed roster suggestions when the current provider list has no usable entries; never treat them as evidence of current employment.
 
+Prioritize historical technicians seen in the last 30 days and retain older or undated candidates at the bottom as “Possible past employees.”
+
+**Why:** The user wants recent staff prioritized without excluding employees on extended leave or loaned to another store. Lack of recent imported work is not termination evidence.
+
+**How to apply:** Use valid invoice dates relative to today, show last-seen dates and archive-coverage caveats, and keep every candidate available for explicit review.
+
 **Why:** The user approved this fallback for Burnett after the live roster remained empty despite named technician evidence in imported repair orders.
 
 **How to apply:** Label historical candidates, leave them unselected, revalidate identity on import, preserve existing lanes/logins, and do not create accounts or automatically activate historical staff.

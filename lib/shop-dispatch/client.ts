@@ -40,7 +40,7 @@ export function useDispatchBoard() {
   useEffect(()=>{mounted.current=true;void refresh();const timer=setInterval(()=>{if(document.visibilityState==="visible")void refresh();},10000);
     const visible=()=>{if(document.visibilityState==="visible")void refresh();};document.addEventListener("visibilitychange",visible);
     return()=>{mounted.current=false;clearInterval(timer);document.removeEventListener("visibilitychange",visible);};},[refresh]);
-  const send=async(url:string,body:unknown):Promise<boolean>=>{
+  const send=async(url:string,body:unknown,propagateError=false):Promise<boolean>=>{
     if(inflight.current)return false;
     inflight.current=true;generation.current++;setBusy(true);setError("");
     // Preserve the exact command/UUID for ambiguous network failure; don't silently submit new work.
@@ -53,13 +53,13 @@ export function useDispatchBoard() {
         throw new Error(value.error||"Save failed");
       }
       retryRef.current=null;accept(value);return true;
-    }catch(e){setError(e instanceof Error?e.message:"Save could not be confirmed. Retry the same request.");return false;}
+    }catch(e){setError(e instanceof Error?e.message:"Save could not be confirmed. Retry the same request.");if(propagateError)throw e;return false;}
     finally{inflight.current=false;setBusy(false);}
   };
   const mutate=(command:Command,expectedRevision?:number)=> {
     if(retryRef.current){setError("Retry or resolve the previous unconfirmed save before making another change.");return Promise.resolve(false);}
     if(!snapshot)return Promise.resolve(false);
-    return send("/api/shop-dispatch",{requestId:crypto.randomUUID(),revision:expectedRevision ?? snapshot.board.revision,command});
+    return send("/api/shop-dispatch",{requestId:crypto.randomUUID(),revision:expectedRevision ?? snapshot.board.revision,command},command.type==="importTechnician");
   };
   const saveEnterpriseBrand=(brand:Brand|null,expectedRevision?:number)=>{
     if(retryRef.current){setError("Resolve the previous unconfirmed save first.");return Promise.resolve(false);}

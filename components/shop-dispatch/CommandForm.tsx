@@ -10,6 +10,7 @@ export function CommandForm({ children, submit, busy, testId, label = "Save", re
   onPinRevision?: (revision: number) => void; onReload?: () => void;
 }) {
   const [message, setMessage] = useState("");
+  const [failed, setFailed] = useState(false);
   const [sending, setSending] = useState(false);
   const [creationId, setCreationId] = useState(() => creation ? crypto.randomUUID() : "");
   const [baseRevision, setBaseRevision] = useState(revision);
@@ -22,9 +23,10 @@ export function CommandForm({ children, submit, busy, testId, label = "Save", re
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
-    setSending(true); setMessage("");
+    setSending(true); setMessage(""); setFailed(false);
     try {
       const ok = await submit(new FormData(form), expectedRevision);
+      setFailed(!ok);
       setMessage(ok ? "Saved to the pilot." : "Not saved. Entries and their base revision are preserved. After a conflict, refresh the board, then explicitly reload this form to review latest values before resubmitting.");
       if (ok && expectedRevision !== undefined) pin(expectedRevision + 1);
       if (ok && reset) {
@@ -33,7 +35,7 @@ export function CommandForm({ children, submit, busy, testId, label = "Save", re
         // generate a fresh one after confirmed success for the next record.
         if (creation) setCreationId(crypto.randomUUID());
       }
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Check your entries and try again."); }
+    } catch (error) { setFailed(true); setMessage(`Not saved. ${error instanceof Error ? error.message : "Check your entries and try again."}`); }
     finally { setSending(false); }
   }
   return <form className={styles.form} data-testid={testId} onSubmit={onSubmit}>
@@ -45,11 +47,13 @@ export function CommandForm({ children, submit, busy, testId, label = "Save", re
         onReload?.();
         pin(revision);
         setReloadVersion(value => value + 1);
+        setFailed(false);
         setMessage("Latest fetched values loaded. Review before saving.");
       }}>Reload latest form</button>
     </div>}
     <fieldset key={reloadVersion} disabled={busy || sending} style={{ border: 0, padding: 0, margin: 0, minWidth: 0, display: "grid", gap: 14 }}>{children}
-      <div className={styles.actions}><button className={styles.primary} type="submit">{sending ? "Saving…" : label}</button><small role="status">{message}</small></div>
+      <div className={styles.actions}><button className={styles.primary} type="submit">{sending ? "Saving…" : label}</button></div>
+      {message && <div className={failed ? styles.error : undefined} role={failed ? "alert" : "status"}>{message}</div>}
     </fieldset>
   </form>;
 }
