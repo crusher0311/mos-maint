@@ -9,6 +9,7 @@ import { actorFor, DispatchError, requireThat, type Board } from "./model";
 import { readShopBranding } from "@/lib/data/repositories/shops";
 import { readLogoPalette } from "./logo-palette";
 import { resolveWorkflowBranding } from "./branding";
+import { scheduleBoardView } from "./schedule-view";
 
 export async function dispatchSession(session:SessionInfo|null):Promise<SessionInfo>{
   requireThat(session&&session.email,"Sign in to use shop workflow",401);
@@ -56,7 +57,7 @@ export async function dispatchSnapshot(session:SessionInfo,board?:Board){
   const logo = await readLogoPalette(saved.logo);
   const branding = resolveWorkflowBranding(value.locationBrand, { name, ...logo }, enterprise?.brand ?? null);
   const {stored,...publicEnterprise}=enterprise ?? {stored:null};
-  return {board:{...value,receipts:[],audit:actor.manager?value.audit:[],
+  return {board:{...scheduleBoardView(value),receipts:[],audit:actor.manager?value.audit:[],
     technicians:value.technicians.map(t=>({...t,email:actor.manager||t.id===actor.technicianId?t.email:"",skills:actor.manager?t.skills:undefined}))},
     actor,branding,sourceSyncWarning,shopId:session.shopId,serverNow:new Date().toISOString(),enterprise:enterprise?publicEnterprise:null};
 }

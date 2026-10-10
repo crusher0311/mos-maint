@@ -6,6 +6,8 @@ import { TechnicianSkills } from "../../components/shop-dispatch/TechnicianSkill
 import { RosterImport } from "../../components/shop-dispatch/RosterImport";
 import { CommandForm } from "../../components/shop-dispatch/CommandForm";
 import { JobCard } from "../../components/shop-dispatch/JobCard";
+import { ScheduleCalendar } from "../../components/shop-dispatch/ScheduleCalendar";
+import { availability } from "../../lib/shop-dispatch/schedule-engine";
 import styles from "../../components/shop-dispatch/pilot.module.css";
 import { actorFor,applyCommand,emptyBoard,type Command } from "../../lib/shop-dispatch/model";
 import { paletteFromPixels, resolveWorkflowBranding } from "../../lib/shop-dispatch/branding";
@@ -40,12 +42,23 @@ if(new URLSearchParams(location.search).has("assignments")){
  board.jobs[0].sourceTechnicians=[{sourceId:"provider-tech",name:"Test Technician"}];
  board.jobs[0].bookMinutes=90;
 }
+if(new URLSearchParams(location.search).has("schedule")){
+ const date=new Date().toISOString().slice(0,10);
+ const weekly=Array.from({length:7},(_,day)=>({day,start:"08:00",end:"17:00"}));
+ board.schedule={holds:[],settings:{enabled:true,timeZone:"America/Chicago",weekly,technicians:[{id:"tech",weekly,timeOff:[]}],resources:[],bufferMinutes:15,leadMinutes:30},
+ appointments:{startDate:date,endDate:new Date(Date.now()+7*86400_000).toISOString().slice(0,10),fetchedAt:new Date().toISOString(),complete:true,appointments:[{id:"demo-appointment",ro:"TEST-002",title:"Fictional appointment vehicle",start:new Date(Date.now()+3600_000).toISOString(),end:new Date(Date.now()+7200_000).toISOString(),technicianSourceIds:[]}]}};
+}
 if (new URLSearchParams(location.search).has("warnings")) board.jobs[0].sourceRemoved = true;
 const realFetch=window.fetch.bind(window);
 window.fetch=async(input,init)=>{
  const url=String(input);
  if(!url.startsWith("/api/shop-dispatch"))throw new Error("Offline fixture blocked unexpected request");
  try {
+  if(url.startsWith("/api/shop-dispatch/schedule")){
+   if(init?.method==="POST")return Response.json({error:"Offline preview is read-only."},{status:409});
+   const parsed=new URL(url,location.origin),query=Object.fromEntries(parsed.searchParams);
+   return Response.json({board,availability:availability(board,{...query,durationMinutes:Number(query.durationMinutes)} as any,Date.now())});
+  }
   if(url==="/api/shop-dispatch/roster")return Response.json({source:"history",truncated:false,employees:[
     {id:"recent",name:"Recent Technician",active:true,historical:true,lastSeenAt:new Date().toISOString(),recentActivity:true},
     {id:"past",name:"Earlier Technician",active:true,historical:true,lastSeenAt:"2026-06-01T12:00:00Z",recentActivity:false},
@@ -68,4 +81,4 @@ function RosterPreview(){
   <RosterImport board={board} busy={false} mutate={async()=>{throw Error("The board changed. Refresh the board and try saving again.");}}/>
  </main>;
 }
-createRoot(document.getElementById("root")!).render(<><div style={{padding:12,background:"#ffe6a0",color:"#222"}}>OFFLINE UI TEST FIXTURE · synthetic data · no production connection</div>{new URLSearchParams(location.search).has("assignments")?<main className={styles.root} style={{padding:24,maxWidth:950}}><JobCard job={board.jobs[0]} board={board} actor={actor} now={Date.now()} busy={false} mutate={async()=>false}/></main>:new URLSearchParams(location.search).has("roster")?<RosterPreview/>:new URLSearchParams(location.search).has("skills")?<main className={styles.root}><TechnicianSkills board={board} actor={actor} busy={false} mutate={async()=>false}/></main>:<DispatchPilot/>}</>);
+createRoot(document.getElementById("root")!).render(<><div style={{padding:12,background:"#ffe6a0",color:"#222"}}>OFFLINE UI TEST FIXTURE · synthetic data · no production connection</div>{new URLSearchParams(location.search).has("schedule")?<main className={styles.root} style={{padding:24}}><ScheduleCalendar board={board} busy={false} refresh={async()=>{}} select={()=>{}}/></main>:new URLSearchParams(location.search).has("assignments")?<main className={styles.root} style={{padding:24,maxWidth:950}}><JobCard job={board.jobs[0]} board={board} actor={actor} now={Date.now()} busy={false} mutate={async()=>false}/></main>:new URLSearchParams(location.search).has("roster")?<RosterPreview/>:new URLSearchParams(location.search).has("skills")?<main className={styles.root}><TechnicianSkills board={board} actor={actor} busy={false} mutate={async()=>false}/></main>:<DispatchPilot/>}</>);

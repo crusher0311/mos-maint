@@ -60,6 +60,8 @@ export interface ApiKeyUsageLog {
 }
 
 const AVAILABLE_PERMISSIONS = [
+  "workflow:availability",
+  "workflow:holds",
   "appointments:create",
   "appointments:read",
   "stickers:generate",

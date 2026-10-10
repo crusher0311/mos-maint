@@ -7,13 +7,14 @@ import { AuditView } from "./AuditView";
 import { BrandSettings } from "./BrandSettings";
 import { JobCard } from "./JobCard";
 import { Management } from "./Management";
+import { ScheduleCalendar } from "./ScheduleCalendar";
 import { Timeline } from "./Timeline";
 import { VisitDetail } from "./VisitDetail";
 import { contrast, dateLabel, minutes, projection, resolvedBranding } from "./helpers";
 import { normalizeRoNumber } from "./ro-number";
 import styles from "./pilot.module.css";
 
-type View = "dispatch" | "work" | "manage" | "settings" | "audit";
+type View = "dispatch" | "work" | "manage" | "settings" | "audit" | "schedule";
 export default function DispatchPilot() {
   const api = useDispatchBoard();
   const { snapshot, error, busy, lastReceived, refresh, needsRetry, retry } = api;
@@ -73,6 +74,7 @@ export default function DispatchPilot() {
           <button data-testid="pilot-dispatch" aria-current={view === "dispatch" ? "page" : undefined} onClick={() => navigate("dispatch")}>Dispatch</button>
           <button data-testid="pilot-work" aria-current={view === "work" ? "page" : undefined} onClick={() => navigate("work")}>My work</button>
           {snapshot.actor.manager && <button data-testid="pilot-manage" aria-current={view === "manage" ? "page" : undefined} onClick={() => navigate("manage")}>Roster & intake</button>}
+          {snapshot.actor.manager && <button data-testid="pilot-schedule" aria-current={view === "schedule" ? "page" : undefined} onClick={() => navigate("schedule")}>Schedule</button>}
           <button data-testid="pilot-settings" aria-current={view === "settings" ? "page" : undefined} onClick={() => navigate("settings")}>Brand settings</button>
           <button data-testid="pilot-audit" aria-current={view === "audit" ? "page" : undefined} onClick={() => navigate("audit")}>Audit</button>
         </nav>
@@ -122,6 +124,7 @@ export default function DispatchPilot() {
             </>}
         </section>}
         {view === "manage" && snapshot.actor.manager && work && <Management {...work} />}
+        {view === "schedule" && snapshot.actor.manager && <ScheduleCalendar board={snapshot.board} busy={busy || needsRetry} refresh={refresh} select={visitId => { setView("dispatch"); setSelected(visitId); }} />}
         {view === "settings" && work && <BrandSettings key={snapshot.shopId} snapshot={snapshot} {...work} saveEnterpriseBrand={api.saveEnterpriseBrand} />}
         {view === "audit" && <AuditView board={snapshot.board} />}
         <footer><small>Server-backed pilot · revision {snapshot.board.revision} · board saved {dateLabel(snapshot.board.updatedAt)}. Protractor intake is read-only and verified per fetched work order, not by this board connection.</small></footer>

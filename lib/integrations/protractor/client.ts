@@ -6432,8 +6432,9 @@ export async function getProtractorAppointments(
     endDate?: string;
     skip?: number;
     top?: number;
-  } = {}
-): Promise<{ ok: boolean; appointments?: ProtractorWorkOrder[]; error?: string }> {
+  } = {},
+  opts?: { priority?:boolean;maxRetries?:number;timeoutMs?:number;deadlineAtMs?:number },
+): Promise<{ ok: boolean; appointments?: ProtractorWorkOrder[]; rawCount?:number; error?: string }> {
   const config = await resolveProtractorConfig(shopId);
   if (!config.configured) {
     return { ok: false, error: "Protractor not configured for this shop" };
@@ -6457,7 +6458,8 @@ export async function getProtractorAppointments(
     config,
     {},
     0,
-    shopId
+    shopId,
+    opts
   );
   
   if (!result.ok) {
@@ -6469,7 +6471,8 @@ export async function getProtractorAppointments(
     wo => wo.Type === "Appointment"
   );
   
-  return { ok: true, appointments };
+  if(!Array.isArray(result.data?.ItemCollection))return {ok:false,error:"Appointment response omitted its collection"};
+  return { ok: true, appointments, rawCount:result.data.ItemCollection.length };
 }
 
 // ------ Employee Functions ------
