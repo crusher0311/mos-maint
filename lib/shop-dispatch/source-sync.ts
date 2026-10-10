@@ -1,4 +1,5 @@
 import { applyCommand, type Board } from "./model";
+import { assertHeldCapacityPreserved } from "./schedule-engine";
 import { mapProtractorWorkOrder } from "./protractor";
 import { isVisitVisible, terminalSourceStatus } from "./source-preferences";
 import type { ProtractorWorkOrder } from "@/lib/integrations/protractor/client";
@@ -43,7 +44,9 @@ export function reconcileSourceSnapshots(input:Board,shopId:number,rows:SourceSn
     try{
       if(!payload)throw new Error("Missing provider snapshot");
       const intake=mapProtractorWorkOrder(payload,id);
-      board=applyCommand(board,{type:"sync",workOrderId:id},sourceActor,now,intake);
+      const updated=applyCommand(board,{type:"sync",workOrderId:id},sourceActor,now,intake);
+      assertHeldCapacityPreserved(board,updated,Date.parse(now));
+      board=updated;
       board.visits.find(v=>v.provider==="protractor"&&v.sourceId===id)!.sourceFetchedAt=new Date(fetched).toISOString();
     }catch{failed++;}
   }

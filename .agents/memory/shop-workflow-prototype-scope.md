@@ -5,6 +5,12 @@ description: Product model and isolation boundary for Detect Dog scheduling expl
 
 The scheduling concept is a vehicle visit containing individual jobs and multi-technician handoffs, not one appointment block per vehicle.
 
+Integrator scheduling is authorized for availability and temporary MOS holds, not appointment confirmation or Protractor write-back.
+
+**Why:** The user selected temporary reservations to prevent competing integrators taking the same MOS slot, with provider writes explicitly kept separate.
+
+**How to apply:** Keep shop-scoped authorization and shared capacity checks. Do not present a MOS hold as a confirmed provider booking or route existing appointment-creation calls through it without a separately approved confirmation contract.
+
 Technician skill profiles must distinguish history-supported experience from manager-confirmed independent capability.
 
 **Why:** The user wants capabilities derived from previously performed work, with manager confirmation and corrections; multi-technician work is not proof of independent proficiency.

@@ -18,6 +18,10 @@ const fakeRepo={
  saveDispatchEnterpriseBrand:async(value:typeof enterpriseBrand,revision:number)=>{if(enterpriseBrand.revision!==revision)return false;enterpriseBrand=structuredClone(value);return true;},
 };
 loader._load=function(id,...args){
+ if(id==="@/lib/shop-dispatch/schedule-runtime")return {scheduleDependencies:{
+   read:fakeRepo.readDispatchBoard,save:fakeRepo.saveDispatchBoard,now:()=>Date.now(),
+   fetchPage:async()=>{throw new Error("No live provider reads in route tests");},
+ }};
  if(id==="@/lib/shop-dispatch/skills")return {loadSkillProfiles:async(shopId:number)=>{assert.equal(shopId,10);skillReads++;return {profiles:[],truncated:false};}};
  if(id==="next/server")return {NextResponse:{json:(value:unknown,init?:ResponseInit)=>Response.json(value,init)}};
  if(id==="@/lib/auth")return {getSession:async()=>session};
@@ -47,6 +51,23 @@ const brandRoute=require("../app/api/shop-dispatch/enterprise-brand/route");
 const http=require("../lib/shop-dispatch/http");
 const rosterRoute=require("../app/api/shop-dispatch/roster/route");
 const skillsRoute=require("../app/api/shop-dispatch/skills/route");
+const scheduleRoute=require("../app/api/shop-dispatch/schedule/route");
+test("schedule management is session-shop scoped, manager-only, CSRF protected and opt-in",async()=>{
+ boards.clear();session=null;
+ const date=new Date().toISOString().slice(0,10),end=new Date(Date.now()+86400_000).toISOString().slice(0,10);
+ const query=new Request(`https://pilot.test/api/shop-dispatch/schedule?startDate=${date}&endDate=${end}&durationMinutes=60`);
+ assert.equal((await scheduleRoute.GET(query)).status,401);
+ session={shopId:10,email:"viewer@example.test",role:"user",token:"real-session"};
+ assert.equal((await scheduleRoute.GET(query)).status,403);
+ session={shopId:10,email:"manager@example.test",role:"manager",token:"real-session"};
+ const res=await scheduleRoute.GET(query);assert.equal(res.status,200);assert.equal((await res.json()).availability.available,false);
+ const command={type:"settings",requestId:randomUUID(),revision:0,settings:{enabled:false,timeZone:"America/Chicago",weekly:[],technicians:[],resources:[],bufferMinutes:0,leadMinutes:0}};
+ assert.equal((await scheduleRoute.POST(req(command,"https://evil.test"))).status,403);
+ assert.equal((await scheduleRoute.POST(req({...command,shopId:999}))).status,400);
+ assert.equal((await scheduleRoute.POST(req(command))).status,200);
+ assert.equal(boards.get(10)?.schedule?.settings?.enabled,false);assert.equal(boards.has(999),false);
+ boards.clear();session=null;reads=0;
+});
 test("RO intake by ID and number has shop-bound interactive scope",async()=>{
  boards.clear();
  session={shopId:10,email:"manager@example.test",role:"manager",token:"real-session"};

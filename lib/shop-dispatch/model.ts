@@ -54,6 +54,7 @@ export interface Visit {
 export interface Audit { at: string; actor: string; action: string; target: string; detail: string }
 export interface Receipt { id: string; actor: string; digest: string }
 export interface Board {
+  schedule?:import("./schedule-types").ScheduleState;
   revision: number; updatedAt: string | null; technicians: Technician[];
   visits: Visit[]; jobs: Job[]; audit: Audit[]; receipts: Receipt[];
   locationBrand: Brand | null;

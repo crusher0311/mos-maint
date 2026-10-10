@@ -1,0 +1,106 @@
+# Workflow calendar and scheduler API
+
+This addition is opt-in per shop, behind the existing `shop_workflow` entitlement.
+Managers configure Schedule → Settings: IANA timezone, weekly shop hours,
+explicit technician shifts, time off, optional bay shifts/time off, buffer and
+lead time. Unconfigured technicians have no advertised availability.
+Settings do not alter provider appointments or employee records.
+
+## Scope and authentication
+
+Use a **shop-scoped MOS API key**, sent as `Authorization: Bearer …` or
+`X-API-Key`. Grant `workflow:availability` for availability and
+`workflow:holds` for creating, inspecting and releasing holds. The existing
+API-key rate limiter applies. Keys resolve the shop server-side; global partner
+keys and request-supplied shop IDs are rejected. Provisioning real credentials
+is a separate authorized operation.
+
+### Availability
+
+`GET /api/external/workflow/availability`
+
+Query:
+- `startDate=2026-10-12`
+- `endDate=2026-10-13` (exclusive; maximum seven days per request)
+- `durationMinutes=60` (15–480)
+- optional `technicianId`, `resourceId`, `skillKey`
+
+Results contain `timeZone`, board `revision`, `generatedAt`,
+`appointmentFetchedAt`, `available`, `reasons`, `warnings`, `slots`, `truncated`.
+Each slot has offset-qualified `start`, `end`, `technicianId`, `resourceId`.
+Results are capped at 1,000; narrow the range or technician if truncated.
+No customer, vehicle, RO, API-key identity or other scheduler's hold is exposed.
+Availability is a snapshot, not a reservation. A slot can disappear before POST.
+
+### Create a temporary reservation
+
+`POST /api/external/workflow/holds` with JSON:
+
+```json
+{
+  "requestId": "7fc0d51e-d566-49ed-963f-a58fe2f4a47d",
+  "start": "2026-10-12T14:00:00Z",
+  "end": "2026-10-12T15:00:00Z",
+  "technicianId": "local-roster-id",
+  "resourceId": "optional-bay-id",
+  "skillKey": "optional-confirmed-skill"
+}
+```
+
+Omit optional resource/skill or send null. Holds last **five minutes** and cannot
+be silently extended. Retry an uncertain POST with the **same requestId and
+identical body**. Different payload with the same ID returns 409; an expired or
+released request returns 410. Request identities are retained for at least
+24 hours. Response is `{hold, reservedIn:"MOS", providerAppointmentCreated:false}`.
+
+`GET /api/external/workflow/holds?holdId=UUID` returns the owning key's hold and
+an `active` flag. `DELETE` to the same path with JSON `{"holdId":"UUID"}` releases
+it idempotently. A different key cannot inspect or release the hold. Managers
+can see timing/lane information and explicitly release holds in the calendar.
+Holds block immediately under the same revision compare-and-swap as local plans.
+No TTL index or background worker is necessary: expiry is checked at every read/write.
+
+## Capacity and safety
+
+- Date navigation and availability use the configured shop timezone. Explicit
+  offset instants distinguish repeated DST times. Ambiguous or nonexistent
+  provider wall times remain unknown rather than guessed.
+- Capacity includes all local jobs, not merely statuses visible on Dispatch,
+  technician time off, shared bays, appointments and active holds.
+- Manual planned duration takes precedence over imported book duration.
+  Actual/paused work blocks its lane because its finish is unknown.
+- Unscheduled backlog is shown and warned about but is not a timed reservation.
+  Assign that backlog before relying on advertised capacity.
+- Only manager-confirmed skills satisfy `skillKey`; historical experience alone
+  does not qualify a technician.
+- Unassigned/unmatched appointments conservatively reserve all technician lanes
+  during their interval. Missing duration blocks that local day; missing start
+  closes advertised capacity until resolved.
+- Appointment arrival times are displayed separately from job work plans.
+  Once all work for an appointment has explicit local plans, those jobs reserve
+  capacity rather than counting the same arrival twice.
+- Protractor reads are bounded, paginated and cached for at most five minutes.
+  New hold attempts request fresh coverage. Failed, truncated, malformed or stale
+  coverage yields no slots. Calendar data may remain visible with a warning.
+- MOS can serialize MOS holds and local plans; it **cannot lock Protractor or
+  another independent scheduler**. External provider edits after a read can
+  invalidate availability. No cross-system atomic booking guarantee is made.
+
+This API does **not** confirm bookings, convert a hold into an appointment, or
+write back to Protractor. The existing external appointment-creation endpoint
+does not consume these holds. Do not chain it as if doing so were atomic.
+Booking confirmation/write-back requires a separately designed integration.
+
+## Operations and verification
+
+No database migration is required; settings, cached arrivals and holds extend
+the existing single-document workflow store. Existing shops remain disabled
+until a manager explicitly configures and enables scheduling. No live shop was
+enabled, API key created, provider appointment changed or production DB mutated
+as part of development.
+
+Offline coverage:
+`tsx --test --test-force-exit tests/shop-dispatch*.test.ts`
+and `node --test components/shop-dispatch/*test.cjs`.
+Checks cover capacity, CAS races, idempotency, expiry, tenant/permission gates,
+incomplete provider responses, DST, manager forms and UI navigation.
