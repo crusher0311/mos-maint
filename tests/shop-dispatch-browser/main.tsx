@@ -7,6 +7,7 @@ import { RosterImport } from "../../components/shop-dispatch/RosterImport";
 import { CommandForm } from "../../components/shop-dispatch/CommandForm";
 import { JobCard } from "../../components/shop-dispatch/JobCard";
 import { ScheduleCalendar } from "../../components/shop-dispatch/ScheduleCalendar";
+import { OperationsPanel } from "../../components/shop-dispatch/OperationsPanel";
 import { availability } from "../../lib/shop-dispatch/schedule-engine";
 import styles from "../../components/shop-dispatch/pilot.module.css";
 import { actorFor,applyCommand,emptyBoard,type Command } from "../../lib/shop-dispatch/model";
@@ -81,4 +82,11 @@ function RosterPreview(){
   <RosterImport board={board} busy={false} mutate={async()=>{throw Error("The board changed. Refresh the board and try saving again.");}}/>
  </main>;
 }
-createRoot(document.getElementById("root")!).render(<><div style={{padding:12,background:"#ffe6a0",color:"#222"}}>OFFLINE UI TEST FIXTURE · synthetic data · no production connection</div>{new URLSearchParams(location.search).has("schedule")?<main className={styles.root} style={{padding:24}}><ScheduleCalendar board={board} busy={false} refresh={async()=>{}} select={()=>{}}/></main>:new URLSearchParams(location.search).has("assignments")?<main className={styles.root} style={{padding:24,maxWidth:950}}><JobCard job={board.jobs[0]} board={board} actor={actor} now={Date.now()} busy={false} mutate={async()=>false}/></main>:new URLSearchParams(location.search).has("roster")?<RosterPreview/>:new URLSearchParams(location.search).has("skills")?<main className={styles.root}><TechnicianSkills board={board} actor={actor} busy={false} mutate={async()=>false}/></main>:<DispatchPilot/>}</>);
+if(new URLSearchParams(location.search).has("operations")){
+ board.operationsEnabled=true;
+ board.jobs[0].operations={reviewedAt:new Date().toISOString(),reviewedBy:"Synthetic manager",parts:"ordered",diagnostics:"ready",requiredSkills:[],checks:[{id:"road-test",label:"Road test",completedAt:null,completedBy:null}],
+ blockers:[{id:"parts",reason:"Confirm delivery window",owner:"Parts desk",resolved:false,openedAt:new Date(Date.now()-7200000).toISOString(),resolvedAt:null}]};
+ board.visits[0].promiseAt=new Date(Date.now()+3600000).toISOString();
+}
+const params=new URLSearchParams(location.search);
+createRoot(document.getElementById("root")!).render(<><div style={{padding:12,background:"#ffe6a0",color:"#222"}}>OFFLINE UI TEST FIXTURE · synthetic data · no production connection</div>{params.has("operations")?<main className={styles.root} style={{padding:24}}><OperationsPanel board={board} actor={actor} now={Date.now()} busy={false} mutate={async()=>false} select={()=>{}}/><JobCard board={board} job={board.jobs[0]} actor={actor} now={Date.now()} busy={false} mutate={async()=>false}/></main>:params.has("schedule")?<main className={styles.root} style={{padding:24}}><ScheduleCalendar board={board} busy={false} refresh={async()=>{}} select={()=>{}}/></main>:params.has("assignments")?<main className={styles.root} style={{padding:24,maxWidth:950}}><JobCard job={board.jobs[0]} board={board} actor={actor} now={Date.now()} busy={false} mutate={async()=>false}/></main>:params.has("roster")?<RosterPreview/>:params.has("skills")?<main className={styles.root}><TechnicianSkills board={board} actor={actor} busy={false} mutate={async()=>false}/></main>:<DispatchPilot/>}</>);

@@ -1,6 +1,7 @@
 "use client";
 import { blockers, elapsed, resourcesFor, type Actor, type Board, type Command, type Job } from "@/lib/shop-dispatch/model";
 import { CommandForm } from "./CommandForm";
+import { JobReadiness } from "./JobReadiness";
 import { canControl, dateLabel, iso, localDate, minutes, nullableNumber } from "./helpers";
 import styles from "./pilot.module.css";
 
@@ -27,7 +28,7 @@ export function JobCard({ job, board, actor, now, busy, mutate }: WorkProps & { 
     if (current && !window.confirm(`Pause “${current.title}” and start “${job.title}”? Waiting time will begin for the paused job.`)) return;
     await mutate({ type: "start", jobId: job.id, pauseCurrent: !!current });
   }
-  return <article className={styles.job} data-testid={`job-${job.id}`}>
+  return <article id={`job-${job.id}`} className={styles.job} data-testid={`job-${job.id}`}>
     <div className={styles.row}><h3>{job.title}</h3><span className={`${styles.chip} ${styles[job.status] || ""}`}>{job.status === "paused" ? "Paused · waiting" : job.status}</span></div>
     <small>Dispatch owner: {tech?.name ?? "Unassigned"} · Planned start {dateLabel(job.plannedStart)}{job.resource && ` · ${resource?.name ?? job.resource}${resourceUnavailable ? " (inactive or unavailable)" : ""}`}</small>
     {(job.sourceId || sourceAssignments.length > 0) && <div data-testid={`protractor-assignment-${job.id}`}>
@@ -58,6 +59,7 @@ export function JobCard({ job, board, actor, now, busy, mutate }: WorkProps & { 
         <label>What are we waiting for?<input name="reason" required maxLength={160} placeholder="Parts, approval, another job…" /></label>
       </CommandForm>
     </details>}
+    <JobReadiness job={job} board={board} actor={actor} now={now} busy={busy} mutate={mutate} />
     {actor.manager && !closed && <details><summary>Assignment, authorization & plan</summary>
       {job.status === "active" || job.status === "completed" ? <p><small>{job.status === "active" ? "Pause active work before changing its plan." : "Completed plans are locked."}</small></p> :
         <CommandForm revision={board.revision} busy={busy} testId={`plan-form-${job.id}`} label="Save plan" submit={(data, expectedRevision) => mutate({
@@ -82,6 +84,7 @@ export function JobCard({ job, board, actor, now, busy, mutate }: WorkProps & { 
           <label className={styles.check}><input type="checkbox" name="authorized" defaultChecked={job.authorized} />Manager authorizes this work</label>
           <div><small>Prerequisites · other jobs on this visit only</small>{board.jobs.filter(j => j.visitId === job.visitId && j.id !== job.id).map(j => <label className={styles.check} key={j.id}><input type="checkbox" name="prerequisites" value={j.id} defaultChecked={job.prerequisites.includes(j.id)} />{j.title} · {j.status}</label>)}</div>
           <small>These are local dispatch assignments, not provider technician assignments or confirmed availability. No learned speed estimates.</small>
+          {board.operationsEnabled && job.technicianId && <small>Before changing an existing dispatch owner, save a fresh unacknowledged handoff note. The new owner must acknowledge it before starting work.</small>}
         </CommandForm>}
     </details>}
     {actor.manager && !closed && job.status !== "active" && <details><summary>Audited session time correction</summary>
