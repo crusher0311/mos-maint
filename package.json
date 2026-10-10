@@ -87,6 +87,7 @@
     "test:cron-scheduler-fetch-timeout": "tsx tests/cron-scheduler-fetch-timeout.smoke.ts",
     "test:cron-lock-pg": "NODE_OPTIONS='--require ./tests/helpers/deny-network-egress.cjs' node --import tsx tests/cron-lock-pg.smoke.ts && npm run test:cron-run-leases",
     "test:cron-run-leases": "NODE_OPTIONS='--require ./tests/helpers/deny-network-egress.cjs' node --test tests/cron-run-leases.test.cjs",
+    "test:cron-run-leases:integration": "node --test tests/cron-integration/config.test.cjs tests/cron-integration/leases.test.cjs",
     "test:drift-reconcile-cron": "tsx tests/drift-reconcile-cron.smoke.ts",
     "test:backfill-reconcile-date-fields": "tsx tests/backfill-reconcile-date-fields.smoke.ts",
     "test:protractor-sync-resumable-cursor": "tsx tests/protractor-sync-resumable-cursor.smoke.ts",
