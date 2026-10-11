@@ -71,6 +71,27 @@ not an automatic archival service. Logo settings alone do not reset work.
 
 ## Verification and operator acceptance
 
+### Saved day timeline views
+
+Managers can create, rename, edit, delete and select up to 30 shop-scoped views.
+The selected view is shared within the shop and persists in the revisioned board.
+Explicit roster members OR technicians with a selected current manager-confirmed
+skill are shown; saved views exclude inactive technicians. History never supplies
+qualifications. Stale criteria remain editable without creating roster members.
+All technicians restores the full roster, and deleting the selected view restores
+that selection automatically.
+
+These preferences affect day timeline presentation only. Week overview,
+availability, assignments, resource conflicts and holds use the complete board.
+Hidden lane/job counts and searchable hidden-job details keep work accessible.
+No location is enabled by saving a view.
+
+Additional offline checks:
+```
+npx tsx --test tests/shop-dispatch-lane-views.test.ts tests/shop-dispatch-timeline.test.ts tests/shop-dispatch-scheduling.test.ts
+node --test components/shop-dispatch/schedule-views-ui.test.cjs components/shop-dispatch/schedule-ui.test.cjs components/shop-dispatch/timeline-ui.test.cjs
+```
+
 Offline tests:
 ```
 NODE_PATH=$PWD/artifacts/detect-dog-workflow/node_modules \

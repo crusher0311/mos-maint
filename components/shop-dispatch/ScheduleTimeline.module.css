@@ -11,6 +11,8 @@
 .viewSwitch button { font-size: 12px; }
 .laneMeta { display: block; margin-top: 5px; line-height: 1.5; color: var(--muted); }
 .retained { border-left: 3px solid var(--accent); }
+.hiddenResults { border: 1px solid var(--line); border-radius: 9px; background: var(--panel); padding: 12px; font-size: 12px; }
+.hiddenList { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 10px; max-height: 320px; overflow-y: auto; }
 .layout { display: grid; grid-template-columns: 258px minmax(0, 1fr); gap: 14px; align-items: start; }
 .queue { border: 1px solid var(--line); background: var(--panel); border-radius: 9px; padding: 13px; }
 .queue h3 { display: flex; justify-content: space-between; }

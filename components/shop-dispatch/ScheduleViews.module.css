@@ -1,0 +1,17 @@
+.workspace { border: 1px solid var(--line); border-radius: 9px; background: var(--panel); padding: 14px; display: grid; gap: 12px; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+.picker { flex: 1; min-width: 200px; max-width: 420px; }
+.scope { color: var(--muted); font-size: 12px; line-height: 1.6; margin: 0; }
+.editor { border-top: 1px solid var(--line); padding-top: 16px; display: grid; gap: 12px; }
+.name { max-width: 420px; }
+.choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.group { border: 1px solid var(--line); border-radius: 6px; padding: 12px; margin: 0; min-width: 0; }
+.group legend { font-size: 12px; font-weight: 700; padding: 0 5px; }
+.list { display: grid; gap: 6px; max-height: 270px; overflow-y: auto; margin-top: 8px; }
+.choice { display: flex !important; flex-direction: row !important; align-items: flex-start; gap: 9px !important; padding: 7px; border-radius: 4px; background: var(--paper); font-size: 12px; overflow-wrap: anywhere; }
+.choice input { width: 16px !important; min-height: 16px !important; height: 16px; margin: 2px 0 0; flex-shrink: 0; accent-color: var(--primary); }
+.choice span { display: grid; gap: 3px; }
+.choice small { font-size: 11px; color: var(--muted); }
+.summary { padding: 10px 12px; background: var(--paper); border-radius: 5px; font-size: 12px; line-height: 1.6; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+@media (max-width: 767px) { .choices { grid-template-columns: 1fr; } .picker { max-width: none; } }
