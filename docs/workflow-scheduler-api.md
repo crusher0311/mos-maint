@@ -9,10 +9,29 @@ Settings do not alter provider appointments or employee records.
 ## Manager timeline
 
 The default Day view has technician lanes and a searchable individual-job queue.
-Drag jobs to another time/technician or resize their planned duration; both
-actions stage an unsaved preview. **Save reviewed plan** uses the existing
-revision-checked dispatch mutation. Keyboard/touch users can set the same
-placement in the inline details form. The seven-day overview remains available.
+Drag jobs to another time/technician or resize their planned duration. Valid,
+authorized routine moves save on drop; uncertain experience or missing planning
+information opens a review drawer. Keyboard/touch users can set the same placement
+in that drawer. The seven-day overview remains available. The work queue groups
+jobs by vehicle and readiness; notes are retained separately rather than discarded.
+
+Imported book durations round UP to quarter-hour planning proposals. Billed
+labor remains unchanged. Existing saved estimates are preserved during moves.
+Closed days are identified explicitly and link to the next configured working day.
+
+An advisory warning appears for a new technician assignment with fewer than three
+exact-match recorded completions without shared attribution. Unknown, failed or
+incomplete history is disclosed; it does not prove inexperience. Manager
+qualification checks remain separate and cannot be bypassed by acknowledging this
+warning. Historical shared work is not treated as independent experience.
+
+Undo reverses only the manager's immediate confirmed scheduling-only change,
+within five minutes and at the same board revision. The server stores the
+previous placement in a short-lived receipt; clients cannot supply restoration
+values. Any newer board edit invalidates Undo. Idle work, current qualification,
+hours, dependencies and capacity constraints are rechecked. Authorization,
+billing and provider data are not reverted. This narrow immediate rollback does
+not waive handoff requirements for normal reassignment.
 
 Block widths use explicit planned minutes, otherwise known book minutes labeled
 **book baseline — review**. Saving confirms a planned estimate without changing

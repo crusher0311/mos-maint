@@ -1,6 +1,8 @@
 "use client";
 import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent } from "react";
-import { resourcesFor, type Board, type Command, type Job } from "@/lib/shop-dispatch/model";
+import { blockers, resourcesFor, type Board, type Command, type Job } from "@/lib/shop-dispatch/model";
+import { assessJobExperience } from "@/lib/shop-dispatch/experience";
+import type { HistoryState } from "./schedule-history";
 import { localParts } from "@/lib/shop-dispatch/schedule-engine";
 import { buildResourceTimelinePlan, buildTimelinePlan, timelineInstant, roundTimelineMinutes } from "@/lib/shop-dispatch/timeline";
 import css from "./ScheduleTimeline.module.css";
@@ -36,10 +38,12 @@ export function timelineLockReason(board: Board, job: Job): string {
   return "";
 }
 
-export function ScheduleTimeline({ board, date, zone, locked, save, select }: {
+export function ScheduleTimeline({ board, date, zone, locked, save, select, history = { status: "error", profiles: [], truncated: false }, nextDay }: {
   board: Board; date: string; zone: string; locked: boolean;
   save: (command: Plan, revision: number, mode: TimelineMode) => Promise<Board | null>;
   select: (visitId: string) => void;
+  history?: HistoryState;
+  nextDay?: (date: string) => void;
 }) {
   const [search, setSearch] = useState("");
   const [mode, setMode] = useState<TimelineMode>("technician");
@@ -48,6 +52,10 @@ export function ScheduleTimeline({ board, date, zone, locked, save, select }: {
   const [preview, setPreview] = useState<Placement | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [experienceConfirmed, setExperienceConfirmed] = useState("");
+  const [autoSaving, setAutoSaving] = useState(false);
+  const autoSending = useRef(false);
+  const returnFocus = useRef<HTMLElement | null>(null);
   const gesture = useRef<Gesture | null>(null);
   const dragJob = useRef<string | null>(null);
   const dragOffset = useRef(0);
@@ -75,13 +83,16 @@ export function ScheduleTimeline({ board, date, zone, locked, save, select }: {
   const shifts = (mode === "resource" ? settings?.resources : settings?.technicians)?.flatMap(t => t.weekly.filter(w => w.day === weekday)) ?? [];
   const rangeStarts = [...openings, ...shifts].map(w => clockMinute(w.start));
   const rangeEnds = [...openings, ...shifts].map(w => clockMinute(w.end));
-  jobs.forEach(j => { const i = interval(j); rangeStarts.push(i.start); rangeEnds.push(Math.max(i.start + 30, i.end)); });
-  holds.forEach(h => {
-    const a = localParts(Date.parse(h.start), zone), b = localParts(Date.parse(h.end), zone);
-    rangeStarts.push(a.date < date ? 0 : a.minute); rangeEnds.push(b.date > date ? 1440 : b.minute);
-  });
-  const start = rangeStarts.length ? Math.max(0, Math.floor(Math.min(...rangeStarts) / 60) * 60) : 0;
-  const end = rangeEnds.length ? Math.min(1440, Math.max(start + 60, Math.ceil(Math.max(...rangeEnds) / 60) * 60)) : 1440;
+  const closed = !!settings?.enabled && openings.length === 0;
+  const start = openings.length ? Math.min(...openings.map(w => clockMinute(w.start))) : rangeStarts.length ? Math.min(...rangeStarts) : 480;
+  const end = openings.length ? Math.max(...openings.map(w => clockMinute(w.end))) : rangeEnds.length ? Math.max(...rangeEnds) : 1080;
+  const nextWorkingDate = (() => {
+    for (let offset = 1; offset <= 7; offset++) {
+      const day = new Date(`${date}T12:00:00Z`); day.setUTCDate(day.getUTCDate() + offset);
+      if (settings?.weekly.some(w => w.day === day.getUTCDay())) return day.toISOString().slice(0, 10);
+    }
+    return null;
+  })();
   const scale = 112 / 60;
   const width = (end - start) * scale;
   const positions = (a: number, b: number): CSSProperties => ({ left: (Math.max(start, a) - start) * scale, width: Math.max(2, (Math.min(end, b) - Math.max(start, a)) * scale) });
@@ -108,8 +119,28 @@ export function ScheduleTimeline({ board, date, zone, locked, save, select }: {
   const chosen = board.jobs.find(j => j.id === selected);
   const visit = board.visits.find(v => v.id === chosen?.visitId);
   const chosenLock = chosen ? timelineLockReason(board, chosen) : "";
+  const assignmentChanged = !!chosen && !!draft && draft.mode === "technician" && !!draft.technicianId && draft.technicianId !== chosen.technicianId;
+  const draftTechnician = board.technicians.find(t => t.id === draft?.technicianId);
+  const experience = assignmentChanged && draftTechnician ? assessJobExperience(chosen!, draftTechnician, history) : null;
+  const confirmationKey = draft ? `${draft.jobId}:${draft.technicianId}:${draft.revision}` : "";
+  const requiresConfirmation = !!experience && experience.level !== "established";
+  useEffect(() => { setExperienceConfirmed(""); }, [draft?.jobId, draft?.technicianId, draft?.revision, history]);
+  useEffect(() => {
+    if (!selected) return;
+    details.current?.focus();
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !latest.current.locked && !autoSending.current) {
+        setSelected(null); setDraft(null); returnFocus.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", escape);
+    return () => window.removeEventListener("keydown", escape);
+  }, [selected]);
+  function closeDetails() { if (!locked && !autoSending.current) { setSelected(null); setDraft(null); setError(""); returnFocus.current?.focus(); } }
   function open(job: Job, placement?: Placement) {
-    if (locked) return;
+    if (locked || autoSending.current) return;
+    if (!selected) returnFocus.current = document.activeElement as HTMLElement;
+    setExperienceConfirmed("");
     setSelected(job.id); setError(placement?.error ?? ""); setNotice("");
     const p = job.plannedStart && Number.isFinite(Date.parse(job.plannedStart)) ? localParts(Date.parse(job.plannedStart), zone) : null;
     const draftMode = placement?.mode ?? mode;
@@ -137,9 +168,36 @@ export function ScheduleTimeline({ board, date, zone, locked, save, select }: {
     return Math.max(start, Math.min(Math.min(1439, end - 1), Math.round((start + (clientX - bounds.left) / scale - offset) / 15) * 15));
   }
   function commitPreview(value: Placement | null) {
-    if (!value || latest.current.locked) return;
+    if (!value || latest.current.locked || autoSending.current) return;
     const job = latest.current.board.jobs.find(j => j.id === value.jobId);
-    if (job) { open(job, value); details.current?.scrollIntoView?.({ block: "nearest", behavior: "smooth" }); }
+    if (!job) return;
+    const technician = value.mode === "technician" ? value.laneId : job.technicianId;
+    const assignment = technician !== job.technicianId;
+    const targetTechnician = latest.current.board.technicians.find(t => t.id === technician);
+    const assessment = assignment && targetTechnician ? assessJobExperience(job, targetTechnician, history) : null;
+    const needsReview = !!value.error || job.estimatedMinutes === null || !job.authorized || blockers(latest.current.board, job).length > 0 || (assignment && (assessment?.level !== "established" || (!!latest.current.board.operationsEnabled && !!job.technicianId)));
+    if (needsReview) { open(job, value); return; }
+    const revision = latest.current.board.revision;
+    try {
+      const instant = timelineInstant(latest.current.date, value.minute, latest.current.zone);
+      const plan = value.mode === "resource"
+        ? buildResourceTimelinePlan(latest.current.board, job.id, value.laneId || null, instant, value.minutes)
+        : buildTimelinePlan(latest.current.board, job.id, value.laneId, instant, value.minutes);
+      autoSending.current = true; setAutoSaving(true); setNotice("Saving…");
+      void save(plan, revision, value.mode).then(confirmed => {
+        if (confirmed) {
+          setNotice("Saved. The timeline shows the server-confirmed plan.");
+          setSelected(null); setDraft(null);
+        } else {
+          autoSending.current = false;
+          // Preserve the exact failed draft; uncertain retry is owned by Calendar.
+          setSelected(job.id);
+          setDraft({ jobId: job.id, mode: value.mode, technicianId: technician ?? "", resourceId: value.mode === "resource" ? value.laneId : job.resource ?? "", date: date, time: minuteText(value.minute), minutes: String(value.minutes), revision });
+          setError("Plan not confirmed. Resolve the schedule error above before continuing.");
+          setNotice("");
+        }
+      }).catch(cause => { setError(message(cause)); setNotice(""); }).finally(() => { autoSending.current = false; setAutoSaving(false); });
+    } catch (cause) { open(job, { ...value, error: message(cause) }); }
   }
   pointerHandlers.current.move = event => {
     const g = gesture.current;
@@ -203,6 +261,7 @@ export function ScheduleTimeline({ board, date, zone, locked, save, select }: {
     if (!draft || locked || chosenLock) return;
     setError(""); setNotice("");
     try {
+      if (requiresConfirmation && experienceConfirmed !== confirmationKey) throw new Error("Review the technician experience warning and explicitly confirm this assignment first.");
       if (draft.revision !== board.revision) throw new Error("The board changed. Review latest board explicitly before saving this draft.");
       const plan = draftPlan(draft);
       const confirmed = await save(plan, draft.revision, draft.mode);
@@ -238,10 +297,16 @@ export function ScheduleTimeline({ board, date, zone, locked, save, select }: {
       <button type="button" disabled={locked} data-testid={`schedule-job-${job.id}`} onClick={() => open(job)}>{reason ? "View job" : "Details / schedule"}</button>
     </article>;
   }
+  function readiness(job: Job) {
+    if (job.bookMinutes === 0 && job.estimatedMinutes === null) return "Notes / non-labor";
+    if (job.operations && ["ordered", "partial", "incorrect"].includes(job.operations.parts)) return "Waiting parts";
+    if (!job.authorized || job.estimatedMinutes === null || blockers(board, job).length || timelineLockReason(board, job)) return "Needs duration / authorization / review";
+    return "Ready";
+  }
   return <section className={css.workspace} data-testid="schedule-timeline">
-    <div className={css.heading}><div><h2>{mode === "resource" ? "Bay / equipment timeline" : "Technician timeline"}</h2><small>{date} · {zone} · drag jobs, then review and save</small></div>
+    <div className={css.heading}><div><h2>{mode === "resource" ? "Bay / equipment timeline" : "Technician timeline"}</h2><small>{date} · {zone} · routine valid drops save automatically; other changes open review</small></div>
       <div className={css.legend}><span><i className={css.dot} />Local job</span><span><i className={`${css.dot} ${css.holdDot}`} />Capacity hold</span><span><i className={`${css.dot} ${css.offDot}`} />Unavailable / unconfigured</span></div></div>
-    <div className={css.heading}><div className={css.viewSwitch} role="group" aria-label="Day timeline lanes">{(["technician", "resource"] as const).map(value => <button type="button" key={value} aria-pressed={mode === value} data-testid={`timeline-mode-${value}`} className={mode === value ? styles.primary : ""} onClick={() => setMode(value)}>{value === "technician" ? "Technicians" : "Bays / equipment"}</button>)}</div>
+    <div className={css.heading}><div className={css.viewSwitch} role="group" aria-label="Day timeline lanes">{(["technician", "resource"] as const).map(value => <button type="button" disabled={locked || autoSaving} key={value} aria-pressed={mode === value} data-testid={`timeline-mode-${value}`} className={mode === value ? styles.primary : ""} onClick={() => setMode(value)}>{value === "technician" ? "Technicians" : "Bays / equipment"}</button>)}</div>
       <small>{mode === "resource" ? "Shared occupancy across technicians. Moving a job never reassigns its technician." : "Technician moves keep the current bay / equipment."}</small></div>
     <label className={css.search}>Find work<input type="search" data-testid="timeline-search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search RO, vehicle or job" /></label>
     {mode === "technician" && <><div className={css.caption} role="status" data-testid="timeline-view-counts">{laneTechnicians.length} of {board.technicians.length} technician lanes shown · {hiddenLaneCount} hidden lanes · {hiddenJobs.length} {hiddenJobs.length === 1 ? "job" : "jobs"} on hidden lanes this day. Unknown and unassigned lanes stay visible. Search and queue cover all work.</div>
@@ -257,9 +322,16 @@ export function ScheduleTimeline({ board, date, zone, locked, save, select }: {
       })}{!hiddenMatches.length && <div className={css.empty}>No hidden-lane jobs match this search.</div>}</div>
     </details>}</>}
     {draft && draft.mode !== mode && <div className={styles.notice} data-testid="timeline-draft-mode">Your unsaved {draft.mode === "resource" ? "bay / equipment" : "technician"} draft is retained below. Changing lanes does not change what this draft will save. Discard / reload the job to start a draft in this view.</div>}
+    {notice && !chosen && <div role="status">{notice}</div>}
     <div className={css.layout}>
       <aside className={css.queue} data-testid="schedule-unplanned"><h3>Work queue <small>{queue.length}</small></h3><small>Individual jobs · drag to {mode === "resource" ? "a bay / equipment lane" : "a technician"} or use Details / schedule. Unassigned technician work requires technician review first.</small>
-        <div className={css.queueList}>{queue.filter(matches).map(queueCard)}{!queue.filter(matches).length && <div className={css.empty}>{search ? "No queued jobs match this search." : "No unscheduled work. New local jobs appear here."}</div>}</div>
+        <div className={css.queueList}>{["Ready", "Needs duration / authorization / review", "Waiting parts", "Notes / non-labor"].map(group => {
+          const groupJobs = queue.filter(matches).filter(j => readiness(j) === group);
+          return groupJobs.length > 0 && <section className={css.queueGroup} key={group} data-testid={`timeline-queue-group-${group.split(" ")[0].toLowerCase()}`}><h4>{group} · {groupJobs.length}</h4>{Array.from(new Set(groupJobs.map(j => j.visitId))).map(id => {
+            const v = board.visits.find(v => v.id === id);
+            return <section key={id}><h4>RO #{v?.ro ?? "unknown"}</h4><small>{v?.vehicle ?? "Vehicle unavailable"}</small>{groupJobs.filter(j => j.visitId === id).map(queueCard)}</section>;
+          })}</section>;
+        })}{!queue.filter(matches).length && <div className={css.empty}>{search ? "No queued jobs match this search." : "No unscheduled work. New local jobs appear here."}</div>}</div>
         <details><summary>Outside this day · {outside.length}</summary>{outside.filter(matches).map(queueCard)}</details>
         <details open><summary>Imported arrivals · read-only</summary><small>Arrival times are intake, not technician assignments. See snapshot warnings below.</small>
           {(board.schedule?.appointments?.appointments ?? []).filter(a => (!a.start || !Number.isFinite(Date.parse(a.start)) || localParts(Date.parse(a.start), zone).date === date) && `${a.ro} ${a.title}`.toLowerCase().includes(search.toLowerCase())).map(a =>
@@ -267,12 +339,15 @@ export function ScheduleTimeline({ board, date, zone, locked, save, select }: {
         </details>
       </aside>
       <div className={css.timelineShell}>
-        <div className={css.scroll}><div className={css.grid} style={{ "--timeline-width": `calc(${width}px + var(--lane-label))` } as CSSProperties}>
+        {closed ? <div className={css.closed} data-testid="timeline-closed-day"><h3>Shop closed · {date}</h3><p>No working hours configured for this day. Existing work is retained for review, not shown as available capacity.</p>{nextWorkingDate && nextDay ? <button type="button" disabled={locked} data-testid="timeline-next-working-day" onClick={() => nextDay(nextWorkingDate)}>Next working day · {nextWorkingDate}</button> : <p>Configure shop working hours in Scheduling settings.</p>}{jobs.filter(matches).map(queueCard)}</div> : <div className={css.scroll}><div className={css.grid} style={{ "--timeline-width": `calc(${width}px + var(--lane-label))` } as CSSProperties}>
           <div className={css.ruler}><div className={css.corner}>{mode === "resource" ? "Bays / equipment" : "Technicians"} / {mode === "resource" ? entities.length : laneTechnicians.length}</div><div className={css.hours}>{Array.from({ length: Math.ceil((end - start) / 60) }, (_, i) => <span className={css.hour} key={i} style={{ left: i * 112 }}>{minuteText(start + i * 60)}</span>)}</div></div>
           {lanes.map(tech => {
             const allLaneJobs = jobs.filter(j => jobLane(j) === tech.id);
-            const laneJobs = allLaneJobs.filter(matches).sort((a, b) => Date.parse(a.plannedStart!) - Date.parse(b.plannedStart!));
-            const laneHolds = holds.filter(h => holdLane(h) === tech.id);
+            const laneJobs = allLaneJobs.filter(matches).filter(j => { const i = interval(j); return i.start < end && (i.end > start || (timelineDuration(j) === null && i.start >= start)); }).sort((a, b) => Date.parse(a.plannedStart!) - Date.parse(b.plannedStart!));
+            const laneHolds = holds.filter(h => holdLane(h) === tech.id).filter(h => {
+              const a = localParts(Date.parse(h.start), zone), b = localParts(Date.parse(h.end), zone);
+              return (a.date < date || a.minute < end) && (b.date > date || b.minute > start);
+            });
             const tracks: number[] = [];
             const placed = laneJobs.map(job => { const i = interval(job); let track = tracks.findIndex(e => e <= i.start); if (track < 0) track = tracks.length; tracks[track] = Math.max(i.end, i.start + (timelineDuration(job) === null ? 65 : 1)); return { job, i, track }; });
             const shift = mode === "resource" ? settings?.resources.find(r => r.id === tech.id) : settings?.technicians.find(t => t.id === tech.id);
@@ -314,13 +389,14 @@ export function ScheduleTimeline({ board, date, zone, locked, save, select }: {
           })}
           {mode === "technician" && !laneTechnicians.length && entities.length > 0 && <div className={css.empty}>No active technicians match this saved view. Choose All technicians or edit the view. Hidden work remains accessible above.</div>}
           {!entities.length && <div className={css.empty}>{mode === "resource" ? "No configured bays / equipment. Work without a resource remains visible above. Add resources in Management." : "No technician lanes. Unassigned work remains visible above. Add technicians in Management, then configure their shifts."}</div>}
-        </div></div>
+        </div></div>}
+        {!closed && jobs.some(j => { const i = interval(j); return i.start < start || i.end > end; }) && <details data-testid="timeline-outside-hours"><summary>Retained work outside shop hours</summary>{jobs.filter(matches).filter(j => { const i = interval(j); return i.start < start || i.end > end; }).map(queueCard)}</details>}
         <div className={css.caption}>15-minute drag snapping. Block width uses planned minutes, or a book baseline when no estimate exists. Book baselines require manager review before saving a planned duration; billed hours never change. Dashed unknown-duration markers do not imply capacity. Overlapping jobs stack. Shaded time is unavailable or unconfigured; the server validates every save. {mode === "resource" ? "Resource hours inherit shop openings unless explicitly configured. Resource moves preserve technician, authorization and prerequisites. No-resource work is not a shared equipment reservation." : "Unknown, inactive and unassigned lanes retain local work."} Active / paused work and unknown durations can block capacity beyond the drawn block; blank space is not confirmed availability.</div>
       </div>
     </div>
-    {chosen && draft && <div className={css.details} ref={details} data-testid="timeline-details" role="region" aria-label="Job quick details">
+    {chosen && draft && <div className={css.details} ref={details} tabIndex={-1} data-testid="timeline-details" role="region" aria-label="Job quick details">
       <div className={css.heading}><div><small>RO #{visit?.ro ?? "unknown"} · {visit?.vehicle ?? "Vehicle unavailable"}</small><h3>{chosen.title}</h3><small>{chosen.status} · {chosen.authorized ? "Authorized" : "Not authorized — unchanged by scheduling"}{chosen.sourceRemoved ? " · removed upstream; manager review" : ""}</small></div>
-        <button type="button" disabled={locked} onClick={() => { setSelected(null); setDraft(null); setError(""); }}>Close details</button></div>
+        <button type="button" disabled={locked} onClick={closeDetails}>Close details</button></div>
       <div className={css.metrics}><span>Capacity duration<strong>{durationLabel(chosen)}</strong></span><span>Billed hours<strong>{chosen.bookMinutes === null ? "Unknown" : `${(chosen.bookMinutes / 60).toFixed(2)} h`}</strong></span><span>Bay / equipment<strong>{resourcesFor(board).find(r => r.id === chosen.resource)?.name ?? chosen.resource ?? "None"}</strong></span><span>Prerequisites<strong>{(chosen.prerequisites ?? []).map(id => board.jobs.find(j => j.id === id)?.title ?? id).join(", ") || "None"}</strong></span></div>
       {chosenLock ? <p className={styles.notice}>{chosenLock}</p> : <form onSubmit={e => { e.preventDefault(); void submit(); }} data-testid="timeline-plan-form">
         <fieldset disabled={locked} style={{ border: 0, margin: 0, padding: 0 }}>
@@ -333,6 +409,11 @@ export function ScheduleTimeline({ board, date, zone, locked, save, select }: {
           <button type="button" data-testid="timeline-round-minutes" disabled={roundTimelineMinutes(Number(draft.minutes)) === null} onClick={() => setDraft({ ...draft, minutes: String(roundTimelineMinutes(Number(draft.minutes))) })}>Round up to 15 min</button>
           <small>Book-based estimates and resizing round up to the next 15-minute increment, minimum 15. Billed hours stay unchanged; existing saved estimates are preserved when moving.</small>
           <div className={css.status}>Unsaved {draft.mode === "resource" ? "bay / equipment" : "technician"} draft · base revision {draft.revision} · latest {board.revision} · {zone}. Authorization, prerequisites and book labor remain unchanged. {draft.mode === "resource" ? "Technician is preserved; only resource, start and planned minutes change." : "Bay / equipment remains unchanged."}</div>
+          {requiresConfirmation && experience && <section className={styles.notice} role="alert" data-testid="timeline-experience-warning"><strong>{experience.title}</strong><p>{experience.message}</p><p>{experience.count === null ? "Completed-job count unknown" : `${experience.count} matching completed jobs`} · {experience.confirmed ? "Manager-confirmed skill" : "No manager-confirmed qualification inferred"}{history.truncated ? " · History truncated; counts are incomplete" : ""}</p>
+            {experience.evidence.map((item, i) => <p key={i}>RO #{item.ro} · {item.title} · {item.completedAt ?? "Date unknown"}{item.shared ? " · shared work" : ""}</p>)}
+            <p>Confirmation is advisory only. It does not authorize work or override qualification or handoff restrictions.</p>
+            <label><input type="checkbox" data-testid="timeline-experience-confirm" checked={experienceConfirmed === confirmationKey} onChange={e => setExperienceConfirmed(e.target.checked ? confirmationKey : "")} />I reviewed this technician’s experience for this assignment.</label>
+          </section>}
           <div className={css.actions}><button type="submit" className={styles.primary} data-testid="timeline-plan-save" disabled={draft.revision !== board.revision}>Save reviewed plan</button><button type="button" data-testid="timeline-plan-review" onClick={review}>Review latest board</button><button type="button" onClick={() => open(chosen)}>Discard draft / reload job</button></div>
         </fieldset>
       </form>}

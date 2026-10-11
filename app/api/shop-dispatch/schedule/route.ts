@@ -17,13 +17,13 @@ export async function GET(req:Request){
   try{
     const session=await manager(),query=queryFromUrl(new URL(req.url));
     const board=await refreshAppointments(session.shopId,query.startDate,query.endDate,deps);
-    return dispatchJson({board:scheduleBoardView(board),availability:availability(board,query,deps.now())});
+    return dispatchJson({board:scheduleBoardView(board,session.email),availability:availability(board,query,deps.now())});
   }catch(error){return dispatchFailure(error);}
 }
 export async function POST(req:Request){
   try{
     const session=await manager(),body=await requestBody(req);
     const board=await executeScheduleCommand(session.shopId,session.email.toLowerCase(),body,deps);
-    return dispatchJson({board:scheduleBoardView(board)});
+    return dispatchJson({board:scheduleBoardView(board,session.email)});
   }catch(error){return dispatchFailure(error);}
 }

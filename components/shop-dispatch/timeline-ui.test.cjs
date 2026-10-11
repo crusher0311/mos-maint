@@ -17,14 +17,14 @@ test("timeline: genuine drop, move, pointer resize, manual fallback and exact un
   Date.now = () => Date.parse("2030-06-03T08:00:00Z");
   const { createRoot } = require("react-dom/client");
   const bundled = await build({
-    entryPoints: [path.join(__dirname, "ScheduleCalendar.tsx")], bundle: true, write: false,
+    stdin: { contents: 'export { ScheduleCalendar } from "./ScheduleCalendar"; export { executeDispatchMutation } from "../../lib/shop-dispatch/service";', resolveDir: __dirname, loader: "tsx" }, bundle: true, write: false,
     platform: "node", format: "cjs", jsx: "automatic", external: ["react", "react-dom"],
     plugins: [{ name: "offline-css", setup(b) { b.onLoad({ filter: /\.module\.css$/ }, () => ({ contents: "export default new Proxy({}, {get: (_, key) => key})", loader: "js" })); } }],
   });
   const compiled = new Module(path.join(__dirname, "offline-timeline.cjs"), module);
   compiled.filename = path.join(__dirname, "offline-timeline.cjs"); compiled.paths = module.paths;
   compiled._compile(bundled.outputFiles[0].text, compiled.filename);
-  const { ScheduleCalendar } = compiled.exports;
+  const { ScheduleCalendar, executeDispatchMutation } = compiled.exports;
   const weekly = Array.from({ length: 7 }, (_, day) => ({ day, start: "08:00", end: "18:00" }));
   const job = (id, extra = {}) => ({ id, visitId: "visit-local", title: `Job ${id}`, technicianId: null, plannedStart: null, estimatedMinutes: 60, bookMinutes: 87, prerequisites: [], resource: "bay-local", authorized: false, status: "idle", activeMs: 0, waitingMs: 0, since: null, pauseReason: null, sourceId: null, sourceRemoved: false, ...extra });
   let latest = {
@@ -43,8 +43,9 @@ test("timeline: genuine drop, move, pointer resize, manual fallback and exact un
   const requests = [];
   global.fetch = async (url, options = {}) => {
     assert.equal(options.credentials, "include");
-    assert.ok(url === "/api/shop-dispatch" || String(url).startsWith("/api/shop-dispatch/schedule"), "all requests intercepted");
+    assert.ok(url === "/api/shop-dispatch/skills" || url === "/api/shop-dispatch" || String(url).startsWith("/api/shop-dispatch/schedule"), "all requests intercepted");
     requests.push({ url, ...options });
+    if(url === "/api/shop-dispatch/skills") return {ok:true,json:async()=>({profiles:[],truncated:true})};
     if (options.method === "POST") {
       const body = JSON.parse(options.body);
       if (outcome === "network") throw new Error("Offline fixture connection lost");
@@ -53,8 +54,13 @@ test("timeline: genuine drop, move, pointer resize, manual fallback and exact un
       if (outcome === "conflict") return { ok: false, status: 409, json: async () => ({ error: "Board revision changed" }) };
       assert.equal(body.revision, latest.revision);
       if (url === "/api/shop-dispatch") {
-        assert.equal(body.command.type, "plan");
-        latest = { ...latest, revision: latest.revision + 1, jobs: latest.jobs.map(j => j.id === body.command.jobId ? { ...j, ...body.command } : j) };
+        assert.ok(["plan","undo-plan"].includes(body.command.type));
+        latest = await executeDispatchMutation({shopId:999,email:"offline-manager@example.invalid",role:"manager"},body,{
+          read:async()=>latest,
+          save:async(_shop, revision, next)=>{assert.equal(revision,latest.revision);latest=next;return true;},
+          now:()=>new Date(Date.now()).toISOString(),
+          intake:async()=>{throw Error("No intake allowed in offline UI test");},
+        });
       } else {
         latest = { ...latest, revision: latest.revision + 1 };
       }
@@ -115,6 +121,11 @@ test("timeline: genuine drop, move, pointer resize, manual fallback and exact un
     assert.equal(posts().length, 0, "invalid preview cannot be persisted");
     await drop("queued", "b", 10);
     assert.equal(posts().length, 0, "drop preview never persists");
+    assert.match(find("timeline-experience-warning").textContent, /Experience unknown/);
+    assert.match(find("timeline-experience-warning").textContent, /truncated/);
+    await submit("timeline-plan-form");
+    assert.equal(posts().length, 0, "unfamiliar assignments need explicit confirmation");
+    await click("timeline-experience-confirm");
     assert.equal(find("timeline-plan-technician").value, "b");
     assert.equal(find("timeline-plan-time").value, "10:00");
     assert.equal(find("timeline-plan-minutes").value, "90");
@@ -138,6 +149,7 @@ test("timeline: genuine drop, move, pointer resize, manual fallback and exact un
     assert.equal(latest.jobs.find(j => j.id === "queued").estimatedMinutes, 90, "reviewed rounded book baseline becomes an explicit planned estimate");
     assert.equal(latest.jobs.find(j => j.id === "queued").bookMinutes, 87);
     await drop("queued", "a", 12, "block");
+    await click("timeline-experience-confirm");
     await submit("timeline-plan-form");
     assert.equal(latest.jobs.find(j => j.id === "queued").technicianId, "a");
     assert.equal(latest.jobs.find(j => j.id === "queued").plannedStart, "2030-06-03T12:00:00.000Z");
@@ -176,6 +188,7 @@ test("timeline: genuine drop, move, pointer resize, manual fallback and exact un
     await change("timeline-plan-technician", "b");
     await change("timeline-plan-time", "15:00");
     await change("timeline-plan-minutes", "40");
+    await click("timeline-experience-confirm");
     outcome = "bad";
     await submit("timeline-plan-form");
     assert.match(find("schedule-error").textContent, /Fixture says this draft is invalid/);
@@ -188,6 +201,7 @@ test("timeline: genuine drop, move, pointer resize, manual fallback and exact un
     await submit("schedule-search");
     assert.ok(find("timeline-plan-save").disabled, "refresh keeps draft base revision");
     await click("timeline-plan-review");
+    await click("timeline-experience-confirm");
     outcome = "network";
     await submit("timeline-plan-form");
     assert.ok(find("schedule-retry"));
@@ -236,8 +250,46 @@ test("timeline: genuine drop, move, pointer resize, manual fallback and exact un
     ] };
     await act(async () => root.render(React.createElement(ScheduleCalendar, { board: latest, busy: false, refresh: async () => { refreshed++; }, select: id => selected.push(id) })));
     assert.equal(find("timeline-block-overnight-book").style.left, "0px");
-    assert.equal(find("timeline-block-overnight-book").style.width, "1064px", "book-only multiday reservation clips to selected day, ending at 09:30");
-    assert.equal(find("timeline-block-late-book").style.width, "224px", "book-only reservation expands bounds beyond configured hours without being hidden");
+    assert.equal(find("timeline-block-overnight-book").style.width, "168px", "book-only multiday reservation clips to working hours, ending at 09:30");
+    assert.equal(find("timeline-block-late-book").style.width, "56px", "book-only reservation clips at shop closing");
+    assert.ok(find("timeline-outside-hours"), "out-of-hours retained work remains reviewable");
+    assert.equal(requests.filter(r=>r.url==="/api/shop-dispatch/skills").length,1,"history is loaded once per calendar mount");
+    // Routine, authorized same-owner moves save on drop, without a review drawer.
+    latest = {...latest,revision:latest.revision+1,jobs:[...latest.jobs,job("routine",{authorized:true,technicianId:"b",plannedStart:"2030-06-03T12:00:00Z",resource:null})]};
+    await act(async()=>root.render(React.createElement(ScheduleCalendar,{board:latest,busy:false,refresh:async()=>{refreshed++;},select:id=>selected.push(id),onLockChange})));
+    const beforeAuto = posts().length;
+    await drop("routine","b",13,"block");
+    assert.equal(posts().length,beforeAuto+1,"valid routine drop autosaves");
+    assert.equal(find("timeline-details"),null,"routine move does not need a drawer");
+    assert.equal(latest.jobs.find(j=>j.id==="routine").plannedStart,"2030-06-03T13:00:00.000Z");
+    assert.ok(find("schedule-undo"),"confirmed save offers Undo");
+    await click("schedule-undo");
+    assert.equal(latest.jobs.find(j=>j.id==="routine").plannedStart,"2030-06-03T12:00:00Z","Undo restores confirmed scheduling position");
+    assert.equal(latest.jobs.find(j=>j.id==="routine").bookMinutes,87,"Undo never changes billing");
+    assert.equal(latest.jobs.find(j=>j.id==="routine").authorized,true);
+    assert.equal(find("schedule-undo"),null);
+    outcome="network";
+    await drop("routine","b",13,"block");
+    assert.equal(latest.jobs.find(j=>j.id==="routine").plannedStart,"2030-06-03T12:00:00Z","no optimistic saved position on response loss");
+    assert.equal(navigationLocked,true);
+    assert.equal(find("schedule-date").disabled || find("schedule-date").closest("fieldset").disabled,true,"unconfirmed autosave locks date navigation");
+    const autoExact=posts().at(-1).body;
+    outcome="success";
+    await click("schedule-retry");
+    assert.equal(posts().at(-1).body,autoExact,"autosave retry reuses exact request");
+    assert.ok(find("schedule-undo"),"retry confirmation retains Undo metadata");
+    await click("schedule-undo");
+    assert.equal(latest.jobs.find(j=>j.id==="routine").plannedStart,"2030-06-03T12:00:00Z");
+    await click("schedule-job-routine");
+    assert.equal(find("timeline-experience-warning"),null,"same-owner manual timing edit has no assignment warning");
+    assert.ok(find("timeline-details").hasAttribute("tabindex"),"drawer receives keyboard focus");
+    latest={...latest,revision:latest.revision+1,schedule:{...latest.schedule,settings:{...latest.schedule.settings,weekly:weekly.filter(w=>w.day!==1)}}};
+    await act(async()=>root.render(React.createElement(ScheduleCalendar,{board:latest,busy:false,refresh:async()=>{},select:()=>{}})));
+    assert.ok(find("timeline-closed-day"));
+    assert.equal(find("timeline-lane-b"),null,"closed day has no false all-day availability grid");
+    assert.match(find("timeline-closed-day").textContent,/Job routine/,"closed-day work stays accessible");
+    await click("timeline-next-working-day");
+    assert.equal(find("schedule-date").value,"2030-06-04");
   } finally {
     await act(async () => root.unmount()); dom.window.close(); Date.now = originalNow;
     for (const key of names) { if (previous[key]) Object.defineProperty(global, key, previous[key]); else delete global[key]; }

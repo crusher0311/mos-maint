@@ -57,7 +57,7 @@ export async function dispatchSnapshot(session:SessionInfo,board?:Board){
   const logo = await readLogoPalette(saved.logo);
   const branding = resolveWorkflowBranding(value.locationBrand, { name, ...logo }, enterprise?.brand ?? null);
   const {stored,...publicEnterprise}=enterprise ?? {stored:null};
-  return {board:{...scheduleBoardView(value),receipts:[],audit:actor.manager?value.audit:[],
+  return {board:{...scheduleBoardView(value,actor.manager?actor.email:undefined),audit:actor.manager?value.audit:[],
     technicians:value.technicians.map(t=>({...t,email:actor.manager||t.id===actor.technicianId?t.email:"",skills:actor.manager?t.skills:undefined}))},
     actor,branding,sourceSyncWarning,shopId:session.shopId,serverNow:new Date().toISOString(),enterprise:enterprise?publicEnterprise:null};
 }

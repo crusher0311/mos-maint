@@ -55,7 +55,11 @@ export interface Visit {
   sourceStatus: string | null; sourceFetchedAt: string | null;
 }
 export interface Audit { at: string; actor: string; action: string; target: string; detail: string }
-export interface Receipt { id: string; actor: string; digest: string }
+export interface Receipt {
+  id: string; actor: string; digest: string;
+  undoPlan?: { revision: number; jobId: string; expiresAt: string;
+    previous: Pick<Job,"technicianId"|"resource"|"plannedStart"|"estimatedMinutes"> };
+}
 export interface Board {
   scheduleViews?: ScheduleLaneViews;
   operationsEnabled?:boolean;
@@ -77,6 +81,7 @@ export const intakeSchema = z.object({
 export type Intake = z.infer<typeof intakeSchema>;
 export const commandSchema = z.discriminatedUnion("type", [
   ...operationCommands,
+  z.object({type:z.literal("undo-plan"),receiptId:z.string().uuid()}).strict(),
   z.object({type:z.literal("saveScheduleView"),view:scheduleLaneViewSchema}).strict(),
   z.object({type:z.literal("deleteScheduleView"),id:idSchema}).strict(),
   z.object({type:z.literal("selectScheduleView"),id:idSchema.nullable()}).strict(),
@@ -134,7 +139,17 @@ export function applyCommand(input:Board,command:Command,actor:Actor,now:string,
   const visit=(id:string)=>{const v=board.visits.find(v=>v.id===id);requireThat(v && !v.closed,"Visit not found or closed",404);return v;};
   const settle=(j:Job)=>{Object.assign(j,elapsed(j,Date.parse(now)));j.since=null;};
   let target="board", detail="";
-  if(command.type==="saveScheduleView"){
+  if(command.type==="undo-plan"){
+    const receipt=board.receipts.find(r=>r.id===command.receiptId&&r.actor===actor.email);
+    const undo=receipt?.undoPlan;
+    requireThat(undo&&undo.revision===board.revision&&Date.parse(undo.expiresAt)>Date.parse(now),"This schedule change can no longer be undone. Review the latest board.",409);
+    const job=board.jobs.find(j=>j.id===undo.jobId);
+    requireThat(board.schedule?.settings?.enabled&&job&&job.status==="idle"&&!job.sourceRemoved&&board.visits.some(v=>v.id===job.visitId&&!v.closed),"Work has changed or started; this move cannot be undone.",409);
+    requireThat(!undo.previous.technicianId||board.technicians.some(t=>t.id===undo.previous.technicianId&&t.active),"Previous technician is unavailable",409);
+    requireThat(!undo.previous.resource||resourcesFor(board).some(r=>r.id===undo.previous.resource&&r.active),"Previous equipment is unavailable",409);
+    Object.assign(job,undo.previous);
+    target=job.id;detail="Undid last confirmed scheduling move";
+  }else if(command.type==="saveScheduleView"){
     const state=board.scheduleViews??{views:[],selectedId:null};
     const previous=state.views.find(v=>v.id===command.view.id);
     requireThat(previous||state.views.length<30,"A shop can save up to 30 schedule views",409);

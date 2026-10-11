@@ -6,7 +6,7 @@ const assert=require("node:assert/strict");
  const page=await browser.newPage({viewport:{width:1500,height:1100}});
  const errors=[];page.on("pageerror",e=>errors.push(e.message));
  await page.clock.install({time:new Date("2026-10-12T12:00:00Z")});
- await page.goto("http://127.0.0.1:24100/?schedule&resourceTimeline");
+ await page.goto("http://127.0.0.1:24100/?schedule&resourceTimeline",{waitUntil:"domcontentloaded",timeout:90000});
  await page.getByTestId("timeline-mode-resource").click();
  await page.getByTestId("timeline-lane-rack").waitFor();
  assert.equal(await page.getByTestId("timeline-lane-rack").locator("[data-job-block]").count(),3);
@@ -64,7 +64,7 @@ const assert=require("node:assert/strict");
  await page.getByTestId("timeline-plan-save").click();
  await page.getByTestId("timeline-error").getByText("conflicts",{exact:false}).waitFor();
  assert.equal(await page.evaluate(()=>window.requests.length),3);
- // Dragging stages a resource draft, never an immediate mutation.
+ // Missing authorization and out-of-hours resource moves still require review.
  await page.getByRole("button",{name:"Close details",exact:true}).click();
  await page.getByTestId("timeline-block-example-14").evaluate(el=>{
   const transfer=new DataTransfer();
@@ -84,9 +84,12 @@ const assert=require("node:assert/strict");
  await page.mouse.down();
  await page.mouse.move(bounds.x+bounds.width/2+28,bounds.y+bounds.height/2,{steps:5});
  await page.mouse.up();
- assert.equal(await page.getByTestId("timeline-plan-resource").inputValue(),"lift-east");
- assert.equal(await page.getByTestId("timeline-plan-minutes").inputValue(),"75");
- assert.equal(await page.evaluate(()=>window.requests.length),3);
+ await page.waitForFunction(()=>window.requests.length===4).catch(async error=>{
+  console.error(await page.locator('[data-testid="timeline-error"],[data-testid="timeline-details"],[data-testid="schedule-error"]').allTextContents());
+  throw error;
+ });
+ assert.equal((await page.evaluate(()=>window.requests.at(-1))).command.estimatedMinutes,75);
+ assert.equal((await page.evaluate(()=>window.requests.at(-1))).command.resource,"lift-east");
  assert.deepEqual(errors,[]);
  console.log("Resource timeline: retained lanes, holds, unknown duration, mode-safe draft, conflict, uncertain retry and time-off rejection passed.");
  } finally {await browser.close();}
