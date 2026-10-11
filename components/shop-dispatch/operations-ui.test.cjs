@@ -13,7 +13,7 @@ let components;
 async function harness() {
   if (!components) {
     const bundle = await build({
-      stdin: { contents: 'export {JobReadiness} from "./JobReadiness"; export {OperationsPanel} from "./OperationsPanel";', resolveDir: __dirname, loader: "tsx" },
+      stdin: { contents: 'export {JobReadiness} from "./JobReadiness"; export {OperationsPanel} from "./OperationsPanel"; export {ReadinessSummary} from "./ReadinessSummary";', resolveDir: __dirname, loader: "tsx" },
       bundle: true, write: false, platform: "node", format: "cjs", jsx: "automatic",
       external: ["react", "react-dom", "zod"],
       plugins: [{ name: "offline-css", setup(builder) {
@@ -178,5 +178,77 @@ test("next work uses scheduler evidence, explains recommendations, and opens job
     assert.equal(h.button("Review job · no automatic assignment"), undefined);
     await h.render("OperationsPanel", { board: { ...board, schedule: undefined }, select: () => {} });
     assert.match(document.body.textContent, /No eligible recommendations/);
+  } finally { await h.close(); }
+});
+
+test("readiness summary switches date windows, separates unknowns and stays read-only", async () => {
+  const h = await harness();
+  const selections = [];
+  try {
+    const weekly = [{ day: 1, start: "07:00", end: "18:00" }, { day: 2, start: "07:00", end: "18:00" }];
+    const board = { ...h.board, visits: [{ ...h.board.visits[0], arrivalAt: "2026-03-15T10:00:00.000Z" }], schedule: {
+      holds: [],
+      settings: { enabled: true, timeZone: "UTC", weekly, technicians: [{ id: "tech", weekly, timeOff: [] }], resources: [], bufferMinutes: 0, leadMinutes: 0 },
+      appointments: { startDate: "2026-03-16", endDate: "2026-03-18", fetchedAt: new Date(h.now).toISOString(), complete: true, appointments: [
+        { id: "today", title: "Monday arrival", start: "2026-03-16T15:00:00.000Z", end: "2026-03-16T16:00:00.000Z", technicianSourceIds: [] },
+        { id: "tomorrow", title: "Tuesday arrival", start: "2026-03-17T15:00:00.000Z", end: "2026-03-17T16:00:00.000Z", technicianSourceIds: [] },
+      ] },
+    } };
+    const before = JSON.stringify(board);
+    await h.render("ReadinessSummary", { board, select: (...args) => selections.push(args) });
+    const summary = h.form("readiness-summary");
+    for (const id of ["carryover", "arrivals", "blockers", "missing", "staffing", "promises"]) {
+      assert(h.form(`readiness-summary-${id}`));
+      assert.match(h.form(`readiness-summary-${id}`).textContent, /\d+ known · \d+ unknown/);
+    }
+    assert.equal(h.button("Morning").getAttribute("aria-pressed"), "true");
+    assert.match(h.form("readiness-summary-arrivals").textContent, /Monday arrival/);
+    assert.doesNotMatch(h.form("readiness-summary-arrivals").textContent, /Tuesday arrival/);
+    assert.match(h.form("readiness-summary-missing-unknown").textContent, /parts readiness unknown/);
+    assert.match(summary.textContent, /Live snapshot, not a saved report/);
+    assert.match(summary.textContent, /Dependency-only LOWER BOUND/);
+    assert.match(summary.textContent, /Timezone: UTC/);
+    assert.match(h.form("readiness-summary-freshness").textContent, /2026-03-16T14:00:00.000Z/);
+    await h.click("RO 4827 · Wheel alignment · Open job");
+    await h.click("RO 4827 · 2018 Mazda CX-5 · Open visit");
+    assert.deepEqual(selections, [["visit", "align"], ["visit", undefined]]);
+    await h.click("End of day");
+    assert.equal(h.button("End of day").getAttribute("aria-pressed"), "true");
+    assert.match(summary.textContent, /Potential overnight carryover/);
+    assert.match(summary.textContent, /Arrivals \/ capacity window: 2026-03-17/);
+    assert.match(h.form("readiness-summary-arrivals").textContent, /Tuesday arrival/);
+    assert.doesNotMatch(h.form("readiness-summary-arrivals").textContent, /Monday arrival/);
+    await h.click("Morning");
+    assert.match(h.form("readiness-summary-arrivals").textContent, /Monday arrival/);
+    assert.equal(summary.querySelectorAll("form").length, 0);
+    assert.equal(h.calls.length, 0);
+    assert.equal(JSON.stringify(board), before, "review does not mutate its board");
+    await h.render("ReadinessSummary", { actor: { manager: false }, select: () => {} });
+    assert.equal(h.form("readiness-summary"), null);
+  } finally { await h.close(); }
+});
+
+test("readiness summary bounds known and unknown previews and preserves missing coverage", async () => {
+  const h = await harness();
+  try {
+    const board = { ...h.board, jobs: Array.from({ length: 5 }, (_, index) => ({ ...h.job, id: `job-${index}`, operations: undefined })) };
+    await h.render("OperationsPanel", { board, select: () => {} });
+    assert(h.form("readiness-summary"), "wired into manager operations");
+    const unknown = h.form("readiness-summary-missing-unknown");
+    assert.equal(unknown.querySelector(":scope > ul").children.length, 2);
+    assert.equal(unknown.querySelector("details summary").textContent, "Show 3 more unknowns");
+    assert.equal(unknown.querySelector("details").open, false);
+    await act(async () => { unknown.querySelector("details").open = true; });
+    assert.equal(unknown.querySelector("details ul").children.length, 3);
+    assert.match(h.form("readiness-summary-arrivals-unknown").textContent, /Shop timezone is not configured/);
+    assert.match(h.form("readiness-summary-freshness").textContent, /Unknown \/ not fetched/);
+    const blocked = { ...board, jobs: Array.from({ length: 5 }, (_, index) => ({ ...h.job, id: `job-${index}` })) };
+    await h.render("ReadinessSummary", { board: blocked, select: () => {} });
+    const blockers = h.form("readiness-summary-blockers");
+    assert.equal(blockers.querySelector(":scope > ul").children.length, 2);
+    assert.equal(blockers.querySelector(":scope > details > summary").textContent, "Show 3 more known items");
+    assert.equal(h.calls.length, 0);
+    await h.render("OperationsPanel", { actor: { manager: false }, select: () => {} });
+    assert.equal(h.form("readiness-summary"), null);
   } finally { await h.close(); }
 });

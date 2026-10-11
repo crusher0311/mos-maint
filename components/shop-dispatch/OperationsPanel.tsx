@@ -3,6 +3,7 @@ import { useState } from "react";
 import { promiseRisk } from "@/lib/shop-dispatch/operations";
 import { recommendNextJobs } from "@/lib/shop-dispatch/operations-scheduling";
 import { CommandForm } from "./CommandForm";
+import { ReadinessSummary } from "./ReadinessSummary";
 import { blockerAge } from "./JobReadiness";
 import type { WorkProps } from "./JobCard";
 import styles from "./pilot.module.css";
@@ -15,6 +16,7 @@ export function OperationsPanel({ board, actor, now, busy, mutate, select }: Wor
     .sort((a, b) => Date.parse(a.blocker.openedAt) - Date.parse(b.blocker.openedAt));
   const recommendations = recommendNextJobs(board, technicianId, now);
   return <section data-testid="operations-panel">
+    <ReadinessSummary board={board} actor={actor} now={now} select={select} />
     <div className={styles.panel}>
       <div className={styles.row}><h2>Shop operations</h2><span className={styles.chip}>{board.operationsEnabled ? "Gate enabled" : "Gate off · default"}</span></div>
       <p>Review readiness, put an owner on every hold, and close the loop on handoffs and final checks.</p>
