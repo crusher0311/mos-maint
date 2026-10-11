@@ -21,5 +21,7 @@
 .settings input[type=checkbox] { flex-shrink: 0; }
 .muted { padding: 14px 0; color: var(--muted); }
 .range { font-variant-numeric: tabular-nums; }
+.searchOptions .filters { margin-top: 12px; }
+.workspace > form { margin-bottom: 0; padding: 16px 18px; }
 @media (max-width: 1100px) { .calendar { grid-template-columns: 1fr; } .day { border-right: 0; border-bottom: 1px solid var(--line); } .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 767px) { .filters, .opening, .absence { grid-template-columns: 1fr; } .toolbar { align-items: stretch; } .toolbar label { width: 100%; } }

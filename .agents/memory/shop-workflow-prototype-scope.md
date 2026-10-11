@@ -112,3 +112,9 @@ Shop Workflow must be explicitly enabled per location by platform administrators
 **Why:** The user requested a controlled store-by-store rollout, with no menu option for unselected stores.
 
 **How to apply:** Preserve opt-in semantics across navigation, direct pages and API access; do not enable real locations during development.
+
+The user supplied Socket Time's Burnett schedule as a usability reference: the scheduling board needs direct drag-and-drop placement, not primarily forms.
+
+**Why:** The user found the first Schedule view cumbersome for arranging a day of work.
+
+**How to apply:** Preserve individual-job, multi-technician scheduling. Keep provider appointments distinct from local work plans, and planned duration distinct from billed hours. Reference screenshots guide interaction and density; they do not authorize copying customer/staff data or changing upstream appointments.

@@ -1,13 +1,16 @@
 "use client";
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
-import type { Board, Job } from "@/lib/shop-dispatch/model";
+import type { Board, Job, Command as DispatchCommand } from "@/lib/shop-dispatch/model";
 import { resourcesFor } from "@/lib/shop-dispatch/model";
+import { buildTimelinePlan } from "@/lib/shop-dispatch/timeline";
 import type { AvailabilityResult, ScheduleSettings as Settings } from "@/lib/shop-dispatch/schedule-types";
 import { ScheduleSettings } from "./ScheduleSettings";
+import { ScheduleTimeline } from "./ScheduleTimeline";
 import styles from "./pilot.module.css";
 import css from "./ScheduleCalendar.module.css";
 
 type Command = { type: "settings"; requestId: string; revision: number; settings: Settings } | { type: "release"; requestId: string; revision: number; holdId: string };
+type Request = { url: string; body: string };
 export function scheduleDate(value: string | number, timeZone: string): string {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return "";
@@ -18,12 +21,12 @@ export function shiftScheduleDate(value: string, days: number): string {
   const date = new Date(`${value}T12:00:00Z`); date.setUTCDate(date.getUTCDate() + days); return date.toISOString().slice(0, 10);
 }
 function errorText(error: unknown): string { return error instanceof Error ? error.message : "Scheduling request failed. Try again."; }
-export function ScheduleCalendar({ board, busy, refresh, select }: { board: Board; busy: boolean; refresh: () => Promise<void>; select: (visitId: string) => void }) {
+export function ScheduleCalendar({ board, busy, refresh, select, onLockChange }: { board: Board; busy: boolean; refresh: () => Promise<void>; select: (visitId: string) => void; onLockChange?: (locked: boolean) => void }) {
   const [fetched, setFetched] = useState<Board | null>(null);
   const current = fetched && fetched.revision >= board.revision ? fetched : board;
   const zone = current.schedule?.settings?.timeZone || "UTC";
   const [startDate, setStartDate] = useState(() => scheduleDate(Date.now(), zone));
-  const [mode, setMode] = useState<"day" | "week">("week");
+  const [mode, setMode] = useState<"day" | "week">("day");
   const [duration, setDuration] = useState(60);
   const [technicianId, setTechnicianId] = useState("");
   const [resourceId, setResourceId] = useState("");
@@ -33,7 +36,11 @@ export function ScheduleCalendar({ board, busy, refresh, select }: { board: Boar
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [pending, setPending] = useState<Command | null>(null);
+  const [pending, setPending] = useState<Request | null>(null);
+  const pendingRef = useRef<Request | null>(null);
+  const [conflict, setConflict] = useState(false);
+  const conflictRef = useRef(false);
+  const currentRef = useRef(current); currentRef.current = current;
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [clock, setClock] = useState(() => Date.now());
   const [loadedQuery, setLoadedQuery] = useState("");
@@ -66,6 +73,9 @@ export function ScheduleCalendar({ board, busy, refresh, select }: { board: Boar
       if (token !== sequence.current || !mounted.current) return;
       setFetched(previous => !previous || data.board.revision >= previous.revision ? data.board : previous);
       setAvailability(data.availability); setLoadedQuery(search); setClock(Date.now());
+      // Only an explicit successful read resolves a revision conflict. Drafts
+      // keep their original base revision until the manager reviews them.
+      conflictRef.current = false; setConflict(false);
     } catch (cause) { if (!abort.signal.aborted && mounted.current) setError(errorText(cause)); }
     finally { if (token === sequence.current && mounted.current) setLoading(false); }
   }
@@ -81,28 +91,46 @@ export function ScheduleCalendar({ board, busy, refresh, select }: { board: Boar
     const timer = window.setInterval(() => setClock(Date.now()), 30000);
     return () => window.clearInterval(timer);
   }, []);
-  async function send(command: Command): Promise<Board | null> {
-    if (sending.current) return null;
+  async function sendRequest(request: Request, retry = false): Promise<Board | null> {
+    if (sending.current || busy || (!retry && (pendingRef.current || conflictRef.current))) return null;
     sending.current = true; setSaving(true); setError(""); setNotice("");
     // Invalidate reads already in flight before a mutation can commit.
     sequence.current++; controller.current?.abort(); setLoading(false);
     let confirmed = false;
     try {
-      const response = await fetch("/api/shop-dispatch/schedule", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(command) });
+      const response = await fetch(request.url, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: request.body });
       if (!response.ok) {
-        if (response.status >= 500) setPending(command);
-        else setPending(null);
-        throw new Error(response.status === 409 ? "Revision conflict. Your draft is unchanged. Refresh schedule, then explicitly Reload latest form before trying again." : `Not saved (${response.status}). Review settings or retry the unconfirmed request.`);
+        pendingRef.current = response.status >= 500 ? request : null; setPending(pendingRef.current);
+        let detail = "";
+        try { const data = await response.json(); detail = typeof data.error === "string" ? data.error : ""; } catch { /* Status still determines whether the outcome is known. */ }
+        if (response.status === 409) { conflictRef.current = true; setConflict(true); }
+        throw new Error(response.status === 409 ? `Revision conflict or capacity rejection. Your draft is unchanged. Refresh schedule, then explicitly review the latest job or Reload latest settings form before trying again.${detail ? ` ${detail}` : ""}` : `Not saved (${response.status}). ${detail || "Review your draft or retry the unconfirmed request."}`);
       }
       const data = await response.json() as { board: Board };
-      confirmed = true; setPending(null); setFetched(data.board); setAvailability(null); setLoadedQuery(""); setClock(Date.now());
+      if (!data.board || !Number.isInteger(data.board.revision)) throw new Error("Save response was incomplete; retry the identical request to confirm.");
+      confirmed = true; pendingRef.current = null; setPending(null);
+      if (data.board.revision >= currentRef.current.revision) currentRef.current = data.board;
+      setFetched(previous => !previous || data.board.revision >= previous.revision ? data.board : previous);
+      setAvailability(null); setLoadedQuery(""); setClock(Date.now());
       setNotice(`Change confirmed at revision ${data.board.revision}. Refresh schedule for new availability. After an uncertain settings retry, explicitly reload the settings form to review the saved values.`);
       try { await refresh(); } catch { setError("Change saved, but parent board refresh failed. Refresh the board manually."); }
       return data.board;
     } catch (cause) {
-      if (!confirmed && !(cause instanceof Error && /^(Revision conflict|Not saved)/.test(cause.message))) setPending(command);
+      if (!confirmed && !(cause instanceof Error && /^(Revision conflict|Not saved)/.test(cause.message))) { pendingRef.current = request; setPending(request); }
       setError(errorText(cause)); return null;
     } finally { sending.current = false; setSaving(false); }
+  }
+  function send(command: Command) {
+    return sendRequest({ url: "/api/shop-dispatch/schedule", body: JSON.stringify(command) });
+  }
+  async function savePlan(command: Extract<DispatchCommand, { type: "plan" }>, revision: number): Promise<Board | null> {
+    if (revision !== currentRef.current.revision) { setError("The board changed. Refresh and explicitly review the job draft before saving."); return null; }
+    try {
+      // Validate against the latest board at the last possible moment. The pure
+      // helper preserves authorization, prerequisites and the existing bay.
+      const plan = buildTimelinePlan(currentRef.current, command.jobId, command.technicianId!, command.plannedStart!, command.estimatedMinutes!);
+      return await sendRequest({ url: "/api/shop-dispatch", body: JSON.stringify({ requestId: crypto.randomUUID(), revision, command: plan }) });
+    } catch (cause) { setError(errorText(cause)); return null; }
   }
   function submitSearch(event: FormEvent) { event.preventDefault(); void load(queryString); }
   function jobCard(job: Job) {
@@ -121,15 +149,23 @@ export function ScheduleCalendar({ board, busy, refresh, select }: { board: Boar
   const appointmentStale = !appointments || clock - Date.parse(appointments.fetchedAt) > 300000 || !Number.isFinite(Date.parse(appointments.fetchedAt));
   const appointmentRangeMismatch = !appointments || appointments.startDate !== startDate || appointments.endDate !== endDate;
   const holds = current.schedule?.holds ?? [];
-  const locked = busy || saving || !!pending;
+  const locked = busy || saving || !!pending || conflict;
+  useEffect(() => { onLockChange?.(saving || !!pending); }, [saving, pending, onLockChange]);
+  useEffect(() => {
+    if (!saving && !pending) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [saving, pending]);
   return <section className={css.workspace} data-testid="schedule-calendar" aria-busy={loading || saving}>
     <div className={styles.row}><div><div className={styles.eyebrow}>Manager workspace / capacity planning</div><h2>Shop schedule</h2><small>{zone}{!current.schedule?.settings?.timeZone ? " · display fallback only; configure shop timezone" : ""} · revision {current.revision} · every local job status included</small></div>
       <button aria-expanded={settingsOpen} data-testid="schedule-settings-toggle" onClick={() => setSettingsOpen(!settingsOpen)}>{settingsOpen ? "Hide settings" : "Scheduling settings"}</button></div>
     {error && <div className={styles.error} role="alert" data-testid="schedule-error">{error}</div>}
     {notice && <div className={styles.brandingInfo} role="status" data-testid="schedule-save-status">{notice}</div>}
     {pending && <div className={styles.error} role="alert">The last change is unconfirmed. Other saves are blocked; retry sends the identical request ID and revision.
-      <div className={styles.actions}><button disabled={busy || saving} data-testid="schedule-retry" onClick={() => void send(pending)}>Retry unconfirmed change</button></div>
+      <div className={styles.actions}><button disabled={busy || saving} data-testid="schedule-retry" onClick={() => void sendRequest(pending, true)}>Retry unconfirmed change</button></div>
     </div>}
+    {conflict && !pending && <div className={styles.notice} role="status">Saves are paused after a conflict or capacity rejection. Refresh schedule, review the unchanged draft against the latest board, then save explicitly.</div>}
     <div hidden={!settingsOpen} className={styles.panel}><ScheduleSettings board={current} busy={locked} save={(settings, revision) => send({ type: "settings", requestId: crypto.randomUUID(), revision, settings })} /></div>
     {!current.schedule?.settings?.enabled && <div className={styles.notice}>Availability is disabled. Configure timezone, shop openings and technician shifts, then opt in. Existing jobs and imported arrivals remain visible.</div>}
     <form onSubmit={submitSearch} className={styles.panel} data-testid="schedule-search">
@@ -142,18 +178,19 @@ export function ScheduleCalendar({ board, busy, refresh, select }: { board: Boar
         <label>Starting date<input required type="date" data-testid="schedule-date" value={startDate} onChange={e => { if (/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) setStartDate(e.target.value); }} /></label>
         <div className={styles.actions}>{(["day", "week"] as const).map(value => <button key={value} type="button" aria-pressed={mode === value} className={mode === value ? styles.primary : ""} data-testid={`schedule-${value}`} onClick={() => setMode(value)}>{value === "day" ? "Day" : "7 days"}</button>)}</div>
       </div>
-      <p className={css.range}>{startDate} – {shiftScheduleDate(endDate, -1)} · {zone} · at most seven days per request</p>
-      <div className={css.filters}>
+      <p className={css.range}>{startDate}{mode === "week" ? ` – ${shiftScheduleDate(endDate, -1)}` : ""} · {zone}</p>
+      <details className={css.searchOptions}><summary>Availability search filters · {duration} minutes{technicianId ? " · specific technician" : ""}{resourceId ? " · specific bay" : ""}</summary><div className={css.filters}>
         <label>Duration · minutes<input required type="number" min={15} max={480} step={1} value={duration} onChange={e => setDuration(Number(e.target.value))} data-testid="schedule-duration" /></label>
         <label>Technician<select value={technicianId} onChange={e => setTechnicianId(e.target.value)}><option value="">All technicians</option>{current.technicians.map(t => <option key={t.id} value={t.id}>{t.name}{t.active ? "" : " (inactive)"}</option>)}</select></label>
         <label>Bay / resource<select value={resourceId} onChange={e => setResourceId(e.target.value)}><option value="">Any resource</option>{resourcesFor(current).map(r => <option key={r.id} value={r.id}>{r.name}{r.active ? "" : " (inactive)"}</option>)}</select></label>
         <label>Required skill key<input maxLength={160} value={skillKey} placeholder="Optional exact skill key" onChange={e => setSkillKey(e.target.value)} /></label>
-      </div>
-      <div className={styles.actions} style={{ marginTop: 16 }}><button className={styles.primary} type="submit" disabled={loading || saving || busy} data-testid="schedule-refresh">{loading ? "Loading schedule…" : "Refresh schedule & find availability"}</button><small>Manual refresh only. Filters apply to availability, never hide local jobs.</small></div>
+      </div></details>
+      <div className={styles.actions} style={{ marginTop: 12 }}><button className={styles.primary} type="submit" disabled={loading || saving || busy} data-testid="schedule-refresh">{loading ? "Loading schedule…" : "Refresh schedule & find availability"}</button><small>Manual refresh only. Search filters never hide local work.</small></div>
     </form>
     {loading && <div className={styles.skeleton} aria-label="Loading schedule and arrivals" />}
     {queryStale && <div className={styles.notice} role="status" data-testid="schedule-query-stale">This date range or search has not been refreshed. Local jobs use the latest board; imported arrivals and availability may belong to the previous request.</div>}
-    <div><div className={styles.row}><h2>Planned local work</h2><small>Planned start, manual estimate and book minutes are separate; cards are not duration-scaled.</small></div>
+    {mode === "day" && <ScheduleTimeline board={current} date={startDate} zone={zone} locked={locked} save={savePlan} select={select} />}
+    {mode === "week" && <><div><div className={styles.row}><h2>Planned local work</h2><small>Week overview · switch to Day to drag individual jobs or resize planned duration.</small></div>
       <div className={css.calendar} style={{ "--days": count } as CSSProperties} data-testid="schedule-days">
         {Array.from({ length: count }, (_, index) => {
           const day = shiftScheduleDate(startDate, index);
@@ -164,7 +201,7 @@ export function ScheduleCalendar({ board, busy, refresh, select }: { board: Boar
     </div>
     <section className={styles.panel} data-testid="schedule-unplanned"><h2>Unplanned queue <small>/ {unplanned.length}</small></h2><small>All statuses, including hidden source statuses and closed visits. A missing start is not available capacity.</small>{unplanned.map(jobCard)}{!unplanned.length && <p className={css.muted}>Every local job has a planned start.</p>}
       <details><summary>Planned outside this window · {outside.length}</summary>{outside.map(jobCard)}{!outside.length && <p>No jobs outside this window.</p>}</details>
-    </section>
+    </section></>}
     <section className={styles.panel} data-testid="schedule-arrivals"><div className={styles.row}><h2>Protractor appointment arrivals</h2><span className={styles.chip}>Read-only intake · not job blocks</span></div>
       <small>{appointments ? `Snapshot ${appointments.startDate} to ${appointments.endDate} (exclusive) · fetched ${time(appointments.fetchedAt)}` : "No appointment snapshot received."}</small>
       {(appointmentStale || appointmentRangeMismatch || !appointments?.complete || appointments.warning) && <div className={styles.notice} role="status" data-testid="schedule-appointment-warning">

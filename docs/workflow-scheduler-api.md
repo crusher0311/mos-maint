@@ -6,6 +6,30 @@ explicit technician shifts, time off, optional bay shifts/time off, buffer and
 lead time. Unconfigured technicians have no advertised availability.
 Settings do not alter provider appointments or employee records.
 
+## Manager timeline
+
+The default Day view has technician lanes and a searchable individual-job queue.
+Drag jobs to another time/technician or resize their planned duration; both
+actions stage an unsaved preview. **Save reviewed plan** uses the existing
+revision-checked dispatch mutation. Keyboard/touch users can set the same
+placement in the inline details form. The seven-day overview remains available.
+
+Block widths use explicit planned minutes, otherwise known book minutes labeled
+**book baseline — review**. Saving confirms a planned estimate without changing
+billed labor. Truly unknown duration requires manual input. Provider appointment
+arrivals remain read-only and distinct from local work blocks.
+
+Placement uses the same hours, time-off, capacity-hold and dependency validation
+as the server. Required skills must be manager-confirmed when operations are
+enabled; moving an existing assignment preserves the handoff requirement.
+Closed/completed/active or upstream-removed work cannot be dragged.
+
+Network/5xx uncertainty retains the exact request for retry and locks other
+schedule writes and internal workspace navigation. A revision rejection
+requires refresh and explicit draft review. No optimistic movement is presented
+as a saved plan. Leaving the page during an unresolved request raises a browser
+warning; this is not durable draft storage.
+
 ## Scope and authentication
 
 Use a **shop-scoped MOS API key**, sent as `Authorization: Bearer …` or
