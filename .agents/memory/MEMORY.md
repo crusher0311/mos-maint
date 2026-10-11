@@ -152,6 +152,7 @@
 - [Recovery accounting gap](recovery-accounting-gap.md) — financial commits and outcome bookkeeping are separate; current matches do not prove when an unrecorded correction occurred.
 - [JWT recovery](jwt-eligible-recovery.md) — eligible-first, budget-preserving handoffs; [scoped history](protractor-scoped-history.md) covers concurrent shop imports and separate budgets.
 - [Shop workflow prototype](shop-workflow-prototype-scope.md) — vehicle visits contain multi-technician jobs; UI evaluation does not authorize production scheduling or live integrations.
+- [Burnett scheduling policy](burnett-scheduling-policy.md) — user-approved weekday store hours apply to all active technicians; do not infer other locations or bay schedules.
 - [Tire DVI demo scope](tire-dvi-demo-scope.md) — fictional manual-measurement presentation; green documentation is required; no production rollout or video-task dependency.
 - [Workflow shared branding](workflow-shared-branding.md) — inherited display logos stay separate from stricter manual-upload drafts; keep deliberate overrides intact.
 - [Enterprise history sharing boundary](enterprise-history-sharing.md) — shared reads never widen current-shop writes; signed/partner redistribution needs its own grant.
