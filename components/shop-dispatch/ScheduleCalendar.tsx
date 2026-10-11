@@ -23,7 +23,7 @@ export function shiftScheduleDate(value: string, days: number): string {
   const date = new Date(`${value}T12:00:00Z`); date.setUTCDate(date.getUTCDate() + days); return date.toISOString().slice(0, 10);
 }
 function errorText(error: unknown): string { return error instanceof Error ? error.message : "Scheduling request failed. Try again."; }
-export function ScheduleCalendar({ board, busy, refresh, select, onLockChange }: { board: Board; busy: boolean; refresh: () => Promise<void>; select: (visitId: string) => void; onLockChange?: (locked: boolean) => void }) {
+export function ScheduleCalendar({ board, shopId, busy, refresh, select, onLockChange }: { board: Board; shopId?: number; busy: boolean; refresh: () => Promise<void>; select: (visitId: string) => void; onLockChange?: (locked: boolean) => void }) {
   const [fetched, setFetched] = useState<Board | null>(null);
   const current = fetched && fetched.revision >= board.revision ? fetched : board;
   const zone = current.schedule?.settings?.timeZone || "UTC";
@@ -226,7 +226,7 @@ export function ScheduleCalendar({ board, busy, refresh, select, onLockChange }:
     </fieldset></form>
     {loading && <div className={styles.skeleton} aria-label="Loading schedule and arrivals" />}
     {queryStale && <div className={styles.notice} role="status" data-testid="schedule-query-stale">This date range or search has not been refreshed. Local jobs use the latest board; imported arrivals and availability may belong to the previous request.</div>}
-    <div hidden={mode !== "day"}><ScheduleViews board={current} locked={locked || mode !== "day"} save={savePlan} /><ScheduleTimeline board={current} date={startDate} zone={zone} locked={locked || mode !== "day"} save={savePlan} select={select} history={history} nextDay={value => { if (!locked) setStartDate(value); }} /></div>
+    <div hidden={mode !== "day"}><ScheduleViews board={current} locked={locked || mode !== "day"} save={savePlan} /><ScheduleTimeline shopId={shopId} board={current} date={startDate} zone={zone} locked={locked || mode !== "day"} save={savePlan} select={select} history={history} nextDay={value => { if (!locked) setStartDate(value); }} /></div>
     {mode === "week" && <><div><div className={styles.row}><h2>Planned local work</h2><small>Week overview · switch to Day to drag individual jobs or resize planned duration.</small></div>
       <div className={css.calendar} style={{ "--days": count } as CSSProperties} data-testid="schedule-days">
         {Array.from({ length: count }, (_, index) => {

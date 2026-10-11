@@ -8,6 +8,7 @@ import { buildResourceTimelinePlan, buildTimelinePlan, timelineInstant, roundTim
 import css from "./ScheduleTimeline.module.css";
 import styles from "./pilot.module.css";
 import { visibleLaneTechnicians } from "@/lib/shop-dispatch/lane-views";
+import { VehicleHistoryPanel } from "./VehicleHistoryPanel";
 
 type Plan = Extract<Command, { type: "plan" }>;
 export type TimelineMode = "technician" | "resource";
@@ -38,8 +39,8 @@ export function timelineLockReason(board: Board, job: Job): string {
   return "";
 }
 
-export function ScheduleTimeline({ board, date, zone, locked, save, select, history = { status: "error", profiles: [], truncated: false }, nextDay }: {
-  board: Board; date: string; zone: string; locked: boolean;
+export function ScheduleTimeline({ board, shopId, date, zone, locked, save, select, history = { status: "error", profiles: [], truncated: false }, nextDay }: {
+  board: Board; shopId?: number; date: string; zone: string; locked: boolean;
   save: (command: Plan, revision: number, mode: TimelineMode) => Promise<Board | null>;
   select: (visitId: string) => void;
   history?: HistoryState;
@@ -222,7 +223,7 @@ export function ScheduleTimeline({ board, date, zone, locked, save, select, hist
     const g = gesture.current; gesture.current = null;
     if (g?.moved) commitPreview(previewRef.current);
     setPreview(null);
-    window.setTimeout(() => { suppressClick.current = false; }, 0);
+    window.setTimeout(() => { if (!dragJob.current) suppressClick.current = false; }, 0);
   };
   useEffect(() => {
     const move = (e: PointerEvent) => pointerHandlers.current.move(e);
@@ -234,6 +235,7 @@ export function ScheduleTimeline({ board, date, zone, locked, save, select, hist
     return () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", end); window.removeEventListener("pointercancel", cancel); };
   }, []);
   function begin(event: ReactPointerEvent, job: Job, kind: "move" | "resize") {
+    if (event.button === 0 && !dragJob.current) suppressClick.current = false;
     if (locked || timelineLockReason(board, job) || event.button !== 0) return;
     if (kind === "resize") { event.preventDefault(); event.stopPropagation(); }
     const block = event.currentTarget.closest<HTMLElement>("[data-job-block]");
@@ -247,8 +249,12 @@ export function ScheduleTimeline({ board, date, zone, locked, save, select, hist
   function dragStart(event: DragEvent, job: Job) {
     if (locked || timelineLockReason(board, job)) { event.preventDefault(); return; }
     dragOffset.current = gesture.current?.jobId === job.id ? gesture.current.offset : 0;
-    gesture.current = null; dragJob.current = job.id;
+    gesture.current = null; dragJob.current = job.id; suppressClick.current = true;
     event.dataTransfer.setData("application/x-detect-dog-job", job.id); event.dataTransfer.effectAllowed = "move";
+  }
+  function finishDrag() {
+    dragJob.current = null; setPreview(null);
+    window.setTimeout(() => { suppressClick.current = false; }, 0);
   }
   function dragOver(event: DragEvent<HTMLElement>, final = false) {
     const id = dragJob.current || event.dataTransfer.getData("application/x-detect-dog-job");
@@ -286,15 +292,16 @@ export function ScheduleTimeline({ board, date, zone, locked, save, select, hist
   function queueCard(job: Job) {
     const v = board.visits.find(v => v.id === job.visitId), reason = timelineLockReason(board, job);
     return <article key={job.id} className={`${css.queueCard} ${!reason && !locked ? css.drag : ""}`} draggable={!locked && !reason && timelineDuration(job) !== null}
-      onDragStart={e => dragStart(e, job)} onDragEnd={() => { dragJob.current = null; setPreview(null); }}
+      onDragStart={e => dragStart(e, job)} onDragEnd={finishDrag}
       onPointerDown={e => { if (!(e.target as HTMLElement).closest("button")) begin(e, job, "move"); }}
+      onClick={e => { if (!(e.target as HTMLElement).closest("button") && !suppressClick.current) open(job); }}
       data-testid={`timeline-queue-${job.id}`}>
       <small>RO #{v?.ro ?? "unknown"} · {job.status}</small><strong>{job.title}</strong><small>{v?.vehicle ?? "Vehicle unavailable"}</small>
       <small>{board.technicians.find(t => t.id === job.technicianId)?.name ?? (job.technicianId ? `Unknown technician ${job.technicianId}` : "Unassigned technician")} · {resourcesFor(board).find(r => r.id === job.resource)?.name ?? (job.resource ? `Unknown resource ${job.resource}` : "No bay / equipment")}</small>
       <small>{durationLabel(job)} · billed {job.bookMinutes === null ? "unknown" : `${(job.bookMinutes / 60).toFixed(2)} h`}</small>
       {reason && <small>{reason}</small>}
       {!reason && timelineDuration(job) === null && <small>Enter duration to schedule. No estimate assumed.</small>}
-      <button type="button" disabled={locked} data-testid={`schedule-job-${job.id}`} onClick={() => open(job)}>{reason ? "View job" : "Details / schedule"}</button>
+       <button type="button" disabled={locked} data-testid={`schedule-job-${job.id}`} onClick={() => { if (!suppressClick.current) open(job); }}>{reason ? "View job" : "Details / schedule"}</button>
     </article>;
   }
   function readiness(job: Job) {
@@ -375,7 +382,7 @@ export function ScheduleTimeline({ board, date, zone, locked, save, select, hist
                   const v = board.visits.find(v => v.id === job.visitId), reason = timelineLockReason(board, job);
                   return <div key={job.id} data-job-block={job.id} data-testid={`timeline-block-${job.id}`} className={`${css.block} ${css[job.status] ?? ""} ${!reason && !locked ? css.drag : ""} ${timelineDuration(job) === null ? css.unknown : ""}`}
                     style={{ ...positions(i.start, timelineDuration(job) === null ? Math.min(end, i.start + 65) : i.end), top: 22 + track * 56 }}
-                    draggable={!locked && !reason && timelineDuration(job) !== null} onDragStart={e => dragStart(e, job)} onDragEnd={() => { dragJob.current = null; setPreview(null); }}
+                    draggable={!locked && !reason && timelineDuration(job) !== null} onDragStart={e => dragStart(e, job)} onDragEnd={finishDrag}
                     title={`${job.title} · RO #${v?.ro ?? "unknown"} · Technician: ${board.technicians.find(t => t.id === job.technicianId)?.name ?? job.technicianId ?? "Unassigned"} · Resource: ${resourcesFor(board).find(r => r.id === job.resource)?.name ?? job.resource ?? "None"} · ${reason || "Drag to move. Use details to schedule by keyboard or touch."}`}>
                     <button type="button" className={css.blockBody} data-testid={`schedule-job-${job.id}`} onPointerDown={e => begin(e, job, "move")} onClick={() => { if (!suppressClick.current) open(job); }}>
                       <strong>#{v?.ro ?? "?"} · {job.title}</strong><span>{mode === "resource" ? board.technicians.find(t => t.id === job.technicianId)?.name ?? (job.technicianId ? `Unknown technician ${job.technicianId}` : "Unassigned technician") : v?.vehicle ?? "Vehicle unavailable"} · {job.status}</span><span>{minuteText(i.start)} · {timelineDuration(job) === null ? "Duration unknown (marker only)" : durationLabel(job)} · {job.bookMinutes === null ? "billed ?" : `${(job.bookMinutes / 60).toFixed(2)} h billed`}</span>
@@ -398,6 +405,7 @@ export function ScheduleTimeline({ board, date, zone, locked, save, select, hist
       <div className={css.heading}><div><small>RO #{visit?.ro ?? "unknown"} · {visit?.vehicle ?? "Vehicle unavailable"}</small><h3>{chosen.title}</h3><small>{chosen.status} · {chosen.authorized ? "Authorized" : "Not authorized — unchanged by scheduling"}{chosen.sourceRemoved ? " · removed upstream; manager review" : ""}</small></div>
         <button type="button" disabled={locked} onClick={closeDetails}>Close details</button></div>
       <div className={css.metrics}><span>Capacity duration<strong>{durationLabel(chosen)}</strong></span><span>Billed hours<strong>{chosen.bookMinutes === null ? "Unknown" : `${(chosen.bookMinutes / 60).toFixed(2)} h`}</strong></span><span>Bay / equipment<strong>{resourcesFor(board).find(r => r.id === chosen.resource)?.name ?? chosen.resource ?? "None"}</strong></span><span>Prerequisites<strong>{(chosen.prerequisites ?? []).map(id => board.jobs.find(j => j.id === id)?.title ?? id).join(", ") || "None"}</strong></span></div>
+      {visit && shopId !== undefined && <VehicleHistoryPanel visitId={visit.id} shopId={shopId} />}
       {chosenLock ? <p className={styles.notice}>{chosenLock}</p> : <form onSubmit={e => { e.preventDefault(); void submit(); }} data-testid="timeline-plan-form">
         <fieldset disabled={locked} style={{ border: 0, margin: 0, padding: 0 }}>
           <div className={`${css.form} ${draft.mode === "resource" ? css.resourceForm : ""}`}>

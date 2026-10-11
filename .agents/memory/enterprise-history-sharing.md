@@ -14,3 +14,9 @@ The user wants workflow vehicle/job cards to open combined vehicle history acros
 **Why:** Dispatchers need prior vehicle work available from the scheduling board rather than switching screens.
 
 **How to apply:** Reuse the authorized VIN-scoped history view, retain source-location attribution and coverage caveats, and do not interpret “all enterprise levels” as permission to bypass location access or sharing policy.
+
+Burnett currently has only one fully onboarded store (user confirmed 2026-10-11), with more locations expected soon.
+
+**Why:** A sharing-only history surface would be unusable before additional stores are onboarded.
+
+**How to apply:** Workflow cards must show current-location history independently of cross-location sharing. Add authorized sibling evidence as locations join; never automatically enroll stores or change sharing permissions.

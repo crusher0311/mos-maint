@@ -210,15 +210,17 @@ export async function findCachedWorkOrderById(
 export async function findCachedWorkOrderByProviderIdentity(
   shopId: number,
   workOrderId: string,
+  workflowHistory = false,
 ): Promise<ProtractorWorkOrderCacheDoc | null> {
   if (isProtractorCachePgCanonical()) {
     const pgMatch = (await pg.findCachedWorkOrderByProviderIdentity(
       shopId,
       workOrderId,
+      workflowHistory,
     )) as ProtractorWorkOrderCacheDoc | null;
     // The active client snapshot writer still writes Mongo directly. Always
     // inspect that store as well; a PG miss alone is not absence evidence.
-    const mongoMatch = await findCachedWorkOrderByProviderIdentityMongo(shopId, workOrderId);
+    const mongoMatch = await findCachedWorkOrderByProviderIdentityMongo(shopId, workOrderId, workflowHistory);
     if (!pgMatch && !mongoMatch) return null;
     return {
       ...(pgMatch || mongoMatch)!,
@@ -226,22 +228,26 @@ export async function findCachedWorkOrderByProviderIdentity(
       ...(mongoMatch ? { __mongoTerminalMatch: mongoMatch } : {}),
     } as TerminalWorkOrderMatch;
   }
-  return findCachedWorkOrderByProviderIdentityMongo(shopId, workOrderId);
+  return findCachedWorkOrderByProviderIdentityMongo(shopId, workOrderId, workflowHistory);
 }
 
 async function findCachedWorkOrderByProviderIdentityMongo(
   shopId: number,
   workOrderId: string,
+  workflowHistory = false,
 ): Promise<ProtractorWorkOrderCacheDoc | null> {
   const col = await collection();
+  const identity=workflowHistory?{$in:[...new Set([workOrderId,workOrderId.toLowerCase(),workOrderId.toUpperCase()])]}:workOrderId;
   return col.findOne({
     shopId: { $in: [shopId, String(shopId)] },
     $or: [
-      { workOrderId },
-      { workOrderGuid: workOrderId },
-      { "data.ID": workOrderId },
+      { workOrderId: identity },
+      { workOrderGuid: identity },
+      { "data.ID": identity },
     ],
-  } as Filter<ProtractorWorkOrderCacheDoc>);
+  } as Filter<ProtractorWorkOrderCacheDoc>, workflowHistory?{
+    maxTimeMS:2000,projection:{vin:1,"data.ServiceItem.VIN":1},
+  }:{});
 }
 
 /** Terminal callback update honoring the cache's Mongo/PG canonical mode. */

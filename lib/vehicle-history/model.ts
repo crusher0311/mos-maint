@@ -16,6 +16,8 @@ export interface HistoryEvent {
   location: string;
   provider: string;
   workOrderId: string | null;
+  /** Human-facing RO number, never a provider UUID. */
+  workOrderNumber?: string;
   jobId: string;
   title: string;
   date: string | null;

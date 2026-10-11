@@ -1,5 +1,27 @@
 # Workflow calendar and scheduler API
 
+## Vehicle history from workflow cards
+
+Opening a workflow visit or scheduled job provides an on-demand, read-only history
+panel without leaving the board. It uses
+`GET /api/shop-dispatch/vehicle-history?visitId=...` under the authenticated
+dashboard session and workflow/maintenance entitlements. Clients cannot choose
+another shop or supply the vehicle VIN: the server resolves it from that shop's
+cached provider order, rejecting missing or conflicting VIN identities.
+
+Current-location service history is available independently of enterprise
+sharing. Authorized sibling records use the existing enterprise history policy,
+membership, account assignments, stage and entitlements. Onboarding additional
+stores does not itself grant sharing access. Sources and coverage limitations
+are displayed; empty or timed-out reads are not proof of no prior work.
+Normalized records include human-facing RO numbers when available.
+
+History reads never fetch Protractor live, write to the board, or invalidate
+schedule drafts. Identity is rechecked before returning. The endpoint has a
+shared read deadline, and workflow-specific cache lookups have database timeouts.
+Current Auto DVI findings are snapshots, not a complete historical log. Visit-based
+and shared DVI remain subject to their existing release gate and permissions.
+
 This addition is opt-in per shop, behind the existing `shop_workflow` entitlement.
 Managers configure Schedule → Settings: IANA timezone, weekly shop hours,
 explicit technician shifts, time off, optional bay shifts/time off, buffer and
