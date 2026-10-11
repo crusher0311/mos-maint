@@ -7,6 +7,10 @@
 .holdDot { background: var(--accent); }
 .offDot { background: #d4dbd7; }
 .search { max-width: 440px; }
+.viewSwitch { display: flex; flex-wrap: wrap; gap: 6px; }
+.viewSwitch button { font-size: 12px; }
+.laneMeta { display: block; margin-top: 5px; line-height: 1.5; color: var(--muted); }
+.retained { border-left: 3px solid var(--accent); }
 .layout { display: grid; grid-template-columns: 258px minmax(0, 1fr); gap: 14px; align-items: start; }
 .queue { border: 1px solid var(--line); background: var(--panel); border-radius: 9px; padding: 13px; }
 .queue h3 { display: flex; justify-content: space-between; }
@@ -52,9 +56,10 @@
 .metrics span { display: grid; gap: 3px; font-size: 11px; color: var(--muted); }
 .metrics strong { font-size: 14px; color: var(--ink); }
 .form { display: grid; grid-template-columns: minmax(140px, 1fr) 150px 120px 110px; gap: 12px; align-items: end; }
+.resourceForm { grid-template-columns: minmax(140px, 1fr) minmax(140px, 1fr) 150px 120px 110px; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .empty { padding: 20px 5px; line-height: 1.6; color: var(--muted); font-size: 12px; }
 .arrival { border-left-color: var(--accent); background: #f5e1c833; }
 .status { font-size: 12px; padding: 9px 0; color: var(--muted); }
-@media (max-width: 1100px) { .layout { grid-template-columns: 215px minmax(0, 1fr); } .form { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 767px) { .layout { grid-template-columns: 1fr; } .queueList { max-height: 245px; } .workspace { --lane-label: 120px; } .tech { padding: 12px 7px; } .initials { display: none; } .form { grid-template-columns: 1fr; } .details { padding: 14px; } }
+@media (max-width: 1100px) { .layout { grid-template-columns: 215px minmax(0, 1fr); } .form, .resourceForm { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 767px) { .layout { grid-template-columns: 1fr; } .queueList { max-height: 245px; } .workspace { --lane-label: 120px; } .tech { padding: 12px 7px; } .initials { display: none; } .form, .resourceForm { grid-template-columns: 1fr; } .details { padding: 14px; } }

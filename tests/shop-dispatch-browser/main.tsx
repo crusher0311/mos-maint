@@ -61,6 +61,45 @@ if(new URLSearchParams(location.search).has("schedule")){
  board.technicians.forEach((t,i)=>{t.sourceId=`example-provider-${i}`;});
  board.schedule={holds:[],settings:{enabled:true,timeZone:zone,weekly,technicians:board.technicians.map(t=>({id:t.id,weekly,timeOff:[]})),resources:[],bufferMinutes:0,leadMinutes:0},
  appointments:{startDate:date,endDate:new Date(Date.parse(date)+7*86400_000).toISOString().slice(0,10),fetchedAt:new Date().toISOString(),complete:true,appointments:[{id:"demo-appointment",ro:"DEMO-ARRIVAL",title:"Fictional appointment vehicle",start:timelineInstant(date,840,zone),end:timelineInstant(date,885,zone),technicianSourceIds:["example-provider-8"]}]}};
+  if(new URLSearchParams(location.search).has("resourceTimeline")){
+   // Optional synthetic resource coverage; no external services or shared state.
+   board.resources=[
+    {id:"rack",name:"Alignment rack",active:true},
+    {id:"lift-east",name:"East lift",active:true},
+    {id:"diagnostic-cart",name:"Diagnostic cart",active:true},
+    {id:"lift-retired",name:"Retired lift",active:false},
+   ];
+   board.schedule.settings!.resources=[
+    {id:"rack",weekly,timeOff:[{start:timelineInstant(date,720,zone),end:timelineInstant(date,765,zone)}]},
+    {id:"lift-east",weekly:weekly.map(w=>({...w,start:"09:00",end:"16:30"})),timeOff:[]},
+   ];
+   board.jobs[0].resource="rack";
+   const fixtureJob=(id:string)=>board.jobs.find(j=>j.id===id)!;
+   fixtureJob("example-0").resource="rack";
+   fixtureJob("example-1").resource="rack"; // Different technician, overlapping resource occupancy.
+   fixtureJob("example-1").authorized=false;
+   fixtureJob("example-2").resource="lift-east";
+   fixtureJob("example-3").resource="diagnostic-cart"; // Inherits shop hours.
+   fixtureJob("example-4").resource="lift-retired";
+   fixtureJob("example-5").resource="missing-equipment";
+   fixtureJob("example-6").technicianId=null; // Planned but unassigned work remains visible.
+   fixtureJob("example-7").technicianId="missing-technician";
+   fixtureJob("example-8").resource="lift-east";
+   board.technicians.find(t=>t.id==="tech-9")!.active=false;
+   fixtureJob("example-12").resource="diagnostic-cart";
+   fixtureJob("example-12").estimatedMinutes=null;
+   fixtureJob("example-12").bookMinutes=null;
+   fixtureJob("example-13").sourceRemoved=true;
+   fixtureJob("example-14").technicianId="tech-6";
+   fixtureJob("example-14").plannedStart=timelineInstant(date,930,zone);
+   fixtureJob("example-14").estimatedMinutes=40;
+   board.schedule.holds=[{
+    id:"fixture-rack-hold",technicianId:"tech-4",resourceId:"rack",skillKey:null,
+    start:timelineInstant(date,810,zone),end:timelineInstant(date,855,zone),
+    expiresAt:new Date(Date.now()+3600000).toISOString(),releasedAt:null,
+    owner:"offline-fixture",digest:"synthetic-rack-hold",requestId:"fixture-hold",createdAt:new Date().toISOString(),
+   }];
+  }
 }
 if (new URLSearchParams(location.search).has("warnings")) board.jobs[0].sourceRemoved = true;
 const realFetch=window.fetch.bind(window);

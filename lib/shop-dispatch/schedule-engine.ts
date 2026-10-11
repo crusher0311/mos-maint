@@ -81,6 +81,8 @@ export function slotIsFree(board:Board,slot:AvailableSlot,now:number,ignoreHoldI
 export function assertLocalPlanAvailable(before:Board,after:Board,jobId:string,now:number){
   if(!before.schedule?.settings?.enabled)return;
   const job=after.jobs.find(j=>j.id===jobId),interval=job&&jobInterval(job);
+  if(job?.resource&&job.plannedStart&&(!job.technicianId||!interval))
+    throw new DispatchError(409,"Assign a technician and a known duration before scheduling shared equipment.");
   if(!job?.technicianId||!interval)return;
   const visit=after.visits.find(v=>v.id===job.visitId);
   const view={...after,jobs:after.jobs.filter(j=>j.id!==job.id),schedule:after.schedule?{...after.schedule,appointments:after.schedule.appointments?{

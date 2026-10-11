@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {randomUUID} from "node:crypto";
 import {applyCommand, emptyBoard, type Board, type Command} from "../lib/shop-dispatch/model";
-import {buildTimelinePlan, timelineInstant} from "../lib/shop-dispatch/timeline";
+import {buildResourceTimelinePlan, buildTimelinePlan, timelineInstant} from "../lib/shop-dispatch/timeline";
 import {executeDispatchMutation} from "../lib/shop-dispatch/service";
 
 const now = Date.parse("2026-10-12T12:00:00Z");
@@ -87,4 +87,76 @@ test("unconfirmed required skills are blocked by preview AND authoritative mutat
   assert.equal(writes,0);
   b.technicians[0].skills=[{key:"ALIGNMENT",title:"Alignment",status:"confirmed",notes:"",reviewedAt:new Date(now).toISOString(),reviewedBy:"manager"}];
   assert.doesNotThrow(()=>buildTimelinePlan(b,"j","t1",start,60,now));
+});
+
+function resourceFixture() {
+  const b=fixture();
+  b.resources=[{id:"rack",name:"Alignment rack",active:true},{id:"bay",name:"Shared bay",active:true}];
+  b.jobs[0].technicianId="t1";
+  b.jobs[0].authorized=false;
+  b.schedule!.settings!.resources=b.resources.map(r=>({id:r.id,weekly:[{day:1,start:"08:00",end:"16:00"}],timeOff:[]}));
+  return b;
+}
+function memoryStore(initial:Board) {
+  let board=structuredClone(initial),writes=0;
+  const deps={read:async()=>structuredClone(board),save:async(_shop:number,revision:number,next:Board)=>{
+    if(board.revision!==revision)return false;
+    board=structuredClone(next);writes++;return true;
+  },now:()=>new Date(now).toISOString(),intake:async()=>{throw Error("Provider calls prohibited");}};
+  return {deps,get board(){return board;},get writes(){return writes;}};
+}
+const principal={shopId:999,email:actor.email,role:"manager"};
+test("resource-only plans preserve technician, authorization, dependencies, labor and provider arrivals",async()=>{
+  const b=resourceFixture();
+  b.jobs.push({...structuredClone(b.jobs[0]),id:"prerequisite",status:"completed"});
+  b.jobs[0].prerequisites=["prerequisite"];
+  b.schedule!.appointments!.appointments=[{id:"arrival",title:"Synthetic arrival",ro:"TEST",start:"2026-10-12T20:00:00Z",end:"2026-10-12T20:30:00Z",technicianSourceIds:[]}];
+  const before=structuredClone(b),store=memoryStore(b);
+  const command=buildResourceTimelinePlan(b,"j","bay",start,75,now);
+  const result=await executeDispatchMutation(principal,{requestId:randomUUID(),revision:b.revision,command},store.deps);
+  assert.equal(result.jobs[0].resource,"bay");
+  assert.equal(result.jobs[0].technicianId,"t1");
+  assert.equal(result.jobs[0].authorized,false);
+  assert.equal(result.jobs[0].bookMinutes,90);
+  assert.deepEqual(result.jobs[0].prerequisites,["prerequisite"]);
+  assert.deepEqual(result.schedule!.appointments,before.schedule!.appointments);
+  assert.deepEqual(b,before);
+  assert.equal(buildResourceTimelinePlan(result,"j",null,start,75,now).resource,null);
+});
+test("server rejects overlapping equipment across technicians, resource time off and closed hours",async()=>{
+  for(const change of [
+    (b:Board)=>b.jobs.push({...structuredClone(b.jobs[0]),id:"other",technicianId:"t2",resource:"rack",plannedStart:start,estimatedMinutes:60}),
+    (b:Board)=>{b.schedule!.settings!.resources[0].timeOff=[{start,end:"2026-10-12T15:00:00Z"}];},
+    (b:Board)=>{b.schedule!.settings!.resources[0].weekly=[{day:1,start:"12:00",end:"16:00"}];},
+    (b:Board)=>{b.resources![0].active=false;},
+    (b:Board)=>{b.jobs[0].technicianId=null;},
+    (b:Board)=>{b.schedule!.holds.push({id:randomUUID(),owner:"test",requestId:randomUUID(),digest:"fixture",createdAt:new Date(now).toISOString(),expiresAt:new Date(now+300000).toISOString(),releasedAt:null,start,end:"2026-10-12T15:00:00Z",technicianId:"t2",resourceId:"rack",skillKey:null});},
+  ]) {
+    const b=resourceFixture();change(b);const store=memoryStore(b);
+    assert.throws(()=>buildResourceTimelinePlan(b,"j","rack",start,60,now));
+    const command={type:"plan",jobId:"j",technicianId:b.jobs[0].technicianId,resource:"rack",plannedStart:start,estimatedMinutes:60,prerequisites:[],authorized:false};
+    await assert.rejects(()=>executeDispatchMutation(principal,{requestId:randomUUID(),revision:b.revision,command},store.deps));
+    assert.equal(store.writes,0);
+  }
+});
+test("concurrent resource placements have one winner and stale revisions cannot overwrite it",async()=>{
+  const b=resourceFixture();
+  b.jobs.push({...structuredClone(b.jobs[0]),id:"second",technicianId:"t2"});
+  const store=memoryStore(b);
+  const requests=["j","second"].map(jobId=>({requestId:randomUUID(),revision:b.revision,command:buildResourceTimelinePlan(b,jobId,"rack",start,60,now)}));
+  const results=await Promise.allSettled(requests.map(r=>executeDispatchMutation(principal,r,store.deps)));
+  assert.equal(results.filter(r=>r.status==="fulfilled").length,1);
+  assert.equal(store.writes,1);
+  await assert.rejects(()=>executeDispatchMutation(principal,{...requests[1],requestId:randomUUID()},store.deps),/changed|saved first/);
+});
+test("uncertain resource save retries the original receipt without a second write",async()=>{
+  const b=resourceFixture(),store=memoryStore(b);
+  const request={requestId:randomUUID(),revision:b.revision,command:buildResourceTimelinePlan(b,"j","rack",start,60,now)};
+  const uncertain={...store.deps,save:async(shop:number,revision:number,next:Board)=>{
+    await store.deps.save(shop,revision,next);throw Error("Synthetic response lost after commit");
+  }};
+  await assert.rejects(()=>executeDispatchMutation(principal,request,uncertain),/response lost/);
+  const retried=await executeDispatchMutation(principal,request,store.deps);
+  assert.equal(retried.jobs[0].resource,"rack");assert.equal(store.writes,1);
+  await assert.rejects(()=>executeDispatchMutation(principal,{...request,command:{...request.command,resource:"bay"}},store.deps),/different work/);
 });
