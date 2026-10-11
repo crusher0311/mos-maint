@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { resourcesFor, type Board, type Command, type Job } from "@/lib/shop-dispatch/model";
 import { localParts } from "@/lib/shop-dispatch/schedule-engine";
-import { buildResourceTimelinePlan, buildTimelinePlan, timelineInstant } from "@/lib/shop-dispatch/timeline";
+import { buildResourceTimelinePlan, buildTimelinePlan, timelineInstant, roundTimelineMinutes } from "@/lib/shop-dispatch/timeline";
 import css from "./ScheduleTimeline.module.css";
 import styles from "./pilot.module.css";
 import { visibleLaneTechnicians } from "@/lib/shop-dispatch/lane-views";
@@ -22,6 +22,10 @@ export function timelineDuration(job: Job): number | null {
 function durationLabel(job: Job): string {
   const duration = timelineDuration(job);
   return duration === null ? "Duration unknown" : `${duration} min ${job.estimatedMinutes == null ? "book baseline — review" : "planned"}`;
+}
+function draftDuration(job: Job): number | null {
+  const duration = timelineDuration(job);
+  return job.estimatedMinutes == null ? roundTimelineMinutes(duration) : duration;
 }
 export function timelineLockReason(board: Board, job: Job): string {
   if (!board.visits.some(v => v.id === job.visitId)) return "Visit is missing; review this job before scheduling.";
@@ -109,12 +113,12 @@ export function ScheduleTimeline({ board, date, zone, locked, save, select }: {
     setSelected(job.id); setError(placement?.error ?? ""); setNotice("");
     const p = job.plannedStart && Number.isFinite(Date.parse(job.plannedStart)) ? localParts(Date.parse(job.plannedStart), zone) : null;
     const draftMode = placement?.mode ?? mode;
-    setDraft({ jobId: job.id, mode: draftMode, technicianId: placement && draftMode === "technician" ? placement.laneId : job.technicianId ?? "", resourceId: placement && draftMode === "resource" ? placement.laneId : job.resource ?? "", date: placement ? date : p?.date ?? date, time: placement ? minuteText(placement.minute) : p ? minuteText(p.minute) : "", minutes: placement ? String(placement.minutes || "") : timelineDuration(job) === null ? "" : String(timelineDuration(job)), revision: board.revision });
+    setDraft({ jobId: job.id, mode: draftMode, technicianId: placement && draftMode === "technician" ? placement.laneId : job.technicianId ?? "", resourceId: placement && draftMode === "resource" ? placement.laneId : job.resource ?? "", date: placement ? date : p?.date ?? date, time: placement ? minuteText(placement.minute) : p ? minuteText(p.minute) : "", minutes: placement ? String(placement.minutes || "") : draftDuration(job) === null ? "" : String(draftDuration(job)), revision: board.revision });
   }
   function placement(jobId: string, laneId: string, minute: number, minutes?: number): Placement {
     const current = latest.current;
     const job = current.board.jobs.find(j => j.id === jobId)!;
-    const duration = minutes ?? (job ? timelineDuration(job) : null) ?? 0;
+    const duration = minutes ?? (job ? draftDuration(job) : null) ?? 0;
     let problem = "";
     try {
       if (current.locked) throw new Error("A save is pending. Resolve it before scheduling other work.");
@@ -151,7 +155,7 @@ export function ScheduleTimeline({ board, date, zone, locked, save, select }: {
     if (g.kind === "resize" && job.plannedStart && effectiveDuration !== null) {
       const local = localParts(Date.parse(job.plannedStart), zone);
       if (local.date !== date) return;
-      const minutes = Math.max(1, Math.min(1440, effectiveDuration + Math.round((event.clientX - g.x) / scale / 15) * 15));
+      const minutes = roundTimelineMinutes(Math.max(1, Math.min(1440, effectiveDuration + (event.clientX - g.x) / scale)))!;
       setPreview(placement(job.id, jobLane(job), local.minute, minutes));
     } else setPreview(placement(job.id, lane.dataset.timelineLane!, point(event.clientX, lane, g.offset)));
   };
@@ -326,6 +330,8 @@ export function ScheduleTimeline({ board, date, zone, locked, save, select }: {
             <label>Local start<input data-testid="timeline-plan-time" type="time" required value={draft.time} onChange={e => setDraft({ ...draft, time: e.target.value })} /></label>
             <label>Planned minutes{chosen.estimatedMinutes == null && timelineDuration(chosen) !== null ? " · book baseline — review" : ""}<input data-testid="timeline-plan-minutes" type="number" required min={1} max={1440} step={1} value={draft.minutes} placeholder="Required" onChange={e => setDraft({ ...draft, minutes: e.target.value })} /></label>
           </div>
+          <button type="button" data-testid="timeline-round-minutes" disabled={roundTimelineMinutes(Number(draft.minutes)) === null} onClick={() => setDraft({ ...draft, minutes: String(roundTimelineMinutes(Number(draft.minutes))) })}>Round up to 15 min</button>
+          <small>Book-based estimates and resizing round up to the next 15-minute increment, minimum 15. Billed hours stay unchanged; existing saved estimates are preserved when moving.</small>
           <div className={css.status}>Unsaved {draft.mode === "resource" ? "bay / equipment" : "technician"} draft · base revision {draft.revision} · latest {board.revision} · {zone}. Authorization, prerequisites and book labor remain unchanged. {draft.mode === "resource" ? "Technician is preserved; only resource, start and planned minutes change." : "Bay / equipment remains unchanged."}</div>
           <div className={css.actions}><button type="submit" className={styles.primary} data-testid="timeline-plan-save" disabled={draft.revision !== board.revision}>Save reviewed plan</button><button type="button" data-testid="timeline-plan-review" onClick={review}>Review latest board</button><button type="button" onClick={() => open(chosen)}>Discard draft / reload job</button></div>
         </fieldset>

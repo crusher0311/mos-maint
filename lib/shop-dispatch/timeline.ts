@@ -2,6 +2,13 @@ import { applyCommand, commandSchema, DispatchError, type Board, type Command } 
 import { assertHeldCapacityPreserved, assertLocalPlanAvailable, localParts } from "./schedule-engine";
 import { assertDependencyPlans, assertPlanSkills } from "./operations-scheduling";
 
+/** Proposed planning duration only; never round stored book labor or capacity. */
+export function roundTimelineMinutes(minutes: number | null): number | null {
+  return minutes !== null && Number.isFinite(minutes) && minutes > 0
+    ? Math.max(15, Math.ceil(minutes / 15) * 15)
+    : null;
+}
+
 /** Resolve a wall-clock minute in the shop's timezone, not the browser's.
  * Gaps and repeated DST hours require an explicit time choice, not guessing.
  */
