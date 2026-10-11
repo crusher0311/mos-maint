@@ -5,6 +5,7 @@ import { localParts } from "@/lib/shop-dispatch/schedule-engine";
 import { buildResourceTimelinePlan, buildTimelinePlan, timelineInstant } from "@/lib/shop-dispatch/timeline";
 import css from "./ScheduleTimeline.module.css";
 import styles from "./pilot.module.css";
+import { visibleLaneTechnicians } from "@/lib/shop-dispatch/lane-views";
 
 type Plan = Extract<Command, { type: "plan" }>;
 export type TimelineMode = "technician" | "resource";
@@ -86,11 +87,16 @@ export function ScheduleTimeline({ board, date, zone, locked, save, select }: {
   };
   const queue = board.jobs.filter(j => !j.plannedStart || !Number.isFinite(Date.parse(j.plannedStart)));
   const entities = mode === "resource" ? resourcesFor(board) : board.technicians;
+  const laneTechnicians = visibleLaneTechnicians(board);
+  const visibleIds = new Set(laneTechnicians.map(t => t.id));
+  const hiddenLaneCount = board.technicians.length - laneTechnicians.length;
+  const hiddenJobs = jobs.filter(j => j.technicianId && board.technicians.some(t => t.id === j.technicianId) && !visibleIds.has(j.technicianId));
+  const hiddenMatches = hiddenJobs.filter(matches);
   const jobLane = (job: Job) => (mode === "resource" ? job.resource : job.technicianId) ?? "";
   const holdLane = (hold: (typeof holds)[number]) => (mode === "resource" ? hold.resourceId : hold.technicianId) ?? "";
   const unknownIds = Array.from(new Set([...jobs.map(jobLane), ...holds.map(holdLane)].filter(id => id && !entities.some(e => e.id === id))));
   const lanes = [
-    ...entities.map(e => ({ id: e.id, name: e.name, active: e.active, known: true })),
+    ...(mode === "resource" ? entities : laneTechnicians).map(e => ({ id: e.id, name: e.name, active: e.active, known: true })),
     ...unknownIds.map(id => ({ id, name: `Unknown ${mode === "resource" ? "resource" : "technician"} · ${id}`, active: false, known: false })),
     { id: "", name: mode === "resource" ? "No bay / equipment" : "Unassigned technician", active: mode === "resource", known: false },
   ];
@@ -234,6 +240,18 @@ export function ScheduleTimeline({ board, date, zone, locked, save, select }: {
     <div className={css.heading}><div className={css.viewSwitch} role="group" aria-label="Day timeline lanes">{(["technician", "resource"] as const).map(value => <button type="button" key={value} aria-pressed={mode === value} data-testid={`timeline-mode-${value}`} className={mode === value ? styles.primary : ""} onClick={() => setMode(value)}>{value === "technician" ? "Technicians" : "Bays / equipment"}</button>)}</div>
       <small>{mode === "resource" ? "Shared occupancy across technicians. Moving a job never reassigns its technician." : "Technician moves keep the current bay / equipment."}</small></div>
     <label className={css.search}>Find work<input type="search" data-testid="timeline-search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search RO, vehicle or job" /></label>
+    {mode === "technician" && <><div className={css.caption} role="status" data-testid="timeline-view-counts">{laneTechnicians.length} of {board.technicians.length} technician lanes shown · {hiddenLaneCount} hidden lanes · {hiddenJobs.length} {hiddenJobs.length === 1 ? "job" : "jobs"} on hidden lanes this day. Unknown and unassigned lanes stay visible. Search and queue cover all work.</div>
+    {hiddenJobs.length > 0 && <details open={search.trim() ? true : undefined} className={css.hiddenResults} data-testid="timeline-hidden-jobs">
+      <summary>Jobs on hidden lanes · {search.trim() ? `${hiddenMatches.length} search matches / ${hiddenJobs.length} total this day` : hiddenJobs.length}</summary>
+      <div className={css.hiddenList}>{hiddenMatches.map(job => {
+        const v = board.visits.find(value => value.id === job.visitId);
+        return <article className={css.queueCard} key={job.id} data-testid={`timeline-hidden-job-${job.id}`}>
+          <small>RO #{v?.ro ?? "unknown"} · {board.technicians.find(t => t.id === job.technicianId)?.name} · hidden lane</small>
+          <strong>{job.title}</strong><small>{v?.vehicle ?? "Vehicle unavailable"} · {job.status} · {durationLabel(job)}</small>
+          <button type="button" disabled={locked} onClick={() => open(job)}>Details / schedule</button>
+        </article>;
+      })}{!hiddenMatches.length && <div className={css.empty}>No hidden-lane jobs match this search.</div>}</div>
+    </details>}</>}
     {draft && draft.mode !== mode && <div className={styles.notice} data-testid="timeline-draft-mode">Your unsaved {draft.mode === "resource" ? "bay / equipment" : "technician"} draft is retained below. Changing lanes does not change what this draft will save. Discard / reload the job to start a draft in this view.</div>}
     <div className={css.layout}>
       <aside className={css.queue} data-testid="schedule-unplanned"><h3>Work queue <small>{queue.length}</small></h3><small>Individual jobs · drag to {mode === "resource" ? "a bay / equipment lane" : "a technician"} or use Details / schedule. Unassigned technician work requires technician review first.</small>
@@ -246,7 +264,7 @@ export function ScheduleTimeline({ board, date, zone, locked, save, select }: {
       </aside>
       <div className={css.timelineShell}>
         <div className={css.scroll}><div className={css.grid} style={{ "--timeline-width": `calc(${width}px + var(--lane-label))` } as CSSProperties}>
-          <div className={css.ruler}><div className={css.corner}>{mode === "resource" ? "Bays / equipment" : "Technicians"} / {entities.length}</div><div className={css.hours}>{Array.from({ length: Math.ceil((end - start) / 60) }, (_, i) => <span className={css.hour} key={i} style={{ left: i * 112 }}>{minuteText(start + i * 60)}</span>)}</div></div>
+          <div className={css.ruler}><div className={css.corner}>{mode === "resource" ? "Bays / equipment" : "Technicians"} / {mode === "resource" ? entities.length : laneTechnicians.length}</div><div className={css.hours}>{Array.from({ length: Math.ceil((end - start) / 60) }, (_, i) => <span className={css.hour} key={i} style={{ left: i * 112 }}>{minuteText(start + i * 60)}</span>)}</div></div>
           {lanes.map(tech => {
             const allLaneJobs = jobs.filter(j => jobLane(j) === tech.id);
             const laneJobs = allLaneJobs.filter(matches).sort((a, b) => Date.parse(a.plannedStart!) - Date.parse(b.plannedStart!));
@@ -290,6 +308,7 @@ export function ScheduleTimeline({ board, date, zone, locked, save, select }: {
               </div>
             </div>;
           })}
+          {mode === "technician" && !laneTechnicians.length && entities.length > 0 && <div className={css.empty}>No active technicians match this saved view. Choose All technicians or edit the view. Hidden work remains accessible above.</div>}
           {!entities.length && <div className={css.empty}>{mode === "resource" ? "No configured bays / equipment. Work without a resource remains visible above. Add resources in Management." : "No technician lanes. Unassigned work remains visible above. Add technicians in Management, then configure their shifts."}</div>}
         </div></div>
         <div className={css.caption}>15-minute drag snapping. Block width uses planned minutes, or a book baseline when no estimate exists. Book baselines require manager review before saving a planned duration; billed hours never change. Dashed unknown-duration markers do not imply capacity. Overlapping jobs stack. Shaded time is unavailable or unconfigured; the server validates every save. {mode === "resource" ? "Resource hours inherit shop openings unless explicitly configured. Resource moves preserve technician, authorization and prerequisites. No-resource work is not a shared equipment reservation." : "Unknown, inactive and unassigned lanes retain local work."} Active / paused work and unknown durations can block capacity beyond the drawn block; blank space is not confirmed availability.</div>

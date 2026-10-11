@@ -5,6 +5,7 @@ import { resourcesFor } from "@/lib/shop-dispatch/model";
 import { buildResourceTimelinePlan, buildTimelinePlan } from "@/lib/shop-dispatch/timeline";
 import type { AvailabilityResult, ScheduleSettings as Settings } from "@/lib/shop-dispatch/schedule-types";
 import { ScheduleSettings } from "./ScheduleSettings";
+import { ScheduleViews } from "./ScheduleViews";
 import { ScheduleTimeline, type TimelineMode } from "./ScheduleTimeline";
 import styles from "./pilot.module.css";
 import css from "./ScheduleCalendar.module.css";
@@ -123,13 +124,13 @@ export function ScheduleCalendar({ board, busy, refresh, select, onLockChange }:
   function send(command: Command) {
     return sendRequest({ url: "/api/shop-dispatch/schedule", body: JSON.stringify(command) });
   }
-  async function savePlan(command: Extract<DispatchCommand, { type: "plan" }>, revision: number, timelineMode: TimelineMode = "technician"): Promise<Board | null> {
+  async function savePlan(command: DispatchCommand, revision: number, timelineMode: TimelineMode = "technician"): Promise<Board | null> {
     if (revision !== currentRef.current.revision) { setError("The board changed. Refresh and explicitly review the job draft before saving."); return null; }
     try {
       // Validate against the latest board at the last possible moment. The pure
       // Each reviewed draft carries its own mode, even if the displayed lanes change.
       // Resource plans preserve the latest technician and all non-scheduling fields.
-      const plan = timelineMode === "resource"
+      const plan = command.type !== "plan" ? command : timelineMode === "resource"
         ? buildResourceTimelinePlan(currentRef.current, command.jobId, command.resource ?? null, command.plannedStart!, command.estimatedMinutes!)
         : buildTimelinePlan(currentRef.current, command.jobId, command.technicianId!, command.plannedStart!, command.estimatedMinutes!);
       return await sendRequest({ url: "/api/shop-dispatch", body: JSON.stringify({ requestId: crypto.randomUUID(), revision, command: plan }) });
@@ -192,7 +193,7 @@ export function ScheduleCalendar({ board, busy, refresh, select, onLockChange }:
     </form>
     {loading && <div className={styles.skeleton} aria-label="Loading schedule and arrivals" />}
     {queryStale && <div className={styles.notice} role="status" data-testid="schedule-query-stale">This date range or search has not been refreshed. Local jobs use the latest board; imported arrivals and availability may belong to the previous request.</div>}
-    <div hidden={mode !== "day"}><ScheduleTimeline board={current} date={startDate} zone={zone} locked={locked || mode !== "day"} save={savePlan} select={select} /></div>
+    <div hidden={mode !== "day"}><ScheduleViews board={current} locked={locked || mode !== "day"} save={savePlan} /><ScheduleTimeline board={current} date={startDate} zone={zone} locked={locked || mode !== "day"} save={savePlan} select={select} /></div>
     {mode === "week" && <><div><div className={styles.row}><h2>Planned local work</h2><small>Week overview · switch to Day to drag individual jobs or resize planned duration.</small></div>
       <div className={css.calendar} style={{ "--days": count } as CSSProperties} data-testid="schedule-days">
         {Array.from({ length: count }, (_, index) => {

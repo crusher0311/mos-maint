@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {operationCommands,readinessReasons,type Operations} from "./operations";
+import { scheduleLaneViewSchema, type ScheduleLaneViews } from "./lane-views";
 
 export const idSchema = z.string().trim().min(1).max(100).regex(/^[\w.:@+-]+$/);
 const text = z.string().trim().min(1).max(160);
@@ -56,6 +57,7 @@ export interface Visit {
 export interface Audit { at: string; actor: string; action: string; target: string; detail: string }
 export interface Receipt { id: string; actor: string; digest: string }
 export interface Board {
+  scheduleViews?: ScheduleLaneViews;
   operationsEnabled?:boolean;
   schedule?:import("./schedule-types").ScheduleState;
   revision: number; updatedAt: string | null; technicians: Technician[];
@@ -75,6 +77,9 @@ export const intakeSchema = z.object({
 export type Intake = z.infer<typeof intakeSchema>;
 export const commandSchema = z.discriminatedUnion("type", [
   ...operationCommands,
+  z.object({type:z.literal("saveScheduleView"),view:scheduleLaneViewSchema}).strict(),
+  z.object({type:z.literal("deleteScheduleView"),id:idSchema}).strict(),
+  z.object({type:z.literal("selectScheduleView"),id:idSchema.nullable()}).strict(),
   z.object({type:z.literal("skill"),technicianId:idSchema,key:text,title:text,status:z.enum(["confirmed","not-qualified","remove"]),notes:z.string().trim().max(500)}).strict(),
   z.object({type:z.literal("technician"), id:idSchema, name:text, email:z.union([z.string().trim().email().max(160),z.literal("")]).default(""), active:z.boolean()}).strict(),
   z.object({type:z.literal("resource"),id:idSchema,name:text,active:z.boolean()}).strict(),
@@ -129,7 +134,29 @@ export function applyCommand(input:Board,command:Command,actor:Actor,now:string,
   const visit=(id:string)=>{const v=board.visits.find(v=>v.id===id);requireThat(v && !v.closed,"Visit not found or closed",404);return v;};
   const settle=(j:Job)=>{Object.assign(j,elapsed(j,Date.parse(now)));j.since=null;};
   let target="board", detail="";
-  if(command.type==="skill"){
+  if(command.type==="saveScheduleView"){
+    const state=board.scheduleViews??{views:[],selectedId:null};
+    const previous=state.views.find(v=>v.id===command.view.id);
+    requireThat(previous||state.views.length<30,"A shop can save up to 30 schedule views",409);
+    requireThat(!state.views.some(v=>v.id!==command.view.id&&v.name.toLowerCase()===command.view.name.toLowerCase()),"A schedule view with this name already exists",409);
+    // Retain stale saved criteria for editing, but never admit foreign roster
+    // IDs or infer qualifications from provider/history evidence.
+    requireThat(command.view.technicianIds.every(id=>board.technicians.some(t=>t.id===id)||previous?.technicianIds.includes(id)),"Choose technicians from this shop's roster");
+    requireThat(command.view.skillKeys.every(key=>board.technicians.some(t=>t.skills?.some(s=>s.key===key&&s.status==="confirmed"))||previous?.skillKeys.includes(key)),"Choose manager-confirmed skills from this shop");
+    const view={...command.view,technicianIds:[...new Set(command.view.technicianIds)],skillKeys:[...new Set(command.view.skillKeys)]};
+    board.scheduleViews={views:previous?state.views.map(v=>v.id===view.id?view:v):[...state.views,view],selectedId:state.selectedId};
+    target=view.id;detail=view.name;
+  }else if(command.type==="deleteScheduleView"){
+    const state=board.scheduleViews??{views:[],selectedId:null};
+    requireThat(state.views.some(v=>v.id===command.id),"Schedule view not found",404);
+    board.scheduleViews={views:state.views.filter(v=>v.id!==command.id),selectedId:state.selectedId===command.id?null:state.selectedId};
+    target=command.id;
+  }else if(command.type==="selectScheduleView"){
+    const state=board.scheduleViews??{views:[],selectedId:null};
+    requireThat(command.id===null||state.views.some(v=>v.id===command.id),"Schedule view not found",404);
+    board.scheduleViews={...state,selectedId:command.id};
+    target=command.id??"all-technicians";
+  }else if(command.type==="skill"){
     const tech=board.technicians.find(t=>t.id===command.technicianId);
     requireThat(tech,"Technician not found",404);
     const key=command.key.trim().toLowerCase().replace(/\s+/g," ");

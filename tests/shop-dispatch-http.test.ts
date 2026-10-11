@@ -90,6 +90,27 @@ test("skill history requires manager authorization and is session-shop scoped",a
 function req(body:unknown,origin="https://pilot.test"){
  return new Request("https://pilot.test/api/shop-dispatch",{method:"POST",headers:{"content-type":"application/json",origin},body:JSON.stringify(body)});
 }
+test("saved lane views persist through authenticated snapshots without accepting tenant overrides",async()=>{
+ boards.clear();
+ const board=emptyBoard();
+ board.technicians=[{id:"local",name:"Local technician",email:"",active:true}];
+ boards.set(10,board);
+ const view={id:"tires",name:"Tire team",technicianIds:["local"],skillKeys:[]};
+ session={shopId:10,email:"manager@example.test",role:"manager",token:"real-session"};
+ const create={requestId:randomUUID(),revision:0,command:{type:"saveScheduleView",view}};
+ assert.equal((await route.POST(req({...create,shopId:20}))).status,400);
+ assert.equal((await route.POST(req(create,"https://evil.test"))).status,403);
+ assert.equal((await route.POST(req(create))).status,200);
+ assert.equal((await route.POST(req({requestId:randomUUID(),revision:1,command:{type:"selectScheduleView",id:view.id}}))).status,200);
+ const snapshot=await (await route.GET()).json();
+ assert.deepEqual(snapshot.board.scheduleViews,{views:[view],selectedId:view.id});
+ session={shopId:10,email:"viewer@example.test",role:"user",token:"real-session"};
+ assert.equal((await route.POST(req({requestId:randomUUID(),revision:2,command:{type:"deleteScheduleView",id:view.id}}))).status,403);
+ session={shopId:20,email:"manager@example.test",role:"manager",token:"real-session"};
+ assert.equal((await route.GET()).status,403);
+ assert.equal(boards.has(20),false);
+ boards.clear();session=null;reads=0;
+});
 test("provider roster review is shop-scoped and manager-only before provider access",async()=>{
  session=null;
  assert.equal((await rosterRoute.GET()).status,401);
