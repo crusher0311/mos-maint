@@ -61,6 +61,12 @@ if(new URLSearchParams(location.search).has("schedule")){
  board.technicians.forEach((t,i)=>{t.sourceId=`example-provider-${i}`;});
  board.schedule={holds:[],settings:{enabled:true,timeZone:zone,weekly,technicians:board.technicians.map(t=>({id:t.id,weekly,timeOff:[]})),resources:[],bufferMinutes:0,leadMinutes:0},
  appointments:{startDate:date,endDate:new Date(Date.parse(date)+7*86400_000).toISOString().slice(0,10),fetchedAt:new Date().toISOString(),complete:true,appointments:[{id:"demo-appointment",ro:"DEMO-ARRIVAL",title:"Fictional appointment vehicle",start:timelineInstant(date,840,zone),end:timelineInstant(date,885,zone),technicianSourceIds:["example-provider-8"]}]}};
+ if(new URLSearchParams(location.search).has("usability")){
+  board.schedule.settings!.weekly=weekly.filter(w=>w.day!==0);
+  board.jobs.find(j=>j.id==="example-14")!.bookMinutes=0;
+  const waiting=board.jobs.find(j=>j.id==="example-15")!;
+  waiting.operations={parts:"ordered",diagnostics:"ready",requiredSkills:[],blockers:[],checks:[],reviewedAt:now,reviewedBy:actor.email};
+ }
   if(new URLSearchParams(location.search).has("resourceTimeline")){
    // Optional synthetic resource coverage; no external services or shared state.
    board.resources=[
@@ -119,16 +125,34 @@ window.fetch=async(input,init)=>{
   if(url==="/api/shop-dispatch/skills")return Response.json({truncated:false,profiles:[{technicianId:"tech",sourceId:"synthetic",skills:[{key:"brake service",title:"Brake service",count:12,lastCompletedAt:"2026-10-01T12:00:00Z",sharedJobCount:2,evidence:[{ro:"TEST-001",title:"Brake service",completedAt:"2026-10-01T12:00:00Z",shared:true}]}]}]});
   if(init?.method==="POST"){
    const body=JSON.parse(String(init.body));
+   const bytes=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(JSON.stringify(body.command)));
+   const digest=Array.from(new Uint8Array(bytes),byte=>byte.toString(16).padStart(2,"0")).join("");
+   const receipt=board.receipts.find(r=>r.id===body.requestId);
+   if(receipt){
+    if(receipt.actor!==actor.email||receipt.digest!==digest)return Response.json({error:"Request ID reused for different work"},{status:409});
+    return Response.json({board});
+   }
    if(body.revision!==board.revision)return Response.json({error:"Revision conflict"},{status:409});
    if(body.command.type==="syncNumber")importRo(body.command.roNumber);
    else {
     const next=applyCommand(board,body.command,actor,new Date().toISOString());
     assertHeldCapacityPreserved(board,next,Date.now());
-    if(body.command.type==="plan"){
-     assertPlanSkills(next,body.command.jobId);
-     assertLocalPlanAvailable(board,next,body.command.jobId,Date.now());
-     assertDependencyPlans(next,body.command.jobId,Date.now());
+    const plannedJobId=body.command.type==="plan"?body.command.jobId:body.command.type==="undo-plan"?board.receipts.find(r=>r.id===body.command.receiptId)?.undoPlan?.jobId:undefined;
+    if(plannedJobId){
+     assertPlanSkills(next,plannedJobId);
+     assertLocalPlanAvailable(board,next,plannedJobId,Date.now());
+     assertDependencyPlans(next,plannedJobId,Date.now());
     }
+    for(const old of next.receipts)delete old.undoPlan;
+    const savedReceipt:typeof board.receipts[number]={id:body.requestId,actor:actor.email,digest};
+    if(body.command.type==="plan"){
+     const before=board.jobs.find(j=>j.id===body.command.jobId)!;
+     if(before.status==="idle"&&before.authorized===body.command.authorized&&JSON.stringify(before.prerequisites)===JSON.stringify(body.command.prerequisites)){
+      savedReceipt.undoPlan={revision:next.revision,jobId:before.id,expiresAt:new Date(Date.now()+300000).toISOString(),
+       previous:{technicianId:before.technicianId,resource:before.resource,plannedStart:before.plannedStart,estimatedMinutes:before.estimatedMinutes}};
+     }
+    }
+    next.receipts.push(savedReceipt);
     board=next;
    }
   }

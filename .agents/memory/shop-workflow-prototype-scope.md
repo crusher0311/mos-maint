@@ -123,4 +123,10 @@ The user clarified that planned job durations should round UP to the next 15-min
 
 **Why:** Rounding down would allocate less time than the job estimate. The desired planning unit is a quarter hour; billed labor must remain separate.
 
-**How to apply:** Round proposals up with a 15-minute minimum for positive known durations, keep exact quarter hours unchanged, preserve unknown durations, and require review before saving.
+**How to apply:** Round proposals up with a 15-minute minimum for positive known durations, keep exact quarter hours unchanged, and preserve unknown durations. The user subsequently approved save-on-drop for routine valid moves; exceptions still need review.
+
+The user requested warnings when assigning jobs to technicians with minimal relevant experience.
+
+**Why:** Dispatch should surface limited experience without confusing missing imported history with a lack of actual skill.
+
+**How to apply:** Keep historical evidence advisory and distinct from manager qualifications. Initially warn below three exact-match completions without shared attribution, disclose the threshold and coverage, and never treat acknowledgment as a qualification override.

@@ -9,8 +9,9 @@ test("quarter-hour planning rounds up without shortening estimates or fabricatin
 import assert from "node:assert/strict";
 import {randomUUID} from "node:crypto";
 import {applyCommand, emptyBoard, type Board, type Command} from "../lib/shop-dispatch/model";
-import {buildResourceTimelinePlan, buildTimelinePlan, timelineInstant} from "../lib/shop-dispatch/timeline";
+import {buildResourceTimelinePlan, buildTimelinePlan, buildTimelineUndo, timelineInstant} from "../lib/shop-dispatch/timeline";
 import {executeDispatchMutation} from "../lib/shop-dispatch/service";
+import {scheduleBoardView} from "../lib/shop-dispatch/schedule-view";
 
 const now = Date.parse("2026-10-12T12:00:00Z");
 const actor = {email:"manager@example.test",manager:true,technicianId:null};
@@ -29,6 +30,62 @@ function fixture():Board {
   return b;
 }
 const start="2026-10-12T14:00:00.000Z";
+
+test("receipt-backed undo reverses the immediate initial assignment without bypassing ordinary handoffs",async()=>{
+  let b=fixture();b.operationsEnabled=true;
+  const before=structuredClone(b.jobs[0]), original=b.revision;
+  const deps={read:async()=>b,save:async(_shop:number,rev:number,next:Board)=>{if(rev!==b.revision)return false;b=next;return true;},intake:async()=>{throw Error("no provider");},now:()=>new Date(now).toISOString()};
+  const principal={shopId:538,email:actor.email,role:"manager"};
+  const plan=buildTimelinePlan(b,"j","t1",start,90,now);
+  const originalId=randomUUID();
+  await executeDispatchMutation(principal,{requestId:originalId,revision:b.revision,command:plan},deps);
+  const confirmed=structuredClone(b.jobs[0]);
+  const publicView=scheduleBoardView(b);
+  assert.equal(publicView.receipts.length,0);
+  assert.equal(scheduleBoardView(b,"other@example.test").receipts.length,0);
+  const ownView=scheduleBoardView(b,actor.email);
+  assert.equal(ownView.receipts.length,1,"authenticated manager response retains a usable undo token");
+  assert.equal(ownView.receipts[0].digest,"","idempotency digests remain hidden");
+  assert.throws(()=>buildTimelinePlan(b,"j","t2",start,90,now),/handoff/);
+  const undo=buildTimelineUndo(b,before,confirmed,now);
+  await assert.rejects(()=>executeDispatchMutation({...principal,email:"other@example.test"},{requestId:randomUUID(),revision:b.revision,command:undo},deps),/no longer/);
+  await assert.rejects(()=>executeDispatchMutation({...principal,role:"technician"},{requestId:randomUUID(),revision:b.revision,command:undo},deps),/manager/i);
+  const request={requestId:randomUUID(),revision:b.revision,command:undo};
+  await executeDispatchMutation(principal,request,deps);
+  assert.equal(b.jobs[0].technicianId,null);assert.equal(b.jobs[0].plannedStart,null);
+  assert.equal(b.jobs[0].bookMinutes,before.bookMinutes);assert.equal(b.jobs[0].authorized,before.authorized);
+  assert.equal(b.revision,original+2);
+  await executeDispatchMutation(principal,request,deps);
+  assert.equal(b.revision,original+2,"uncertain undo retry cannot apply twice");
+  assert.ok(b.receipts.every(r=>!r.undoPlan));
+});
+
+test("undo rejects changed boards, expired receipts and job starts; never overwrites intervening edits",async()=>{
+  let b=fixture();const before=structuredClone(b.jobs[0]);
+  const deps={read:async()=>b,save:async(_shop:number,_rev:number,next:Board)=>{b=next;return true;},intake:async()=>{throw Error("no provider");},now:()=>new Date(now).toISOString()};
+  const principal={shopId:538,email:actor.email,role:"manager"};
+  await executeDispatchMutation(principal,{requestId:randomUUID(),revision:b.revision,command:buildTimelinePlan(b,"j","t1",start,90,now)},deps);
+  const confirmed=structuredClone(b.jobs[0]),saved=structuredClone(b);
+  assert.throws(()=>buildTimelineUndo(b,before,confirmed,now+300_001),/no longer/);
+  b.revision++;assert.throws(()=>buildTimelineUndo(b,before,confirmed,now),/no longer/);
+  b=structuredClone(saved);b.jobs[0].status="active";
+  assert.throws(()=>buildTimelineUndo(b,before,confirmed,now),/changed/);
+  b=structuredClone(saved);b.jobs[0].authorized=!confirmed.authorized;
+  assert.throws(()=>buildTimelineUndo(b,before,confirmed,now),/changed/);
+});
+
+test("undo revalidates the original slot and cannot bypass live reservation conflicts",async()=>{
+  let b=fixture();b=applyCommand(b,{type:"plan",jobId:"j",technicianId:"t1",plannedStart:start,estimatedMinutes:90,resource:null,authorized:false,prerequisites:[]},actor,new Date(now).toISOString());
+  const before=structuredClone(b.jobs[0]);
+  const deps={read:async()=>b,save:async(_shop:number,_rev:number,next:Board)=>{b=next;return true;},intake:async()=>{throw Error("no provider");},now:()=>new Date(now).toISOString()};
+  const principal={shopId:538,email:actor.email,role:"manager"};
+  await executeDispatchMutation(principal,{requestId:randomUUID(),revision:b.revision,command:buildTimelinePlan(b,"j","t1","2026-10-12T17:00:00Z",90,now)},deps);
+  const confirmed=structuredClone(b.jobs[0]);
+  b.schedule!.holds.push({id:"hold",owner:"test",requestId:"test",digest:"test",createdAt:new Date(now).toISOString(),skillKey:null,technicianId:"t1",resourceId:null,start,end:"2026-10-12T15:30:00Z",expiresAt:new Date(now+60_000).toISOString(),releasedAt:null});
+  assert.throws(()=>buildTimelineUndo(b,before,confirmed,now),/hold|reserv|capacity|conflict/i);
+  const receipt=b.receipts.find(r=>r.undoPlan)!;
+  await assert.rejects(()=>executeDispatchMutation(principal,{requestId:randomUUID(),revision:b.revision,command:{type:"undo-plan",receiptId:receipt.id}},deps),/hold|reserv|capacity|conflict/i);
+});
 test("timeline wall-clock conversion handles shop zones, invalid dates and DST without browser timezone assumptions",()=>{
   assert.equal(timelineInstant("2026-10-12",450,"America/Chicago"),"2026-10-12T12:30:00.000Z");
   assert.equal(timelineInstant("2026-12-12",450,"America/Chicago"),"2026-12-12T13:30:00.000Z");

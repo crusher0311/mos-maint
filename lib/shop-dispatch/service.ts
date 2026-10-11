@@ -37,11 +37,24 @@ export async function executeDispatchMutation(principal:Principal,raw:unknown,de
     command.type==="syncNumber"?await deps.intakeByNumber!(principal.shopId,command.roNumber):undefined;
   const result=applyCommand(board,command,actor,deps.now(),intake,employee);
   assertHeldCapacityPreserved(board,result,Date.parse(deps.now()));
-  if(command.type==="plan")assertPlanSkills(result,command.jobId);
-  if(command.type==="plan")assertLocalPlanAvailable(board,result,command.jobId,Date.parse(deps.now()));
-  if(command.type==="plan")assertDependencyPlans(result,command.jobId,Date.parse(deps.now()));
+  const plannedJobId=command.type==="plan"?command.jobId:command.type==="undo-plan"?board.receipts.find(r=>r.id===command.receiptId)?.undoPlan?.jobId:undefined;
+  if(plannedJobId){
+    assertPlanSkills(result,plannedJobId);
+    assertLocalPlanAvailable(board,result,plannedJobId,Date.parse(deps.now()));
+    assertDependencyPlans(result,plannedJobId,Date.parse(deps.now()));
+  }
   if(command.type==="start")assertStartReservations(board,command.jobId,Date.parse(deps.now()));
-  result.receipts.push({id:requestId,actor:actor.email,digest:hash});
+  // One immediate undo only. Keep older idempotency receipts, not their snapshots.
+  for(const r of result.receipts)delete r.undoPlan;
+  const savedReceipt:Board["receipts"][number]={id:requestId,actor:actor.email,digest:hash};
+  if(command.type==="plan"){
+    const before=board.jobs.find(j=>j.id===command.jobId)!;
+    if(before.status==="idle"&&before.authorized===command.authorized&&JSON.stringify(before.prerequisites)===JSON.stringify(command.prerequisites)){
+      savedReceipt.undoPlan={revision:result.revision,jobId:before.id,expiresAt:new Date(Date.parse(deps.now())+5*60_000).toISOString(),
+        previous:{technicianId:before.technicianId,resource:before.resource,plannedStart:before.plannedStart,estimatedMinutes:before.estimatedMinutes}};
+    }
+  }
+  result.receipts.push(savedReceipt);
   requireThat(Buffer.byteLength(JSON.stringify(result),"utf8")<=8*1024*1024,"Pilot storage capacity reached. Export and arrange archival.",409);
   if(!await deps.save(principal.shopId,revision,result)){
     // A retry may have committed while the original request was still running.
