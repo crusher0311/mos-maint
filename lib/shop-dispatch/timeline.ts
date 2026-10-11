@@ -43,6 +43,24 @@ export function buildTimelinePlan(
   board: Board, jobId: string, technicianId: string, start: string,
   minutes: number, now = Date.now(),
 ): Extract<Command, {type: "plan"}> {
+  return previewPlan(board, jobId, technicianId, undefined, start, minutes, now);
+}
+
+/** Resource placement changes equipment/time only, never technician assignment. */
+export function buildResourceTimelinePlan(
+  board: Board, jobId: string, resourceId: string | null, start: string,
+  minutes: number, now = Date.now(),
+): Extract<Command, {type: "plan"}> {
+  const job = board.jobs.find(j => j.id === jobId);
+  if (!job) throw new DispatchError(404, "This job is no longer on the board. Refresh the schedule.");
+  if (!job.technicianId) throw new DispatchError(409, "Assign a technician before scheduling shared equipment.");
+  return previewPlan(board, jobId, job.technicianId, resourceId, start, minutes, now);
+}
+
+function previewPlan(
+  board: Board, jobId: string, technicianId: string, resourceId: string | null | undefined,
+  start: string, minutes: number, now: number,
+): Extract<Command, {type: "plan"}> {
   if (!board.schedule?.settings?.enabled) {
     throw new DispatchError(409, "Enable scheduling and configure technician shifts first.");
   }
@@ -51,7 +69,7 @@ export function buildTimelinePlan(
   if (job.sourceRemoved) throw new DispatchError(409, "This job was removed upstream. Review it before scheduling.");
   const parsed = commandSchema.safeParse({
     type: "plan", jobId, technicianId, plannedStart: start, estimatedMinutes: minutes,
-    prerequisites: [...job.prerequisites], resource: job.resource, authorized: job.authorized,
+    prerequisites: [...job.prerequisites], resource: resourceId === undefined ? job.resource : resourceId, authorized: job.authorized,
   });
   if (!parsed.success || parsed.data.type !== "plan") {
     throw new DispatchError(400, "Choose a technician, valid start time and a whole-minute duration from 1 to 1440.");
