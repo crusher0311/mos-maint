@@ -70,6 +70,9 @@ test("manager schedule: bounded manual reads, complete work visibility, conflict
     assert.match(find("schedule-appointment-appt-a").textContent, /Unknown arrival time/);
     assert.match(find("schedule-appointment-warning").textContent, /incomplete/);
     await click("schedule-job-job-planned");
+    assert.ok(find("timeline-details"), "job click opens quick details without leaving the schedule");
+    assert.deepEqual(selected, []);
+    await act(async () => Array.from(find("timeline-details").querySelectorAll("button")).find(button => button.textContent === "Open full RO details").click());
     assert.deepEqual(selected, ["visit-a"]);
     await click("schedule-next"); await click("schedule-day");
     assert.equal(requests.length, 1, "navigation must not poll upstream");

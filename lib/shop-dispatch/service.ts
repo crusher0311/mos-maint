@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { actorFor, applyCommand, DispatchError, mutationSchema, requireThat, type Board, type Intake } from "./model";
 import { assertHeldCapacityPreserved, assertLocalPlanAvailable } from "./schedule-engine";
-import {assertDependencyPlans,assertStartReservations} from "./operations-scheduling";
+import {assertDependencyPlans,assertPlanSkills,assertStartReservations} from "./operations-scheduling";
 export interface Principal {shopId:number;email:string;role:string}
 export interface DispatchDependencies {
   read:(shopId:number)=>Promise<Board>;
@@ -37,6 +37,7 @@ export async function executeDispatchMutation(principal:Principal,raw:unknown,de
     command.type==="syncNumber"?await deps.intakeByNumber!(principal.shopId,command.roNumber):undefined;
   const result=applyCommand(board,command,actor,deps.now(),intake,employee);
   assertHeldCapacityPreserved(board,result,Date.parse(deps.now()));
+  if(command.type==="plan")assertPlanSkills(result,command.jobId);
   if(command.type==="plan")assertLocalPlanAvailable(board,result,command.jobId,Date.parse(deps.now()));
   if(command.type==="plan")assertDependencyPlans(result,command.jobId,Date.parse(deps.now()));
   if(command.type==="start")assertStartReservations(board,command.jobId,Date.parse(deps.now()));

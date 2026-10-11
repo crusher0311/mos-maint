@@ -8,7 +8,9 @@ import { CommandForm } from "../../components/shop-dispatch/CommandForm";
 import { JobCard } from "../../components/shop-dispatch/JobCard";
 import { ScheduleCalendar } from "../../components/shop-dispatch/ScheduleCalendar";
 import { OperationsPanel } from "../../components/shop-dispatch/OperationsPanel";
-import { availability } from "../../lib/shop-dispatch/schedule-engine";
+import { availability, assertHeldCapacityPreserved, assertLocalPlanAvailable, localParts } from "../../lib/shop-dispatch/schedule-engine";
+import { assertDependencyPlans, assertPlanSkills } from "../../lib/shop-dispatch/operations-scheduling";
+import { timelineInstant } from "../../lib/shop-dispatch/timeline";
 import styles from "../../components/shop-dispatch/pilot.module.css";
 import { actorFor,applyCommand,emptyBoard,type Command } from "../../lib/shop-dispatch/model";
 import { paletteFromPixels, resolveWorkflowBranding } from "../../lib/shop-dispatch/branding";
@@ -44,10 +46,21 @@ if(new URLSearchParams(location.search).has("assignments")){
  board.jobs[0].bookMinutes=90;
 }
 if(new URLSearchParams(location.search).has("schedule")){
- const date=new Date().toISOString().slice(0,10);
- const weekly=Array.from({length:7},(_,day)=>({day,start:"08:00",end:"17:00"}));
- board.schedule={holds:[],settings:{enabled:true,timeZone:"America/Chicago",weekly,technicians:[{id:"tech",weekly,timeOff:[]}],resources:[],bufferMinutes:15,leadMinutes:30},
- appointments:{startDate:date,endDate:new Date(Date.now()+7*86400_000).toISOString().slice(0,10),fetchedAt:new Date().toISOString(),complete:true,appointments:[{id:"demo-appointment",ro:"TEST-002",title:"Fictional appointment vehicle",start:new Date(Date.now()+3600_000).toISOString(),end:new Date(Date.now()+7200_000).toISOString(),technicianSourceIds:[]}]}};
+ const zone="America/Chicago",date=localParts(Date.now(),zone).date;
+ const weekly=Array.from({length:7},(_,day)=>({day,start:"07:30",end:"17:30"}));
+ board.technicians[0].name="Example technician 1";
+ for(let i=2;i<=9;i++)act({type:"technician",id:`tech-${i}`,name:`Example technician ${i}`,email:"",active:true});
+ board.jobs[0].plannedStart=timelineInstant(date,510,zone);
+ board.jobs[0].estimatedMinutes=60;
+ for(let i=0;i<18;i++){
+  const id=`example-${i}`,tech=board.technicians[i%9];
+  act({type:"visit",id,ro:`DEMO-${101+i}`,vehicle:["Example SUV","Example sedan","Example pickup"][i%3],customer:"Fictional customer"});
+  act({type:"job",id,visitId:id,title:["Oil service","Brake service","Tire rotation","Inspection"][i%4],bookMinutes:[45,90,30,60][i%4]});
+  if(i<14)act({type:"plan",jobId:id,technicianId:tech.id,estimatedMinutes:[45,90,30,60][i%4],plannedStart:timelineInstant(date,600+Math.floor(i/9)*150,zone),prerequisites:[],resource:null,authorized:true});
+ }
+ board.technicians.forEach((t,i)=>{t.sourceId=`example-provider-${i}`;});
+ board.schedule={holds:[],settings:{enabled:true,timeZone:zone,weekly,technicians:board.technicians.map(t=>({id:t.id,weekly,timeOff:[]})),resources:[],bufferMinutes:0,leadMinutes:0},
+ appointments:{startDate:date,endDate:new Date(Date.parse(date)+7*86400_000).toISOString().slice(0,10),fetchedAt:new Date().toISOString(),complete:true,appointments:[{id:"demo-appointment",ro:"DEMO-ARRIVAL",title:"Fictional appointment vehicle",start:timelineInstant(date,840,zone),end:timelineInstant(date,885,zone),technicianSourceIds:["example-provider-8"]}]}};
 }
 if (new URLSearchParams(location.search).has("warnings")) board.jobs[0].sourceRemoved = true;
 const realFetch=window.fetch.bind(window);
@@ -65,7 +78,21 @@ window.fetch=async(input,init)=>{
     {id:"past",name:"Earlier Technician",active:true,historical:true,lastSeenAt:"2026-06-01T12:00:00Z",recentActivity:false},
   ]});
   if(url==="/api/shop-dispatch/skills")return Response.json({truncated:false,profiles:[{technicianId:"tech",sourceId:"synthetic",skills:[{key:"brake service",title:"Brake service",count:12,lastCompletedAt:"2026-10-01T12:00:00Z",sharedJobCount:2,evidence:[{ro:"TEST-001",title:"Brake service",completedAt:"2026-10-01T12:00:00Z",shared:true}]}]}]});
-  if(init?.method==="POST"){const body=JSON.parse(String(init.body));if(body.revision!==board.revision)return Response.json({error:"Revision conflict"},{status:409});if(body.command.type==="syncNumber")importRo(body.command.roNumber);else act(body.command);}
+  if(init?.method==="POST"){
+   const body=JSON.parse(String(init.body));
+   if(body.revision!==board.revision)return Response.json({error:"Revision conflict"},{status:409});
+   if(body.command.type==="syncNumber")importRo(body.command.roNumber);
+   else {
+    const next=applyCommand(board,body.command,actor,new Date().toISOString());
+    assertHeldCapacityPreserved(board,next,Date.now());
+    if(body.command.type==="plan"){
+     assertPlanSkills(next,body.command.jobId);
+     assertLocalPlanAvailable(board,next,body.command.jobId,Date.now());
+     assertDependencyPlans(next,body.command.jobId,Date.now());
+    }
+    board=next;
+   }
+  }
   return Response.json({board,branding:resolveWorkflowBranding(board.locationBrand,shared,null),actor:actorFor(board,actor.email,"manager"),shopId:999,serverNow:new Date().toISOString(),enterprise:null});
  }catch(e){return Response.json({error:e instanceof Error?e.message:"Error"},{status:422});}
 };

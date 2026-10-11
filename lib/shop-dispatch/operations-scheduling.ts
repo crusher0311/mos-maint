@@ -2,6 +2,14 @@ import {DispatchError,type Board} from "./model";
 import {nextJobs} from "./operations";
 import {availability,activeHolds,jobInterval,localParts,overlaps,slotIsFree} from "./schedule-engine";
 
+export function assertPlanSkills(board:Board,jobId:string){
+ const job=board.jobs.find(j=>j.id===jobId);
+ if(!board.operationsEnabled||!job?.technicianId)return;
+ const tech=board.technicians.find(t=>t.id===job.technicianId);
+ const missing=job.operations?.requiredSkills.filter(key=>!tech?.skills?.some(s=>s.status==="confirmed"&&s.key.toLowerCase()===key.toLowerCase()))??[];
+ if(missing.length)throw new DispatchError(409,`This technician needs manager-confirmed skills: ${missing.join(", ")}.`);
+}
+
 export function assertDependencyPlans(board:Board,changedJobId:string,now:number){
  const changed=board.jobs.find(j=>j.id===changedJobId);
  if(!changed)return;

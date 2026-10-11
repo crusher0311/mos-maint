@@ -29,6 +29,7 @@ export default function DispatchPilot() {
   const [loaner, setLoaner] = useState("all");
   const [history, setHistory] = useState(false);
   const [showHiddenStatuses, setShowHiddenStatuses] = useState(false);
+  const [scheduleLocked, setScheduleLocked] = useState(false);
   // Clock display only. Fetch polling and visibility refresh belong to useDispatchBoard.
   useEffect(() => { const timer = window.setInterval(() => setTick(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
   const brand = resolvedBranding(snapshot).brand;
@@ -55,7 +56,7 @@ export default function DispatchPilot() {
       setSelectedJob(null);
     }
   }, [view, selected, selectedJob]);
-  function navigate(next: View) { setView(next); setSelected(null); setSelectedJob(null); }
+  function navigate(next: View) { if (scheduleLocked) return; setView(next); setSelected(null); setSelectedJob(null); }
   return <main className={styles.root} style={theme} data-testid="dispatch-pilot">
     <header className={styles.header}>
       <div className={styles.identity}>{brand.logo && <img className={styles.logo} src={brand.logo} alt={`${brand.name} logo`} />}
@@ -78,6 +79,8 @@ export default function DispatchPilot() {
     {!snapshot ? error ? <section className={styles.empty}><h2>Pilot data unavailable</h2><p>Nothing has been loaded or changed. Contact a manager if this location is not enabled.</p><button onClick={() => void refresh()}>Try fetching again</button></section> :
       <section aria-busy="true" aria-label="Loading pilot data"><p>Connecting to the signed-in location…</p><div className={styles.skeleton} /><div className={styles.skeleton} /><div className={styles.skeleton} /></section> :
       <>
+        {scheduleLocked && <div className={styles.error} role="alert">Resolve the pending schedule save before switching workspaces. Stay on Schedule and retry the unconfirmed change if prompted.</div>}
+        <fieldset disabled={scheduleLocked} style={{border:0,padding:0,margin:0,minWidth:0}} aria-label="Workflow navigation">
         <nav className={styles.nav} aria-label="Pilot workspace">
           <button data-testid="pilot-dispatch" aria-current={view === "dispatch" ? "page" : undefined} onClick={() => navigate("dispatch")}>Dispatch</button>
           <button data-testid="pilot-work" aria-current={view === "work" ? "page" : undefined} onClick={() => navigate("work")}>My work</button>
@@ -87,6 +90,7 @@ export default function DispatchPilot() {
           <button data-testid="pilot-settings" aria-current={view === "settings" ? "page" : undefined} onClick={() => navigate("settings")}>Brand settings</button>
           <button data-testid="pilot-audit" aria-current={view === "audit" ? "page" : undefined} onClick={() => navigate("audit")}>Audit</button>
         </nav>
+        </fieldset>
         {view === "dispatch" && work && (detail ? <VisitDetail key={detail.id} visit={detail} {...work} onBack={() => setSelected(null)} /> : <>
           <div className={styles.stats}>
             <div className={styles.stat}><small>Open vehicles</small><strong>{open.length}</strong><small>{open.filter(v => v.transport.customerPlan === "waiting").length} customers waiting · {open.filter(v => v.transport.customerPlan === "drop-off").length} drop-offs</small></div>
@@ -134,7 +138,7 @@ export default function DispatchPilot() {
         </section>}
         {view === "manage" && snapshot.actor.manager && work && <Management {...work} />}
         {view === "operations" && snapshot.actor.manager && work && <OperationsPanel {...work} select={(visitId, jobId) => { setView("dispatch"); setSelected(visitId); setSelectedJob(jobId ?? null); }} />}
-        {view === "schedule" && snapshot.actor.manager && <ScheduleCalendar board={snapshot.board} busy={busy || needsRetry} refresh={refresh} select={visitId => { setView("dispatch"); setSelected(visitId); }} />}
+        {view === "schedule" && snapshot.actor.manager && <ScheduleCalendar board={snapshot.board} busy={busy || needsRetry} refresh={refresh} onLockChange={setScheduleLocked} select={visitId => { if (!scheduleLocked) { setView("dispatch"); setSelected(visitId); } }} />}
         {view === "settings" && work && <BrandSettings key={snapshot.shopId} snapshot={snapshot} {...work} saveEnterpriseBrand={api.saveEnterpriseBrand} />}
         {view === "audit" && <AuditView board={snapshot.board} />}
         <footer><small>Server-backed pilot · revision {snapshot.board.revision} · board saved {dateLabel(snapshot.board.updatedAt)}. Protractor intake is read-only and verified per fetched work order, not by this board connection.</small></footer>
