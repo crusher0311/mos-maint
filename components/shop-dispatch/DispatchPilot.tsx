@@ -91,7 +91,7 @@ export default function DispatchPilot() {
           <button data-testid="pilot-audit" aria-current={view === "audit" ? "page" : undefined} onClick={() => navigate("audit")}>Audit</button>
         </nav>
         </fieldset>
-        {view === "dispatch" && work && (detail ? <VisitDetail key={detail.id} visit={detail} {...work} onBack={() => setSelected(null)} /> : <>
+        {view === "dispatch" && work && (detail ? <VisitDetail key={detail.id} visit={detail} shopId={snapshot.shopId} {...work} onBack={() => setSelected(null)} /> : <>
           <div className={styles.stats}>
             <div className={styles.stat}><small>Open vehicles</small><strong>{open.length}</strong><small>{open.filter(v => v.transport.customerPlan === "waiting").length} customers waiting · {open.filter(v => v.transport.customerPlan === "drop-off").length} drop-offs</small></div>
             <div className={styles.stat}><small>Active sessions</small><strong>{activeJobs.length}</strong><small>{minutes(activeJobs.reduce((sum, j) => sum + elapsed(j, now).activeMs, 0))} active time</small></div>
@@ -138,7 +138,7 @@ export default function DispatchPilot() {
         </section>}
         {view === "manage" && snapshot.actor.manager && work && <Management {...work} />}
         {view === "operations" && snapshot.actor.manager && work && <OperationsPanel {...work} select={(visitId, jobId) => { setView("dispatch"); setSelected(visitId); setSelectedJob(jobId ?? null); }} />}
-        {view === "schedule" && snapshot.actor.manager && <ScheduleCalendar board={snapshot.board} busy={busy || needsRetry} refresh={refresh} onLockChange={setScheduleLocked} select={visitId => { if (!scheduleLocked) { setView("dispatch"); setSelected(visitId); } }} />}
+        {view === "schedule" && snapshot.actor.manager && <ScheduleCalendar shopId={snapshot.shopId} board={snapshot.board} busy={busy || needsRetry} refresh={refresh} onLockChange={setScheduleLocked} select={visitId => { if (!scheduleLocked) { setView("dispatch"); setSelected(visitId); } }} />}
         {view === "settings" && work && <BrandSettings key={snapshot.shopId} snapshot={snapshot} {...work} saveEnterpriseBrand={api.saveEnterpriseBrand} />}
         {view === "audit" && <AuditView board={snapshot.board} />}
         <footer><small>Server-backed pilot · revision {snapshot.board.revision} · board saved {dateLabel(snapshot.board.updatedAt)}. Protractor intake is read-only and verified per fetched work order, not by this board connection.</small></footer>

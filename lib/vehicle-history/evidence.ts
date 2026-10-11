@@ -132,6 +132,7 @@ export function normalizedHistoryEvent(row: NormalizedHistoryRow, location: stri
   return {
     id: eventIdentity(row.shop_id, provider, workOrderId, jobId),
     shopId: row.shop_id, location, provider, workOrderId,
+    ...(row.work_order_number ? {workOrderNumber:String(row.work_order_number)} : {}),
     jobId, title: row.title, date, mileage: row.odometer,
     mileageUnit: row.odometer_unit === "miles" || row.odometer_unit === "kilometers" ? row.odometer_unit : null,
     status, origin: "normalized", components: semantic.components,

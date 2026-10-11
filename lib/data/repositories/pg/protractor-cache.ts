@@ -211,8 +211,24 @@ export async function findCachedWorkOrderById(
 export async function findCachedWorkOrderByProviderIdentity(
   shopId: number,
   workOrderId: string,
+  workflowHistory = false,
 ): Promise<AnyDoc | null> {
   const db = getDb();
+  if(workflowHistory){
+    const ids=sql.join([...new Set([workOrderId,workOrderId.toLowerCase(),workOrderId.toUpperCase()])].map(id=>sql`${id}`),sql`, `);
+    return db.transaction(async tx=>{
+      await tx.execute(sql`SET LOCAL statement_timeout = '2000ms'`);
+      const rows=await tx.select({
+        vin:protractorWorkOrders.vin,
+        cachedVin:sql<string|null>`${protractorWorkOrders.payload} ->> 'vin'`,
+        rawVin:sql<string|null>`${protractorWorkOrders.payload} #>> '{data,ServiceItem,VIN}'`,
+      }).from(protractorWorkOrders).where(and(
+        eq(protractorWorkOrders.shopId,shopId),
+        sql`(${protractorWorkOrders.workOrderId} IN (${ids}) OR ${protractorWorkOrders.workOrderGuid} IN (${ids}) OR (${protractorWorkOrders.payload} #>> '{data,ID}') IN (${ids}))`,
+      )).limit(1);
+      return rows.length?{vin:rows[0].vin,cachedVin:rows[0].cachedVin,data:{ServiceItem:{VIN:rows[0].rawVin}}}:null;
+    });
+  }
   const rows = await db
     .select()
     .from(protractorWorkOrders)

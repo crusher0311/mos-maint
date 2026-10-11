@@ -2,10 +2,11 @@
 import type { Transport, Visit } from "@/lib/shop-dispatch/model";
 import { CommandForm } from "./CommandForm";
 import { JobCard, type WorkProps } from "./JobCard";
+import { VehicleHistoryPanel } from "./VehicleHistoryPanel";
 import { dateLabel, iso, localDate, nullableNumber, projection } from "./helpers";
 import styles from "./pilot.module.css";
 
-export function VisitDetail({ visit, onBack, ...work }: WorkProps & { visit: Visit; onBack: () => void }) {
+export function VisitDetail({ visit, shopId, onBack, ...work }: WorkProps & { visit: Visit; shopId?: number; onBack: () => void }) {
   const { board, actor, busy, mutate, now } = work;
   const jobs = board.jobs.filter(j => j.visitId === visit.id);
   const unresolved = ["needed", "arranged"].includes(visit.transport.ride) || ["requested", "assigned"].includes(visit.transport.loaner);
@@ -29,6 +30,7 @@ export function VisitDetail({ visit, onBack, ...work }: WorkProps & { visit: Vis
         {actor.manager && !visit.closed && visit.sourceId && <div className={styles.actions}><button disabled={busy} onClick={() => void mutate({ type: "sync", workOrderId: visit.sourceId! })}>Refresh this work order</button></div>}
       </div>}
     </div>
+    {shopId !== undefined && <VehicleHistoryPanel visitId={visit.id} shopId={shopId} />}
     <div className={styles.grid}><section>
       <h2>Individual jobs <small> / {jobs.length}</small></h2>
       {!jobs.length && <div className={styles.empty}>No jobs on this visit yet. Managers can add work below.</div>}
