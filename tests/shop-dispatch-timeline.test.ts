@@ -1,4 +1,11 @@
 import test from "node:test";
+import {roundTimelineMinutes} from "../lib/shop-dispatch/timeline";
+
+test("quarter-hour planning rounds up without shortening estimates or fabricating unknown duration", () => {
+  for (const [input, expected] of [[60,60],[61.8,75],[67.4,75],[67.5,75],[87,90],[1,15],[7.4,15],[15,15],[1440,1440]] as const)
+    assert.equal(roundTimelineMinutes(input), expected);
+  for (const input of [null,0,-1,NaN,Infinity]) assert.equal(roundTimelineMinutes(input), null);
+});
 import assert from "node:assert/strict";
 import {randomUUID} from "node:crypto";
 import {applyCommand, emptyBoard, type Board, type Command} from "../lib/shop-dispatch/model";

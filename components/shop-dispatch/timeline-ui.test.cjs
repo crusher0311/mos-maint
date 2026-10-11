@@ -117,7 +117,13 @@ test("timeline: genuine drop, move, pointer resize, manual fallback and exact un
     assert.equal(posts().length, 0, "drop preview never persists");
     assert.equal(find("timeline-plan-technician").value, "b");
     assert.equal(find("timeline-plan-time").value, "10:00");
-    assert.equal(find("timeline-plan-minutes").value, "87");
+    assert.equal(find("timeline-plan-minutes").value, "90");
+    await change("timeline-plan-minutes", "61.8");
+    await click("timeline-round-minutes");
+    assert.equal(find("timeline-plan-minutes").value, "75");
+    await change("timeline-plan-minutes", "87");
+    await click("timeline-round-minutes");
+    assert.equal(find("timeline-plan-minutes").value, "90");
     assert.match(find("timeline-details").textContent, /book baseline — review/);
     assert.equal(latest.jobs.find(j => j.id === "queued").estimatedMinutes, null, "book-baseline drag stays local until manager saves");
     assert.equal(find("timeline-block-queued"), null, "preview does not masquerade as saved work");
@@ -129,7 +135,7 @@ test("timeline: genuine drop, move, pointer resize, manual fallback and exact un
     assert.equal(first.command.resource, "bay-local");
     assert.equal(first.command.plannedStart, "2030-06-03T10:00:00.000Z");
     assert.ok(find("timeline-block-queued"), "only server response puts work on timeline");
-    assert.equal(latest.jobs.find(j => j.id === "queued").estimatedMinutes, 87, "reviewed book baseline becomes an explicit planned estimate");
+    assert.equal(latest.jobs.find(j => j.id === "queued").estimatedMinutes, 90, "reviewed rounded book baseline becomes an explicit planned estimate");
     assert.equal(latest.jobs.find(j => j.id === "queued").bookMinutes, 87);
     await drop("queued", "a", 12, "block");
     await submit("timeline-plan-form");
@@ -143,10 +149,10 @@ test("timeline: genuine drop, move, pointer resize, manual fallback and exact un
     await act(async () => window.dispatchEvent(new dom.window.MouseEvent("pointermove", { bubbles: true, cancelable: true, clientX: 616, clientY: 20 })));
     assert.ok(find("timeline-preview"));
     await act(async () => window.dispatchEvent(new dom.window.MouseEvent("pointerup", { bubbles: true, clientX: 616, clientY: 20 })));
-    assert.equal(find("timeline-plan-minutes").value, "117", "pointer resizing changes planned duration");
+    assert.equal(find("timeline-plan-minutes").value, "120", "pointer resizing snaps planned duration");
     assert.equal(posts().length, 2);
     await submit("timeline-plan-form");
-    assert.equal(latest.jobs.find(j => j.id === "queued").estimatedMinutes, 117);
+    assert.equal(latest.jobs.find(j => j.id === "queued").estimatedMinutes, 120);
     assert.equal(latest.jobs.find(j => j.id === "queued").bookMinutes, 87);
     // Resize an existing reservation that still has only book labor, not an estimate.
     await act(async () => find("timeline-resize-book-scheduled").dispatchEvent(new dom.window.MouseEvent("pointerdown", { bubbles: true, cancelable: true, clientX: 868, button: 0 })));

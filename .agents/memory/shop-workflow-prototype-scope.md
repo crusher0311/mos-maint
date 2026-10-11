@@ -118,3 +118,9 @@ The user supplied Socket Time's Burnett schedule as a usability reference: the s
 **Why:** The user found the first Schedule view cumbersome for arranging a day of work.
 
 **How to apply:** Preserve individual-job, multi-technician scheduling. Keep provider appointments distinct from local work plans, and planned duration distinct from billed hours. Reference screenshots guide interaction and density; they do not authorize copying customer/staff data or changing upstream appointments.
+
+The user clarified that planned job durations should round UP to the next 15-minute increment, not to the nearest (61.8 becomes 75, not 60).
+
+**Why:** Rounding down would allocate less time than the job estimate. The desired planning unit is a quarter hour; billed labor must remain separate.
+
+**How to apply:** Round proposals up with a 15-minute minimum for positive known durations, keep exact quarter hours unchanged, preserve unknown durations, and require review before saving.
