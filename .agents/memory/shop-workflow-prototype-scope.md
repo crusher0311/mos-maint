@@ -17,6 +17,18 @@ Operational additions prioritize readiness/owned blockers, manager-confirmed dep
 
 **How to apply:** Keep parts readiness manual until before/after receipt evidence establishes partial-delivery semantics and callback behavior. Recommendations must not silently reassign work or replace shop-approved repair procedures.
 
+User-confirmed ordering and receipt can generate WorkOrder updates without changing the returned RO material line.
+
+**Why:** On 2026-10-11, read-only before/order/receipt observations showed identical non-personal part fields and line modification time despite new callbacks. The blank line already carried `CoreStatus=Returned`, so that value does not establish delivery.
+
+**How to apply:** Do not equate callback arrival with parts readiness. Verify a separate receipt/allocated-quantity contract and partial deliveries before enabling automation; the current evidence is documented in `docs/protractor-parts-receipt-investigation.md`.
+
+Automatically refresh the job's parts list, but retain manual receipt readiness and require a fresh readiness review when a new part is added to an already-ready job.
+
+**Why:** The user explicitly accepted this narrower behavior after the live addition/order/receipt comparison could not distinguish receipt status.
+
+**How to apply:** Reconcile part identity, quantity, description and price from provider snapshots without labeling parts ordered or received. Do not silently preserve ready status for newly added parts.
+
 Technician skill profiles must distinguish history-supported experience from manager-confirmed independent capability.
 
 **Why:** The user wants capabilities derived from previously performed work, with manager confirmation and corrections; multi-technician work is not proof of independent proficiency.
