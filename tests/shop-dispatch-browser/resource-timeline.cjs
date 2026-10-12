@@ -82,13 +82,15 @@ const assert=require("node:assert/strict");
  const bounds=await handle.boundingBox();
  await page.mouse.move(bounds.x+bounds.width/2,bounds.y+bounds.height/2);
  await page.mouse.down();
- await page.mouse.move(bounds.x+bounds.width/2+28,bounds.y+bounds.height/2,{steps:5});
+ // Shorten into free capacity. Extending this 09:00 job past 10:00 correctly
+ // conflicts with the next job on the East lift and must not auto-save.
+ await page.mouse.move(bounds.x+bounds.width/2-28,bounds.y+bounds.height/2,{steps:5});
  await page.mouse.up();
  await page.waitForFunction(()=>window.requests.length===4).catch(async error=>{
   console.error(await page.locator('[data-testid="timeline-error"],[data-testid="timeline-details"],[data-testid="schedule-error"]').allTextContents());
   throw error;
  });
- assert.equal((await page.evaluate(()=>window.requests.at(-1))).command.estimatedMinutes,75);
+ assert.equal((await page.evaluate(()=>window.requests.at(-1))).command.estimatedMinutes,45);
  assert.equal((await page.evaluate(()=>window.requests.at(-1))).command.resource,"lift-east");
  assert.deepEqual(errors,[]);
  console.log("Resource timeline: retained lanes, holds, unknown duration, mode-safe draft, conflict, uncertain retry and time-off rejection passed.");
