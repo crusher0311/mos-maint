@@ -30,7 +30,7 @@ stopped and expired. Do not reset either record or repeat the completed import.
 
 | Boundary | Proposed value |
 | --- | --- |
-| Shop | One operator-selected Protractor shop with a verified history gap |
+| Shop | Telle Tire – Afton, MOS 139 (operator-selected); verify a gap before importing |
 | Data scope | One explicit, incomplete historical invoice date window |
 | Provider operations | Final-invoice list GETs only, including bounded pagination |
 | Budget | At most 100 physical attempts, including retries |
@@ -42,6 +42,32 @@ stopped and expired. Do not reset either record or repeat the completed import.
 
 These are proposed operating limits, not claims that a generic pilot runner
 already enforces them.
+
+### Shop 139 preflight — October 13
+
+- The operator identifies MOS 139 as Telle Tire – Afton; the stored display name
+  is `Telle Tire - 111`. Use MOS 139 as the scope, not a name-based match.
+- The shop is active and configured for Protractor. Shop-specific connection
+  credentials are present; recent telemetry contains 101 HTTP 200 responses over
+  the preceding 72 hours. This is existing telemetry, not a new provider probe.
+- Mongo's legacy backfill record is marked completed on July 4. It is not proof
+  of complete current coverage. There is no corresponding PG progress row.
+- Normalized closed work orders exist for every weekday from October 1 through
+  October 12; October 12 has 16 rows using the stored closed-date day grouping.
+  No missing date range has yet been established against upstream evidence.
+- The stored timezone is `America/New_York`. The activity profile was computed
+  August 17 and uses that same timezone; its inferred quiet hours must not be
+  treated as current store hours or permission to run.
+- Confirm this location's timezone and weekly opening hours before choosing a
+  window. Do not inherit Burnett's hours or its prior closed-shop exception.
+
+The first proposed provider step is a bounded read-only comparison of October
+12's final invoices with existing local identities, using the provider's date
+semantics. The 16 local rows are a baseline, not an expected upstream total.
+If comparison finds no gap, report that result and stop rather than inventing
+work, rewriting existing records, or expanding dates automatically. Any actual
+import must be limited to verified missing records in the approved scope.
+This comparison still requires a reviewed implementation and explicit activation.
 
 ## Required implementation before activation
 
