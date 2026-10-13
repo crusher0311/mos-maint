@@ -46,6 +46,18 @@ subsequently completed the full build with the same release source.
 network isolation, do not weaken tests, and require Render's successful build and
 live commit verification before reporting a release as deployed.
 
+Do not force `NODE_ENV=production` around the entire `npm run build` lifecycle.
+Leave it unset for prebuild tests; Next selects production mode for compilation.
+Allow loopback in the offline egress guard when running the tsx CLI.
+
+**Why:** React's production package rejects `act()` in the prebuild UI tests,
+and blocking local sockets prevents tsx's own IPC from starting. Both can
+falsely block an otherwise valid release before compilation.
+
+**How to apply:** Keep credentials removed and external egress denied, but set
+`PROTRACTOR_OFFLINE_ALLOW_LOOPBACK=true` and leave `NODE_ENV` unset when running
+the complete npm build lifecycle in an isolated checkout.
+
 Credential-free build environments must retain the workspace's native-library
 search paths.
 
