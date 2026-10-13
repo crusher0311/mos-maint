@@ -32,6 +32,13 @@ export function jobInterval(job:Job):{start:number;end:number}|null{
   const duration=job.estimatedMinutes??job.bookMinutes;
   return Number.isFinite(start)&&duration!==null&&duration>0?{start,end:start+duration*60_000}:null;
 }
+export function appointmentHasCompletePlan(board:Board,appointmentId:string):boolean{
+  // A check-in only records arrival. Only an explicitly linked official ticket,
+  // with every retained job planned, can replace the appointment reservation.
+  const visit=board.visits.find(v=>!v.closed&&v.provider==="protractor"&&v.sourceId&&v.intake?.appointmentId===appointmentId);
+  const jobs=visit?board.jobs.filter(j=>j.visitId===visit.id):[];
+  return jobs.length>0&&jobs.every(j=>!j.sourceRemoved&&(j.status==="completed"||!!j.technicianId&&!!jobInterval(j)));
+}
 function sameLanes(tech:string,resource:string|null,otherTech:string|null,otherResource:string|null){
   return !otherTech||tech===otherTech||!!resource&&resource===otherResource;
 }
@@ -64,11 +71,9 @@ export function slotIsFree(board:Board,slot:AvailableSlot,now:number,ignoreHoldI
     if(job.plannedStart&&!interval&&localParts(Date.parse(job.plannedStart),settings.timeZone).date===localParts(start,settings.timeZone).date)return false;
   }
   for(const appointment of board.schedule?.appointments?.appointments??[]){
-    const visit=board.visits.find(v=>v.provider==="protractor"&&v.sourceId?.toLowerCase()===appointment.id.toLowerCase());
-    const planned=visit?board.jobs.filter(j=>j.visitId===visit.id):[];
     // Once all of this appointment's work has an explicit local plan, those
     // job intervals (above) own the capacity; don't reserve the arrival twice.
-    if(planned.length&&planned.every(j=>j.status==="completed"||!!j.technicianId&&!!jobInterval(j)))continue;
+    if(appointmentHasCompletePlan(board,appointment.id))continue;
     if(!appointment.start)return false;
     const a=Date.parse(appointment.start),b=appointment.end?Date.parse(appointment.end):null;
     const linked=appointment.technicianSourceIds.map(id=>board.technicians.find(t=>t.active&&t.sourceId?.toLowerCase()===id.toLowerCase())?.id);
@@ -84,9 +89,12 @@ export function assertLocalPlanAvailable(before:Board,after:Board,jobId:string,n
   if(job?.resource&&job.plannedStart&&(!job.technicianId||!interval))
     throw new DispatchError(409,"Assign a technician and a known duration before scheduling shared equipment.");
   if(!job?.technicianId||!interval)return;
-  const visit=after.visits.find(v=>v.id===job.visitId);
+  const ownAppointment=after.visits.find(v=>v.id===job.visitId&&!v.closed)?.intake?.appointmentId;
   const view={...after,jobs:after.jobs.filter(j=>j.id!==job.id),schedule:after.schedule?{...after.schedule,appointments:after.schedule.appointments?{
-    ...after.schedule.appointments,appointments:after.schedule.appointments.appointments.filter(a=>a.id.toLowerCase()!==visit?.sourceId?.toLowerCase()),
+    // Self-planning consumes this visit's explicit arrival reservation. This is
+    // a validation-only view: unrelated work still sees the full reservation
+    // until all retained jobs are planned against a verified official ticket.
+    ...after.schedule.appointments,appointments:after.schedule.appointments.appointments.filter(a=>a.id!==ownAppointment&&!appointmentHasCompletePlan(after,a.id)),
   }:undefined}:undefined};
   const date=localParts(interval.start,before.schedule.settings.timeZone).date;
   const next=new Date(Date.parse(`${date}T00:00:00Z`)+86400_000).toISOString().slice(0,10);

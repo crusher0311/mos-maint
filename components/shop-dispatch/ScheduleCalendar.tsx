@@ -8,6 +8,7 @@ import type { AvailabilityResult, ScheduleSettings as Settings } from "@/lib/sho
 import { ScheduleSettings } from "./ScheduleSettings";
 import { ScheduleViews } from "./ScheduleViews";
 import { ScheduleTimeline, type TimelineMode } from "./ScheduleTimeline";
+import { IntakeForm } from "./IntakeForm";
 import styles from "./pilot.module.css";
 import css from "./ScheduleCalendar.module.css";
 
@@ -239,7 +240,8 @@ export function ScheduleCalendar({ board, shopId, busy, refresh, select, onLockC
     <section className={styles.panel} data-testid="schedule-unplanned"><h2>Unplanned queue <small>/ {unplanned.length}</small></h2><small>All statuses, including hidden source statuses and closed visits. A missing start is not available capacity.</small>{unplanned.map(jobCard)}{!unplanned.length && <p className={css.muted}>Every local job has a planned start.</p>}
       <details><summary>Planned outside this window · {outside.length}</summary>{outside.map(jobCard)}{!outside.length && <p>No jobs outside this window.</p>}</details>
     </section></>}
-    <section className={styles.panel} data-testid="schedule-arrivals"><div className={styles.row}><h2>Protractor appointment arrivals</h2><span className={styles.chip}>Read-only intake · not job blocks</span></div>
+    <details className={styles.panel}><summary>Walk-in check-in</summary><IntakeForm board={current} shopId={shopId} busy={locked} refresh={refresh} select={select} /></details>
+    <section className={styles.panel} data-testid="schedule-arrivals"><div className={styles.row}><h2>Protractor appointment arrivals</h2><span className={styles.chip}>Imported arrivals · local check-in available</span></div>
       <small>{appointments ? `Snapshot ${appointments.startDate} to ${appointments.endDate} (exclusive) · fetched ${time(appointments.fetchedAt)}` : "No appointment snapshot received."}</small>
       {(appointmentStale || appointmentRangeMismatch || !appointments?.complete || appointments.warning) && <div className={styles.notice} role="status" data-testid="schedule-appointment-warning">
         {appointmentStale && <p>Appointment snapshot is missing or over five minutes old. Refresh before relying on capacity.</p>}
@@ -255,6 +257,7 @@ export function ScheduleCalendar({ board, shopId, busy, refresh, select, onLockC
           <p>{time(appointment.start)}{durationKnown ? ` – ${time(appointment.end)}` : " · duration unknown"}</p>
           <small>Source technician IDs: {appointment.technicianSourceIds.join(", ") || "not supplied"}. Arrival only; does not create a local assignment.</small>
           {(unknownTime || !durationKnown) && <p className={styles.warning}>{unknownTime ? "Unknown arrival time. " : ""}{!durationKnown ? "Unknown duration; do not assume a booking length." : ""}</p>}
+          <details><summary>Appointment details & check-in</summary><IntakeForm board={current} shopId={shopId} busy={locked} appointment={appointment} refresh={refresh} select={select} /></details>
         </article>;
       })}</div>
       {!appointments?.appointments.length && <p className={css.muted}>No arrivals in the fetched snapshot. Check completeness and date range above before interpreting this as empty.</p>}

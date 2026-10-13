@@ -140,15 +140,15 @@ async function main() {
       if (ids.length) {
         pgUsed = true;
         matches = await getClient().begin(async sql => {
-          await sql`set transaction read only`;
-          await sql`set local statement_timeout = '5000ms'`;
-          return await sql<Array<{ source_id: string; id: string }>>`
+          await sql.unsafe("set transaction read only");
+          await sql.unsafe("set local statement_timeout = '5000ms'");
+          return await sql.unsafe<Array<{ source_id: string; id: string }>>(`
             select distinct w.id, lower(s->>'idValue') as source_id
             from normalized_work_orders w
             cross join lateral jsonb_array_elements(w.provenance->'sourceIds') s
-            where w.shop_id=${P.shopId} and s->>'system'='protractor'
-              and lower(s->>'idValue')=any(${sql.array(ids)}::text[])
-            limit 201`;
+            where w.shop_id=$1 and s->>'system'='protractor'
+              and lower(s->>'idValue')=any($2::text[])
+            limit 201`, [P.shopId, sql.array(ids)]);
         });
         assert.ok(matches.length <= 200, "Local identity result truncated; do not infer absence");
       }

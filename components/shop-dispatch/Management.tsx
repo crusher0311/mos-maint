@@ -1,5 +1,6 @@
 "use client";
 import { CommandForm } from "./CommandForm";
+import { IntakeForm } from "./IntakeForm";
 import type { WorkProps } from "./JobCard";
 import { ResourceManagement } from "./ResourceManagement";
 import { RosterImport } from "./RosterImport";
@@ -8,7 +9,7 @@ import { TechnicianSkills } from "./TechnicianSkills";
 import { normalizeRoNumber } from "./ro-number";
 import styles from "./pilot.module.css";
 
-export function Management({ board, actor, busy, mutate }: WorkProps) {
+export function Management({ board, actor, busy, mutate, shopId, refresh, select }: WorkProps & { shopId?: number; refresh?: () => Promise<void>; select?: (visitId: string) => void }) {
   if (!actor.manager) return <section className={styles.empty}><h2>Manager access required</h2><p>A manager can update this shop’s roster, resources and intake preferences.</p></section>;
   return <div className={styles.grid}>
     <section className={styles.panel}><h2>Technician roster</h2><p><small>Add technicians by name, even without a MOS account. Leave the login email blank for local dispatch only. To link an existing MOS login later, edit the same technician’s email; their lane and assignments stay intact. This does not create accounts or verify provider assignments or availability. Reassign unfinished work before deactivating.</small></p>
@@ -35,8 +36,8 @@ export function Management({ board, actor, busy, mutate }: WorkProps) {
         <label>Vehicle<input name="vehicle" required maxLength={160} /></label>
         <label>Customer · optional<input name="customer" maxLength={160} /></label>
       </CommandForm>
-    </div><div className={styles.panel}><div className={styles.eyebrow}>Read-only upstream</div><h2>Protractor intake</h2>
-      <p><small>Visits arrive automatically through provider callbacks. To recover a missing visit, fetch its RO number in the current shop. This pilot does not write to Protractor. New imported jobs must be authorized and assigned by a manager before work starts. Connection remains unverified until intake succeeds.</small></p>
+    </div><IntakeForm board={board} shopId={shopId} busy={busy} refresh={refresh} select={select} /><div className={styles.panel}><div className={styles.eyebrow}>Upstream recovery / read-only fetch</div><h2>Protractor intake</h2>
+      <p><small>Visits arrive automatically through provider callbacks. Recover a missing visit by fetching its RO number in the current shop. This fetch is read-only; workflow check-in and explicitly confirmed ticket creation are separate actions. New imported jobs require manager authorization and assignment before work starts. Connection remains unverified until intake succeeds.</small></p>
       <CommandForm testId="sync-form" busy={busy} label="Fetch by RO number" submit={data => {
         const roNumber = normalizeRoNumber(String(data.get("roNumber")));
         if (!roNumber) throw new Error("Enter an RO number after the optional # or RO prefix.");

@@ -31,7 +31,8 @@ function fixture():Board {
 }
 const start="2026-10-12T14:00:00.000Z";
 
-test("receipt-backed undo reverses the immediate initial assignment without bypassing ordinary handoffs",async()=>{
+test("receipt-backed undo reverses the immediate initial assignment without bypassing ordinary handoffs",async(t)=>{
+  t.mock.method(Date,"now",()=>now);
   let b=fixture();b.operationsEnabled=true;
   const before=structuredClone(b.jobs[0]), original=b.revision;
   const deps={read:async()=>b,save:async(_shop:number,rev:number,next:Board)=>{if(rev!==b.revision)return false;b=next;return true;},intake:async()=>{throw Error("no provider");},now:()=>new Date(now).toISOString()};

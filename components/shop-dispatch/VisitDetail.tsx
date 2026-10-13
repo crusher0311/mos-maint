@@ -3,10 +3,11 @@ import type { Transport, Visit } from "@/lib/shop-dispatch/model";
 import { CommandForm } from "./CommandForm";
 import { JobCard, type WorkProps } from "./JobCard";
 import { VehicleHistoryPanel } from "./VehicleHistoryPanel";
+import { VisitIntake } from "./VisitIntake";
 import { dateLabel, iso, localDate, nullableNumber, projection } from "./helpers";
 import styles from "./pilot.module.css";
 
-export function VisitDetail({ visit, shopId, onBack, ...work }: WorkProps & { visit: Visit; shopId?: number; onBack: () => void }) {
+export function VisitDetail({ visit, shopId, onBack, refresh, ...work }: WorkProps & { visit: Visit; shopId?: number; onBack: () => void; refresh?: () => Promise<void> }) {
   const { board, actor, busy, mutate, now } = work;
   const jobs = board.jobs.filter(j => j.visitId === visit.id);
   const unresolved = ["needed", "arranged"].includes(visit.transport.ride) || ["requested", "assigned"].includes(visit.transport.loaner);
@@ -26,10 +27,11 @@ export function VisitDetail({ visit, shopId, onBack, ...work }: WorkProps & { vi
       {actor.manager && !visit.closed && !canClose && <p><small>To close: complete every job, finish arranged rides, and resolve requested or assigned loaners.</small></p>}
       {visit.provider === "protractor" && <div className={styles.notice}>
         Upstream status: {visit.sourceStatus || "Not supplied"} · Fetched {dateLabel(visit.sourceFetchedAt)}<br />
-        Imported jobs require manager authorization. Removed packages are blocked for review. Upstream status never silently completes local work. No upstream writebacks.
+        Imported jobs require manager authorization. Removed packages are blocked for review. Upstream status never silently completes local work. Only explicitly confirmed ticket creation can write upstream; local dispatch does not write back.
         {actor.manager && !visit.closed && visit.sourceId && <div className={styles.actions}><button disabled={busy} onClick={() => void mutate({ type: "sync", workOrderId: visit.sourceId! })}>Refresh this work order</button></div>}
       </div>}
     </div>
+    <VisitIntake visit={visit} board={board} shopId={shopId} manager={actor.manager} busy={busy} refresh={refresh} />
     {shopId !== undefined && <VehicleHistoryPanel visitId={visit.id} shopId={shopId} />}
     <div className={styles.grid}><section>
       <h2>Individual jobs <small> / {jobs.length}</small></h2>

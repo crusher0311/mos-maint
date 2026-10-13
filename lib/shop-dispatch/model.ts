@@ -49,6 +49,7 @@ export interface Job {
   sourceTechnicians?: {sourceId:string|null;name:string}[];
 }
 export interface Visit {
+  intake?:import("./intake-types").WorkflowIntake;
   id: string; ro: string; vehicle: string; customer: string;
   arrivalAt: string | null; promiseAt: string | null; transport: Transport;
   closed: boolean; provider: "manual" | "protractor"; sourceId: string | null;
@@ -61,6 +62,7 @@ export interface Receipt {
     previous: Pick<Job,"technicianId"|"resource"|"plannedStart"|"estimatedMinutes"> };
 }
 export interface Board {
+  ticketIntents?:import("./intake-types").TicketIntent[];
   scheduleViews?: ScheduleLaneViews;
   operationsEnabled?:boolean;
   schedule?:import("./schedule-types").ScheduleState;
@@ -227,6 +229,7 @@ export function applyCommand(input:Board,command:Command,actor:Actor,now:string,
   else if(command.type==="sourceStatuses"){board.sourceStatuses=[...new Set(command.statuses)];}
   else if(command.type==="close"){
     const v=visit(command.visitId);
+    requireThat(!board.ticketIntents?.some(i=>i.visitId===v.id&&i.status!=="confirmed"),"Recover the pending official ticket before closing this visit",409);
     requireThat(board.jobs.filter(j=>j.visitId===v.id).every(j=>j.status==="completed"),"Complete all jobs before closing");
     if(board.operationsEnabled)requireThat(board.jobs.filter(j=>j.visitId===v.id).every(j=>j.operations&&j.operations.checks.every(c=>!!c.completedAt)),"Review readiness and finish required quality checks before closing",409);
     requireThat(!["assigned","requested"].includes(v.transport.loaner)&&!["needed","arranged"].includes(v.transport.ride),"Resolve transportation and return the loaner first");
@@ -238,6 +241,8 @@ export function applyCommand(input:Board,command:Command,actor:Actor,now:string,
       : Number(intake.ro)===Number(command.roNumber.replace(/^(?:RO\s*#?\s*|#\s*)/i,"")),
     "Upstream work order identity mismatch",502);
     const sourceId=intake.sourceId.toLowerCase();
+    requireThat(!board.ticketIntents?.some(i=>i.workOrderId.toLowerCase()===sourceId&&i.status!=="confirmed"&&i.visitId!==board.visits.find(v=>v.sourceId===sourceId)?.id),
+      "This ticket belongs to pending workflow intake. Recover that visit instead.",409);
     let v=board.visits.find(v=>v.provider==="protractor"&&v.sourceId===sourceId);
     requireThat(!v?.closed,"This visit was closed locally; it will not be reopened by sync",409);
     if(!v){
@@ -248,7 +253,7 @@ export function applyCommand(input:Board,command:Command,actor:Actor,now:string,
     Object.assign(v,{ro:intake.ro,vehicle:intake.vehicle,customer:intake.customer,sourceStatus:intake.sourceStatus,sourceFetchedAt:now});
     for(const source of intake.jobs){
       const id=`${v.id}:${source.sourceId.toLowerCase()}`;
-      let job=board.jobs.find(j=>j.id===id);
+      let job=board.jobs.find(j=>j.visitId===v!.id&&j.sourceId===source.sourceId.toLowerCase());
       if(!job){job=newJob(id,v.id,source.title,source.bookMinutes);job.authorized=false;job.sourceId=source.sourceId.toLowerCase();board.jobs.push(job);}
       Object.assign(job,{title:source.title,bookMinutes:source.bookMinutes,sourceTechnicians:source.sourceTechnicians??[],sourceRemoved:false});
     }

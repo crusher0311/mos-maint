@@ -18,6 +18,7 @@ export const scheduleSettingsSchema=z.object({
 }).strict();
 export type ScheduleSettings=z.infer<typeof scheduleSettingsSchema>;
 export interface CalendarAppointment {
+  customer?:string;contactId?:string;vehicleId?:string;concerns?:string[];mileage?:number;
   id:string; ro:string; title:string; start:string|null; end:string|null;
   technicianSourceIds:string[];
 }
