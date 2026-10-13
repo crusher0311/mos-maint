@@ -5,9 +5,10 @@ export const HISTORY_UNTIL = "2026-10-09"; // exclusive; includes October 8
 export const HISTORY_START = "2026-10-08T23:00:00.000Z"; // explicit closed-shop approval
 export const HISTORY_END = "2026-10-09T10:00:00.000Z";
 const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
-export interface ShopHistoryRequest { runId:string; shopId:number; day:string }
+import {validateAftonGrant,aftonEndpoint,aftonAdmissionExpression} from "./protractor-afton-pilot-policy";
+export interface ShopHistoryRequest { runId:string; shopId:number; day:string; pilot?:"afton" }
 export interface ShopHistoryGrant {
-  version:1; runId:string; shopId:number; from:string; until:string;
+  version:1|2; runId:string; shopId:number; from:string; until:string;
   canaryGeneration:string; bindingDigest:string;
   notBefore:Date; expiresAt:Date; maxRequests:number; consumedRequests:number;
   stopped:boolean;
@@ -17,6 +18,7 @@ function validDay(day:string):boolean {
     new Date(`${day}T00:00:00Z`).toISOString().slice(0,10)===day;
 }
 export function validateHistoryGrant(g:ShopHistoryGrant):void {
+  if(g?.version===2)return validateAftonGrant(g);
   if(!g || g.version!==1 || g.shopId!==HISTORY_SHOP || !uuid.test(g.runId) ||
     !uuid.test(g.canaryGeneration) || !/^[a-f0-9]{64}$/.test(g.bindingDigest) ||
     g.from!==HISTORY_FROM || g.until!==HISTORY_UNTIL ||
@@ -28,6 +30,7 @@ export function validateHistoryGrant(g:ShopHistoryGrant):void {
     throw Error("Invalid shop history permission");
 }
 export function historyEndpoint(r:ShopHistoryRequest,page:number):string {
+  if(r.pilot!==undefined)return aftonEndpoint(r,page);
   if(r.shopId!==HISTORY_SHOP || !uuid.test(r.runId) || !validDay(r.day) ||
     !Number.isSafeInteger(page) || page<0 || page>=50)throw Error("Invalid history request");
   const end=new Date(Date.parse(`${r.day}T00:00:00Z`)+86400000).toISOString().slice(0,10);
@@ -35,11 +38,12 @@ export function historyEndpoint(r:ShopHistoryRequest,page:number):string {
 }
 export function matchesHistoryRequest(r:ShopHistoryRequest,endpoint:string,method:string,shopId:number,body?:unknown):boolean {
   if(shopId!==r.shopId || method!=="GET" || body!==undefined)return false;
-  try { for(let page=0;page<50;page++)if(endpoint===historyEndpoint(r,page))return true; }
+  try { for(let page=0;page<(r.pilot==="afton"?100:50);page++)if(endpoint===historyEndpoint(r,page))return true; }
   catch { return false; } return false;
 }
 /** Used ONLY inside the existing atomic fleet-confirmation update. */
 export function historyAdmissionExpression(r:ShopHistoryRequest,bindingDigest?:string):object {
+  if(r.pilot!==undefined)return aftonAdmissionExpression(r,bindingDigest);
   try {historyEndpoint(r,0);}catch{return {$literal:false};}
   if(!bindingDigest || !/^[a-f0-9]{64}$/.test(bindingDigest))return {$literal:false};
   return {$cond:[{$and:[
