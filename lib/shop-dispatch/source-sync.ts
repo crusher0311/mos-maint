@@ -21,6 +21,9 @@ export function reconcileSourceSnapshots(input:Board,shopId:number,rows:SourceSn
     const id=row.workOrderId?.toLowerCase();
     if(!id||seen.has(id))continue;
     seen.add(id);
+    // An admitted ticket already belongs to its local visit, even while its
+    // upstream write/finalization is uncertain. Recovery verifies all packages.
+    if(board.ticketIntents?.some(i=>i.workOrderId.toLowerCase()===id&&i.status!=="confirmed"))continue;
     const existing=board.visits.find(v=>v.provider==="protractor"&&v.sourceId===id);
     if(existing?.closed)continue;
     const fetched= row.fetchedAt ? new Date(row.fetchedAt).getTime() : NaN;

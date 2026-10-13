@@ -2395,7 +2395,7 @@ export async function createServiceItem(
   // Task #936: `vehicleId` lets the wizard pin a client-generated UUID so a
   // retry after a timeout upserts the SAME service item (no duplicates);
   // `soapTimeoutMs` bounds the SOAP socket for interactive callers.
-  opts?: { vehicleId?: string; soapTimeoutMs?: number }
+  opts?: { vehicleId?: string; soapTimeoutMs?: number; maxRetries?: number }
 ): Promise<{ ok: boolean; vehicleId?: string; vehicle?: ProtractorVehicle; error?: string }> {
   const config = await __protractorClientTestHooks.resolveProtractorConfig(shopId);
   if (!config.configured) {
@@ -2440,7 +2440,7 @@ export async function createServiceItem(
   const soapResult = await protractorSoapServiceItemUpdate(
     config,
     xmlBody,
-    opts?.soapTimeoutMs !== undefined ? { timeoutMs: opts.soapTimeoutMs } : undefined
+    opts?.soapTimeoutMs !== undefined || opts?.maxRetries !== undefined ? { timeoutMs: opts.soapTimeoutMs, maxRetries: opts.maxRetries } : undefined
   );
 
   if (!soapResult.ok) {
@@ -2576,7 +2576,7 @@ export async function createProtractorWorkOrder(
   // with a single retry (background callers keep the generous defaults);
   // `workOrderId` pins a client-generated UUID so a wizard retry after a
   // timeout upserts the SAME work order instead of creating a duplicate.
-  opts?: { interactive?: boolean; workOrderId?: string }
+  opts?: { interactive?: boolean; workOrderId?: string; maxRetries?: number }
 ): Promise<{
   ok: boolean;
   workOrderId?: string;
@@ -2628,7 +2628,7 @@ export async function createProtractorWorkOrder(
     { method: "POST", body: JSON.stringify(body) },
     0,
     shopId,
-    opts?.interactive ? { priority: true, maxRetries: 1 } : undefined
+    opts?.interactive ? { priority: true, maxRetries: opts.maxRetries ?? 1 } : undefined
   );
 
   if (!result.ok || !result.data) {

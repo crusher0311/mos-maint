@@ -31,7 +31,12 @@ export function mapAppointments(rows:any[],timeZone:string):CalendarAppointment[
     const raw=row.ServicePackages,packages=Array.isArray(raw)?raw:raw?.ItemCollection??[];
     const ids=[typeof row.TechnicianID==="string"?row.TechnicianID.toLowerCase():null,...packages.flatMap((pkg:any)=>packageTechnicians(pkg).map(t=>t.sourceId))].filter((id):id is string=>!!id);
     const title=[row.ServiceItem?.Year,row.ServiceItem?.Make,row.ServiceItem?.Model].filter(v=>typeof v==="string"||typeof v==="number").join(" ").slice(0,160);
-    found.set(row.ID,{id:row.ID,ro:String(row.WorkOrderNumber??"").slice(0,30),title:title||"Protractor appointment",start,end,technicianSourceIds:[...new Set(ids)]});
+    const guid=(value:unknown)=>typeof value==="string"&&/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(value)?value.toLowerCase():undefined;
+    found.set(row.ID,{id:row.ID,ro:String(row.WorkOrderNumber??"").slice(0,30),title:title||"Protractor appointment",start,end,technicianSourceIds:[...new Set(ids)],
+      customer:[row.Contact?.Name?.FirstName,row.Contact?.Name?.LastName].filter(v=>typeof v==="string").join(" ").slice(0,160),
+      contactId:guid(row.Contact?.ID),vehicleId:guid(row.ServiceItem?.ID),
+      concerns:packages.map((p:any)=>p.ServicePackageHeader?.Description||p.ServicePackageHeader?.Title||p.Title).filter((v:unknown)=>typeof v==="string"&&!!v.trim()).slice(0,20).map((v:string)=>v.slice(0,160)),
+      mileage:typeof row.InUsage==="number"&&Number.isInteger(row.InUsage)&&row.InUsage>=0?row.InUsage:undefined});
   }
   return [...found.values()];
 }

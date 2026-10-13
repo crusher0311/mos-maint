@@ -2,6 +2,7 @@
 import { blockers, elapsed, resourcesFor, type Actor, type Board, type Command, type Job } from "@/lib/shop-dispatch/model";
 import { CommandForm } from "./CommandForm";
 import { JobReadiness } from "./JobReadiness";
+import { JobOffers } from "./JobOffers";
 import { canControl, dateLabel, iso, localDate, minutes, nullableNumber } from "./helpers";
 import styles from "./pilot.module.css";
 
@@ -60,7 +61,11 @@ export function JobCard({ job, board, actor, now, busy, mutate }: WorkProps & { 
       </CommandForm>
     </details>}
     <JobReadiness job={job} board={board} actor={actor} now={now} busy={busy} mutate={mutate} />
-    {actor.manager && !closed && <details><summary>Assignment, authorization & plan</summary>
+    <JobOffers board={board} jobId={job.id} now={now} canReview={actor.manager && !closed} review={() => {
+      const plan = document.getElementById(`assignment-plan-${job.id}`);
+      if (plan instanceof HTMLDetailsElement) { plan.open = true; plan.scrollIntoView?.({ block: "center" }); plan.querySelector("summary")?.focus(); }
+    }} />
+    {actor.manager && !closed && <details id={`assignment-plan-${job.id}`}><summary>Assignment, authorization & plan</summary>
       {job.status === "active" || job.status === "completed" ? <p><small>{job.status === "active" ? "Pause active work before changing its plan." : "Completed plans are locked."}</small></p> :
         <CommandForm revision={board.revision} busy={busy} testId={`plan-form-${job.id}`} label="Save plan" submit={(data, expectedRevision) => mutate({
           type: "plan", jobId: job.id, technicianId: String(data.get("technicianId")) || null,

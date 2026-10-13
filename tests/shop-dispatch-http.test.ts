@@ -18,6 +18,12 @@ const fakeRepo={
  saveDispatchEnterpriseBrand:async(value:typeof enterpriseBrand,revision:number)=>{if(enterpriseBrand.revision!==revision)return false;enterpriseBrand=structuredClone(value);return true;},
 };
 loader._load=function(id,...args){
+ if(id==="@/lib/shop-dispatch/intake-runtime")return {
+  intakeDependencies:{read:fakeRepo.readDispatchBoard,save:fakeRepo.saveDispatchBoard,now:()=>new Date().toISOString(),
+   verifyIdentity:async(shop:number)=>{assert.equal(shop,10);assert.equal(getProtractorInteractiveTransportContext()?.shopId,10);},
+   byNumber:async()=>{throw new Error("No live provider");},confirm:async()=>null,confirmEntity:async()=>false,write:async()=>{throw new Error("No live provider");}},
+  intakeLookup:async(shop:number)=>{assert.equal(shop,10);assert.equal(getProtractorInteractiveTransportContext()?.shopId,10);return {contacts:[]};}
+ };
  if(id==="@/lib/shop-dispatch/schedule-runtime")return {scheduleDependencies:{
    read:fakeRepo.readDispatchBoard,save:fakeRepo.saveDispatchBoard,now:()=>Date.now(),
    fetchPage:async()=>{throw new Error("No live provider reads in route tests");},
@@ -52,6 +58,29 @@ const http=require("../lib/shop-dispatch/http");
 const rosterRoute=require("../app/api/shop-dispatch/roster/route");
 const skillsRoute=require("../app/api/shop-dispatch/skills/route");
 const scheduleRoute=require("../app/api/shop-dispatch/schedule/route");
+const intakeRoute=require("../app/api/shop-dispatch/intake/route");
+test("workflow intake guards session, role, entitlement, origin and tenant before provider work",async()=>{
+ boards.clear();session=null;
+ const lookup=new Request("https://pilot.test/api/shop-dispatch/intake?q=Test");
+ assert.equal((await intakeRoute.GET(lookup)).status,401);
+ for(const value of [
+  {shopId:10,email:"user@example.test",role:"user",token:"real"},
+  {shopId:99,email:"manager@example.test",role:"manager",token:"real"},
+  {shopId:10,email:"manager@example.test",role:"manager",token:"dev-auto-login"},
+ ]){
+  session=value;assert.equal((await intakeRoute.GET(lookup)).status,403);
+ }
+ session={shopId:10,email:"manager@example.test",role:"manager",token:"real-session"};
+ assert.equal((await intakeRoute.GET(lookup)).status,200);
+ const command={action:"checkIn",revision:0,requestId:randomUUID(),appointmentId:null,details:{customer:"Test",vehicle:"Test",contactId:null,vehicleId:null,newCustomer:null,newVehicle:null,identityConfirmed:false,concerns:["Noise"],mileage:null,customerPlan:"unknown",neededBy:null,promiseAt:null,nextUpdateAt:null,commitmentsConfirmed:false}};
+ assert.equal((await intakeRoute.POST(req(command,"https://evil.test"))).status,403);
+ assert.equal((await intakeRoute.POST(req({...command,shopId:99}))).status,400);
+ const response=await intakeRoute.POST(req(command));assert.equal(response.status,200);
+ const result=await response.json();assert.equal(result.board.visits.length,1);assert.equal(result.board.jobs[0].authorized,false);
+ assert.equal((await intakeRoute.POST(req(command))).status,200);
+ assert.equal(boards.get(10)?.visits.length,1);assert.equal(boards.has(99),false);
+ boards.clear();session=null;reads=0;
+});
 test("schedule management is session-shop scoped, manager-only, CSRF protected and opt-in",async()=>{
  boards.clear();session=null;
  const date=new Date().toISOString().slice(0,10),end=new Date(Date.now()+86400_000).toISOString().slice(0,10);

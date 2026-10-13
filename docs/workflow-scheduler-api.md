@@ -1,5 +1,60 @@
 # Workflow calendar and scheduler API
 
+## Workflow check-in and official tickets
+
+Manager-only `GET/POST /api/shop-dispatch/intake` uses the verified dashboard
+session, current-shop workflow entitlement and same-origin JSON protections.
+It is not exposed to integrator API keys or other providers.
+
+- GET `?q=...` searches customers; `?contactId=UUID` lists that customer's
+  vehicles. Selection is explicit and ownership is rechecked before writes.
+  GET `?roNumber=...` previews a verified eligible open ticket. Linking requires
+  its reviewed GUID as well as the human RO number; the server rechecks both.
+- POST `checkIn` accepts a stable request UUID, board revision, nullable
+  appointment ID and intake details. Appointment check-in requires fresh,
+  complete shop-scoped arrival evidence. Walk-ins can record explicitly
+  unresolved identity without creating provider records. Concerns become
+  unauthorized local jobs, not repair authorization.
+- Intake separates needed-by request, staff/customer-confirmed promise, next
+  update, arrival, mileage and waiting/drop-off. `update` preserves local jobs
+  and plans; edit jobs separately after check-in. Once ticket creation starts,
+  identity/concerns are frozen, while customer commitments remain editable.
+- `link` merges only a verified open Protractor identity into the selected
+  workflow visit. Imported job IDs, time, readiness, dependencies and audit are
+  retained. Conflicting local commitments or worked duplicate packages stop
+  for explicit resolution rather than discarding history.
+- `create` requires an explicit confirmation and confirmed existing or new
+  customer/vehicle identity. It first commits immutable, payload-bound intent.
+  Each customer, vehicle and RO stage is admitted by a separate board CAS,
+  followed by provider I/O outside that local transaction. Upstream IDs are
+  server-derived per shop and visit; a new browser request cannot allocate a
+  second ticket for the same visit.
+- `reconcile` reads exact saved IDs, confirms customer/vehicle ownership and
+  the full expected concern-package set, continues only unattempted stages,
+  and retries local finalization. An attempted but unverified stage is **not
+  automatically sent again**: a timeout does not cancel provider work. If
+  records/packages never appear, staff must investigate/complete the saved
+  identities upstream, then retry verification. No new ticket button is
+  offered for that pending visit. Pending and uncertain states are durable,
+  visible to other managers, and cannot be closed as completed.
+
+Only exact upstream verification plus local finalization produces a confirmed
+ticket. Optional cached source refresh never creates a second visit for pending
+intent. Concern packages are intake descriptions, not priced/authorized repair
+packages. Existing manual jobs/plans stay attached when a ticket is created.
+
+The browser retains shop-scoped drafts and exact unconfirmed requests in session
+storage across reload. Successful walk-in requests retain their returned visit
+identity; starting another walk-in is explicit.
+
+Per-job offers rank qualified technician windows by earliest start, with
+readiness, duration, dependency, shift, time-off, equipment, holds and appointment
+checks. Unknown/unplanned backlog prevents a supported capacity offer. Historical
+experience never supplies a qualification. Offers do not automatically assign,
+reserve or promise whole-visit completion. Staff review the existing plan form;
+normal server-side planning validation applies on save. Flexible drop-off and
+customer-update discussions remain available without claiming same-day service.
+
 ## Vehicle history from workflow cards
 
 Opening a workflow visit or scheduled job provides an on-demand, read-only history
@@ -142,8 +197,12 @@ No TTL index or background worker is necessary: expiry is checked at every read/
   during their interval. Missing duration blocks that local day; missing start
   closes advertised capacity until resolved.
 - Appointment arrival times are displayed separately from job work plans.
-  Once all work for an appointment has explicit local plans, those jobs reserve
-  capacity rather than counting the same arrival twice.
+  Only an explicit appointment-to-visit link and a verified official ticket with
+  every retained job planned can replace the arrival reservation. Incidental
+  appointment/WO ID equality or RO-number matches never imply association.
+  Partial plans and check-in alone leave the appointment reservation intact.
+  A job can be planned within its own explicitly linked arrival window. This
+  self-planning exception does not remove the reservation for other visits.
 - Protractor reads are bounded, paginated and cached for at most five minutes.
   New hold attempts request fresh coverage. Failed, truncated, malformed or stale
   coverage yields no slots. Calendar data may remain visible with a warning.
