@@ -22,3 +22,13 @@ another location's expired permission.
 
 **How to apply:** Scope by MOS 139. Verify its own coverage, timezone, and quiet
 hours; do not inherit Burnett's schedule or one-night closure approval.
+
+For Telle Tire – Afton (MOS 139), use Monday–Friday 07:00–18:00 in
+`America/Chicago`. Weekend hours have not been confirmed.
+
+**Why:** The user explicitly supplied these hours and Central time on
+2026-10-13 after preflight found an Eastern-time setting.
+
+**How to apply:** Use this store's confirmed schedule for pilot preparation.
+Check runtime timezone and activity-profile alignment before activation; this
+confirmation does not itself authorize a run or imply weekend closure.

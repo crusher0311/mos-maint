@@ -35,6 +35,7 @@ stopped and expired. Do not reset either record or repeat the completed import.
 | Provider operations | Final-invoice list GETs only, including bounded pagination |
 | Budget | At most 100 physical attempts, including retries |
 | Duration | At most 15 minutes, ending sooner at the shop's quiet-window cutoff |
+| Proposed local window | One explicitly approved weekday, 18:30–18:45 America/Chicago; no date activated |
 | Parallelism | One dedicated runner, one page and one local normalization operation at a time |
 | General workers | Remain suspended |
 | Renewal | None automatically |
@@ -58,8 +59,15 @@ already enforces them.
 - The stored timezone is `America/New_York`. The activity profile was computed
   August 17 and uses that same timezone; its inferred quiet hours must not be
   treated as current store hours or permission to run.
-- Confirm this location's timezone and weekly opening hours before choosing a
-  window. Do not inherit Burnett's hours or its prior closed-shop exception.
+- The operator confirmed Monday–Friday 07:00–18:00 Central
+  (`America/Chicago`) on October 13. This supersedes the stored Eastern timezone
+  for pilot planning; production configuration has not been corrected.
+- Propose a single weekday 18:30–18:45 Central window, with a 30-minute closing
+  buffer. Weekend hours remain unconfirmed; do not schedule weekend runs or
+  infer that the shop is closed. Do not inherit Burnett's schedule.
+- Before activation, reconcile the stored timezone and stale profile so that
+  runtime quiet-hour checks agree with the confirmed schedule. Use an IANA
+  timezone when translating the selected date to UTC, not a fixed UTC offset.
 
 The first proposed provider step is a bounded read-only comparison of October
 12's final invoices with existing local identities, using the provider's date
