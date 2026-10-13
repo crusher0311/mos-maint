@@ -13,6 +13,17 @@ all included shops were closed for an early start on October 8, 2026.
 closure confirmation is a one-night exception, not an ongoing quiet-hour bypass.
 Do not widen fleet-wide background access or use interactive authority for imports.
 
+Avid Auto Care (MOS 457) requested 24 months of history, not Burnett's 14-month
+exception. Its October 13–14, 2026 overnight approval was based on closing at
+18:00 and reopening at 07:00 Eastern, ahead of October 14 training.
+
+**Why:** The user supplied the range and closure window specifically for this
+store. Training urgency is not authorization to keep importing during opening
+hours or to widen another store's import.
+
+**How to apply:** Keep the store-specific horizon distinct. Do not infer a
+recurring weekly schedule or another night's approval from this one-night window.
+
 The operator selected Telle Tire – Afton, MOS 139, as the first controlled
 background-expansion pilot.
 
