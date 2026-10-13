@@ -4,10 +4,38 @@
 
 Prepared for operator review on 2026-10-13. This document does not activate
 background traffic, change production configuration, or authorize a deployment.
-No new grant has been installed.
+No new grant has been installed by this document.
 
-The operator approved preparation of a controlled expansion, not removal of
-permanent transport protections or an unrestricted fleet restart.
+The operator subsequently authorized building and scheduling the scoped pilot,
+not removal of permanent protections or an unrestricted fleet restart.
+
+## October 13 scheduled implementation
+
+The first stage is comparison-only, implemented in `scripts/run-afton-pilot.ts`.
+The one-use window is October 13, 2026, 18:30–18:45 America/Chicago
+(23:30–23:45 UTC). It compares October 12 final invoice IDs with normalized
+Postgres source identities. Absent identities are **missing candidates**, not
+proof of complete absence from all stores or authorization to rewrite invoices.
+No provider or normalized-history writes occur. Only permission state, source-ID
+evidence, comparison reports, and checkpoints are persisted.
+
+The independent `aftonPilot` permission cannot replace Burnett or JWT permissions.
+The production one-off command, after verifying the tested build is live, is:
+
+`NODE_OPTIONS='--require ./scripts/_stubs/server-only-stub.cjs' node --import tsx scripts/run-afton-pilot.ts --schedule-approved`
+
+It persists a stopped permission and a scheduled job, waits until the approved
+window, checks actual worker suspension and connection identity, then opens its
+one-use permission. A duplicate command cannot replace its job or grant. Every
+attempt consumes the shared physical admission and separate pilot budget
+atomically. No provider retries, automatic handoff, continuation, or renewal.
+The grant expires independently even if the process dies.
+
+The store's approved Central schedule is pinned in this pilot and checked by its
+dated admission window; the stale Eastern activity profile is not consulted or
+silently changed. A missing or ambiguous local identity is retained for review.
+Ingestion and generic reusable multi-shop grants remain future stages, not part
+of this first scheduled comparison.
 
 ## Existing operating boundary
 

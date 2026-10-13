@@ -1296,7 +1296,10 @@ export async function confirmProtractorPhysicalTransportLease(
     [{
       $set: {
         ...(context.overnightRequest ? jwtOvernightConsumptionFields(context.overnightRequest) : {}),
-        ...(context.historyRequest ? {"shopHistory.consumedRequests":{$add:["$shopHistory.consumedRequests",1]}} : {}),
+        ...(context.historyRequest ? {
+          [`${context.historyRequest.pilot==="afton"?"aftonPilot":"shopHistory"}.consumedRequests`]:
+            {$add:[`$${context.historyRequest.pilot==="afton"?"aftonPilot":"shopHistory"}.consumedRequests`,1]},
+        } : {}),
         physicalAdmissionStartedAt: "$$NOW",
         physicalAdmissionOwnerToken: { $literal: ownerToken },
         "canary.consumedAdmissions": {
