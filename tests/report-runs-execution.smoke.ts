@@ -205,6 +205,14 @@ async function lifecycle(execute: (definition: any, scope: any) => Promise<any>)
     assert.equal(stored.status, "failed");
     assert.equal(stored.error.kind, "access", "worker rechecks authorized location membership");
     assert.equal(classifyReportFailure({ code: "42P01" }, "business", "ref").kind, "schema");
+    const bounded = classifyReportFailure(new ReportingQueryError(
+      "Invoice evidence exceeds 100,000 stored work orders. Select fewer locations.", "validation", "invoice"
+    ), "query", "ref");
+    assert.equal(bounded.kind, "invoice_scope_limit");
+    assert.equal(bounded.stage, "invoice");
+    assert.equal(bounded.retryable, false);
+    assert.match(bounded.message, /Select fewer locations/);
+    assert.doesNotMatch(classifyReportFailure(new Error("private SQL"), "query", "ref").message, /private SQL/);
     assert.equal(classifyReportFailure({ code: "ECONNRESET" }, "persist", "ref").retryable, true);
   } finally { Module._load = originalLoad; }
 }

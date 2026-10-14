@@ -14,6 +14,8 @@ const assert = require("node:assert/strict");
     await page.getByRole("heading", { name: "Invoice hours", exact: true }).waitFor();
     assert.equal(await page.evaluate(() => window.invoiceFixture.requests.length), 0, "no automatic query");
     const panel = page.getByRole("tabpanel", { name: "Invoice hours" });
+    await panel.getByLabel("Location", { exact: true }).locator('option[value="2"]').waitFor({ state: "attached" });
+    assert.equal(await page.evaluate(() => window.invoiceFixture.requests.length), 0, "location choices require no report run");
     await panel.getByLabel("Start date").fill("2026-09-01");
     await panel.getByLabel("End date").fill("2026-09-30");
     await panel.getByRole("button", { name: /Run/ }).click();

@@ -43,6 +43,9 @@ window.fetch = async (input, init) => {
   const url = String(input);
   let body: any = {};
   if (url === "/api/auth/me") body = { role: "owner", shopId: 1, enterpriseId: "fictional" };
+  else if (url.startsWith("/api/reports/locations?")) body = { locations: [
+    { key: "1", label: "Fictional Central" }, { key: "2", label: "Fictional North" },
+  ] };
   else if (url.startsWith("/api/reports/custom?")) body = { reports: [] };
   else if (url.startsWith("/api/reports/subscriptions")) body = { subscriptions: [] };
   else if (url === "/api/reports/runs") {
