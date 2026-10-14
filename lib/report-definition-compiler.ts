@@ -33,6 +33,7 @@ import {
 } from "@/lib/reporting-kpi-service";
 import type { ResolvedReportingScope } from "@/lib/reporting-scope";
 import { LABOR_METRIC_KEYS } from "@/lib/labor-reporting-contract";
+import { INVOICE_HOURS_METRICS } from "@/lib/invoice-hours-contract";
 
 export class ReportDefinitionError extends Error {
   constructor(message: string, readonly field?: string) {
@@ -137,6 +138,10 @@ export function compileReportDefinition(
   const metrics = uniqueEnumArray(source.metrics, REPORT_METRICS, "metrics", REPORT_METRICS.length);
   const dimensions = uniqueEnumArray(source.dimensions, REPORT_DIMENSIONS, "dimensions", 1);
   const dimension = dimensions[0];
+  const hasInvoiceMetric = metrics.some(metric => (INVOICE_HOURS_METRICS as readonly string[]).includes(metric));
+  if (hasInvoiceMetric && !["none", "location"].includes(dimension)) {
+    throw new ReportDefinitionError("Invoice averages support summary or location only", "dimensions");
+  }
   const hasLaborMetric = metrics.some(metric => (LABOR_METRIC_KEYS as readonly string[]).includes(metric));
   if (hasLaborMetric && !["none", "date", "location", "soldLaborHoursBand"].includes(dimension)) {
     throw new ReportDefinitionError("Labor metrics support summary, date, location or sold-hours bands only", "dimensions");
@@ -230,7 +235,7 @@ export function compileReportDefinition(
     "opportunityConversionRate", "laborPartsMix",
   ]);
   const hasBusinessMetric = metrics.some((metric) => businessMetrics.has(metric));
-  const hasEventMetric = metrics.some((metric) => !businessMetrics.has(metric) && !(LABOR_METRIC_KEYS as readonly string[]).includes(metric));
+  const hasEventMetric = metrics.some((metric) => !businessMetrics.has(metric) && !(LABOR_METRIC_KEYS as readonly string[]).includes(metric) && !(INVOICE_HOURS_METRICS as readonly string[]).includes(metric));
   const execution: ReportExecutionPlan = (() => {
     switch (dimension) {
       case "technician":
@@ -244,6 +249,7 @@ export function compileReportDefinition(
         if (hasBusinessMetric) stages.push("business");
         if (hasEventMetric) stages.push("events");
         if (hasLaborMetric) stages.push("labor");
+        if (hasInvoiceMetric) stages.push("invoice");
         return {
           stages,
           dimensions: [dimension === "none" ? "summary" : dimension],
@@ -251,6 +257,13 @@ export function compileReportDefinition(
       }
     }
   })();
+  if (hasInvoiceMetric && dimension === "location" && filters.length) {
+    execution.invoiceShopIds = scope.shopIds.filter(id => filters.every(filter => {
+      const values = Array.isArray(filter.value) ? filter.value : [filter.value];
+      const matches = values.includes(String(id));
+      return filter.operator === "eq" || filter.operator === "in" ? matches : !matches;
+    }));
+  }
   return {
     definition: {
       version: REPORT_DEFINITION_VERSION,
@@ -366,6 +379,8 @@ export async function executeCompiledReport(
     generatedAt: periods.current.generatedAt,
     rows,
     metadata: {
+      executedRange: plan.definition.dateRange,
+      executedScope: { kind: scope.kind, shopIds: [...scope.shopIds], ...(scope.enterpriseId ? { enterpriseId: scope.enterpriseId } : {}) },
       definitionName: plan.definition.name,
       dimension: plan.projection.dimension,
       metrics: plan.projection.metrics,

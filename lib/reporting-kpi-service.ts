@@ -20,10 +20,12 @@ import { aggregateLaborFacts, type LaborFact } from "@/lib/labor-reporting-aggre
 import { LABOR_REPORTING_NOTES } from "@/lib/labor-reporting-contract";
 import { recoverLaborEvidence } from "@/lib/labor-reporting-recovery";
 import { laborPartitions } from "@/lib/labor-reporting-partitions";
+import { aggregateInvoiceHours, INVOICE_HOURS_NOTES, type InvoiceHoursFact } from "./invoice-hours-contract";
+import { INVOICE_HOURS_SQL, INVOICE_HOURS_MAX_ORDERS } from "./invoice-hours-query";
 import { redactedReportCause, reportRunDiagnostics } from "@/lib/report-run-diagnostics";
 
 type Row = Record<string, any>;
-type ReportingStage = "business" | "technician" | "events" | "labor";
+type ReportingStage = "business" | "technician" | "events" | "labor" | "invoice";
 type CancelableQuery = PromiseLike<Row[]> & { cancel?: () => void };
 type ReportingQuery = (
   text: string,
@@ -603,6 +605,29 @@ export async function getReportingKpis(
       ],
     },
   };
+  if (stages.has("invoice")) {
+    const invoiceIds = executionPlan?.invoiceShopIds ?? scope.shopIds;
+    if (invoiceIds.some(id => !scope.shopIds.includes(id))) {
+      throw new ReportingQueryError("Invoice locations are outside the authorized scope.", "authorization", "invoice");
+    }
+    const rows = await runStage("invoice", query, INVOICE_HOURS_SQL, [`{${invoiceIds.join(",")}}`], deadlineAt, options.beforeStage);
+    if (rows.length > INVOICE_HOURS_MAX_ORDERS) {
+      throw new ReportingQueryError("Invoice evidence exceeds 100,000 stored work orders. Select fewer locations.", "validation", "invoice");
+    }
+    if (options.recoverLabor) {
+      const recoveryDeadline = Math.min(deadlineAt, Date.now() + 8000);
+      try {
+        await withinDeadline(options.recoverLabor(rows.filter(r => !r.invoice_evidence) as LaborFact[], recoveryDeadline), recoveryDeadline, "invoice_source_cache");
+      } catch {
+        result.dataQuality.notes.push("Stored invoice source recovery was incomplete; unverified population remains disclosed.");
+      }
+    }
+    const invoice = aggregateInvoiceHours(rows as InvoiceHoursFact[], range.start, range.end);
+    Object.assign(result.summary, invoice.summary);
+    for (const location of result.byLocation) Object.assign(location.metrics, invoice.locations.get(location.key) ?? invoice.empty);
+    result.dataQuality.notes.push(...INVOICE_HOURS_NOTES);
+    if (stages.size === 1) result.range.timestampBasis = "Verified invoice date, UTC";
+  }
   if (stages.has("labor")) {
     const laborRows: Row[] = [];
     for (const params of laborPartitions(scope.shopIds, range.start, range.end)) {

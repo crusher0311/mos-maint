@@ -17,6 +17,7 @@ import { REPORTING_KPI_CATALOG } from "@/lib/reporting-kpi-contract";
 import type { AiReportProposal } from "@/lib/custom-report-ai";
 import { buildReportRunRequest } from "@/lib/report-run-request";
 import { reportFailureText } from "@/lib/report-run-failure";
+import { invoiceHoursDisplay, INVOICE_HOURS_LABELS } from "@/lib/invoice-hours-display";
 
 type Scope = { kind: "shop" | "enterprise" | "platform"; shopId?: number; enterpriseId?: string };
 type SavedReport = {
@@ -415,23 +416,27 @@ function metricColumns(result: DeclarativeReportResult) {
   return result.metadata.metrics.flatMap(metric => metric.valueKeys.map(key => ({
     id: `${metric.key}-${String(key)}`,
     key: String(key),
-    label: `${metric.label}${metric.valueKeys.length > 1 ? ` · ${String(key)}` : ""}`,
+    label: INVOICE_HOURS_LABELS[String(key)] ?? `${metric.label}${metric.valueKeys.length > 1 ? ` · ${String(key)}` : ""}`,
   })));
 }
 
-function displayValue(value: number | null | undefined) {
+function displayValue(value: number | null | undefined, key?: string, values?: Record<string, number | null>) {
+  if (key && values) {
+    const invoice = invoiceHoursDisplay(key, values);
+    if (invoice !== undefined) return invoice;
+  }
   return value == null ? "Unavailable" : value.toLocaleString();
 }
 
 function ResultTable({ result, caption }: { result: DeclarativeReportResult; caption: string }) {
   const columns = metricColumns(result);
-  return <div className="mt-3 overflow-x-auto"><table className="min-w-full divide-y divide-slate-200 text-left text-xs"><caption className="sr-only">{caption}</caption><thead><tr><th scope="col" className="px-3 py-2">Group</th>{columns.map(column => <th scope="col" key={column.id} className="px-3 py-2">{column.label}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{result.rows.map(row => <tr key={row.key}><th scope="row" className="px-3 py-2 font-medium">{row.label}</th>{columns.map(column => <td key={`${row.key}-${column.id}`} className="px-3 py-2">{displayValue(row.current[column.key])}</td>)}</tr>)}</tbody></table></div>;
+  return <div className="mt-3 overflow-x-auto"><table className="min-w-full divide-y divide-slate-200 text-left text-xs"><caption className="sr-only">{caption}</caption><thead><tr><th scope="col" className="px-3 py-2">Group</th>{columns.map(column => <th scope="col" key={column.id} className="px-3 py-2">{column.label}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{result.rows.map(row => <tr key={row.key}><th scope="row" className="px-3 py-2 font-medium">{row.label}</th>{columns.map(column => <td key={`${row.key}-${column.id}`} className="px-3 py-2">{displayValue(row.current[column.key], column.key, row.current)}</td>)}</tr>)}</tbody></table></div>;
 }
 
 function ScorecardPreview({ result }: { result: DeclarativeReportResult }) {
   const row = result.rows[0];
   const columns = metricColumns(result);
-  return <section className="mt-4" aria-label="Scorecard results"><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{columns.map(column => <article key={column.id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"><h4 className="text-xs font-bold text-slate-500">{column.label}</h4><p className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">{displayValue(row.current[column.key])}</p>{row.comparison && <p className="mt-2 text-xs text-slate-500">Comparison: {displayValue(row.comparison[column.key])}</p>}</article>)}</div>{result.rows.length > 1 && <p className="mt-2 text-xs text-slate-500">Scorecards summarize the first result group ({row.label}). Choose Table to inspect all {result.rows.length} groups.</p>}</section>;
+  return <section className="mt-4" aria-label="Scorecard results"><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{columns.map(column => <article key={column.id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"><h4 className="text-xs font-bold text-slate-500">{column.label}</h4><p className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">{displayValue(row.current[column.key], column.key, row.current)}</p>{row.comparison && <p className="mt-2 text-xs text-slate-500">Comparison: {displayValue(row.comparison[column.key], column.key, row.comparison)}</p>}</article>)}</div>{result.rows.length > 1 && <p className="mt-2 text-xs text-slate-500">Scorecards summarize the first result group ({row.label}). Choose Table to inspect all {result.rows.length} groups.</p>}</section>;
 }
 
 function TimeSeriesPreview({ result }: { result: DeclarativeReportResult }) {

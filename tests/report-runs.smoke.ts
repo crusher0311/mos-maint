@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { buildReportRunRequest } from "../lib/report-run-request";
 import {
   REPORT_RUN_FRESH_MS,
+  REPORT_RUN_EXECUTION_VERSION,
   classifyReportRunCache,
   reportRunCacheKey,
 } from "../lib/data/repositories/report-runs";
@@ -36,6 +38,15 @@ const base = {
   authorizedShopIds: [1],
 };
 const key = reportRunCacheKey(base);
+const formerKey = (input: typeof base) => createHash("sha256").update(JSON.stringify({
+  executionVersion: REPORT_RUN_EXECUTION_VERSION, reportId: null, reportVersion: null,
+  requester: input.requestedBy, definition: input.definition, scope: input.scopeRequest, shopIds: input.authorizedShopIds,
+})).digest("hex");
+assert.equal(key, formerKey(base), "legacy report cache keys remain unchanged");
+for (const metric of ["averageSoldHoursPerInvoice", "averagePresentedHoursPerInvoice"]) {
+  const invoiceInput = { ...base, definition: { ...base.definition, metrics: [metric] } };
+  assert.notEqual(reportRunCacheKey(invoiceInput), formerKey(invoiceInput), "old invoice population results are invalidated");
+}
 assert.equal(key, reportRunCacheKey({ ...base, authorizedShopIds: [1] }), "equivalent runs have a stable dedupe key");
 assert.notEqual(key, reportRunCacheKey({ ...base, authorizedShopIds: [2] }), "authorization scope is part of the snapshot key");
 assert.notEqual(key, reportRunCacheKey({ ...base, requestedBy: "other@example.com" }), "unsaved definitions remain requester-isolated");

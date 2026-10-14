@@ -42,6 +42,7 @@ import { ObjectId } from 'mongodb';
 import { protractorTechnician } from "./technician";
 import { protractorLaborLineEvidence } from "@/lib/labor-reporting-contract";
 import { protractorInvoiceLaborEvidence } from "./labor-evidence";
+import { invoiceHoursEvidence } from "@/lib/invoice-hours-contract";
 import {
   extractProtractorServicePackages,
   getProtractorPackageLines,
@@ -268,7 +269,8 @@ export class ProtractorAdapter implements INormalizedAdapter {
       isInternal: Boolean(inv.IsInternal),
       isComeback: Boolean(inv.IsComeback),
       tags: [],
-      customFields: { laborReporting: isTerminal ? protractorInvoiceLaborEvidence(inv) : null },
+      customFields: { laborReporting: isTerminal ? protractorInvoiceLaborEvidence(inv) : null,
+        invoiceHours: invoiceHoursEvidence(inv) },
     };
   }
   

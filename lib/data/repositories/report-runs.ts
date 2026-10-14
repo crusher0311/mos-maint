@@ -50,6 +50,11 @@ export function reportRunCacheKey(input: {
 }) {
   return createHash("sha256").update(JSON.stringify({
     executionVersion: REPORT_RUN_EXECUTION_VERSION,
+    // Invalidate only invoice-average results produced by the former population
+    // rules; leave saved legacy report cache keys and pinned definitions intact.
+    ...(input.definition.metrics.some(metric =>
+      metric === "averageSoldHoursPerInvoice" || metric === "averagePresentedHoursPerInvoice")
+      ? { invoicePopulationVersion: 2 } : {}),
     reportId: input.reportId || null,
     reportVersion: input.reportVersion || null,
     requester: input.reportId ? null : input.requestedBy?.trim().toLowerCase() || null,

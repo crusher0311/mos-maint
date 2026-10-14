@@ -33,7 +33,7 @@ export type ReportMetric = (typeof REPORTING_KPI_CATALOG)[number]["key"];
 export type ReportDimension = (typeof REPORT_DIMENSIONS)[number];
 export type ReportFilterOperator = (typeof REPORT_FILTER_OPERATORS)[number];
 export type ReportPresentationKind = (typeof REPORT_PRESENTATIONS)[number];
-export type ReportExecutionStage = "business" | "technician" | "events" | "labor";
+export type ReportExecutionStage = "business" | "technician" | "events" | "labor" | "invoice";
 export type ReportExecutionDimension =
   | "summary"
   | "date"
@@ -46,6 +46,8 @@ export type ReportExecutionDimension =
 export interface ReportExecutionPlan {
   stages: ReportExecutionStage[];
   dimensions: ReportExecutionDimension[];
+  /** Authorized location-filter intersection for the bounded invoice scan. */
+  invoiceShopIds?: number[];
 }
 
 export interface ReportDateRange {
@@ -114,6 +116,8 @@ export interface DeclarativeReportResult {
   generatedAt: string;
   rows: DeclarativeReportRow[];
   metadata: {
+    executedRange?: ReportDateRange;
+    executedScope?: { kind: string; shopIds: number[]; enterpriseId?: string };
     definitionName: string;
     dimension: ReportDimension;
     metrics: CompiledReportDefinition["projection"]["metrics"];
@@ -141,6 +145,8 @@ export const REPORT_DIMENSION_TO_KPI_FIELD: Readonly<
 };
 
 export const REPORT_METRIC_VALUE_KEYS: Readonly<Record<ReportMetric, Array<keyof ReportingMetricValues>>> = {
+  averagePresentedHoursPerInvoice: ["averagePresentedHoursPerInvoice", "invoiceCount", "invoicePresentedHours", "invoicePresentedCovered", "invoicePopulationUnknown"],
+  averageSoldHoursPerInvoice: ["averageSoldHoursPerInvoice", "invoiceCount", "invoiceSoldHours", "invoiceSoldCovered", "invoicePopulationUnknown"],
   laborClosedROCount: ["laborClosedROCount"],
   soldLaborHours: ["soldLaborHours", "soldLaborCoveredROs", "laborClosedROCount"],
   presentedLaborHours: ["presentedLaborHours", "presentedLaborCoveredROs", "laborClosedROCount"],

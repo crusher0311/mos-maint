@@ -1,0 +1,13 @@
+.dashboard { --hours-blue: #28679f; --hours-ink: #174b78; }
+.dashboard input:focus-visible, .dashboard select:focus-visible, .dashboard button:focus-visible, .dashboard summary:focus-visible { outline: 2px solid var(--hours-blue); outline-offset: 3px; }
+.card { position: relative; border: 1px solid #c7dfef; border-top: 3px solid #347bbd; border-radius: .5rem; background: #f8fcff; padding: 1.5rem; }
+.cardSold { border-color: #d2dedf; border-top-color: #537e82; background: #f7fbfa; }
+.value { font-variant-numeric: tabular-nums; letter-spacing: -.045em; line-height: 1.15; }
+.table { width: 100%; border-collapse: collapse; font-size: .8125rem; }
+.table th { padding: .8rem 1rem; background: #f4f7fa; color: #475569; font-size: .6875rem; text-transform: uppercase; letter-spacing: .06em; text-align: left; }
+.table td { padding: 1rem; border-top: 1px solid #e2e8f0; vertical-align: top; }
+.table tbody tr:hover { background: #f8fcff; }
+.table th:not(:first-child), .table td:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
+.skeleton { height: 2.5rem; width: 8rem; margin: 1rem 0; border-radius: .25rem; background: #e2edf5; animation: breathe 1.6s ease-in-out infinite; }
+@keyframes breathe { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
