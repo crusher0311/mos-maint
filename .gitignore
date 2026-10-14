@@ -96,3 +96,4 @@ attached_assets/jwt-701-approved-recovery-source_1791211851558.json
 attached_assets/*_Service_Package_Sales_Data_*.csv
 # Authenticated invoice source captures contain customer and vehicle details.
 attached_assets/jwt-701-approved-recovery-source*.json
+/generated-artifacts/
