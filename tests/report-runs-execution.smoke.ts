@@ -74,6 +74,40 @@ async function main() {
     executionPlan: { stages: ["business"], dimensions: ["summary"] },
   }), (error: any) => error.kind === "deadline" && error.stage === "business");
   await lifecycle(execute);
+  // Independent invoice population, real SQL; legacy fixtures above stay intact.
+  const invoiceGuid = "10000000-0000-0000-0000-000000000001";
+  const invoice = { version: 1, id: invoiceGuid, date: "2026-10-01T12:00:00.000Z", sold: 2, presented: 3 };
+  const provenance = { sourceSystem: "protractor", sourceIds: [{ system: "protractor", idType: "invoice_id", idValue: invoiceGuid }] };
+  for (const key of ["verified", "duplicate"]) {
+    await pg`INSERT INTO normalized_work_orders (id,shop_id,status,closed_date,provenance,custom_fields)
+      VALUES (${key},3,'invoiced','2020-01-01',${pg.json(provenance)},${pg.json({ invoiceHours: invoice })})`;
+  }
+  await pg`INSERT INTO normalized_work_orders (id,shop_id,status,closed_date,provenance)
+    VALUES ('open',3,'open','2026-10-01',${pg.json({ sourceSystem: "protractor" })})`;
+  const invoiceScope: any = { kind: "shop", shopIds: [3], shops: [{ shopId: 3, name: "Invoice fixture" }] };
+  const invoiceDefinition = { ...definition, metrics: ["averagePresentedHoursPerInvoice", "averageSoldHoursPerInvoice"], comparison: { mode: "none" } };
+  const verified = await execute(invoiceDefinition, invoiceScope);
+  assert.equal(verified.rows[0].current.invoiceCount, 1, "source identity deduplicates and invoice date wins over close date");
+  assert.equal(verified.rows[0].current.averageSoldHoursPerInvoice, 2);
+  assert.equal(verified.rows[0].current.averagePresentedHoursPerInvoice, 3);
+  for (const key of ["a-missing-copy", "z-missing-copy"]) {
+    await pg`INSERT INTO normalized_work_orders (id,shop_id,status,provenance)
+      VALUES (${key},3,'invoiced',${pg.json(provenance)})`;
+  }
+  for (const status of ["open", "estimate", "in_progress"]) {
+    await pg`INSERT INTO normalized_work_orders (id,shop_id,status,provenance)
+      VALUES (${`unsupported-${status}`},3,${status},${pg.json({ sourceSystem: "tekmetric" })})`;
+  }
+  const partialDuplicates = await execute(invoiceDefinition, invoiceScope);
+  assert.equal(partialDuplicates.rows[0].current.invoiceCount, 1);
+  assert.equal(partialDuplicates.rows[0].current.invoicePopulationUnknown, 0);
+  assert.equal(partialDuplicates.rows[0].current.averageSoldHoursPerInvoice, 2);
+  assert.equal(partialDuplicates.rows[0].current.averagePresentedHoursPerInvoice, 3);
+  await pg`INSERT INTO normalized_work_orders (id,shop_id,status,closed_date,provenance)
+    VALUES ('unknown-date',3,'closed','2020-01-01',${pg.json({ sourceSystem: "protractor" })})`;
+  const uncertain = await execute(invoiceDefinition, invoiceScope);
+  assert.equal(uncertain.rows[0].current.invoicePopulationUnknown, 1, "unknown invoice dates cannot disappear behind a close-date filter");
+  assert.equal(uncertain.rows[0].current.averageSoldHoursPerInvoice, null);
 }
 
 async function lifecycle(execute: (definition: any, scope: any) => Promise<any>) {

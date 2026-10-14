@@ -19,6 +19,8 @@ export interface MetricDefinition {
 }
 
 export const REPORTING_KPI_CATALOG: readonly MetricDefinition[] = [
+  { key: "averagePresentedHoursPerInvoice", label: "Average hours presented", definition: "Sold plus explicitly declined/deferred labor hours divided by the same verified invoice count used for sold hours.", denominator: "invoiceCount", timestampBasis: "Verified invoice date, UTC", moneyUnit: "hours", availability: "Incomplete data unless every eligible invoice has presented-hours evidence and the stored invoice population is verifiable." },
+  { key: "averageSoldHoursPerInvoice", label: "Average hours sold", definition: "Invoiced labor hours divided by verified invoice count. Open uninvoiced work is excluded.", denominator: "invoiceCount", timestampBasis: "Verified invoice date, UTC", moneyUnit: "hours", availability: "Independent sold-hours coverage; missing hours are not zero. Stored coverage does not certify complete imported history." },
   { key: "laborClosedROCount", label: "Labor population: closed ROs", definition: "Labor v1: distinct non-deleted terminal closed/invoiced/paid ROs. Separate from legacy Repair orders.", denominator: null, timestampBasis: "UTC closed_date, completed_date fallback", moneyUnit: "count", availability: "A zero count means no stored ROs, not verified complete history." },
   { key: "soldLaborHours", label: "Sold labor hours (supported)", definition: "Supported subtotal of billed labor hours on sold jobs; includes covered-RO count. Unknown hours are not zero.", denominator: null, timestampBasis: "Parent terminal RO close date, UTC", moneyUnit: "hours", availability: "Protractor evidence only; other providers unavailable. Missing hours make that RO unknown." },
   { key: "presentedLaborHours", label: "Presented labor hours (supported)", definition: "Sold plus explicitly declined/deferred hours, package-deduplicated, excluding drafts. Includes covered-RO count.", denominator: null, timestampBasis: "Parent terminal RO close date, UTC", moneyUnit: "hours", availability: "Requires verified complete dispositions and hours. Historical decline ingestion may be incomplete." },
@@ -36,6 +38,14 @@ export const REPORTING_KPI_CATALOG: readonly MetricDefinition[] = [
 ] as const;
 
 export interface ReportingMetricValues {
+  invoiceCount?: number | null;
+  invoicePopulationUnknown?: number | null;
+  invoiceSoldHours?: number | null;
+  invoicePresentedHours?: number | null;
+  invoiceSoldCovered?: number | null;
+  invoicePresentedCovered?: number | null;
+  averageSoldHoursPerInvoice?: number | null;
+  averagePresentedHoursPerInvoice?: number | null;
   laborClosedROCount?: number | null;
   soldLaborHours?: number | null;
   soldLaborCoveredROs?: number | null;

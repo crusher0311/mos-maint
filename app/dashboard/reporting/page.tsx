@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { FileSpreadsheet } from "lucide-react";
 import { CustomReportBuilder } from "./custom-report-builder";
+import { InvoiceHoursDashboard } from "./invoice-hours-dashboard";
 import { ReportingSubscriptionManager } from "./reporting-subscription-manager";
 
 type ScopeKind = "shop" | "enterprise" | "platform";
@@ -23,6 +24,7 @@ export default function ReportingPage() {
   const [initialReportVersion, setInitialReportVersion] = useState<number>();
   const [initialRange, setInitialRange] = useState<{ start?: string; end?: string; locationId?: string; advisorKey?: string; technicianKey?: string }>({});
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<"invoice" | "custom">("invoice");
 
   useEffect(() => {
     void fetch("/api/auth/me", { credentials: "include" })
@@ -43,7 +45,7 @@ export default function ReportingPage() {
         const enterpriseId = params.get("enterpriseId");
         if (enterpriseId) setRequestedEnterpriseId(enterpriseId);
         const reportId = params.get("reportId");
-        if (reportId) setInitialReportId(reportId);
+        if (reportId) { setInitialReportId(reportId); setTab("custom"); }
         const reportVersion = Number(params.get("reportVersion"));
         if (Number.isSafeInteger(reportVersion) && reportVersion > 0) setInitialReportVersion(reportVersion);
         setInitialRange({
@@ -54,6 +56,7 @@ export default function ReportingPage() {
           technicianKey: params.get("technicianKey") || undefined,
         });
       })
+      .catch(() => setMe(null))
       .finally(() => setLoading(false));
   }, []);
 
@@ -72,7 +75,7 @@ export default function ReportingPage() {
           <div>
             <div className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[.18em] text-[#2f6fae]"><span className="h-2 w-2 bg-[#f0aa30]" />Operations intelligence</div>
             <h1 className="text-3xl font-semibold tracking-[-.04em] text-slate-950">Performance reporting</h1>
-            <p className="mt-1 max-w-2xl text-sm text-slate-600">Choose the metrics and grouping you need, then run the report. Nothing is queried until you click Run.</p>
+            <p className="mt-1 max-w-2xl text-sm text-slate-600">Compare labor hours presented and sold per invoice. Nothing is queried until you click Run. Custom reports remain available separately.</p>
           </div>
           <label className="text-xs font-bold text-slate-700">Reporting scope
             <select value={scope} onChange={(event) => setScope(event.target.value as ScopeKind)} className="filter ml-2">
@@ -89,13 +92,30 @@ export default function ReportingPage() {
       {loading
         ? <div className="flex min-h-64 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm text-slate-500">Loading report definitions…</div>
         : me && (reportScope.kind === "platform" || reportScope.shopId || reportScope.enterpriseId)
-          ? <CustomReportBuilder
+           ? <div>
+             <div role="tablist" aria-label="Reporting views" className="mb-5 flex gap-1 border-b border-slate-200" onKeyDown={event => {
+               if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+               event.preventDefault();
+               const next = event.key === "Home" ? "invoice" : event.key === "End" ? "custom" : tab === "invoice" ? "custom" : "invoice";
+               setTab(next);
+               document.getElementById(next === "invoice" ? "invoice-hours-tab" : "custom-reporting-tab")?.focus();
+             }}>
+               <button role="tab" id="invoice-hours-tab" tabIndex={tab === "invoice" ? 0 : -1} aria-controls="invoice-hours-panel" aria-selected={tab === "invoice"} onClick={() => setTab("invoice")} className={`border-b-2 px-4 py-3 text-sm font-bold ${tab === "invoice" ? "border-[#347bbd] text-[#28679f]" : "border-transparent text-slate-500"}`}>Invoice hours</button>
+               <button role="tab" id="custom-reporting-tab" tabIndex={tab === "custom" ? 0 : -1} aria-controls="custom-reporting-panel" aria-selected={tab === "custom"} onClick={() => setTab("custom")} className={`border-b-2 px-4 py-3 text-sm font-bold ${tab === "custom" ? "border-[#347bbd] text-[#28679f]" : "border-transparent text-slate-500"}`}>Custom reporting</button>
+             </div>
+             <div role="tabpanel" id="invoice-hours-panel" aria-labelledby="invoice-hours-tab" hidden={tab !== "invoice"}>
+               <InvoiceHoursDashboard key={`${reportScope.kind}:${reportScope.shopId || ""}:${reportScope.enterpriseId || ""}`} scope={reportScope} initialRange={initialRange} />
+             </div>
+             <div role="tabpanel" id="custom-reporting-panel" aria-labelledby="custom-reporting-tab" hidden={tab !== "custom"}>
+               <CustomReportBuilder
               key={`${reportScope.kind}:${reportScope.shopId || ""}:${reportScope.enterpriseId || ""}`}
               scope={reportScope}
               initialReportId={initialReportId}
               initialReportVersion={initialReportVersion}
               initialRange={initialRange}
             />
+             </div>
+           </div>
           : <div className="flex min-h-64 items-center justify-center rounded-lg border border-slate-200 bg-white p-6 text-center text-sm text-slate-500"><span><FileSpreadsheet className="mx-auto mb-2 h-6 w-6 text-slate-300" />A reporting scope could not be resolved for this account.</span></div>}
       {!loading && me && <ReportingSubscriptionManager />}
     </div>

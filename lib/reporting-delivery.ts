@@ -8,6 +8,7 @@ import { logAdminAction } from "@/lib/data/repositories/audit-logs";
 import { findSavedReportingDefinition, type SavedReportingDefinition } from "@/lib/data/repositories/saved-reporting-definitions";
 import { canReadCustomReport } from "@/lib/custom-report-access";
 import type { DeclarativeReportResult } from "@/lib/report-definition-contract";
+import { invoiceHoursDisplay, INVOICE_HOURS_LABELS } from "./invoice-hours-display";
 import { requestReportRun } from "@/lib/report-run-service";
 import {
   claimDueReportingSubscriptions,
@@ -273,12 +274,12 @@ const renderedValue = (value: number | null | undefined) =>
 export function buildSavedReportEmail(result: DeclarativeReportResult, dashboardUrl: string, unsubscribeUrl: string) {
   const keys = result.metadata.metrics.flatMap((metric) => metric.valueKeys);
   const headers = result.metadata.metrics.flatMap((metric) =>
-    metric.valueKeys.map((key) => metric.valueKeys.length === 1 ? metric.label : `${metric.label} (${key})`),
+    metric.valueKeys.map((key) => INVOICE_HOURS_LABELS[key] ?? (metric.valueKeys.length === 1 ? metric.label : `${metric.label} (${key})`)),
   );
   const comparison = result.metadata.comparison?.mode !== "none";
   const rowHtml = result.rows.map((row) => `<tr><td>${escapeHtml(row.label)}</td>${
-    keys.map((key) => `<td>${escapeHtml(renderedValue(row.current[key]))}</td>${
-      comparison ? `<td>${escapeHtml(renderedValue(row.comparison?.[key]))}</td>` : ""}`).join("")
+    keys.map((key) => `<td>${escapeHtml(invoiceHoursDisplay(key, row.current) ?? renderedValue(row.current[key]))}</td>${
+      comparison ? `<td>${escapeHtml(invoiceHoursDisplay(key, row.comparison ?? {}) ?? renderedValue(row.comparison?.[key]))}</td>` : ""}`).join("")
   }</tr>`).join("");
   const tableHeaders = ["Dimension", ...headers.flatMap((header) => comparison ? [header, `${header} (comparison)`] : [header])];
   const textRows = result.rows.map((row) => [

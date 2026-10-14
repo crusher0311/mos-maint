@@ -109,7 +109,7 @@ function getLineBaseIdentity(line: any): string {
   return signature.replace(/\|/g, "") ? `sig:${signature}` : "anonymous";
 }
 
-function getOccurrenceAwareLineKeys(lines: any[]): string[] {
+export function getOccurrenceAwareLineKeys(lines: any[]): string[] {
   const occurrences = new Map<string, number>();
   return lines.map((line) => {
     const base = getLineBaseIdentity(line);
