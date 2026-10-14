@@ -20,7 +20,9 @@ export function classifyReportFailure(error: unknown, stage: string, correlation
   const codes = redactedReportCause(error).map(item => item.code || "");
   const value = error as { kind?: string; stage?: string; name?: string; message?: string };
   let kind: ReportFailureKind = "unknown";
-  if (value?.kind === "deadline" || codes.includes("57014")) kind = "deadline";
+  if (value?.name === "ReportingQueryError" && value?.kind === "validation" && value?.stage === "invoice" &&
+    value?.message === "Invoice evidence exceeds 100,000 stored work orders. Select fewer locations.") kind = "invoice_scope_limit";
+  else if (value?.kind === "deadline" || codes.includes("57014")) kind = "deadline";
   else if (codes.some(code => ["42P01", "42703", "3F000"].includes(code))) kind = "schema";
   else if (["MongoServerSelectionError", "MongoNetworkError", "MongoNetworkTimeoutError"].includes(value?.name || "") ||
     codes.some(code => /^(08|53|57P|40)/.test(code) || ["ECONNRESET", "ECONNREFUSED", "ETIMEDOUT", "CONNECT_TIMEOUT", "CONNECTION_CLOSED"].includes(code))) kind = "unavailable";

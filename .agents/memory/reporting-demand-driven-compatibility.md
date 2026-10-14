@@ -14,3 +14,14 @@ Incomplete data with explicit coverage is an accepted product outcome for invoic
 **Why:** Verified invoice populations differ from terminal work-order counts; existing imports and fallback close dates cannot justify silently treating missing invoice or hour evidence as zero.
 
 **How to apply:** Preserve that availability boundary when improving reporting. Extending source support or repairing history requires separate scope; do not repurpose the legacy closed-RO measures as invoice averages.
+
+Reporting filters must be available independently of report execution.
+
+**Why:** A platform-wide invoice report exceeded the bounded scan, but location
+choices depended on that same report succeeding. Users could not narrow the
+query to recover, and generic failure sanitization hid the actionable limit.
+
+**How to apply:** Load authorized scope metadata without querying history. Keep
+bounded-query failures distinct from SQL faults, with safe recovery guidance.
+Do not remove query bounds or filter by fallback close dates to disguise an
+invoice-evidence population problem.

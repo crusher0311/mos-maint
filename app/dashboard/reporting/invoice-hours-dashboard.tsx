@@ -41,6 +41,27 @@ export function InvoiceHoursDashboard({ scope, initialRange }: {
   const [range, setRange] = useState(() => defaultRange(initialRange));
   const [location, setLocation] = useState(initialRange?.locationId || "");
   const [locations, setLocations] = useState<Array<{ key: string; label: string }>>([]);
+  const [locationsError, setLocationsError] = useState("");
+  const [locationsAttempt, setLocationsAttempt] = useState(0);
+  useEffect(() => {
+    const abort = new AbortController();
+    setLocations([]);
+    setLocationsError("");
+    const params = new URLSearchParams({ scope: scope.kind });
+    if (scope.shopId != null) params.set("shopId", String(scope.shopId));
+    if (scope.enterpriseId) params.set("enterpriseId", scope.enterpriseId);
+    fetch(`/api/reports/locations?${params}`, { signal: abort.signal, cache: "no-store" })
+      .then(async response => {
+        if (!response.ok) throw new Error("locations");
+        const json = await response.json();
+        if (!Array.isArray(json.locations)) throw new Error("locations");
+        if (!abort.signal.aborted) setLocations(json.locations);
+      })
+      .catch(() => {
+        if (!abort.signal.aborted) setLocationsError("Could not load authorized locations. Retry loading locations or switch reporting scope.");
+      });
+    return () => abort.abort();
+  }, [scope.kind, scope.shopId, scope.enterpriseId, locationsAttempt]);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [run, setRun] = useState<RunResponse | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -59,10 +80,6 @@ export function InvoiceHoursDashboard({ scope, initialRange }: {
     setRun(json);
     if (json.result) {
       setSnapshot({ result: json.result, stale: Boolean(json.stale || json.cache === "stale" || json.cache === "refreshing") });
-      // Only unfiltered executions define the all-location picker.
-      if (!json.result.metadata.selectedFilters?.some(filter => filter.dimension === "location")) {
-        setLocations(json.result.rows.map(row => ({ key: row.key, label: row.label })));
-      }
     }
     if (json.error) setError(reportFailureText(json.error));
     if (json.status === "succeeded") setNotice("Report complete.");
@@ -154,7 +171,8 @@ export function InvoiceHoursDashboard({ scope, initialRange }: {
         <label className="text-xs font-bold text-slate-700">Location<select aria-label="Location" value={location} onChange={event => setLocation(event.target.value)} className="filter mt-1 block w-full"><option value="">All authorized locations</option>{location && !locations.some(item => item.key === location) && <option value={location}>Linked location — run to resolve name</option>}{locations.map(item => <option key={item.key} value={item.key}>{item.label}</option>)}</select></label>
         <button type="submit" className="action primary justify-center" disabled={pending || !valid}><Play className="h-4 w-4" />{submitting ? "Queuing…" : pending ? "Building…" : "Run"}</button>
       </form>
-      <p className="mt-3 text-xs text-slate-500">{!valid ? "Choose a valid start and end date." : changed ? "Selection changed. Click Run to apply; displayed results still use the executed context below." : "Nothing runs when you change a control. Click Run to request results."} {!locations.length && "Location choices become available after an all-location run."}</p>
+      <p className="mt-3 text-xs text-slate-500">{!valid ? "Choose a valid start and end date." : changed ? "Selection changed. Click Run to apply; displayed results still use the executed context below." : "Nothing runs when you change a control. Choose a location before clicking Run to narrow large reports."}</p>
+      {locationsError && <p role="alert" className="mt-2 text-xs text-red-700">{locationsError} <button type="button" className="underline" onClick={() => setLocationsAttempt(value => value + 1)}>Retry loading locations</button></p>}
     </div>
     {error && <div role="alert" className="rounded-md border border-red-300 bg-red-50 p-3 text-xs text-red-900">{error}{!pending && " Use Run above to retry."}</div>}
     {notice && <p role="status" className="text-xs text-[#28679f]">{notice}{pending && run?.stage ? ` Stage: ${run.stage.replaceAll("_", " ")}.` : ""}</p>}
