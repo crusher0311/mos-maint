@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { ReportDefinitionError } from "@/lib/report-definition-compiler";
 import { lookupReportRun, requestReportRun } from "@/lib/report-run-service";
 import { ReportingScopeError } from "@/lib/reporting-scope";
+import { safeReportFailure } from "@/lib/report-run-failure";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,6 +25,8 @@ export async function POST(req: NextRequest) {
         runId: run?._id,
         status: run?.status || "idle",
         stage: run?.stage,
+        error: run?.error ? safeReportFailure(run.error, run._id) : undefined,
+        attempts: run?.attempts,
         result: run?.result,
         generatedAt: run?.generatedAt,
       });
@@ -41,6 +44,8 @@ export async function POST(req: NextRequest) {
       runId: response.run._id,
       status: response.run.status,
       stage: response.run.stage,
+      error: response.run.error ? safeReportFailure(response.run.error, response.run._id) : undefined,
+      attempts: response.run.attempts,
       cache: response.cache,
       deduplicated: response.deduplicated,
       result: response.run.result,
@@ -50,6 +55,7 @@ export async function POST(req: NextRequest) {
     if (error instanceof ReportingScopeError) return NextResponse.json({ error: error.message }, { status: error.status });
     if (error instanceof ReportDefinitionError) return NextResponse.json({ error: error.message, field: error.field }, { status: 400 });
     const message = error instanceof Error ? error.message : "Report could not be queued";
-    return NextResponse.json({ error: message }, { status: /Forbidden/.test(message) ? 403 : /not found/i.test(message) ? 404 : 400 });
+    const status = /^Forbidden$/.test(message) ? 403 : /^Report (version )?not found$/.test(message) ? 404 : 503;
+    return NextResponse.json({ error: status === 503 ? "Report storage is unavailable. Please retry shortly." : message }, { status });
   }
 }

@@ -15,6 +15,7 @@ import {
 export class ReportingScopeError extends Error {
   constructor(message: string, readonly status: number) {
     super(message);
+    this.name = "ReportingScopeError";
   }
 }
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { cancelReportRun, touchReportRun } from "@/lib/data/repositories/report-runs";
 import { readableRunFor } from "@/lib/report-run-service";
+import { safeReportFailure } from "@/lib/report-run-failure";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,7 +19,7 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
     attempts: run.attempts, queuedAt: run.queuedAt, startedAt: run.startedAt,
     completedAt: run.completedAt, generatedAt: run.generatedAt,
     stale, refreshing: run.status === "queued" || run.status === "running",
-    result: run.result, error: run.error,
+    result: run.result, error: run.error ? safeReportFailure(run.error, run._id) : undefined,
   });
 }
 

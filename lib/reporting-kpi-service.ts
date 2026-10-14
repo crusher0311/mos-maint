@@ -20,6 +20,7 @@ import { aggregateLaborFacts, type LaborFact } from "@/lib/labor-reporting-aggre
 import { LABOR_REPORTING_NOTES } from "@/lib/labor-reporting-contract";
 import { recoverLaborEvidence } from "@/lib/labor-reporting-recovery";
 import { laborPartitions } from "@/lib/labor-reporting-partitions";
+import { redactedReportCause, reportRunDiagnostics } from "@/lib/report-run-diagnostics";
 
 type Row = Record<string, any>;
 type ReportingStage = "business" | "technician" | "events" | "labor";
@@ -111,7 +112,7 @@ async function runStage(
   if (Date.now() >= deadlineAt) throw new ReportingQueryError("Reporting took too long. Please retry.", "deadline", stage);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), remainingMs(deadlineAt));
-  console.info("[reporting-kpis] stage_start", { stage, remainingMs: remainingMs(deadlineAt) });
+  console.info("[reporting-kpis] stage_start", { ...reportRunDiagnostics.getStore(), stage, remainingMs: remainingMs(deadlineAt) });
   try {
     const pending = query(text, params, { signal: controller.signal, stage });
     const rows = await Promise.race([
@@ -126,8 +127,8 @@ async function runStage(
   } catch (error) {
     const classified = classifyQueryError(error);
     console.error("[reporting-kpis] stage_failed", {
-      stage, durationMs: Date.now() - startedAt, kind: classified.kind,
-      error: error instanceof Error ? error.message : String(error),
+      ...reportRunDiagnostics.getStore(), stage, durationMs: Date.now() - startedAt, kind: classified.kind,
+      causes: redactedReportCause(error),
     });
     throw new ReportingQueryError(classified.message, classified.kind, stage, error);
   } finally {
@@ -375,7 +376,7 @@ export async function getReportingKpis(
       FROM facts
     ), grouped AS (
        SELECT ${dimensionTypeExpression} dimension_type,
-        shop_id,
+        ${businessDimensions.some(dimension => dimension === "location" || dimension === "advisor") ? "shop_id" : "NULL::integer AS shop_id"},
           ${dimensionKeyExpression} dimension_key,
           ${dimensionLabelExpression} dimension_label,
         ${aggregate}
