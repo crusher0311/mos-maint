@@ -83,3 +83,16 @@ packs. The build log stopped before either a compiler error or an exit marker.
 size before repeating compilation. Remove only disposable generated caches,
 preserving source, worktrees and logs. Prefer a managed console workflow for
 long-running verification and record its explicit exit result.
+
+SQL execution fixtures must preserve production enum column types, not replace
+them with text.
+
+**Why:** A report passed real PostgreSQL tests with a text status fixture but
+failed immediately in production when an invalid enum literal was compared.
+Switching to the real enum also exposed fixture statuses that never existed in
+the normalized schema.
+
+**How to apply:** Derive disposable test enums from the application's schema
+values. Keep provider-native labels in provider fixtures and use normalized
+labels in normalized-table fixtures; verify both query execution and population
+classification against those labels.

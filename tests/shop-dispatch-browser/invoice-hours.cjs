@@ -43,6 +43,8 @@ const assert = require("node:assert/strict");
     await panel.getByRole("button", { name: /Run/ }).click();
     await panel.getByText("Previous result · refresh in progress", { exact: true }).waitFor();
     await panel.getByRole("alert").waitFor();
+    assert.equal(await panel.getByText(/Building in the background/).count(), 0, "failed runs clear the queued notice");
+    assert.ok(await panel.getByRole("alert").evaluate(el => el.classList.contains("bg-red-50")), "failures are visibly red");
     assert.equal(await panel.locator("article").getByText("No data", { exact: true }).count(), 2);
     // Scope unmount during a delayed poll must not populate the next scope.
     await page.evaluate(() => { window.invoiceFixture.fail = false; });

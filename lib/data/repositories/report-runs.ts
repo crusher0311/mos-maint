@@ -54,7 +54,7 @@ export function reportRunCacheKey(input: {
     // rules; leave saved legacy report cache keys and pinned definitions intact.
     ...(input.definition.metrics.some(metric =>
       metric === "averageSoldHoursPerInvoice" || metric === "averagePresentedHoursPerInvoice")
-      ? { invoicePopulationVersion: 2 } : {}),
+      ? { invoicePopulationVersion: 3 } : {}),
     reportId: input.reportId || null,
     reportVersion: input.reportVersion || null,
     requester: input.reportId ? null : input.requestedBy?.trim().toLowerCase() || null,
