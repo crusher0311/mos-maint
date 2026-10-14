@@ -109,7 +109,7 @@ for (const reverse of [false, true]) {
   const missing = { ...terminalMissing, id: "missing-copy" };
   const mixed = [
     verified, missing,
-    ...["tekmetric", "shopware", "protractor"].flatMap(provider => ["open", "estimate", "in_progress"].map(status =>
+    ...["tekmetric", "shopware", "protractor"].flatMap(provider => ["open", "estimate", "in_progress", "work_in_progress"].map(status =>
       ({ ...fact(9), id: `${provider}-${status}`, provider, status, invoice_evidence: null }))),
   ];
   if (reverse) mixed.reverse();

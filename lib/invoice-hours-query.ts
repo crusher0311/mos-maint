@@ -10,7 +10,7 @@ SELECT wo.id, wo.shop_id, wo.status,
 FROM normalized_work_orders wo
 WHERE wo.shop_id=ANY($1::int[])
   AND NOT coalesce((wo.soft_delete->>'isDeleted')::boolean,false)
-  AND wo.status NOT IN ('voided','cancelled')
+  AND wo.status::text NOT IN ('voided','cancelled')
 ORDER BY wo.shop_id, wo.id
 LIMIT ${INVOICE_HOURS_MAX_ORDERS + 1}
 `;

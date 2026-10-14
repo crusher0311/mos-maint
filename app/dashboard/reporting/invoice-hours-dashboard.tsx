@@ -66,7 +66,10 @@ export function InvoiceHoursDashboard({ scope, initialRange }: {
     }
     if (json.error) setError(reportFailureText(json.error));
     if (json.status === "succeeded") setNotice("Report complete.");
-    else if (json.status === "failed") setError(json.error ? reportFailureText(json.error) : "Report failed. Click Run to retry.");
+    else if (json.status === "failed") {
+      setNotice("");
+      setError(json.error ? reportFailureText(json.error) : "Report failed. Click Run to retry.");
+    }
     else if (json.status === "cancelled") setNotice("Report cancelled. Click Run to try again.");
   };
 
@@ -153,7 +156,7 @@ export function InvoiceHoursDashboard({ scope, initialRange }: {
       </form>
       <p className="mt-3 text-xs text-slate-500">{!valid ? "Choose a valid start and end date." : changed ? "Selection changed. Click Run to apply; displayed results still use the executed context below." : "Nothing runs when you change a control. Click Run to request results."} {!locations.length && "Location choices become available after an all-location run."}</p>
     </div>
-    {error && <div role="alert" className="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">{error}{!pending && " Use Run above to retry."}</div>}
+    {error && <div role="alert" className="rounded-md border border-red-300 bg-red-50 p-3 text-xs text-red-900">{error}{!pending && " Use Run above to retry."}</div>}
     {notice && <p role="status" className="text-xs text-[#28679f]">{notice}{pending && run?.stage ? ` Stage: ${run.stage.replaceAll("_", " ")}.` : ""}</p>}
     {result && <div className="flex flex-wrap items-start justify-between gap-2 rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
       <div><strong className="block text-slate-800">Executed results · {executedLocation(result)}</strong><span>{executed ? `${executed.start} – ${executed.end} · UTC invoice dates` : "Executed dates unavailable"} · {executedScope ? `${executedScope.kind} scope · ${executedScope.shopIds.length} authorized location${executedScope.shopIds.length === 1 ? "" : "s"}` : "Executed scope unavailable"}</span></div>

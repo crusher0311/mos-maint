@@ -130,7 +130,7 @@ export function aggregateInvoiceHours(facts: InvoiceHoursFact[], start: Date, en
       // close date is outside the period. Unknown dates cannot be period-filtered.
       // Known uninvoiced work is excluded regardless of provider. A verified
       // final invoice above can still override a stale normalized open label.
-      if (["estimate", "open", "in_progress", "cancelled", "voided"].includes(fact.status)) continue;
+      if (["estimate", "open", "in_progress", "work_in_progress", "cancelled", "voided"].includes(fact.status)) continue;
       const candidates = ids.map(id => `${fact.provider}:${id}`);
       location.unknown.set(candidates[0] ?? `${fact.provider}:row:${fact.id}`, candidates);
       continue;

@@ -6,6 +6,7 @@ import { getReportingKpis, normalizeReportingRange, ReportingQueryError } from "
 import { executeReportDefinition } from "../lib/report-definition-compiler";
 import { classifyReportFailure, redactedReportCause } from "../lib/report-run-diagnostics";
 import { reportFailureText } from "../lib/report-run-failure";
+import { workOrderStatusEnum } from "../lib/db/schema/normalized";
 
 const pg = postgres({ host: "127.0.0.1", port: Number(process.argv[2] || 55439), database: "postgres", username: userInfo().username, max: 1 });
 const range = { start: "2026-09-15", end: "2026-10-14" };
@@ -18,8 +19,11 @@ const scope: any = { kind: "enterprise", shopIds: [1, 2], shops: [1, 2].map(shop
 const query = (text: string, params: unknown[]) => pg.unsafe(text, params as any[]) as any;
 
 async function main() {
+  // Use the application enum: a text fixture missed invalid enum literals
+  // that made the invoice-hours query fail in production (22P02).
+  await pg.unsafe(`CREATE TYPE pg_temp.work_order_status AS ENUM (${workOrderStatusEnum.enumValues.map(value => `'${value}'`).join(",")})`);
   await pg`CREATE TEMP TABLE normalized_work_orders (
-    id text, shop_id int, work_order_number text, status text, soft_delete jsonb,
+    id text, shop_id int, work_order_number text, status pg_temp.work_order_status, soft_delete jsonb,
     closed_date timestamptz, completed_date timestamptz, grand_total numeric,
     labor_total numeric, parts_total numeric, provenance jsonb, custom_fields jsonb,
     service_advisor_id text, service_advisor_name text
@@ -83,7 +87,7 @@ async function main() {
       VALUES (${key},3,'invoiced','2020-01-01',${pg.json(provenance)},${pg.json({ invoiceHours: invoice })})`;
   }
   await pg`INSERT INTO normalized_work_orders (id,shop_id,status,closed_date,provenance)
-    VALUES ('open',3,'open','2026-10-01',${pg.json({ sourceSystem: "protractor" })})`;
+    VALUES ('open',3,'work_in_progress','2026-10-01',${pg.json({ sourceSystem: "protractor" })})`;
   const invoiceScope: any = { kind: "shop", shopIds: [3], shops: [{ shopId: 3, name: "Invoice fixture" }] };
   const invoiceDefinition = { ...definition, metrics: ["averagePresentedHoursPerInvoice", "averageSoldHoursPerInvoice"], comparison: { mode: "none" } };
   const verified = await execute(invoiceDefinition, invoiceScope);
@@ -94,7 +98,7 @@ async function main() {
     await pg`INSERT INTO normalized_work_orders (id,shop_id,status,provenance)
       VALUES (${key},3,'invoiced',${pg.json(provenance)})`;
   }
-  for (const status of ["open", "estimate", "in_progress"]) {
+  for (const status of ["estimate", "work_in_progress"]) {
     await pg`INSERT INTO normalized_work_orders (id,shop_id,status,provenance)
       VALUES (${`unsupported-${status}`},3,${status},${pg.json({ sourceSystem: "tekmetric" })})`;
   }
