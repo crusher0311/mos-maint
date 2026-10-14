@@ -16,6 +16,7 @@ import {
 import { REPORTING_KPI_CATALOG } from "@/lib/reporting-kpi-contract";
 import type { AiReportProposal } from "@/lib/custom-report-ai";
 import { buildReportRunRequest } from "@/lib/report-run-request";
+import { reportFailureText } from "@/lib/report-run-failure";
 
 type Scope = { kind: "shop" | "enterprise" | "platform"; shopId?: number; enterpriseId?: string };
 type SavedReport = {
@@ -89,6 +90,7 @@ export function CustomReportBuilder({ scope, initialReportId, initialReportVersi
   const resetRunState = useCallback(() => {
     selectionRef.current += 1;
     activeRunRef.current = "";
+    setBusy(null);
     setRunId(""); setRunStatus(null); setRunStage(""); setGeneratedAt(null); setStale(false); setResult(null);
   }, []);
 
@@ -177,12 +179,12 @@ export function CustomReportBuilder({ scope, initialReportId, initialReportVersi
       activeRunRef.current = json.runId;
       setRunId(json.runId);
       setRunStatus(json.status);
-      setRunStage(json.stage || json.status);
+      setRunStage(json.status === "failed" ? json.error?.stage || json.stage : json.stage || json.status);
       if (json.result) setResult(json.result);
       if (json.generatedAt) setGeneratedAt(json.generatedAt);
-      setMessage(json.cache === "hit" ? "Loaded the latest cached result." : json.deduplicated ? "A matching report is already running." : "Report queued. Large first builds may take a few minutes.");
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Report could not be queued."); }
-    finally { setBusy(null); }
+      setMessage(json.error ? reportFailureText(json.error) : json.cache === "hit" ? "Loaded the latest cached result." : json.deduplicated ? "A matching report is already running." : "Report queued. Large first builds may take a few minutes.");
+    } catch (error) { if (selection === selectionRef.current) setMessage(error instanceof Error ? error.message : "Report could not be queued."); }
+    finally { if (selection === selectionRef.current) setBusy(null); }
   };
   useEffect(() => {
     if (!runId || (runStatus !== "queued" && runStatus !== "running")) return;
@@ -191,11 +193,11 @@ export function CustomReportBuilder({ scope, initialReportId, initialReportVersi
         const json = await response.json();
         if (!response.ok) throw new Error(json.error || "Run status could not be loaded.");
         if (activeRunRef.current !== runId) return;
-        setRunStatus(json.status); setRunStage(json.stage || json.status); setStale(Boolean(json.stale));
+        setRunStatus(json.status); setRunStage(json.status === "failed" ? json.error?.stage || json.stage : json.stage || json.status); setStale(Boolean(json.stale));
         if (json.result) setResult(json.result);
         if (json.generatedAt) setGeneratedAt(json.generatedAt);
         if (json.status === "succeeded") setMessage("Report complete.");
-        if (json.status === "failed") setMessage(json.error?.message || "Report generation failed. Retry when ready.");
+        if (json.error) setMessage(reportFailureText(json.error) + (json.status === "queued" ? " Automatic retry scheduled." : ""));
       }).catch(error => {
         if (activeRunRef.current === runId) {
           setMessage(error instanceof Error ? error.message : "Run status could not be loaded.");
@@ -322,10 +324,10 @@ export function CustomReportBuilder({ scope, initialReportId, initialReportVersi
         if (selection !== selectionRef.current) return;
         if (json.runId) {
           activeRunRef.current = json.runId;
-          setRunId(json.runId); setRunStatus(json.status); setRunStage(json.stage || json.status);
+          setRunId(json.runId); setRunStatus(json.status); setRunStage(json.status === "failed" ? json.error?.stage || json.stage : json.stage || json.status);
           if (json.result) setResult(json.result);
           if (json.generatedAt) setGeneratedAt(json.generatedAt);
-          setMessage(json.result
+          setMessage(json.error ? reportFailureText(json.error) : json.result
             ? "Loaded the latest completed result. Click Refresh to rebuild it."
             : json.status === "queued" || json.status === "running"
               ? "This report is already building. Progress will update automatically."

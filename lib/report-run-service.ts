@@ -14,8 +14,9 @@ import {
 import { findReportingRecipient } from "@/lib/data/repositories/reporting-subscriptions";
 import { executeReportDefinition, compileReportDefinition } from "@/lib/report-definition-compiler";
 import type { ReportDefinitionV1 } from "@/lib/report-definition-contract";
-import { ReportingQueryError } from "@/lib/reporting-kpi-service";
+import { classifyReportFailure, redactedReportCause, reportRunDiagnostics } from "@/lib/report-run-diagnostics";
 import { resolveReportingScope } from "@/lib/reporting-scope";
+import { randomUUID } from "node:crypto";
 
 type SessionLike = { email: string; shopId?: number; role?: string; isPlatformAdmin?: boolean; enterpriseId?: string | null };
 
@@ -120,6 +121,8 @@ export async function processNextReportRun() {
   if (!run) return { claimed: 0, status: "idle" };
   const queueDelayMs = Date.now() - run.queuedAt.getTime();
   console.info("[report-run] claimed", { runId: run._id, queueDelayMs, attempts: run.attempts });
+  let stage = "authorization";
+  const correlationId = randomUUID();
   try {
     const session = await requesterSession(run.requestedBy);
     if (!session) throw new Error("Requester access is no longer active");
@@ -134,23 +137,20 @@ export async function processNextReportRun() {
       throw new Error("Authorized reporting scope changed; run the report again");
     }
     await updateReportRunStage(run._id, "query");
-    const result = await executeReportDefinition(run.definition, authorized.scope, {
+    stage = "query";
+    const result = await reportRunDiagnostics.run({ correlationId }, () => executeReportDefinition(run.definition, authorized.scope, {
       serviceOptions: { deadlineMs: 5 * 60_000 },
       maxDeadlineMs: 5 * 60_000,
-    });
+    }));
+    stage = "persist";
     await updateReportRunStage(run._id, "persist");
     await completeReportRun(run._id, result);
     console.info("[report-run] complete", { runId: run._id, queueDelayMs, durationMs: Date.now() - (run.startedAt?.getTime() || Date.now()) });
     return { claimed: 1, status: "succeeded", runId: run._id };
   } catch (cause) {
-    const retryable = cause instanceof ReportingQueryError || !/access|scope changed|not found/i.test(cause instanceof Error ? cause.message : "");
-    const error = {
-      message: cause instanceof Error ? cause.message : "Report generation failed",
-      retryable,
-      ...(cause instanceof ReportingQueryError && cause.stage ? { stage: cause.stage } : {}),
-    };
+    const error = classifyReportFailure(cause, stage, correlationId);
     await failReportRun(run._id, error);
-    console.error("[report-run] failed", { runId: run._id, ...error });
+    console.error("[report-run] failed", JSON.stringify({ runId: run._id, ...error, causes: redactedReportCause(cause) }));
     return { claimed: 1, status: "failed", runId: run._id };
   }
 }

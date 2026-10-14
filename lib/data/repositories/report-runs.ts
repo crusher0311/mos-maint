@@ -3,6 +3,7 @@ import type { Document } from "mongodb";
 import { getDb } from "@/lib/data/db";
 import type { DeclarativeReportResult, ReportDefinitionV1 } from "@/lib/report-definition-contract";
 import type { CustomReportScopeRequest } from "@/lib/data/repositories/custom-reports";
+import type { ReportRunFailure } from "@/lib/report-run-failure";
 
 const COLLECTION = "report_runs";
 export const REPORT_RUN_EXECUTION_VERSION = 4;
@@ -32,7 +33,7 @@ export interface ReportRunDocument extends Document {
   lastViewedAt: Date;
   refreshEnabled: boolean;
   result?: DeclarativeReportResult;
-  error?: { message: string; retryable: boolean; stage?: string };
+  error?: ReportRunFailure;
 }
 
 async function collection() {
@@ -191,7 +192,7 @@ export async function completeReportRun(id: string, result: DeclarativeReportRes
   );
 }
 
-export async function failReportRun(id: string, error: { message: string; retryable: boolean; stage?: string }) {
+export async function failReportRun(id: string, error: ReportRunFailure) {
   const run = await findReportRun(id);
   const retry = error.retryable && (run?.attempts || 0) < MAX_ATTEMPTS;
   await (await collection()).updateOne(
@@ -199,7 +200,7 @@ export async function failReportRun(id: string, error: { message: string; retrya
     {
       $set: {
         status: retry ? "queued" : "failed",
-        stage: retry ? "retry_queued" : "failed",
+        stage: retry ? "retry_queued" : error.stage || "failed",
         queuedAt: retry ? new Date(Date.now() + Math.min(5 * 60_000, 30_000 * (run?.attempts || 1))) : run?.queuedAt,
         completedAt: new Date(),
         error,
