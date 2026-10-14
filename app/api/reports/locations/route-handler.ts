@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { resolveReportingScope, ReportingScopeError } from "@/lib/reporting-scope";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 export const __deps = { getSession, resolveReportingScope };
 
 // Authorization metadata only: never runs a report or queries invoice history.
