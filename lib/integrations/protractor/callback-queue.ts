@@ -112,6 +112,7 @@ export async function processProtractorCallbackQueue(
     limit?: number;
     maxAttempts?: number;
     budgetMs?: number;
+    shouldStop?: () => boolean;
     /** Optional invocation deadline so setup/selection cannot extend a short cron budget. */
     deadlineAtMs?: number;
     isShopEligible: (shopId: number) => Promise<boolean>;
@@ -283,7 +284,7 @@ export async function processProtractorCallbackQueue(
       let admittedWork = 0;
       for (const item of pending) {
         if (admittedWork >= limit) break;
-        if (Date.now() >= deadlineMs) {
+        if (options.shouldStop?.() || Date.now() >= deadlineMs) {
           exitReason = "deadline";
           break;
         }
@@ -297,7 +298,7 @@ export async function processProtractorCallbackQueue(
           // seams retain their one-shot semantics for deterministic exhaustion
           // tests.
           const budgetClaimed = await acquire();
-          if (Date.now() >= deadlineMs) {
+          if (options.shouldStop?.() || Date.now() >= deadlineMs) {
             exitReason = "deadline";
             timingOutcome = "skipped";
             timing.mark("claim", 0, "skipped");
@@ -401,7 +402,7 @@ export async function processProtractorCallbackQueue(
             // Claim/admission itself is asynchronous. It may cross the
             // invocation deadline even though the pre-claim guard passed;
             // release the fence in finally, but never begin provider work.
-            if (Date.now() >= deadlineMs) {
+            if (options.shouldStop?.() || Date.now() >= deadlineMs) {
               exitReason = "deadline";
               timingOutcome = "skipped";
               break;
