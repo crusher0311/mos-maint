@@ -1,4 +1,5 @@
 import type { Db } from "mongodb";
+import { callbackExecutionTarget } from "./callback-worker-policy";
 import * as callbackEvents from "@/lib/data/repositories/protractor-callback-events";
 import { processProtractorCallbackQueue } from "./callback-queue";
 import { fetchVehicleById, fetchWorkOrderById } from "./client";
@@ -45,7 +46,14 @@ function normalizationCallbackOutcome(
  * Library-owned callback replay. Keeping this out of route modules lets the
  * minute scheduler and tests use exactly the same durable worker.
  */
-export async function processProtractorCallbackDrain(db?: Db, options: { budgetMs?: number } = {}) {
+export async function processProtractorCallbackDrain(db?: Db, options: {
+  budgetMs?: number;
+  executionTarget?: "web" | "worker";
+  shouldStop?: () => boolean;
+} = {}) {
+  if (callbackExecutionTarget(process.env) !== (options.executionTarget ?? "web")) {
+    return { processed: 0, failed: 0 };
+  }
   const invocationStartedAt = Date.now();
   const queueDb = db ?? await callbackEvents.getCallbackQueueDb();
   // Eligibility is resolved once per queue invocation.  Keep only the
@@ -259,6 +267,7 @@ export async function processProtractorCallbackDrain(db?: Db, options: { budgetM
     throw new Error("Callback event has no replayable object");
   }, {
     limit: 45,
+    shouldStop: options.shouldStop,
     maxAttempts: 3,
     // Stop starting work at 40s, including setup/selection time, leaving
     // nominal 10s headroom under the minute scheduler's 50s timeout.
