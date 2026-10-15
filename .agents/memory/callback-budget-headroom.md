@@ -27,3 +27,16 @@ long batches as minute-drain overruns would produce a false regression finding.
 **How to apply:** Correlate timing with scheduler invocations where possible.
 Otherwise report mixed-caller latency and attribution limits explicitly; do not
 claim a specific admission-budget violation from completion duration alone.
+
+Separate actively processed callback age from superseded-record age when
+measuring queue freshness.
+
+**Why:** Durable completion also closes older duplicate notifications. Their
+received-to-completed ages can inflate a delay distribution, while raw completed
+row counts overstate provider work. Successful HTTP responses can coexist with
+hours-old callbacks and expensive local persistence.
+
+**How to apply:** Report attempted, non-superseded callback latency separately;
+compare stage timings for fetch, persistence, and completion without summing
+nested timing totals. A batch's normal admission-deadline exit is not itself
+an upstream timeout or evidence that unfinished work was discarded.
