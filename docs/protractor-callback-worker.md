@@ -3,7 +3,10 @@
 Disabled by default. This does not enable history imports or remove any shared
 operator stop, relay pacing, callback ownership, retry, or admission restrictions.
 
-Start command: `node --import tsx scripts/protractor-callback-worker.ts`
+Start command: `node --require ./scripts/_stubs/server-only-stub.cjs --import tsx scripts/protractor-callback-worker.ts`
+
+The standalone Node process uses the existing CLI preload for `server-only`;
+React component-boundary enforcement is not applicable to this server process.
 
 The worker runs the existing durable callback drain directly, never via an HTTP
 request to the website. Batches remain serial and bounded to the existing
