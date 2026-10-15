@@ -32,3 +32,15 @@ letting it catch up overnight + weekends avoids that while still draining.
   managed service-ID set). Needs `RENDER_API_KEY_PROD` on the web service.
 - The in-process cron scheduler honors a per-job `timezone` field (defaults UTC);
   this feature was the first consumer of it.
+
+Keep the dedicated callback worker outside the historical-worker power schedule.
+
+**Why:** Callback processing serves live shop updates during business hours;
+the historical workers' overnight-only policy would recreate daytime queue
+delays if applied to it. The callback-only Render service is
+`mos-protractor-callback-worker` (`srv-db8l7hnf3r2c7398a21g`); verify its live
+identity before managing it.
+
+**How to apply:** Do not broaden the scheduled service-ID list to every
+background worker. Shared relay limits and operator stops still apply to the
+callback worker; separating its schedule does not authorize history imports.
