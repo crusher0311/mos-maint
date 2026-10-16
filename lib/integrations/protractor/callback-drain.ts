@@ -1,5 +1,6 @@
 import type { Db } from "mongodb";
 import { callbackExecutionTarget } from "./callback-worker-policy";
+import { callbackPipelineWidth } from "./callback-pipeline";
 import * as callbackEvents from "@/lib/data/repositories/protractor-callback-events";
 import { processProtractorCallbackQueue } from "./callback-queue";
 import { fetchVehicleById, fetchWorkOrderById } from "./client";
@@ -268,6 +269,10 @@ export async function processProtractorCallbackDrain(db?: Db, options: {
   }, {
     limit: 45,
     shouldStop: options.shouldStop,
+    // Only the dedicated worker may opt in. Web/cron callers remain serial.
+    concurrency: options.executionTarget === "worker"
+      ? callbackPipelineWidth(process.env.PROTRACTOR_CALLBACK_PIPELINE_WIDTH)
+      : 1,
     maxAttempts: 3,
     // Stop starting work at 40s, including setup/selection time, leaving
     // nominal 10s headroom under the minute scheduler's 50s timeout.

@@ -1,5 +1,6 @@
 import { assertCallbackWorkerConfiguration } from "../lib/integrations/protractor/callback-worker-policy";
 import { runCallbackWorkerLoop } from "../lib/integrations/protractor/callback-worker-loop";
+import { callbackPipelineWidth } from "../lib/integrations/protractor/callback-pipeline";
 
 async function main() {
   // Validate before importing database/provider modules. This process is callback-only.
@@ -17,6 +18,7 @@ async function main() {
     sleep: (ms) => new Promise(resolve => setTimeout(resolve, ms)),
     report: (result) => console.info(JSON.stringify({
       event: "protractor_callback_worker_batch",
+      pipelineWidth: callbackPipelineWidth(process.env.PROTRACTOR_CALLBACK_PIPELINE_WIDTH),
       outcome: result ? "completed" : "failed",
       ...(result ?? {}),
     })),

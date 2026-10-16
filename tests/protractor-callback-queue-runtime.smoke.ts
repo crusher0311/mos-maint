@@ -1540,6 +1540,50 @@ async function main(): Promise<void> {
 
   try {
     await runQueueAssertions(processProtractorCallbackQueue);
+    // Exercise the real queue with local overlap. Keep the same shop serial,
+    // and verify one provider failure does not discard another shop's save.
+    {
+      const first = event("pipeline-first", "pipeline-wo-first");
+      const sibling = event("pipeline-sibling", "pipeline-wo-sibling");
+      const other = { ...event("pipeline-other", "pipeline-wo-other"), shopId: 43 };
+      resetQueueState([first, sibling, other]);
+      for (const item of [first, sibling, other]) ownerTokens.set(item.key, `owner-${item.key}`);
+      const busy = new Set<number>();
+      let peak = 0;
+      const result = await processProtractorCallbackQueue({} as any, async item => {
+        assert(!busy.has(item.shopId));
+        busy.add(item.shopId);
+        peak = Math.max(peak, busy.size);
+        await new Promise(resolve => setImmediate(resolve));
+        busy.delete(item.shopId);
+        if (item.key === other.key) throw new Error("pipeline upstream failure");
+        return { category: "applied_indexed", reason: "indexed" };
+      }, { ...queueOptions(), concurrency: 2 });
+      assert.deepEqual(result, { processed: 2, failed: 1 });
+      assert.equal(peak, 2);
+      assert.equal(completionCalls.length, 2);
+      assert.equal(releases.length, 3);
+    }
+    {
+      const first = event("pipeline-deadline-a", "pipeline-deadline-wo-a");
+      const other = { ...event("pipeline-deadline-b", "pipeline-deadline-wo-b"), shopId: 43 };
+      resetQueueState([first, other]);
+      for (const item of [first, other]) ownerTokens.set(item.key, `owner-${item.key}`);
+      let count = 0;
+      const result = await processProtractorCallbackQueue({} as any, async () => {
+        count++;
+      }, {
+        ...queueOptions(), concurrency: 2, budgetMs: 10,
+        isShopEligible: async () => {
+          await new Promise(resolve => setImmediate(resolve));
+          clockOffsetMs += 20;
+          return true;
+        },
+      });
+      assert.deepEqual(result, { processed: 0, failed: 0 });
+      assert.equal(count, 0, "concurrent eligibility crossing deadline must not dispatch");
+      assert.equal(claims.length, 0, "no durable claims after eligibility deadline");
+    }
     await runRecoveryLaneAssertions(processProtractorCallbackQueue);
     await runFreshPreselectionStarvationAssertions(processProtractorCallbackQueue);
     runRecoveryBufferOrderAssertions(selectFairCallbackBatch);

@@ -106,6 +106,8 @@ export function selectFairCallbackBatch(
   return { selected, coalesced };
 }
 
+import { runCallbackPipeline } from "./callback-pipeline";
+
 export async function processProtractorCallbackQueue(
   db: Db,
   dispatch: (
@@ -116,6 +118,7 @@ export async function processProtractorCallbackQueue(
     limit?: number;
     maxAttempts?: number;
     budgetMs?: number;
+    concurrency?: number;
     shouldStop?: () => boolean;
     /** Optional invocation deadline so setup/selection cannot extend a short cron budget. */
     deadlineAtMs?: number;
@@ -291,11 +294,18 @@ export async function processProtractorCallbackQueue(
         options.deadlineAtMs ?? Infinity,
       );
       let admittedWork = 0;
-      for (const item of pending) {
-        if (admittedWork >= limit) break;
+      await runCallbackPipeline(pending, options.concurrency ?? 1,
+        item => String(Number(item.shopId)),
+        () => {
+          const stopped = Boolean(options.shouldStop?.()) || Date.now() >= deadlineMs;
+          if (stopped) exitReason = "deadline";
+          return stopped;
+        },
+        async (item): Promise<boolean> => {
+        if (admittedWork >= limit) return false;
         if (options.shouldStop?.() || Date.now() >= deadlineMs) {
           exitReason = "deadline";
-          break;
+          return false;
         }
         const timing = createCallbackTimingRecorder();
         let timingOutcome: CallbackTimingOutcome = "failed";
@@ -311,13 +321,13 @@ export async function processProtractorCallbackQueue(
             exitReason = "deadline";
             timingOutcome = "skipped";
             timing.mark("claim", 0, "skipped");
-            break;
+            return false;
           }
           if (!budgetClaimed) {
             exitReason = "budget_unavailable";
             timingOutcome = "skipped";
             timing.mark("claim", 0, "skipped");
-            break;
+            return false;
           }
           const shopId = Number(item.shopId);
           const eligibilityStartedAt = timing.start("eligibility");
@@ -333,11 +343,11 @@ export async function processProtractorCallbackQueue(
           }
           // Pre-admission waits must not start an event after the deadline.
           // Once claimed below, retain the existing durable completion path.
-          if (Date.now() >= deadlineMs) {
+          if (options.shouldStop?.() || Date.now() >= deadlineMs) {
             exitReason = "deadline";
             timingOutcome = "skipped";
             timing.mark("claim", 0, "skipped");
-            break;
+            return false;
           }
           if (!eligible) {
             await callbackEvents.markProcessed(item.key, {
@@ -347,7 +357,7 @@ export async function processProtractorCallbackQueue(
             timing.mark("claim", 0, "skipped");
             timing.mark("completion", 0, "success");
             timingOutcome = "success";
-            continue;
+            return true;
           }
           const identity = item.objectType && item.objectId ? {
             shopId,
@@ -397,7 +407,7 @@ export async function processProtractorCallbackQueue(
                     }
                   }
                   timingOutcome = "skipped";
-                  continue;
+                  return true;
                 }
                 admittedWork++;
               } else {
@@ -414,7 +424,7 @@ export async function processProtractorCallbackQueue(
             if (options.shouldStop?.() || Date.now() >= deadlineMs) {
               exitReason = "deadline";
               timingOutcome = "skipped";
-              break;
+              return false;
             }
             if (item.objectType === "Contact" && ownerToken) {
               // Retain the notification as unresolved customer-sync work. No
@@ -424,7 +434,7 @@ export async function processProtractorCallbackQueue(
                 category: "deferred", reason: "unsupported_contact",
               });
               timingOutcome = "deferred";
-              continue;
+              return true;
             }
             await callbackEvents.recordProcessingStarted(item.key);
             attemptStarted = true;
@@ -502,7 +512,7 @@ export async function processProtractorCallbackQueue(
                 category: "deferred", reason: "safety_boundary",
               });
               timingOutcome = "deferred";
-              continue;
+              return true;
             }
             if (ownerToken) {
               // If durable completion fails, retain actual dispatch evidence
@@ -523,7 +533,8 @@ export async function processProtractorCallbackQueue(
         } finally {
           timing.finalize(timingOutcome);
         }
-      }
+        return true;
+      });
     } catch (error) {
       if (!selectionSucceeded) {
         emitCallbackStageTiming(
