@@ -18,6 +18,20 @@ interpret a Render management-API 429 as a provider response or worker failure.
 
 Production timing comparisons must exclude Render prebuild smoke-test output.
 
+Worker rollout measurements must distinguish outgoing and incoming instances,
+not just the service's deployment status.
+
+**Why:** A callback worker continued logging its final serial batch after the
+replacement deployment was marked live and reported two-slot processing. A
+service-wide mixed-width detector stopped the trial on this overlap rather than
+on provider failures.
+
+**How to apply:** Identify the new instance from runtime evidence and allow the
+outgoing instance to drain before starting the measurement window. Keep detecting
+unexpected instances, but classify bounded deployment overlap separately from
+steady-state configuration drift. Confirm rollback on the replacement instance,
+not on any historical matching-width log.
+
 **Why:** Render's logs API can label prebuild test output as `type=app`, including
 synthetic callback timing events. Those records lacked an `instance` label,
 while actual running replica events included one.
