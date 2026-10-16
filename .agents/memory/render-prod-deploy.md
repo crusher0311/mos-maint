@@ -5,6 +5,17 @@ description: Prod runs on Render and builds from GitHub main; merging a fix to m
 
 # Prod runs on Render — merging to main is not deploying
 
+Render log pagination can hit the Render API's HTTP 429 limit independently of
+any Protractor rate limit.
+
+**Why:** Fetching every per-stage callback log for before/after windows exhausted
+the management API allowance. Targeted batch/snapshot log queries and bounded
+callback-store reads recovered complete measurements without changing traffic.
+
+**How to apply:** Filter to the few event/stage types needed, bound windows,
+respect retry guidance, and report incomplete pagination explicitly. Do not
+interpret a Render management-API 429 as a provider response or worker failure.
+
 Production timing comparisons must exclude Render prebuild smoke-test output.
 
 **Why:** Render's logs API can label prebuild test output as `type=app`, including

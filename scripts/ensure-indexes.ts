@@ -156,6 +156,9 @@ async function ensureIndexes() {
       // protractor_work_orders - dashboard
       { collection: "protractor_work_orders", index: { shopId: 1 } },
       { collection: "protractor_work_orders", index: { shopId: 1, status: 1 } },
+      // Callback snapshot upserts locate one RO by this natural key.
+      // Non-unique: adding lookup coverage must not impose a new data constraint.
+      { collection: "protractor_work_orders", index: { shopId: 1, workOrderId: 1 }, options: { name: "protractor_wo_shop_work_order", unique: false } },
 
       // tekmetric_work_orders - dashboard
       { collection: "tekmetric_work_orders", index: { shopId: 1 } },
