@@ -40,6 +40,7 @@ function isUnsupportedContact(item: callbackEvents.PendingGetEvent): boolean {
 export function selectFairCallbackBatch(
   candidates: callbackEvents.PendingGetEvent[],
   limit: number,
+  order: "oldest" | "newest" = "oldest",
 ): {
   selected: callbackEvents.PendingGetEvent[];
   coalesced: callbackEvents.PendingGetEvent[];
@@ -77,12 +78,15 @@ export function selectFairCallbackBatch(
     queue.sort((a, b) => {
       // Recovery rotation is persisted specifically to avoid a repeatedly
       // unclaimable oldest same-shop event monopolizing its reserved slot.
-      // Fresh ordering and cross-shop fairness remain unchanged.
+      // Recovery ordering and cross-shop fairness do not depend on the
+      // fresh lane's review direction.
       if (a.selectionLane === "recovery" && b.selectionLane === "recovery" &&
           a.recoveryBufferOrder !== undefined && b.recoveryBufferOrder !== undefined) {
         return a.recoveryBufferOrder - b.recoveryBufferOrder;
       }
-      return eventTime(a) - eventTime(b);
+      return order === "newest"
+        ? eventTime(b) - eventTime(a)
+        : eventTime(a) - eventTime(b);
     });
   }
 
@@ -199,6 +203,11 @@ export async function processProtractorCallbackQueue(
       const freshPreselection = selectFairCallbackBatch(
         freshCandidates,
         Math.min(freshCandidates.length, limit * 6),
+        // Bound authority reads without letting old, rejected identities fill
+        // every per-shop slot ahead of a genuinely new notification. Recovery
+        // retains its separate oldest-first/carry-over lane. This changes only
+        // which identities are reviewed, never their authoritative winners.
+        "newest",
       );
       const recoveryPreselection = selectFairCallbackBatch(
         recoveryCandidates,
