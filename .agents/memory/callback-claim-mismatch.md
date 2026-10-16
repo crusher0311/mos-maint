@@ -123,3 +123,14 @@ recovery allowance despite having no supported replay handler.
 handler. Remove only fenced scheduling metadata for unsupported records; do not
 treat this exclusion as successful customer synchronization. Preserve unknown
 and missing object-type behavior when maintaining Mongo/Postgres parity.
+
+An `empty` batch means no selected work, not an empty retained callback queue.
+
+**Why:** An overnight audit found repeated zero-selection batches alongside
+thousands of retained notifications whose same-object siblings had exhausted
+retries. A recent-only query concealed most of these older unresolved records.
+
+**How to apply:** Measure pending work over the active policy's replay floor,
+separating unsupported Contacts, exhausted records, and their blocked siblings.
+Check a genuinely new notification before declaring the system caught up;
+do not reset attempts or discard terminal events to make the count disappear.
