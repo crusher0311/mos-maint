@@ -40,3 +40,16 @@ hours-old callbacks and expensive local persistence.
 compare stage timings for fetch, persistence, and completion without summing
 nested timing totals. A batch's normal admission-deadline exit is not itself
 an upstream timeout or evidence that unfinished work was discarded.
+
+Initial callback pipelining must overlap different shops only, not arbitrary
+callback objects, and remain opt-in with a two-slot first trial.
+
+**Why:** A WorkOrder and ServiceItem can update the same vehicle despite having
+different callback object IDs. The user approved building configurable overlap,
+not enabling production or relaxing provider safeguards. More slots may increase
+database contention without increasing permitted provider capacity.
+
+**How to apply:** Keep same-shop work serial through durable completion, retain
+the single dedicated worker instance and existing fleet transport guards, and
+measure a two-slot trial before considering three or four. Deployment and live
+enablement require separate approval.
