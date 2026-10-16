@@ -844,8 +844,50 @@ async function runRecoveryLaneAssertions(
   );
 }
 
+async function runFreshPreselectionStarvationAssertions(
+  processQueue: (db: any, dispatch: (item: any) => Promise<any>, options: any) =>
+    Promise<{ processed: number; failed: number }>,
+): Promise<void> {
+  // More rejected identities than the entire bounded authority window.
+  // An oldest-first preselection never offers the new same-shop notification.
+  const blocked = Array.from({ length: 400 }, (_, i) =>
+    event(`blocked-${i}`, `old-wo-${i}`));
+  const fresh = {
+    ...event("new-arrival", "new-wo"),
+    receivedAt: new Date("2026-06-02T00:00:00Z"),
+  };
+  const recovery = {
+    ...event("older-recovery", "recovery-wo"),
+    selectionLane: "recovery" as const,
+  };
+  const originalFilter = callbackEventsMock.filterPendingCallbackCandidatesByAuthority;
+  resetQueueState([...blocked, fresh, recovery]);
+  returnAllPendingForSelection = true;
+  ownerTokens.set(fresh.key, "fresh-owner");
+  ownerTokens.set(recovery.key, "recovery-owner");
+  let reviewed = 0;
+  callbackEventsMock.filterPendingCallbackCandidatesByAuthority = async (items) => {
+    reviewed = items.length;
+    return items.filter((item) => !item.key.startsWith("blocked-"));
+  };
+  try {
+    assert.deepEqual(
+      await processQueue({}, dispatch, { ...queueOptions(), limit: 45 }),
+      { processed: 2, failed: 0 },
+    );
+    assert.deepEqual(dispatches.map((item) => item.key), [recovery.key, fresh.key]);
+    assert.equal(reviewed, 271, "authority work remains capped; recovery is independent");
+    assert.ok(claims.every((item) => !item.key.startsWith("blocked-")),
+      "blocked identities are not retried to make room for fresh work");
+  } finally {
+    callbackEventsMock.filterPendingCallbackCandidatesByAuthority = originalFilter;
+  }
+}
+
 function runRecoveryBufferOrderAssertions(
-  selectFairCallbackBatch: (candidates: any[], limit: number) => { selected: any[] },
+  selectFairCallbackBatch: (
+    candidates: any[], limit: number, order?: "oldest" | "newest",
+  ) => { selected: any[] },
 ): void {
   const olderRejected = {
     ...event("buffer-old", "same-shop-old"),
@@ -865,6 +907,27 @@ function runRecoveryBufferOrderAssertions(
     selectFairCallbackBatch([olderRejected, nextPeer], 1).selected[0]?.key,
     nextPeer.key,
     "same-shop recovery rotation outranks receivedAt so a rejected claim cannot pin the slot",
+  );
+  assert.equal(
+    selectFairCallbackBatch([olderRejected, nextPeer], 1, "newest").selected[0]?.key,
+    nextPeer.key,
+    "fresh review direction never overrides persisted recovery rotation",
+  );
+  const close = terminalPostEvent("closed-winner", "same-wo");
+  const newerUpdate = {
+    ...event("newer-update", "same-wo"),
+    receivedAt: new Date("2026-06-03T00:00:00Z"),
+  };
+  const otherShop = { ...event("other-shop", "other-wo"), shopId: 99 };
+  const newerDistinct = {
+    ...event("new-distinct", "distinct-wo"),
+    receivedAt: new Date("2026-06-02T00:00:00Z"),
+  };
+  assert.deepEqual(
+    selectFairCallbackBatch([close, newerUpdate, newerDistinct, otherShop], 3, "newest")
+      .selected.map((item) => item.key),
+    ["new-distinct", "other-shop", "closed-winner"],
+    "newest-first reviews retain round-robin shops and same-object terminal precedence",
   );
 }
 
@@ -1478,6 +1541,7 @@ async function main(): Promise<void> {
   try {
     await runQueueAssertions(processProtractorCallbackQueue);
     await runRecoveryLaneAssertions(processProtractorCallbackQueue);
+    await runFreshPreselectionStarvationAssertions(processProtractorCallbackQueue);
     runRecoveryBufferOrderAssertions(selectFairCallbackBatch);
     await runPreAdmissionDeadlineAssertions(processProtractorCallbackQueue);
     await runDrainDeadlineAssertions(processProtractorCallbackDrain);

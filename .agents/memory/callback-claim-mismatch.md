@@ -134,3 +134,15 @@ retries. A recent-only query concealed most of these older unresolved records.
 separating unsupported Contacts, exhausted records, and their blocked siblings.
 Check a genuinely new notification before declaring the system caught up;
 do not reset attempts or discard terminal events to make the count disappear.
+
+Review fresh identities newest-first within each shop before the bounded
+authority check, while preserving separate oldest-first recovery.
+
+**Why:** Old retryable siblings of exhausted winners can repeatedly fill the
+authority-review cap. Filtering them afterward leaves no selected work and can
+prevent a genuinely new same-shop callback from even being reviewed.
+
+**How to apply:** Change identity review order only; retain round-robin shop
+fairness, authoritative terminal winners, claim fences and retry budgets. Test
+more blocked identities than the review cap alongside a fresh arrival and a
+recovery candidate.
