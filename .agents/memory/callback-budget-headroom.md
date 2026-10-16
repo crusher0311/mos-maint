@@ -53,3 +53,16 @@ database contention without increasing permitted provider capacity.
 the single dedicated worker instance and existing fleet transport guards, and
 measure a two-slot trial before considering three or four. Deployment and live
 enablement require separate approval.
+
+Production trials must not rely on a workspace background shell as their sole
+expiry or automatic rollback mechanism.
+
+**Why:** A workspace restart killed the four-hour trial controller and erased
+its temporary logs while the production worker continued at the elevated width.
+Its `finally` rollback could not run after that loss.
+
+**How to apply:** Before another bounded rollout, require a production-enforced
+expiry that defaults back to one slot or a durable external rollback mechanism.
+Workspace monitoring can supplement it, not replace it. If monitoring is lost
+without such protection, return to the safe width and verify the replacement
+instance; do not report the interrupted trial as completed.
