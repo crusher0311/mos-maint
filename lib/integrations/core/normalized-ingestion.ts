@@ -35,6 +35,7 @@ import {
 } from '@/lib/repair-patterns';
 import pLimit from 'p-limit';
 import { SupabaseDualWriter } from '@/lib/supabase-dual-writer';
+import { preserveInvoiceIdentity } from '@/lib/invoice-evidence-preservation';
 import { shouldShadowWriteMongo } from './normalized-write-mode';
 import { bumpMongoWrites, bumpPgWrites } from '@/lib/backfill-metrics/write-counters';
 import { enrichVinWithAces, enrichVinsWithAcesAllVins, extractShopWarePcdb, extractTekmetricPcdb, type AcesEnrichment } from '@/lib/job-index-aces';
@@ -638,6 +639,9 @@ export class NormalizedIngestionService {
           )
           : null);
       
+      if (this.adapter.sourceSystem === "protractor") {
+        mapped.customFields = preserveInvoiceIdentity(this.shopId, sourceData, existing, mapped.customFields);
+      }
       const contentHash = generateContentHash(mapped);
       
       const serviceJobs = this.adapter.extractServiceJobsFromWorkOrder(sourceData);
@@ -776,7 +780,7 @@ export class NormalizedIngestionService {
         isInternal: false,
         isComeback: false,
         tags: [],
-        customFields: {},
+        customFields: mapped.customFields || {},
         rawPayload: this.sanitizeRawPayload(sourceData.rawPayload || sourceData),
       } as NormalizedWorkOrder;
       

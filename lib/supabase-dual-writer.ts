@@ -551,6 +551,8 @@ export class SupabaseDualWriter {
   ): Promise<any | null> {
     const cols = {
       _id: normalizedWorkOrders.id,
+      shopId: normalizedWorkOrders.shopId,
+      customFields: normalizedWorkOrders.customFields,
       provenance: normalizedWorkOrders.provenance,
       softDelete: normalizedWorkOrders.softDelete,
       version: normalizedWorkOrders.version,
