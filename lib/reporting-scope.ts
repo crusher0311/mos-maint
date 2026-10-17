@@ -26,12 +26,16 @@ export interface ResolvedReportingScope {
   shops: Array<{ shopId: number; name: string; locationIdentifier: string | null }>;
 }
 
+export const reportingScopeDependencies = {
+  getEnterpriseById, findShopByShopId, listAllShops, listShopsByShopIds, listReportingUserShopAssignments,
+};
+
 function numericIds(values: unknown[]): number[] {
   return [...new Set(values.map(Number).filter((n) => Number.isSafeInteger(n) && n > 0))];
 }
 
 async function assignedShopIds(session: SessionInfo): Promise<number[]> {
-  const docs = await listReportingUserShopAssignments(session.email) as Array<{
+  const docs = await reportingScopeDependencies.listReportingUserShopAssignments(session.email) as Array<{
     shopId?: unknown;
     shopIds?: unknown[];
   }>;
@@ -55,10 +59,10 @@ export async function resolveReportingScope(
   let enterpriseId: string | undefined;
   if (kind === "platform") {
     if (!isPlatform) throw new ReportingScopeError("Platform reporting requires platform admin access", 403);
-    shopIds = numericIds((await listAllShops()).map((shop) => shop.shopId));
+    shopIds = numericIds((await reportingScopeDependencies.listAllShops()).map((shop) => shop.shopId));
   } else if (kind === "enterprise") {
     if (!request.enterpriseId) throw new ReportingScopeError("enterpriseId is required", 400);
-    const enterprise = await getEnterpriseById(request.enterpriseId);
+    const enterprise = await reportingScopeDependencies.getEnterpriseById(request.enterpriseId);
     if (!enterprise) throw new ReportingScopeError("Enterprise not found", 404);
     enterpriseId = String(enterprise._id);
     const enterpriseIds = numericIds(enterprise.shopIds || []);
@@ -68,8 +72,10 @@ export async function resolveReportingScope(
       if (!["owner", "admin"].includes(session.role || "")) {
         throw new ReportingScopeError("Enterprise reporting requires owner or admin access", 403);
       }
-      const homeShop = await findShopByShopId(session.shopId);
-      if (String(session.enterpriseId || homeShop?.enterpriseId || "") !== enterpriseId) {
+      const homeShop = await reportingScopeDependencies.findShopByShopId(session.shopId);
+      // The active shop's current membership is authoritative; session metadata
+      // can predate a location switch or an enterprise reassignment.
+      if (String(homeShop?.enterpriseId || "") !== enterpriseId) {
         throw new ReportingScopeError("Enterprise is outside your assigned scope", 403);
       }
       shopIds = restrictToAssignedShops(enterpriseIds, await assignedShopIds(session));
@@ -89,7 +95,7 @@ export async function resolveReportingScope(
   if (shopIds.length > REPORTING_MAX_SHOPS) {
     throw new ReportingScopeError(`Reporting scope exceeds ${REPORTING_MAX_SHOPS} shops`, 400);
   }
-  const shops = await listShopsByShopIds(shopIds);
+  const shops = await reportingScopeDependencies.listShopsByShopIds(shopIds);
   const existingIds = new Set(shops.map((s) => Number(s.shopId)));
   shopIds = shopIds.filter((id) => existingIds.has(id));
   if (!shopIds.length) throw new ReportingScopeError("No reporting shops found", 404);

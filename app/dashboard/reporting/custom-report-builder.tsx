@@ -18,6 +18,7 @@ import type { AiReportProposal } from "@/lib/custom-report-ai";
 import { buildReportRunRequest } from "@/lib/report-run-request";
 import { reportFailureText } from "@/lib/report-run-failure";
 import { invoiceHoursDisplay, INVOICE_HOURS_LABELS } from "@/lib/invoice-hours-display";
+import { LocationSelection } from "./location-selection";
 
 type Scope = { kind: "shop" | "enterprise" | "platform"; shopId?: number; enterpriseId?: string };
 type SavedReport = {
@@ -346,6 +347,7 @@ export function CustomReportBuilder({ scope, initialReportId, initialReportVersi
     </div>
     <div className="grid gap-5 p-5 xl:grid-cols-[1fr_1fr]">
       <div className="space-y-5">
+        <LocationSelection scope={scope} value={definition.locationIds} onChange={locationIds => update({ locationIds })} />
         <label className="block text-xs font-bold text-slate-700">Report name<input className="filter mt-1 w-full" maxLength={80} value={definition.name} onChange={event => update({ name: event.target.value })} /></label>
         <fieldset><legend className="text-xs font-bold text-slate-700">Metrics (up to 6)</legend><div className="mt-2 grid gap-2 sm:grid-cols-2">{REPORTING_KPI_CATALOG.map(metric => <label key={metric.key} className={`cursor-pointer rounded-md border p-3 text-xs ${selectedMetrics.has(metric.key as ReportMetric) ? "border-[#4d91c9] bg-[#edf7fd]" : "border-slate-200 bg-white"}`}><input type="checkbox" className="mr-2" checked={selectedMetrics.has(metric.key as ReportMetric)} onChange={() => toggleMetric(metric.key as ReportMetric)} /><strong>{metric.label}</strong><span className="mt-1 block leading-4 text-slate-500">{metric.definition}</span></label>)}</div></fieldset>
         <div className="grid gap-3 sm:grid-cols-3">
@@ -369,7 +371,7 @@ export function CustomReportBuilder({ scope, initialReportId, initialReportVersi
       </div>
     </div>
      {scheduleOpen && <ScheduleReportDialog email={recipientEmail} setEmail={setRecipientEmail} cadence={cadence} setCadence={setCadence} timezone={timezone} setTimezone={setTimezone} version={selectedVersion} onClose={() => setScheduleOpen(false)} onSave={() => void saveSchedule()} busy={busy === "schedule"} />}
-     {result && <ReportPreview result={result} />}
+     {result && <><p className="px-5 text-xs">Executed: {result.metadata.executedScope?.enterpriseId || result.metadata.executedScope?.kind || "scope unavailable"} · {result.metadata.executedScope?.shopIds.length ?? "unknown"} locations · {result.metadata.executedRange?.start} – {result.metadata.executedRange?.end}. Draft changes do not change these results.</p><ReportPreview result={result} /></>}
   </section>;
 }
 

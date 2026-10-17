@@ -55,7 +55,7 @@ export async function prepare(approved: boolean) {
   }
   const entries = [];
   for (const shop of shops) {
-    if (!isProtractorShopRecord(shop) || weekendShopCancelled(shop)) continue;
+    if (!isProtractorShopRecord(shop) || weekendShopCancelled({ status: shop.status, billing: shop.billing })) continue;
     const shopId = Number(shop.shopId);
     const b = await binding(shopId);
     const priorId = shopId === 538 ? "shop538-history-2026-10-08" :

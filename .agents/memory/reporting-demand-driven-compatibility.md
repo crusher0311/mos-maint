@@ -25,3 +25,26 @@ query to recover, and generic failure sanitization hid the actionable limit.
 bounded-query failures distinct from SQL faults, with safe recovery guidance.
 Do not remove query bounds or filter by fallback close dates to disguise an
 invoice-evidence population problem.
+
+An invoice date-range optimization must retain other representations of the same
+candidate identities, even outside the requested dates.
+
+**Why:** Dropping an out-of-range conflicting date can turn an uncertain invoice
+into a falsely complete denominator. Unknown copies may also be resolved by a
+verified copy outside the period.
+
+**How to apply:** Test conflicting dates and missing-evidence copies across the
+date boundary; keep unknown-population work explicit and bounded. Treat matching
+partial indexes as an operator-approved rollout, not an assumed production fact.
+
+Keep full current authorization separate from effective execution locations.
+
+**Why:** A definition may explicitly select two shops and then filter to one.
+Recompiling that definition against the one-shop execution scope incorrectly
+rejects the other selected shop. Historical runs can also have a broader stored
+authorization set than their displayed location rows.
+
+**How to apply:** Revalidate definitions against full current authorization;
+use the effective intersection for queries and new cache identities. Reject
+empty intersections before queueing, and authorize historical reads against
+their stored scope without demanding equality with the new query subset.

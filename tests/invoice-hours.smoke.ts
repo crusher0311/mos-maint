@@ -164,7 +164,7 @@ async function main() {
   const result = await executeReportDefinition(definition, scope, { serviceOptions: {
     query: (text, params, context) => {
       assert.equal(text, INVOICE_HOURS_SQL);
-      assert.deepEqual(params, ["{1,2}"]);
+      assert.deepEqual(params, ["{1,2}", start.toISOString(), end.toISOString()]);
       stages.push(context!.stage);
       return Promise.resolve(uneven);
     },
@@ -177,7 +177,7 @@ async function main() {
   assert.ok(result.metadata.dataQuality.notes.some(n => n.includes("not a reconciliation")));
   const filtered = await executeReportDefinition({ ...definition, filters: [{ dimension: "location", operator: "eq", value: "2" }] }, scope,
     { serviceOptions: { query: (_text, params) => {
-      assert.deepEqual(params, ["{2}"], "location filter narrows bounded authorized scan");
+      assert.deepEqual(params, ["{2}", start.toISOString(), end.toISOString()], "location filter narrows bounded authorized scan");
       return Promise.resolve(uneven.filter(row => row.shop_id === 2));
     } } });
   assert.equal(filtered.rows.length, 1);

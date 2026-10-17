@@ -128,7 +128,7 @@ export function compileReportDefinition(
   const source = record(upgradeReportDefinition(input), "definition");
   strictKeys(source, [
     "version", "id", "name", "dateRange", "metrics", "dimensions",
-    "filters", "comparison", "presentation",
+    "filters", "comparison", "presentation", "locationIds",
   ], "definition");
   if (source.version !== REPORT_DEFINITION_VERSION) throw new ReportDefinitionError("Invalid definition version", "version");
   const id = nonEmptyString(source.id, "id", 100);
@@ -221,7 +221,25 @@ export function compileReportDefinition(
     throw new ReportDefinitionError(`scope must contain 1-${REPORTING_MAX_SHOPS} unique shop IDs`, "scope.shopIds");
   }
   const periods = comparisonRange ? 2 : 1;
-  const estimatedQueryCost = scope.shopIds.length * (current.normalized.days + (comparisonRange?.days || 0)) *
+  let locationIds: number[] | undefined;
+  if (source.locationIds !== undefined) {
+    if (!Array.isArray(source.locationIds) || !source.locationIds.length ||
+        source.locationIds.length > REPORTING_MAX_SHOPS ||
+        source.locationIds.some(id => !Number.isSafeInteger(id) || Number(id) <= 0)) {
+      throw new ReportDefinitionError("locationIds must be a non-empty list of valid location IDs", "locationIds");
+    }
+    locationIds = [...new Set(source.locationIds as number[])].sort((a, b) => a - b);
+    if (locationIds.some(id => !scope.shopIds.includes(id))) {
+      throw new ReportDefinitionError("Selected location is outside the authorized reporting scope", "locationIds");
+    }
+  }
+  const executionShopIds = (locationIds ?? scope.shopIds).filter(id => filters
+    .filter(filter => filter.dimension === "location").every(filter => {
+      const values = Array.isArray(filter.value) ? filter.value : [filter.value];
+      const matches = values.includes(String(id));
+      return filter.operator === "eq" || filter.operator === "in" ? matches : !matches;
+    }));
+  const estimatedQueryCost = executionShopIds.length * (current.normalized.days + (comparisonRange?.days || 0)) *
     (1 + (dimension === "none" ? 0 : 1) + filters.length);
   if (estimatedQueryCost > REPORT_DEFINITION_MAX_QUERY_COST) {
     throw new ReportDefinitionError(
@@ -271,12 +289,14 @@ export function compileReportDefinition(
       name,
       dateRange: current.raw,
       metrics,
+      ...(locationIds ? { locationIds } : {}),
       dimensions,
       ...(filters.length ? { filters } : {}),
       comparison,
       presentation: { kind, limit, orderBy, direction },
     },
     authorizedShopIds: [...scope.shopIds],
+    executionShopIds,
     currentRange: current.normalized,
     comparisonRange,
     projection: {
@@ -286,7 +306,7 @@ export function compileReportDefinition(
     },
     execution,
     bounds: {
-      shops: scope.shopIds.length,
+      shops: executionShopIds.length,
       days: current.normalized.days,
       periods,
       estimatedQueryCost,
@@ -332,12 +352,12 @@ export async function executeCompiledReport(
     throw new ReportDefinitionError("compiled report scope does not match execution scope", "scope.shopIds");
   }
   const periods: ReportingPeriodResponse = await (options?.getPeriods ?? getReportingPeriods)(
-    scope,
+    { ...scope, shopIds: plan.executionShopIds, shops: scope.shops.filter(shop => plan.executionShopIds.includes(shop.shopId)) },
     plan.currentRange,
     plan.comparisonRange,
     {
       ...options?.serviceOptions,
-      executionPlan: plan.execution,
+       executionPlan: { ...plan.execution, invoiceShopIds: plan.executionShopIds },
       deadlineMs: Math.max(1, Math.min(
         options?.serviceOptions?.deadlineMs ?? REPORTING_QUERY_DEADLINE_MS,
         options?.maxDeadlineMs ?? REPORTING_QUERY_DEADLINE_MS,
@@ -380,7 +400,7 @@ export async function executeCompiledReport(
     rows,
     metadata: {
       executedRange: plan.definition.dateRange,
-      executedScope: { kind: scope.kind, shopIds: [...scope.shopIds], ...(scope.enterpriseId ? { enterpriseId: scope.enterpriseId } : {}) },
+      executedScope: { kind: scope.kind, shopIds: [...plan.executionShopIds], ...(scope.enterpriseId ? { enterpriseId: scope.enterpriseId } : {}) },
       definitionName: plan.definition.name,
       dimension: plan.projection.dimension,
       metrics: plan.projection.metrics,

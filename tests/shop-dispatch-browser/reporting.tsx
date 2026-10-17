@@ -16,7 +16,8 @@ let active = false;
 window.fetch = async (input, init) => {
   const url = String(input);
   let body: any = {};
-  if (url.startsWith("/api/reports/custom/first")) body = { report: { versions: [{ version: 1, definition: { ...definition, name: "Pinned Hours Presented" } }] } };
+  if (url.startsWith("/api/reports/locations?")) body = { locations: [1,2,3].map(id => ({ key: String(id), label: `JWT ${id}` })) };
+  else if (url.startsWith("/api/reports/custom/first")) body = { report: { versions: [{ version: 1, definition: { ...definition, name: "Pinned Hours Presented" } }] } };
   else if (url.startsWith("/api/reports/custom?")) body = { reports: saved };
   else if (url === "/api/reports/runs") {
     const request = JSON.parse(String(init?.body));

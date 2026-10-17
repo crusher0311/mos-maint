@@ -64,6 +64,11 @@ async function main() {
   const single = await execute(definition, { ...scope, kind: "shop", shopIds: [1], shops: [scope.shops[0]] });
   assert.equal(single.rows[0].current.billedRevenue, 90);
   assert.equal(single.rows[0].current.soldLaborHours, 2);
+  const subset = await execute({ ...definition, locationIds: [1] });
+  assert.equal(subset.rows[0].current.billedRevenue, 90);
+  assert.equal(subset.rows[0].current.soldLaborHours, 2);
+  assert.equal(subset.rows[0].comparison?.billedRevenue, 50);
+  assert.deepEqual(subset.metadata.executedScope?.shopIds, [1]);
   const unknown = await execute(definition, { ...scope, kind: "shop", shopIds: [2], shops: [scope.shops[1]] });
   assert.equal(unknown.rows[0].current.presentedLaborHours, null, "unknown hours are not zero");
   for (const dimension of ["none", "date", "location"]) {
@@ -204,6 +209,25 @@ async function lifecycle(execute: (definition: any, scope: any) => Promise<any>)
     await service.processNextReportRun();
     assert.equal(stored.status, "failed");
     assert.equal(stored.error.kind, "access", "worker rechecks authorized location membership");
+    effectiveScope = scope;
+    const combined = { ...definition, locationIds: [1,2], dimensions: ["location"],
+      presentation: { kind: "table" }, filters: [{ dimension: "location", operator: "eq", value: "1" }] };
+    stored = null;
+    await service.requestReportRun(session, { definition: combined, scope: { kind: "enterprise", enterpriseId: "fixture" } });
+    assert.deepEqual(stored.authorizedShopIds, [1]);
+    await service.processNextReportRun();
+    assert.equal(stored.status, "succeeded", "subset plus narrower dimension filter executes without reauthorization narrowing");
+    assert.equal(stored.result.rows[0].current.billedRevenue, 90);
+    assert.deepEqual(stored.result.metadata.executedScope.shopIds, [1]);
+    const historicalId = stored._id;
+    stored.authorizedShopIds = [1,2]; // pre-subset historical run identity
+    assert.ok(await service.readableRunFor(session, historicalId), "historical full authorization remains readable");
+    effectiveScope = { ...scope, shopIds: [1] };
+    await assert.rejects(service.readableRunFor(session, historicalId), /outside|changed/);
+    effectiveScope = scope;
+    await assert.rejects(service.requestReportRun(session, {
+      definition: { ...combined, locationIds: [2] }, scope: { kind: "enterprise", enterpriseId: "fixture" },
+    }), /at least one location/);
     assert.equal(classifyReportFailure({ code: "42P01" }, "business", "ref").kind, "schema");
     const bounded = classifyReportFailure(new ReportingQueryError(
       "Invoice evidence exceeds 100,000 stored work orders. Select fewer locations.", "validation", "invoice"
