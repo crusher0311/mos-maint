@@ -1,6 +1,6 @@
 import "./helpers/deny-network-egress";
 import assert from "node:assert/strict";
-import { WEEKEND, callbackQuietEvidence, weekendAdmissionExpression, weekendFrom } from "../lib/protractor-weekend-policy";
+import { WEEKEND, callbackQuietEvidence, weekendAdmissionExpression, weekendFrom, weekendShopCancelled } from "../lib/protractor-weekend-policy";
 import { historyEndpoint, matchesHistoryRequest, validateHistoryGrant, type ShopHistoryGrant } from "../lib/protractor-shop-history-policy";
 import { historyBindingDigest, runWithShopHistory } from "../lib/integrations/protractor/shop-history-context";
 import { createMongoExpressionCollection } from "./helpers/mongo-expression-collection";
@@ -29,6 +29,9 @@ function fixture(patch: object = {}) {
   }, { now: () => now });
 }
 async function main() {
+  assert.equal(weekendShopCancelled({ status: "active", billing: { status: "canceled" } }), true);
+  assert.equal(weekendShopCancelled({ status: "locked", billing: { status: "past_due" } }), false);
+  assert.equal(weekendShopCancelled({ status: "Cancelled" }), true);
   assert.equal(plannedDays(538, null, { status: "completed", until: "2026-10-09" }).at(-1), "2026-10-08");
   const avidDays = plannedDays(457, null, null);
   assert.equal(avidDays[0], "2026-10-16");
