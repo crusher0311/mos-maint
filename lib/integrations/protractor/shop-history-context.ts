@@ -20,6 +20,7 @@ export async function runWithShopHistory<T>(g:ShopHistoryGrant,r:ShopHistoryRequ
   validateHistoryGrant(g);historyEndpoint(r,0);const now=Date.now();
   if(g.stopped || r.shopId!==g.shopId || (g.version===2)!==(r.pilot==="afton") ||
     (g.version===3)!==(r.pilot==="avid") ||
+    (g.version===4)!==(r.pilot==="weekend") ||
     r.runId!==g.runId || g.consumedRequests>=g.maxRequests ||
     now<g.notBefore.getTime() || now>=g.expiresAt.getTime())throw Error("Shop history permission unavailable");
   let active=true;
