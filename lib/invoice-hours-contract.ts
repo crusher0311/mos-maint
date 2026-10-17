@@ -2,6 +2,7 @@ import { isFinalProtractorInvoice, protractorInvoiceLaborEvidence } from "./inte
 import { extractProtractorServicePackages, getOccurrenceAwareLineKeys, getProtractorPackageIdentity, getProtractorPackageLines, normalizeProtractorServiceJobStatus, unwrapProtractorCollection } from "./integrations/protractor/package-normalization";
 import { recordedNumber } from "./labor-reporting-contract";
 import type { ReportingMetricValues } from "./reporting-kpi-contract";
+import { knownUninvoiced } from "./invoice-status-policy";
 
 export const INVOICE_HOURS_METRICS = ["averagePresentedHoursPerInvoice", "averageSoldHoursPerInvoice"] as const;
 export const INVOICE_HOURS_NOTES = [
@@ -136,7 +137,7 @@ export function aggregateInvoiceHours(facts: InvoiceHoursFact[], start: Date, en
       // close date is outside the period. Unknown dates cannot be period-filtered.
       // Known uninvoiced work is excluded regardless of provider. A verified
       // final invoice above can still override a stale normalized open label.
-      if (["estimate", "open", "in_progress", "work_in_progress", "cancelled", "voided"].includes(fact.status)) continue;
+      if (knownUninvoiced(fact.provider,fact.status) || ["cancelled","voided"].includes(fact.status)) continue;
       const candidates = ids.map(id => `${fact.provider}:${id}`);
       location.unknown.set(candidates[0] ?? `${fact.provider}:row:${fact.id}`, candidates);
       continue;

@@ -1,5 +1,10 @@
 // Only verified, canonical UTC invoice dates can be excluded by the date range.
 // Everything else remains an explicit unknown population (never close-date filtered).
+import { COMMON_UNINVOICED_STATUSES, PROTRACTOR_UNINVOICED_STATUSES } from "./invoice-status-policy";
+const statusList=(values:string[])=>values.map(v=>`'${v}'`).join(",");
+const KNOWN_UNINVOICED_SQL=`(wo.status::text IN (${statusList(COMMON_UNINVOICED_STATUSES)})
+  OR (coalesce(wo.provenance->>'sourceSystem','')='protractor'
+    AND wo.status::text IN (${statusList(PROTRACTOR_UNINVOICED_STATUSES)})))`;
 export const INVOICE_HOURS_MAX_ORDERS = 100_000;
 export const INVOICE_VERIFIED_PREDICATE = `
 wo.provenance->>'sourceSystem' = 'protractor'
@@ -39,8 +44,8 @@ WITH candidates AS MATERIALIZED (
         AND wo.custom_fields->'invoiceHours'->>'date' >= $2
         AND wo.custom_fields->'invoiceHours'->>'date' <= $3)
       OR (NOT coalesce((${INVOICE_VERIFIED_PREDICATE}), false)
-        AND (wo.status::text NOT IN ('estimate','open','in_progress','work_in_progress')
-          OR wo.custom_fields->'invoiceHours' IS NOT NULL))
+        AND (NOT ${KNOWN_UNINVOICED_SQL}
+          OR (wo.custom_fields->'invoiceHours' IS NOT NULL AND wo.custom_fields->'invoiceHours'<>'null'::jsonb)))
     )
   LIMIT ${INVOICE_HOURS_MAX_ORDERS + 1}
 ), identities AS MATERIALIZED (

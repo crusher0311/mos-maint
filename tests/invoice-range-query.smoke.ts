@@ -3,6 +3,7 @@ import postgres from "postgres";
 import { userInfo } from "node:os";
 import { INVOICE_HOURS_SQL, INVOICE_HOURS_INDEX_SQL } from "../lib/invoice-hours-query";
 import { aggregateInvoiceHours } from "../lib/invoice-hours-contract";
+import { PROTRACTOR_UNINVOICED_STATUSES } from "../lib/invoice-status-policy";
 const pg = postgres({ host: "127.0.0.1", port: Number(process.argv[2]), database: "postgres", username: userInfo().username, max: 1 });
 async function main() {
   await pg`CREATE TEMP TABLE normalized_work_orders (id text,shop_id int,status text,soft_delete jsonb,provenance jsonb,custom_fields jsonb)`;
@@ -58,5 +59,23 @@ async function main() {
   assert.equal(partialFleet.averageSoldHoursPerInvoice,5.5);
   assert.equal(partialFleet.averagePresentedHoursPerInvoice,null);
   console.log("PASS: ten-shop report over 120,000 historical rows; independent sold/presented coverage");
+  for(const status of PROTRACTOR_UNINVOICED_STATUSES) {
+    await pg`INSERT INTO normalized_work_orders VALUES (${`stage-${status}`},11,${status},null,
+      '{"sourceSystem":"protractor","sourceIds":[]}','{"invoiceHours":null}')`;
+  }
+  await pg`INSERT INTO normalized_work_orders VALUES ('terminal-unknown',11,'closed',null,
+    '{"sourceSystem":"protractor","sourceIds":[]}',null)`;
+  await pg`INSERT INTO normalized_work_orders
+    SELECT 'verified-stale-stage',11,'scheduled',soft_delete,provenance,custom_fields
+    FROM normalized_work_orders WHERE id='2:1'`;
+  const stages=await pg.unsafe(INVOICE_HOURS_SQL,["{11}",params[1],params[2]]);
+  assert.equal(stages.length,2,"pre-invoice stages and explicit JSON-null evidence must not consume the row budget");
+  const stageSummary=aggregateInvoiceHours(stages as any,new Date(params[1]),new Date(params[2])).summary;
+  assert.equal(stageSummary.invoiceCount,1,"verified evidence overrides a stale scheduled stage");
+  assert.equal(stageSummary.invoicePopulationUnknown,1,"closed without evidence stays unknown");
+  await pg`INSERT INTO normalized_work_orders VALUES ('unsupported-stage',12,'scheduled',null,
+    '{"sourceSystem":"unsupported","sourceIds":[]}',null),('missing-provider',12,'closed',null,'{}',null)`;
+  assert.equal((await pg.unsafe(INVOICE_HOURS_SQL,["{12}",params[1],params[2]])).length,2);
+  console.log("PASS: Protractor pre-invoice stage exclusions agree across SQL and aggregation");
 }
 main().finally(() => pg.end()).catch(error => { console.error(error); process.exitCode=1; });

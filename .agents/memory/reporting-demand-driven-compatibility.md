@@ -93,3 +93,14 @@ or declined work. This confirms omission-as-empty for the verified invoice shape
 evidence and limitations. Require valid invoice identity/date/finality and regular
 job collections. Explicit null/malformed deferred fields, missing labor hours,
 and unknown dispositions remain incomplete; do not manufacture zero hours.
+
+Validate proposed reporting-metadata repairs against a disposable local copy
+before asking to deploy or apply them.
+
+**Why:** The user explicitly requested the real ten-shop full-period report,
+not another passing sample followed by a production release that remains unusable.
+
+**How to apply:** Keep external stores read-only, run the actual bounded report
+SQL before/after the local repair, and report unresolved populations honestly.
+Do not treat exit success or candidate counts as report correctness. Production
+metadata writes and deployment still require separate approval.

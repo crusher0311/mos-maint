@@ -138,3 +138,63 @@ Combined: 173.50 sold hours and 316.96 presented hours, averaging approximately
 one archived day across four shops, not a full-period production report.
 Production evidence and cached report results remain unchanged. Existing
 stored metadata still requires a separately authorized, guarded repair.
+
+## Full-period disposable-database validation
+
+`bash scripts/run-jwt-report-local.sh` creates a fresh loopback PostgreSQL cluster
+marked as disposable. The validator refuses an unmarked target and has no apply
+mode. Source PostgreSQL sessions default to read-only and each shop is copied
+under a repeatable-read, read-only transaction with a ten-second statement limit.
+Copying uses batches of 100 primary keys with pacing, not a long-running cursor
+that mixes source reads and local insert round trips. The launcher removes the
+temporary cluster on exit, including failures.
+
+Scope is checked against the JWT enterprise's actual ten-member list. The period
+is September 18–October 17, 2026, inclusive in UTC, matching the report being
+investigated. Shops are snapshotted sequentially, not at one fleet-wide instant;
+active imports can continue during the read-only exercise.
+
+Only minimal reporting columns are stored locally. Customer/vehicle payloads
+are not persisted. Invoice-source fields are evaluated in memory. Candidate
+evidence can come from the stored raw invoice or digest-verified weekend
+archives. Conflicting dates, identities, or recorded hours are withheld.
+Explicit existing metadata is not overwritten. Archive evidence is not
+manufactured for zero-number or otherwise invalid invoices.
+
+The actual production invoice SQL runs against the disposable copy before and
+after the local-only metadata update, including the existing row limit and
+coverage rules. Per-location results are emitted as aggregates. An executable
+offline integration test (`bash tests/run-invoice-local-preview.sh`) checks the
+same pipeline against a second disposable source database, including unchanged
+source rows, null raw payloads, archived evidence, conflicting hours, and unknown
+populations withholding averages.
+
+This is a candidate preview, not a production repair manifest. Production
+application would additionally require fresh cross-store validation, compare-
+and-set guards, an auditable manifest, and separate operator approval. Neither
+a successful script exit nor a recoverable-row count proves the full report is
+usable: the final report's cap, unknown population, and coverage must be checked.
+
+The full-copy exercise exposed Protractor pre-invoice stages incorrectly counted
+as unknown invoices. The local policy now excludes the explicitly mapped draft,
+scheduled, checked-in, authorized, inspection, waiting, paused, and work-complete
+stages when no verified invoice evidence exists. This is provider-specific;
+closed/paid/invoiced/unknown statuses remain unresolved without invoice evidence.
+Verified evidence still overrides a stale pre-invoice status. SQL and aggregation
+share the policy; JSON-null evidence is not treated as a populated invoice.
+
+A bounded follow-up check of 50 unresolved closed records from each of the first
+three copied shops found 124 matching work-order-cache snapshots. All 124 lacked
+a positive invoice number; none supplied usable invoice evidence. Their raw
+dates included both the selected period and earlier dates, but unverified dates
+were not used to hide records. This is a sampled diagnosis, not a full count of
+the remaining source gap.
+
+For subsequent verification without additional production reads, the baseline
+can be retained as a mode-0600 temporary PostgreSQL dump containing only the
+minimal copied reporting rows and candidate evidence. The capture checks all ten
+shop counts and existing-evidence counts under an exported repeatable-read
+snapshot before dumping. `scripts/replay-invoice-local.sh` restores that baseline
+into another marked loopback cluster and runs the latest report SQL before and
+after a local-only repair. A retention failure must not silently substitute an
+already-repaired baseline. Delete the temporary dump when verification ends.

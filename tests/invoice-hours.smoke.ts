@@ -3,6 +3,7 @@ import { aggregateInvoiceHours, invoiceHoursEvidence, type InvoiceHoursFact } fr
 import { compileReportDefinition, executeReportDefinition } from "../lib/report-definition-compiler";
 import { INVOICE_HOURS_SQL } from "../lib/invoice-hours-query";
 import { invoiceHoursDisplay } from "../lib/invoice-hours-display";
+import { PROTRACTOR_UNINVOICED_STATUSES } from "../lib/invoice-status-policy";
 
 const start = new Date("2026-09-01T00:00:00Z"), end = new Date("2026-09-30T23:59:59.999Z");
 const id = (n: number) => `10000000-0000-0000-0000-${String(n).padStart(12,"0")}`;
@@ -18,6 +19,14 @@ const fact = (n: number, shop = 1, payload = raw(n)): InvoiceHoursFact => ({
   invoice_evidence: invoiceHoursEvidence(payload),
 });
 const aggregate = (rows: InvoiceHoursFact[]) => aggregateInvoiceHours(rows, start, end);
+for(const status of PROTRACTOR_UNINVOICED_STATUSES) {
+  assert.equal(aggregate([{...fact(1),status,invoice_evidence:null}]).summary.invoicePopulationUnknown,0);
+  assert.equal(aggregate([{...fact(1),status}]).summary.invoiceCount,1,"verified invoice overrides a stale stage");
+  assert.equal(aggregate([{...fact(1),provider:"unsupported",status,invoice_evidence:null}]).summary.invoicePopulationUnknown,1);
+}
+for(const status of ["closed","paid","invoiced","unrecognized"]) {
+  assert.equal(aggregate([{...fact(1),status,invoice_evidence:null}]).summary.invoicePopulationUnknown,1);
+}
 const hundred = Array.from({ length: 100 }, (_, n) => fact(n));
 assert.equal(aggregate(hundred).summary.averagePresentedHoursPerInvoice, 3);
 assert.equal(aggregate(hundred).summary.averageSoldHoursPerInvoice, 2);
