@@ -104,3 +104,16 @@ not another passing sample followed by a production release that remains unusabl
 SQL before/after the local repair, and report unresolved populations honestly.
 Do not treat exit success or candidate counts as report correctness. Production
 metadata writes and deployment still require separate approval.
+
+Invoice-source recovery is a separate, capped read-only operation, not authority
+to publish reporting changes or repair production reporting records.
+
+**Why:** On 2026-10-17 the user approved up to 1,000 additional Protractor requests,
+including retries, under existing eligibility and traffic protections, followed
+by another local report validation.
+
+**How to apply:** Preserve the cumulative cap and callback priority; never borrow
+the active weekend runner's permission or use interactive authority for bulk
+recovery. Missing or conflicting source dates remain held, not guessed. Source
+captures may be retained for validation, but production repair and deployment
+still require separate approval.

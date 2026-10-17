@@ -8,9 +8,10 @@ const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 import {validateAftonGrant,aftonEndpoint,aftonAdmissionExpression} from "./protractor-afton-pilot-policy";
 import {validateAvidGrant,avidEndpoint,avidAdmissionExpression} from "./protractor-avid-history-policy";
 import {validateWeekendGrant,weekendEndpoint,weekendAdmissionExpression} from "./protractor-weekend-policy";
-export interface ShopHistoryRequest { runId:string; shopId:number; day:string; pilot?:"afton"|"avid"|"weekend" }
+import {validateInvoiceRecoveryGrant,invoiceRecoveryEndpoint,invoiceRecoveryAdmissionExpression} from "./protractor-invoice-recovery-policy";
+export interface ShopHistoryRequest { runId:string; shopId:number; day:string; pilot?:"afton"|"avid"|"weekend"|"invoiceRecovery"; recoveryOwner?:string }
 export interface ShopHistoryGrant {
-  version:1|2|3|4; runId:string; shopId:number; from:string; until:string;
+  version:1|2|3|4|5; runId:string; shopId:number; from:string; until:string;
   canaryGeneration:string; bindingDigest:string;
   notBefore:Date; expiresAt:Date; maxRequests:number; consumedRequests:number;
   stopped:boolean;
@@ -20,6 +21,7 @@ function validDay(day:string):boolean {
     new Date(`${day}T00:00:00Z`).toISOString().slice(0,10)===day;
 }
 export function validateHistoryGrant(g:ShopHistoryGrant):void {
+  if(g?.version===5)return validateInvoiceRecoveryGrant(g);
   if(g?.version===4)return validateWeekendGrant(g);
   if(g?.version===3)return validateAvidGrant(g);
   if(g?.version===2)return validateAftonGrant(g);
@@ -34,6 +36,7 @@ export function validateHistoryGrant(g:ShopHistoryGrant):void {
     throw Error("Invalid shop history permission");
 }
 export function historyEndpoint(r:ShopHistoryRequest,page:number):string {
+  if(r.pilot==="invoiceRecovery")return invoiceRecoveryEndpoint(r,page);
   if(r.pilot==="weekend")return weekendEndpoint(r,page);
   if(r.pilot==="avid")return avidEndpoint(r,page);
   if(r.pilot!==undefined)return aftonEndpoint(r,page);
@@ -49,6 +52,7 @@ export function matchesHistoryRequest(r:ShopHistoryRequest,endpoint:string,metho
 }
 /** Used ONLY inside the existing atomic fleet-confirmation update. */
 export function historyAdmissionExpression(r:ShopHistoryRequest,bindingDigest?:string):object {
+  if(r.pilot==="invoiceRecovery")return invoiceRecoveryAdmissionExpression(r,bindingDigest);
   if(r.pilot==="weekend")return weekendAdmissionExpression(r,bindingDigest);
   if(r.pilot==="avid")return avidAdmissionExpression(r,bindingDigest);
   if(r.pilot!==undefined)return aftonAdmissionExpression(r,bindingDigest);

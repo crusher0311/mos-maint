@@ -1297,8 +1297,8 @@ export async function confirmProtractorPhysicalTransportLease(
       $set: {
         ...(context.overnightRequest ? jwtOvernightConsumptionFields(context.overnightRequest) : {}),
         ...(context.historyRequest ? {
-          [`${context.historyRequest.pilot==="weekend"?"weekendHistory":context.historyRequest.pilot==="avid"?"avidHistory":context.historyRequest.pilot==="afton"?"aftonPilot":"shopHistory"}.consumedRequests`]:
-            {$add:[`$${context.historyRequest.pilot==="weekend"?"weekendHistory":context.historyRequest.pilot==="avid"?"avidHistory":context.historyRequest.pilot==="afton"?"aftonPilot":"shopHistory"}.consumedRequests`,1]},
+          [`${context.historyRequest.pilot==="invoiceRecovery"?"invoiceRecovery":context.historyRequest.pilot==="weekend"?"weekendHistory":context.historyRequest.pilot==="avid"?"avidHistory":context.historyRequest.pilot==="afton"?"aftonPilot":"shopHistory"}.consumedRequests`]:
+            {$add:[`$${context.historyRequest.pilot==="invoiceRecovery"?"invoiceRecovery":context.historyRequest.pilot==="weekend"?"weekendHistory":context.historyRequest.pilot==="avid"?"avidHistory":context.historyRequest.pilot==="afton"?"aftonPilot":"shopHistory"}.consumedRequests`,1]},
         } : {}),
         physicalAdmissionStartedAt: "$$NOW",
         physicalAdmissionOwnerToken: { $literal: ownerToken },
