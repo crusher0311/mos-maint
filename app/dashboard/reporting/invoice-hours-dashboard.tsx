@@ -7,6 +7,7 @@ import { buildReportRunRequest } from "@/lib/report-run-request";
 import { reportFailureText, type ReportRunFailure } from "@/lib/report-run-failure";
 import { hoursDisplay, summarizeInvoiceHours } from "./invoice-hours-summary";
 import styles from "./invoice-hours-dashboard.module.css";
+import { LocationSelection } from "./location-selection";
 
 type Scope = { kind: "shop" | "enterprise" | "platform"; shopId?: number; enterpriseId?: string };
 type Result = DeclarativeReportResult & { metadata: DeclarativeReportResult["metadata"] & {
@@ -29,6 +30,7 @@ function coverage(covered: number | null, count: number | null) {
   return `${covered === null ? "Unknown" : covered.toLocaleString()} covered / ${count === null ? "unknown" : count.toLocaleString()} eligible invoices`;
 }
 function executedLocation(result: Result) {
+  if (result.metadata.executedScope) return `${result.metadata.executedScope.shopIds.length} executed locations`;
   const filter = result.metadata.selectedFilters?.find(item => item.dimension === "location" && item.operator === "eq");
   if (!filter) return "All authorized locations";
   const row = result.rows.find(item => item.key === filter.value || String(item.shopId) === filter.value);
@@ -39,29 +41,8 @@ export function InvoiceHoursDashboard({ scope, initialRange }: {
   scope: Scope; initialRange?: { start?: string; end?: string; locationId?: string };
 }) {
   const [range, setRange] = useState(() => defaultRange(initialRange));
-  const [location, setLocation] = useState(initialRange?.locationId || "");
+  const [locationIds, setLocationIds] = useState<number[] | undefined>(() => initialRange?.locationId ? [Number(initialRange.locationId)] : undefined);
   const [locations, setLocations] = useState<Array<{ key: string; label: string }>>([]);
-  const [locationsError, setLocationsError] = useState("");
-  const [locationsAttempt, setLocationsAttempt] = useState(0);
-  useEffect(() => {
-    const abort = new AbortController();
-    setLocations([]);
-    setLocationsError("");
-    const params = new URLSearchParams({ scope: scope.kind });
-    if (scope.shopId != null) params.set("shopId", String(scope.shopId));
-    if (scope.enterpriseId) params.set("enterpriseId", scope.enterpriseId);
-    fetch(`/api/reports/locations?${params}`, { signal: abort.signal, cache: "no-store" })
-      .then(async response => {
-        if (!response.ok) throw new Error("locations");
-        const json = await response.json();
-        if (!Array.isArray(json.locations)) throw new Error("locations");
-        if (!abort.signal.aborted) setLocations(json.locations);
-      })
-      .catch(() => {
-        if (!abort.signal.aborted) setLocationsError("Could not load authorized locations. Retry loading locations or switch reporting scope.");
-      });
-    return () => abort.abort();
-  }, [scope.kind, scope.shopId, scope.enterpriseId, locationsAttempt]);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [run, setRun] = useState<RunResponse | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -104,7 +85,8 @@ export function InvoiceHoursDashboard({ scope, initialRange }: {
       // The deployed KPI catalog supplies these two invoice metrics.
       metrics: ["averagePresentedHoursPerInvoice", "averageSoldHoursPerInvoice"] as ReportDefinitionV1["metrics"],
       dimensions: ["location"], comparison: { mode: "none" },
-      filters: location ? [{ dimension: "location", operator: "eq", value: location }] : [],
+      ...(locationIds ? { locationIds } : {}),
+      filters: [],
       presentation: { kind: "table", limit: 500, orderBy: "dimension", direction: "asc" },
     };
     try {
@@ -155,12 +137,12 @@ export function InvoiceHoursDashboard({ scope, initialRange }: {
   const result = snapshot?.result;
   const summary = result ? summarizeInvoiceHours(result.rows) : null;
   const pending = submitting || run?.status === "queued" || run?.status === "running";
-  const valid = Boolean(range.start && range.end && range.start <= range.end);
+  const valid = Boolean(range.start && range.end && range.start <= range.end && locationIds?.length !== 0);
   const metadata = result?.metadata;
   const executed = metadata?.executedRange;
   const executedScope = metadata?.executedScope;
   const changed = Boolean(result && (range.start !== executed?.start || range.end !== executed?.end
-    || location !== (metadata?.selectedFilters?.find(filter => filter.dimension === "location" && filter.operator === "eq")?.value || "")));
+    || JSON.stringify(locationIds ?? locations.map(item => Number(item.key)).sort((a,b) => a-b)) !== JSON.stringify(executedScope?.shopIds)));
 
   return <section className={`${styles.dashboard} space-y-4`} aria-label="Invoice hours dashboard">
     <div className="panel p-5">
@@ -168,11 +150,10 @@ export function InvoiceHoursDashboard({ scope, initialRange }: {
       <form onSubmit={event => { event.preventDefault(); void runReport(); }} className="grid items-end gap-3 md:grid-cols-[1fr_1fr_1.4fr_auto]">
         <label className="text-xs font-bold text-slate-700">Start date<input required type="date" value={range.start} onChange={event => setRange(current => ({ ...current, start: event.target.value }))} className="filter mt-1 block w-full" /></label>
         <label className="text-xs font-bold text-slate-700">End date<input required type="date" min={range.start} value={range.end} onChange={event => setRange(current => ({ ...current, end: event.target.value }))} className="filter mt-1 block w-full" /></label>
-        <label className="text-xs font-bold text-slate-700">Location<select aria-label="Location" value={location} onChange={event => setLocation(event.target.value)} className="filter mt-1 block w-full"><option value="">All authorized locations</option>{location && !locations.some(item => item.key === location) && <option value={location}>Linked location — run to resolve name</option>}{locations.map(item => <option key={item.key} value={item.key}>{item.label}</option>)}</select></label>
+        <LocationSelection scope={scope} value={locationIds} onChange={setLocationIds} onLoaded={setLocations} />
         <button type="submit" className="action primary justify-center" disabled={pending || !valid}><Play className="h-4 w-4" />{submitting ? "Queuing…" : pending ? "Building…" : "Run"}</button>
       </form>
       <p className="mt-3 text-xs text-slate-500">{!valid ? "Choose a valid start and end date." : changed ? "Selection changed. Click Run to apply; displayed results still use the executed context below." : "Nothing runs when you change a control. Choose a location before clicking Run to narrow large reports."}</p>
-      {locationsError && <p role="alert" className="mt-2 text-xs text-red-700">{locationsError} <button type="button" className="underline" onClick={() => setLocationsAttempt(value => value + 1)}>Retry loading locations</button></p>}
     </div>
     {error && <div role="alert" className="rounded-md border border-red-300 bg-red-50 p-3 text-xs text-red-900">{error}{!pending && " Use Run above to retry."}</div>}
     {notice && <p role="status" className="text-xs text-[#28679f]">{notice}{pending && run?.stage ? ` Stage: ${run.stage.replaceAll("_", " ")}.` : ""}</p>}

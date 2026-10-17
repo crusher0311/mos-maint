@@ -610,7 +610,7 @@ export async function getReportingKpis(
     if (invoiceIds.some(id => !scope.shopIds.includes(id))) {
       throw new ReportingQueryError("Invoice locations are outside the authorized scope.", "authorization", "invoice");
     }
-    const rows = await runStage("invoice", query, INVOICE_HOURS_SQL, [`{${invoiceIds.join(",")}}`], deadlineAt, options.beforeStage);
+    const rows = await runStage("invoice", query, INVOICE_HOURS_SQL, [`{${invoiceIds.join(",")}}`, range.start.toISOString(), range.end.toISOString()], deadlineAt, options.beforeStage);
     if (rows.length > INVOICE_HOURS_MAX_ORDERS) {
       throw new ReportingQueryError("Invoice evidence exceeds 100,000 stored work orders. Select fewer locations.", "validation", "invoice");
     }

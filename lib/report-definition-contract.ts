@@ -61,6 +61,8 @@ export interface ReportDefinitionV1 {
   name: string;
   dateRange: ReportDateRange;
   metrics: ReportMetric[];
+  /** Omitted means all currently authorized locations; an explicit list never widens. */
+  locationIds?: number[];
   dimensions: ReportDimension[];
   filters?: Array<{
     dimension: Exclude<ReportDimension, "none" | "date">;
@@ -82,6 +84,7 @@ export interface ReportDefinitionV1 {
 export interface CompiledReportDefinition {
   definition: ReportDefinitionV1;
   authorizedShopIds: number[];
+  executionShopIds: number[];
   currentRange: { start: Date; end: Date; days: number };
   comparisonRange: { start: Date; end: Date; days: number } | null;
   projection: {

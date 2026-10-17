@@ -83,7 +83,7 @@ export async function findCustomReport(id: string) {
 
 export async function listCustomReports(
   actor: CustomReportAccessActor,
-  scope: CustomReportAccessScope,
+  scope: CustomReportAccessScope & { kind: CustomReportScopeRequest["kind"] },
 ) {
   const email = normalizeActorEmail(actor.email);
   const visible: Filter<CustomReportDocument> = actor.isPlatformAdmin
@@ -97,8 +97,16 @@ export async function listCustomReports(
             : []),
         ],
       };
-  const docs = await (await collection()).find(visible).sort({ updatedAt: -1 }).limit(LIST_LIMIT).toArray();
-  return docs.filter((doc) => canReadCustomReport(actor, doc, scope));
+  const docs = await (await collection()).find({
+    ...visible,
+    "scope.kind": scope.kind,
+    ...(scope.kind === "enterprise" ? { "scope.enterpriseId": scope.enterpriseId } : {}),
+    ...(scope.kind === "shop" ? { "scope.shopId": { $in: [...scope.shopIds] } } : {}),
+  }).sort({ updatedAt: -1 }).limit(LIST_LIMIT).toArray();
+  return docs.filter((doc) => doc.scope.kind === scope.kind &&
+    (scope.kind !== "enterprise" || doc.scope.enterpriseId === scope.enterpriseId) &&
+    (scope.kind !== "shop" || scope.shopIds.includes(Number(doc.scope.shopId))) &&
+    canReadCustomReport(actor, doc, scope));
 }
 
 export async function renameCustomReport(

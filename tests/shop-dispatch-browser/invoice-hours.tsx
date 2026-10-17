@@ -32,8 +32,9 @@ async function result(request: any) {
   }
   const filter = request.definition.filters?.[0];
   if (filter) rows = rows.filter(row => row.key === filter.value);
+  if (request.definition.locationIds) rows = rows.filter(row => request.definition.locationIds.includes(Number(row.key)));
   return { ok: true, version: 1, definitionId: request.definition.id, generatedAt: "2026-10-14T12:00:00Z", rows,
-    metadata: { executedRange: request.definition.dateRange, executedScope: { kind: request.scope.kind, shopIds: [1,2] },
+    metadata: { executedRange: request.definition.dateRange, executedScope: { kind: request.scope.kind, shopIds: request.definition.locationIds ?? [1,2] },
       definitionName: request.definition.name, selectedFilters: request.definition.filters, dimension: "location",
       metrics: REPORTING_KPI_CATALOG.filter(m => request.definition.metrics.includes(m.key)),
       comparison: { mode: "none" }, presentation: request.definition.presentation, bounds: { shops: 2 },

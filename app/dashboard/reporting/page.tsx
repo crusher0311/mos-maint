@@ -34,11 +34,10 @@ export default function ReportingPage() {
         const params = new URLSearchParams(window.location.search);
         const requestedScope = params.get("scope") as ScopeKind | null;
         const platform = Boolean(user?.isPlatformAdmin || user?.platformAdmin);
-        const enterprise = Boolean(user?.enterpriseId && (user.role === "owner" || user.role === "admin"));
+         const enterprise = Boolean(user?.enterpriseId && (platform || user.role === "owner" || user.role === "admin"));
         if (requestedScope === "platform" && platform) setScope("platform");
         else if (requestedScope === "enterprise" && enterprise) setScope("enterprise");
         else if (requestedScope === "shop") setScope("shop");
-        else if (platform) setScope("platform");
         else if (enterprise) setScope("enterprise");
         const shopId = Number(params.get("shopId"));
         if (Number.isSafeInteger(shopId) && shopId > 0) setRequestedShopId(shopId);
@@ -60,7 +59,7 @@ export default function ReportingPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const canEnterprise = Boolean(me?.enterpriseId && (me.role === "owner" || me.role === "admin"));
+   const canEnterprise = Boolean(me?.enterpriseId && (me.isPlatformAdmin || me.platformAdmin || me.role === "owner" || me.role === "admin"));
   const canPlatform = Boolean(me?.isPlatformAdmin || me?.platformAdmin);
   const reportScope = {
     kind: scope,
@@ -78,10 +77,13 @@ export default function ReportingPage() {
             <p className="mt-1 max-w-2xl text-sm text-slate-600">Compare labor hours presented and sold per invoice. Nothing is queried until you click Run. Custom reports remain available separately.</p>
           </div>
           <label className="text-xs font-bold text-slate-700">Reporting scope
-            <select value={scope} onChange={(event) => setScope(event.target.value as ScopeKind)} className="filter ml-2">
+             <select value={scope} onChange={(event) => {
+               setScope(event.target.value as ScopeKind);
+               setInitialRange(current => ({ ...current, locationId: undefined }));
+             }} className="filter ml-2">
               <option value="shop">This location</option>
-              {canEnterprise && <option value="enterprise">All locations</option>}
-              {canPlatform && <option value="platform">Platform</option>}
+               {canEnterprise && <option value="enterprise">Selected enterprise</option>}
+               {canPlatform && <option value="platform">Platform-wide (all enterprises)</option>}
             </select>
           </label>
         </div>

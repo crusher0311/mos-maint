@@ -4,11 +4,15 @@ const assert = require("node:assert/strict");
   const browser = await chromium.launch({ executablePath: process.env.DEMO_CHROMIUM_PATH, headless: true });
   try {
     const page = await browser.newPage();
+    await page.route("**/*", route => new URL(route.request().url()).hostname === "127.0.0.1" ? route.continue() : route.abort());
     const errors = [];
     page.on("pageerror", error => errors.push(error.message));
     await page.goto("http://127.0.0.1:24100/reporting.html");
     await page.getByRole("status").filter({ hasText: "Support reference: fixture-run-1" }).waitFor();
     await page.getByText("Saved report · version 1").waitFor();
+    await page.getByLabel("JWT 2", { exact: true }).uncheck();
+    await page.getByText("2 selected", { exact: true }).waitFor();
+    await page.getByLabel("All authorized locations in this scope").check();
     assert.equal(await page.getByRole("textbox", { name: "Report name" }).inputValue(), "Pinned Hours Presented");
     await page.getByRole("button", { name: "Refresh", exact: true }).click();
     await page.getByRole("status").filter({ hasText: "Required reporting database setup" }).waitFor();
