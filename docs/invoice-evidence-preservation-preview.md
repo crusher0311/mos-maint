@@ -198,3 +198,36 @@ snapshot before dumping. `scripts/replay-invoice-local.sh` restores that baselin
 into another marked loopback cluster and runs the latest report SQL before and
 after a local-only repair. A retention failure must not silently substitute an
 already-repaired baseline. Delete the temporary dump when verification ends.
+
+## Full-scope result, 2026-10-17
+
+The completed ten-shop snapshot contained 214,229 records. There were no existing
+invoice-hours metadata objects in this snapshot. The proposed local-only repair
+populated 191,632 rows; 22,589 lacked recoverable evidence from the inspected
+sources and eight were held for conflicts.
+
+The latest SQL and status policy were replayed against the untouched retained
+baseline:
+
+| Measure | Before | After local repair |
+| --- | ---: | ---: |
+| Rows returned by bounded report query | 100,001 (cap exceeded) | 18,659 |
+| Verified invoices in selected period | Not available | 1,824 |
+| Unknown invoice population | Not available | 16,834 |
+| Sold/presented covered invoices | Not available | 1,824 / 1,824 |
+| Full-population averages | Unavailable | Incomplete data |
+
+The unknown population includes historical closed records; it is NOT a count
+of confirmed missing invoices in the selected month. Covered totals were
+1,955.05 sold hours and 3,789.21 presented hours, but dividing them by the
+verified subset would not produce a valid full-population average.
+
+The production dashboard summary functions were checked against all ten actual
+local-result rows and correctly returned "Incomplete data" for both averages.
+Regression tests, the disposable-source safety test, and TypeScript passed.
+No production repair, deployment, or additional provider request occurred.
+
+Conclusion: metadata preservation and local repair fix the lost-evidence and
+record-limit failures, but do not certify the full report. More authoritative
+invoice-source evidence and review of held conflicts are required. Do not deploy
+this as a completed reporting recovery merely because the scripts exited zero.
