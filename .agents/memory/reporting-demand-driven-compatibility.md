@@ -48,3 +48,11 @@ authorization set than their displayed location rows.
 use the effective intersection for queries and new cache identities. Reject
 empty intersections before queueing, and authorize historical reads against
 their stored scope without demanding equality with the new query subset.
+
+Reporting fixes prompted by JWT are fleet-wide, not JWT-only rollouts.
+
+**Why:** The user explicitly clarified that JWT exposed a shared reporting issue,
+not a customer-specific feature request.
+
+**How to apply:** Apply shared reporting corrections to all eligible shops and
+enterprises, preserving authorization boundaries and provider evidence requirements.
