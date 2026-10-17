@@ -12,6 +12,9 @@ export const WEEKEND = Object.freeze({
 });
 const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const digest = /^[a-f0-9]{64}$/;
+export function weekendShopCancelled(shop: { status?: unknown; billing?: { status?: unknown } | null }): boolean {
+  return [shop.status, shop.billing?.status].some(s => /^(canceled|cancelled)$/i.test(String(s ?? "").trim()));
+}
 export const weekendFrom = (shopId: number) => shopId === 538 ? "2025-08-17" : "2024-10-17";
 export function weekendEndpoint(r: ShopHistoryRequest, page: number): string {
   if (r.pilot !== "weekend" || !Number.isSafeInteger(r.shopId) || r.shopId < 1 ||

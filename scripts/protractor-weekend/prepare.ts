@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { WEEKEND, weekendFrom } from "../../lib/protractor-weekend-policy";
+import { WEEKEND, weekendFrom, weekendShopCancelled } from "../../lib/protractor-weekend-policy";
 import { isProtractorShopRecord } from "../../lib/integrations/protractor/shop-eligibility";
 import { collections, runtime, workersSuspended, fleet, RATE, binding, log } from "./shared";
 
@@ -55,7 +55,7 @@ export async function prepare(approved: boolean) {
   }
   const entries = [];
   for (const shop of shops) {
-    if (!isProtractorShopRecord(shop) || ["canceled", "cancelled"].includes(String(shop.status))) continue;
+    if (!isProtractorShopRecord(shop) || weekendShopCancelled(shop)) continue;
     const shopId = Number(shop.shopId);
     const b = await binding(shopId);
     const priorId = shopId === 538 ? "shop538-history-2026-10-08" :

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { getDb } from "../../lib/mongo";
-import { WEEKEND, callbackQuietEvidence } from "../../lib/protractor-weekend-policy";
+import { WEEKEND, callbackQuietEvidence, weekendShopCancelled } from "../../lib/protractor-weekend-policy";
 import { isProtractorShopRecord } from "../../lib/integrations/protractor/shop-eligibility";
 import { historyBindingDigest } from "../../lib/integrations/protractor/shop-history-context";
 import { resolveProtractorConfig } from "../../lib/integrations/protractor/client";
@@ -50,8 +50,11 @@ export async function workersSuspended() {
 }
 export async function binding(shopId: number) {
   const { db } = await collections();
-  const shop = await db.collection("shops").findOne({ shopId }, { maxTimeMS: 5000 });
-  assert.ok(shop && shop.status !== "canceled" && shop.status !== "cancelled" &&
+  const matches = await db.collection("shops").find({ shopId: { $in: [shopId, String(shopId)] } },
+    { maxTimeMS: 5000 }).limit(2).toArray();
+  assert.equal(matches.length, 1, "Ambiguous or missing shop identity");
+  const shop = matches[0];
+  assert.ok(shop && !weekendShopCancelled(shop) &&
     isProtractorShopRecord(shop), "Shop no longer eligible");
   const config = await resolveProtractorConfig(shopId);
   assert.ok(config.configured && config.connectionId);
