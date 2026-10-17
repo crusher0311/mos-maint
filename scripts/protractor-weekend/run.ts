@@ -14,11 +14,21 @@ async function child(pageId: string, owner: string): Promise<number> {
   return new Promise((resolve, reject) => {
     const proc = spawn(process.execPath,
       ["--import", "tsx", "scripts/protractor-weekend/main.ts", "--ingest", pageId, owner],
-      { stdio: ["ignore", "ignore", "ignore"], env: process.env });
+      { stdio: ["ignore", "ignore", "ignore", "ipc"], env: process.env });
+    proc.on("message", (message: any) => {
+      if (message?.event === "weekend_ingest_failed" && message.stage === "postgres_duplicate_check" &&
+        ["57014", "53300", "55P03", "23505", "ETIMEDOUT", "ECONNRESET", "UNCLASSIFIED"].includes(message.code)) {
+        log("weekend_ingest_failed", { pageId, stage: message.stage, code: message.code });
+      }
+    });
     const timer = setTimeout(() => proc.kill("SIGKILL"),
       Math.max(1, Math.min(180000, Date.parse(WEEKEND.end) - Date.now() - 120000)));
     proc.once("error", e => { clearTimeout(timer); reject(e); });
-    proc.once("exit", code => { clearTimeout(timer); resolve(code ?? 75); });
+    proc.once("exit", code => {
+      clearTimeout(timer);
+      if (code !== 0) log("weekend_ingest_exit", { pageId, exitCode: code ?? 75 });
+      resolve(code ?? 75);
+    });
   });
 }
 export async function run() {
