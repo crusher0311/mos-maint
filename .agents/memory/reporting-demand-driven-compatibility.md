@@ -56,3 +56,38 @@ not a customer-specific feature request.
 
 **How to apply:** Apply shared reporting corrections to all eligible shops and
 enterprises, preserving authorization boundaries and provider evidence requirements.
+
+Verified invoice evidence must survive both initial normalization and later
+partial provider snapshots.
+
+**Why:** A read-only production comparison found usable invoice evidence in
+archived Protractor Invoice responses while the corresponding stored work orders
+had none. Newly created rows discarded mapped custom fields; older snapshots
+often lacked a positive invoice number despite richer archived copies.
+
+**How to apply:** Test evidence persistence through the real create path, not
+only the adapter. Distinguish legacy missing evidence from legitimate unknowns.
+Any repair must verify shop/invoice identity and reconcile conflicting evidence;
+patch reporting metadata only, never financial totals or provider invoices.
+
+Keep reporting changes local until the reporting flow is working and verified,
+not merely until a release build passes.
+
+**Why:** The user explicitly rejected another reporting deployment before
+verification after successive releases still left the report unusable.
+
+**How to apply:** Verify scope, stored evidence, calculations, and visible
+results together. Clearly separate fixture success from real-data coverage;
+missing presented-hour evidence is not cured by passing SQL or browser tests.
+
+Do not equate Protractor's omitted deferred-work collection with a failed list
+fetch, or declare it empty solely from list/detail agreement.
+
+**Why:** A bounded live comparison on 2026-10-17 found five omitted-field
+invoices also omitted the collection in detail responses, while five
+known-deferred controls retained identical jobs and hours. This supports
+omission-as-empty but lacks independent native-UI/provider-contract confirmation.
+
+**How to apply:** See docs/invoice-evidence-preservation-preview.md for the
+evidence and limitations. Separate confirmed endpoint parity from the business
+meaning of absence before relaxing presented-hour completeness rules.

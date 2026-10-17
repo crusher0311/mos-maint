@@ -55,3 +55,39 @@ would miss useful quiet periods.
 verified recent callbacks is unknown, not closed. Preserve fleet pacing,
 interactive/callback capacity, durable checkpoints, and production-enforced
 expiry; this does not authorize unrestricted backfills or financial corrections.
+
+Separate provider fetch failures from local duplicate-check failures before
+tuning import throughput.
+
+**Why:** The weekend campaign received successful, fast Protractor responses,
+but its PostgreSQL invoice-existence lookup repeatedly exhausted the five-second
+deadline at the first unreceipted invoice. A generic deferred status hid that
+local bottleneck; increasing provider concurrency would not solve it.
+
+**How to apply:** Use archived-page timestamps and receipt boundaries to locate
+the failing stage. Preserve case-insensitive identity matching and no-overwrite
+semantics when optimizing the lookup. Persist sanitized stage/error codes instead
+of discarding child-process errors; never log invoice payloads or credentials.
+
+Keep the shop restriction ahead of JSON source-identity expansion in duplicate
+lookups, including the no-match path. A materialized tenant slice preserves
+arbitrary mixed-case IDs without replacing the comparison with a few guessed
+case variants.
+
+**Why:** A top-level LIMIT on a rare JSON identity can favor a broad scan even
+with a shop index. Fast positive matches alone do not validate missing-ID cost.
+
+**How to apply:** Test missing IDs, other shops/providers, and mixed-case IDs;
+retain the statement deadline and no-overwrite behavior. Do not assume reporting
+indexes cover this different source-identity query.
+
+A tenant-bounded JSON scan is not necessarily fast enough under live load.
+
+**Why:** After materializing the shop slice, the resumed worker still encountered
+a five-second duplicate-check timeout, while another previously blocked shop
+advanced. A subsequent warm read succeeded, so one passing probe did not
+establish sustained production reliability.
+
+**How to apply:** Keep the deadline and no-overwrite guard, inspect real resumed
+progress and per-shop failures, and distinguish partial improvement from full
+resolution. Never convert a duplicate-check timeout into “not found.”

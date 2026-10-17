@@ -29,5 +29,34 @@ async function main() {
   console.log("Bounded invoice fixture: 120,000 historical rows, 10 in range; elapsed ms",Date.now()-started);
   console.log(JSON.stringify(explain));
   assert.ok(JSON.stringify(explain).includes("reporting_invoice_verified_date"), "date index is used");
+  // Fleet scope must work with a history population above the old row cap.
+  // All ten locations have independently verified evidence; only the selected
+  // invoice dates may contribute to the averages.
+  await pg`TRUNCATE normalized_work_orders`;
+  await pg`INSERT INTO normalized_work_orders
+    SELECT shop::text||':'||n::text,shop,'invoiced',null,
+      jsonb_build_object('sourceSystem','protractor','sourceIds',jsonb_build_array(jsonb_build_object(
+        'system','protractor','idType','invoice_id','idValue',md5(shop::text||':'||n::text)::uuid::text))),
+      jsonb_build_object('invoiceHours',jsonb_build_object('version',1,
+        'id',md5(shop::text||':'||n::text)::uuid::text,
+        'date',CASE WHEN n<=10 THEN '2026-09-01T00:00:00.000Z' ELSE '2020-01-01T00:00:00.000Z' END,
+        'sold',shop,'presented',shop+1))
+    FROM generate_series(1,10) shop CROSS JOIN generate_series(1,12000) n`;
+  await pg`ANALYZE normalized_work_orders`;
+  const fleet = await pg.unsafe(INVOICE_HOURS_SQL,["{1,2,3,4,5,6,7,8,9,10}",params[1],params[2]]);
+  assert.equal(fleet.length,100);
+  const fleetSummary=aggregateInvoiceHours(fleet as any,new Date(params[1]),new Date(params[2])).summary;
+  assert.equal(fleetSummary.invoiceCount,100);
+  assert.equal(fleetSummary.averageSoldHoursPerInvoice,5.5);
+  assert.equal(fleetSummary.averagePresentedHoursPerInvoice,6.5);
+  // Missing presentation evidence must not suppress complete sold-hour results.
+  await pg`UPDATE normalized_work_orders SET custom_fields=jsonb_set(custom_fields,'{invoiceHours,presented}','null')
+    WHERE id='1:1'`;
+  const partialFleet=aggregateInvoiceHours(
+    await pg.unsafe(INVOICE_HOURS_SQL,["{1,2,3,4,5,6,7,8,9,10}",params[1],params[2]]) as any,
+    new Date(params[1]),new Date(params[2])).summary;
+  assert.equal(partialFleet.averageSoldHoursPerInvoice,5.5);
+  assert.equal(partialFleet.averagePresentedHoursPerInvoice,null);
+  console.log("PASS: ten-shop report over 120,000 historical rows; independent sold/presented coverage");
 }
 main().finally(() => pg.end()).catch(error => { console.error(error); process.exitCode=1; });
