@@ -35,6 +35,28 @@ assert.equal(aggregate([fact(1, 1, raw(1, 0, 0))]).summary.averageSoldHoursPerIn
 assert.equal(aggregate([]).summary.averageSoldHoursPerInvoice, null);
 assert.equal(aggregate([]).summary.invoiceCount, 0);
 const noDeclined = fact(1, 1, { ...raw(1), DeferredServicePackages: null });
+const omittedDeferred = raw(1);
+delete omittedDeferred.DeferredServicePackages;
+assert.equal(invoiceHoursEvidence(omittedDeferred)?.presented, 2, "confirmed omission on a verified invoice means no deferred jobs");
+assert.equal(aggregate([fact(1,1,omittedDeferred)]).summary.averagePresentedHoursPerInvoice,2);
+for (const value of [null, undefined, {}, "missing"]) {
+  assert.equal(invoiceHoursEvidence({...omittedDeferred,DeferredServicePackages:value})?.presented,null,
+    "an explicit invalid deferred collection is not confirmed absence");
+}
+assert.equal(invoiceHoursEvidence({...omittedDeferred,ServicePackages:null})?.presented,null);
+assert.equal(invoiceHoursEvidence({...omittedDeferred,WorkflowStage:"Estimate"}),null);
+assert.equal(invoiceHoursEvidence({...omittedDeferred,InvoiceNumber:0}),null);
+assert.equal(invoiceHoursEvidence({...omittedDeferred,InvoiceTime:undefined}),null);
+assert.equal(invoiceHoursEvidence({...omittedDeferred,ID:"invalid"}),null);
+const omittedMissingHours=structuredClone(omittedDeferred);
+delete omittedMissingHours.ServicePackages[0].ServicePackageLines[0].BilledHours;
+assert.equal(invoiceHoursEvidence(omittedMissingHours)?.presented,null,"missing labor hours are not zero");
+const omittedMissingDisposition=structuredClone(omittedDeferred);
+delete omittedMissingDisposition.ServicePackages[0].IsInvoicing;
+assert.equal(invoiceHoursEvidence(omittedMissingDisposition)?.presented,null);
+const omittedWithRegularDecline=structuredClone(omittedDeferred);
+omittedWithRegularDecline.ServicePackages.push(raw(1).DeferredServicePackages[0]);
+assert.equal(invoiceHoursEvidence(omittedWithRegularDecline)?.presented,3,"declined work in regular packages still counts");
 assert.equal(aggregate([noDeclined]).summary.averageSoldHoursPerInvoice, 2);
 assert.equal(aggregate([noDeclined]).summary.averagePresentedHoursPerInvoice, null);
 assert.equal(aggregate([noDeclined]).summary.invoicePresentedCovered, 0);

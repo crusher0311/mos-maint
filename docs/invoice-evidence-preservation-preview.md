@@ -112,3 +112,29 @@ This rules out a list-vs-detail discrepancy in these samples. It supports, but
 does not independently prove, the interpretation that an omitted collection is
 empty. No native UI or provider-contract confirmation has yet been obtained, so
 the reporting evidence rule remains unchanged.
+
+## Native confirmation and local rule update
+
+On 2026-10-17 the user confirmed that the two omitted-field examples checked in
+Protractor had neither deferred nor declined work. The local invoice-hours
+calculation now recognizes omission as an empty deferred collection only after
+invoice identity, positive invoice number, invoice date, finality, and a regular
+package collection have passed validation. Explicit null/undefined/malformed
+deferred fields remain unknown. Missing hours and dispositions are not inferred.
+The legacy labor-evidence calculation was not relaxed.
+
+Recomputing the same archived sample locally now produces complete sold and
+presented coverage for all 90 invoices:
+
+| Shop | Invoices | Sold hours | Presented hours |
+| --- | ---: | ---: | ---: |
+| 227 | 26 | 28.80 | 47.82 |
+| 228 | 32 | 50.75 | 112.72 |
+| 139 | 18 | 18.15 | 29.42 |
+| 457 | 14 | 75.80 | 127.00 |
+
+Combined: 173.50 sold hours and 316.96 presented hours, averaging approximately
+1.93 and 3.52 hours per invoice, respectively. These are local simulations for
+one archived day across four shops, not a full-period production report.
+Production evidence and cached report results remain unchanged. Existing
+stored metadata still requires a separately authorized, guarded repair.

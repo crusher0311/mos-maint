@@ -85,10 +85,16 @@ export function invoiceHoursEvidence(raw: any): InvoiceEvidence | null {
   const regular = jobs.filter(job => !job._isDeferred).map(clean);
   const deferred = jobs.filter(job => job._isDeferred).map(clean);
   const collection = (v: any) => Array.isArray(v) || Array.isArray(v?.ItemCollection);
+  // Full final invoices omit this property when there is no deferred work
+  // (list/detail parity plus native-UI confirmation). Do not extend this to
+  // explicit null/malformed collections, missing regular jobs, or legacy labor
+  // evidence: identity/date/finality were verified above and hours below.
+  const omittedDeferred = !Object.hasOwn(raw, "DeferredServicePackages") &&
+    collection(raw.ServicePackages);
   const evidence = protractorInvoiceLaborEvidence({
     ...raw,
     ServicePackages: collection(raw.ServicePackages) ? regular : null,
-    DeferredServicePackages: collection(raw.DeferredServicePackages) ? deferred : null,
+    DeferredServicePackages: collection(raw.DeferredServicePackages) || omittedDeferred ? deferred : null,
   });
   let sold = evidence?.sold ?? null, presented = evidence?.presented ?? null;
   for (const job of jobs) {

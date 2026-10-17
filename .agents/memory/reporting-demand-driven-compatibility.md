@@ -80,14 +80,16 @@ verification after successive releases still left the report unusable.
 results together. Clearly separate fixture success from real-data coverage;
 missing presented-hour evidence is not cured by passing SQL or browser tests.
 
-Do not equate Protractor's omitted deferred-work collection with a failed list
-fetch, or declare it empty solely from list/detail agreement.
+Protractor's omitted deferred-work collection can mean no deferred jobs on a
+verified final invoice; do not extend this to incomplete or open work orders.
 
 **Why:** A bounded live comparison on 2026-10-17 found five omitted-field
 invoices also omitted the collection in detail responses, while five
-known-deferred controls retained identical jobs and hours. This supports
-omission-as-empty but lacks independent native-UI/provider-contract confirmation.
+known-deferred controls retained identical jobs and hours. The user then checked
+two omitted-field examples in the native UI and confirmed neither had deferred
+or declined work. This confirms omission-as-empty for the verified invoice shape.
 
 **How to apply:** See docs/invoice-evidence-preservation-preview.md for the
-evidence and limitations. Separate confirmed endpoint parity from the business
-meaning of absence before relaxing presented-hour completeness rules.
+evidence and limitations. Require valid invoice identity/date/finality and regular
+job collections. Explicit null/malformed deferred fields, missing labor hours,
+and unknown dispositions remain incomplete; do not manufacture zero hours.
