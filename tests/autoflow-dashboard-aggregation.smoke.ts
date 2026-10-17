@@ -198,6 +198,11 @@ const events = [
   { shopId: "432", provider: "autoflow", vehicleVin: "VIN-D", receivedAt: new Date("2026-09-17T12:00:00Z"), payload: { ticket: {} } },
 ];
 
+// Preserve event ordering without letting these active fixtures age out of the
+// real route's rolling 30-day window as the calendar advances.
+const fixtureShiftMs = Date.now() - Date.parse("2026-09-17T13:00:00Z");
+for (const event of events) event.receivedAt = new Date(+event.receivedAt + fixtureShiftMs);
+
 const dbStub = {
   collection(name: string) {
     return {
