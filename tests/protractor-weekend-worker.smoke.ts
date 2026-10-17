@@ -6,6 +6,7 @@ import vm from "node:vm";
 import ts from "typescript";
 import { WEEKEND } from "../lib/protractor-weekend-policy";
 import { pilotInvoiceIds } from "../lib/protractor-afton-pilot-report";
+import * as historyLookup from "../lib/protractor-history-existing-invoice";
 
 const compiled = ts.transpileModule(readFileSync("scripts/protractor-weekend/ingest.ts", "utf8"),
   { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
@@ -36,6 +37,7 @@ async function scenario(options: {
         : options.indexed === false ? null : { _id: "indexed" } }) },
   };
   const fakeRequire = (name: string): any => {
+    if (name.endsWith("/protractor-history-existing-invoice")) return historyLookup;
     if (name === "node:assert/strict") return assert;
     if (name.endsWith("/drizzle")) return { getClient: () => ({
       begin: async (fn: any) => fn({ unsafe: async () => [] }),

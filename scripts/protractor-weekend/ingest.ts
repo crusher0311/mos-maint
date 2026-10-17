@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { getClient } from "../../lib/db/drizzle";
+import { HISTORY_EXISTING_INVOICE_SQL, historyFailureCode } from "../../lib/protractor-history-existing-invoice";
 import { createIngestionService } from "../../lib/integrations/core/normalized-ingestion";
 import { extractJobIndexFromWorkOrder } from "../../lib/job-index";
 import { WEEKEND } from "../../lib/protractor-weekend-policy";
@@ -18,12 +19,13 @@ async function existingInvoice(shopId: number, invoice: any): Promise<boolean> {
   const rows = await getClient().begin(async sql => {
     await sql.unsafe("set transaction read only");
     await sql.unsafe("set local statement_timeout='5000ms'");
-    return sql.unsafe(`
-      select w.id from normalized_work_orders w
-      where w.shop_id=$1 and exists (
-        select 1 from jsonb_array_elements(w.provenance->'sourceIds') s
-        where s->>'system'='protractor' and lower(s->>'idValue')=$2
-      ) limit 1`, [shopId, invoice.ID.toLowerCase()]);
+    try {
+      return await sql.unsafe(HISTORY_EXISTING_INVOICE_SQL, [shopId, invoice.ID.toLowerCase()]);
+    } catch (error) {
+      process.send?.({ event: "weekend_ingest_failed", stage: "postgres_duplicate_check",
+        code: historyFailureCode(error) });
+      throw error;
+    }
   });
   return rows.length > 0;
 }
