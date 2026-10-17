@@ -43,3 +43,15 @@ For Telle Tire – Afton (MOS 139), use Monday–Friday 07:00–18:00 in
 **How to apply:** Use this store's confirmed schedule for pilot preparation.
 Check runtime timezone and activity-profile alignment before activation; this
 confirmation does not itself authorize a run or imply weekend closure.
+
+Callback-aware catch-up may use sustained inactivity at shops with recent
+working-callback evidence instead of assuming weekend closure.
+
+**Why:** The user explicitly approved using actual incoming callbacks to defer
+busy shops; stored activity profiles were stale and blanket overnight scheduling
+would miss useful quiet periods.
+
+**How to apply:** Treat recent activity as a reason to yield. Silence without
+verified recent callbacks is unknown, not closed. Preserve fleet pacing,
+interactive/callback capacity, durable checkpoints, and production-enforced
+expiry; this does not authorize unrestricted backfills or financial corrections.
