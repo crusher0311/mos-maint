@@ -18,7 +18,7 @@ async function main() {
       ["missing", 25, []],
     ] as const;
     for (const [key, shop, ids] of records)
-      await sql`INSERT INTO normalized_work_orders VALUES (${key},${shop},${JSON.stringify({sourceIds:ids})}::jsonb)`;
+      await sql`INSERT INTO normalized_work_orders VALUES (${key},${shop},${sql.json({sourceIds:ids})})`;
     assert.deepEqual((await sql.unsafe(HISTORY_EXISTING_INVOICE_SQL,[25,id])).map(r=>r.id),["same"]);
     for (const missing of ["11111111-1111-4111-8111-111111111111","22222222-2222-4222-8222-222222222222","33333333-3333-4333-8333-333333333333"])
       assert.equal((await sql.unsafe(HISTORY_EXISTING_INVOICE_SQL,[25,missing])).length,0);
