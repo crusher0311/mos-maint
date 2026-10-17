@@ -51,6 +51,7 @@ const drizzleMigrationFiles = [
 // PostgreSQL rejects CREATE INDEX CONCURRENTLY.
 const concurrentIndexMigrationFiles = [
   "0034_reporting_query_indexes.sql",
+  "0039_invoice_report_indexes.sql",
 ];
 
 async function main() {
