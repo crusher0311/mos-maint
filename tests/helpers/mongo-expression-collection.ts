@@ -117,6 +117,8 @@ function expression(value: any, row: Row, now: Date): any {
     case "$subtract": {
       const [a, b] = args();
       if (a instanceof Date && b instanceof Date) return a.getTime() - b.getTime();
+      if (a instanceof Date && typeof b === "number" && Number.isFinite(b))
+        return new Date(a.getTime() - Math.round(b));
       if (typeof a === "bigint" || typeof b === "bigint") {
         assert.ok(
           [a, b].every(item =>
