@@ -1,0 +1,14 @@
+import assert from "node:assert/strict";
+import {reviewCredit} from "../scripts/invoice-credit-review";
+const id="11111111-1111-1111-1111-111111111111";
+const raw={ID:id,Type:"CreditSlip",WorkflowStage:"Invoice",InvoiceNumber:123,InvoiceTime:"2026-10-01T12:00:00Z"};
+const check=(raws:any[],invoice=false)=>reviewCredit([id],raws,invoice).classification;
+assert.equal(check([raw]),"verified_credit");
+assert.equal(check([raw,{...raw,Type:"WorkOrder"}]),"not_exclusively_credit");
+assert.equal(check([raw],true),"invoice_evidence_present");
+assert.equal(check([{...raw,ID:"wrong"}]),"identity_unverified");
+assert.equal(check([{...raw,InvoiceNumber:0}]),"finality_unverified");
+assert.equal(check([{...raw,InvoiceTime:"2026-02-30T00:00:00"}]),"date_unverified");
+assert.equal(check([raw,{...raw,InvoiceTime:"2026-10-02T12:00:00Z"}]),"conflicting_dates");
+assert.equal(check([{...raw,Status:"Open"}]),"finality_unverified");
+console.log("PASS credit preview: explicit document class, identity, finality, dates, mixed-copy veto");

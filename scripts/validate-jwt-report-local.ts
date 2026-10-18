@@ -13,6 +13,7 @@ import { INVOICE_HOURS_SQL, INVOICE_HOURS_INDEX_SQL, INVOICE_HOURS_MAX_ORDERS } 
 import { protractorInvoiceLaborEvidence } from "../lib/integrations/protractor/labor-evidence";
 import { reconcileStored } from "./invoice-stored-evidence";
 import { reviewUninvoiced, uninvoicedShape } from "./invoice-uninvoiced-review";
+import { reviewCredit } from "./invoice-credit-review";
 
 const hash = (v: string) => createHash("sha256").update(v).digest("hex");
 const same = (a: any,b: any) => a===b || (!!a&&!!b&&
@@ -49,9 +50,12 @@ async function main() {
     await local`CREATE TABLE IF NOT EXISTS completed_shop_copies (shop_id int PRIMARY KEY, mode text, inventory jsonb)`;
     const reconcile = process.argv.includes("--stored-reconcile");
     const classify = process.argv.includes("--classify-uninvoiced");
+    const credits = process.argv.includes("--separate-credits");
+    assert.ok(!credits||reconcile,"Credit review requires full reconciliation");
+    await local`CREATE TABLE IF NOT EXISTS credit_reviews (id text PRIMARY KEY,shop_id int,classification text,date text)`;
     assert.ok(!classify || reconcile,"Classification requires full stored reconciliation");
     await local`CREATE TABLE IF NOT EXISTS uninvoiced_review (id text PRIMARY KEY,shop_id int,classification text,shape jsonb)`;
-    const mode=classify?"stored-reconcile-uninvoiced":reconcile?"stored-reconcile":"archive";
+    const mode=(classify?"stored-reconcile-uninvoiced":reconcile?"stored-reconcile":"archive")+(credits?"-credits":"");
     const completed=await local`SELECT * FROM completed_shop_copies`;
     assert.ok(completed.every(r=>r.mode===mode),"Cannot resume with a different validation mode");
     const [baseline]=await local`SELECT to_regclass('invoice_preview_baseline') present`;
@@ -106,9 +110,11 @@ async function main() {
       await local`DELETE FROM proposed_evidence WHERE id IN (SELECT id FROM normalized_work_orders WHERE shop_id=${shop})`;
       await local`DELETE FROM evidence_diagnostics WHERE shop_id=${shop}`;
       await local`DELETE FROM uninvoiced_review WHERE shop_id=${shop}`;
+      await local`DELETE FROM credit_reviews WHERE shop_id=${shop}`;
       await local`DELETE FROM normalized_work_orders WHERE shop_id=${shop}`;
       stage="archive";
       const archive=new Map<string,InvoiceEvidence|null>();
+      const archiveHeaders=new Map<string,any[]>();
       let pages=0;
       for (const campaign of ["protractor-weekend-2026-10-17","invoice-evidence-recovery-2026-10-17"]) {
       const prefix=`${campaign}:${shop}:`;
@@ -122,6 +128,13 @@ async function main() {
         assert.equal(page.shopId,shop);
         assert.ok(Array.isArray(page.invoices)&&page.invoices.length<=100);
         assert.equal(hash(JSON.stringify(page.invoices)),page.digest);
+          if(credits)for(const raw of page.invoices) {
+            if(!raw?.ID)continue;
+            const key=String(raw.ID).toLowerCase();
+            const headers=archiveHeaders.get(key)??[];
+            headers.push(Object.fromEntries(["ID","Type","WorkflowStage","Status","InvoiceNumber","InvoiceTime"].map(k=>[k,raw[k]])));
+            archiveHeaders.set(key,headers);
+          }
         for(const raw of page.invoices) {
           const e=invoiceHoursEvidence(raw);if(!e)continue;
           const old=archive.get(e.id);
@@ -153,6 +166,7 @@ async function main() {
           const copies:any[]=[];const proposals:any[]=[];
           const diagnostics:any[]=[];
           const statusReviews:any[]=[];
+          const creditReviews:any[]=[];
           const rowIds=(row:any)=>(row.provenance?.sourceIds??[])
             .filter((s:any)=>s.system==="protractor"&&["invoice_id","work_order_id"].includes(s.idType))
             .map((s:any)=>String(s.idValue));
@@ -223,6 +237,9 @@ async function main() {
                 checked.evidence=null;
               }
               diagnostics.push({id,shop_id:shop,reason,matched_copies:validPayloads.filter(Boolean).length});
+              if(credits)creditReviews.push({id,shop_id:shop,...reviewCredit(ids,
+                [...payloads,...ids.flatMap((key:string)=>archiveHeaders.get(key)??[])],
+                present!=null||checked.evidence!=null||ids.some((key:string)=>archive.has(key)))});
               if(classify) {
                 const classification=reviewUninvoiced(ids,payloads,
                   present!=null || ids.some((key:string)=>archive.has(key)) || checked.evidence!=null ||
@@ -265,6 +282,8 @@ async function main() {
           }
           stage="local_copy";
           await local.begin(async t=>{
+            if(creditReviews.length)await t.unsafe(`INSERT INTO credit_reviews SELECT * FROM jsonb_to_recordset($1::jsonb)
+              AS r(id text,shop_id int,classification text,date text)`,[t.json(creditReviews)]);
             if(statusReviews.length)await t.unsafe(`INSERT INTO uninvoiced_review SELECT * FROM jsonb_to_recordset($1::jsonb)
               AS r(id text,shop_id int,classification text,shape jsonb)`,[t.json(statusReviews)]);
             if(diagnostics.length)await t.unsafe(`INSERT INTO evidence_diagnostics SELECT * FROM jsonb_to_recordset($1::jsonb)
@@ -288,8 +307,9 @@ async function main() {
       await local.unsafe(statement);
     await local`ANALYZE normalized_work_orders`;
     await local`SET statement_timeout='90s'`;
+    let reportSql=INVOICE_HOURS_SQL;
     async function report(label:string,scope:number[]) {
-      const rows=await local.unsafe(INVOICE_HOURS_SQL,[`{${scope.join(",")}}`,start,end]);
+      const rows=await local.unsafe(reportSql,[`{${scope.join(",")}}`,start,end]);
       console.log(JSON.stringify({event:"local_report",label,shops:scope,rows:rows.length,
         bounded:rows.length>INVOICE_HOURS_MAX_ORDERS,
         summary:rows.length>INVOICE_HOURS_MAX_ORDERS?null:aggregateInvoiceHours(rows as any,new Date(start),new Date(end)).summary}));
@@ -325,6 +345,36 @@ async function main() {
         WHERE d.id=ANY(${local.array(facts.map(r=>r.id))}) GROUP BY d.reason ORDER BY d.reason`;
       console.log(JSON.stringify({event:"report_candidate_diagnostics",groups:selected,
         note:"Candidate row counts are not deduplicated invoice counts; unknown dates are not proof of in-period invoices."}));
+    }
+    if(credits) {
+      // A second normalized row sharing an invoice/work-order identity can veto
+      // exclusion. Never hide a credit copy that conflicts with an invoice peer.
+      await local`CREATE TEMP TABLE credit_exclusions AS
+        WITH identities AS MATERIALIZED (
+          SELECT w.id,w.shop_id,lower(s->>'idValue') identity,
+            coalesce(r.classification='verified_credit',false) credit,r.date
+          FROM normalized_work_orders w LEFT JOIN credit_reviews r ON r.id=w.id
+          CROSS JOIN LATERAL jsonb_array_elements(coalesce(w.provenance->'sourceIds','[]'::jsonb)) s
+          WHERE s->>'system'='protractor' AND s->>'idType' IN ('invoice_id','work_order_id')
+        ), blocked AS (
+          SELECT shop_id,identity FROM identities GROUP BY shop_id,identity
+          HAVING bool_or(NOT credit) OR count(DISTINCT date)>1
+        )
+        SELECT r.* FROM credit_reviews r WHERE classification='verified_credit'
+          AND NOT EXISTS (SELECT 1 FROM identities i JOIN blocked b
+            ON b.shop_id=i.shop_id AND b.identity=i.identity WHERE i.id=r.id)`;
+      const counts=await local`SELECT
+        CASE WHEN date::timestamptz BETWEEN ${start}::timestamptz AND ${end}::timestamptz
+          THEN 'report_period' ELSE 'outside_report_period' END period,count(*)::int records
+        FROM credit_exclusions GROUP BY 1`;
+      console.log(JSON.stringify({event:"separate_credit_documents",groups:counts,
+        note:"Stored credit records, not ordinary invoices; no credit financial netting."}));
+      await local`CREATE UNIQUE INDEX ON credit_exclusions(id)`;
+      await local`ANALYZE credit_exclusions`;
+      await local`CREATE TEMP VIEW invoice_credit_preview_orders AS SELECT w.* FROM normalized_work_orders w
+        WHERE NOT EXISTS (SELECT 1 FROM credit_exclusions c WHERE c.id=w.id)`;
+      reportSql=INVOICE_HOURS_SQL.replaceAll("normalized_work_orders","invoice_credit_preview_orders");
+      await report("after_separate_credits",shops);
     }
     for(const shop of shops)await report("after_location",[shop]);
     console.log(JSON.stringify({event:"validation_complete",total,inventory,productionWrites:0,providerRequests:0}));

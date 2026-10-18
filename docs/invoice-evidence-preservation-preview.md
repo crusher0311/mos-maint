@@ -1,5 +1,31 @@
 # Stored-status classification experiment
 
+## Local credit-document experiment
+
+`--stored-reconcile --separate-credits` adds a local-only credit review. A record
+is separated only when every matched raw/header copy is a final CreditSlip with
+an explicit positive number, matching provider identity and consistent valid
+invoice date. Ordinary invoice evidence vetoes credit exclusion. A second
+normalized record sharing the identity also vetoes exclusion if its type is
+unverified or its credit date conflicts, including across the reporting boundary.
+
+The real invoice SQL runs first unchanged, then against a disposable local view
+excluding only those reviewed credit records. Separate counts distinguish
+in-period from out-of-period credit records. This does not net credits against
+labor totals, change production SQL, change production work-order statuses, or
+establish complete upstream coverage. Fixture tests cover both the unchanged
+invoice totals and unknown/cross-date peer vetoes.
+
+Completed real-data comparison on 2026-10-18 (214,776 copied records):
+1,304 reviewed credit records separated, comprising 36 within the requested
+period and 1,268 outside it. Unknown population fell from 11,306 to 10,002.
+Ordinary invoice count stayed at 6,258; covered sold hours stayed at 6,756.61
+and covered presented hours at 13,601.20. Coverage stayed at 6,257 invoices,
+with one incomplete-hours invoice; both averages remained unavailable.
+The remaining candidate diagnostics were 9,958 missing positive invoice numbers
+and 44 conflicts. These unknown records are not proven in-period invoices.
+No provider calls, production writes or deployments were performed.
+
 ## Header/source audit — 2026-10-18
 
 Read-only audit of 214,740 normalized records and 502 digest-verified capture
