@@ -25,7 +25,7 @@ function describe(raw:any) {
   if(!raw)return {present:false};
   const evidence=invoiceHoursEvidence(raw);
   const jobs=extractProtractorServicePackages(raw);
-  return {present:true,type:vocabulary(raw.Type),stage:vocabulary(raw.WorkflowStage),
+  return {present:true,identityHash:hash(String(raw.ID??"").toLowerCase()),type:vocabulary(raw.Type),stage:vocabulary(raw.WorkflowStage),
     sourceModified:safeTime(raw.Header?.LastModifiedTime),sourceCreated:safeTime(raw.Header?.CreationTime),
     status:vocabulary(raw.Status),number:raw.InvoiceNumber===0||raw.InvoiceNumber==="0"?"zero":
       Number(raw.InvoiceNumber)>0?"positive":"missing",
@@ -36,11 +36,12 @@ function describe(raw:any) {
     regularCollection:Array.isArray(raw.ServicePackages)?"array":
       Array.isArray(raw.ServicePackages?.ItemCollection)?"wrapped_array":
       !Object.hasOwn(raw,"ServicePackages")?"omitted":raw.ServicePackages===null?"null":"malformed",
-    jobs:jobs.map(j=>({status:vocabulary(j.Status),deferred:!!j._isDeferred,
+    jobs:jobs.map(j=>({identityHash:hash(String(j.ID??j.ServicePackageID??"").toLowerCase()),status:vocabulary(j.Status),deferred:!!j._isDeferred,
       isInvoicing:typeof j.IsInvoicing==="boolean"?j.IsInvoicing:null,
       identityPresent:!!(j.ID||j.ServicePackageID),
       billedHours:typeof j.BilledHours==="number"?j.BilledHours:null,
       lines:getProtractorPackageLines(j).map(l=>({
+        identityHash:hash(String(l.ID??"").toLowerCase()),
         type:vocabulary(l.Type??l.LineType),unit:vocabulary(l.Unit),
         hasQuantity:l.Quantity!=null,hasHours:l.Hours!=null,hasBilledHours:l.BilledHours!=null,
         hasEstimatedHours:l.EstimatedHours!=null,evidence:protractorLaborLineEvidence(l),
@@ -61,9 +62,10 @@ async function main() {
       "2026-09-18T00:00:00Z","2026-10-17T23:59:59.999Z"]);
     assert.ok(facts.length<=INVOICE_HOURS_MAX_ORDERS);
     const mixed=process.argv.includes("--mixed-remainder");
-    const held=process.argv.includes("--held-remainder");
+    const header=process.argv.includes("--header-remainder");
+    const held=header||process.argv.includes("--held-remainder");
     const remaining=held||process.argv.includes("--current-remainder");
-    const chosen=remaining?JSON.parse(readFileSync(held?"/tmp/invoice-held-targets.json":"/tmp/invoice-current-targets.json","utf8")):[];
+    const chosen=remaining?JSON.parse(readFileSync(header?"/tmp/invoice-header-targets.json":held?"/tmp/invoice-held-targets.json":"/tmp/invoice-current-targets.json","utf8")):[];
     const targets=remaining?await local`SELECT w.id,w.shop_id,w.provenance,d.reason FROM normalized_work_orders w
       JOIN evidence_diagnostics d ON d.id=w.id WHERE w.id=ANY(${local.array(chosen.map((r:any)=>r.id))})
       ORDER BY w.shop_id,w.id`:mixed?await local`
@@ -83,8 +85,9 @@ async function main() {
          AND p.evidence->>'date'<'2026-10-18')))
       SELECT * FROM ranked WHERE n<=3 ORDER BY shop_id,reason,n`;
     if(mixed)assert.equal(targets.length,48,"Expected the retained mixed-state cohort");
-    if(remaining)assert.equal(targets.length,held?46:107);
-    assert.ok(targets.length<=(held?46:remaining?107:60)&&targets.every(t=>t.shop_id>=227&&t.shop_id<=236));
+    if(header)assert.ok(targets.length===chosen.length&&targets.length>=32&&targets.length<=60);
+    else if(remaining)assert.equal(targets.length,held?46:107);
+    assert.ok(targets.length<=(header?60:held?46:remaining?107:60)&&targets.every(t=>t.shop_id>=227&&t.shop_id<=236));
     await mongo.connect();const db=mongo.db("mos-maintenance-mvp");
     assert.equal((await db.collection("enterprise_accounts").findOne({shopIds:227},{projection:{name:1},maxTimeMS:5000}))?.name,"JWT");
     console.log(JSON.stringify({event:"targeted_trace_start",records:targets.length,productionWrites:0,providerRequests:0}));

@@ -600,6 +600,33 @@ The full run reported zero provider requests and zero production writes.
 Nothing was deployed. Passing validation does not mean the enterprise report
 is complete or that source coverage is exhaustive.
 
+### Follow-up labor and identity trace
+
+The next bounded trace reproduced the 31 unknown identities and examined
+38 candidate source rows, including the incomplete invoice. It performed no
+provider requests or production writes.
+
+Of 17 recorded-hour-conflict rows, 13 are in shop 227. In the traced sources
+these compare earlier ScheduledWork, Unassigned or InspectionInProgress
+snapshots against later agreeing final invoices. Comparing hashed labor-line
+identities found additions but no removed old labor lines or changed hours
+on shared labor lines. Every final date in this 13-row cohort is September
+1–11, before the September 18 report start. This supports investigating
+date-only eligibility independently of financial reconciliation; it does not
+authorize silently replacing draft labor or establish a new report count.
+
+The other four hour conflicts compare different final versions: shared labor
+line IDs actually have changed hours. One changes from 100 to 1. The remaining
+eight evidence-conflict rows and two identity-conflict rows contain different
+provider invoice IDs and different job sets. Their source-identity linkage
+requires review; they must not be treated as revisions of one invoice simply
+because both IDs occur in a normalized row's provenance.
+
+The trace is not a substitute for the full dedicated-cache reconciliation.
+No exclusions or reporting policies were changed by this investigation.
+The last full verified result remains 31 unknown identities and one incomplete
+invoice. Diagnostic changes passed type checking and whitespace validation.
+
 The source stores can change during this read-only run; it is not a fleet-wide
 atomic snapshot or a guarantee of complete upstream history.
 

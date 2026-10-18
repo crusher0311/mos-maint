@@ -234,6 +234,19 @@ hours. Keep it unresolved rather than treating null from a finality-gated helper
 as proof of financial agreement. Never use an old snapshot to invent new invoice
 hours or establish finality.
 
+Different totals on a pre-invoice draft and a final invoice are not necessarily
+contradictory labor evidence.
+
+**Why:** A targeted trace found older drafts with fewer jobs, while shared labor
+line IDs retained the same hours in the final invoice. Separate final-version
+conflicts did change hours on identical labor line IDs, so the two cases need
+different treatment.
+
+**How to apply:** Compare line identities and source stages before diagnosing
+corruption or proposing latest-version selection. Where all verified dates are
+outside the report period, evaluate date-only scope independently; do not weaken
+financial conflict checks or claim a lower unknown count before validation.
+
 Retained preview databases under `/tmp` are not durable across workspace sessions.
 
 **Why:** A previously retained reporting database was absent on a later turn,
