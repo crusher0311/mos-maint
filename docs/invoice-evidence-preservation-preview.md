@@ -46,6 +46,27 @@ These are comparisons within one run; source data changed between earlier
 runs, so their differing invoice/credit counts are not experiment effects.
 Zero provider requests and production writes; no deployment.
 
+### Offline remainder inspection
+
+The retained local copy reproduced 6,259 verified invoices and 152 unknown
+records without reading external stores. The remainder consists of:
+
+- 108 missing positive invoice numbers: 48 have mixed open/completed and
+  invoice-stage snapshots; 60 have no recognized final invoice stage in the
+  retained shape summaries (59 WorkOrder, one missing/other type).
+- 30 conflicting-date records.
+- 8 conflicting-evidence records.
+- 2 conflicting-identity records.
+- 4 conflicting-recorded-hours records.
+
+All 152 normalized rows say `closed`; this does not resolve their source
+contradictions. The single incomplete-hours invoice is additional to these
+unknown records, not part of the 152. Shape summaries do not retain source
+chronology or complete payloads, so they cannot prove that an open snapshot is
+older than the invoice snapshot, or resolve disagreements. No additional rows
+were reclassified. The offline inspector creates only temporary local objects
+and checks that the report exactly reproduces the retained result.
+
 ## Local credit-document experiment
 
 `--stored-reconcile --separate-credits` adds a local-only credit review. A record
