@@ -33,7 +33,11 @@ feature parity or a completed unified workflow.
 **Why:** owner's stated direction (July 2026) — declined AutoFlow sheet write-back for Auto DVI.
 
 **How to apply:**
-- Protractor DOES have a native inspection write: POST `/WorkOrder/{id}/Inspection` (docs §1.9.4 InspectionResultUpdate) — only packages with Chapter "Inspection" processed, only header + `ServicePackageInspectionLines.ItemCollection` lines `{ID, Rank, Title, Result, Notes}` (item name goes in Title, NOT Description; live-probed 2026-07-31). Result values: Good / Needs Attention / Immediate. Re-posting the same package/line IDs updates in place (whole line set replaced). WO service packages can NEVER be deleted via API — pushes must find+reuse an existing MOS package or they stack duplicates forever. `/WorkOrder/Inspections` is the read side.
+- Protractor native inspection writes update/create by package and line ID; do not assume the entire line set is replaced. Result labels are shop-configured, not a universal Good / Needs Attention / Immediate mapping. Ordinary WO package removal is unsupported; keep stable package identity.
+
+**Why:** Public Swagger checked 2026-10-18 explicitly describes ID-based inspection upserts; later historical grid observations below contradicted the earlier replacement/universal-label assumption.
+
+**How to apply:** Verify each shop's displayed labels and treat tombstone behavior as a separately verified capability, never as general package-deletion support.
 - AutoFlow CAN be written via the extension (`update_sheet` status+notes on existing sheet items, `add_rvh` recommendations; no new items, no photos) — that path stays reserved for the separate dvi_prefill feature.
 - Yellow/red ratings go on line titles as bracketed tags ("Inspected: Battery [Red]"); notes/recommendations in the package note. Tags are verb-free so titles stay inspect-only for anchoring.
 - Recommended-work push (overdue/due-soon → priced packages, history-hours + cachedLaborRate) is built but parked behind an off-by-default dashboard toggle pending review.
