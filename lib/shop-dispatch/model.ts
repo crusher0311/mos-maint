@@ -49,6 +49,8 @@ export interface Job {
   sourceTechnicians?: {sourceId:string|null;name:string}[];
 }
 export interface Visit {
+  /** Retired imported IDs; never VIN or display RO aliases. */
+  workflowAliases?:string[];
   intake?:import("./intake-types").WorkflowIntake;
   id: string; ro: string; vehicle: string; customer: string;
   arrivalAt: string | null; promiseAt: string | null; transport: Transport;
@@ -62,6 +64,7 @@ export interface Receipt {
     previous: Pick<Job,"technicianId"|"resource"|"plannedStart"|"estimatedMinutes"> };
 }
 export interface Board {
+  dviAdmissions?:import("../auto-dvi/workflow-binding-contract").BindingAdmission[];
   ticketIntents?:import("./intake-types").TicketIntent[];
   scheduleViews?: ScheduleLaneViews;
   operationsEnabled?:boolean;

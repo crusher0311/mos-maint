@@ -37,11 +37,14 @@ export function bindTicket(board:Board,visitId:string,intake:Intake,now:string,p
   requireThat(!visit.sourceId||visit.sourceId===id,"Visit is already linked to a different ticket",409);
   const other=board.visits.find(v=>v.id!==visit.id&&v.provider==="protractor"&&v.sourceId===id);
   if(other){
+    requireThat(!board.dviAdmissions?.some(a=>a.identity.workflowVisitId===other.id),
+      "Imported visit has an inspection binding; explicit inspection reconciliation required",409);
     requireThat(!other.closed&&!other.intake,"Ticket belongs to another checked-in or closed visit; manager resolution required",409);
     // Conflicting customer plans cannot be silently overwritten.
     requireThat(!other.arrivalAt&&!other.promiseAt&&other.transport.customerPlan==="unknown"&&other.transport.ride==="none"&&other.transport.loaner==="none"&&!other.transport.notes&&!other.transport.pickupAt,
       "Imported visit has local customer commitments; resolve them before linking",409);
     for(const job of board.jobs.filter(j=>j.visitId===other.id))job.visitId=visit.id;
+    visit.workflowAliases=[...new Set([...(visit.workflowAliases??[]),other.id,...(other.workflowAliases??[])])];
     board.visits=board.visits.filter(v=>v.id!==other.id);
     // Audit targets remain unchanged: append the reconciliation identity.
     board.audit.push({at:now,actor:"system:ticket-link",action:"merge-visit",target:visit.id,detail:`Retained all jobs and history from ${other.id}`});

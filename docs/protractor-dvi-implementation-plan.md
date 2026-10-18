@@ -51,6 +51,10 @@ Avoid broad rewrites, blanket package upgrades or deleting legacy paths. Cleanup
 
 **Review gate:** approve binding/alias semantics, storage design and permission precedence against the settled product rules before persistence/UI implementation. S1 can be completed entirely offline; its completion is not a rollout decision.
 
+The dark S1 contract and synthetic harness are documented in
+[S1 boundary design and storage proposal](protractor-dvi-s1-boundary.md).
+Production persistence/UI approval remains a separate gate.
+
 ## Subsequent roadmap
 
 | Slice | Dependencies and scope | Acceptance and exit gate |

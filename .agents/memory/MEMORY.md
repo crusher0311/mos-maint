@@ -147,3 +147,4 @@
 - [Sticker QR compatibility](sticker-qr-compatibility.md) — preserve printed HoverCode targets; publish cached images and target metadata together.
 - [Cron network fault injection](cron-fault-injection.md) — PostgreSQL parameter descriptions must reach the driver before execution acknowledgments can be lost.
 - [Workflow ticket intake safety](workflow-ticket-intake-safety.md) — explicit ticket writes are approved; appointment writes remain excluded, and timed-out admissions require exact-ID recovery.
+- [Workflow DVI boundary scope](workflow-dvi-boundary-scope.md) — offline identity contracts do not authorize persistence, release or duplicate enterprise-match work.
