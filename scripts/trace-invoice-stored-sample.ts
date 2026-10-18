@@ -10,6 +10,7 @@ import {INVOICE_HOURS_SQL,INVOICE_HOURS_MAX_ORDERS} from "../lib/invoice-hours-q
 import {reviewInvoiceChronology} from "./invoice-date-review";
 import {extractProtractorServicePackages,getProtractorPackageLines} from "../lib/integrations/protractor/package-normalization";
 import {protractorLaborLineEvidence} from "../lib/labor-reporting-contract";
+import {protractorInvoiceLaborEvidence} from "../lib/integrations/protractor/labor-evidence";
 const hash=(s:string)=>createHash("sha256").update(s).digest("hex");
 const vocabulary=(v:any)=>typeof v==="string"&&/^[a-z _-]{1,40}$/i.test(v)?v:"missing_or_other";
 function safeTime(v:any) {
@@ -30,6 +31,7 @@ function describe(raw:any) {
       Number(raw.InvoiceNumber)>0?"positive":"missing",
     invoiceDate:typeof raw.InvoiceTime==="string"&&/^\d{4}-\d{2}-\d{2}T/.test(raw.InvoiceTime)?raw.InvoiceTime:null,
     strictEvidence:evidence?{sold:evidence.sold,presented:evidence.presented}:null,
+    recordedLabor:protractorInvoiceLaborEvidence({...raw,WorkflowStage:"Invoice",Status:undefined}),
     deferredField:Object.hasOwn(raw,"DeferredServicePackages")?"present":"omitted",
     regularCollection:Array.isArray(raw.ServicePackages)?"array":
       Array.isArray(raw.ServicePackages?.ItemCollection)?"wrapped_array":
@@ -59,8 +61,9 @@ async function main() {
       "2026-09-18T00:00:00Z","2026-10-17T23:59:59.999Z"]);
     assert.ok(facts.length<=INVOICE_HOURS_MAX_ORDERS);
     const mixed=process.argv.includes("--mixed-remainder");
-    const remaining=process.argv.includes("--current-remainder");
-    const chosen=remaining?JSON.parse(readFileSync("/tmp/invoice-current-targets.json","utf8")):[];
+    const held=process.argv.includes("--held-remainder");
+    const remaining=held||process.argv.includes("--current-remainder");
+    const chosen=remaining?JSON.parse(readFileSync(held?"/tmp/invoice-held-targets.json":"/tmp/invoice-current-targets.json","utf8")):[];
     const targets=remaining?await local`SELECT w.id,w.shop_id,w.provenance,d.reason FROM normalized_work_orders w
       JOIN evidence_diagnostics d ON d.id=w.id WHERE w.id=ANY(${local.array(chosen.map((r:any)=>r.id))})
       ORDER BY w.shop_id,w.id`:mixed?await local`
@@ -80,8 +83,8 @@ async function main() {
          AND p.evidence->>'date'<'2026-10-18')))
       SELECT * FROM ranked WHERE n<=3 ORDER BY shop_id,reason,n`;
     if(mixed)assert.equal(targets.length,48,"Expected the retained mixed-state cohort");
-    if(remaining)assert.equal(targets.length,107);
-    assert.ok(targets.length<=(remaining?107:60)&&targets.every(t=>t.shop_id>=227&&t.shop_id<=236));
+    if(remaining)assert.equal(targets.length,held?46:107);
+    assert.ok(targets.length<=(held?46:remaining?107:60)&&targets.every(t=>t.shop_id>=227&&t.shop_id<=236));
     await mongo.connect();const db=mongo.db("mos-maintenance-mvp");
     assert.equal((await db.collection("enterprise_accounts").findOne({shopIds:227},{projection:{name:1},maxTimeMS:5000}))?.name,"JWT");
     console.log(JSON.stringify({event:"targeted_trace_start",records:targets.length,productionWrites:0,providerRequests:0}));
@@ -91,6 +94,7 @@ async function main() {
         ["invoice_id","work_order_id"].includes(s.idType)).map((s:any)=>String(s.idValue).toLowerCase());
       const wanted=new Set(selected.flatMap(ids));
       const captured=new Map<string,any[]>();
+      const capturedRaw=new Map<string,any[]>();
       stage="archive";let pages=0;
       for(const campaign of ["protractor-weekend-2026-10-17","invoice-evidence-recovery-2026-10-17"]) {
         const cursor=db.collection<any>("operator_history_import_pages").find(
@@ -101,6 +105,7 @@ async function main() {
           assert.equal(hash(JSON.stringify(page.invoices)),page.digest);
           for(const raw of page.invoices)if(wanted.has(String(raw.ID).toLowerCase())){
             const key=String(raw.ID).toLowerCase();captured.set(key,[...(captured.get(key)??[]),describe(raw)]);
+            capturedRaw.set(key,[...(capturedRaw.get(key)??[]),raw]);
           }
         }
       }
@@ -121,11 +126,15 @@ async function main() {
           {projection:{rawPayload:1,fetchedAt:1,updatedAt:1},maxTimeMS:5000}).hint("unique_shop_source_idValue").limit(101).toArray();
         assert.ok(wo.length<101&&mirror.length<101);
         const original:any=originals.find((r:any)=>hash(`${shop}:${r.id}`)===t.id);
-        const chronology=(mixed||remaining)&&keys.every((k:string)=>!captured.get(k)?.length)
+        const chronology=(mixed||remaining)
           ?reviewInvoiceChronology(keys,[original?.raw_data?.rawPayload,...wo.map(r=>r.rawPayload),
-            ...mirror.map(r=>r.rawPayload)].filter(Boolean)):null;
+            ...mirror.map(r=>r.rawPayload),...keys.flatMap((k:string)=>capturedRaw.get(k)??[])].filter(Boolean)):null;
         console.log(JSON.stringify({event:"targeted_trace_record",shop,record:t.id,reason:t.reason,
           chronology,
+          identityReview:[original?.raw_data?.rawPayload,...wo.map(r=>r.rawPayload),
+            ...mirror.map(r=>r.rawPayload),...keys.flatMap((k:string)=>capturedRaw.get(k)??[])]
+            .filter(Boolean).map(r=>({matchesTarget:keys.includes(String(r.ID??"").toLowerCase()),
+              identityHash:hash(String(r.ID??"").toLowerCase())})),
           pg:describe(original?.raw_data?.rawPayload),
           pgEnvelopeKeys:Object.keys(original?.raw_data??{}),
           workOrderCache:wo.map(r=>({...describe(r.rawPayload),timing:timing(r)})),

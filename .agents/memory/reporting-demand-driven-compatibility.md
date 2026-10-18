@@ -200,6 +200,18 @@ Never silently discard equal/newer nonfinal snapshots or conflicting final
 copies. Chronology-based date exclusions still require separate local validation;
 they do not establish invoice-number or labor completeness.
 
+Source identity-set membership is not proof that two provider invoices are
+versions of the same invoice.
+
+**Why:** Targeted stored-data review found conflicting copies with two distinct
+provider IDs, both present in the selected normalized row's provenance. Treating
+these as older and newer versions could combine unrelated invoice labor.
+
+**How to apply:** Verify equivalence before resolving conflicts by chronology.
+Preserve identity vetoes even when both IDs match a row's lookup set. Also test
+source projections end to end: dropping provider Header timestamps can make
+valid chronology fail despite correctly timestamped raw data in storage.
+
 Distinguish earlier sentinel-date snapshots from disagreements between two
 final invoice versions.
 

@@ -29,9 +29,10 @@ async function main() {
     const facts=await db.unsafe(INVOICE_HOURS_SQL.replaceAll("normalized_work_orders","remainder_preview"),
       ["{227,228,229,230,231,232,233,234,235,236}",start,end]);
     const summary=aggregateInvoiceHours(facts as any,new Date(start),new Date(end)).summary;
-    const current=process.argv.includes("--current-chronology");
-    assert.equal(summary.invoicePopulationUnknown,current?106:152,"Retained result must reproduce exactly");
-    assert.equal(summary.invoiceCount,current?6260:6259);
+    const held=process.argv.includes("--held-remainder");
+    const current=held||process.argv.includes("--current-chronology");
+    assert.equal(summary.invoicePopulationUnknown,held?41:current?106:152,"Retained result must reproduce exactly");
+    assert.equal(summary.invoiceCount,held?6273:current?6260:6259);
     console.log(JSON.stringify({event:"reproduced",summary}));
     const rows=await db`SELECT d.reason,r.classification date_review,r.date,u.classification status_review,
       u.shape,w.shop_id,w.status,count(*)::int records
@@ -46,8 +47,9 @@ async function main() {
       const targets=await db`SELECT w.id,w.shop_id,d.reason FROM normalized_work_orders w
         JOIN evidence_diagnostics d ON d.id=w.id WHERE w.id=ANY(${db.array(facts.map(f=>f.id))})
         AND d.reason<>'verified_complete' ORDER BY w.shop_id,w.id`;
-      assert.equal(targets.length,107);
-      writeFileSync("/tmp/invoice-current-targets.json",JSON.stringify(targets),{mode:0o600});
+      // Source rows are not deduplicated invoice identities.
+      assert.equal(targets.length,held?46:107);
+      writeFileSync(held?"/tmp/invoice-held-targets.json":"/tmp/invoice-current-targets.json",JSON.stringify(targets),{mode:0o600});
     }
     const reviewFile=current?null:process.argv[3];
     if(reviewFile) {

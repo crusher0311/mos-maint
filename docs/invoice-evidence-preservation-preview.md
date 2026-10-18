@@ -547,6 +547,43 @@ Only minimal reporting rows and hashed-ID diagnostics are stored in disposable
 local PostgreSQL. Diagnostics group missing identity, missing payload, missing
 positive invoice number, invalid identity/date/finality, conflicts and verified
 incomplete hours. Candidate-row counts are not deduplicated invoice counts.
+
+### Targeted remaining-exception review (2026-10-18)
+
+The retained full-period preview reproduced 6,273 verified invoices, 6,272 with
+complete hours, and 41 unknown invoice identities. The diagnostic cohort contains
+46 source rows, not 42: rows and deduplicated invoice identities differ.
+
+A bounded stored-source trace of those rows found:
+
+- 28 date-conflict rows: 21 passed chronology on the traced full payloads; two
+  involved earlier appointments and five earlier OnHold work orders, which the
+  chronology policy deliberately does not accept.
+- Eight evidence-conflict rows and two identity-conflict rows each contain two
+  distinct provider IDs within their selected source-identity set. Membership
+  in that set does not establish that the two invoices are equivalent. Do not
+  apply a latest-version-wins rule.
+- Four recorded-hour conflicts have later final captures with different labor
+  values, including a 100-hour versus 1-hour difference. Preserve the conflict
+  pending identity and revision-policy verification.
+- Three missing-number rows involve appointments (two have later invoice
+  copies; one is appointment-only).
+- The incomplete-hours invoice still lacks its regular ServicePackages
+  collection in every traced copy; deferred work does not prove zero sold hours.
+
+The validator's PostgreSQL payload projection was dropping Header, preventing
+source-time comparisons even when the stored payload contained it. The local
+projection now retains it, and the checkpoint mode rejects pre-fix resumptions.
+An offline PostgreSQL regression executes the real projection and checks source
+timestamp retention and unrelated-field exclusion. Full report fixtures,
+reconciliation regressions and type checking pass.
+
+These findings do not establish a new fleet result: the targeted trace omitted
+dedicated invoice caches covered by the full validator. The last verified count
+remains 41 unknown identities until a fresh full comparison includes those
+sources. There were no provider requests or production writes, and nothing was
+deployed.
+
 The source stores can change during this read-only run; it is not a fleet-wide
 atomic snapshot or a guarantee of complete upstream history.
 

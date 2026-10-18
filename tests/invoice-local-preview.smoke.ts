@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import postgres from "postgres";
 import { userInfo } from "node:os";
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 const port=Number(process.argv[2]);
 const pg=postgres({host:"127.0.0.1",port,database:"postgres",username:userInfo().username,max:1});
 async function main() {
@@ -10,6 +11,16 @@ async function main() {
   try {
     await source`CREATE TABLE normalized_work_orders (id text,shop_id int,status text,soft_delete jsonb,
       provenance jsonb,custom_fields jsonb,raw_data jsonb)`;
+    // Exercise the validator's real SQL projection, not a richer hand-built payload.
+    const validator=readFileSync("scripts/validate-jwt-report-local.ts","utf8");
+    const projection=validator.match(/\(SELECT jsonb_object_agg\(key,value\)[\s\S]*?\) raw/)?.[0];
+    assert.ok(projection);
+    const stamp="2026-10-16T12:00:00Z";
+    const projected=await source.unsafe(`SELECT ${projection} FROM
+      (SELECT $1::text::jsonb raw_data) fixture`,
+      [JSON.stringify({rawPayload:{ID:"fixture",Header:{LastModifiedTime:stamp},Customer:"excluded"}})]);
+    assert.equal(projected[0].raw.Header.LastModifiedTime,stamp);
+    assert.equal(projected[0].raw.Customer,undefined);
     for(let shop=227;shop<=236;shop++) {
       const id=`10000000-0000-0000-0000-000000000${shop}`;
       const raw={ID:id,Type:"Invoice",WorkflowStage:"Invoice",InvoiceNumber:shop,

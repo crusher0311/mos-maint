@@ -64,7 +64,7 @@ async function main() {
     await local`CREATE TABLE IF NOT EXISTS credit_reviews (id text PRIMARY KEY,shop_id int,classification text,date text)`;
     assert.ok(!classify || reconcile,"Classification requires full stored reconciliation");
     await local`CREATE TABLE IF NOT EXISTS uninvoiced_review (id text PRIMARY KEY,shop_id int,classification text,shape jsonb)`;
-    const mode=(classify?"stored-reconcile-uninvoiced":reconcile?"stored-reconcile":"archive")+(credits?"-credits":"")+(dateScope?"-dates":"")+(chronology?"-chronology":"")+(heldSentinels?"-held-sentinels":"");
+    const mode=(classify?"stored-reconcile-uninvoiced":reconcile?"stored-reconcile":"archive")+(credits?"-credits":"")+(dateScope?"-dates":"")+(chronology?"-chronology":"")+(heldSentinels?"-held-sentinels":"")+"-source-header";
     const completed=await local`SELECT * FROM completed_shop_copies`;
     assert.ok(completed.every(r=>r.mode===mode),"Cannot resume with a different validation mode");
     const [baseline]=await local`SELECT to_regclass('invoice_preview_baseline') present`;
@@ -168,7 +168,7 @@ async function main() {
             ELSE '{}'::jsonb END custom_fields,
           (SELECT jsonb_object_agg(key,value) FROM jsonb_each(
             CASE WHEN jsonb_typeof(raw_data->'rawPayload')='object' THEN raw_data->'rawPayload' ELSE '{}'::jsonb END)
-            WHERE key IN ('ID','Type','WorkflowStage','Status','InvoiceNumber','InvoiceTime',
+            WHERE key IN ('ID','Type','WorkflowStage','Status','InvoiceNumber','InvoiceTime','Header',
               'ServicePackages','DeferredServicePackages')) raw
           FROM normalized_work_orders
           WHERE shop_id=$1 AND id=ANY($2::text[])`,
