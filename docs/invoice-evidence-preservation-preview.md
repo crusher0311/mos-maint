@@ -67,6 +67,27 @@ older than the invoice snapshot, or resolve disagreements. No additional rows
 were reclassified. The offline inspector creates only temporary local objects
 and checks that the report exactly reproduces the retained result.
 
+### Targeted mixed-status chronology trace
+
+Read-only inspection of all 48 mixed-status candidates found:
+
+- Every record had a single consistent InvoiceTime across its inspected
+  invoice-stage copies, before the September 18 reporting-period start.
+- Every inspected non-invoice copy had a source Header.LastModifiedTime earlier
+  than every matched invoice-stage copy for that record.
+- No matching invoice captures were found in the two inspected operator
+  campaigns. Dedicated invoice-cache collections were not reread by this trace;
+  the preceding full reconciliation included them.
+- Local cache updatedAt can be later than the actual source modification.
+  Therefore local maintenance timestamps must not decide source chronology.
+
+This supports testing a source-chronology-aware date exclusion locally, not
+declaring these records newly verified invoices. It has not yet been applied to
+the report: the measured unknown count remains 152. An exclusion policy would
+still need per-copy identity binding, valid source timestamps, agreement among
+final copies, and vetoes for equal/newer nonfinal snapshots and other conflicts.
+The trace made no provider requests or production writes; typechecking passed.
+
 ## Local credit-document experiment
 
 `--stored-reconcile --separate-credits` adds a local-only credit review. A record

@@ -188,6 +188,18 @@ ServicePackages collection. That establishes deferred work, not zero sold work.
 regular-work completeness is supported; do not generalize omission-as-empty
 from the separately verified deferred collection.
 
+Use provider modification times, not cache maintenance times, when comparing
+historical Protractor work-order and invoice snapshots.
+
+**Why:** A targeted stored-copy trace found earlier nonfinal snapshots retained
+alongside later invoice-stage copies, while local updatedAt could be later than
+the invoice itself. Local refresh chronology can reverse business chronology.
+
+**How to apply:** Require matching identities and valid provider timestamps.
+Never silently discard equal/newer nonfinal snapshots or conflicting final
+copies. Chronology-based date exclusions still require separate local validation;
+they do not establish invoice-number or labor completeness.
+
 **Why:** On 2026-10-17 the user approved up to 1,000 additional Protractor requests,
 including retries, under existing eligibility and traffic protections, followed
 by another local report validation.

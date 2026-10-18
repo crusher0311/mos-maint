@@ -10,11 +10,20 @@ import {extractProtractorServicePackages,getProtractorPackageLines} from "../lib
 import {protractorLaborLineEvidence} from "../lib/labor-reporting-contract";
 const hash=(s:string)=>createHash("sha256").update(s).digest("hex");
 const vocabulary=(v:any)=>typeof v==="string"&&/^[a-z _-]{1,40}$/i.test(v)?v:"missing_or_other";
+function safeTime(v:any) {
+  if(!(v instanceof Date)&&!(typeof v==="string"&&/^\d{4}-\d\d-\d\dT/.test(v)))return null;
+  const d=new Date(v);return Number.isFinite(+d)&&d.getUTCFullYear()>=1900?d.toISOString():null;
+}
+function timing(doc:any) {
+  return {fetchedAt:safeTime(doc?.fetchedAt),updatedAt:safeTime(doc?.updatedAt),
+    sourceModified:safeTime(doc?.rawPayload?.Header?.LastModifiedTime)};
+}
 function describe(raw:any) {
   if(!raw)return {present:false};
   const evidence=invoiceHoursEvidence(raw);
   const jobs=extractProtractorServicePackages(raw);
   return {present:true,type:vocabulary(raw.Type),stage:vocabulary(raw.WorkflowStage),
+    sourceModified:safeTime(raw.Header?.LastModifiedTime),sourceCreated:safeTime(raw.Header?.CreationTime),
     status:vocabulary(raw.Status),number:raw.InvoiceNumber===0||raw.InvoiceNumber==="0"?"zero":
       Number(raw.InvoiceNumber)>0?"positive":"missing",
     invoiceDate:typeof raw.InvoiceTime==="string"&&/^\d{4}-\d{2}-\d{2}T/.test(raw.InvoiceTime)?raw.InvoiceTime:null,
@@ -47,7 +56,16 @@ async function main() {
     const facts=await local.unsafe(INVOICE_HOURS_SQL,["{227,228,229,230,231,232,233,234,235,236}",
       "2026-09-18T00:00:00Z","2026-10-17T23:59:59.999Z"]);
     assert.ok(facts.length<=INVOICE_HOURS_MAX_ORDERS);
-    const targets=await local`WITH ranked AS (
+    const mixed=process.argv.includes("--mixed-remainder");
+    const targets=mixed?await local`
+      SELECT w.id,w.shop_id,w.provenance,d.reason FROM normalized_work_orders w
+      JOIN evidence_diagnostics d ON d.id=w.id JOIN date_reviews r ON r.id=w.id
+      JOIN uninvoiced_review u ON u.id=w.id
+      WHERE w.id=ANY(${local.array(facts.map(r=>r.id))})
+      AND d.reason='missing_positive_invoice_number' AND r.classification='finality_unverified'
+      AND EXISTS(SELECT 1 FROM jsonb_array_elements_text(u.shape) s WHERE s::jsonb->>'stage'='Invoice')
+      ORDER BY w.shop_id,w.id
+    `:await local`WITH ranked AS (
       SELECT w.id,w.shop_id,w.provenance,d.reason,row_number() OVER(PARTITION BY w.shop_id,d.reason ORDER BY w.id) n
       FROM normalized_work_orders w JOIN evidence_diagnostics d ON d.id=w.id
       LEFT JOIN proposed_evidence p ON p.id=w.id
@@ -55,6 +73,7 @@ async function main() {
         (d.reason='verified_incomplete_hours' AND p.evidence->>'date'>='2026-09-18'
          AND p.evidence->>'date'<'2026-10-18')))
       SELECT * FROM ranked WHERE n<=3 ORDER BY shop_id,reason,n`;
+    if(mixed)assert.equal(targets.length,48,"Expected the retained mixed-state cohort");
     assert.ok(targets.length<=60&&targets.every(t=>t.shop_id>=227&&t.shop_id<=236));
     await mongo.connect();const db=mongo.db("mos-maintenance-mvp");
     assert.equal((await db.collection("enterprise_accounts").findOne({shopIds:227},{projection:{name:1},maxTimeMS:5000}))?.name,"JWT");
@@ -89,16 +108,17 @@ async function main() {
         const keys=ids(t),lookup=[...new Set(keys.flatMap((k:string)=>[k,k.toUpperCase()]))];
         const wo=await db.collection("protractor_work_orders").find(
           {shopId:{$in:[shop,String(shop)]},workOrderId:{$in:lookup}},
-          {projection:{rawPayload:1},maxTimeMS:5000}).hint("protractor_wo_shop_work_order").limit(101).toArray();
+          {projection:{rawPayload:1,fetchedAt:1,updatedAt:1},maxTimeMS:5000}).hint("protractor_wo_shop_work_order").limit(101).toArray();
         const mirror=await db.collection("normalized_work_orders").find(
           {shopId:{$in:[shop,String(shop)]},"provenance.sourceSystem":"protractor","provenance.sourceIds.idValue":{$in:lookup}},
-          {projection:{rawPayload:1},maxTimeMS:5000}).hint("unique_shop_source_idValue").limit(101).toArray();
+          {projection:{rawPayload:1,fetchedAt:1,updatedAt:1},maxTimeMS:5000}).hint("unique_shop_source_idValue").limit(101).toArray();
         assert.ok(wo.length<101&&mirror.length<101);
         const original:any=originals.find((r:any)=>hash(`${shop}:${r.id}`)===t.id);
         console.log(JSON.stringify({event:"targeted_trace_record",shop,record:t.id,reason:t.reason,
           pg:describe(original?.raw_data?.rawPayload),
           pgEnvelopeKeys:Object.keys(original?.raw_data??{}),
-          workOrderCache:wo.map(r=>describe(r.rawPayload)),normalizedMirror:mirror.map(r=>describe(r.rawPayload)),
+          workOrderCache:wo.map(r=>({...describe(r.rawPayload),timing:timing(r)})),
+          normalizedMirror:mirror.map(r=>({...describe(r.rawPayload),timing:timing(r)})),
           captured:keys.flatMap((k:string)=>captured.get(k)??[])}));
       }
     }
