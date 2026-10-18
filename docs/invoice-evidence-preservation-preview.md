@@ -1,5 +1,29 @@
 # Stored-status classification experiment
 
+## Header/source audit — 2026-10-18
+
+Read-only audit of 214,740 normalized records and 502 digest-verified capture
+pages across the ten JWT shops; zero provider requests and production writes.
+Results describe sequential source snapshots, not a single fleet-atomic snapshot.
+
+- 2,430 zero-number normalized WorkOrder/Invoice records dated in the reporting
+  period matched positive-number captures by invoice identity and exact date.
+  Another 522 matching records were outside the period.
+- These are corroborated records, **not additional recovered invoices**. The
+  previous reconciliation already used source captures; no report rerun was
+  performed by this header audit and labor values were not compared here.
+- CreditSlip appeared as the unsupported invoice-stage type: 34 normalized
+  records dated within the reporting period and 1,263 outside it. The captures
+  also included this type. Do not silently include credit notes in ordinary
+  invoice counts or apply financial netting without a defined contract.
+- 15,961 normalized rows had no usable projected raw header. Other stored
+  sources were not exhaustively reconciled by this audit; this is not evidence
+  that the payload is absent everywhere.
+
+The audit does not authorize dropping the positive-number requirement globally.
+Use independent capture evidence where available, reconcile contradictions, and
+validate any separate credit-document treatment in the real local report first.
+
 The optional local validator flags `--stored-reconcile --classify-uninvoiced`
 compare the real report before and after classifying stored uninvoiced work.
 This is not a production reporting-policy change or authorization to repair live

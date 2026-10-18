@@ -142,6 +142,20 @@ matched copies, retain invoice/date/identity contradictions, and report coverage
 as stored-evidence coverage. Keep production status changes and deployment
 outside the local classification experiment.
 
+Zero-number Protractor snapshots can represent the same invoice as independently
+captured positive-number Invoice responses; credit slips are a separate document
+class, not ordinary invoices.
+
+**Why:** A stored-data audit on 2026-10-18 found matching invoice IDs and dates
+between zero-number normalized snapshots and positive-number source captures.
+It also identified CreditSlip payloads among documents rejected by invoice
+verification. This does not establish eligibility for every zero-number record.
+
+**How to apply:** Prefer corroborated source evidence over rejecting a record
+solely for a zero number. Keep date/hour/identity conflict checks, distinguish
+credit documents, and never call corroborated matches newly recovered invoices
+without rerunning the actual report. Header-only audits do not verify labor.
+
 **Why:** On 2026-10-17 the user approved up to 1,000 additional Protractor requests,
 including retries, under existing eligibility and traffic protections, followed
 by another local report validation.
