@@ -18,7 +18,7 @@ The native helper does not expose reliable evidence distinguishing a rejected wr
 
 Staff should check the exact work order's package and inspection view, then contact support if reconciliation is needed. The dashboard and extension block repeat clicks in the current panel after an incomplete result or response loss. The extension keeps its lock and visible warning in work-order-scoped panel state across photo, voice, and generation rerenders, including navigation away and back. This is not a durable server idempotency lock; reopening the panel is **not** permission to retry.
 
-No recovery endpoint or retry button is introduced. Safe future recovery requires durable stable operation/payload identity, persisted exact package/line IDs before admission, exact-ID reconciliation after ambiguous outcomes, and detection of provider edits before a stage-only write. Title matching in the legacy writer does not satisfy that contract, particularly for priced recommended packages.
+No recovery endpoint or retry button is introduced. The [durable recovery design](auto-dvi-durable-recovery-design.md) specifies the separately authorized storage, admission, exact-ID reconciliation, provider-edit conflict handling and stage-only recovery protocol for both routes. It is a design, not an implemented or enabled recovery capability. Title matching in the legacy writer does not satisfy that contract, particularly for priced recommended packages.
 
 ## Offline verification
 
