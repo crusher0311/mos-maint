@@ -200,6 +200,16 @@ Never silently discard equal/newer nonfinal snapshots or conflicting final
 copies. Chronology-based date exclusions still require separate local validation;
 they do not establish invoice-number or labor completeness.
 
+Retained preview databases under `/tmp` are not durable across workspace sessions.
+
+**Why:** A previously retained reporting database was absent on a later turn,
+despite an earlier successful inspection. Reusing its path cannot establish that
+the old snapshot still exists.
+
+**How to apply:** Verify the directory and disposable marker before resuming.
+If missing, rebuild a read-only preview and compare policies within that same
+run; never attribute changed source totals between runs to a reporting fix.
+
 **Why:** On 2026-10-17 the user approved up to 1,000 additional Protractor requests,
 including retries, under existing eligibility and traffic protections, followed
 by another local report validation.

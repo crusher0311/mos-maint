@@ -6,6 +6,7 @@ import postgres from "postgres";
 import {MongoClient} from "mongodb";
 import {invoiceHoursEvidence} from "../lib/invoice-hours-contract";
 import {INVOICE_HOURS_SQL,INVOICE_HOURS_MAX_ORDERS} from "../lib/invoice-hours-query";
+import {reviewInvoiceChronology} from "./invoice-date-review";
 import {extractProtractorServicePackages,getProtractorPackageLines} from "../lib/integrations/protractor/package-normalization";
 import {protractorLaborLineEvidence} from "../lib/labor-reporting-contract";
 const hash=(s:string)=>createHash("sha256").update(s).digest("hex");
@@ -114,7 +115,11 @@ async function main() {
           {projection:{rawPayload:1,fetchedAt:1,updatedAt:1},maxTimeMS:5000}).hint("unique_shop_source_idValue").limit(101).toArray();
         assert.ok(wo.length<101&&mirror.length<101);
         const original:any=originals.find((r:any)=>hash(`${shop}:${r.id}`)===t.id);
+        const chronology=mixed&&keys.every((k:string)=>!captured.get(k)?.length)
+          ?reviewInvoiceChronology(keys,[original?.raw_data?.rawPayload,...wo.map(r=>r.rawPayload),
+            ...mirror.map(r=>r.rawPayload)].filter(Boolean)):null;
         console.log(JSON.stringify({event:"targeted_trace_record",shop,record:t.id,reason:t.reason,
+          chronology,
           pg:describe(original?.raw_data?.rawPayload),
           pgEnvelopeKeys:Object.keys(original?.raw_data??{}),
           workOrderCache:wo.map(r=>({...describe(r.rawPayload),timing:timing(r)})),

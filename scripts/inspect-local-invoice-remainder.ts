@@ -41,6 +41,47 @@ async function main() {
       GROUP BY d.reason,r.classification,r.date,u.classification,u.shape,w.shop_id,w.status
       ORDER BY d.reason,w.shop_id`;
     console.log(JSON.stringify({event:"remaining_diagnostics",rows}));
+    const reviewFile=process.argv[3];
+    if(reviewFile) {
+      const events=readFileSync(reviewFile,"utf8").trim().split("\n").map(l=>JSON.parse(l));
+      assert.equal(events.at(-1)?.event,"targeted_trace_complete");
+      const records=events.filter(e=>e.event==="targeted_trace_record");
+      assert.equal(records.length,48);
+      assert.equal(new Set(records.map(r=>r.record)).size,48);
+      await db`CREATE TEMP TABLE date_reviews AS SELECT * FROM public.date_reviews`;
+      let eligible=0;
+      for(const r of records) {
+        if(r.chronology?.classification!=="consistent_final_invoice_date")continue;
+        const changed=await db`UPDATE date_reviews r SET classification='consistent_final_invoice_date',date=${r.chronology.date}
+          FROM evidence_diagnostics d WHERE r.id=${r.record} AND r.shop_id=${r.shop}
+          AND d.id=r.id AND d.reason='missing_positive_invoice_number'
+          AND r.classification='finality_unverified' RETURNING r.id`;
+        assert.equal(changed.length,1);
+        eligible++;
+      }
+      await db`DROP TABLE date_exclusions CASCADE`;
+      const text=source.match(/CREATE TEMP TABLE date_exclusions AS[\s\S]*?(?=`;)/)?.[0];
+      assert.ok(text);
+      await db.unsafe(text.replaceAll("${start}","$1").replaceAll("${end}","$2"),[start,end]);
+      await db`CREATE UNIQUE INDEX ON date_exclusions(id)`;
+      await db`ANALYZE date_exclusions`;
+      await db`CREATE TEMP VIEW remainder_preview AS SELECT w.* FROM normalized_work_orders w
+        WHERE NOT EXISTS(SELECT 1 FROM credit_exclusions c WHERE c.id=w.id)
+        AND NOT EXISTS(SELECT 1 FROM date_exclusions d WHERE d.id=w.id)`;
+      const after=await db.unsafe(INVOICE_HOURS_SQL.replaceAll("normalized_work_orders","remainder_preview"),
+        ["{227,228,229,230,231,232,233,234,235,236}",start,end]);
+      const result=aggregateInvoiceHours(after as any,new Date(start),new Date(end)).summary;
+      assert.equal(result.invoiceCount,summary.invoiceCount);
+      assert.equal(result.invoiceSoldCovered,summary.invoiceSoldCovered);
+      assert.equal(result.invoicePresentedCovered,summary.invoicePresentedCovered);
+      assert.ok(result.invoiceSoldHours!=null&&summary.invoiceSoldHours!=null);
+      assert.ok(result.invoicePresentedHours!=null&&summary.invoicePresentedHours!=null);
+      assert.ok(result.invoicePopulationUnknown!=null);
+      assert.ok(Math.abs(result.invoiceSoldHours-summary.invoiceSoldHours)<1e-6);
+      assert.ok(Math.abs(result.invoicePresentedHours-summary.invoicePresentedHours)<1e-6);
+      assert.ok(result.invoicePopulationUnknown<=152&&result.invoicePopulationUnknown>=152-eligible);
+      console.log(JSON.stringify({event:"chronology_report",eligible,summary:result,productionWrites:0,providerRequests:0}));
+    }
   } finally {await db.end();}
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});

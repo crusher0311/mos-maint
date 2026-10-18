@@ -88,6 +88,36 @@ still need per-copy identity binding, valid source timestamps, agreement among
 final copies, and vetoes for equal/newer nonfinal snapshots and other conflicts.
 The trace made no provider requests or production writes; typechecking passed.
 
+### Local chronology experiment
+
+`--review-chronology` adds a separate, opt-in local comparison after the strict
+date-scope report. It preserves both strict and chronology reviews from the same
+source reads, reruns the same report SQL, and asserts unchanged verified invoice
+counts, labor coverage and totals. Normalized identity-peer vetoes still apply.
+
+Earlier nonfinal copies must have the same provider identity, explicit zero
+invoice number, a recognized work stage, no real conflicting invoice date, and
+a valid timezone-qualified provider modification time strictly before every
+final copy. Missing, equal, newer, malformed or contradictory source evidence
+remains held. This is date-only exclusion; it does not establish sold hours or
+new verified invoices.
+
+Chronology unit tests, full disposable PostgreSQL regression/resume tests and
+typechecking passed. The prior temporary database was no longer present when
+validation resumed, so real-data verification requires a rebuilt read-only
+preview rather than assuming the earlier 152-record result still applies.
+No production reporting policy has been changed.
+
+Completed rebuilt comparison on 2026-10-18: 215,060 stored records across all ten
+shops, zero provider requests and production writes. Within this same run the
+strict date-scope result had 152 unknown records; chronology reduced that to
+106, a reduction of 46 rather than the projected 48. Do not report 104 as verified.
+Both stages had 6,260 verified invoices, 6,259 with complete hours, 6,757.31
+covered sold hours and 13,610.82 covered presented hours. Counts, coverage and
+labor totals passed the unchanged-value assertions. Both averages remain null.
+The one-invoice difference from the previous run reflects changed source data,
+not the chronology experiment. Reporting is not yet fully verified or deployed.
+
 ## Local credit-document experiment
 
 `--stored-reconcile --separate-credits` adds a local-only credit review. A record

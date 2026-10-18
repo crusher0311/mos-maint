@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import {reviewInvoiceDate} from "../scripts/invoice-date-review";
+import {reviewInvoiceDate,reviewInvoiceChronology} from "../scripts/invoice-date-review";
 const id="11111111-1111-1111-1111-111111111111";
 const raw={ID:id,Type:"WorkOrder",WorkflowStage:"Invoice",InvoiceNumber:0,InvoiceTime:"2026-08-01T12:00:00-04:00"};
 const check=(raws:any[])=>reviewInvoiceDate([id],raws);
@@ -14,3 +14,19 @@ assert.equal(check([{...raw,InvoiceNumber:undefined}]).classification,"number_un
 assert.equal(check([{...raw,ID:"wrong"}]).classification,"identity_conflict");
 assert.equal(check([]).classification,"missing_source");
 console.log("PASS date-scope hypothesis: identity, actual invoice date, explicit zero, no fallback dates");
+const final={...raw,Header:{LastModifiedTime:"2026-08-01T16:00:00Z"}};
+const old={...raw,WorkflowStage:"ScheduledWork",InvoiceTime:"0001-01-01T00:00:00",Header:{LastModifiedTime:"2026-08-01T15:00:00Z"}};
+const chrono=(xs:any[])=>reviewInvoiceChronology([id],xs).classification;
+assert.equal(chrono([old,final]),"consistent_final_invoice_date");
+for(const changed of [
+  {...old,ID:"22222222-2222-2222-2222-222222222222"},
+  {...old,Header:{LastModifiedTime:"2026-08-01T16:00:00Z"}},
+  {...old,Header:{LastModifiedTime:"2026-08-01T17:00:00Z"}},
+  {...old,Header:{}},
+  {...old,Header:{LastModifiedTime:"2026-08-01T15:00:00"}},
+  {...old,InvoiceTime:"2026-07-01T15:00:00Z"},
+  {...old,Type:"CreditSlip"},
+  {...old,InvoiceNumber:123},
+])assert.equal(chrono([changed,final]),"chronology_unverified");
+assert.equal(chrono([old,final,{...final,InvoiceTime:"2026-10-01T12:00:00Z"}]),"date_conflict");
+console.log("PASS chronology: identity, strict ordering, timezone, dates and credit vetoes");

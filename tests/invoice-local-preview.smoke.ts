@@ -68,7 +68,7 @@ async function main() {
     env.MONGODB_USERNAME="offline";env.MONGODB_PASSWORD="offline";
     env.PROTRACTOR_OFFLINE_ALLOW_LOOPBACK="true";
     env.NODE_OPTIONS="--require ./tests/helpers/deny-network-egress.cjs --require ./tests/helpers/invoice-preview-mongo.cjs --require ./scripts/_stubs/server-only-stub.cjs";
-    const child=spawnSync(process.execPath,["--import","tsx","scripts/validate-jwt-report-local.ts",String(port),"--stored-reconcile","--classify-uninvoiced","--separate-credits","--review-date-scope"],{env,encoding:"utf8",timeout:90000});
+    const child=spawnSync(process.execPath,["--import","tsx","scripts/validate-jwt-report-local.ts",String(port),"--stored-reconcile","--classify-uninvoiced","--separate-credits","--review-date-scope","--review-chronology"],{env,encoding:"utf8",timeout:90000});
     assert.equal(child.status,0,child.stdout+"\n"+child.stderr);
     const events=child.stdout.split("\n").filter(x=>x.startsWith("{")).map(x=>JSON.parse(x));
     const after=events.find(e=>e.event==="local_report"&&e.label==="after");
@@ -105,7 +105,9 @@ async function main() {
     assert.equal(counts.conflict,1,"conflicting hours remain unresolved even when legacy invoice number is missing");
     // Re-running a retained local database must use completed shop checkpoints
     // and restore the original baseline, not treat prior local repairs as source.
-    const resumed=spawnSync(process.execPath,["--import","tsx","scripts/validate-jwt-report-local.ts",String(port),"--stored-reconcile","--classify-uninvoiced","--separate-credits","--review-date-scope"],{env,encoding:"utf8",timeout:90000});
+    const chrono=events.find(e=>e.event==="local_report"&&e.label==="after_chronology_experiment");
+    assert.deepEqual(chrono.summary,dated.summary,"Fixtures without qualifying older snapshots must not change");
+    const resumed=spawnSync(process.execPath,["--import","tsx","scripts/validate-jwt-report-local.ts",String(port),"--stored-reconcile","--classify-uninvoiced","--separate-credits","--review-date-scope","--review-chronology"],{env,encoding:"utf8",timeout:90000});
     assert.equal(resumed.status,0,resumed.stdout+"\n"+resumed.stderr);
     const resumedEvents=resumed.stdout.split("\n").filter(x=>x.startsWith("{")).map(x=>JSON.parse(x));
     assert.equal(resumedEvents.filter(e=>e.event==="shop_copy_resumed").length,10);
@@ -116,6 +118,7 @@ async function main() {
     assert.deepEqual(resumedEvents.find(e=>e.event==="local_report"&&e.label==="after_stored_status_classification"),classified);
     assert.deepEqual(resumedEvents.find(e=>e.event==="local_report"&&e.label==="after_separate_credits"),credits);
     assert.deepEqual(resumedEvents.find(e=>e.event==="local_report"&&e.label==="after_date_scope_experiment"),dated);
+    assert.deepEqual(resumedEvents.find(e=>e.event==="local_report"&&e.label==="after_chronology_experiment"),chrono);
     console.log("PASS: read-only source, disposable-only repair, full report SQL, ten locations, null payload and unresolved coverage");
   } finally {await source.end();}
 }

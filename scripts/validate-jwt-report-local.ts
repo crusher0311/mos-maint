@@ -14,7 +14,7 @@ import { protractorInvoiceLaborEvidence } from "../lib/integrations/protractor/l
 import { reconcileStored } from "./invoice-stored-evidence";
 import { reviewUninvoiced, uninvoicedShape } from "./invoice-uninvoiced-review";
 import { reviewCredit } from "./invoice-credit-review";
-import { reviewInvoiceDate } from "./invoice-date-review";
+import { reviewInvoiceDate, reviewInvoiceChronology } from "./invoice-date-review";
 
 const hash = (v: string) => createHash("sha256").update(v).digest("hex");
 const same = (a: any,b: any) => a===b || (!!a&&!!b&&
@@ -53,13 +53,16 @@ async function main() {
     const classify = process.argv.includes("--classify-uninvoiced");
     const credits = process.argv.includes("--separate-credits");
     const dateScope=process.argv.includes("--review-date-scope");
+    const chronology=process.argv.includes("--review-chronology");
+    assert.ok(!chronology||dateScope,"Chronology requires date review");
     assert.ok(!dateScope||(credits&&reconcile),"Date review requires credit and full reconciliation");
     await local`CREATE TABLE IF NOT EXISTS date_reviews (id text PRIMARY KEY,shop_id int,classification text,date text)`;
+    await local`CREATE TABLE IF NOT EXISTS strict_date_reviews (id text PRIMARY KEY,shop_id int,classification text,date text)`;
     assert.ok(!credits||reconcile,"Credit review requires full reconciliation");
     await local`CREATE TABLE IF NOT EXISTS credit_reviews (id text PRIMARY KEY,shop_id int,classification text,date text)`;
     assert.ok(!classify || reconcile,"Classification requires full stored reconciliation");
     await local`CREATE TABLE IF NOT EXISTS uninvoiced_review (id text PRIMARY KEY,shop_id int,classification text,shape jsonb)`;
-    const mode=(classify?"stored-reconcile-uninvoiced":reconcile?"stored-reconcile":"archive")+(credits?"-credits":"")+(dateScope?"-dates":"");
+    const mode=(classify?"stored-reconcile-uninvoiced":reconcile?"stored-reconcile":"archive")+(credits?"-credits":"")+(dateScope?"-dates":"")+(chronology?"-chronology":"");
     const completed=await local`SELECT * FROM completed_shop_copies`;
     assert.ok(completed.every(r=>r.mode===mode),"Cannot resume with a different validation mode");
     const [baseline]=await local`SELECT to_regclass('invoice_preview_baseline') present`;
@@ -116,6 +119,7 @@ async function main() {
       await local`DELETE FROM uninvoiced_review WHERE shop_id=${shop}`;
       await local`DELETE FROM credit_reviews WHERE shop_id=${shop}`;
       await local`DELETE FROM date_reviews WHERE shop_id=${shop}`;
+      await local`DELETE FROM strict_date_reviews WHERE shop_id=${shop}`;
       await local`DELETE FROM normalized_work_orders WHERE shop_id=${shop}`;
       stage="archive";
       const archive=new Map<string,InvoiceEvidence|null>();
@@ -173,6 +177,7 @@ async function main() {
           const statusReviews:any[]=[];
           const creditReviews:any[]=[];
           const dateReviews:any[]=[];
+          const strictDateReviews:any[]=[];
           const rowIds=(row:any)=>(row.provenance?.sourceIds??[])
             .filter((s:any)=>s.system==="protractor"&&["invoice_id","work_order_id"].includes(s.idType))
             .map((s:any)=>String(s.idValue));
@@ -244,13 +249,16 @@ async function main() {
               }
               diagnostics.push({id,shop_id:shop,reason,matched_copies:validPayloads.filter(Boolean).length});
               if(dateScope) {
-                const review=reviewInvoiceDate(ids,[...payloads,...ids.flatMap((key:string)=>archiveHeaders.get(key)??[])]);
+                const review=(chronology?reviewInvoiceChronology:reviewInvoiceDate)(ids,[...payloads,...ids.flatMap((key:string)=>archiveHeaders.get(key)??[])]);
+                const strict=reviewInvoiceDate(ids,[...payloads,...ids.flatMap((key:string)=>archiveHeaders.get(key)??[])]);
                 // Existing/derived invoice evidence and all reconciliation
                 // contradictions remain in the ordinary report unchanged.
                 if(present!=null||checked.evidence!=null||reason.startsWith("conflicting")||reason.startsWith("matched_copy")) {
                   review.classification="retain_invoice_or_conflict";review.date=null;
+                  strict.classification="retain_invoice_or_conflict";strict.date=null;
                 }
                 dateReviews.push({id,shop_id:shop,...review});
+                strictDateReviews.push({id,shop_id:shop,...strict});
               }
               if(credits)creditReviews.push({id,shop_id:shop,...reviewCredit(ids,
                 [...payloads,...ids.flatMap((key:string)=>archiveHeaders.get(key)??[])],
@@ -299,6 +307,8 @@ async function main() {
           await local.begin(async t=>{
             if(dateReviews.length)await t.unsafe(`INSERT INTO date_reviews SELECT * FROM jsonb_to_recordset($1::jsonb)
               AS r(id text,shop_id int,classification text,date text)`,[t.json(dateReviews)]);
+            if(strictDateReviews.length)await t.unsafe(`INSERT INTO strict_date_reviews SELECT * FROM jsonb_to_recordset($1::jsonb)
+              AS r(id text,shop_id int,classification text,date text)`,[t.json(strictDateReviews)]);
             if(creditReviews.length)await t.unsafe(`INSERT INTO credit_reviews SELECT * FROM jsonb_to_recordset($1::jsonb)
               AS r(id text,shop_id int,classification text,date text)`,[t.json(creditReviews)]);
             if(statusReviews.length)await t.unsafe(`INSERT INTO uninvoiced_review SELECT * FROM jsonb_to_recordset($1::jsonb)
@@ -394,6 +404,8 @@ async function main() {
       await report("after_separate_credits",shops);
     }
     if(dateScope) {
+      if(chronology)await local`CREATE TEMP TABLE date_reviews AS SELECT * FROM public.strict_date_reviews`;
+      async function buildDateExclusions() {
       await local`CREATE TEMP TABLE date_exclusions AS
         WITH identities AS MATERIALIZED (
           SELECT w.id,w.shop_id,lower(s->>'idValue') identity,r.date,
@@ -411,6 +423,8 @@ async function main() {
             ON b.shop_id=i.shop_id AND b.identity=i.identity WHERE i.id=r.id)`;
       await local`CREATE UNIQUE INDEX ON date_exclusions(id)`;
       await local`ANALYZE date_exclusions`;
+      }
+      await buildDateExclusions();
       const counts=await local`SELECT shop_id,count(*)::int records FROM date_exclusions GROUP BY shop_id ORDER BY shop_id`;
       console.log(JSON.stringify({event:"out_of_period_date_experiment",groups:counts,
         note:"Local hypothesis using consistent final InvoiceTime; no new invoice or hours evidence."}));
@@ -418,6 +432,25 @@ async function main() {
         WHERE NOT EXISTS (SELECT 1 FROM date_exclusions d WHERE d.id=w.id)`;
       reportSql=INVOICE_HOURS_SQL.replaceAll("normalized_work_orders","invoice_date_preview_orders");
       await report("after_date_scope_experiment",shops);
+      if(chronology) {
+        const before=await local.unsafe(reportSql,[`{${shops.join(",")}}`,start,end]);
+        await local`DROP VIEW invoice_date_preview_orders`;
+        await local`DROP TABLE date_exclusions`;
+        await local`TRUNCATE date_reviews`;
+        await local`INSERT INTO date_reviews SELECT * FROM public.date_reviews`;
+        await buildDateExclusions();
+        await local`CREATE TEMP VIEW invoice_date_preview_orders AS SELECT w.* FROM invoice_credit_preview_orders w
+          WHERE NOT EXISTS (SELECT 1 FROM date_exclusions d WHERE d.id=w.id)`;
+        const after=await local.unsafe(reportSql,[`{${shops.join(",")}}`,start,end]);
+        const b=aggregateInvoiceHours(before as any,new Date(start),new Date(end)).summary;
+        const a=aggregateInvoiceHours(after as any,new Date(start),new Date(end)).summary;
+        for(const k of ["invoiceCount","invoiceSoldCovered","invoicePresentedCovered"] as const)assert.equal(a[k],b[k]);
+        for(const k of ["invoiceSoldHours","invoicePresentedHours"] as const) {
+          assert.ok(a[k]!=null&&b[k]!=null);
+          assert.ok(Math.abs(a[k]!-b[k]!)<1e-6,"Chronology must not change verified hours");
+        }
+        await report("after_chronology_experiment",shops);
+      }
     }
     for(const shop of shops)await report("after_location",[shop]);
     console.log(JSON.stringify({event:"validation_complete",total,inventory,productionWrites:0,providerRequests:0}));
