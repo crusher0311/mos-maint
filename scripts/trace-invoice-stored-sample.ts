@@ -1,6 +1,7 @@
 /** Targeted read-only trace from an existing disposable preview; no provider calls. */
 import assert from "node:assert/strict";
 import {createHash} from "node:crypto";
+import {readFileSync} from "node:fs";
 import {userInfo} from "node:os";
 import postgres from "postgres";
 import {MongoClient} from "mongodb";
@@ -58,7 +59,11 @@ async function main() {
       "2026-09-18T00:00:00Z","2026-10-17T23:59:59.999Z"]);
     assert.ok(facts.length<=INVOICE_HOURS_MAX_ORDERS);
     const mixed=process.argv.includes("--mixed-remainder");
-    const targets=mixed?await local`
+    const remaining=process.argv.includes("--current-remainder");
+    const chosen=remaining?JSON.parse(readFileSync("/tmp/invoice-current-targets.json","utf8")):[];
+    const targets=remaining?await local`SELECT w.id,w.shop_id,w.provenance,d.reason FROM normalized_work_orders w
+      JOIN evidence_diagnostics d ON d.id=w.id WHERE w.id=ANY(${local.array(chosen.map((r:any)=>r.id))})
+      ORDER BY w.shop_id,w.id`:mixed?await local`
       SELECT w.id,w.shop_id,w.provenance,d.reason FROM normalized_work_orders w
       JOIN evidence_diagnostics d ON d.id=w.id JOIN date_reviews r ON r.id=w.id
       JOIN uninvoiced_review u ON u.id=w.id
@@ -75,7 +80,8 @@ async function main() {
          AND p.evidence->>'date'<'2026-10-18')))
       SELECT * FROM ranked WHERE n<=3 ORDER BY shop_id,reason,n`;
     if(mixed)assert.equal(targets.length,48,"Expected the retained mixed-state cohort");
-    assert.ok(targets.length<=60&&targets.every(t=>t.shop_id>=227&&t.shop_id<=236));
+    if(remaining)assert.equal(targets.length,107);
+    assert.ok(targets.length<=(remaining?107:60)&&targets.every(t=>t.shop_id>=227&&t.shop_id<=236));
     await mongo.connect();const db=mongo.db("mos-maintenance-mvp");
     assert.equal((await db.collection("enterprise_accounts").findOne({shopIds:227},{projection:{name:1},maxTimeMS:5000}))?.name,"JWT");
     console.log(JSON.stringify({event:"targeted_trace_start",records:targets.length,productionWrites:0,providerRequests:0}));
@@ -115,7 +121,7 @@ async function main() {
           {projection:{rawPayload:1,fetchedAt:1,updatedAt:1},maxTimeMS:5000}).hint("unique_shop_source_idValue").limit(101).toArray();
         assert.ok(wo.length<101&&mirror.length<101);
         const original:any=originals.find((r:any)=>hash(`${shop}:${r.id}`)===t.id);
-        const chronology=mixed&&keys.every((k:string)=>!captured.get(k)?.length)
+        const chronology=(mixed||remaining)&&keys.every((k:string)=>!captured.get(k)?.length)
           ?reviewInvoiceChronology(keys,[original?.raw_data?.rawPayload,...wo.map(r=>r.rawPayload),
             ...mirror.map(r=>r.rawPayload)].filter(Boolean)):null;
         console.log(JSON.stringify({event:"targeted_trace_record",shop,record:t.id,reason:t.reason,

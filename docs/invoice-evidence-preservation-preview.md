@@ -118,6 +118,39 @@ labor totals passed the unchanged-value assertions. Both averages remain null.
 The one-invoice difference from the previous run reflects changed source data,
 not the chronology experiment. Reporting is not yet fully verified or deployed.
 
+### Remaining 106 records: bounded stored-copy trace
+
+A follow-up read-only trace selected the actual post-chronology SQL candidates
+from the retained local snapshot: 106 unknown records plus the separate one
+incomplete-hours invoice. It inspected matched PG raw data, indexed Mongo
+work-order/mirror copies and digest-verified pages in the two operator campaigns.
+Dedicated invoice-cache collections were not reread in this targeted pass;
+the preceding full validation had included them.
+
+- **59 OnHold work orders:** inspected copies consistently have Type WorkOrder,
+  stage OnHold, zero invoice numbers and sentinel invoice dates. The local
+  uninvoiced-stage allowlist omits OnHold. The normalized adapter also omits it
+  and defaults unknown stages to closed. No reclassification has been applied.
+- **1 appointment-only record:** lacks a recognized final invoice stage.
+- **2 mixed appointment/invoice records:** the earlier ScheduledWork copy is
+  Type Appointment, not WorkOrder. This explains the two exclusions that the
+  WorkOrder-only chronology rule did not permit.
+- **30 date-conflict records:** inspected invoice-stage copies agree on date;
+  inspected nonfinal copies have only sentinel dates and earlier provider
+  modification times. The evidence reconciler currently vetoes those sentinels
+  as date contradictions. This is a candidate for a guarded local experiment,
+  not proof that every record can be promoted without identity/hour checks.
+- **8 conflicting-evidence records:** seven have differing complete labor
+  values among inspected final copies; one has the same complete labor values
+  but differing invoice dates. Do not resolve these by choosing a copy blindly.
+- **4 recorded-hours conflicts:** remain held pending source-version/line-level
+  review; a later complete capture alone does not establish correction policy.
+- **2 identity conflicts:** remain held.
+
+The additional incomplete-hours invoice remains unchanged. The report still has
+106 unknown records; this investigation did not alter policy, production data or
+coverage. Diagnostic typechecking passed. No provider API requests or deployment.
+
 ## Local credit-document experiment
 
 `--stored-reconcile --separate-credits` adds a local-only credit review. A record

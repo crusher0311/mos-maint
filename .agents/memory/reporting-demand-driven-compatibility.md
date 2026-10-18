@@ -200,6 +200,17 @@ Never silently discard equal/newer nonfinal snapshots or conflicting final
 copies. Chronology-based date exclusions still require separate local validation;
 they do not establish invoice-number or labor completeness.
 
+Distinguish earlier sentinel-date snapshots from disagreements between two
+final invoice versions.
+
+**Why:** Stored-source tracing found earlier nonfinal copies with year-0001
+invoice dates blocking otherwise agreeing final dates, but also found final
+copies with genuinely different invoice dates and labor values.
+
+**How to apply:** A chronology exception must verify same identity, source
+ordering and nonfinal state. It must not become a general latest-copy-wins rule
+for conflicting final invoices or financial values.
+
 Retained preview databases under `/tmp` are not durable across workspace sessions.
 
 **Why:** A previously retained reporting database was absent on a later turn,

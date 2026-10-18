@@ -1,6 +1,6 @@
 /** Offline diagnostics only. No production connections or provider clients. */
 import assert from "node:assert/strict";
-import {readFileSync} from "node:fs";
+import {readFileSync,writeFileSync} from "node:fs";
 import {userInfo} from "node:os";
 import postgres from "postgres";
 import {INVOICE_HOURS_SQL} from "../lib/invoice-hours-query";
@@ -29,8 +29,9 @@ async function main() {
     const facts=await db.unsafe(INVOICE_HOURS_SQL.replaceAll("normalized_work_orders","remainder_preview"),
       ["{227,228,229,230,231,232,233,234,235,236}",start,end]);
     const summary=aggregateInvoiceHours(facts as any,new Date(start),new Date(end)).summary;
-    assert.equal(summary.invoicePopulationUnknown,152,"Retained result must reproduce exactly");
-    assert.equal(summary.invoiceCount,6259);
+    const current=process.argv.includes("--current-chronology");
+    assert.equal(summary.invoicePopulationUnknown,current?106:152,"Retained result must reproduce exactly");
+    assert.equal(summary.invoiceCount,current?6260:6259);
     console.log(JSON.stringify({event:"reproduced",summary}));
     const rows=await db`SELECT d.reason,r.classification date_review,r.date,u.classification status_review,
       u.shape,w.shop_id,w.status,count(*)::int records
@@ -41,7 +42,14 @@ async function main() {
       GROUP BY d.reason,r.classification,r.date,u.classification,u.shape,w.shop_id,w.status
       ORDER BY d.reason,w.shop_id`;
     console.log(JSON.stringify({event:"remaining_diagnostics",rows}));
-    const reviewFile=process.argv[3];
+    if(current) {
+      const targets=await db`SELECT w.id,w.shop_id,d.reason FROM normalized_work_orders w
+        JOIN evidence_diagnostics d ON d.id=w.id WHERE w.id=ANY(${db.array(facts.map(f=>f.id))})
+        AND d.reason<>'verified_complete' ORDER BY w.shop_id,w.id`;
+      assert.equal(targets.length,107);
+      writeFileSync("/tmp/invoice-current-targets.json",JSON.stringify(targets),{mode:0o600});
+    }
+    const reviewFile=current?null:process.argv[3];
     if(reviewFile) {
       const events=readFileSync(reviewFile,"utf8").trim().split("\n").map(l=>JSON.parse(l));
       assert.equal(events.at(-1)?.event,"targeted_trace_complete");
