@@ -11,6 +11,7 @@ import postgres from "postgres";
 import { invoiceHoursEvidence, aggregateInvoiceHours, type InvoiceEvidence } from "../lib/invoice-hours-contract";
 import { INVOICE_HOURS_SQL, INVOICE_HOURS_INDEX_SQL, INVOICE_HOURS_MAX_ORDERS } from "../lib/invoice-hours-query";
 import { protractorInvoiceLaborEvidence } from "../lib/integrations/protractor/labor-evidence";
+import { reconcileStored } from "./invoice-stored-evidence";
 
 const hash = (v: string) => createHash("sha256").update(v).digest("hex");
 const same = (a: any,b: any) => a===b || (!!a&&!!b&&
@@ -40,15 +41,65 @@ async function main() {
     assert.equal(shops.length,10);
     assert.ok(shops.every(s=>Number.isSafeInteger(s)&&s>0));
     console.log(JSON.stringify({event:"scope_verified",shops,start,end,productionReadOnly:true}));
-    await local`CREATE TABLE normalized_work_orders (
+    await local`CREATE TABLE IF NOT EXISTS normalized_work_orders (
       id text PRIMARY KEY, shop_id int,status text,soft_delete jsonb,provenance jsonb,custom_fields jsonb)`;
-    await local`CREATE TABLE proposed_evidence (id text PRIMARY KEY,evidence jsonb)`;
+    await local`CREATE TABLE IF NOT EXISTS proposed_evidence (id text PRIMARY KEY,evidence jsonb)`;
+    await local`CREATE TABLE IF NOT EXISTS evidence_diagnostics (id text PRIMARY KEY,shop_id int,reason text,matched_copies int)`;
+    await local`CREATE TABLE IF NOT EXISTS completed_shop_copies (shop_id int PRIMARY KEY, mode text, inventory jsonb)`;
+    const reconcile = process.argv.includes("--stored-reconcile");
+    const mode=reconcile?"stored-reconcile":"archive";
+    const completed=await local`SELECT * FROM completed_shop_copies`;
+    assert.ok(completed.every(r=>r.mode===mode),"Cannot resume with a different validation mode");
+    const [baseline]=await local`SELECT to_regclass('invoice_preview_baseline') present`;
+    if(baseline.present)await local`UPDATE normalized_work_orders w SET custom_fields=b.custom_fields
+      FROM invoice_preview_baseline b WHERE b.id=w.id`;
+    // These legacy invoice collections lack shop/invoice indexes. Build a
+    // temporary identity directory with bounded _id keyset reads, then fetch
+    // matching payloads by _id. No production index or data writes.
+    const directory=new Map<string,{collection:string;id:any}[]>();
+    const invoiceCollections=["protractor_invoice_cache","protractor_invoices"];
+    if(reconcile&&completed.length<shops.length)for(const collection of invoiceCollections) {
+      stage="invoice_cache_directory";
+      const col=db.collection(collection);
+      const [last]=await col.find({},{projection:{_id:1},maxTimeMS:5000}).sort({_id:-1}).limit(1).toArray();
+      let after:any=undefined,scanned=0,matched=0;
+      while(last) {
+        const docs=await col.find({_id:{...(after?{$gt:after}:{}),$lte:last._id}},
+          {projection:{_id:1,shopId:1,invoiceId:1},maxTimeMS:5000}).sort({_id:1}).hint("_id_").limit(1000).toArray();
+        if(!docs.length)break;
+        scanned+=docs.length;assert.ok(scanned<=1000000,"Invoice directory cap reached");
+        for(const d of docs)if(shops.includes(Number(d.shopId))&&d.invoiceId) {
+          const key=`${Number(d.shopId)}:${String(d.invoiceId).toLowerCase()}`;
+          const entries=directory.get(key)??[];entries.push({collection,id:d._id});directory.set(key,entries);matched++;
+        }
+        after=docs[docs.length-1]._id;
+        await new Promise(r=>setTimeout(r,100));
+      }
+      console.log(JSON.stringify({event:"invoice_cache_directory",collection,scanned,matched}));
+    }
+    const pgCaches:string[]=[];
+    if(reconcile)for(const table of ["protractor_work_orders","protractor_invoices","protractor_invoice_cache"]) {
+      const [r]=await source.unsafe("SELECT to_regclass($1) present",[table]);
+      if(r.present)pgCaches.push(table);
+    }
     let total=0;
     const inventory:any[]=[];
     const archiveCutoff = new Date();
     console.log(JSON.stringify({event:"archive_cutoff",at:archiveCutoff.toISOString(),
       campaigns:["protractor-weekend-2026-10-17","invoice-evidence-recovery-2026-10-17"]}));
     for(const shop of shops) {
+      const checkpoint=completed.find(r=>r.shop_id===shop);
+      if(checkpoint) {
+        const [copied]=await local`SELECT count(*)::int rows FROM normalized_work_orders WHERE shop_id=${shop}`;
+        assert.equal(copied.rows,checkpoint.inventory.rows,"Retained shop snapshot is incomplete");
+        inventory.push(checkpoint.inventory);total+=checkpoint.inventory.rows;
+        console.log(JSON.stringify({event:"shop_copy_resumed",...checkpoint.inventory}));
+        continue;
+      }
+      // A stopped shop is recopied; completed shops remain unchanged locally.
+      await local`DELETE FROM proposed_evidence WHERE id IN (SELECT id FROM normalized_work_orders WHERE shop_id=${shop})`;
+      await local`DELETE FROM evidence_diagnostics WHERE shop_id=${shop}`;
+      await local`DELETE FROM normalized_work_orders WHERE shop_id=${shop}`;
       stage="archive";
       const archive=new Map<string,InvoiceEvidence|null>();
       let pages=0;
@@ -93,6 +144,42 @@ async function main() {
           [shop,identifiers.slice(offset,offset+100).map(r=>r.id)]);
           assert.equal(batch.length,Math.min(100,identifiers.length-offset),"Incomplete source batch");
           const copies:any[]=[];const proposals:any[]=[];
+          const diagnostics:any[]=[];
+          const rowIds=(row:any)=>(row.provenance?.sourceIds??[])
+            .filter((s:any)=>s.system==="protractor"&&["invoice_id","work_order_id"].includes(s.idType))
+            .map((s:any)=>String(s.idValue));
+          // Read copies for every row, including conflicts and apparently complete rows.
+          // Exact natural-key queries only: never unbounded VIN or regex scans.
+          const lookup=[...new Set(batch.flatMap(rowIds).flatMap(id=>[id,id.toUpperCase(),id.toLowerCase()]))];
+          let cached:any[]=[],mirrors:any[]=[],invoiceCopies:any[]=[];
+          if(reconcile&&lookup.length) {
+            cached=await db.collection("protractor_work_orders").find(
+              {shopId:{$in:[shop,String(shop)]},workOrderId:{$in:lookup}},
+              {projection:{shopId:1,workOrderId:1,rawPayload:1},maxTimeMS:5000})
+              .hint("protractor_wo_shop_work_order").limit(1001).toArray();
+            mirrors=await db.collection("normalized_work_orders").find(
+              {shopId:{$in:[shop,String(shop)]},"provenance.sourceSystem":"protractor",
+                "provenance.sourceIds.idValue":{$in:lookup}},
+              {projection:{shopId:1,provenance:1,rawPayload:1},maxTimeMS:5000})
+              .hint("unique_shop_source_idValue").limit(1001).toArray();
+            assert.ok(cached.length<1001&&mirrors.length<1001,"Stored copy cap reached");
+            for(const collection of invoiceCollections) {
+              const entries=[...new Set(lookup.map(id=>id.toLowerCase()))]
+                .flatMap(id=>directory.get(`${shop}:${id}`)??[]).filter(d=>d.collection===collection);
+              assert.ok(entries.length<=2000,"Invoice copy cap reached");
+              for(let at=0;at<entries.length;at+=100)invoiceCopies.push(...await db.collection(collection).find(
+                {_id:{$in:entries.slice(at,at+100).map(d=>d.id)}},
+                {projection:{shopId:1,invoiceId:1,invoice:1,rawPayload:1},maxTimeMS:5000}).toArray());
+            }
+            for(const table of pgCaches) {
+              const key=table==="protractor_work_orders"?"work_order_id":"invoice_id";
+              const docs=await sql.unsafe(`SELECT shop_id,${key} source_id,
+                payload->'rawPayload' raw,payload->'invoice' invoice
+                FROM ${table} WHERE shop_id=$1 AND ${key}=ANY($2::text[]) LIMIT 1001`,[shop,lookup]);
+              assert.ok(docs.length<1001,"PG cache cap reached");
+              invoiceCopies.push(...docs.map(d=>({shopId:d.shop_id,invoiceId:d.source_id,rawPayload:d.raw,invoice:d.invoice})));
+            }
+          }
           for(const row of batch) {
             assert.ok(++total<=500000,"Row cap reached: snapshot incomplete");
             count.rows++;
@@ -112,6 +199,30 @@ async function main() {
             const choices=ids.filter((id:string)=>archive.has(id)).map((id:string)=>archive.get(id));
             if(stored)choices.push(stored);
             const present=row.custom_fields?.invoiceHours;
+            if(reconcile) {
+              const cache=cached.filter(d=>Number(d.shopId)===shop&&ids.includes(String(d.workOrderId).toLowerCase()));
+              const mirror=mirrors.filter(d=>Number(d.shopId)===shop&&(d.provenance?.sourceIds??[])
+                .some((s:any)=>s.system==="protractor"&&["invoice_id","work_order_id"].includes(s.idType)&&ids.includes(String(s.idValue).toLowerCase())));
+              const invoices=invoiceCopies.filter(d=>Number(d.shopId)===shop&&ids.includes(String(d.invoiceId).toLowerCase()));
+              const payloads=[raw,...cache.map(d=>d.rawPayload),...mirror.map(d=>d.rawPayload),
+                ...invoices.flatMap(d=>[d.rawPayload,d.invoice])].filter(Boolean);
+              // A key match alone is not authority for a payload with a missing/mismatched ID.
+              const validPayloads=payloads.filter(p=>p===raw||p?.ID&&ids.includes(String(p.ID).toLowerCase()));
+              const checked=reconcileStored(ids,validPayloads,ids.filter((id:string)=>archive.has(id)).map((id:string)=>archive.get(id)!));
+              let reason=checked.reason;
+              if(validPayloads.length!==payloads.length&&payloads.some(Boolean)) {
+                reason="matched_copy_missing_or_mismatched_identity";
+                checked.evidence=null;
+              }
+              diagnostics.push({id,shop_id:shop,reason,matched_copies:validPayloads.filter(Boolean).length});
+              if(present!=null){count.existing++;if(checked.evidence&&!same(present,checked.evidence))count.conflict++;continue;}
+              if(!checked.evidence) {
+                if(reason.startsWith("conflicting")||reason.startsWith("matched_copy"))count.conflict++;
+                else count.unrecoverable++;
+                continue;
+              }
+              count.proposed++;proposals.push({id,evidence:checked.evidence});continue;
+            }
             if(present!=null) {
               count.existing++;
               // Existing evidence is not silently replaced by a repair preview.
@@ -140,6 +251,8 @@ async function main() {
           }
           stage="local_copy";
           await local.begin(async t=>{
+            if(diagnostics.length)await t.unsafe(`INSERT INTO evidence_diagnostics SELECT * FROM jsonb_to_recordset($1::jsonb)
+              AS r(id text,shop_id int,reason text,matched_copies int)`,[t.json(diagnostics)]);
             await t.unsafe(`INSERT INTO normalized_work_orders SELECT * FROM jsonb_to_recordset($1::jsonb)
               AS r(id text,shop_id int,status text,soft_delete jsonb,provenance jsonb,custom_fields jsonb)`,
               [t.json(copies)]);
@@ -150,10 +263,11 @@ async function main() {
           await new Promise(r=>setTimeout(r,100));
         }
       });
+      await local`INSERT INTO completed_shop_copies VALUES (${shop},${mode},${local.json(count)})`;
       inventory.push(count);console.log(JSON.stringify({event:"shop_snapshot",...count}));
     }
     stage="local_indexes";
-    await local`CREATE INDEX ON normalized_work_orders(shop_id)`;
+    await local`CREATE INDEX IF NOT EXISTS invoice_preview_shop ON normalized_work_orders(shop_id)`;
     for(const statement of INVOICE_HOURS_INDEX_SQL.replaceAll("CONCURRENTLY ","").split(";").filter(s=>s.trim()))
       await local.unsafe(statement);
     await local`ANALYZE normalized_work_orders`;
@@ -164,6 +278,7 @@ async function main() {
         bounded:rows.length>INVOICE_HOURS_MAX_ORDERS,
         summary:rows.length>INVOICE_HOURS_MAX_ORDERS?null:aggregateInvoiceHours(rows as any,new Date(start),new Date(end)).summary}));
     }
+    await local`CREATE TABLE IF NOT EXISTS invoice_preview_baseline AS SELECT id,custom_fields FROM normalized_work_orders`;
     stage="baseline_report";await report("before",shops);
     stage="local_repair";
     await local`UPDATE normalized_work_orders w SET custom_fields=jsonb_set(
@@ -171,6 +286,17 @@ async function main() {
       FROM proposed_evidence p WHERE p.id=w.id AND (w.custom_fields->'invoiceHours' IS NULL OR w.custom_fields->'invoiceHours'='null'::jsonb)`;
     await local`ANALYZE normalized_work_orders`;
     stage="repaired_report";await report("after",shops);
+    if(reconcile) {
+      const grouped=await local`SELECT shop_id,reason,count(*)::int records,
+        sum(matched_copies)::int matched_copies FROM evidence_diagnostics GROUP BY shop_id,reason ORDER BY shop_id,reason`;
+      console.log(JSON.stringify({event:"stored_reconciliation_diagnostics",scope:"all copied history",groups:grouped}));
+      const facts=await local.unsafe(INVOICE_HOURS_SQL,[`{${shops.join(",")}}`,start,end]);
+      assert.ok(facts.length<=INVOICE_HOURS_MAX_ORDERS,"Cannot classify capped report");
+      const selected=await local`SELECT d.reason,count(*)::int records FROM evidence_diagnostics d
+        WHERE d.id=ANY(${local.array(facts.map(r=>r.id))}) GROUP BY d.reason ORDER BY d.reason`;
+      console.log(JSON.stringify({event:"report_candidate_diagnostics",groups:selected,
+        note:"Candidate row counts are not deduplicated invoice counts; unknown dates are not proof of in-period invoices."}));
+    }
     for(const shop of shops)await report("after_location",[shop]);
     console.log(JSON.stringify({event:"validation_complete",total,inventory,productionWrites:0,providerRequests:0}));
   } finally {await mongo.close();await source.end();await local.end();}

@@ -147,7 +147,14 @@ mode. Source PostgreSQL sessions default to read-only and each shop is copied
 under a repeatable-read, read-only transaction with a ten-second statement limit.
 Copying uses batches of 100 primary keys with pacing, not a long-running cursor
 that mixes source reads and local insert round trips. The launcher removes the
-temporary cluster on exit, including failures.
+temporary cluster after success. Failed or timed-out runs retain the stopped
+private local cluster so completed shops can be resumed without re-reading
+production. The launcher prints its temporary directory; resume with
+`bash scripts/run-jwt-report-local.sh --resume-run /tmp/jwt-report-local.EXAMPLE --stored-reconcile`.
+The overall validation limit is one hour; per-query production read deadlines
+and pacing remain unchanged. Resume requires the same mode, verifies completed
+shop row counts, recopies an unfinished shop, and restores the untouched
+local reporting baseline before repeating before/after comparisons.
 
 Scope is checked against the JWT enterprise's actual ten-member list. The period
 is September 18–October 17, 2026, inclusive in UTC, matching the report being
@@ -265,3 +272,36 @@ The run completed with zero production writes and zero provider requests.
 This demonstrates progress, not readiness to deploy or authorize a production
 repair. Source data changed between runs, so the comparison is operational
 progress rather than an identical-snapshot experiment isolating archive effects.
+
+## Stored-data reconciliation mode
+
+Run `bash scripts/run-jwt-report-local.sh --stored-reconcile` to compare the
+stored PostgreSQL raw payloads with shop/identity-matched work-order caches,
+normalized Mongo copies, invoice snapshots, full invoice caches, PostgreSQL
+cache mirrors when present, and digest-verified capture archives. No provider
+client is used and the operator-paused source recovery is not restarted.
+
+Legacy Mongo invoice collections have only their `_id` index in the inspected
+environment. This mode first builds an in-memory identity directory using
+bounded `_id` keyset pages and a high-water mark, then reads matching payloads
+by `_id`. It does not add indexes or repeat unindexed per-invoice lookups.
+Exact case variants are used for the indexed work-order and mirror lookups;
+unmatched mixed-case keys are not proof that a source copy is absent.
+
+Identity, date and recorded-hour contradictions remain vetoes. A stale or
+incomplete copy is not silently overwritten by whichever source is read last.
+Rows with missing payloads are distinct from payloads without positive invoice
+numbers. Existing normalized pre-invoice status exclusions remain unchanged;
+an unverified historical date is never used to remove an unknown invoice from
+the selected period.
+
+Only minimal reporting rows and hashed-ID diagnostics are stored in disposable
+local PostgreSQL. Diagnostics group missing identity, missing payload, missing
+positive invoice number, invalid identity/date/finality, conflicts and verified
+incomplete hours. Candidate-row counts are not deduplicated invoice counts.
+The source stores can change during this read-only run; it is not a fleet-wide
+atomic snapshot or a guarantee of complete upstream history.
+
+Offline checks cover invoice-cache-only recovery, source read-only enforcement,
+actual report SQL, and identity/date/hour conflicts. A successful test or script
+exit does not authorize production metadata repair or deployment.

@@ -42,7 +42,7 @@ async function main() {
     env.MONGODB_USERNAME="offline";env.MONGODB_PASSWORD="offline";
     env.PROTRACTOR_OFFLINE_ALLOW_LOOPBACK="true";
     env.NODE_OPTIONS="--require ./tests/helpers/deny-network-egress.cjs --require ./tests/helpers/invoice-preview-mongo.cjs --require ./scripts/_stubs/server-only-stub.cjs";
-    const child=spawnSync(process.execPath,["--import","tsx","scripts/validate-jwt-report-local.ts",String(port)],{env,encoding:"utf8",timeout:90000});
+    const child=spawnSync(process.execPath,["--import","tsx","scripts/validate-jwt-report-local.ts",String(port),"--stored-reconcile"],{env,encoding:"utf8",timeout:90000});
     assert.equal(child.status,0,child.stdout+"\n"+child.stderr);
     const events=child.stdout.split("\n").filter(x=>x.startsWith("{")).map(x=>JSON.parse(x));
     const after=events.find(e=>e.event==="local_report"&&e.label==="after");
@@ -56,6 +56,16 @@ async function main() {
     const counts=events.find(e=>e.event==="shop_snapshot"&&e.shop===227);
     assert.equal(counts.proposed,2,"stored final source and matching archived source recover independently");
     assert.equal(counts.conflict,1,"conflicting hours remain unresolved even when legacy invoice number is missing");
+    // Re-running a retained local database must use completed shop checkpoints
+    // and restore the original baseline, not treat prior local repairs as source.
+    const resumed=spawnSync(process.execPath,["--import","tsx","scripts/validate-jwt-report-local.ts",String(port),"--stored-reconcile"],{env,encoding:"utf8",timeout:90000});
+    assert.equal(resumed.status,0,resumed.stdout+"\n"+resumed.stderr);
+    const resumedEvents=resumed.stdout.split("\n").filter(x=>x.startsWith("{")).map(x=>JSON.parse(x));
+    assert.equal(resumedEvents.filter(e=>e.event==="shop_copy_resumed").length,10);
+    assert.equal(resumedEvents.filter(e=>e.event==="shop_copy_started").length,0);
+    assert.deepEqual(resumedEvents.find(e=>e.event==="local_report"&&e.label==="before"),
+      events.find(e=>e.event==="local_report"&&e.label==="before"));
+    assert.deepEqual(resumedEvents.find(e=>e.event==="local_report"&&e.label==="after"),after);
     console.log("PASS: read-only source, disposable-only repair, full report SQL, ten locations, null payload and unresolved coverage");
   } finally {await source.end();}
 }

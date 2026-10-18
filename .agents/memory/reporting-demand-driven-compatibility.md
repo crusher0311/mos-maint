@@ -105,6 +105,18 @@ SQL before/after the local repair, and report unresolved populations honestly.
 Do not treat exit success or candidate counts as report correctness. Production
 metadata writes and deployment still require separate approval.
 
+Long stored-evidence validation must preserve resumable local snapshots on
+timeout and keep the original reporting baseline separate from local repairs.
+
+**Why:** The expanded read-only reconciliation exceeded its initial wall-clock
+limit after nine shops; deleting the temporary database forced production
+source reads to be repeated. A resumed repaired baseline would also falsely
+improve the "before" result.
+
+**How to apply:** Retain only private, minimal reporting evidence locally on
+failure; validate completed-shop checkpoints, keep source query limits intact,
+and restore the original baseline when repeating report comparisons.
+
 Invoice-source recovery is a separate, capped read-only operation, not authority
 to publish reporting changes or repair production reporting records.
 
