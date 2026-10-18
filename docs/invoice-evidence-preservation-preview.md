@@ -578,11 +578,27 @@ An offline PostgreSQL regression executes the real projection and checks source
 timestamp retention and unrelated-field exclusion. Full report fixtures,
 reconciliation regressions and type checking pass.
 
-These findings do not establish a new fleet result: the targeted trace omitted
-dedicated invoice caches covered by the full validator. The last verified count
-remains 41 unknown identities until a fresh full comparison includes those
-sources. There were no provider requests or production writes, and nothing was
-deployed.
+Those targeted findings alone did not establish a new fleet result: the trace
+omitted dedicated invoice caches covered by the full validator.
+
+The subsequently authorized full rerun with the Header projection fix completed
+successfully across 215,060 stored rows for shops 227–236, September 18 through
+October 17. Final results: 6,297 verified invoices, 6,296 with complete hours,
+31 unknown invoice identities, 6,786.39 sold hours and 13,646.32 presented hours
+among covered invoices. Four locations have complete local averages; enterprise
+averages remain unavailable. The previous run had 6,273 verified invoices and
+41 unknown identities. Source reads are not an atomic cross-run snapshot, so
+these changes are not a controlled estimate of the fix alone.
+
+Remaining unknown identities by shop: 227=17, 228=4, 230=2, 231=1, 233=5,
+234=2. Shop 233 also has the one verified invoice with incomplete hours.
+The report-candidate diagnostics now include seven date-conflict rows and
+17 recorded-hour-conflict rows; these are source-row counts, not unique unknown
+invoice counts. Date acceptance does not override labor disagreement.
+
+The full run reported zero provider requests and zero production writes.
+Nothing was deployed. Passing validation does not mean the enterprise report
+is complete or that source coverage is exhaustive.
 
 The source stores can change during this read-only run; it is not a fleet-wide
 atomic snapshot or a guarantee of complete upstream history.
