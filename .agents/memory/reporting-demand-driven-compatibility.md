@@ -108,6 +108,17 @@ metadata writes and deployment still require separate approval.
 Invoice-source recovery is a separate, capped read-only operation, not authority
 to publish reporting changes or repair production reporting records.
 
+Exhaust stored invoice evidence before requesting additional source recovery.
+
+**Why:** The user explicitly chose stored-data-first verification after seeing
+that raw invoices were available but underused by reporting. Unknown report
+population is not proof that upstream requests are necessary.
+
+**How to apply:** Match shop-scoped provider identities across stored payloads
+and verified archives, preserve conflicts, and establish specific missing fields
+before proposing new requests. Do not automatically resume an operator-paused
+evidence recovery or confuse it with the separately authorized weekend backfill.
+
 **Why:** On 2026-10-17 the user approved up to 1,000 additional Protractor requests,
 including retries, under existing eligibility and traffic protections, followed
 by another local report validation.

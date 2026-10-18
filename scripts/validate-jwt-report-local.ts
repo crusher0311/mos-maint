@@ -45,13 +45,19 @@ async function main() {
     await local`CREATE TABLE proposed_evidence (id text PRIMARY KEY,evidence jsonb)`;
     let total=0;
     const inventory:any[]=[];
+    const archiveCutoff = new Date();
+    console.log(JSON.stringify({event:"archive_cutoff",at:archiveCutoff.toISOString(),
+      campaigns:["protractor-weekend-2026-10-17","invoice-evidence-recovery-2026-10-17"]}));
     for(const shop of shops) {
       stage="archive";
       const archive=new Map<string,InvoiceEvidence|null>();
       let pages=0;
-      const prefix=`protractor-weekend-2026-10-17:${shop}:`;
+      for (const campaign of ["protractor-weekend-2026-10-17","invoice-evidence-recovery-2026-10-17"]) {
+      const prefix=`${campaign}:${shop}:`;
       const cursor=db.collection<any>("operator_history_import_pages").find(
-        {_id:{$gte:prefix,$lt:`protractor-weekend-2026-10-17:${shop};`}},
+        {_id:{$gte:prefix,$lt:`${campaign}:${shop};`},
+          ...(campaign==="invoice-evidence-recovery-2026-10-17"
+            ? {capturedAt:{$lte:archiveCutoff}} : {})},
         {projection:{shopId:1,invoices:1,digest:1},maxTimeMS:10000}).sort({_id:1}).batchSize(10);
       for await(const page of cursor) {
         assert.ok(++pages<=2000,"Archive cap reached");
@@ -63,6 +69,7 @@ async function main() {
           const old=archive.get(e.id);
           archive.set(e.id,old===undefined?e:same(old,e)?e:null);
         }
+      }
       }
       const count={shop,rows:0,archivePages:pages,archiveIdentities:archive.size,existing:0,
         proposed:0,unrecoverable:0,conflict:0,notProtractor:0};

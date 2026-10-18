@@ -231,3 +231,37 @@ Conclusion: metadata preservation and local repair fix the lost-evidence and
 record-limit failures, but do not certify the full report. More authoritative
 invoice-source evidence and review of held conflicts are required. Do not deploy
 this as a completed reporting recovery merely because the scripts exited zero.
+
+## Partial recovery archive validation, October 17 evening Central
+
+A fresh read-only copy of all ten JWT shops evaluated the same September
+18–October 17 UTC period. Recovery archive captures were cut off at
+2026-10-18T01:19:34.390Z; the recovery continues independently. Existing weekend
+archives were also evaluated with digest checks and the same identity/date/hour
+conflict vetoes. This is not an end-of-recovery result or a provider completeness
+reconciliation. Sequential shop snapshots now contained 214,245 rows, versus
+214,229 in the earlier run.
+
+Across 282 archive pages and stored raw payloads, the local-only repair proposed
+196,009 rows, left 18,187 without recoverable evidence, and withheld 49 conflicting
+rows. These are all-history storage counts, not selected-period invoice counts.
+
+| Selected-period report measure | Earlier local result | Partial recovery result |
+| --- | ---: | ---: |
+| Verified invoices | 1,824 | 5,931 |
+| Unknown invoice population | 16,834 | 12,486 |
+| Invoices with complete sold/presented hours | 1,824 | 5,930 |
+| Query rows after local repair | 18,659 | 18,419 |
+| Full-population averages | Incomplete | Incomplete |
+
+Covered totals were 6,553.53 sold hours and 13,351.35 presented hours, not full
+population totals. One verified invoice at shop 233 still had incomplete hours.
+Every location retained an unknown population, which can include historical
+records outside the chosen dates; those records cannot be excluded without
+authoritative date/identity evidence. The unchanged baseline still exceeded the
+100,000-row limit before local repair.
+
+The run completed with zero production writes and zero provider requests.
+This demonstrates progress, not readiness to deploy or authorize a production
+repair. Source data changed between runs, so the comparison is operational
+progress rather than an identical-snapshot experiment isolating archive effects.
