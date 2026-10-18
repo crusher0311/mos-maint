@@ -54,6 +54,8 @@ async function main() {
     const credits = process.argv.includes("--separate-credits");
     const dateScope=process.argv.includes("--review-date-scope");
     const chronology=process.argv.includes("--review-chronology");
+    const heldSentinels=process.argv.includes("--review-held-sentinels");
+    assert.ok(!heldSentinels||chronology,"Held/sentinel review requires chronology");
     assert.ok(!chronology||dateScope,"Chronology requires date review");
     assert.ok(!dateScope||(credits&&reconcile),"Date review requires credit and full reconciliation");
     await local`CREATE TABLE IF NOT EXISTS date_reviews (id text PRIMARY KEY,shop_id int,classification text,date text)`;
@@ -62,7 +64,7 @@ async function main() {
     await local`CREATE TABLE IF NOT EXISTS credit_reviews (id text PRIMARY KEY,shop_id int,classification text,date text)`;
     assert.ok(!classify || reconcile,"Classification requires full stored reconciliation");
     await local`CREATE TABLE IF NOT EXISTS uninvoiced_review (id text PRIMARY KEY,shop_id int,classification text,shape jsonb)`;
-    const mode=(classify?"stored-reconcile-uninvoiced":reconcile?"stored-reconcile":"archive")+(credits?"-credits":"")+(dateScope?"-dates":"")+(chronology?"-chronology":"");
+    const mode=(classify?"stored-reconcile-uninvoiced":reconcile?"stored-reconcile":"archive")+(credits?"-credits":"")+(dateScope?"-dates":"")+(chronology?"-chronology":"")+(heldSentinels?"-held-sentinels":"");
     const completed=await local`SELECT * FROM completed_shop_copies`;
     assert.ok(completed.every(r=>r.mode===mode),"Cannot resume with a different validation mode");
     const [baseline]=await local`SELECT to_regclass('invoice_preview_baseline') present`;
@@ -141,7 +143,7 @@ async function main() {
             if(!raw?.ID)continue;
             const key=String(raw.ID).toLowerCase();
             const headers=archiveHeaders.get(key)??[];
-            headers.push(Object.fromEntries(["ID","Type","WorkflowStage","Status","InvoiceNumber","InvoiceTime"].map(k=>[k,raw[k]])));
+            headers.push(Object.fromEntries(["ID","Type","WorkflowStage","Status","InvoiceNumber","InvoiceTime",...(heldSentinels?["Header"]:[])].map(k=>[k,raw[k]])));
             archiveHeaders.set(key,headers);
           }
         for(const raw of page.invoices) {
@@ -241,7 +243,8 @@ async function main() {
                 ...invoices.flatMap(d=>[d.rawPayload,d.invoice])].filter(Boolean);
               // A key match alone is not authority for a payload with a missing/mismatched ID.
               const validPayloads=payloads.filter(p=>p===raw||p?.ID&&ids.includes(String(p.ID).toLowerCase()));
-              const checked=reconcileStored(ids,validPayloads,ids.filter((id:string)=>archive.has(id)).map((id:string)=>archive.get(id)!));
+              const checked=reconcileStored(ids,validPayloads,ids.filter((id:string)=>archive.has(id)).map((id:string)=>archive.get(id)!),
+                heldSentinels?{ignoreOlderSentinels:true,archiveHeaders:ids.flatMap((key:string)=>archiveHeaders.get(key)??[])}:undefined);
               let reason=checked.reason;
               if(validPayloads.length!==payloads.length&&payloads.some(Boolean)) {
                 reason="matched_copy_missing_or_mismatched_identity";
@@ -266,7 +269,7 @@ async function main() {
               if(classify) {
                 const classification=reviewUninvoiced(ids,payloads,
                   present!=null || ids.some((key:string)=>archive.has(key)) || checked.evidence!=null ||
-                  reason.startsWith("conflicting") || reason.startsWith("matched_copy"));
+                  reason.startsWith("conflicting") || reason.startsWith("matched_copy"),heldSentinels);
                 statusReviews.push({id,shop_id:shop,classification,shape:uninvoicedShape(payloads)});
               }
               if(present!=null){count.existing++;if(checked.evidence&&!same(present,checked.evidence))count.conflict++;continue;}

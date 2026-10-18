@@ -4,13 +4,14 @@ const stages = new Set([
   "InspectionInProgress", "InspectionCompleted", "WaitingForParts", "WaitingForApproval",
   "WorkInProgress", "WorkPaused", "WorkCompleted",
 ]);
-export function reviewUninvoiced(ids: string[], raws: any[], hasInvoiceEvidence: boolean) {
+export function reviewUninvoiced(ids: string[], raws: any[], hasInvoiceEvidence: boolean, includeOnHold=false) {
   if (hasInvoiceEvidence) return "invoice_evidence_present";
   if (!ids.length || !raws.length) return "missing_source";
   for (const raw of raws) {
     if (!raw?.ID || !ids.includes(String(raw.ID).toLowerCase())) return "identity_unverified";
     if (!["WorkOrder", "Estimate"].includes(raw.Type)) return "type_unverified";
-    if (!stages.has(raw.WorkflowStage)) return "stage_unverified";
+    if (!stages.has(raw.WorkflowStage)&&!(includeOnHold&&raw.WorkflowStage==="OnHold")) return "stage_unverified";
+    if(raw.WorkflowStage==="OnHold"&&raw.Status!=null&&!["Open","OnHold"].includes(raw.Status))return "stage_unverified";
     // Missing, malformed, negative and positive numbers are not an explicit zero.
     if (!(raw.InvoiceNumber === 0 || raw.InvoiceNumber === "0")) return "number_unverified";
     if (raw.InvoiceTime != null && raw.InvoiceTime !== "" &&

@@ -27,7 +27,7 @@ async function main() {
     const openId="10000000-0000-0000-0000-000000000555";
     await source`INSERT INTO normalized_work_orders VALUES ('stored-open',227,'closed',null,
       ${source.json({sourceSystem:"protractor",sourceIds:[{system:"protractor",idType:"work_order_id",idValue:openId}]})},
-      null,${source.json({rawPayload:{ID:openId,Type:"WorkOrder",WorkflowStage:"WorkInProgress",InvoiceNumber:0}})})`;
+      null,${source.json({rawPayload:{ID:openId,Type:"WorkOrder",WorkflowStage:"OnHold",InvoiceNumber:0}})})`;
     for(const n of [333,334]) {
       const id=`10000000-0000-0000-0000-000000000${n}`;
       const raw={ID:id,Type:"Invoice",WorkflowStage:"Invoice",InvoiceNumber:0,
@@ -68,7 +68,7 @@ async function main() {
     env.MONGODB_USERNAME="offline";env.MONGODB_PASSWORD="offline";
     env.PROTRACTOR_OFFLINE_ALLOW_LOOPBACK="true";
     env.NODE_OPTIONS="--require ./tests/helpers/deny-network-egress.cjs --require ./tests/helpers/invoice-preview-mongo.cjs --require ./scripts/_stubs/server-only-stub.cjs";
-    const child=spawnSync(process.execPath,["--import","tsx","scripts/validate-jwt-report-local.ts",String(port),"--stored-reconcile","--classify-uninvoiced","--separate-credits","--review-date-scope","--review-chronology"],{env,encoding:"utf8",timeout:90000});
+    const child=spawnSync(process.execPath,["--import","tsx","scripts/validate-jwt-report-local.ts",String(port),"--stored-reconcile","--classify-uninvoiced","--separate-credits","--review-date-scope","--review-chronology","--review-held-sentinels"],{env,encoding:"utf8",timeout:90000});
     assert.equal(child.status,0,child.stdout+"\n"+child.stderr);
     const events=child.stdout.split("\n").filter(x=>x.startsWith("{")).map(x=>JSON.parse(x));
     const after=events.find(e=>e.event==="local_report"&&e.label==="after");
@@ -107,7 +107,7 @@ async function main() {
     // and restore the original baseline, not treat prior local repairs as source.
     const chrono=events.find(e=>e.event==="local_report"&&e.label==="after_chronology_experiment");
     assert.deepEqual(chrono.summary,dated.summary,"Fixtures without qualifying older snapshots must not change");
-    const resumed=spawnSync(process.execPath,["--import","tsx","scripts/validate-jwt-report-local.ts",String(port),"--stored-reconcile","--classify-uninvoiced","--separate-credits","--review-date-scope","--review-chronology"],{env,encoding:"utf8",timeout:90000});
+    const resumed=spawnSync(process.execPath,["--import","tsx","scripts/validate-jwt-report-local.ts",String(port),"--stored-reconcile","--classify-uninvoiced","--separate-credits","--review-date-scope","--review-chronology","--review-held-sentinels"],{env,encoding:"utf8",timeout:90000});
     assert.equal(resumed.status,0,resumed.stdout+"\n"+resumed.stderr);
     const resumedEvents=resumed.stdout.split("\n").filter(x=>x.startsWith("{")).map(x=>JSON.parse(x));
     assert.equal(resumedEvents.filter(e=>e.event==="shop_copy_resumed").length,10);

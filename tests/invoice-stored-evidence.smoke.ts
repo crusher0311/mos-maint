@@ -23,3 +23,23 @@ changed.ServicePackages.ItemCollection[0].ServicePackageLines.ItemCollection[0].
 assert.equal(reconcileStored([id],[{...changed,DeferredServicePackages:[]}],[resolved.evidence]).reason,"conflicting_recorded_hours");
 assert.equal(reconcileStored(["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"],[raw],[]).reason,"conflicting_evidence");
 console.log("PASS stored reconciliation: source completeness, identity/date/hour conflicts, no fabricated zero evidence");
+const final={...raw,Header:{LastModifiedTime:"2026-09-19T12:00:00Z"}};
+const old={...raw,InvoiceNumber:0,WorkflowStage:"ScheduledWork",InvoiceTime:"0001-01-01T00:00:00",
+  Header:{LastModifiedTime:"2026-09-19T11:00:00Z"}};
+const options={ignoreOlderSentinels:true,archiveHeaders:[final]};
+assert.equal(reconcileStored([id],[old],[resolved.evidence],options).reason,"verified_complete");
+assert.equal(reconcileStored([id],[old],[resolved.evidence]).reason,"conflicting_date");
+for(const patched of [
+  {...old,Header:{LastModifiedTime:"2026-09-19T12:00:00Z"}},
+  {...old,Header:{LastModifiedTime:"2026-09-19T13:00:00Z"}},
+  {...old,Header:{}},
+  {...old,WorkflowStage:"Invoice"},
+  {...old,InvoiceTime:"2026-09-18T00:00:00Z"},
+  {...old,Type:"Appointment"},
+])assert.equal(reconcileStored([id],[patched],[resolved.evidence],options).reason,"conflicting_date");
+assert.equal(reconcileStored([id],[{...old,ID:"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}],[resolved.evidence],options).reason,"conflicting_identity");
+const differing={...old,ServicePackages:changed.ServicePackages,DeferredServicePackages:[]};
+assert.equal(reconcileStored([id],[differing],[resolved.evidence],options).reason,"conflicting_recorded_hours");
+assert.equal(reconcileStored([id],[old],[resolved.evidence,{...resolved.evidence!,sold:9}],options).reason,"conflicting_evidence");
+assert.equal(reconcileStored([id],[old],[resolved.evidence],{...options,archiveHeaders:[{...final,Header:{}}]}).reason,"conflicting_date");
+console.log("PASS older sentinel date exception preserves identity, final-date, source-time and labor vetoes");

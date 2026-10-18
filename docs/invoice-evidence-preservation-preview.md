@@ -153,6 +153,32 @@ coverage. Diagnostic typechecking passed. No provider API requests or deployment
 
 ## Local credit-document experiment
 
+### Opt-in held-work and older-placeholder rules
+
+`--review-held-sentinels` extends the local preview only (requires chronology).
+Explicit OnHold WorkOrder/Estimate snapshots may classify as stored uninvoiced
+only if all matched copies have allowed identities, explicit zero numbers, no
+real invoice dates and no invoice/conflict veto. Explicit contradictory Status
+values are retained. This does not change the production adapter's fallback.
+
+Reconciliation may ignore an earlier nonfinal year-0001 date only when provider
+modification timestamps, matching identity and final-date agreement pass the
+chronology review. Source archive headers now retain provider modification
+timestamps in memory for that check. Missing/equal/newer times, appointments,
+real conflicting dates and conflicting final evidence remain held.
+
+The exception also checks recorded labor on the older nonfinal snapshot.
+The ordinary legacy labor helper returns null for nonfinal stages, so simply
+retaining the old call would silently bypass that guard. A calculation-only
+projection checks labor as a veto; it never supplies identity, denominator,
+new hours or persisted provider state.
+
+Unit tests cover explicit OnHold evidence, contradictory states/dates/numbers,
+identity mismatches, missing/equal/newer timestamps, appointment vetoes, true
+date conflicts, final-evidence disagreements and changed recorded hours.
+The ten-shop disposable PostgreSQL fixture/resume test and typechecking passed.
+Real-data validation is separate; no result is inferred from these tests.
+
 `--stored-reconcile --separate-credits` adds a local-only credit review. A record
 is separated only when every matched raw/header copy is a final CreditSlip with
 an explicit positive number, matching provider identity and consistent valid

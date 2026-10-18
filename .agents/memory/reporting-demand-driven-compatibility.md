@@ -211,6 +211,17 @@ copies with genuinely different invoice dates and labor values.
 ordering and nonfinal state. It must not become a general latest-copy-wins rule
 for conflicting final invoices or financial values.
 
+A date-only exception must not silently bypass labor comparisons.
+
+**Why:** The legacy labor extractor rejects nonfinal stages before reading their
+lines. Once an old sentinel date stops vetoing a snapshot, retaining that call
+alone makes recorded-hour disagreement invisible.
+
+**How to apply:** Test a strictly older nonfinal snapshot with different recorded
+hours. Keep it unresolved rather than treating null from a finality-gated helper
+as proof of financial agreement. Never use an old snapshot to invent new invoice
+hours or establish finality.
+
 Retained preview databases under `/tmp` are not durable across workspace sessions.
 
 **Why:** A previously retained reporting database was absent on a later turn,

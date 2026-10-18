@@ -13,5 +13,13 @@ assert.equal(check([{...raw,InvoiceTime:"2026-10-01T00:00:00Z"}]),"invoice_date_
 assert.equal(check([{...raw,ID:"wrong"}]),"identity_unverified");
 assert.equal(check([{...raw,WorkflowStage:"custom"}]),"stage_unverified");
 assert.equal(check([]),"missing_source");
+const held={...raw,WorkflowStage:"OnHold"};
+assert.equal(check([held]),"stage_unverified");
+assert.equal(reviewUninvoiced([id],[held],false,true),"verified_stored_uninvoiced");
+assert.equal(reviewUninvoiced([id],[held],true,true),"invoice_evidence_present");
+assert.equal(reviewUninvoiced([id],[held,{...held,InvoiceNumber:12}],false,true),"number_unverified");
+assert.equal(reviewUninvoiced([id],[{...held,InvoiceTime:"2026-09-01T00:00:00Z"}],false,true),"invoice_date_present");
+assert.equal(reviewUninvoiced([id],[{...held,Type:"Appointment"}],false,true),"type_unverified");
+assert.equal(reviewUninvoiced([id],[{...held,Status:"Closed"}],false,true),"stage_unverified");
 assert.ok(!JSON.stringify(uninvoicedShape([{Type:"private",WorkflowStage:"private"}])).includes("private"));
 console.log("PASS stored non-invoice review: explicit status/zero, identity, dates, conflicting evidence, privacy");
