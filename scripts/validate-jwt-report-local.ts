@@ -12,6 +12,7 @@ import { invoiceHoursEvidence, aggregateInvoiceHours, type InvoiceEvidence } fro
 import { INVOICE_HOURS_SQL, INVOICE_HOURS_INDEX_SQL, INVOICE_HOURS_MAX_ORDERS } from "../lib/invoice-hours-query";
 import { protractorInvoiceLaborEvidence } from "../lib/integrations/protractor/labor-evidence";
 import { reconcileStored } from "./invoice-stored-evidence";
+import { reviewUninvoiced, uninvoicedShape } from "./invoice-uninvoiced-review";
 
 const hash = (v: string) => createHash("sha256").update(v).digest("hex");
 const same = (a: any,b: any) => a===b || (!!a&&!!b&&
@@ -47,12 +48,17 @@ async function main() {
     await local`CREATE TABLE IF NOT EXISTS evidence_diagnostics (id text PRIMARY KEY,shop_id int,reason text,matched_copies int)`;
     await local`CREATE TABLE IF NOT EXISTS completed_shop_copies (shop_id int PRIMARY KEY, mode text, inventory jsonb)`;
     const reconcile = process.argv.includes("--stored-reconcile");
-    const mode=reconcile?"stored-reconcile":"archive";
+    const classify = process.argv.includes("--classify-uninvoiced");
+    assert.ok(!classify || reconcile,"Classification requires full stored reconciliation");
+    await local`CREATE TABLE IF NOT EXISTS uninvoiced_review (id text PRIMARY KEY,shop_id int,classification text,shape jsonb)`;
+    const mode=classify?"stored-reconcile-uninvoiced":reconcile?"stored-reconcile":"archive";
     const completed=await local`SELECT * FROM completed_shop_copies`;
     assert.ok(completed.every(r=>r.mode===mode),"Cannot resume with a different validation mode");
     const [baseline]=await local`SELECT to_regclass('invoice_preview_baseline') present`;
     if(baseline.present)await local`UPDATE normalized_work_orders w SET custom_fields=b.custom_fields
       FROM invoice_preview_baseline b WHERE b.id=w.id`;
+    await local`CREATE TABLE IF NOT EXISTS invoice_status_baseline (id text PRIMARY KEY,status text)`;
+    await local`UPDATE normalized_work_orders w SET status=b.status FROM invoice_status_baseline b WHERE b.id=w.id`;
     // These legacy invoice collections lack shop/invoice indexes. Build a
     // temporary identity directory with bounded _id keyset reads, then fetch
     // matching payloads by _id. No production index or data writes.
@@ -99,6 +105,7 @@ async function main() {
       // A stopped shop is recopied; completed shops remain unchanged locally.
       await local`DELETE FROM proposed_evidence WHERE id IN (SELECT id FROM normalized_work_orders WHERE shop_id=${shop})`;
       await local`DELETE FROM evidence_diagnostics WHERE shop_id=${shop}`;
+      await local`DELETE FROM uninvoiced_review WHERE shop_id=${shop}`;
       await local`DELETE FROM normalized_work_orders WHERE shop_id=${shop}`;
       stage="archive";
       const archive=new Map<string,InvoiceEvidence|null>();
@@ -145,6 +152,7 @@ async function main() {
           assert.equal(batch.length,Math.min(100,identifiers.length-offset),"Incomplete source batch");
           const copies:any[]=[];const proposals:any[]=[];
           const diagnostics:any[]=[];
+          const statusReviews:any[]=[];
           const rowIds=(row:any)=>(row.provenance?.sourceIds??[])
             .filter((s:any)=>s.system==="protractor"&&["invoice_id","work_order_id"].includes(s.idType))
             .map((s:any)=>String(s.idValue));
@@ -215,6 +223,12 @@ async function main() {
                 checked.evidence=null;
               }
               diagnostics.push({id,shop_id:shop,reason,matched_copies:validPayloads.filter(Boolean).length});
+              if(classify) {
+                const classification=reviewUninvoiced(ids,payloads,
+                  present!=null || ids.some((key:string)=>archive.has(key)) || checked.evidence!=null ||
+                  reason.startsWith("conflicting") || reason.startsWith("matched_copy"));
+                statusReviews.push({id,shop_id:shop,classification,shape:uninvoicedShape(payloads)});
+              }
               if(present!=null){count.existing++;if(checked.evidence&&!same(present,checked.evidence))count.conflict++;continue;}
               if(!checked.evidence) {
                 if(reason.startsWith("conflicting")||reason.startsWith("matched_copy"))count.conflict++;
@@ -251,6 +265,8 @@ async function main() {
           }
           stage="local_copy";
           await local.begin(async t=>{
+            if(statusReviews.length)await t.unsafe(`INSERT INTO uninvoiced_review SELECT * FROM jsonb_to_recordset($1::jsonb)
+              AS r(id text,shop_id int,classification text,shape jsonb)`,[t.json(statusReviews)]);
             if(diagnostics.length)await t.unsafe(`INSERT INTO evidence_diagnostics SELECT * FROM jsonb_to_recordset($1::jsonb)
               AS r(id text,shop_id int,reason text,matched_copies int)`,[t.json(diagnostics)]);
             await t.unsafe(`INSERT INTO normalized_work_orders SELECT * FROM jsonb_to_recordset($1::jsonb)
@@ -286,6 +302,19 @@ async function main() {
       FROM proposed_evidence p WHERE p.id=w.id AND (w.custom_fields->'invoiceHours' IS NULL OR w.custom_fields->'invoiceHours'='null'::jsonb)`;
     await local`ANALYZE normalized_work_orders`;
     stage="repaired_report";await report("after",shops);
+    if(classify) {
+      const facts=await local.unsafe(INVOICE_HOURS_SQL,[`{${shops.join(",")}}`,start,end]);
+      assert.ok(facts.length<=INVOICE_HOURS_MAX_ORDERS,"Cannot classify capped report");
+      const review=await local`SELECT classification,shape,count(*)::int records FROM uninvoiced_review
+        WHERE id=ANY(${local.array(facts.map(r=>r.id))}) GROUP BY classification,shape ORDER BY records DESC`;
+      console.log(JSON.stringify({event:"uninvoiced_candidate_review",groups:review}));
+      await local`INSERT INTO invoice_status_baseline SELECT id,status FROM normalized_work_orders ON CONFLICT DO NOTHING`;
+      // Disposable local rows only. Existing invoice evidence always takes precedence.
+      await local`UPDATE normalized_work_orders w SET status='open' FROM uninvoiced_review r
+        WHERE r.id=w.id AND r.classification='verified_stored_uninvoiced'
+        AND (w.custom_fields->'invoiceHours' IS NULL OR w.custom_fields->'invoiceHours'='null'::jsonb)`;
+      await report("after_stored_status_classification",shops);
+    }
     if(reconcile) {
       const grouped=await local`SELECT shop_id,reason,count(*)::int records,
         sum(matched_copies)::int matched_copies FROM evidence_diagnostics GROUP BY shop_id,reason ORDER BY shop_id,reason`;

@@ -131,6 +131,17 @@ and verified archives, preserve conflicts, and establish specific missing fields
 before proposing new requests. Do not automatically resume an operator-paused
 evidence recovery or confuse it with the separately authorized weekend backfill.
 
+Classifying stored uninvoiced work is not proof of the provider's current state.
+
+**Why:** The user approved local classification to resolve reporting's unknown
+population, not dropping ambiguous records or assuming an old open-work snapshot
+means the work was never invoiced later.
+
+**How to apply:** Require explicit source-stage and zero-number evidence across
+matched copies, retain invoice/date/identity contradictions, and report coverage
+as stored-evidence coverage. Keep production status changes and deployment
+outside the local classification experiment.
+
 **Why:** On 2026-10-17 the user approved up to 1,000 additional Protractor requests,
 including retries, under existing eligibility and traffic protections, followed
 by another local report validation.

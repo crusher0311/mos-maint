@@ -1,0 +1,17 @@
+import assert from "node:assert/strict";
+import { reviewUninvoiced, uninvoicedShape } from "../scripts/invoice-uninvoiced-review";
+const id="11111111-1111-1111-1111-111111111111";
+const raw={ID:id,Type:"WorkOrder",WorkflowStage:"WorkInProgress",InvoiceNumber:0,InvoiceTime:"0001-01-01T00:00:00"};
+const check=(raws:any[],evidence=false)=>reviewUninvoiced([id],raws,evidence);
+assert.equal(check([raw]),"verified_stored_uninvoiced");
+assert.equal(check([raw,{...raw,WorkflowStage:"EstimateCompleted"}]),"verified_stored_uninvoiced");
+assert.equal(check([raw],true),"invoice_evidence_present");
+assert.equal(check([raw,{...raw,WorkflowStage:"Invoice"}]),"stage_unverified");
+assert.equal(check([{...raw,InvoiceNumber:undefined}]),"number_unverified");
+assert.equal(check([{...raw,InvoiceNumber:123}]),"number_unverified");
+assert.equal(check([{...raw,InvoiceTime:"2026-10-01T00:00:00Z"}]),"invoice_date_present");
+assert.equal(check([{...raw,ID:"wrong"}]),"identity_unverified");
+assert.equal(check([{...raw,WorkflowStage:"custom"}]),"stage_unverified");
+assert.equal(check([]),"missing_source");
+assert.ok(!JSON.stringify(uninvoicedShape([{Type:"private",WorkflowStage:"private"}])).includes("private"));
+console.log("PASS stored non-invoice review: explicit status/zero, identity, dates, conflicting evidence, privacy");

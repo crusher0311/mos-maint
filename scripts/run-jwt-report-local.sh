@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
+keep=false
+if [[ "${1:-}" == "--keep-local" ]]; then keep=true; shift; fi
 if [[ "${1:-}" == "--resume-run" ]]; then
   tmp="${2:?Local run directory required}"; shift 2
   [[ "$tmp" == /tmp/jwt-report-local.* && -d "$tmp/data" ]] || exit 2
@@ -10,8 +12,8 @@ port=$(node -e 'const s=require("net").createServer();s.listen(0,"127.0.0.1",()=
 cleanup() {
   status=$?
   pg_ctl -D "$tmp/data" -m immediate stop >/dev/null 2>&1 || true
-  if [[ $status == 0 ]]; then rm -rf "$tmp"; else
-    printf 'Local validation paused; retained private database: %s\n' "$tmp"
+  if [[ $status == 0 && "$keep" == false ]]; then rm -rf "$tmp"; else
+    printf 'Retained private local validation database: %s\n' "$tmp"
   fi
 }
 trap cleanup EXIT

@@ -24,6 +24,10 @@ async function main() {
     // A real JSON null, not a SQL NULL: must stay unresolved, not crash jsonb_each.
     await source`INSERT INTO normalized_work_orders VALUES ('null-payload',227,'closed',null,
       '{"sourceSystem":"protractor","sourceIds":[]}',null,'{"rawPayload":null}')`;
+    const openId="10000000-0000-0000-0000-000000000555";
+    await source`INSERT INTO normalized_work_orders VALUES ('stored-open',227,'closed',null,
+      ${source.json({sourceSystem:"protractor",sourceIds:[{system:"protractor",idType:"work_order_id",idValue:openId}]})},
+      null,${source.json({rawPayload:{ID:openId,Type:"WorkOrder",WorkflowStage:"WorkInProgress",InvoiceNumber:0}})})`;
     for(const n of [333,334]) {
       const id=`10000000-0000-0000-0000-000000000${n}`;
       const raw={ID:id,Type:"Invoice",WorkflowStage:"Invoice",InvoiceNumber:0,
@@ -42,12 +46,18 @@ async function main() {
     env.MONGODB_USERNAME="offline";env.MONGODB_PASSWORD="offline";
     env.PROTRACTOR_OFFLINE_ALLOW_LOOPBACK="true";
     env.NODE_OPTIONS="--require ./tests/helpers/deny-network-egress.cjs --require ./tests/helpers/invoice-preview-mongo.cjs --require ./scripts/_stubs/server-only-stub.cjs";
-    const child=spawnSync(process.execPath,["--import","tsx","scripts/validate-jwt-report-local.ts",String(port),"--stored-reconcile"],{env,encoding:"utf8",timeout:90000});
+    const child=spawnSync(process.execPath,["--import","tsx","scripts/validate-jwt-report-local.ts",String(port),"--stored-reconcile","--classify-uninvoiced"],{env,encoding:"utf8",timeout:90000});
     assert.equal(child.status,0,child.stdout+"\n"+child.stderr);
     const events=child.stdout.split("\n").filter(x=>x.startsWith("{")).map(x=>JSON.parse(x));
     const after=events.find(e=>e.event==="local_report"&&e.label==="after");
     assert.equal(after.summary.invoiceCount,11);
-    assert.equal(after.summary.invoicePopulationUnknown,2);
+    assert.equal(after.summary.invoicePopulationUnknown,3);
+    const classified=events.find(e=>e.event==="local_report"&&e.label==="after_stored_status_classification");
+    assert.equal(classified.summary.invoicePopulationUnknown,2);
+    assert.equal(classified.summary.invoiceCount,11);
+    assert.equal(classified.summary.invoiceSoldHours,22);
+    assert.equal(classified.summary.averagePresentedHoursPerInvoice,null);
+    assert.equal((await source`SELECT status FROM normalized_work_orders WHERE id='stored-open'`)[0].status,"closed");
     assert.equal(after.summary.invoiceSoldHours,22);
     assert.equal(after.summary.invoicePresentedHours,22);
     assert.equal(after.summary.averagePresentedHoursPerInvoice,null,"unknown source population still withholds the full average");
@@ -58,7 +68,7 @@ async function main() {
     assert.equal(counts.conflict,1,"conflicting hours remain unresolved even when legacy invoice number is missing");
     // Re-running a retained local database must use completed shop checkpoints
     // and restore the original baseline, not treat prior local repairs as source.
-    const resumed=spawnSync(process.execPath,["--import","tsx","scripts/validate-jwt-report-local.ts",String(port),"--stored-reconcile"],{env,encoding:"utf8",timeout:90000});
+    const resumed=spawnSync(process.execPath,["--import","tsx","scripts/validate-jwt-report-local.ts",String(port),"--stored-reconcile","--classify-uninvoiced"],{env,encoding:"utf8",timeout:90000});
     assert.equal(resumed.status,0,resumed.stdout+"\n"+resumed.stderr);
     const resumedEvents=resumed.stdout.split("\n").filter(x=>x.startsWith("{")).map(x=>JSON.parse(x));
     assert.equal(resumedEvents.filter(e=>e.event==="shop_copy_resumed").length,10);
@@ -66,6 +76,7 @@ async function main() {
     assert.deepEqual(resumedEvents.find(e=>e.event==="local_report"&&e.label==="before"),
       events.find(e=>e.event==="local_report"&&e.label==="before"));
     assert.deepEqual(resumedEvents.find(e=>e.event==="local_report"&&e.label==="after"),after);
+    assert.deepEqual(resumedEvents.find(e=>e.event==="local_report"&&e.label==="after_stored_status_classification"),classified);
     console.log("PASS: read-only source, disposable-only repair, full report SQL, ten locations, null payload and unresolved coverage");
   } finally {await source.end();}
 }

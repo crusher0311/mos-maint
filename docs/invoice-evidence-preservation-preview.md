@@ -1,3 +1,24 @@
+# Stored-status classification experiment
+
+The optional local validator flags `--stored-reconcile --classify-uninvoiced`
+compare the real report before and after classifying stored uninvoiced work.
+This is not a production reporting-policy change or authorization to repair live
+work-order statuses.
+
+Every matched raw copy must have the correct provider identity, a recognized
+uninvoiced workflow stage, a WorkOrder/Estimate type, an explicit zero invoice
+number, and no recorded invoice date other than the provider's empty date sentinel.
+Any stored invoice evidence, archive identity, or reconciliation conflict vetoes
+classification. Missing fields and unrecognized stages remain unresolved.
+This establishes only the state documented in stored snapshots, not provider
+completeness or current upstream status.
+
+Use `--keep-local` as the launcher's first argument to retain the private local
+database on success as well as failure. The report baseline preserves original
+statuses independently of the experimental local classification. Resume with
+the same classification flags; the original evidence-only and classified reports
+must reproduce without rereading completed shops.
+
 # Invoice evidence preservation and read-only preview
 
 ## Behavior
