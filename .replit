@@ -23,6 +23,10 @@ args = "typecheck"
 task = "workflow.run"
 args = "Shop Workflow offline checks"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Offline DVI push outcomes"
+
 [[workflows.workflow]]
 name = "MOS Maintenance MVP"
 author = "agent"
@@ -54,6 +58,18 @@ author = "agent"
 task = "shell.exec"
 args = "node artifacts/detect-dog-workflow/node_modules/vite/bin/vite.js --config tests/shop-dispatch-browser/vite.config.mjs"
 waitForPort = 24100
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[workflows.workflow]]
+name = "Offline DVI push outcomes"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "node_modules/.bin/tsx tests/browser/dvi-push-fixture-server.ts"
+waitForPort = 5000
 
 [workflows.workflow.metadata]
 outputType = "webview"

@@ -12,6 +12,7 @@ import {
 import { checkShopFeatureGate } from "@/lib/extension-route-guard";
 import { buildInspectionLineTitle, buildFindingsNote, appendRatingTag, buildVhiContextNote } from "@/lib/auto-dvi/compose";
 import { pushInspectionPackageToProtractor } from "@/lib/auto-dvi/protractor-push";
+import { publicDviPushOutcome } from "@/lib/auto-dvi/push-outcome";
 import { runWithProtractorInteractiveTransport } from "@/lib/integrations/protractor/interactive-context";
 import { buildRecommendedWorkPackages } from "@/lib/auto-dvi/recommended-work";
 import { trackPushToRO } from "@/lib/extension-analytics";
@@ -131,11 +132,14 @@ export async function POST(req: NextRequest) {
   );
   if (!result.ok) {
     return NextResponse.json(
-      { error: result.error, requiresManualEntry: result.requiresManualEntry },
+      { error: result.error, requiresManualEntry: result.requiresManualEntry,
+        ...(result.pushOutcome ? publicDviPushOutcome(result.pushOutcome, false) : {}),
+        workOrderId: result.workOrderGuid },
       { status: result.status || 500 },
     );
   }
 
+  let receiptRecorded = true;
   try {
     await recordAutoDviApplication({
       shopId,
@@ -147,6 +151,7 @@ export async function POST(req: NextRequest) {
       mode: "server_write",
     });
   } catch (err: any) {
+    receiptRecorded = false;
     console.error("[AutoDVI dashboard push] application record failed (non-fatal):", err?.message);
   }
   trackPushToRO({
@@ -164,5 +169,6 @@ export async function POST(req: NextRequest) {
     lineCount: lineTitles.length,
     recommendedCount: recommendedWork?.packages.length || 0,
     inspectionResultsWritten: result.inspectionResultsWritten || false,
+    ...publicDviPushOutcome(result.pushOutcome!, receiptRecorded),
   });
 }

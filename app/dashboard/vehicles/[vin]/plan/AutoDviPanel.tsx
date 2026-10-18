@@ -12,6 +12,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import VisitInspectionPanel from "@/components/auto-dvi/VisitInspectionPanel";
 import { VISIT_DVI_RELEASE_ENABLED } from "@/lib/auto-dvi/visit-release";
+import { DVI_PUSH_UNCERTAIN_MESSAGE } from "@/lib/auto-dvi/push-outcome";
+import DviPushNotice from "@/components/auto-dvi/DviPushNotice";
 import {
   ClipboardCheck,
   Loader2,
@@ -90,6 +92,7 @@ function ExistingAutoDviPanel({
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [pushing, setPushing] = useState(false);
+  const [pushNeedsVerification, setPushNeedsVerification] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [items, setItems] = useState<ComposedItem[] | null>(null);
@@ -396,7 +399,7 @@ function ExistingAutoDviPanel({
   }
 
   async function push() {
-    if (!items) return;
+    if (!items || pushNeedsVerification) return;
     const selected = items.filter((i) => checked[i.id]);
     if (selected.length === 0) {
       setError("Select at least one item to write to the RO");
@@ -438,14 +441,23 @@ function ExistingAutoDviPanel({
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Could not write inspection to RO");
+      if (data.outcome === "partial" || data.outcome === "uncertain") {
+        setPushNeedsVerification(true);
+        setError(data.message || DVI_PUSH_UNCERTAIN_MESSAGE);
+        return;
+      }
+      if (!res.ok) {
+        setError(data?.error || "Could not write inspection to RO");
+        return;
+      }
       setSuccess(
         `Inspection written to the work order (${data.lineCount} lines${
           data.recommendedCount ? `, plus ${data.recommendedCount} recommended-work package${data.recommendedCount !== 1 ? "s" : ""}` : ""
         })${data.inspectionResultsWritten ? " — findings also recorded in Protractor's inspection view" : ""}.`,
       );
     } catch (err: any) {
-      setError(err.message || "Could not write inspection to RO");
+      setPushNeedsVerification(true);
+      setError(DVI_PUSH_UNCERTAIN_MESSAGE);
     } finally {
       setPushing(false);
     }
@@ -474,7 +486,7 @@ function ExistingAutoDviPanel({
                 <Loader2 className="w-4 h-4 animate-spin" /> Building this vehicle&apos;s inspection…
               </div>
             )}
-            {error && <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</div>}
+            {error && <DviPushNotice message={error} needsVerification={pushNeedsVerification} />}
             {success && <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">{success}</div>}
 
             {items && !loading && (
@@ -708,7 +720,7 @@ function ExistingAutoDviPanel({
                     />
                     <button
                       onClick={push}
-                      disabled={pushing}
+                      disabled={pushing || pushNeedsVerification}
                       className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg px-4 py-1.5"
                     >
                       {pushing && <Loader2 className="w-4 h-4 animate-spin" />} Write inspection to open RO

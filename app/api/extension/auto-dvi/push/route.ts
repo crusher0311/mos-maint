@@ -24,6 +24,7 @@ import {
 import { buildInspectionLineTitle, buildFindingsNote, appendRatingTag, buildVhiContextNote } from "@/lib/auto-dvi/compose";
 import { buildRecommendedWorkPackages } from "@/lib/auto-dvi/recommended-work";
 import { pushInspectionPackageToProtractor } from "@/lib/auto-dvi/protractor-push";
+import { publicDviPushOutcome } from "@/lib/auto-dvi/push-outcome";
 import { runWithProtractorInteractiveTransport } from "@/lib/integrations/protractor/interactive-context";
 import { trackPushToRO } from "@/lib/extension-analytics";
 
@@ -62,8 +63,10 @@ interface PushItem {
 async function recordApplication(opts: AutoDviApplicationRecord) {
   try {
     await recordAutoDviApplication(opts);
+    return true;
   } catch (err: any) {
     console.error("[AutoDVI push] application record failed (non-fatal):", err?.message);
+    return false;
   }
 }
 
@@ -167,12 +170,14 @@ async function _POST(req: NextRequest) {
       );
       if (!result.ok) {
         return NextResponse.json(
-          { error: result.error, requiresManualEntry: result.requiresManualEntry },
+          { error: result.error, requiresManualEntry: result.requiresManualEntry,
+            ...(result.pushOutcome ? publicDviPushOutcome(result.pushOutcome, false) : {}),
+            workOrderId: result.workOrderGuid },
           { status: result.status || 500, headers: corsHeaders },
         );
       }
 
-      await recordApplication({
+      const receiptRecorded = await recordApplication({
         shopId: guard.mosShopId,
         vin: vinUpper,
         provider: "protractor",
@@ -198,6 +203,7 @@ async function _POST(req: NextRequest) {
           lineCount: lineTitles.length,
           recommendedCount: recommendedWork?.packages.length || 0,
           inspectionResultsWritten: result.inspectionResultsWritten || false,
+          ...publicDviPushOutcome(result.pushOutcome!, receiptRecorded),
         },
         { headers: corsHeaders },
       );

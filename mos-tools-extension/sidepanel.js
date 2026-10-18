@@ -9188,13 +9188,14 @@ function renderAutoDviChecklist(data) {
           `<li style="font-size:10px;color:#888;padding:1px 0;">${escapeAutoDviHtml(h.item?.name)} \u2014 ${escapeAutoDviHtml(h.reason)}</li>`).join('')}</ul>
       </details>`
     : '';
-  body.innerHTML = items.length === 0
+  body.innerHTML = '<div id="auto-dvi-verification-warning" role="alert" hidden style="margin:8px 0;padding:10px;border:1px solid #fcd34d;border-radius:6px;background:#fffbeb;color:#78350f;font-size:12px;"></div>' + (items.length === 0
     ? '<div style="font-size:12px;color:#888;">No inspection items for this vehicle.</div>'
     : `<ul style="list-style:none;padding:0;margin:0;">${itemRows}</ul>${recallBlock}${hiddenBlock}
-       <button id="auto-dvi-push-btn" class="btn-add" style="margin-top:6px;">+ Add Inspection to RO</button>`;
+       <button id="auto-dvi-push-btn" class="btn-add" style="margin-top:6px;">+ Add Inspection to RO</button>`);
   body.classList.remove('hidden');
   const pushBtn = document.getElementById('auto-dvi-push-btn');
   if (pushBtn) pushBtn.addEventListener('click', handleAutoDviPush);
+  renderAutoDviVerification();
 
   // Rating dots: tap toggles; re-render keeps checkbox state via findings only.
   body.querySelectorAll('.auto-dvi-rate').forEach((btn) => {
@@ -9239,9 +9240,32 @@ let autoDviData = null; // last generate response for the current vehicle
 
 let autoDviFindings = {};
 
+// Survives photo/voice/generate checklist rebuilds and navigation back to an
+// affected RO within this panel. Never clear on generate or a findings edit.
+const autoDviVerificationByWorkOrder = new Map();
+function autoDviWorkOrderKey(context = currentContext) {
+  return JSON.stringify([context?.provider, context?.shopId,
+    context?.roId || context?.roNumber || String(context?.vin || '').toUpperCase()]);
+}
+function renderAutoDviVerification() {
+  const message = autoDviVerificationByWorkOrder.get(autoDviWorkOrderKey());
+  const warning = document.getElementById('auto-dvi-verification-warning');
+  if (warning) {
+    warning.textContent = message ? `Verification needed: ${message}` : '';
+    warning.hidden = !message;
+  }
+  const button = document.getElementById('auto-dvi-push-btn');
+  if (button) button.disabled = autoDviInFlight || !!message;
+}
+
 async function handleAutoDviPush() {
   const pushBtn = document.getElementById('auto-dvi-push-btn');
-  if (autoDviInFlight || !autoDviData) return;
+  const requestWorkOrderKey = autoDviWorkOrderKey();
+  const requestProvider = currentContext?.provider;
+  if (autoDviInFlight || !autoDviData || autoDviVerificationByWorkOrder.has(requestWorkOrderKey)) {
+    renderAutoDviVerification();
+    return;
+  }
   const selected = [];
   document.querySelectorAll('.auto-dvi-check').forEach((cb) => {
     if (cb.checked) {
@@ -9290,7 +9314,16 @@ async function handleAutoDviPush() {
         }),
       },
     }, 90000, 'Still writing the inspection \u2014 please keep this panel open\u2026');
+    if (result?.outcome === 'partial' || result?.outcome === 'uncertain') {
+      const message = result.message || 'Check the work order in Protractor before writing again. Do not resend the inspection.';
+      autoDviVerificationByWorkOrder.set(requestWorkOrderKey, message);
+      showNotification(message, 'error');
+      return;
+    }
     if (result?.error) throw new Error(result.error);
+    if (requestProvider === 'protractor' && result?.ok !== true) {
+      throw new Error('Inspection write acknowledgment missing');
+    }
 
     if (result?.mode === 'client_write') {
       // Tekmetric: the server resolved the RO and composed the job; the
@@ -9309,10 +9342,17 @@ async function handleAutoDviPush() {
     }
   } catch (err) {
     console.error('[MOS] Auto DVI push error:', err);
-    showNotification(err.message || 'Could not write the inspection to the RO.', 'error');
+    if (requestProvider === 'protractor') {
+      const message = 'The write could not be confirmed. Check this work order in Protractor before writing again; it may already contain the package or findings. Contact support if verification is needed. Do not resend the inspection.';
+      autoDviVerificationByWorkOrder.set(requestWorkOrderKey, message);
+      showNotification(message, 'error');
+    } else {
+      showNotification(err.message || 'Could not write the inspection to the RO.', 'error');
+    }
   } finally {
     autoDviInFlight = false;
-    if (pushBtn) { pushBtn.disabled = false; pushBtn.textContent = originalLabel; }
+    if (pushBtn) pushBtn.textContent = originalLabel;
+    renderAutoDviVerification();
   }
 }
 
@@ -9357,6 +9397,7 @@ async function handleAutoDviGenerate() {
     showNotification(err.message || 'Could not generate the inspection.', 'error');
   } finally {
     autoDviInFlight = false;
+    renderAutoDviVerification();
     if (btn) { btn.disabled = false; btn.textContent = originalLabel; }
   }
 }

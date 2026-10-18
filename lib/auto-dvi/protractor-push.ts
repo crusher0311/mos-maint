@@ -6,6 +6,8 @@
 // SOAP fallback on the "Invalid column name 'Status'" Protractor bug.
 
 import { randomUUID } from "crypto";
+import type { DviPushOutcome } from "./push-outcome";
+import { DVI_PUSH_UNCERTAIN_MESSAGE } from "./push-outcome";
 import {
   resolveProtractorConfig,
   protractorFetch,
@@ -16,6 +18,7 @@ import {
 } from "@/lib/integrations/protractor";
 
 export interface ProtractorInspectionPushResult {
+  pushOutcome?: DviPushOutcome;
   ok: boolean;
   workOrderGuid?: string;
   error?: string;
@@ -121,7 +124,7 @@ export async function pushInspectionPackageToProtractor(opts: {
 
   const existingWOResult = await fetchWorkOrderById(shopId, workOrderGuid, { priority: true });
   if (!existingWOResult.ok || !existingWOResult.workOrder) {
-    return { ok: false, status: 404, error: existingWOResult.error || "Work order not found" };
+    return { ok: false, status: 404, error: "Could not load the work order. No inspection write was attempted." };
   }
   const existingWorkOrder = existingWOResult.workOrder;
   const workOrderStage = existingWorkOrder.WorkflowStage || (existingWorkOrder as any).workflowStage;
@@ -253,6 +256,7 @@ export async function pushInspectionPackageToProtractor(opts: {
     }
   }
 
+  try {
   if (woPostNeeded) {
     const updateResult = await protractorFetch<any>(
       `/WorkOrder/${workOrderGuid}`,
@@ -271,13 +275,20 @@ export async function pushInspectionPackageToProtractor(opts: {
           return {
             ok: false,
             status: 500,
-            error: "Failed to add inspection — Protractor database issue. Please contact Protractor support.",
+            error: DVI_PUSH_UNCERTAIN_MESSAGE,
+            workOrderGuid,
+            pushOutcome: { packageStatus: "uncertain", resultsStatus: "not_requested", readBackStatus: "not_performed" },
           };
         }
       } else {
-        return { ok: false, status: 500, error: updateResult.error || "Failed to add inspection to work order" };
+        return { ok: false, status: 500, error: DVI_PUSH_UNCERTAIN_MESSAGE, workOrderGuid,
+          pushOutcome: { packageStatus: "uncertain", resultsStatus: "not_requested", readBackStatus: "not_performed" } };
       }
     }
+  }
+  } catch {
+    return { ok: false, status: 500, error: DVI_PUSH_UNCERTAIN_MESSAGE, workOrderGuid,
+      pushOutcome: { packageStatus: "uncertain", resultsStatus: "not_requested", readBackStatus: "not_performed" } };
   }
 
   // Native inspection-results write (best-effort): POST
@@ -363,5 +374,11 @@ export async function pushInspectionPackageToProtractor(opts: {
     }
   }
 
-  return { ok: true, workOrderGuid, inspectionResultsWritten, inspectionResultsError };
+  return { ok: true, workOrderGuid, inspectionResultsWritten, inspectionResultsError,
+    pushOutcome: {
+      packageStatus: "acknowledged",
+      resultsStatus: inspectionItems.length === 0 ? "not_requested" : inspectionResultsWritten ? "acknowledged" : "uncertain",
+      readBackStatus: "not_performed",
+    },
+  };
 }
