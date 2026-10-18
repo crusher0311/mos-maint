@@ -156,6 +156,38 @@ solely for a zero number. Keep date/hour/identity conflict checks, distinguish
 credit documents, and never call corroborated matches newly recovered invoices
 without rerunning the actual report. Header-only audits do not verify labor.
 
+Sample unresolved reporting records from the actual report candidates, not all
+historical rows carrying the same diagnostic reason.
+
+**Why:** Known open work shares the missing-number diagnostic but is already
+excluded by report SQL. A candidate-filtered trace instead found historical
+InvoiceTime values behind the unknown-period population.
+
+**How to apply:** Preserve the real query's status, deletion and date semantics
+when investigating its gaps. Use actual InvoiceTime only for local date-scope
+experiments; keep inconsistent copies and unknown peer dates unresolved.
+
+Date-scope certainty and complete invoice evidence are separate questions.
+
+**Why:** A local full-fleet comparison showed that many unknown-population
+records had consistent actual invoice dates outside the reporting period.
+Excluding those from that period did not require inventing invoice numbers or
+hours, and did not change verified invoice totals.
+
+**How to apply:** Treat date-only exclusion as a separate, explicitly validated
+policy. Require agreement across matched copies and identity peers; never use
+it to make in-period unknown records verified or suppress contradictory dates.
+
+An omitted regular-job collection is not covered by the confirmed
+omitted-deferred-work behavior.
+
+**Why:** A final invoice capture held five deferred labor hours but no regular
+ServicePackages collection. That establishes deferred work, not zero sold work.
+
+**How to apply:** Keep that invoice's complete labor measures unavailable until
+regular-work completeness is supported; do not generalize omission-as-empty
+from the separately verified deferred collection.
+
 **Why:** On 2026-10-17 the user approved up to 1,000 additional Protractor requests,
 including retries, under existing eligibility and traffic protections, followed
 by another local report validation.

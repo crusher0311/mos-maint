@@ -1,0 +1,16 @@
+import assert from "node:assert/strict";
+import {reviewInvoiceDate} from "../scripts/invoice-date-review";
+const id="11111111-1111-1111-1111-111111111111";
+const raw={ID:id,Type:"WorkOrder",WorkflowStage:"Invoice",InvoiceNumber:0,InvoiceTime:"2026-08-01T12:00:00-04:00"};
+const check=(raws:any[])=>reviewInvoiceDate([id],raws);
+assert.deepEqual(check([raw]),{classification:"consistent_final_invoice_date",date:"2026-08-01T16:00:00.000Z"});
+assert.equal(check([raw,{...raw,InvoiceNumber:123}]).classification,"consistent_final_invoice_date");
+assert.equal(check([raw,{...raw,InvoiceTime:"2026-10-01T12:00:00Z"}]).classification,"date_conflict");
+assert.equal(check([{...raw,InvoiceTime:"0001-01-01T00:00:00"}]).classification,"date_unverified");
+assert.equal(check([{...raw,InvoiceTime:"2026-02-30T00:00:00"}]).classification,"date_unverified");
+assert.equal(check([{...raw,WorkflowStage:"ScheduledWork"}]).classification,"finality_unverified");
+assert.equal(check([{...raw,Type:"CreditSlip"}]).classification,"finality_unverified");
+assert.equal(check([{...raw,InvoiceNumber:undefined}]).classification,"number_unverified");
+assert.equal(check([{...raw,ID:"wrong"}]).classification,"identity_conflict");
+assert.equal(check([]).classification,"missing_source");
+console.log("PASS date-scope hypothesis: identity, actual invoice date, explicit zero, no fallback dates");

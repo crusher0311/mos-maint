@@ -57,19 +57,27 @@ async function main() {
     for(const key of ["PATH","HOME","USER","LANG","LD_AUDIT","LD_LIBRARY_PATH","REPLIT_LD_LIBRARY_PATH","NIX_LD_LIBRARY_PATH"])
       if(process.env[key])env[key]=process.env[key];
     env.SUPABASE_PROD_DATABASE_URL=`postgres://${userInfo().username}@127.0.0.1:${port}/invoice_preview_source`;
+    for(const suffix of [888,889,890])for(const copy of suffix===890?[0,1]:[0]) {
+      const identity=`10000000-0000-0000-0000-000000000${suffix}`;
+      const raw={ID:identity,Type:"WorkOrder",WorkflowStage:"Invoice",InvoiceNumber:0,
+        InvoiceTime:suffix===889||copy===1?"2026-10-16T12:00:00Z":"2026-08-01T12:00:00Z"};
+      await source`INSERT INTO normalized_work_orders VALUES (${`date-review-${suffix}-${copy}`},227,'closed',null,
+        ${source.json({sourceSystem:"protractor",sourceIds:[{system:"protractor",idType:"invoice_id",idValue:identity}]})},
+        null,${source.json({rawPayload:raw})})`;
+    }
     env.MONGODB_USERNAME="offline";env.MONGODB_PASSWORD="offline";
     env.PROTRACTOR_OFFLINE_ALLOW_LOOPBACK="true";
     env.NODE_OPTIONS="--require ./tests/helpers/deny-network-egress.cjs --require ./tests/helpers/invoice-preview-mongo.cjs --require ./scripts/_stubs/server-only-stub.cjs";
-    const child=spawnSync(process.execPath,["--import","tsx","scripts/validate-jwt-report-local.ts",String(port),"--stored-reconcile","--classify-uninvoiced","--separate-credits"],{env,encoding:"utf8",timeout:90000});
+    const child=spawnSync(process.execPath,["--import","tsx","scripts/validate-jwt-report-local.ts",String(port),"--stored-reconcile","--classify-uninvoiced","--separate-credits","--review-date-scope"],{env,encoding:"utf8",timeout:90000});
     assert.equal(child.status,0,child.stdout+"\n"+child.stderr);
     const events=child.stdout.split("\n").filter(x=>x.startsWith("{")).map(x=>JSON.parse(x));
     const after=events.find(e=>e.event==="local_report"&&e.label==="after");
     assert.equal(after.summary.invoiceCount,11);
-    assert.equal(after.summary.invoicePopulationUnknown,6);
+    assert.equal(after.summary.invoicePopulationUnknown,9);
     const classified=events.find(e=>e.event==="local_report"&&e.label==="after_stored_status_classification");
-    assert.equal(classified.summary.invoicePopulationUnknown,5);
+    assert.equal(classified.summary.invoicePopulationUnknown,8);
     const credits=events.find(e=>e.event==="local_report"&&e.label==="after_separate_credits");
-    assert.equal(credits.summary.invoicePopulationUnknown,4,
+    assert.equal(credits.summary.invoicePopulationUnknown,7,
       "unknown peer and cross-boundary conflicting credit dates must not disappear");
     assert.deepEqual(events.find(e=>e.event==="separate_credit_documents").groups,
       [{period:"report_period",records:1}]);
@@ -77,6 +85,12 @@ async function main() {
     assert.equal(credits.summary.invoiceSoldHours,22);
     assert.equal(credits.summary.invoicePresentedHours,22);
     assert.equal(credits.summary.averagePresentedHoursPerInvoice,null);
+    const dated=events.find(e=>e.event==="local_report"&&e.label==="after_date_scope_experiment");
+    assert.equal(dated.summary.invoicePopulationUnknown,6,"Only agreed outside-period dates are removed; in-period and cross-date peers remain");
+    assert.equal(dated.summary.invoiceCount,11);
+    assert.equal(dated.summary.invoiceSoldHours,22);
+    assert.equal(dated.summary.invoicePresentedHours,22);
+    assert.equal(dated.summary.averagePresentedHoursPerInvoice,null);
     assert.equal(classified.summary.invoiceCount,11);
     assert.equal(classified.summary.invoiceSoldHours,22);
     assert.equal(classified.summary.averagePresentedHoursPerInvoice,null);
@@ -91,7 +105,7 @@ async function main() {
     assert.equal(counts.conflict,1,"conflicting hours remain unresolved even when legacy invoice number is missing");
     // Re-running a retained local database must use completed shop checkpoints
     // and restore the original baseline, not treat prior local repairs as source.
-    const resumed=spawnSync(process.execPath,["--import","tsx","scripts/validate-jwt-report-local.ts",String(port),"--stored-reconcile","--classify-uninvoiced","--separate-credits"],{env,encoding:"utf8",timeout:90000});
+    const resumed=spawnSync(process.execPath,["--import","tsx","scripts/validate-jwt-report-local.ts",String(port),"--stored-reconcile","--classify-uninvoiced","--separate-credits","--review-date-scope"],{env,encoding:"utf8",timeout:90000});
     assert.equal(resumed.status,0,resumed.stdout+"\n"+resumed.stderr);
     const resumedEvents=resumed.stdout.split("\n").filter(x=>x.startsWith("{")).map(x=>JSON.parse(x));
     assert.equal(resumedEvents.filter(e=>e.event==="shop_copy_resumed").length,10);
@@ -101,6 +115,7 @@ async function main() {
     assert.deepEqual(resumedEvents.find(e=>e.event==="local_report"&&e.label==="after"),after);
     assert.deepEqual(resumedEvents.find(e=>e.event==="local_report"&&e.label==="after_stored_status_classification"),classified);
     assert.deepEqual(resumedEvents.find(e=>e.event==="local_report"&&e.label==="after_separate_credits"),credits);
+    assert.deepEqual(resumedEvents.find(e=>e.event==="local_report"&&e.label==="after_date_scope_experiment"),dated);
     console.log("PASS: read-only source, disposable-only repair, full report SQL, ten locations, null payload and unresolved coverage");
   } finally {await source.end();}
 }

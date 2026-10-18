@@ -1,5 +1,51 @@
 # Stored-status classification experiment
 
+## Targeted candidate trace and local date-scope hypothesis
+
+A targeted 2026-10-18 trace selected three unresolved zero-number records per
+shop **from the actual report SQL candidates**, plus the one in-period invoice
+with incomplete hours. All 30 selected zero-number records had July/August
+InvoiceTime values in matched stored WorkOrder/Invoice payloads. None had a
+matching capture in the two inspected operator campaigns. This bounded,
+deterministic sample is not a representative estimate of the full unknown set.
+The dedicated invoice-cache collections were not reread by this targeted trace;
+they were included in the preceding full reconciliation.
+
+The incomplete-hours record has five deferred labor hours but omits the regular
+ServicePackages collection in all inspected copies, including its positive-number
+capture. Missing regular work is not evidence of zero sold hours; leave it held.
+
+`--review-date-scope` (with stored reconciliation and credit separation) tests
+only date eligibility, not new invoice or labor evidence. It accepts an explicit
+nonnegative invoice number, final ordinary-invoice shape, bound GUID, and valid
+actual InvoiceTime only when all matched copies agree. It excludes only
+out-of-period records. Existing invoice evidence and reconciliation conflicts
+remain untouched. Unknown or conflicting normalized peers veto exclusion,
+including a peer on the other side of the date boundary. No fallback close,
+creation, or completion dates are used.
+
+Fixtures verify no change to ordinary invoice counts/hours, retention of
+in-period unknowns and cross-period conflicts, and identical results after
+resuming. This remains a local hypothesis, not a production policy change.
+
+Completed ten-shop comparison on 2026-10-18 (214,899 copied records; report
+period September 18–October 17 inclusive UTC):
+
+| Local stage | Verified invoices | Unknown population | Invoices with complete hours |
+| --- | ---: | ---: | ---: |
+| Stored-evidence reconciliation | 6,259 | 11,313 | 6,258 |
+| Separate reviewed credits | 6,259 | 10,002 | 6,258 |
+| Exclude consistently dated out-of-period records | 6,259 | 152 | 6,258 |
+
+The date experiment removed 9,850 out-of-period records from unknown population
+without changing invoice counts or covered labor totals (6,757.11 sold hours;
+13,608.82 presented hours, apart from floating-point summation noise).
+All ten locations still have unresolved population, and both fleet averages
+remain unavailable. The single incomplete-hours invoice also remains held.
+These are comparisons within one run; source data changed between earlier
+runs, so their differing invoice/credit counts are not experiment effects.
+Zero provider requests and production writes; no deployment.
+
 ## Local credit-document experiment
 
 `--stored-reconcile --separate-credits` adds a local-only credit review. A record
