@@ -8,12 +8,13 @@ import { HISTORY_SUMMARY_LIMITS } from "../../lib/data/repositories/terminal-his
 const body = renderToStaticMarkup(<main>
   <h1>Sync Health — terminal history imports</h1>
   <p>Offline fixture. Read-only; no import authorization or replay.</p>
-  <TerminalHistoryImportsView data={{
-    limits: HISTORY_SUMMARY_LIMITS, campaignsTruncated: false, campaigns: [{
+  <TerminalHistoryImportsView onPage={() => {}} data={{
+    limits: HISTORY_SUMMARY_LIMITS, campaignsTruncated: true, nextCampaignCursor: "fixture", campaigns: [{
       campaignId: "example-history-campaign", status: "needs-attention",
       endedAt: "2026-10-18T06:00:00.000Z", recordedUnresolved: 5,
       outcomes: { imported: 120, verifiedPresent: 34, ambiguous: 2, indexReview: 1, thin: 1, unknown: 0 },
-      receiptsSampled: 158, receiptsTruncated: false, shopsTruncated: false,
+      receiptsSampled: 158, receiptsTruncated: true, shopsTruncated: true,
+      shopAfter: undefined, receiptAfter: undefined, nextShopCursor: "fixture", nextReceiptCursor: "fixture",
       shops: [{ shopId: 123, recordedUnresolved: 5, heldDays: ["2026-10-16"], heldDaysTruncated: false }],
     }],
   }} />
