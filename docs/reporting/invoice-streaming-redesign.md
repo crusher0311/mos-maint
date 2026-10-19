@@ -132,3 +132,24 @@ snapshot-consistency checks.
 
 No new production report, deployment or activation occurred during this
 optimization. A separately approved bounded live retry remains necessary.
+
+## Approved optimized live retry — October 19, 2026
+
+One read-only retry against the verified web-service database target completed
+all ten JWT locations in 20.575 seconds, within the unchanged 45-second deadline.
+It fetched 215,950 records / 44,720,556 serialized bytes in 218 pages. Sampled
+runner RSS was 142.3 MiB at baseline and 264.0 MiB at peak; sampled peak heap was
+150.2 MiB. These describe this separate runner, not database usage or spare
+capacity on the deployed web service.
+
+For October 16–19 UTC, the metadata-only result contained zero verified eligible
+invoices, 210,080 unresolved invoice identities and unavailable sold/presented
+averages. The unknown population spans stored history, not just the requested
+dates: unknown invoice dates cannot be period-filtered. This does not establish
+that the shops had no invoices or zero labor.
+
+No row cap was hit, no partial result was published, no provider was called, and
+no data, grants or persistent configuration changed. Both fleet features remained
+disabled. This is live execution evidence, not a release or proof of financial
+coverage. Source-evidence repair readiness and release/build validation remain
+separate requirements. The previous failed run evidence was preserved.
