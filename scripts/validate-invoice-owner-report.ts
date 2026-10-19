@@ -11,9 +11,7 @@ import {userInfo} from "node:os";
 import postgres from "postgres";
 import {MongoClient} from "mongodb";
 import {planOwnerStructure} from "./invoice-owner-repair-model";
-import {reconcileStored} from "./invoice-stored-evidence";
-import {INVOICE_HOURS_SQL} from "../lib/invoice-hours-query";
-import {aggregateInvoiceHours} from "../lib/invoice-hours-contract";
+import {reconcileOwnerCopies,queryOwnerReport,assertOwnerFinancialControl} from "./invoice-owner-report-model";
 const hash=(v:string)=>createHash("sha256").update(v).digest("hex");
 const refs=(p:any)=>[...new Set<string>((p?.sourceIds??[])
   .filter((s:any)=>s.system==="protractor"&&["invoice_id","work_order_id"].includes(s.idType))
@@ -66,7 +64,7 @@ async function main(){
           assert.ok(bound.length>0,"Missing owner payload");
           const desired=plan.parents.find(p=>p.owner===owner)!;assert.ok(desired);
           assert.ok(bound.every(r=>hash(`${shop}:${r.WorkOrderNumber}`)===desired.number),"Work-order number conflict");
-          const reconciled=reconcileStored([ownerId],bound,[]);
+          const reconciled=reconcileOwnerCopies(ownerId,raws);
           reasons[reconciled.reason]=(reasons[reconciled.reason]??0)+1;
           if(reconciled.evidence){
             const e=reconciled.evidence;
@@ -90,23 +88,16 @@ async function main(){
     }
     assert.equal(parents,snapshot.nodes.length);assert.equal(owners,plan.parents.length);
     const start="2026-09-18T00:00:00.000Z",end="2026-10-17T23:59:59.999Z";
-    for(const [label,table] of [["before","normalized_work_orders"],["after_owner_separation","proposed_work_orders"]]){
-      const rows=await local.unsafe(INVOICE_HOURS_SQL.replaceAll("normalized_work_orders",table),[`{${shops.join(",")}}`,start,end]);
+    for(const [label,table] of [["before","normalized_work_orders"],["after_owner_separation","proposed_work_orders"]] as const){
+      const {rows,summary}=await queryOwnerReport(local,table,shops,start,end);
       console.log(JSON.stringify({event:"owner_cohort_report",label,rows:rows.length,
-        summary:aggregateInvoiceHours(rows as any,new Date(start),new Date(end)).summary}));
+        summary}));
     }
     // An all-date control checks actual hours too: excluding old invoices from the
     // requested period alone would not establish financial/report parity.
     const from="1900-01-01T00:00:00.000Z",until="9999-12-31T23:59:59.999Z";
-    const control=await local.unsafe(INVOICE_HOURS_SQL.replaceAll("normalized_work_orders","proposed_work_orders"),
-      [`{${shops.join(",")}}`,from,until]);
-    const summary=aggregateInvoiceHours(control as any,new Date(from),new Date(until)).summary;
-    assert.equal(summary.invoiceCount,expectedInvoices);
-    assert.equal(summary.invoiceSoldCovered,expectedInvoices);
-    assert.equal(summary.invoicePresentedCovered,expectedInvoices);
-    assert.ok(summary.invoiceSoldHours!=null&&summary.invoicePresentedHours!=null);
-    assert.ok(Math.abs(summary.invoiceSoldHours-expectedSold)<0.000001);
-    assert.ok(Math.abs(summary.invoicePresentedHours-expectedPresented)<0.000001);
+    const {summary}=await queryOwnerReport(local,"proposed_work_orders",shops,from,until);
+    assertOwnerFinancialControl(summary,{invoices:expectedInvoices,sold:expectedSold,presented:expectedPresented});
     console.log(JSON.stringify({event:"owner_all_date_financial_control",summary,evidenceScope,sourceTotalsMatchReport:true}));
     console.log(JSON.stringify({event:"owner_report_simulation_complete",parents,owners,structurallyPreservedChildren:plan.children.length,
       reasons,scope:"Reviewed closure only; normalized stored copies, not archive-wide or full-fleet validation",
