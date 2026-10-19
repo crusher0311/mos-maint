@@ -6,6 +6,7 @@
  */
 
 import { MongoClient, Db, Collection, ObjectId } from 'mongodb';
+import { assertSameProtractorWorkOrder, protractorMongoIdentityFilter, ProtractorIdentityConflict } from '../../protractor-work-order-identity';
 import {
   SourceSystem,
   NormalizedVehicle,
@@ -35,6 +36,7 @@ import {
 } from '@/lib/repair-patterns';
 import pLimit from 'p-limit';
 import { SupabaseDualWriter } from '@/lib/supabase-dual-writer';
+import { preserveInvoiceIdentity } from '@/lib/invoice-evidence-preservation';
 import { shouldShadowWriteMongo } from './normalized-write-mode';
 import { bumpMongoWrites, bumpPgWrites } from '@/lib/backfill-metrics/write-counters';
 import { enrichVinWithAces, enrichVinsWithAcesAllVins, extractShopWarePcdb, extractTekmetricPcdb, type AcesEnrichment } from '@/lib/job-index-aces';
@@ -638,6 +640,10 @@ export class NormalizedIngestionService {
           )
           : null);
       
+      if (this.adapter.sourceSystem === "protractor") {
+        if(existing)assertSameProtractorWorkOrder(existing.provenance,{sourceIds});
+        mapped.customFields = preserveInvoiceIdentity(this.shopId, sourceData, existing, mapped.customFields);
+      }
       const contentHash = generateContentHash(mapped);
       
       const serviceJobs = this.adapter.extractServiceJobsFromWorkOrder(sourceData);
@@ -690,11 +696,20 @@ export class NormalizedIngestionService {
         // collections with their own future migrations — they continue
         // to write regardless of the WRITE_MONGO_NORMALIZED flag.
         await this.dualWriteToSupabase('work_order', existing._id, 'update', () =>
-          this.supabaseDualWriter!.upsertWorkOrder({ ...mapped, _id: existing._id, shopId: this.shopId, enterpriseId: this.enterpriseId, vehicleId: vehicleId || existing.vehicleId, customerId: customerId || existing.customerId, provenance: updatedProvenance, softDelete: existing.softDelete, version: existing.version + 1, createdAt: existing.createdAt, updatedAt: new Date() })
+          this.supabaseDualWriter!.upsertWorkOrder({
+            ...mapped, _id: existing._id, shopId: this.shopId, enterpriseId: this.enterpriseId,
+            vehicleId: vehicleId || existing.vehicleId, customerId: customerId || existing.customerId,
+            provenance: updatedProvenance, softDelete: existing.softDelete,
+            version: existing.version + 1, createdAt: existing.createdAt, updatedAt: new Date(),
+            // Match create and Mongo shadow writes: raw_data serializes this
+            // document, so omitting the payload here erases the retained source.
+            rawPayload: this.sanitizeRawPayload(sourceData.rawPayload || sourceData),
+          })
         );
         await this.shadowWriteMongo('work_order', async () => {
-          await collection.updateOne(
-            { _id: existing._id },
+          const result = await collection.updateOne(
+            { _id: existing._id, ...(this.adapter.sourceSystem==="protractor"
+              ?protractorMongoIdentityFilter(existing.provenance,{sourceIds}):{}) },
             {
               $set: {
                 ...mapped,
@@ -708,6 +723,8 @@ export class NormalizedIngestionService {
               },
             }
           );
+          if(this.adapter.sourceSystem==="protractor"&&result.matchedCount!==1)
+            throw new ProtractorIdentityConflict();
           await this._stampIngestionVia(existing._id);
         });
 
@@ -776,7 +793,7 @@ export class NormalizedIngestionService {
         isInternal: false,
         isComeback: false,
         tags: [],
-        customFields: {},
+        customFields: mapped.customFields || {},
         rawPayload: this.sanitizeRawPayload(sourceData.rawPayload || sourceData),
       } as NormalizedWorkOrder;
       
