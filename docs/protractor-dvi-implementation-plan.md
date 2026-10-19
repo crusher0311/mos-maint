@@ -1,3 +1,39 @@
+# Acknowledged native findings: scoped read-back contract
+
+The legacy push still defaults to `readBackStatus: not_performed`. A write
+acknowledgment is not proof of saved content or inspection-grid display.
+The server-only `readBack` dependency in `protractor-push.ts` permits offline
+fixtures and a future separately authorized collector; no HTTP request flag
+enables it. `fetchInspectionReadBackSnapshot` reads only the supplied shop and
+exact work-order GUID, with no RO-number/VIN fallback. It does not discover
+configured rating labels or authorize access on its own.
+
+Comparison uses the exact package and line IDs submitted in that operation,
+never titles as read-back identity. It compares chapter, package title, line
+type/title/result/notes and requested deletions; duplicate IDs, missing IDs,
+changed content, malformed snapshots and wrong scopes cannot pass. Unrelated
+packages and lines are not rewritten or treated as owned. Read errors are
+reported as fixed codes, not raw provider errors or saved note content.
+The single submitted package must have a nonempty ID and distinct, nonempty
+line IDs. Duplicate submitted identities fail closed before comparison.
+A requested deletion matches only an absent line or one uniquely identified
+tombstone with the deletion flag, matching Type, and empty Title, Result and
+Notes; retained finding content is a mismatch.
+
+`matched` means the requested content was observed, not that a human saw it.
+`ratingLabelsStatus` is separately `matched`, `mismatched`, or `unverified`,
+using independently captured shop-configured green/yellow/red labels. Missing
+label evidence never proves display correctness. Mismatched/unavailable reads
+and unverified labels produce a verification warning and disallow recovery;
+acknowledged package/results fields remain acknowledged. No automatic repair,
+retry, mapping change, or additional write follows comparison.
+
+Live evidence collection is NOT authorized by these fixtures. Before using
+the reader live, obtain separate authorization naming the shop, exact ticket,
+read-only scope and label-setup access. Capture staff-grid evidence separately;
+API content alone is not a screenshot or customer-display test. Do not run
+deletion experiments or resend acknowledged writes as part of collection.
+
 # Protractor DVI: scoped debt and dependency-aware build plan
 
 Read with [foundation evidence](protractor-dvi-foundations.md) and the consolidated product specification. This is a proposed implementation sequence, not permission to enable the product.

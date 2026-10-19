@@ -3173,6 +3173,29 @@ export async function updateInspectionResults(
   }
   return { ok: true, data: result.data };
 }
+/** Exact-WO evidence only; no VIN/number fallback or corrective writes.
+ * Not enabled by ordinary DVI pushes. Calling this for live evidence requires
+ * separate operator authorization for the shop and work order. Shop-configured
+ * rating labels must be captured separately; this response cannot prove them. */
+export async function fetchInspectionReadBackSnapshot(
+  shopId: number,
+  workOrderGuid: string,
+): Promise<{ ok: true; shopId: number; workOrderGuid: string; workOrder: unknown } |
+  { ok: false; reason: "invalid_scope" | "read_failed" | "scope_mismatch" }> {
+  if (!Number.isSafeInteger(shopId) || shopId <= 0 ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(workOrderGuid)) {
+    return { ok: false, reason: "invalid_scope" };
+  }
+  try {
+    const result = await fetchWorkOrderById(shopId, workOrderGuid, { priority: true });
+    if (!result.ok || !result.workOrder) return { ok: false, reason: "read_failed" };
+    if (result.workOrder.ID !== workOrderGuid) return { ok: false, reason: "scope_mismatch" };
+    return { ok: true, shopId, workOrderGuid, workOrder: result.workOrder };
+  } catch {
+    return { ok: false, reason: "read_failed" };
+  }
+}
+
 export async function fetchActiveInspections(
   shopId: number | string,
   workOrderId: string

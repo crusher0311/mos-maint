@@ -8,6 +8,7 @@
 import { randomUUID } from "crypto";
 import type { DviPushOutcome } from "./push-outcome";
 import { DVI_PUSH_UNCERTAIN_MESSAGE } from "./push-outcome";
+import { compareInspectionReadBack, type InspectionReadBackEvidence, type InspectionReadBackReport, type InspectionReadBackScope } from "./protractor-read-back";
 import {
   resolveProtractorConfig,
   protractorFetch,
@@ -63,6 +64,10 @@ export async function pushInspectionPackageToProtractor(opts: {
   /** Per-item findings for the NATIVE inspection-results write (§1.9.4).
    * When present, results also land in Protractor's inspection view. */
   inspectionItems?: InspectionResultItem[];
+  /** Server-only opt-in. No route accepts this from request JSON.
+   * Live collection requires separate operator authorization; fixtures use an
+   * injected reader. This callback must only read the supplied exact scope. */
+  readBack?: (scope: InspectionReadBackScope) => Promise<InspectionReadBackEvidence>;
 }): Promise<ProtractorInspectionPushResult> {
   const { shopId } = opts;
   const config = await resolveProtractorConfig(shopId);
@@ -300,6 +305,7 @@ export async function pushInspectionPackageToProtractor(opts: {
   // instead of duplicating. A failure here never fails the package push above.
   let inspectionResultsWritten = false;
   let inspectionResultsError: string | undefined;
+  let readBack: InspectionReadBackReport | undefined;
   const inspectionItems = (opts.inspectionItems || []).filter((i) => i.name && i.name.trim());
   if (inspectionItems.length > 0) {
     try {
@@ -367,10 +373,19 @@ export async function pushInspectionPackageToProtractor(opts: {
         ItemCollection: [inspectionPackage],
       });
       inspectionResultsWritten = inspectionResult.ok;
-      if (!inspectionResult.ok) inspectionResultsError = inspectionResult.error;
+      if (!inspectionResult.ok) inspectionResultsError = "Native inspection write could not be confirmed.";
+      if (inspectionResult.ok && opts.readBack) {
+        try {
+          const scope = { shopId, workOrderGuid };
+          readBack = compareInspectionReadBack(scope, inspectionPackage,
+            inspectionItems.map(item => item.rating), await opts.readBack(scope));
+        } catch {
+          readBack = { readBackStatus: "unavailable", ratingLabelsStatus: "unverified",
+            issues: [{ code: "read_failed" }] };
+        }
+      }
     } catch (err: any) {
-      inspectionResultsError = err?.message || "inspection-results write threw";
-      console.error("[AutoDVI push] InspectionResultUpdate failed (non-fatal):", inspectionResultsError);
+      inspectionResultsError = "Native inspection write could not be confirmed.";
     }
   }
 
@@ -378,7 +393,8 @@ export async function pushInspectionPackageToProtractor(opts: {
     pushOutcome: {
       packageStatus: "acknowledged",
       resultsStatus: inspectionItems.length === 0 ? "not_requested" : inspectionResultsWritten ? "acknowledged" : "uncertain",
-      readBackStatus: "not_performed",
+      readBackStatus: readBack?.readBackStatus || "not_performed",
+      ...(readBack ? { ratingLabelsStatus: readBack.ratingLabelsStatus, readBackIssues: readBack.issues } : {}),
     },
   };
 }
