@@ -15,7 +15,7 @@ function fixture() {
   const invoices = ids.map(ID => ({ ID, Total: 10 }));
   return {
     page: { _id: pageId, shopId: 457, day: "2026-10-13", invoices, digest: hash(invoices) } as any,
-    receipts: new Map<string, any>(), calls: [] as string[], stopped: false,
+    receipts: new Map<string, any>(), calls: [] as string[], stopped: false, signals: {} as any,
   };
 }
 async function run(f: ReturnType<typeof fixture>, behavior: "ok" | "hang" | "partial" | "thin" = "ok") {
@@ -30,8 +30,9 @@ async function run(f: ReturnType<typeof fixture>, behavior: "ok" | "hang" | "par
       },
       updateOne: async (q: any, u: any) => {
         if (name === "operator_history_import_pages") Object.assign(f.page, u.$set);
+        else if (name === "operator_history_import_jobs") Object.assign(f.signals, u.$max);
         else f.receipts.set(q._id, { ...f.receipts.get(q._id), ...u.$set });
-        return { modifiedCount: 1 };
+        return { modifiedCount: 1, matchedCount: 1 };
       },
     });
     const requireMock = (name: string): any => {
@@ -65,7 +66,9 @@ async function run(f: ReturnType<typeof fixture>, behavior: "ok" | "hang" | "par
 async function main() {
   let f = fixture(); assert.equal(await run(f), 0); assert.equal(f.page.imported, true);
   assert.equal(f.receipts.size, 2); assert.ok([...f.receipts.values()].every(r => r.status === "imported"));
+  assert.ok(f.signals.importedInvoiceAt);
   await run(f); assert.equal(f.calls.length, 2, "confirmed invoices never reimported");
+  assert.ok(f.signals.verifiedPresentAt);
   f = fixture(); assert.equal(await run(f, "hang"), 75);
   assert.equal(f.receipts.get(`${P.jobId}:${hash(ids[0])}`).status, "processing");
   assert.notEqual(f.page.imported, true);
@@ -73,8 +76,10 @@ async function main() {
   assert.deepEqual(f.calls, ids, "restart skips ambiguous first write and imports unrelated second invoice");
   assert.equal(f.page.imported, false); assert.equal(f.page.pending, 1);
   f = fixture(); await run(f, "partial"); assert.equal(f.page.imported, false);
+  assert.equal(f.signals.importedInvoiceAt, undefined);
   assert.ok([...f.receipts.values()].every(r => r.status === "processing"));
   f = fixture(); await run(f, "thin"); assert.equal(f.calls.length, 0); assert.equal(f.page.imported, false);
+  assert.deepEqual(f.signals, {});
   f = fixture(); f.stopped = true; assert.equal(await run(f), 75); assert.equal(f.calls.length, 0);
   f = fixture(); f.page.digest = "corrupted"; assert.equal(await run(f), 75); assert.equal(f.calls.length, 0);
   console.log("Avid worker: completed receipts, no duplicate replay, hung-invoice isolation, partial writes, thin rows, stop and digest checks passed");

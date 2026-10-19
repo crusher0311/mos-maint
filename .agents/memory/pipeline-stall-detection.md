@@ -57,6 +57,19 @@ as cancellation hides repeated duplicate-check failures.
 leases; use verified outcomes for progress and separate bounded callback waits.
 Keep campaign stalls in the existing pipeline alert/dedup path.
 
+Older one-use runners do not share the weekend runner's dispatch-grant or
+lease semantics. Keep monitoring bounded by each campaign's unchanged approval;
+adding telemetry is not permission to reuse an expired run. Comparison-only
+campaigns report completed comparisons, never imported invoices.
+
+**Why:** Afton has only a 15-minute approval, while the fleet stall threshold is
+three hours. Both the observation cadence and threshold must fit the authorized
+window, without a separate pager or extended grant.
+
+**How to apply:** Check both cron cadence and campaign duration when adding
+short-lived campaigns. Do not backfill new authority metadata into expired jobs
+just to make them appear active.
+
 Treat lease renewal, cursor advancement to a held/error day, and actual imported
 or verified-present receipts as separate signals. Fixed-order retries must not
 let an early shop repeatedly trigger a fleet-wide cooldown and starve later shops.

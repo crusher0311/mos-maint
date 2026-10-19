@@ -69,6 +69,7 @@ async function main() {
   // Unique _id prevents duplicate schedulers before either can open a permission.
   await jobs.insertOne({
     _id: P.jobId, runId: grant.runId, owner, status: "preparing", stopped: false,
+    canaryGeneration: grant.canaryGeneration, bindingDigest: grant.bindingDigest,
     shopId: P.shopId, grantDigest: pilotDigest(grant), createdAt: new Date(),
     notBefore: grant.notBefore, expiresAt: grant.expiresAt,
     approvedTimezone: P.timezone, approvedHours: "Mon-Fri 07:00-18:00",
@@ -113,6 +114,7 @@ async function main() {
       const job = await jobs.findOne({ _id: P.jobId, owner, status: "running", stopped: false },
         { projection: { _id: 1 }, maxTimeMS: 3000 });
       assert.ok(job, "Pilot stopped or ownership changed");
+      await jobs.updateOne({ _id: P.jobId, owner }, { $max: { heartbeatAt: new Date() } });
       const live = await rates.findOne({ _id: RATE }, { maxTimeMS: 3000 });
       fleetReady(live, grant.canaryGeneration);
       validateHistoryGrant(live.aftonPilot);
@@ -136,6 +138,7 @@ async function main() {
       // Store evidence before local comparison. An ambiguous write stops, never re-fetches.
       await pages.insertOne({ _id: pageId, jobId: P.jobId, page, sourceIds: ids,
         digest: pilotDigest(ids), capturedAt: new Date(), status: "captured" });
+      await jobs.updateOne({ _id: P.jobId, owner }, { $max: { capturedPageAt: new Date() } });
       let matches: Array<{ source_id: string; id: string }> = [];
       if (ids.length) {
         pgUsed = true;
@@ -162,7 +165,8 @@ async function main() {
         { $set: { status: "compared", results, completedAt: new Date() } });
       assert.equal(recorded.modifiedCount, 1, "Comparison receipt unconfirmed");
       const advanced = await jobs.updateOne({ _id: P.jobId, owner, status: "running", stopped: false, nextPage: page },
-        { $set: { nextPage: page + 1, lastProgressAt: new Date() }, $inc: { pagesCompleted: 1, ...counts } });
+        { $set: { nextPage: page + 1, lastProgressAt: new Date(), comparedPageAt: new Date() },
+          $inc: { pagesCompleted: 1, ...counts } });
       assert.equal(advanced.modifiedCount, 1, "Checkpoint unconfirmed; no automatic continuation");
       assert.equal(counts.ambiguous, 0, "Ambiguous local identities require review");
       if (ids.length < 100) {

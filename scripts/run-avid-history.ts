@@ -61,6 +61,7 @@ async function main() {
   };
   validateHistoryGrant(grant);
   await jobs.insertOne({ _id: P.jobId, owner, runId: grant.runId, shopId: P.shopId,
+    canaryGeneration: grant.canaryGeneration, bindingDigest: grant.bindingDigest,
     status: "preparing", stopped: false, from: P.from, until: P.until,
     notBefore: grant.notBefore, expiresAt: grant.expiresAt, completedDays: 0,
     mode: "normalized_history_import", createdAt: new Date(), grantDigest: hash(grant) });
@@ -105,7 +106,7 @@ async function main() {
           assert.ok(currentConfig.configured &&
             historyBindingDigest(P.shopId, currentConfig.connectionId) === grant.bindingDigest);
           const pageId = `${id}:${page}`;
-          await jobs.updateOne({ _id: P.jobId, owner }, { $set: { day, page, pass, lastCheckedAt: new Date() } });
+          await jobs.updateOne({ _id: P.jobId, owner }, { $set: { day, page, pass, lastCheckedAt: new Date(), heartbeatAt: new Date() } });
           let archived = await pages.findOne({ _id: pageId }, { maxTimeMS: 5000 });
           if (!archived) {
             const request = { runId: grant.runId, shopId: P.shopId, day, pilot: "avid" as const };
@@ -124,6 +125,7 @@ async function main() {
             archived = { _id: pageId, jobId: P.jobId, shopId: P.shopId, day, page,
               invoices, digest: hash(invoices), imported: invoices.length === 0, capturedAt: new Date() };
             await pages.insertOne(archived);
+            await jobs.updateOne({ _id: P.jobId, owner }, { $max: { capturedPageAt: new Date() } });
           }
           assert.equal(hash(archived.invoices), archived.digest);
           if (!archived.imported) {
@@ -131,6 +133,7 @@ async function main() {
             archived = await pages.findOne({ _id: pageId }, { maxTimeMS: 5000 });
           }
           if (!archived.imported) complete = false;
+          else await jobs.updateOne({ _id: P.jobId, owner }, { $max: { completedPageAt: new Date() } });
           if (archived.invoices.length < 100) { terminal = true; break; }
           page++;
           await sleep(2000);
@@ -138,7 +141,8 @@ async function main() {
         await days.updateOne({ _id: id }, { $set: { jobId: P.jobId, day,
           complete: complete && terminal, checkedAt: new Date() } }, { upsert: true });
         const completedDays = await days.countDocuments({ jobId: P.jobId, complete: true }, { maxTimeMS: 5000 });
-        await jobs.updateOne({ _id: P.jobId, owner }, { $set: { completedDays, lastProgressAt: new Date() } });
+        await jobs.updateOne({ _id: P.jobId, owner }, { $set: { completedDays, lastCheckedAt: new Date() },
+          ...(!complete || !terminal ? { $max: { heldDayAdvanceAt: new Date() } } : {}) });
         console.log(JSON.stringify({ event: "avid_history_progress", completedDays, day, pass }));
         await sleep(2000);
       }

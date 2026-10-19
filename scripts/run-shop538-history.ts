@@ -52,6 +52,8 @@ async function main(){
       "canary.generation":grant.canaryGeneration,"canary.mode":"live"},{$set:{shopHistory:grant}});
     assert.equal(saved.modifiedCount,1,"Admission state changed");
     await jobs.insertOne({_id:JOB,runId:grant.runId,grantDigest:hash(grant),status:"scheduled",stopped:false,
+      canaryGeneration:grant.canaryGeneration,bindingDigest:grant.bindingDigest,
+      notBefore:grant.notBefore,expiresAt:grant.expiresAt,
       shopId:HISTORY_SHOP,from:HISTORY_FROM,until:HISTORY_UNTIL,createdAt:new Date(),
       day:yesterday(HISTORY_UNTIL),page:0,completedDays:0,imported:0,failed:0});
     console.log(JSON.stringify({event:"shop_history_prepared",shopId:HISTORY_SHOP,from:HISTORY_FROM,
@@ -97,7 +99,7 @@ async function main(){
       assert.ok(config.configured && historyBindingDigest(HISTORY_SHOP,config.connectionId)===grant.bindingDigest,"Shop connection changed");
       const pageId=`${JOB}:${day}:${page}`;
       let archived=await sources.findOne({_id:pageId},{maxTimeMS:5000});
-      await jobs.updateOne({_id:JOB,owner},{$set:{day,page,waitingForQuietWindow:false,lastCheckedAt:new Date()}});
+      await jobs.updateOne({_id:JOB,owner},{$set:{day,page,waitingForQuietWindow:false,lastCheckedAt:new Date(),heartbeatAt:new Date()}});
       if(!archived){
         const request={runId:grant.runId,shopId:HISTORY_SHOP,day};
         const response=await runWithShopHistory(live.shopHistory,request,()=>protractorFetch<any>(
@@ -110,6 +112,7 @@ async function main(){
         assert.ok(Array.isArray(invoices) && invoices.length<=100,"Unexpected invoice envelope");
         archived={_id:pageId,invoices,digest:hash(invoices),capturedAt:new Date()};
         await sources.insertOne(archived);
+        await jobs.updateOne({_id:JOB,owner},{$max:{capturedPageAt:new Date()}});
       }
       assert.equal(hash(archived.invoices),archived.digest,"Archived page changed");
       let pending=0;
@@ -117,7 +120,10 @@ async function main(){
         if(Date.now()>=Date.parse(HISTORY_END)-60000)throw Error("Morning cutoff; page retained");
         assert.ok(typeof invoice.ID==="string" && invoice.ID.length>0,"Invoice identity missing");
         const id=`${JOB}:${hash(invoice.ID)}`;
-        if(await receipts.findOne({_id:id,status:"imported"},{projection:{_id:1},maxTimeMS:5000}))continue;
+        if(await receipts.findOne({_id:id,status:"imported"},{projection:{_id:1},maxTimeMS:5000})){
+          await jobs.updateOne({_id:JOB,owner},{$max:{verifiedPresentAt:new Date()}});
+          continue;
+        }
         try{
           // Do not silently complete thin list rows. Detail reads require a
           // separately reviewed scope rather than accidental fan-out.
@@ -127,7 +133,7 @@ async function main(){
             ...result.payments,...result.inspections,...result.recommendations].every(r=>r.success),"Incomplete normalized ingestion");
           await receipts.updateOne({_id:id},{$set:{status:"imported",jobId:JOB,shopId:HISTORY_SHOP,day,
             sourceDigest:hash(invoice),completedAt:new Date()}},{upsert:true});
-          await jobs.updateOne({_id:JOB,owner},{$inc:{imported:1},$set:{lastProgressAt:new Date()}});
+          await jobs.updateOne({_id:JOB,owner},{$inc:{imported:1},$set:{lastProgressAt:new Date(),importedInvoiceAt:new Date()}});
         }catch{
           pending++;
           await receipts.updateOne({_id:id},{$set:{status:"pending",jobId:JOB,shopId:HISTORY_SHOP,day,
@@ -148,7 +154,7 @@ async function main(){
         day=yesterday(day);page=0;
         await jobs.updateOne({_id:JOB,owner},{$inc:{completedDays:1}});
       }
-      await jobs.updateOne({_id:JOB,owner},{$set:{day,page,pendingOnPage:0,lastProgressAt:new Date()}});
+      await jobs.updateOne({_id:JOB,owner},{$set:{day,page,pendingOnPage:0,lastProgressAt:new Date(),completedPageAt:new Date()}});
       console.log(JSON.stringify({event:"shop_history_progress",shopId:HISTORY_SHOP,day,page}));
       await sleep(2000);
     }

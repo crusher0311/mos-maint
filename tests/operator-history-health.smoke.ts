@@ -1,11 +1,12 @@
 import "./helpers/deny-network-egress";
 import assert from "node:assert/strict";
-import { historyHealth } from "../app/api/cron/pipeline-stall-alerter/history";
+import { historyHealth, HISTORY_CAMPAIGNS } from "../app/api/cron/pipeline-stall-alerter/history";
 import { buildAlertKey, type StallHit } from "../app/api/cron/pipeline-stall-alerter/lib";
 import { WEEKEND, weekendFrom } from "../lib/protractor-weekend-policy";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
 import ts from "typescript";
+import { fixtures } from "./legacy-history-health.smoke";
 
 const start = Date.parse(WEEKEND.start) + 3600000, windowMs = 3 * 3600000;
 const now = start + windowMs, future = new Date(now + 240000);
@@ -65,20 +66,22 @@ console.log("PASS operator history health: outcomes, held days, heartbeat, captu
 
 // Execute the real cron handler against metadata-only stores. No DB, email,
 // provider requests, or app boot; validates shared escalation and auto-clear.
-async function routeScenario() {
-  let clock = start;
+async function routeScenario(fixture?: typeof fixtures[number]) {
+  const scenarioStart = fixture?.start ?? start, scenarioNow = fixture?.now ?? now;
+  const scenarioId = fixture?.id ?? WEEKEND.id;
+  let clock = scenarioStart;
   const heartbeats = new Map<string, any>(), alerts = new Map<string, any>();
   const notifications: any[] = [];
-  const mutableJob: any = { ...job, invoices: [{ customer: "DO-NOT-REPORT" }] };
+  const mutableJob: any = { ...(fixture?.job ?? job), invoices: [{ customer: "DO-NOT-REPORT" }] };
   const collection = (name: string): any => {
     const map = name === "pipeline_progress_heartbeat" ? heartbeats : alerts;
     return {
       findOne: async (q: any, options?: any) => {
         if (name === "operator_history_import_jobs") {
           assert.ok(options.projection);
-          return mutableJob;
+          return q._id === mutableJob._id ? mutableJob : null;
         }
-        if (name === "api_rate_limits") return state;
+        if (name === "api_rate_limits") return fixture?.state ?? state;
         if (name === "cron_status") return {};
         return map.get(q._id) ?? null;
       },
@@ -101,7 +104,7 @@ async function routeScenario() {
     "@/lib/data/repositories/tekmetric-ops": { listProgress: async () => [], getDrainLock: async () => null },
     "@/lib/data/repositories/protractor-backfill-progress": { findAllProgress: async () => [] },
     "@/lib/protractor-weekend-policy": { WEEKEND },
-    "./history": { historyHealth },
+    "./history": { historyHealth, HISTORY_CAMPAIGNS },
     "./lib": helpers,
   };
   class Clock extends Date { constructor() { super(clock); } static now() { return clock; } }
@@ -113,7 +116,7 @@ async function routeScenario() {
   const request = { headers: { get: () => "Bearer offline-only" } };
   assert.equal((await exports.GET({ headers: { get: () => null } })).status, 401);
   assert.equal((await exports.GET(request)).body.action, "none");
-  clock = now;
+  clock = scenarioNow;
   assert.equal((await exports.GET(request)).body.action, "alerted");
   assert.equal(notifications.length, 2, "Existing ops and email channels each send once");
   mutableJob.heartbeatAt = new Date(now + 1);
@@ -121,18 +124,30 @@ async function routeScenario() {
   mutableJob.retryAfter = future;
   assert.equal((await exports.GET(request)).body.action, "deduped");
   assert.equal(notifications.length, 2, "Error cooldown must not re-page");
-  assert.ok(JSON.stringify(notifications).includes(WEEKEND.id));
+  assert.ok(JSON.stringify(notifications).includes(scenarioId));
   assert.ok(!JSON.stringify(notifications).includes("DO-NOT-REPORT"));
   assert.ok(!JSON.stringify(notifications).includes("bindingDigest"));
-  mutableJob.importedInvoiceAt = new Date(now);
+  const outcome = fixture?.version === 2 ? "comparedPageAt" : "importedInvoiceAt";
+  mutableJob[outcome] = new Date(scenarioNow);
   assert.equal((await exports.GET(request)).body.action, "cleared");
-  delete mutableJob.importedInvoiceAt;
+  delete mutableJob[outcome];
+  if (!fixture) {
   mutableJob.callbackWaitUntil = future;
   assert.equal((await exports.GET(request)).body.history.waiting, true);
   assert.equal(notifications.length, 2);
   clock = Date.parse(WEEKEND.end);
   assert.equal((await exports.GET(request)).body.history.active, false);
   assert.equal(notifications.length, 2, "Expired campaign cannot page");
+  } else {
+    clock = Date.parse(fixture.end);
+    const response = (await exports.GET(request)).body;
+    assert.equal(response.histories.find((h: any) => h.campaignId === scenarioId).active, false);
+    assert.equal(notifications.length, 2, "Expired legacy campaign cannot page");
+  }
   console.log("PASS real pipeline route: authorization, escalation, dedup, recovery, waits, expiry and payload redaction");
 }
-routeScenario().catch(error => { console.error(error); process.exitCode = 1; });
+async function main() {
+  await routeScenario();
+  for (const fixture of fixtures) await routeScenario(fixture);
+}
+main().catch(error => { console.error(error); process.exitCode = 1; });

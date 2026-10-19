@@ -8,7 +8,7 @@ import { isQueueEnabled } from "@/lib/queue/connection";
 import { listProgress as listTekmetricProgress, getDrainLock } from "@/lib/data/repositories/tekmetric-ops";
 import { findAllProgress as findAllProtractorProgress } from "@/lib/data/repositories/protractor-backfill-progress";
 import { WEEKEND } from "@/lib/protractor-weekend-policy";
-import { historyHealth } from "./history";
+import { historyHealth, HISTORY_CAMPAIGNS } from "./history";
 import {
   PROVIDERS,
   DEFAULT_STALL_WINDOW_MS,
@@ -229,16 +229,21 @@ export async function GET(req: NextRequest) {
 
   // Operator runs are not cron-driven. Read only bounded campaign metadata,
   // never archived invoice payloads, receipt identities, or customer records.
-  const historyKey = `history:${WEEKEND.id}`;
-  const [historyJob, historyRate, historyPrevious] = await Promise.all([
-    db.collection("operator_history_import_jobs").findOne({ _id: WEEKEND.id as any }, {
+  const historyRate = await db.collection("api_rate_limits").findOne(
+    { _id: "protractor-physical-transport-v1" as any },
+    { projection: { weekendHistory: 1, avidHistory: 1, aftonPilot: 1, shopHistory: 1,
+      operatorStop: 1, canary: 1 }, maxTimeMS: 5000 });
+  const historyReports = [];
+  for (const campaignId of HISTORY_CAMPAIGNS) {
+  const historyKey = `history:${campaignId}`;
+  const [historyJob, historyPrevious] = await Promise.all([
+    db.collection("operator_history_import_jobs").findOne({ _id: campaignId as any }, {
       projection: { runId: 1, owner: 1, stopped: 1, status: 1, canaryGeneration: 1,
+        shopId: 1, bindingDigest: 1, notBefore: 1, comparedPageAt: 1,
         expiresAt: 1, leaseUntil: 1, heartbeatAt: 1, callbackWaitUntil: 1,
         heldDayAdvanceAt: 1, capturedPageAt: 1, verifiedPresentAt: 1,
         importedInvoiceAt: 1, completedPageAt: 1 }, maxTimeMS: 5000,
     }),
-    db.collection("api_rate_limits").findOne({ _id: "protractor-physical-transport-v1" as any },
-      { projection: { weekendHistory: 1, operatorStop: 1, canary: 1 }, maxTimeMS: 5000 }),
     db.collection(HEARTBEAT_COLLECTION).findOne({ _id: historyKey as any }),
   ]);
   const history = historyHealth(historyJob, historyRate, historyPrevious, nowMs, windowMs);
@@ -246,12 +251,14 @@ export async function GET(req: NextRequest) {
     { _id: historyKey as any }, { $set: { ...history, lastSeenAt: now } }, { upsert: true },
   );
   if (history.stalled) hits.push({
-    reason: "history_import", campaignId: WEEKEND.id, stalledMs: history.stalledMs,
+    reason: "history_import", campaignId, stalledMs: history.stalledMs,
     lastRealProgressAt: history.lastRealProgressAt, signals: history.signals,
   });
-  const historyReport = { campaignId: WEEKEND.id, active: history.active, waiting: history.waiting,
+  historyReports.push({ campaignId, active: history.active, waiting: history.waiting,
     stalled: history.stalled, stalledMs: history.stalledMs,
-    lastRealProgressAt: history.lastRealProgressAt, signals: history.signals };
+    lastRealProgressAt: history.lastRealProgressAt, signals: history.signals });
+  }
+  const historyReport = historyReports.find(report => report.campaignId === WEEKEND.id);
   const alertKey = buildAlertKey(hits);
 
   // State-based dedup: singleton alert doc. Re-page only when the breach set
@@ -275,6 +282,7 @@ export async function GET(req: NextRequest) {
       windowMinutes: Math.round(windowMs / 60000),
       providers: providerReport,
       history: historyReport,
+      histories: historyReports,
       queue,
       drainWedge: null,
     });
@@ -311,6 +319,7 @@ export async function GET(req: NextRequest) {
     windowMinutes: Math.round(windowMs / 60000),
     providers: providerReport,
     history: historyReport,
+    histories: historyReports,
     queue,
     drainWedge: wedge,
   });
@@ -330,11 +339,12 @@ async function escalate(
     if (h.reason === "history_import") {
       severity = "critical";
       const stamp = (value: number | null) => value ? new Date(value).toISOString() : "none recorded";
-      lines.push(`History campaign ${h.campaignId}: no completed import, verified-present receipt, or clean page completion for ${fmtMins(h.stalledMs)}. ` +
+      lines.push(`History campaign ${h.campaignId}: no verified outcome (import, present receipt, clean page, or comparison) for ${fmtMins(h.stalledMs)}. ` +
         `Last real progress: ${stamp(h.lastRealProgressAt)}. ` +
-        `Lease heartbeat: ${stamp(h.signals.heartbeatAt)}; held-day advance: ${stamp(h.signals.heldDayAdvanceAt)}; ` +
+        `Runner heartbeat: ${stamp(h.signals.heartbeatAt)}; held-day advance: ${stamp(h.signals.heldDayAdvanceAt)}; ` +
         `page capture: ${stamp(h.signals.capturedPageAt)}; verified present: ${stamp(h.signals.verifiedPresentAt)}; ` +
-        `imported invoice: ${stamp(h.signals.importedInvoiceAt)}; completed page: ${stamp(h.signals.completedPageAt)}.`);
+        `imported invoice: ${stamp(h.signals.importedInvoiceAt)}; completed page: ${stamp(h.signals.completedPageAt)}; ` +
+        `compared page: ${stamp(h.signals.comparedPageAt ?? 0)}.`);
       fields["history.campaign"] = h.campaignId;
       fields["history.lastRealProgressAt"] = stamp(h.lastRealProgressAt);
     } else if (h.reason === "no_progress") {

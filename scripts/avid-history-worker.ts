@@ -31,7 +31,11 @@ async function main() {
       assert.match(invoice.ID, /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i);
       const id = `${P.jobId}:${hash(invoice.ID.toLowerCase())}`;
       const prior = await receipts.findOne({ _id: id }, { maxTimeMS: 5000 });
-      if (prior?.status === "imported") continue;
+      if (prior?.status === "imported") {
+        await db.collection<any>("operator_history_import_jobs").updateOne(
+          { _id: P.jobId, owner, runId: job.runId }, { $max: { verifiedPresentAt: new Date() } });
+        continue;
+      }
       // A killed child may have committed part of the invoice. Never blindly
       // replay that ambiguous operation or let it block unrelated invoices.
       if (prior?.status === "processing") { pending++; continue; }
@@ -54,8 +58,11 @@ async function main() {
         pending++; // retain processing: some writes may already have committed
         continue;
       }
-      await receipts.updateOne({ _id: id, status: "processing" },
+      const recorded = await receipts.updateOne({ _id: id, status: "processing" },
         { $set: { status: "imported", completedAt: new Date() } });
+      assert.equal(recorded.matchedCount, 1, "Import receipt unconfirmed");
+      await db.collection<any>("operator_history_import_jobs").updateOne(
+        { _id: P.jobId, owner, runId: job.runId }, { $max: { importedInvoiceAt: new Date() } });
     } finally { clearTimeout(watchdog); }
     await new Promise(r => setTimeout(r, 150));
   }
