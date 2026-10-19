@@ -16,6 +16,8 @@ import {INVOICE_HOURS_SQL} from "../lib/invoice-hours-query";
 import {aggregateInvoiceHours,combineInvoiceLocationDiagnostics} from "../lib/invoice-hours-contract";
 import {INVOICE_HOURS_MAX_ORDERS} from "../lib/invoice-hours-query";
 import {captureFleet,retainedArchives} from "./invoice-owner-retained-sources";
+import {INVOICE_FLEET_SQL,invoiceFleetParams,invoiceFleetResult} from "../lib/invoice-fleet-aggregation";
+import {admitInvoiceFleet} from "../lib/invoice-fleet-admission";
 import {collectChildEvidence,auditChild,childKinds} from "./invoice-owner-financial-audit";
 const hash=(v:string)=>createHash("sha256").update(v).digest("hex");
 const refs=(p:any)=>[...new Set<string>((p?.sourceIds??[])
@@ -195,6 +197,17 @@ async function main(){
       }
       console.log(JSON.stringify({event:"fleet_location_aggregate_diagnostic",label:table,rows:diagnosticRows,
         offlineOnly:true,summary:combineInvoiceLocationDiagnostics(fleetShops,summaries)}));
+      // Execute the opt-in production query only on this marked local snapshot.
+      const aggregateRows=await local.begin(async tx=>{
+        await admitInvoiceFleet((text,params)=>tx.unsafe(text,params as Parameters<typeof tx.unsafe>[1]));
+        await tx.unsafe("SET LOCAL statement_timeout='35s'");
+        return tx.unsafe(INVOICE_FLEET_SQL.replaceAll("normalized_work_orders",table),
+          invoiceFleetParams(fleetShops,fleetShops,new Date(start),new Date(end)));
+      });
+      const aggregate=invoiceFleetResult(fleetShops,aggregateRows);
+      assert.deepEqual(aggregate.summary,combineInvoiceLocationDiagnostics(fleetShops,summaries),
+        "Guarded aggregate disagrees with independently scoped local reports");
+      console.log(JSON.stringify({event:"guarded_fleet_aggregate_verified",label:table,offlineOnly:true,summary:aggregate.summary}));
     }
     const childDetails=await local`select table_name,reason,count(*)::int n from child_audit group by 1,2 order by 1,2`;
     const mismatchedFields=await local`select table_name,reason,f.field,count(*)::int n from child_audit,

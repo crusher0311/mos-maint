@@ -1,5 +1,9 @@
 # Stored-evidence recheck
 
+Follow-up: the operator subsequently approved a bounded source refresh.
+See stored-snapshot-refresh-2026-10-19.md for the new capture and runtime blocker.
+The missing-input section below describes the earlier state, not the current one.
+
 This is a local audit of the committed, sanitized evidence review, not a new
 production snapshot or an execution of the fleet report.
 

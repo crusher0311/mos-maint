@@ -94,3 +94,17 @@ mtime_ms = 1792407311422
 storage_uri = "gcs://replit-rams-assets-picard/rams/assets/repl:a5a4005c-4e3d-4ce9-896c-c46425944606/460e67d2-de52-49da-acd5-d6c85d815457/a54b8756-1d2d-49f5-94d0-e532ff022fdb"
 storage_version_token = "1792407328001219"
 content_type = "text/markdown"
+
+[[outputs]]
+id = "mmhkPLn4TBNCZcIuYO4MY"
+uri = "file://docs/reporting/stored-snapshot-refresh-2026-10-19.md"
+type = "text"
+title = "Stored-data reporting verification results"
+description = "Read-only refresh results, the local resource-limit failure, and remaining evidence gaps. No production changes or Protractor calls."
+logical_id = "05def75b-ca37-4bea-b565-608f1f588694"
+content_hash = "sha256:a00bcad94344d01e8d13532150f990403e3c3932f1736ff74537670f359ef927"
+size = 4153
+mtime_ms = 1792409068934
+storage_uri = "gcs://replit-rams-assets-picard/rams/assets/repl:a5a4005c-4e3d-4ce9-896c-c46425944606/05def75b-ca37-4bea-b565-608f1f588694/30234e36-e8bb-40c6-a7a5-ac3f4f90883c"
+storage_version_token = "1792409095388976"
+content_type = "text/markdown"

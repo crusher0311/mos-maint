@@ -23,7 +23,7 @@ function describe(raw:any,shop:number) {
 }
 async function main() {
   const pg=postgres(process.env.SUPABASE_PROD_DATABASE_URL!,{max:1,connect_timeout:10,
-    connection:{default_transaction_read_only:true,statement_timeout:10000},onnotice:()=>{}});
+    connection:{default_transaction_read_only:true,statement_timeout:5000,lock_timeout:1000},onnotice:()=>{}});
   const mongo=new MongoClient(`mongodb+srv://${encodeURIComponent(process.env.MONGODB_USERNAME!)}:${encodeURIComponent(process.env.MONGODB_PASSWORD!)}@mos-maintenance-mvp.tiixipi.mongodb.net/`,{serverSelectionTimeoutMS:10000});
   try {
     await mongo.connect();

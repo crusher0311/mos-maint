@@ -29,6 +29,13 @@ identities, or relax source checks to make an average appear.
 
 ## Still required
 
+**Fresh real-data validation is blocked:** the guarded query exceeds its 64 MB
+temporary-file limit on the refreshed local snapshot, despite passing synthetic
+fixtures. The 215,655-record capture is preserved for offline optimization.
+Independent location calculations still cannot establish invoice averages for
+the requested period. See stored-snapshot-refresh-2026-10-19.md. Production
+permission alone is not sufficient to enable reporting.
+
 **Production preflight found blockers after the initial local checks passed:**
 the reporting role cannot set temp_file_limit, and the earlier SQL failed against
 the production enum. The enum comparison is now fixed locally and the large

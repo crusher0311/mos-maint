@@ -59,3 +59,26 @@ whether PostgreSQL supports its syntax.
 **How to apply:** Disclose this scope before permission approval, retain fail-closed
 admission, and never substitute broad admin privileges or assume customer SQL
 access can grant a restricted managed-database permission.
+
+Preserve a protected, non-deployed local capture through evidence review,
+including its completion/failure status, rather than relying only on temporary
+database files.
+
+**Why:** Earlier temporary captures disappeared before verification finished,
+forcing repeated production reads and changing the evidence snapshot. A summary
+cannot reproduce the raw-data report.
+
+**How to apply:** Keep sensitive generated captures out of Git and deployments;
+never label a partial or failed capture complete. Prefer rerunning analysis on
+the same local snapshot over requerying production.
+
+Validate spill budgets with realistic identity/provenance widths, not just row
+counts.
+
+**Why:** A roughly 210,000-row synthetic fixture passed the resource guard, but
+a similarly sized retained fleet snapshot exceeded the 64 MB temporary-file
+limit. A passing high-row-count fixture alone did not establish budget fitness.
+
+**How to apply:** Keep representative payload widths and mixed identity shapes
+in local resource tests; optimize against preserved snapshots without increasing
+the cap or repeating live reads.
