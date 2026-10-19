@@ -149,3 +149,4 @@
 - [Workflow ticket intake safety](workflow-ticket-intake-safety.md) — explicit ticket writes are approved; appointment writes remain excluded, and timed-out admissions require exact-ID recovery.
 - [Workflow DVI boundary scope](workflow-dvi-boundary-scope.md) — offline identity contracts do not authorize persistence, release or duplicate enterprise-match work.
 - [Durable DVI enrollment](dvi-durable-enrollment.md) — rollback disables admissions, never durable routing; legacy fallback would bypass unresolved target ownership.
+- [Chromium lost-response fixtures](chromium-lost-response-fixtures.md) — drop responses after headers to avoid transparent connection retries obscuring application behavior.
