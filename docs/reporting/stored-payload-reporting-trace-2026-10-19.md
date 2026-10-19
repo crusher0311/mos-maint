@@ -1,5 +1,9 @@
 # Stored Protractor payload → invoice reporting: local trace
 
+Follow-up: the raw-retention discrepancy identified below is now corrected and
+regression-tested locally. See `raw-retention-and-repair-preview.md`. This
+original trace describes the pre-correction behavior; no deployment is implied.
+
 ## Scope and evidence
 
 Local source inspection and network-denied, credential-free smoke tests only.

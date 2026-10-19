@@ -35,7 +35,12 @@ async function ingest(existing: any, next: any, raw: any = partial, expectConfli
   }
   assert.equal(result.success,true,result.message);
   assert.ok(writes.length);
-  for (const doc of writes) assert.equal(doc.grandTotal,10);
+  for (const doc of writes) {
+    assert.equal(doc.grandTotal,10);
+    assert.deepEqual(doc.rawPayload,JSON.parse(JSON.stringify(raw.rawPayload || raw)),
+      "Create and update must send the sanitized native payload to PostgreSQL");
+    assert.notEqual(doc.rawPayload,raw.rawPayload || raw,"Retained payload must be a detached snapshot");
+  }
   return writes[0];
 }
 async function main() {
@@ -46,6 +51,8 @@ async function main() {
   const updated = await ingest(previous,null);
   assert.deepEqual(updated.customFields.invoiceHours,{...evidence,sold:null,presented:null});
   assert.deepEqual((await ingest(previous,evidence)).customFields.invoiceHours,evidence);
+  await ingest(previous,evidence,{...partial,rawPayload:{...partial,ServicePackages:[],
+    omitted:undefined,Header:{LastModifiedTime:new Date("2026-10-16T13:00:00Z")}}});
   for(const [old,raw] of [
     [{...previous,shopId:26},partial],
     [previous,{...partial,ID:"11111111-1111-4111-8111-111111111111"}],

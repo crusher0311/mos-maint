@@ -696,7 +696,15 @@ export class NormalizedIngestionService {
         // collections with their own future migrations — they continue
         // to write regardless of the WRITE_MONGO_NORMALIZED flag.
         await this.dualWriteToSupabase('work_order', existing._id, 'update', () =>
-          this.supabaseDualWriter!.upsertWorkOrder({ ...mapped, _id: existing._id, shopId: this.shopId, enterpriseId: this.enterpriseId, vehicleId: vehicleId || existing.vehicleId, customerId: customerId || existing.customerId, provenance: updatedProvenance, softDelete: existing.softDelete, version: existing.version + 1, createdAt: existing.createdAt, updatedAt: new Date() })
+          this.supabaseDualWriter!.upsertWorkOrder({
+            ...mapped, _id: existing._id, shopId: this.shopId, enterpriseId: this.enterpriseId,
+            vehicleId: vehicleId || existing.vehicleId, customerId: customerId || existing.customerId,
+            provenance: updatedProvenance, softDelete: existing.softDelete,
+            version: existing.version + 1, createdAt: existing.createdAt, updatedAt: new Date(),
+            // Match create and Mongo shadow writes: raw_data serializes this
+            // document, so omitting the payload here erases the retained source.
+            rawPayload: this.sanitizeRawPayload(sourceData.rawPayload || sourceData),
+          })
         );
         await this.shadowWriteMongo('work_order', async () => {
           const result = await collection.updateOne(
