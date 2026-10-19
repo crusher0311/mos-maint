@@ -1,6 +1,7 @@
 "use client";
 
 import React, { Fragment, useState, useEffect, useRef } from "react";
+import TerminalHistoryImports from "@/components/platform-admin/TerminalHistoryImports";
 import {
   Activity,
   AlertTriangle,
@@ -4526,6 +4527,7 @@ export default function SyncHealthPage() {
       {/* Callback outcomes are intentionally a separate manual read so the
           page's normal refresh does not scan callback-event history. */}
       <ProtractorCallbackOutcomeSection />
+      <TerminalHistoryImports />
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">

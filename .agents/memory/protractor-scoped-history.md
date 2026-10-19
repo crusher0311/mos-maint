@@ -91,3 +91,15 @@ establish sustained production reliability.
 **How to apply:** Keep the deadline and no-overwrite guard, inspect real resumed
 progress and per-shop failures, and distinguish partial improvement from full
 resolution. Never convert a duplicate-check timeout into “not found.”
+
+Terminal campaign reporting is separate from active stall monitoring. Prefer
+bounded, explicitly incomplete receipt samples over a fleet scan; held-day counts
+and receipt counts must not be combined into an invoice total.
+
+**Why:** Terminal runs can retain unresolved work, but monitoring them as active
+would create false stall alerts. A processing receipt can follow a partial write,
+so neither a held cursor nor campaign completion proves invoice success.
+
+**How to apply:** Preserve ambiguous outcomes, label truncation, and keep review
+visibility independent of import authorization. Do not use the summary to replay
+receipts or infer permission for a new campaign.
