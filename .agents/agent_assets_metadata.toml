@@ -80,3 +80,17 @@ type = "unspecified"
 title = "Protractor callback analysis summary"
 description = "Counts by connection, object type, operation, repeated object, and repeat interval for the incident window."
 logical_id = "b41c9be5-52c6-41e1-b889-c4e051fdd0d6"
+
+[[outputs]]
+id = "yOu1eBjRjO_qdmbJ8pg7H"
+uri = "file://docs/reporting/invoice-fleet-database-setup-proposal.md"
+type = "text"
+title = "Fleet reporting database setup proposal"
+description = "Unapplied, single-parameter permission proposal with scope, managed-platform constraints, validation and rollback steps."
+logical_id = "460e67d2-de52-49da-acd5-d6c85d815457"
+content_hash = "sha256:836e47d781062bc3f0a0174036a6438a98cbefed3f55c248b5c0e78988a19a71"
+size = 5419
+mtime_ms = 1792407311422
+storage_uri = "gcs://replit-rams-assets-picard/rams/assets/repl:a5a4005c-4e3d-4ce9-896c-c46425944606/460e67d2-de52-49da-acd5-d6c85d815457/a54b8756-1d2d-49f5-94d0-e532ff022fdb"
+storage_version_token = "1792407328001219"
+content_type = "text/markdown"

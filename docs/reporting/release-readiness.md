@@ -29,11 +29,17 @@ identities, or relax source checks to make an average appear.
 
 ## Still required
 
-**Production preflight found blockers after the local checks passed:** the
-reporting role cannot set temp_file_limit, and the current SQL's status
-comparisons fail against the production enum. A hypothetical text-cast version
-plans successfully against existing indexes, but has not been applied or run.
-See invoice-fleet-production-preflight.md. Do not enable the feature yet.
+**Production preflight found blockers after the initial local checks passed:**
+the reporting role cannot set temp_file_limit, and the earlier SQL failed against
+the production enum. The enum comparison is now fixed locally and the large
+disposable fixture uses the application's real enum, reproducing the old failure
+and validating the fix. The permission blocker remains. See
+invoice-fleet-production-preflight.md and invoice-fleet-database-setup-proposal.md.
+Do not enable the feature yet.
+
+The enum follow-up passed nine disposable PostgreSQL tests (including the actual
+enum and narrow grant/revoke behavior), the invoice service/summary/location
+suite, and TypeScript. These were local checks; production access was not used.
 
 1. Complete release validation and an approved production preflight for the new
    opt-in database aggregation. It is now integrated into the reporting service,

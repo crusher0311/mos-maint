@@ -48,3 +48,14 @@ database's superuser tests cannot establish this capability.
 **How to apply:** Include an enum-backed fixture and preflight the actual
 runtime role. Keep budget enforcement mandatory; do not enable an unrestricted
 query or grant broad database privileges to make tests pass.
+
+A parameter-specific SET grant is not a value-bounded database quota.
+
+**Why:** It allows any value for that parameter, including unlimited, throughout
+the grantee role's sessions. The application's fixed transaction limit remains
+application-enforced. Managed-provider approval of the grant is separate from
+whether PostgreSQL supports its syntax.
+
+**How to apply:** Disclose this scope before permission approval, retain fail-closed
+admission, and never substitute broad admin privileges or assume customer SQL
+access can grant a restricted managed-database permission.

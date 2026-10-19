@@ -15,6 +15,7 @@ import {INVOICE_HOURS_SQL, INVOICE_HOURS_MAX_ORDERS} from "../lib/invoice-hours-
 import {invoiceHoursDisplay} from "../lib/invoice-hours-display";
 import {INVOICE_FLEET_PROTOTYPE_SQL,invoiceFleetPrototypeParams,invoiceFleetPrototypeResult} from "../scripts/invoice-fleet-sql-prototype";
 import {admitInvoiceFleet} from "../lib/invoice-fleet-admission";
+import {workOrderStatusEnum} from "../lib/db/schema/normalized";
 
 test("location diagnostic ratios use raw totals and preserve independent vetoes",()=>{
   const summary=(count:number,hours:number)=>({
@@ -58,6 +59,36 @@ test("fleet admission is database-global, read-only, and released on commit or t
   }finally{await pg.end();}
 });
 
+test("a single-parameter grant admits an unprivileged role without superuser or ALTER SYSTEM",async()=>{
+  const socket=process.env.INVOICE_OWNER_TEST_SOCKET;
+  assert.match(socket??"",/^\/tmp\/invoice-owner-offline\.[A-Za-z0-9]+$/);
+  const pg=postgres({host:socket,port:5432,username:userInfo().username,database:"postgres",max:1,onnotice:()=>{}});
+  const admit=(tx:any)=>admitInvoiceFleet((text,params)=>tx.unsafe(text,params));
+  try{
+    assert.equal((await pg`SELECT current_setting('invoice_preview.disposable',true) marker`)[0].marker,"yes");
+    await pg`CREATE ROLE invoice_budget_fixture NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`;
+    await assert.rejects(pg.begin(async tx=>{
+      await tx.unsafe("SET LOCAL ROLE invoice_budget_fixture");
+      await admit(tx);
+    }),e=>(e as any).code==="42501");
+    await pg`GRANT SET ON PARAMETER temp_file_limit TO invoice_budget_fixture`;
+    await pg.begin(async tx=>{
+      await tx.unsafe("SET LOCAL ROLE invoice_budget_fixture");
+      await admit(tx);
+      assert.equal((await tx.unsafe("SHOW temp_file_limit"))[0].temp_file_limit,"64MB");
+      const [rights]=await tx.unsafe(`SELECT
+        (SELECT rolsuper FROM pg_roles WHERE rolname=current_user) superuser,
+        has_parameter_privilege(current_user,'temp_file_limit','ALTER SYSTEM') alter_system`);
+      assert.equal(rights.superuser,false);assert.equal(rights.alter_system,false);
+    });
+    await pg`REVOKE SET ON PARAMETER temp_file_limit FROM invoice_budget_fixture`;
+    await assert.rejects(pg.begin(async tx=>{
+      await tx.unsafe("SET LOCAL ROLE invoice_budget_fixture");await admit(tx);
+    }),e=>(e as any).code==="42501");
+    await pg`DROP ROLE invoice_budget_fixture`;
+  }finally{await pg.end();}
+});
+
 test("large fleet remains capped; bounded offline location aggregates retain unknowns and identity conflicts",async()=>{
   const socket=process.env.INVOICE_OWNER_TEST_SOCKET;
   assert.match(socket??"",/^\/tmp\/invoice-owner-offline\.[A-Za-z0-9]+$/);
@@ -81,6 +112,13 @@ test("large fleet remains capped; bounded offline location aggregates retain unk
           'sold',2,'presented',3))
       FROM generate_series(1,2) n`;
     await pg`INSERT INTO normalized_work_orders VALUES ('unauthorized',99,'closed',null,'{}',null)`;
+    // Use the application's real enum, not a permissive text-only substitute.
+    // pg_temp is created by the temp table; this type disappears with the session.
+    await pg.unsafe(`CREATE TYPE pg_temp.work_order_status AS ENUM (${
+      workOrderStatusEnum.enumValues.map(v=>`'${v.replaceAll("'","''")}'`).join(",")
+    })`);
+    await pg`ALTER TABLE normalized_work_orders ALTER COLUMN status
+      TYPE pg_temp.work_order_status USING status::pg_temp.work_order_status`;
     // Disposable fixture indexes only; not production guidance.
     await pg`CREATE INDEX ON normalized_work_orders(shop_id)`;
     await pg`CREATE INDEX ON normalized_work_orders(shop_id,(lower(custom_fields->'invoiceHours'->>'id')))`;
@@ -112,6 +150,11 @@ test("large fleet remains capped; bounded offline location aggregates retain unk
     await pg`SET temp_file_limit='64MB'`;
     await pg`SET max_parallel_workers_per_gather=0`;
     const params=invoiceFleetPrototypeParams(shops,shops,new Date(start),new Date(end));
+    const unsafeEnumQuery=INVOICE_FLEET_PROTOTYPE_SQL
+      .replaceAll("AND status::text NOT IN","AND status NOT IN")
+      .replaceAll("AND status::text IN","AND status IN");
+    await assert.rejects(pg.unsafe("EXPLAIN "+unsafeEnumQuery,params),
+      e=>(e as any).code==="22P02","the fixture must reproduce the production planning failure");
     assert.throws(()=>invoiceFleetPrototypeParams(shops,[99],new Date(start),new Date(end)));
     assert.throws(()=>invoiceFleetPrototypeParams(shops,[1,1],new Date(start),new Date(end)));
     const prototype=await pg.begin(async tx=>{

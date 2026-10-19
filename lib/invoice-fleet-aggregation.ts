@@ -46,8 +46,10 @@ invoices AS MATERIALIZED (
 unknown_rows AS (
   SELECT shop_id,coalesce(ids[1],coalesce(provider,'null')||':row:'||id) identity,ids
   FROM facts WHERE NOT verified
-    AND status NOT IN (${statuses(COMMON_UNINVOICED_STATUSES)},'voided','cancelled')
-    AND NOT (coalesce(provider,'')='protractor' AND status IN (${statuses(PROTRACTOR_UNINVOICED_STATUSES)}))
+    -- Policy labels span providers; some are absent from the database enum.
+    -- Compare text, never ask PostgreSQL to coerce those labels into the enum.
+    AND status::text NOT IN (${statuses(COMMON_UNINVOICED_STATUSES)},'voided','cancelled')
+    AND NOT (coalesce(provider,'')='protractor' AND status::text IN (${statuses(PROTRACTOR_UNINVOICED_STATUSES)}))
 ),
 unknown_groups AS (
   SELECT shop_id,identity,count(DISTINCT ids)>1 ambiguous,min(ids::text)::text[] ids

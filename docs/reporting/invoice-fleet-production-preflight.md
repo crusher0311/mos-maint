@@ -58,6 +58,12 @@ provenance index was observed but was not touched.
 
 ## Next approval
 
+Local follow-up: the two status comparisons now cast to text, and the large
+offline fixture uses the application's real status enum. The original preflight
+above remains a historical record; no production query was rerun as part of
+this local fix. See invoice-fleet-database-setup-proposal.md for the separate,
+unapplied permission proposal.
+
 Fix enum handling locally and add a production-shaped enum fixture. Separately
 prepare a least-privilege budget-enforcement plan compatible with the managed
 database. Any production permission/configuration change, full report execution,
