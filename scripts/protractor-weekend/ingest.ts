@@ -26,10 +26,11 @@ async function existingInvoice(shopId: number, invoice: any, stage: (value: Held
   });
   return rows.length > 0;
 }
-export async function ingestPage(pageId: string, owner: string) {
+export async function ingestPage(pageId: string, owner: string, deadline = Date.now() + 180000) {
   let stage: HeldFailureStage = "unknown";
   try {
-    return await ingestPageWithEvidence(pageId, owner, value => { stage = value; });
+    assert.ok(Number.isFinite(deadline) && deadline <= Date.now() + 180000);
+    return await ingestPageWithEvidence(pageId, owner, value => { stage = value; }, deadline);
   } catch (error) {
     // main exits immediately after this rejects; drain IPC before rethrowing.
     if (process.send) await new Promise<void>(resolve => {
@@ -40,7 +41,7 @@ export async function ingestPage(pageId: string, owner: string) {
   }
 }
 
-async function ingestPageWithEvidence(pageId: string, owner: string, stage: (value: HeldFailureStage) => void) {
+async function ingestPageWithEvidence(pageId: string, owner: string, stage: (value: HeldFailureStage) => void, deadline: number) {
   runtime();
   assert.ok(pageId.startsWith(`${WEEKEND.id}:`));
   const { pages, receipts, jobs, db } = await collections();
@@ -51,8 +52,25 @@ async function ingestPageWithEvidence(pageId: string, owner: string, stage: (val
   const entry = job.shops.find((s: any) => s.shopId === page.shopId);
   const service = createIngestionService(db, "protractor", page.shopId, undefined,
     { ingestionVia: "backfill", dualWriteToJobIndex: true, dualWriteToRepairPatterns: false });
-  let unresolved = 0;
-  for (const invoice of page.invoices) {
+  const resume = page.resume ?? { next: 0, unresolved: 0 };
+  assert.ok(Number.isInteger(resume.next) && resume.next >= 0 && resume.next <= page.invoices.length);
+  assert.ok(Number.isInteger(resume.unresolved) && resume.unresolved >= 0 && resume.unresolved <= resume.next);
+  let unresolved = resume.unresolved;
+  for (let position = resume.next; position < page.invoices.length; position++) {
+    // Reserve the entire existing per-invoice watchdog plus a completion margin.
+    // Never pause in the middle of a financial write.
+    if (Date.now() + 130000 >= deadline) {
+      await assertOwner(owner, page.shopId);
+      const saved = await pages.updateOne({ _id: pageId, digest: page.digest }, {
+        $set: { resume: { next: position, unresolved }, yieldedBy: owner, yieldedAt: new Date() },
+      });
+      assert.equal(saved.matchedCount, 1, "Page checkpoint not acknowledged");
+      if (process.send) await new Promise<void>((resolve, reject) => {
+        process.send!({ event: "weekend_ingest_yielded" }, (error: Error | null) => error ? reject(error) : resolve());
+      });
+      return;
+    }
+    const invoice = page.invoices[position];
     stage("unknown");
     const watchdog = setTimeout(() => process.exit(75), 120000);
     try {

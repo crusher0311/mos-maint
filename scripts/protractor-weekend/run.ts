@@ -15,25 +15,28 @@ import {
   assertOwner, binding, collections, fleet, hash, log, RATE, recentActivity, runtime, sleep, workersSuspended,
 } from "./shared";
 
-async function child(pageId: string, owner: string): Promise<HeldFailure> {
+async function child(pageId: string, owner: string): Promise<{ failure: HeldFailure; yielded: boolean }> {
   return new Promise((resolve, reject) => {
     let failure = sanitizedHeldFailure(null);
+    let yielded = false;
+    const deadline = Math.min(Date.now() + 180000, Date.parse(WEEKEND.end) - 120000);
     const proc = spawn(process.execPath,
-      ["--import", "tsx", "scripts/protractor-weekend/main.ts", "--ingest", pageId, owner],
+      ["--import", "tsx", "scripts/protractor-weekend/main.ts", "--ingest", pageId, owner, String(deadline)],
       { stdio: ["ignore", "ignore", "ignore", "ipc"], env: process.env });
     proc.on("message", (message: any) => {
+      if (message?.event === "weekend_ingest_yielded") yielded = true;
       if (message?.event === "weekend_ingest_failed") {
         failure = sanitizedHeldFailure(message);
         log("weekend_ingest_failed", { pageId, ...failure });
       }
     });
     const timer = setTimeout(() => proc.kill("SIGKILL"),
-      Math.max(1, Math.min(180000, Date.parse(WEEKEND.end) - Date.now() - 120000)));
+      Math.max(1, deadline - Date.now()));
     proc.once("error", e => { clearTimeout(timer); reject(e); });
     proc.once("close", code => {
       clearTimeout(timer);
       if (code !== 0) log("weekend_ingest_exit", { pageId, exitCode: code ?? 75 });
-      resolve(failure);
+      resolve({ failure, yielded: yielded && code === 0 });
     });
   });
 }
@@ -159,8 +162,17 @@ export async function run() {
           }
           assert.equal(hash(page.invoices), page.digest);
           if (!page.checked) {
-            failure = await child(pageId, owner);
+            const outcome = await child(pageId, owner);
+            failure = outcome.failure;
             page = await pages.findOne({ _id: pageId }, { maxTimeMS: 5000 });
+            if (outcome.yielded && !page.checked && page.yieldedBy === owner) {
+              await assertOwner(owner, entry.shopId);
+              await jobs.updateOne({ _id: shopJobId, cursor: cursor.cursor, page: pageNumber },
+                { $set: { status: "progressing", failures: 0, retryAfter: new Date(0) } });
+              consecutiveFailures = 0; worked = true;
+              log("weekend_page_yielded", { shopId: entry.shopId, day, page: pageNumber });
+              continue; // finally closes the grant; the next shop gets its turn.
+            }
           }
           // A timed-out page stays at its exact position. After three attempts,
           // preserve it as unresolved and allow other days/shops to proceed.

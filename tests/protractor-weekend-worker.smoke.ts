@@ -18,10 +18,19 @@ async function scenario(options: {
   thin?: boolean; partial?: boolean; active?: boolean; corrupt?: boolean;
   failAt?: string;
   realIPC?: boolean;
+  yieldAfterFirst?: boolean;
+  resume?: boolean;
+  checkpointFailure?: boolean;
 } = {}) {
+  let time = Date.now();
+  class Clock extends Date { static now() { return time; } }
   const page: any = { _id: `${WEEKEND.id}:457:2026-10-16:0`, campaignId: WEEKEND.id,
     shopId: 457, day: "2026-10-16", invoices: [{ ID, Total: 20 }] };
   page.digest = options.corrupt ? "bad" : hash(page.invoices);
+  if (options.yieldAfterFirst) {
+    page.invoices.push({ ID: "22222222-2222-4222-8222-222222222222", Total: 20 });
+    page.digest = hash(page.invoices);
+  }
   const receipts = new Map<string, any>();
   const receiptId = `${WEEKEND.id}:457:${hash(ID)}`;
   if (options.receipt) receipts.set(receiptId, { status: options.receipt });
@@ -31,7 +40,10 @@ async function scenario(options: {
     if (options.failAt === stage) throw Object.assign(Error("private SQL and credentials"), { code: "57014" });
   };
   const stores = {
-    pages: { findOne: async () => page, updateOne: async (_: any, u: any) => Object.assign(page, u.$set) },
+    pages: { findOne: async () => page, updateOne: async (_: any, u: any) => {
+      if (options.checkpointFailure && u.$set.resume) return { matchedCount: 0 };
+      Object.assign(page, u.$set); return { matchedCount: 1 };
+    } },
     receipts: {
       findOne: async (q: any) => q._id.startsWith("prior:")
         ? options.priorReceipt ? { status: options.priorReceipt } : null : receipts.get(q._id),
@@ -60,7 +72,8 @@ async function scenario(options: {
     }) };
     if (name.endsWith("/normalized-ingestion")) return { createIngestionService: () => ({
       ingestWorkOrderWithAllEntities: async () => {
-        writes++; fail("ingestion"); return { workOrder: { success: true },
+        writes++; if (options.yieldAfterFirst) time += 60000;
+        fail("ingestion"); return { workOrder: { success: true },
           serviceJobs: [{ success: !options.partial }], lineItems: [], payments: [], inspections: [], recommendations: [] };
       },
     }) };
@@ -80,12 +93,33 @@ async function scenario(options: {
   vm.runInNewContext(compiled, { require: fakeRequire, exports, process: options.realIPC ? process : {
     send: (message: any, callback: () => void) => { messages.push(message); callback(); }, exit: process.exit,
   },
-    setTimeout, clearTimeout, console });
+    setTimeout, clearTimeout, console, Date: Clock });
   let error: unknown;
   try { await exports.ingestPage(page._id, "owner"); } catch (e) { error = e; }
+  if (options.yieldAfterFirst && !error) {
+    assert.equal(writes, 1);
+    assert.equal(page.checked, undefined);
+    assert.equal(page.resume.next, 1);
+    assert.equal(receipts.size, 1, "No second write may start before yielding");
+    if (options.resume) await exports.ingestPage(page._id, "owner");
+  }
   return { page, writes, receipt: receipts.get(receiptId), error, messages };
 }
 async function main() {
+  const yielded = await scenario({ yieldAfterFirst: true });
+  assert.equal(yielded.error, undefined);
+  assert.equal(yielded.messages[0].event, "weekend_ingest_yielded");
+  const resumed = await scenario({ yieldAfterFirst: true, resume: true });
+  assert.equal(resumed.writes, 2, "Resume must not re-ingest the first invoice");
+  assert.equal(resumed.page.checked, true);
+  assert.equal(resumed.page.unresolved, 0);
+  const partialResume = await scenario({ yieldAfterFirst: true, resume: true, partial: true });
+  assert.equal(partialResume.writes, 2);
+  assert.equal(partialResume.page.unresolved, 2);
+  assert.equal(partialResume.page.imported, false, "Resume must retain ambiguous writes");
+  const lostCheckpoint = await scenario({ yieldAfterFirst: true, checkpointFailure: true });
+  assert.ok(lostCheckpoint.error);
+  assert.ok(!lostCheckpoint.messages.some(m => m.event === "weekend_ingest_yielded"));
   let result = await scenario();
   assert.equal(result.writes, 1); assert.equal(result.receipt.status, "imported"); assert.equal(result.page.imported, true);
   result = await scenario({ partial: true });
@@ -124,7 +158,11 @@ async function main() {
   }
   console.log("PASS: weekend ingestion, preserved receipts, partial writes, existing invoices, thin data and live-activity stop");
 }
-if (process.argv[2] === "--ipc-failure") {
+if (process.argv[2] === "--ipc-yield") {
+  scenario({ yieldAfterFirst: true, realIPC: true }).then(result => {
+    assert.equal(result.error, undefined); process.exit(0);
+  }).catch(() => process.exit(1));
+} else if (process.argv[2] === "--ipc-failure") {
   scenario({ failAt: process.argv[3], realIPC: true }).then(result => {
     assert.ok(result.error);
     process.exit(1);

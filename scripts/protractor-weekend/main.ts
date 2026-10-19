@@ -8,7 +8,8 @@ async function main() {
   if (mode === "--inventory") return prepare(false);
   if (mode === "--prepare-approved") return prepare(true);
   if (mode === "--run-approved") return run();
-  if (mode === "--ingest" && args.length === 2) return ingestPage(args[0], args[1]);
+  if (mode === "--ingest" && (args.length === 2 || args.length === 3))
+    return ingestPage(args[0], args[1], args.length === 3 ? Number(args[2]) : undefined);
   throw Error("Explicit campaign mode required");
 }
 main().then(() => process.exit(0)).catch(() => {

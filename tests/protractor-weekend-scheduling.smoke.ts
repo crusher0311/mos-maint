@@ -60,7 +60,11 @@ async function scenario(allFail=false,missingIndex=false,resumeIndex=0,childStag
       return {digest:"same",config:{}};
     },
     collections:async()=>({jobs,rates,pages:{
-      findOne:async(q:any)=>pages.get(q._id),
+      findOne:async(q:any)=>{
+        const page = pages.get(q._id);
+        if (page?.resume && attempts.length > 1) page.checked = true;
+        return page;
+      },
       insertOne:async(d:any)=>{pages.set(d._id,d);writes++},
     },days:{updateOne:async()=>{writes++;return {matchedCount:1}}}}),
   };
@@ -69,11 +73,20 @@ async function scenario(allFail=false,missingIndex=false,resumeIndex=0,childStag
     if(name==="node:crypto")return {randomUUID:()=> "owner"};
     if(name==="node:child_process")return {spawn:()=>{
       assert.ok(childStage);
-      if (realChild) return spawn(process.execPath, ["--import", "tsx",
-        "tests/protractor-weekend-worker.smoke.ts", "--ipc-failure", childStage], {
+      if (realChild) {
+        const child = spawn(process.execPath, ["--import", "tsx",
+        "tests/protractor-weekend-worker.smoke.ts", childStage === "yield" ? "--ipc-yield" : "--ipc-failure", childStage], {
         stdio: ["ignore", "ignore", "inherit", "ipc"],
         env: { NODE_ENV: "test", PATH: process.env.PATH, NODE_OPTIONS: "--require ./tests/helpers/deny-network-egress.cjs" },
       });
+        child.on("message", (m: any) => {
+          if (m.event === "weekend_ingest_yielded") {
+            const page = [...pages.values()][0];
+            page.yieldedBy = "owner"; page.resume = { next: 1, unresolved: 0 };
+          }
+        });
+        return child;
+      }
       const proc = new EventEmitter();
       queueMicrotask(() => {
         if(childStage !== "silent") proc.emit("message", {
@@ -103,6 +116,12 @@ async function scenario(allFail=false,missingIndex=false,resumeIndex=0,childStag
   return {attempts,sleeps,job,cursors};
 }
 async function main(){
+  const yielded = await scenario(false,false,0,"yield",true);
+  const checkpoint = [...yielded.cursors.values()][0];
+  assert.equal(checkpoint.failures, 0);
+  assert.equal(checkpoint.heldDays?.length ?? 0, 0);
+  assert.equal(checkpoint.cursor, 1);
+  assert.equal(yielded.job.status, "completed");
   const mixed=await scenario();
   assert.deepEqual(mixed.attempts.slice(0,8),[1,2,3,4,5,1,2,3]);
   assert.equal(mixed.job.status,"needs-attention");
