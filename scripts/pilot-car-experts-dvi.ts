@@ -4,7 +4,8 @@
  * Run once with --operator-approved and a pre-recorded PILOT_MANIFEST.
  */
 import assert from "node:assert/strict";
-import { getDb, getMongoClient } from "@/lib/mongo";
+import {findSyntheticPilotShop,findSyntheticPilotMarker,updateSyntheticPilotMarker,
+  insertSyntheticPilotMarker,closeSyntheticPilotConnection} from "@/lib/data/repositories/protractor-synthetic-pilot";
 import { resolveProtractorConfig, protractorFetch, createServiceItem } from "@/lib/integrations/protractor/client";
 import { runWithProtractorInteractiveTransport } from "@/lib/integrations/protractor/interactive-context";
 import { readProtractorRelayConfig } from "@/lib/integrations/protractor/relay-config";
@@ -20,9 +21,7 @@ async function main() {
   for (const key of ids) assert.match(m[key], /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
   assert.equal(new Set(ids.map(k => m[k])).size, ids.length);
   databaseOpened = true;
-  const db = await getDb();
-  const shop = await db.collection("shops").findOne({shopId: 66},
-    {projection: {name: 1, integrationProvider: 1}, maxTimeMS: 3000});
+  const shop = await findSyntheticPilotShop();
   assert.equal(shop?.name, "CAR Experts Protractor");
   assert.equal(shop?.integrationProvider, "protractor");
   const config = await resolveProtractorConfig(66);
@@ -31,7 +30,7 @@ async function main() {
   // is lost. This is pilot bookkeeping, never an application operation/grant.
   const key = `synthetic-pilot:${m.order}`;
   if (process.argv.includes("--read-metadata")) {
-    const existing = await db.collection("auto_dvi_durable_v1").findOne({_id: key as any});
+    const existing = await findSyntheticPilotMarker(key);
     assert.equal(existing?.status, "probes_finished_not_certified");
     assert.equal(JSON.stringify(existing?.manifest), JSON.stringify(m));
     const result = await runWithProtractorInteractiveTransport(66, () =>
@@ -50,24 +49,24 @@ async function main() {
       completed: result.data.Completed,
     };
     // Only the generated fixture's metadata, never customer records.
-    await db.collection("auto_dvi_durable_v1").updateOne({_id: key as any},
+    await updateSyntheticPilotMarker({_id: key as any},
       {$set: {metadata}}, {writeConcern: {w: "majority", j: true}});
     console.log(JSON.stringify({pilotMetadata: metadata}));
     return;
   }
   const continuation = process.argv.includes("--continue-after-inspection");
-  const prior = continuation ? await db.collection("auto_dvi_durable_v1").findOne({_id: key as any}) : null;
+  const prior = continuation ? await findSyntheticPilotMarker(key) : null;
   if (continuation) {
     assert.equal(prior?.status, "stopped_do_not_resend");
     assert.equal(prior?.report?.at(-1)?.step, "inspection_write");
     assert.equal(prior?.report?.at(-1)?.ok, true);
     assert.equal(JSON.stringify(prior?.manifest), JSON.stringify(m));
-    const claimed = await db.collection("auto_dvi_durable_v1").updateOne(
+    const claimed = await updateSyntheticPilotMarker(
       {_id: key as any, status: "stopped_do_not_resend", continuationClaimed: {$exists: false}},
       {$set: {continuationClaimed: true, status: "continuation_started"}},
       {writeConcern: {w: "majority", j: true}});
     assert.equal(claimed.modifiedCount, 1);
-  } else await db.collection("auto_dvi_durable_v1").insertOne({
+  } else await insertSyntheticPilotMarker({
     _id: key as any, kind: "operator-synthetic-pilot", shopId: 66,
     manifest: m, startedAt: new Date(), status: "started",
   }, {writeConcern: {w: "majority", j: true}});
@@ -75,7 +74,7 @@ async function main() {
   const record = async (step: string, evidence: any) => {
     report.push({step, ...evidence});
     console.log(JSON.stringify({pilot: true, step, ...evidence}));
-    await db.collection("auto_dvi_durable_v1").updateOne({_id: key as any},
+    await updateSyntheticPilotMarker({_id: key as any},
       {$set: {report}}, {writeConcern: {w: "majority", j: true}});
   };
   let calls = 0;
@@ -174,10 +173,10 @@ async function main() {
     await send("line_omission_write", orderPath, after);
     const omitted = await send("line_omission_read", orderPath);
     await record("omission_projection", summarize(omitted));
-    await db.collection("auto_dvi_durable_v1").updateOne({_id: key as any},
+    await updateSyntheticPilotMarker({_id: key as any},
       {$set: {status: "probes_finished_not_certified", finishedAt: new Date()}});
   } catch (error) {
-    await db.collection("auto_dvi_durable_v1").updateOne({_id: key as any},
+    await updateSyntheticPilotMarker({_id: key as any},
       {$set: {status: "stopped_do_not_resend", stoppedAt: new Date()}});
     throw error;
   }
@@ -185,4 +184,4 @@ async function main() {
 main().catch(e => {
   console.error(JSON.stringify({pilotStopped: true, type: e?.name, code: e?.code}));
   process.exitCode = 1;
-}).finally(async () => { if (databaseOpened) await (await getMongoClient()).close(); });
+}).finally(async () => { if (databaseOpened) await closeSyntheticPilotConnection(); });

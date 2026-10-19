@@ -40,3 +40,22 @@ a one-line `[OPS-ALERT]` stderr JSON (Render → Better Stack, host
 `OPS_ALERT_SLACK_WEBHOOK_URL` (or `SLACK_WEBHOOK_URL` /
 `ALERT_SLACK_WEBHOOK_URL`) is set — gracefully skipped when unset. Build
 Better Stack alert rules on the `[OPS-ALERT]` marker.
+
+## Operator history runners
+
+Treat lease renewal, cursor advancement to a held/error day, and actual imported
+or verified-present receipts as separate signals. Fixed-order retries must not
+let an early shop repeatedly trigger a fleet-wide cooldown and starve later shops.
+
+**Why:** A weekend runner kept renewing its lease while PostgreSQL duplicate
+checks timed out. Its error counter survived the cooldown, so subsequent early
+failures repeatedly paused the entire loop. Moving a failed day into held work
+also advanced a cursor without completing that day's import.
+
+**How to apply:** Check actual receipt/page completion times, per-shop waiting
+time and held work. Read Render one-off runner logs using the job resource ID,
+not only the parent service ID; otherwise the diagnostic stream can appear empty.
+Tenant-bounded JSON identity scans are still scans: a materialized per-shop
+slice can exceed the deadline repeatedly when an absent invoice requires
+checking every row. Verify an identity-indexed plan rather than merely raising
+the timeout or bypassing duplicate protection.
