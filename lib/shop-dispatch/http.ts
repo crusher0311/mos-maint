@@ -44,7 +44,7 @@ export async function enterpriseContext(session:SessionInfo){
 export async function dispatchSnapshot(session:SessionInfo,board?:Board){
   let value=board ?? await readDispatchBoard(session.shopId);
   const actor=actorFor(value,session.email,session.role),enterprise=await enterpriseContext(session);
-  requireThat(actor.manager||actor.technicianId,"Your login has not been mapped to an active technician. Ask a manager to update the roster.",403);
+  requireThat(actor.manager||actor.technicianId||session.role==="advisor","Your login has not been mapped to an active technician. Ask a manager to update the roster.",403);
   // Access is established before cache intake. Mutation responses must acknowledge
   // their committed revision without a second, unrelated write.
   let sourceSyncWarning:string|undefined;

@@ -4,6 +4,7 @@ import { CommandForm } from "./CommandForm";
 import { JobCard, type WorkProps } from "./JobCard";
 import { VehicleHistoryPanel } from "./VehicleHistoryPanel";
 import { VisitIntake } from "./VisitIntake";
+import { StaffInspectionPanel } from "./StaffInspectionPanel";
 import { dateLabel, iso, localDate, nullableNumber, projection } from "./helpers";
 import styles from "./pilot.module.css";
 
@@ -32,6 +33,7 @@ export function VisitDetail({ visit, shopId, onBack, refresh, ...work }: WorkPro
       </div>}
     </div>
     <VisitIntake visit={visit} board={board} shopId={shopId} manager={actor.manager} busy={busy} refresh={refresh} />
+    <StaffInspectionPanel visitId={visit.id} shopId={shopId} closed={visit.closed} />
     {shopId !== undefined && <VehicleHistoryPanel visitId={visit.id} shopId={shopId} />}
     <div className={styles.grid}><section>
       <h2>Individual jobs <small> / {jobs.length}</small></h2>
