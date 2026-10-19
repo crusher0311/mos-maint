@@ -13,6 +13,7 @@ import {reconcileOwnerCopies,queryOwnerReport,assertOwnerFinancialControl} from 
 import {aggregateInvoiceHours, combineInvoiceLocationDiagnostics} from "../lib/invoice-hours-contract";
 import {INVOICE_HOURS_SQL, INVOICE_HOURS_MAX_ORDERS} from "../lib/invoice-hours-query";
 import {invoiceHoursDisplay} from "../lib/invoice-hours-display";
+import {INVOICE_FLEET_PROTOTYPE_SQL,invoiceFleetPrototypeParams,invoiceFleetPrototypeResult} from "../scripts/invoice-fleet-sql-prototype";
 
 test("location diagnostic ratios use raw totals and preserve independent vetoes",()=>{
   const summary=(count:number,hours:number)=>({
@@ -79,12 +80,30 @@ test("large fleet remains capped; bounded offline location aggregates retain unk
     assert.equal(combined.averageSoldHoursPerInvoice,null);
     assert.equal(combined.averagePresentedHoursPerInvoice,null);
     assert.equal(combined.invoiceEvidenceCapped,0);
+    // Single-query offline prototype: bound server spill and app output rather
+    // than loading the fleet representations or making one query per shop.
+    await pg`SET work_mem='2MB'`;
+    await pg`SET temp_file_limit='64MB'`;
+    await pg`SET max_parallel_workers_per_gather=0`;
+    const params=invoiceFleetPrototypeParams(shops,shops,new Date(start),new Date(end));
+    assert.throws(()=>invoiceFleetPrototypeParams(shops,[99],new Date(start),new Date(end)));
+    assert.throws(()=>invoiceFleetPrototypeParams(shops,[1,1],new Date(start),new Date(end)));
+    const prototype=await pg.unsafe(INVOICE_FLEET_PROTOTYPE_SQL,params);
+    assert.equal(prototype.length,10);
+    assert.ok(Buffer.byteLength(JSON.stringify(prototype))<8192);
+    assert.deepEqual(invoiceFleetPrototypeResult(shops,prototype).summary,combined);
+    assert.throws(()=>invoiceFleetPrototypeResult(shops,prototype.slice(1)));
     assert.throws(()=>combineInvoiceLocationDiagnostics([1],locations),/authorized location/);
     locations.set(1,capped);
     assert.deepEqual(combineInvoiceLocationDiagnostics(shops,locations),capped);
     // One oversized location must not be paged or treated as complete.
     await pg`UPDATE normalized_work_orders SET shop_id=1 WHERE shop_id<=10`;
     assert.equal(summarize(await query([1])).invoiceEvidenceCapped,1);
+    const oversized=await pg.unsafe(INVOICE_FLEET_PROTOTYPE_SQL,
+      invoiceFleetPrototypeParams([1],[1],new Date(start),new Date(end)));
+    assert.deepEqual(invoiceFleetPrototypeResult([1],oversized).summary,combined);
+    await pg`SET statement_timeout='1ms'`;
+    await assert.rejects(pg.unsafe(INVOICE_FLEET_PROTOTYPE_SQL,params),e=>(e as any).code==="57014");
   }finally{await pg.end();}
 });
 
@@ -167,6 +186,13 @@ test("real invoice SQL retains owner totals, unknowns, dates and deletion semant
     assert.equal(period.summary.averageSoldHoursPerInvoice,null);
     assert.equal(period.summary.averagePresentedHoursPerInvoice,null);
     assert.equal(period.rows.length,5);
+    for(const [first,last,expectedReport] of [[from,until,all],[start,end,period]] as const){
+      const sqlRows=await pg.unsafe(INVOICE_FLEET_PROTOTYPE_SQL.replaceAll("normalized_work_orders","proposed_work_orders"),
+        invoiceFleetPrototypeParams([1,2],[1,2],new Date(first),new Date(last)));
+      const sqlReport=invoiceFleetPrototypeResult([1,2],sqlRows);
+      assert.deepEqual(sqlReport.summary,expectedReport.summary);
+      for(const id of [1,2])assert.deepEqual(sqlReport.locations.get(id),expectedReport.locations.get(String(id)));
+    }
     // Global totals alone cannot detect a transfer between owners.
     const expected=new Map([
       [owners[0].id,[2,5]],[owners[1].id,[7,8]],[owners[5].id,[11,13]],
@@ -183,6 +209,58 @@ test("real invoice SQL retains owner totals, unknowns, dates and deletion semant
     assert.throws(()=>assertOwnerFinancialControl(all.summary,{invoices:5,sold:51,presented:62}));
     assert.throws(()=>reconcileOwnerCopies("missing",owners[0].payloads),/Missing owner payload/);
     assert.deepEqual({snapshot,owners},original,"No source or child data mutated");
+  }finally{await pg.end();}
+});
+
+test("SQL prototype preserves duplicate hour vetoes, alias resolution and weighted averages",async()=>{
+  const socket=process.env.INVOICE_OWNER_TEST_SOCKET;
+  assert.match(socket??"",/^\/tmp\/invoice-owner-offline\.[A-Za-z0-9]+$/);
+  const pg=postgres({host:socket,port:5432,username:userInfo().username,database:"postgres",max:1,onnotice:()=>{}});
+  const start=new Date("2026-09-01T00:00:00.000Z"),end=new Date("2026-09-30T23:59:59.999Z");
+  const id=(n:number)=>`00000000-0000-0000-0000-${String(n).padStart(12,"0")}`;
+  try{
+    await pg`CREATE TEMP TABLE normalized_work_orders(id text PRIMARY KEY,shop_id int,status text,soft_delete jsonb,provenance jsonb,custom_fields jsonb)`;
+    const put=async(row:string,shop:number,identity:number,sold:number|null,presented:number|null,evidence=true)=>{
+      const sourceIds=[{system:"protractor",idType:"invoice_id",idValue:id(identity)}];
+      await pg`INSERT INTO normalized_work_orders VALUES(${row},${shop},'invoiced','{}',
+        ${pg.json({sourceSystem:"protractor",sourceIds})},
+        ${pg.json(evidence?{invoiceHours:{version:1,id:id(identity),date:"2026-09-12T00:00:00.000Z",sold,presented}}:{})})`;
+    };
+    await put("a",1,1,2,4);await put("a-copy",1,1,2,4);
+    await put("a-unknown",1,1,null,null,false);
+    await put("b",2,2,10,12);await put("c",2,3,6,8);
+    const compare=async()=>{
+      const params=invoiceFleetPrototypeParams([1,2],[1,2],start,end);
+      const existing=aggregateInvoiceHours(await pg.unsafe(INVOICE_HOURS_SQL,params) as any,start,end);
+      const result=invoiceFleetPrototypeResult([1,2],await pg.unsafe(INVOICE_FLEET_PROTOTYPE_SQL,params));
+      assert.deepEqual(result.summary,existing.summary);
+      return result.summary;
+    };
+    assert.equal((await compare()).averageSoldHoursPerInvoice,6);
+    await put("b-partial",2,2,10,null);
+    let summary=await compare();
+    assert.equal(summary.averageSoldHoursPerInvoice,6);
+    assert.equal(summary.averagePresentedHoursPerInvoice,null);
+    await put("c-conflict",2,3,7,8);
+    summary=await compare();
+    assert.equal(summary.averageSoldHoursPerInvoice,null);
+    assert.equal(summary.invoiceSoldCovered,2);
+    for(const n of [101,102]){
+      await pg`INSERT INTO normalized_work_orders VALUES(${'alias-'+n},1,'closed','{}',
+        ${pg.json({sourceSystem:"protractor",sourceIds:[100,n].map(v=>({
+          system:"protractor",idType:"invoice_id",idValue:id(v),
+        }))})},'{}')`;
+    }
+    const params=invoiceFleetPrototypeParams([1,2],[1,2],start,end);
+    assert.equal(invoiceFleetPrototypeResult([1,2],
+      await pg.unsafe(INVOICE_FLEET_PROTOTYPE_SQL,params)).summary.invoiceEvidenceCapped,1,
+      "Competing alias sets must not pick a row-order-dependent winner");
+    await pg`DELETE FROM normalized_work_orders WHERE id LIKE 'alias-%'`;
+    await pg`UPDATE normalized_work_orders SET custom_fields=
+      jsonb_set(custom_fields,'{invoiceHours,version}','9') WHERE id='a'`;
+    assert.equal(invoiceFleetPrototypeResult([1,2],
+      await pg.unsafe(INVOICE_FLEET_PROTOTYPE_SQL,params)).summary.invoiceEvidenceCapped,1,
+      "Unsupported evidence versions are unavailable, not silently discarded");
   }finally{await pg.end();}
 });
 

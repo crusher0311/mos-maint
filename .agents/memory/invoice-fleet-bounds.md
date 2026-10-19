@@ -16,3 +16,13 @@ not establish reliable averages.
 delivery. Any future live partitioning needs a separately justified total
 resource budget and complete same-location identity closure, not just a limit
 on each individual query.
+
+Database-side aggregation feasibility is not live admission approval.
+
+**Why:** Per-query spill and timeout limits do not bound fleet-wide concurrent
+load, scanned pages or total database RAM. A small returned result can still
+represent expensive database work.
+
+**How to apply:** Require concurrency/admission limits and enforceable
+transaction settings before replacing the live raw-row cap. Preserve explicit
+unavailable results for unsupported identity/evidence shapes.

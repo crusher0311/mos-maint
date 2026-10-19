@@ -32,6 +32,9 @@ identities, or relax source checks to make an average appear.
 1. Implement exact large-fleet processing with a justified total resource budget.
    The current merged code reports capped coverage honestly; it does not solve
    exact aggregation above the existing limit.
+   An offline database-side prototype now passes the 210,000-record fixture;
+   see invoice-fleet-sql-prototype.md for its tested budget and remaining
+   integration, concurrency and evidence-shape requirements. It is not live code.
 2. Establish the authoritative evidence and accounting rules still missing from
    the retained-source review. Nine financial conflicts remain held. See
    invoice-owner-financial-corroboration-approval.md; plan approval is not
