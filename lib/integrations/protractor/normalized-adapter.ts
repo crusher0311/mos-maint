@@ -39,6 +39,7 @@ import {
   cleanString,
 } from '@/lib/integrations/core/normalized-adapter';
 import { ObjectId } from 'mongodb';
+import { invoiceHoursEvidence } from "@/lib/invoice-hours-source-evidence";
 import {
   extractProtractorServicePackages,
   getProtractorPackageLines,
@@ -265,7 +266,7 @@ export class ProtractorAdapter implements INormalizedAdapter {
       isInternal: Boolean(inv.IsInternal),
       isComeback: Boolean(inv.IsComeback),
       tags: [],
-      customFields: {},
+      customFields: { invoiceHours: invoiceHoursEvidence(inv) },
     };
   }
   
