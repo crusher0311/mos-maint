@@ -2,9 +2,12 @@
 
 ## Release boundary
 
-The durable path is **not active**. `DURABLE_DVI_ENROLLMENTS` is empty. No database
-collection/index, production migration, provider pilot, background reconciler or
-recovery write is installed or run by this implementation. Non-enrolled shops
+The durable path is **not active**. `DURABLE_DVI_ENROLLMENTS` is empty. The
+operator-approved storage provisioning described in the
+[pilot evidence record](auto-dvi-protractor-pilot-evidence.md) has run, followed by
+an approved synthetic Car Experts pilot. The pilot did not establish the required
+safety contract; no capability activation or enrollment has occurred.
+Non-enrolled shops
 retain the existing legacy behavior and warnings; Tekmetric is unchanged.
 
 Enrollment is permanent routing ownership, separate from the admissions switch.
