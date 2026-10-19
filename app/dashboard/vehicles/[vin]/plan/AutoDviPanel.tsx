@@ -14,6 +14,7 @@ import VisitInspectionPanel from "@/components/auto-dvi/VisitInspectionPanel";
 import { VISIT_DVI_RELEASE_ENABLED } from "@/lib/auto-dvi/visit-release";
 import { DVI_PUSH_UNCERTAIN_MESSAGE } from "@/lib/auto-dvi/push-outcome";
 import DviPushNotice from "@/components/auto-dvi/DviPushNotice";
+import * as dviRequest from "@/mos-tools-extension/dvi-request-core";
 import {
   ClipboardCheck,
   Loader2,
@@ -93,6 +94,9 @@ function ExistingAutoDviPanel({
   const [loading, setLoading] = useState(false);
   const [pushing, setPushing] = useState(false);
   const [pushNeedsVerification, setPushNeedsVerification] = useState(false);
+  const [checkingPush, setCheckingPush] = useState(true);
+  const [pushStatusReady, setPushStatusReady] = useState(false);
+  const pushLock = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [items, setItems] = useState<ComposedItem[] | null>(null);
@@ -114,6 +118,28 @@ function ExistingAutoDviPanel({
   const pendingSaves = useRef<Map<string, { itemId: string; name: string }>>(new Map());
   const findingsRef = useRef(findings);
   findingsRef.current = findings;
+
+  async function discoverPush() {
+    const query = new URLSearchParams({vin, roNumber: roNumber.trim()});
+    const response = await fetch(`/api/auto-dvi/push/status?${query}`, {cache: "no-store"});
+    const context = await response.json();
+    if (!response.ok || !context.ok) throw Error(context.message || DVI_PUSH_UNCERTAIN_MESSAGE);
+    if (context.durable && (context.operation || dviRequest.read(localStorage, context))) {
+      setPushNeedsVerification(true);
+      throw Error(DVI_PUSH_UNCERTAIN_MESSAGE);
+    }
+    return context;
+  }
+  useEffect(() => {
+    if (!isProtractor) { setCheckingPush(false); return; }
+    let active = true;
+    setCheckingPush(true);
+    setPushStatusReady(false);
+    discoverPush().then(() => { if (active) setPushStatusReady(true); }).catch((err) => {
+      if (active) setError(err.message);
+    }).finally(() => { if (active) setCheckingPush(false); });
+    return () => { active = false; };
+  }, [vin, roNumber, isProtractor]);
 
   function emptyFinding(): Finding {
     return { rating: null, notes: "", recommendation: "", media: [] };
@@ -399,13 +425,14 @@ function ExistingAutoDviPanel({
   }
 
   async function push() {
-    if (!items || pushNeedsVerification) return;
+    if (!items || pushNeedsVerification || pushLock.current || checkingPush || !pushStatusReady) return;
     const selected = items.filter((i) => checked[i.id]);
     if (selected.length === 0) {
       setError("Select at least one item to write to the RO");
       return;
     }
     setPushing(true);
+    pushLock.current = true;
     setError(null);
     setSuccess(null);
     const recommendedItems = addRecommended
@@ -414,10 +441,8 @@ function ExistingAutoDviPanel({
           .map((i) => ({ name: i.name, serviceKey: i.serviceKey }))
       : [];
     try {
-      const res = await fetch("/api/auto-dvi/push", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const context = await discoverPush();
+      const draft = {
           vin,
           roNumber: roNumber.trim() || undefined,
           items: selected.map((i) => {
@@ -438,7 +463,12 @@ function ExistingAutoDviPanel({
             };
           }),
           recommendedItems: recommendedItems.length > 0 ? recommendedItems : undefined,
-        }),
+      };
+      const payload = context.durable ? await dviRequest.prepare(localStorage, context, draft) : draft;
+      const res = await fetch("/api/auto-dvi/push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (data.outcome === "partial" || data.outcome === "uncertain") {
@@ -460,6 +490,7 @@ function ExistingAutoDviPanel({
       setError(DVI_PUSH_UNCERTAIN_MESSAGE);
     } finally {
       setPushing(false);
+      pushLock.current = false;
     }
   }
 
@@ -486,7 +517,7 @@ function ExistingAutoDviPanel({
                 <Loader2 className="w-4 h-4 animate-spin" /> Building this vehicle&apos;s inspection…
               </div>
             )}
-            {error && <DviPushNotice message={error} needsVerification={pushNeedsVerification} />}
+            {(error || pushNeedsVerification) && <DviPushNotice message={pushNeedsVerification ? DVI_PUSH_UNCERTAIN_MESSAGE : error!} needsVerification={pushNeedsVerification} />}
             {success && <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">{success}</div>}
 
             {items && !loading && (
@@ -720,7 +751,7 @@ function ExistingAutoDviPanel({
                     />
                     <button
                       onClick={push}
-                      disabled={pushing || pushNeedsVerification}
+                      disabled={pushing || checkingPush || !pushStatusReady || pushNeedsVerification}
                       className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg px-4 py-1.5"
                     >
                       {pushing && <Loader2 className="w-4 h-4 animate-spin" />} Write inspection to open RO

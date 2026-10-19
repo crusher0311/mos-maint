@@ -140,6 +140,21 @@ export class DurablePushService {
     await this.validateExisting(scope, op);
     return this.deps.repository.response(op);
   }
+  /** Read-only target discovery works even when the client lost the POST reply. */
+  async discover(scope: Scope, request: Request): Promise<Reply | null> {
+    const target = await this.checkedTarget(scope, request);
+    const op = await this.deps.repository.target(scope, target.connection, target.guid);
+    if (op) {
+      if (op.request.vin !== request.vin) throw new DurableError("TARGET_CHANGED");
+      // Do not expose another actor's findings or operation ID.
+      if (op.scope.actor !== scope.actor) throw new DurableError("TARGET_UNRESOLVED");
+      await this.validateExisting(scope, op);
+      return this.deps.repository.response(op);
+    }
+    const snapshot = await this.deps.provider.read(target);
+    if (!validSnapshot(snapshot, target)) throw new DurableError("UNVERIFIED_TARGET");
+    return null;
+  }
   async reconcile(scope: Scope, id: string): Promise<Reply> {
     const repo = this.deps.repository;
     const op = await repo.operation(id);

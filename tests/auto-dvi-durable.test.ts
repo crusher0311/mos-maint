@@ -62,6 +62,24 @@ async function fixture() {
 const calls = async (db: Db) => (await db.collection("fixture_provider").findOne({_id: "wo"} as any))!.writes;
 const storedOp = async (db: Db) => (await db.collection(DURABLE_COLLECTION).findOne({_id: /^operation:/} as any))!.value as Operation;
 const mode = (db: Db, value: string) => db.collection("fixture_provider").updateOne({_id: "wo"} as any, {$set: {mode: value}});
+test("target discovery after a lost reply is read-only, actor/shop scoped and survives admission rollback", async () => {
+  const f = await fixture();
+  const {request} = parseRequest(body);
+  assert.equal(await f.service.discover(scope, request), null);
+  await mode(f.db, "absent-packages");
+  await f.service.push(scope, body); // caller loses this response
+  const writesBefore = await calls(f.db);
+  const rolledBack = new DurablePushService({
+    repository: f.repo, provider: new FixtureProvider(f.db), admissions: false, price: async () => {throw Error("must not price");},
+  });
+  const discovered = await rolledBack.discover(scope, request);
+  assert.equal(discovered?.body.operationId, (await storedOp(f.db)).id);
+  assert.equal(discovered?.body.outcome, "uncertain");
+  await assert.rejects(rolledBack.discover({...scope, actor: "other@example.invalid"}, request), /TARGET_UNRESOLVED/);
+  await assert.rejects(rolledBack.discover({...scope, shopId: 2}, request), /TARGET_CHANGED/);
+  await assert.rejects(rolledBack.discover(scope, {...request, vin: "1HGCM82633A004353"}), /TARGET_CHANGED/);
+  assert.deepEqual(await calls(f.db), writesBefore);
+});
 function child(db: Db, mode: string) {
   return new Promise<number | null>((resolve, reject) => {
     const proc = spawn(process.execPath, ["--import", "tsx", "tests/helpers/dvi-durable-child.ts", String(port), db.databaseName, mode],

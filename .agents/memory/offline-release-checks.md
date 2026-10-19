@@ -36,6 +36,17 @@ test also had a stale extraction delimiter.
 packaging. Assert source-extraction boundaries explicitly; don't weaken hidden
 preferences to compensate for a broken settings transport.
 
+Browser reload tests must await intercepted POST completion separately from the
+visible warning before navigating.
+
+**Why:** Concurrent status discovery can display a persisted target warning
+before the intercepted POST finishes inspecting storage. Reloading at that point
+destroys its browser execution context and masks the result with a target-closed
+error.
+
+**How to apply:** Coordinate reload with an explicit interception-completion
+promise rather than sleeps or the warning text alone.
+
 Isolated release worktrees sharing workspace node_modules can fail native canvas
 loading on missing Nix libraries even when Render's build environment passes.
 

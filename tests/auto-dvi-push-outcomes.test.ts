@@ -183,6 +183,8 @@ test("dashboard and extension warn and block repeat clicks for partial/uncertain
     let error = "", success = "", locked = false, calls = 0;
     const ctx: any = {items: [{id: "a", name: "Battery"}], checked: {a: true}, findings: {}, addRecommended: false,
       vin: "FIXTURE", roNumber: "", getFinding: () => ({}), pushNeedsVerification: false, DVI_PUSH_UNCERTAIN_MESSAGE,
+      pushLock: {current: false}, checkingPush: false, pushStatusReady: true,
+      discoverPush: async () => ({durable: false}),
       setPushing() {}, setError(v: string) {error = v;}, setSuccess(v: string) {success = v;},
       setPushNeedsVerification(v: boolean) {locked = v; ctx.pushNeedsVerification = v;},
       fetch: async () => { calls++; if (!payload) throw Error("network lost"); return {ok: true, json: async () => payload}; },
@@ -222,13 +224,16 @@ test("dashboard and extension warn and block repeat clicks for partial/uncertain
       sendMessage: async () => { sends++; if (payload === null) throw Error("lost"); return payload; },
     };
     vm.createContext(ext); vm.runInContext(extensionVerification + extensionRender + extensionHandler + extensionGenerate, ext);
+    ext.discoverAutoDviPush = async () => ({durable: false});
     const pushSend = ext.sendMessage;
     ext.sendMessage = async () => ext.autoDviData;
     await ext.handleAutoDviGenerate();
+    await new Promise(resolve => setImmediate(resolve));
     assert.equal(button.disabled, false, "normal generation must enable an unlocked push");
     assert.equal(generateButton.disabled, false);
     ext.sendMessage = pushSend;
     await ext.handleAutoDviPush();
+    await new Promise(resolve => setImmediate(resolve));
     assert.equal(button.disabled, payload !== complete);
     if (payload !== complete) assert.match(notifications[0][0], /Do not resend/);
     assert.equal(notifications[0][1], payload === complete ? "success" : "error");
@@ -243,6 +248,7 @@ test("dashboard and extension warn and block repeat clicks for partial/uncertain
       assert.equal(sends, 1);
       ext.currentContext.roId = "RO-B";
       ext.renderAutoDviChecklist(ext.autoDviData);
+      await new Promise(resolve => setImmediate(resolve));
       assert.equal(button.disabled, false); assert.equal(warning.hidden, true);
       ext.currentContext.roId = "RO-A";
       ext.renderAutoDviChecklist(ext.autoDviData);
@@ -257,6 +263,6 @@ test("dashboard and extension warn and block repeat clicks for partial/uncertain
       await ext.handleAutoDviPush(); assert.equal(sends, 1);
     }
   }
-  assert.match(panel, /disabled=\{pushing \|\| pushNeedsVerification\}/);
+  assert.match(panel, /disabled=\{pushing \|\| checkingPush \|\| !pushStatusReady \|\| pushNeedsVerification\}/);
   assert.match(panel, /VISIT_DVI_RELEASE_ENABLED/);
 });

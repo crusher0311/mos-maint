@@ -9247,7 +9247,22 @@ function autoDviWorkOrderKey(context = currentContext) {
   return JSON.stringify([context?.provider, context?.shopId,
     context?.roId || context?.roNumber || String(context?.vin || '').toUpperCase()]);
 }
-function renderAutoDviVerification() {
+async function discoverAutoDviPush(context) {
+  const query = new URLSearchParams({
+    shopId: String(context.shopId), vin: context.vin,
+    roNumber: String(context.roNumber || context.roId || ''),
+  });
+  const result = await sendMessage({
+    action: 'MOS_API_REQUEST',
+    endpoint: `/api/extension/auto-dvi/push/status?${query}`,
+    options: {method: 'GET'},
+  });
+  if (!result?.ok) throw Error(result?.message || MosDviRequest.warning);
+  if (result.durable && (result.operation || MosDviRequest.read(localStorage, result)))
+    throw Error(MosDviRequest.warning);
+  return result;
+}
+function renderAutoDviVerification(refresh = true) {
   const message = autoDviVerificationByWorkOrder.get(autoDviWorkOrderKey());
   const warning = document.getElementById('auto-dvi-verification-warning');
   if (warning) {
@@ -9256,12 +9271,23 @@ function renderAutoDviVerification() {
   }
   const button = document.getElementById('auto-dvi-push-btn');
   if (button) button.disabled = autoDviInFlight || !!message;
+  if (refresh && !message && currentContext?.provider === 'protractor') {
+    const context = {...currentContext};
+    const key = autoDviWorkOrderKey(context);
+    if (button) button.disabled = true;
+    discoverAutoDviPush(context).catch((error) => {
+      autoDviVerificationByWorkOrder.set(key, error.message || MosDviRequest.warning);
+    }).finally(() => {
+      if (autoDviWorkOrderKey() === key) renderAutoDviVerification(false);
+    });
+  }
 }
 
 async function handleAutoDviPush() {
   const pushBtn = document.getElementById('auto-dvi-push-btn');
   const requestWorkOrderKey = autoDviWorkOrderKey();
   const requestProvider = currentContext?.provider;
+  const requestContext = {...currentContext};
   if (autoDviInFlight || !autoDviData || autoDviVerificationByWorkOrder.has(requestWorkOrderKey)) {
     renderAutoDviVerification();
     return;
@@ -9298,20 +9324,24 @@ async function handleAutoDviPush() {
   const originalLabel = pushBtn ? pushBtn.textContent : '';
   if (pushBtn) { pushBtn.disabled = true; pushBtn.textContent = 'Adding\u2026'; }
   try {
+    const durableContext = requestProvider === 'protractor' ? await discoverAutoDviPush(requestContext) : null;
+    const draft = {
+      vin: requestContext.vin,
+      roNumber: String(requestContext.roNumber || requestContext.roId || '') || null,
+      items: selected,
+    };
+    const payload = durableContext?.durable
+      ? {...await MosDviRequest.prepare(localStorage, durableContext, draft),
+          shopId: requestContext.shopId, provider: requestProvider}
+      : {...draft, shopId: requestContext.shopId, provider: requestProvider,
+          roId: requestContext.roId || null,
+          workOrderGuid: getRecentlyCreatedWoGuid(requestContext.vehicle?.vin || requestContext.vin, requestContext.roId) || null};
     const result = await sendMessage({
       action: 'MOS_API_REQUEST',
       endpoint: '/api/extension/auto-dvi/push',
       options: {
         method: 'POST',
-        body: JSON.stringify({
-          shopId: currentContext.shopId,
-          vin: currentContext.vin,
-          provider: currentContext.provider,
-          roId: currentContext.roId || null,
-          roNumber: currentContext.roNumber || (currentContext.roId ? String(currentContext.roId) : null),
-          workOrderGuid: getRecentlyCreatedWoGuid(currentContext.vehicle?.vin || currentContext.vin, currentContext.roId) || null,
-          items: selected,
-        }),
+        body: JSON.stringify(payload),
       },
     }, 90000, 'Still writing the inspection \u2014 please keep this panel open\u2026');
     if (result?.outcome === 'partial' || result?.outcome === 'uncertain') {

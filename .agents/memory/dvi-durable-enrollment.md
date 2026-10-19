@@ -14,3 +14,16 @@ that is still executing. A timed-out call is not proof of termination.
 operation keys/target gates. Provider capability verification, storage provisioning,
 and client activation require separate operator approval; never use shared
 application storage to test the protocol.
+
+Browser request identity must be committed before sending, and an uncertain
+target gate must survive draft edits. Even a completed operation does not
+authorize an edited replacement under the current ownership contract.
+
+**Why:** A lost response cannot distinguish an unreceived request from a write
+still executing. Clearing the local marker or minting a new key after edits
+would conceal that ambiguity; server target discovery remains authoritative
+when another device has no local marker.
+
+**How to apply:** Keep browser records free of findings and credentials. Use
+authenticated scope and exact verified targets, fail closed on storage/status
+errors, and do not add automatic local expiry or resend-based recovery.
