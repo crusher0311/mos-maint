@@ -35,10 +35,15 @@ const uploadSchema = z.object({requestId: z.string().uuid(), digest: z.string().
   visitId: z.string(), sheet: z.string(), item: z.string(), revision, photo: photoSchema,
   state: z.enum(["reserved", "committed", "abandoned"])}).strict();
 export type UploadReservation = z.infer<typeof uploadSchema>;
-export interface ShopState {version: 1; revision: number; records: WorkflowInspection[]; receipts: StaffReceipt[]; events: StaffEvent[]; uploads: UploadReservation[]}
+const releaseAdmissionSchema = z.object({requestId: z.string().uuid(), digest: z.string().length(64),
+  actor: z.string(), visitId: z.string(), at: z.string().datetime(),
+  rejected: z.boolean().optional()}).strict();
+export type ReleaseAdmission = z.infer<typeof releaseAdmissionSchema>;
+export interface ShopState {version: 1; revision: number; records: WorkflowInspection[]; receipts: StaffReceipt[]; events: StaffEvent[]; uploads: UploadReservation[]; releaseAdmissions?: ReleaseAdmission[]}
 export const emptyShopState = (): ShopState => ({version: 1, revision: 0, records: [], receipts: [], events: [], uploads: []});
 export function validateShopState(raw: unknown): ShopState {
   return z.object({version: z.literal(1), revision, records: z.array(bindingSchema).max(500), uploads: z.array(uploadSchema).max(5000),
+    releaseAdmissions: z.array(releaseAdmissionSchema).max(5000).optional(),
     receipts: z.array(z.object({requestId: z.string().uuid(), digest: z.string().length(64), actor: z.string(), visitId: z.string(), revision}).strict()).max(5000),
     events: z.array(z.object({requestId: z.string().uuid(), actor: z.string(), at: z.string().datetime(), visitId: z.string(),
       before: staffStateSchema.nullable(), after: staffStateSchema}).strict()).max(5000),
@@ -53,12 +58,45 @@ export interface StaffPersistence {
 }
 export class StaffRepository implements WorkflowInspectionRepository {
   constructor(readonly persistence: StaffPersistence) {}
+  /** Linearization point shared with evidence/photo CAS. Only opaque release
+   * receipt metadata enters this bounded aggregate; snapshots live separately. */
+  async admitRelease(shopId: number, raw: ReleaseAdmission,
+    validate: (record: WorkflowInspection) => void, authorize: () => Promise<void>) {
+    const admission = releaseAdmissionSchema.parse(raw);
+    await authorize();
+    const state = await this.persistence.read(shopId);
+    const prior = state.releaseAdmissions?.find(r => r.requestId === admission.requestId);
+    if (prior) {
+      requireThat(prior.digest === admission.digest && prior.actor === admission.actor &&
+        prior.visitId === admission.visitId, "Publication request conflicts", 409);
+      requireThat(!prior.rejected, "Publication selection rejected; preview again", 409);
+      return prior;
+    }
+    requireThat(!state.receipts.some(r => r.requestId === admission.requestId) &&
+      !state.uploads.some(r => r.requestId === admission.requestId) &&
+      !state.records.some(r => r.receipts.some(x => x.requestId === admission.requestId)), "Request ID already used", 409);
+    const record = state.records.find(r => r.identity.workflowVisitId === admission.visitId);
+    requireThat(record && !record.closed, "Open canonical inspection required", 409);
+    try {validate(structuredClone(record));}
+    catch (error) {
+      // A durable negative receipt prevents a competing retry from admitting a
+      // stale prepared snapshot after its pending release has been cleared.
+      (state.releaseAdmissions ??= []).push({...admission, rejected: true});
+      requireThat(await this.save(shopId, state), "Concurrent evidence change; retry exact publication", 409);
+      throw error;
+    }
+    (state.releaseAdmissions ??= []).push(admission);
+    await authorize();
+    requireThat(await this.save(shopId, state), "Concurrent evidence change; retry exact publication", 409);
+    return admission;
+  }
   async read(shopId: number, visitId: string) {
     const state = await this.persistence.read(shopId);
     return structuredClone(state.records.find(r => r.identity.workflowVisitId === visitId || r.aliases.includes(visitId)) ?? null);
   }
   async commit(raw: BindingAdmission): Promise<"confirmed" | "conflict"> {
     const a = admissionSchema.parse(raw), state = await this.persistence.read(a.identity.shopId);
+    if (state.releaseAdmissions?.some(r => r.requestId === a.requestId)) return "conflict";
     if (state.uploads.some(u => u.requestId === a.requestId)) return "conflict";
     const prior = state.receipts.find(r => r.requestId === a.requestId);
     if (prior && (prior.actor !== a.actorId || prior.visitId !== a.identity.workflowVisitId)) return "conflict";
@@ -82,6 +120,7 @@ export class StaffRepository implements WorkflowInspectionRepository {
     const requested = uploadSchema.parse(raw);
     await authorize();
     const state = await this.persistence.read(shopId), existing = state.uploads.find(u => u.requestId === requested.requestId);
+    requireThat(!state.releaseAdmissions?.some(r => r.requestId === requested.requestId), "Request ID reserved for publication", 409);
     if (existing) {
       requireThat(existing.digest === requested.digest && existing.actor === requested.actor &&
         existing.visitId === requested.visitId && existing.state !== "abandoned", "Upload receipt conflicts or was abandoned", 409);
@@ -122,6 +161,7 @@ export class StaffRepository implements WorkflowInspectionRepository {
     await input.authorize();
     const state = await this.persistence.read(shopId);
     const receipt = state.receipts.find(r => r.requestId === requestId);
+    requireThat(!state.releaseAdmissions?.some(r => r.requestId === requestId), "Request ID reserved for publication", 409);
     requireThat(command.type === "initialize" || !state.records.some(r => r.receipts.some(x => x.requestId === requestId)), "Request ID reserved for binding", 409);
     if (receipt) {
       requireThat(receipt.actor === actor && receipt.digest === hash && receipt.visitId === visitId, "Request ID conflicts with saved work", 409);

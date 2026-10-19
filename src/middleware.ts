@@ -59,6 +59,11 @@ function isPasswordChangeAllowedPath(pathname: string) {
 }
 
 function isPublicPath(pathname: string, method: string) {
+  // Workflow report tokens are carried in POST bodies, never session cookies.
+  // These exact paths still enforce bearer expiry/revocation/entitlements in
+  // the report handler; staff release and media routes remain cookie-protected.
+  if (pathname === "/workflow-report" && (method === "GET" || method === "HEAD")) return true;
+  if (pathname === "/api/workflow-report" && method === "POST") return true;
   // Printed sticker scans are public, but sticker management is not.
   // Leave shop/reference validation, entitlements and report signing to the handler.
   if (

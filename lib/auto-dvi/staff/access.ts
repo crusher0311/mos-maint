@@ -16,6 +16,11 @@ export const configurationSchema = z.object({
   version: z.literal(1), enabledShopIds: z.array(z.number().int().positive()).max(500),
   sheets: z.array(sheetSchema).min(1).max(20), defaultSheet: z.string().max(80),
   rules, individual: z.record(z.string(), rules).default({}),
+  release: z.object({
+    enabledShopIds: z.array(z.number().int().positive()).max(500),
+    publicPhone: z.string().max(40),
+    defaultExpiryDays: z.number().int().min(1).max(365),
+  }).strict().optional(),
 }).strict().superRefine((c, ctx) => {
   if (!c.sheets.some(s => instanceKey(s) === c.defaultSheet) ||
     new Set(c.sheets.map(instanceKey)).size !== c.sheets.length)
