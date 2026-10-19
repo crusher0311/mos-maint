@@ -26,27 +26,29 @@ export function financialProjection(table:string,row:any,stored=false){
   return Object.fromEntries(fields[table].map(f=>[f,value(row[stored?column(f):f],f)]));
 }
 export function collectChildEvidence(raws:any[],shop:number){
-  const evidence=new Map<string,{owner:string;job:string|null;values:any}[]>();
-  const add=(table:string,id:any,owner:string,job:string|null,mapped:any)=>{
+  const evidence=new Map<string,{owner:string;job:string|null;values:any;native:any;copy:string}[]>();
+  let copy="";
+  const add=(table:string,id:any,owner:string,job:string|null,mapped:any,native:any)=>{
     if(!id)return;
     const key=`${table}:${String(id).toLowerCase()}`;
-    evidence.set(key,[...(evidence.get(key)??[]),{owner,job,values:financialProjection(table,mapped)}]);
+    evidence.set(key,[...(evidence.get(key)??[]),{owner,job,values:financialProjection(table,mapped),native,copy}]);
   };
   for(const raw of raws){
+    copy=hash(JSON.stringify(raw));
     const owner=hash(`${shop}:${String(raw.ID).toLowerCase()}`);
     // Inspect each retained occurrence independently: no latest-copy or merging override.
     for(const job of [...unwrapProtractorCollection(raw.ServicePackages),...unwrapProtractorCollection(raw.DeferredServicePackages)]){
       const id=job.ID??job.ServicePackageHeader?.ID;
-      add("normalized_service_jobs",id,owner,null,adapter.mapServiceJob(shop,"",job));
+      add("normalized_service_jobs",id,owner,null,adapter.mapServiceJob(shop,"",job),job);
       for(const line of adapter.extractLineItemsFromServiceJob(job)){
         add("normalized_line_items",line.ID??line.LineID,owner,String(id).toLowerCase(),
-          adapter.mapLineItem(shop,"","",line));
+          adapter.mapLineItem(shop,"","",line),line);
       }
     }
     for(const payment of adapter.extractPaymentsFromWorkOrder(raw)){
       add("normalized_payments",payment.ID,owner,null,{
         amount:payment.Amount,tipAmount:payment.TipAmount,refundedAmount:payment.RefundedAmount,
-      });
+      },payment);
     }
   }
   return evidence;

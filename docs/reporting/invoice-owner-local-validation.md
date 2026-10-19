@@ -1,5 +1,10 @@
 # Invoice-owner local validation
 
+Follow-on retained financial resolution:
+[findings and rules](invoice-owner-financial-resolution.md) and
+[all-owner eligibility](invoice-owner-financial-eligibility.md). That separate
+snapshot explains the 219 mismatches and 24 conflicts without authorizing repair.
+
 ## Scope and safety
 
 This is a local simulation, not a deployed fix or a production repair.
