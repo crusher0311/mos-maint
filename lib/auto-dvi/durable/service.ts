@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { composePlan } from "./compose";
 import { Repository } from "./repository";
 import {
-  canonical, classify, digest, DurableError, newOperation, parseRequest, validSnapshot,
+  canonical, comparisonBytes, classify, digest, DurableError, newOperation, parseRequest, validSnapshot, VERSION,
   type Operation, type Reply, type Request, type Scope, type Snapshot, type Stage, type Target,
 } from "./model";
 
@@ -32,7 +32,8 @@ export class DurablePushService {
   }
   async validateExisting(scope: Scope, op: Operation, staff = false) {
     this.deps.repository.authorize(op, scope, staff);
-    if (op.schemaVersion !== 1 || op.composerVersion !== 1 || op.comparatorVersion !== 1 ||
+    if (op.schemaVersion !== VERSION || op.composerVersion !== VERSION || op.comparatorVersion !== VERSION ||
+        op.plan.version !== VERSION ||
         op.planDigest !== digest(op.plan) || op.planBytes !== canonical(op.plan) ||
         op.requestDigest !== digest(op.request) || op.requestBytes !== canonical(op.request))
       throw new DurableError("PLAN_VERSION_OR_INTEGRITY", 503);
@@ -103,7 +104,7 @@ export class DurablePushService {
         await this.validateExisting(scope, op);
         const observed = await this.deps.provider.read(op.plan.target);
         const expected = stage === "packages" ? op.plan.baseline.body : op.plan.desired.packages;
-        if (!validSnapshot(observed, op.plan.target) || canonical(observed.body) !== canonical(expected) ||
+        if (!validSnapshot(observed, op.plan.target) || comparisonBytes(op.plan, observed.body) !== comparisonBytes(op.plan, expected) ||
             (stage === "packages" && observed.revision !== op.plan.baseline.revision)) {
           await repo.observe(op.id, token, stage, validSnapshot(observed, op.plan.target) ? "partial_or_edited" : "unknown",
             null, null);

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { canonical, classify, digest, DurableError, type Operation, type Scope, type Snapshot, type Stage } from "./model";
+import { canonical, comparisonBytes, classify, digest, DurableError, type Operation, type Scope, type Snapshot, type Stage } from "./model";
 import { Repository, operationKey, targetKey, type Gate } from "./repository";
 import { DurablePushService, type Provider } from "./service";
 
@@ -44,7 +44,7 @@ export class RecoveryService {
     // Findings baseline must include *all* desired packages. The generic
     // classifier also recognizes the original baseline, which is insufficient.
     const expected = stage === "packages" ? op.plan.baseline.body : op.plan.desired.packages;
-    if (canonical(read.body) !== canonical(expected)) throw new DurableError("PROVIDER_EDIT");
+    if (comparisonBytes(op.plan, read.body) !== comparisonBytes(op.plan, expected)) throw new DurableError("PROVIDER_EDIT");
     if (stage === "packages" && read.revision !== op.plan.baseline.revision)
       throw new DurableError("PROVIDER_EDIT");
     if (stage === "findings" && (op.stages.packages.state !== "verified" ||

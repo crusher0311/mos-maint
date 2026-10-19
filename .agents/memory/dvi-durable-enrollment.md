@@ -89,3 +89,14 @@ provider-side concurrency contract.
 
 **How to apply:** Keep durable enrollment closed until a supported exclusive or
 conditional-write contract and upstream termination evidence are established.
+
+Offline projection/normalization work may proceed while provider safety
+confirmation is pending, but it must not install a verified capability adapter.
+
+**Why:** The user explicitly approved advancing offline implementation rather
+than waiting for provider confirmation; this was not approval to enable writes.
+
+**How to apply:** Keep live label enumeration, writable-payload certification,
+and concurrency/termination evidence distinct from passing fixture tests.
+Independently sourced setup labels cannot be replaced with values echoed by
+inspection upserts.

@@ -141,8 +141,39 @@ unchanged Header timestamp as a usable work-order revision.
 
 Do not implement a `VerifiedProtractorCapabilities` adapter from the current
 observations. Decimal normalization alone would hide the missing concurrency
-and termination guarantees. The existing fail-closed provider remains unchanged.
+and termination guarantees. The provider still fails closed without a separately
+verified capability adapter.
 Enrollment requires separate approval even after every guarantee passes.
+
+## Offline projection work (not certification)
+
+The operator requested proceeding with offline implementation while provider
+concurrency/termination confirmation remains pending. This does not authorize
+further live writes or enrollments.
+
+- Composer/comparator version 2 sends only newly generated service packages,
+  with an allowlisted shape constructed by the composer. It never echoes the
+  baseline GET, unrelated packages, read-only fields or deletion headers.
+  Expected readback retains the full baseline so unrelated edits remain conflicts.
+- Only Labor `Quantity`, `Price`, and `Total` use the pilot-confirmed
+  decimal-string/number equivalence, without rounding or precision loss.
+  Other fields, nulls, collection order, labels and deletion metadata remain
+  strict. Omitted nested collections remain unknown; empty collections are
+  not treated as proof of deletion.
+- Each snapshot must carry target-bound result-label evidence independently
+  obtained from shop configuration by the capability adapter. No default label
+  mapping or inference from accepted POST values is allowed. **Live setup
+  enumeration is still outstanding**; the offline fixture is not shop evidence.
+- An empty successful POST response is transport acknowledgment only. Exact-ID
+  readback still determines the outcome. Unknown chapter variants and missing
+  or duplicate nested identities fail closed.
+- Old frozen operation versions are not silently recomposed or reinterpreted.
+
+These tests prepare the adapter interface; they do not establish the remaining
+provider contract. No capability adapter was installed and enrollments remain
+empty. Additional decimal fields, provider-added/default fields, nested variants,
+and the minimal additive payload need bounded live certification after the
+safety prerequisites are met.
 
 ## Offline verification
 

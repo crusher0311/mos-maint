@@ -11,7 +11,7 @@ import { Repository, type Store, type Transaction } from "../lib/auto-dvi/durabl
 import { DurablePushService } from "../lib/auto-dvi/durable/service";
 import { RecoveryService } from "../lib/auto-dvi/durable/recovery";
 import { composePlan } from "../lib/auto-dvi/durable/compose";
-import { newOperation } from "../lib/auto-dvi/durable/model";
+import { newOperation, validSnapshot, comparisonBody } from "../lib/auto-dvi/durable/model";
 import { canonical, classify, digest, DurableError, parseRequest, type Operation } from "../lib/auto-dvi/durable/model";
 import { body, scope, target, guid, resetProvider, FixtureProvider, fixtureService } from "./helpers/dvi-durable-fixture";
 
@@ -316,6 +316,153 @@ test("canonical request validates every field and preserves repeated selections 
   }
   assert.equal(parseRequest(body).request.recommendedItems.length, 2);
   assert.notEqual(digest(parseRequest(body).request), digest(parseRequest({...body, items: [{name: "Battery", notes: " Test"}]}).request));
+});
+test("additive payload excludes GET-only fields and untouched packages; labels require independent setup", async () => {
+  const f = await fixture();
+  const snapshot = await new FixtureProvider(f.db).read(target);
+  snapshot.body.Header = {DeletionTime: "metadata-not-a-delete-instruction"};
+  snapshot.body.Summary = {Total: 500};
+  snapshot.body.Owner = {ID: "read-only"};
+  snapshot.body.ServicePackages.ItemCollection.push({
+    ID: "untouched", Chapter: "Service", Header: {LastModifiedTime: "original"},
+    ServicePackageLines: {ItemCollection: [{ID: "untouched-line", Price: 500}]},
+  });
+  const request = parseRequest(body).request;
+  const plan = composePlan(request, snapshot, []);
+  assert.deepEqual(Object.keys(plan.payloads.packages!), ["ID", "ServicePackages"]);
+  assert.equal(plan.payloads.packages!.ServicePackages.ItemCollection.length, 1);
+  assert.equal(JSON.stringify(plan.payloads).includes("untouched"), false);
+  assert.equal(JSON.stringify(plan.payloads).includes("DeletionTime"), false);
+  assert.deepEqual(plan.desired.packages.ServicePackages.ItemCollection[0], snapshot.body.ServicePackages.ItemCollection[0]);
+  assert.equal(plan.desired.packages.Header.DeletionTime, "metadata-not-a-delete-instruction");
+  for (const labels of [undefined, {...snapshot.resultLabels!, source: "roundtrip"},
+    {...snapshot.resultLabels!, target: {...target, shopId: 99}},
+    {...snapshot.resultLabels!, evidence: ""}, {...snapshot.resultLabels!, red: "OK"}]) {
+    assert.throws(() => composePlan(request, {...snapshot, resultLabels: labels as any}, []), /RESULT_LABELS_UNVERIFIED/);
+  }
+  snapshot.resultLabels!.red = "Configured urgent result";
+  const configured = composePlan(request, snapshot, []);
+  assert.equal(configured.payloads.findings!.ItemCollection[0].ServicePackageInspectionLines.ItemCollection[0].Result,
+    "Configured urgent result");
+});
+test("only verified labor decimal equivalents compare equal; results, omissions and deletions do not", async () => {
+  const f = await fixture();
+  const snapshot = await new FixtureProvider(f.db).read(target);
+  const plan = composePlan(parseRequest(body).request, snapshot, [{title: "Priced", hours: 1.25, rate: 80.10}]);
+  const observed = {...snapshot, body: structuredClone(plan.desired.findings)};
+  const line = observed.body.ServicePackages.ItemCollection[1].ServicePackageLines.ItemCollection[0];
+  for (const key of ["Quantity", "Price", "Total"]) line[key] = Number(line[key]);
+  assert.equal(classify(plan, "findings", observed), "desired");
+  line.Price = 80.11;
+  assert.equal(classify(plan, "findings", observed), "partial_or_edited");
+  line.Price = 80.1;
+  line.TechnicianHour = 1.25; // this field was not independently certified
+  assert.equal(classify(plan, "findings", observed), "partial_or_edited");
+  line.TechnicianHour = "1.25";
+  const inspection = observed.body.ServicePackages.ItemCollection.at(-1);
+  inspection.ServicePackageInspectionLines.ItemCollection[0].Result = "required";
+  assert.equal(classify(plan, "findings", observed), "partial_or_edited");
+  inspection.ServicePackageInspectionLines.ItemCollection[0].Result = "Required";
+  line.Header = {DeletionTime: "2026-10-18"};
+  assert.equal(classify(plan, "findings", observed), "partial_or_edited");
+  delete line.Header;
+  observed.body.ServicePackages.ItemCollection[1].ServicePackageLines.ItemCollection = [];
+  assert.equal(classify(plan, "findings", observed), "partial_or_edited");
+  delete observed.body.ServicePackages.ItemCollection[1].ServicePackageLines;
+  assert.equal(classify(plan, "findings", observed), "unknown");
+  for (const value of ["", " 80.10", "8.01e1", "9007199254740993", "1.0000000000000001", null]) {
+    const raw = {ServicePackages: {ItemCollection: [{ServicePackageLines: {ItemCollection: [{Type: "Labor", Price: value}]}}]}};
+    assert.equal(comparisonBody(raw).ServicePackages.ItemCollection[0].ServicePackageLines.ItemCollection[0].Price, value);
+  }
+});
+test("exact-ID snapshots reject incomplete, moved, duplicated and unknown nested collections", async () => {
+  const f = await fixture();
+  const snapshot = await new FixtureProvider(f.db).read(target);
+  const plan = composePlan(parseRequest(body).request, snapshot, []);
+  const observed = {...snapshot, body: structuredClone(plan.desired.findings)};
+  assert.ok(validSnapshot(observed, target));
+  observed.body.ID = "wrong-order";
+  assert.equal(classify(plan, "findings", observed), "unknown");
+  observed.body.ID = target.guid;
+  const pkg = observed.body.ServicePackages.ItemCollection[0];
+  pkg.ServicePackageInspectionLines = {};
+  assert.equal(validSnapshot(observed, target), false);
+  pkg.ServicePackageInspectionLines = {ItemCollection: [structuredClone(pkg.ServicePackageLines.ItemCollection[0])]};
+  assert.equal(validSnapshot(observed, target), false);
+  delete pkg.ServicePackageInspectionLines;
+  pkg.Chapter = "Unknown";
+  assert.equal(validSnapshot(observed, target), false);
+});
+test("provider accepts an empty successful POST body only as transport acknowledgment", async () => {
+  const f = await fixture();
+  const snapshot = await new FixtureProvider(f.db).read(target);
+  const loader = Module as unknown as {_load: (id: string, ...args: any[]) => any};
+  const original = loader._load;
+  let posts = 0, labelReads = 0, exactReads = 0;
+  loader._load = function(id, ...args) {
+    if (id === "@/lib/integrations/protractor") return {
+      resolveProtractorConfig: async () => ({configured: true, shopId: target.shopId, connectionId: target.connection}),
+      fetchWorkOrderById: async (shop: number, guid: string, options: any) => {
+        assert.equal(shop, target.shopId); assert.equal(guid, target.guid);
+        assert.equal(options.maxRetries, 0); exactReads++;
+        return {ok: true, workOrder: snapshot.body};
+      },
+      protractorFetch: async (path: string, _config: any, init: any, _attempt: any, _shop: any, options: any) => {
+        assert.equal(path, `/WorkOrder/${target.guid}/Inspection`);
+        assert.equal(init.method, "POST"); assert.equal(options.maxRetries, 0); posts++;
+        return {ok: true, data: undefined};
+      },
+    };
+    return original.call(this, id, ...args);
+  };
+  try {
+    const {ProtractorDurableProvider} = require("../lib/auto-dvi/durable/protractor-provider");
+    const unverified = new ProtractorDurableProvider();
+    await assert.rejects(unverified.write(target, "findings", {}, "0"), /PROVIDER_CAPABILITY_UNVERIFIED/);
+    assert.equal(posts, 0);
+    const provider = new ProtractorDurableProvider({
+      connectionVersion: target.connectionVersion,
+      read: () => snapshot,
+      resultLabels: async () => {labelReads++; return snapshot.resultLabels;},
+      exclusiveWrite: async (_target: any, _revision: any, send: any) => send(),
+    });
+    const read = await provider.read(target);
+    assert.equal(labelReads, 1); assert.equal(exactReads, 1);
+    const plan = composePlan(parseRequest(body).request, read, []);
+    assert.equal(await provider.write(target, "findings", plan.payloads.findings, "0"), true);
+    assert.equal(posts, 1);
+    // A transport acknowledgment with an unchanged exact-ID read is not success.
+    assert.equal(classify(plan, "findings", await provider.read(target)), "baseline");
+    assert.equal(posts, 1); assert.equal(exactReads, 2);
+  } finally { loader._load = original; }
+});
+test("old frozen composer/comparator versions cannot be resumed under new semantics", async () => {
+  const f = await fixture();
+  const snapshot = await new FixtureProvider(f.db).read(target);
+  const request = parseRequest(body).request;
+  const op = newOperation(scope, body.clientRequestId, request, composePlan(request, snapshot, []));
+  op.comparatorVersion = 1;
+  await assert.rejects(f.service.validateExisting(scope, op), /PLAN_VERSION_OR_INTEGRITY/);
+  assert.deepEqual(await calls(f.db), []);
+});
+test("full push with numeric package readback sends findings and finalizes one receipt", async () => {
+  const f = await fixture();
+  await mode(f.db, "numeric-readback");
+  const service = new DurablePushService({
+    repository: f.repo, provider: new FixtureProvider(f.db), admissions: true,
+    price: async () => [{title: "Priced", hours: 1.25, rate: 80.10}],
+  });
+  const result = await service.push(scope, body);
+  assert.equal(result.status, 200);
+  const op = await storedOp(f.db);
+  assert.equal(op.state, "complete");
+  assert.equal(op.stages.packages.state, "verified");
+  assert.equal(op.stages.findings.state, "verified");
+  assert.deepEqual(await calls(f.db), ["packages", "findings"]);
+  assert.equal(await f.db.collection("auto_dvi_applications").countDocuments(), 1);
+  assert.equal(await f.db.collection(DURABLE_COLLECTION).countDocuments({_id: /^receipt:/} as any), 1);
+  assert.deepEqual(await service.push(scope, body), result);
+  assert.deepEqual(await calls(f.db), ["packages", "findings"]);
 });
 test("network egress outside the isolated replica set is denied", async () => {
   await assert.rejects(fetch("https://example.invalid"), /Network egress denied/);

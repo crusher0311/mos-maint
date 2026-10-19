@@ -9,6 +9,8 @@ import type { Provider } from "./service";
 export interface VerifiedProtractorCapabilities {
   connectionVersion: string;
   read(raw: unknown, target: Target): Snapshot;
+  /** Independent setup enumeration/evidence, not labels echoed by an upsert. */
+  resultLabels(target: Target): Promise<NonNullable<Snapshot["resultLabels"]>>;
   exclusiveWrite<T>(target: Target, revision: string, sendOnce: () => Promise<T>): Promise<T>;
 }
 export class ProtractorDurableProvider implements Provider {
@@ -30,7 +32,8 @@ export class ProtractorDurableProvider implements Provider {
       throw new DurableError("PROVIDER_CAPABILITY_UNVERIFIED", 503);
     const response = await fetchWorkOrderById(target.shopId, target.guid, {priority: true, maxRetries: 0, timeoutMs: 15_000});
     if (!response.ok) throw new DurableError("READ_UNAVAILABLE", 503);
-    return this.capabilities.read(response.workOrder, target);
+    const snapshot = this.capabilities.read(response.workOrder, target);
+    return {...snapshot, resultLabels: await this.capabilities.resultLabels(target)};
   }
   async write(target: Target, stage: Stage, payload: Record<string, any>, expectedRevision: string): Promise<boolean> {
     if (!this.capabilities || this.capabilities.connectionVersion !== target.connectionVersion)

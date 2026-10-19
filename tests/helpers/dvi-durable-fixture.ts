@@ -26,7 +26,20 @@ export class FixtureProvider implements Provider {
   async read(t: Target): Promise<Snapshot> {
     const row = (await this.db.collection("fixture_provider").findOne({_id: "wo"} as any))!;
     if (row.mode === "read-fails") throw Error("fixture read failed");
+    if (row.mode === "numeric-readback") {
+      // Independent provider simulation, not the application's comparator.
+      for (const pkg of row.body.ServicePackages.ItemCollection) {
+        for (const line of pkg.ServicePackageLines?.ItemCollection || []) {
+          if (line.Type !== "Labor") continue;
+          for (const field of ["Quantity", "Price", "Total"]) {
+            if (typeof line[field] === "string") line[field] = Number(line[field]);
+          }
+        }
+      }
+    }
     return {target: row.target, open: row.open, complete: row.complete, fresh: true,
+      resultLabels: {target: row.target, source: "shop_configuration", evidence: "isolated fixture setup",
+        green: "OK", yellow: "Requires Future Attention", red: "Required"},
       revision: String(row.revision), body: row.body};
   }
   async write(t: Target, stage: Stage, payload: Record<string, any>, revision: string) {
@@ -37,7 +50,7 @@ export class FixtureProvider implements Provider {
       await coll.updateOne({_id: "wo"} as any, {$inc: {revision: 1}});
     }
     const next = structuredClone(row.body);
-    if (stage === "packages") Object.assign(next, payload);
+    if (stage === "packages") next.ServicePackages.ItemCollection.push(...payload.ServicePackages.ItemCollection);
     else next.ServicePackages.ItemCollection.push(...payload.ItemCollection);
     const result = await coll.updateOne({_id: "wo", revision: Number(revision)} as any,
       {$set: {body: next}, $inc: {revision: 1}, $push: {writes: stage}} as any);

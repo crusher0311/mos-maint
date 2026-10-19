@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 
-export const VERSION = 1;
+export const VERSION = 2;
 export const stages = ["packages", "findings"] as const;
 export type Stage = typeof stages[number];
 export type StageState = "prepared" | "admitted" | "acknowledged" | "verified" | "uncertain" | "conflict" | "not_requested";
@@ -51,11 +51,16 @@ export interface Target { shopId: number; connection: string; connectionVersion:
 export interface Snapshot {
   target: Target; open: boolean; fresh: boolean; complete: boolean;
   revision: string; body: Record<string, any>;
+  /** Independently read setup, never inferred from inspection POST/readback. */
+  resultLabels?: {
+    target: Target; source: "shop_configuration"; evidence: string;
+    green: string; yellow: string; red: string;
+  };
 }
 export interface Plan {
   version: number; target: Target; baseline: Snapshot;
   payloads: Record<Stage, Record<string, any> | null>;
-  /** Full replacement projections, including unrelated packages. */
+  /** Expected readback, including untouched packages; NOT a write payload. */
   desired: Record<Stage, Record<string, any>>;
   itemKeys: string[]; lineCount: number; recommendedCount: number;
 }
@@ -103,7 +108,7 @@ export function newOperation(scope: Scope, key: string, request: Request, plan: 
   };
 }
 
-/** Strict v1: no undocumented normalization or assumed deletion semantics. */
+/** No missing-collection defaults or assumed deletion semantics. */
 export function validSnapshot(s: Snapshot, target: Target): boolean {
   if (!s || !s.fresh || !s.complete || !s.open || !s.revision || canonical(s.target) !== canonical(target)) return false;
   const packages = s.body?.ServicePackages?.ItemCollection;
@@ -112,14 +117,46 @@ export function validSnapshot(s: Snapshot, target: Target): boolean {
   for (const pkg of packages) {
     if (!pkg || typeof pkg.ID !== "string" || ids.has(pkg.ID)) return false;
     ids.add(pkg.ID);
+    if (pkg.Chapter !== "Inspection" && pkg.Chapter !== "Service") return false;
     const lines = pkg.Chapter === "Inspection" ? pkg.ServicePackageInspectionLines : pkg.ServicePackageLines;
     if (!Array.isArray(lines?.ItemCollection)) return false;
     for (const line of lines.ItemCollection) {
       if (!line || typeof line.ID !== "string" || ids.has(line.ID)) return false;
       ids.add(line.ID);
     }
+    // A second nested collection must not escape identity/completeness checks.
+    const other = pkg.Chapter === "Inspection" ? pkg.ServicePackageLines : pkg.ServicePackageInspectionLines;
+    if (other !== undefined) {
+      if (!Array.isArray(other?.ItemCollection)) return false;
+      for (const line of other.ItemCollection) {
+        if (!line || typeof line.ID !== "string" || ids.has(line.ID)) return false;
+        ids.add(line.ID);
+      }
+    }
   }
   return true;
+}
+/** Pilot-confirmed decimal representation only. No rounding, coercion of
+ * identifiers/results, collection sorting, null defaults or deletion filtering. */
+export function comparisonBody(body: Record<string, any>): Record<string, any> {
+  const copy = structuredClone(body);
+  for (const pkg of copy.ServicePackages.ItemCollection) {
+    for (const line of pkg.ServicePackageLines?.ItemCollection || []) {
+      if (line.Type !== "Labor") continue;
+      for (const field of ["Quantity", "Price", "Total"]) {
+        const value = line[field];
+        if (typeof value !== "string" || !/^-?(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value)) continue;
+        // Reject precision-losing conversions instead of silently equating edits.
+        const number = Number(value);
+        const strip = (s: string) => s.includes(".") ? s.replace(/0+$/, "").replace(/\.$/, "") : s;
+        if (Number.isFinite(number) && strip(value) === String(number)) line[field] = number;
+      }
+    }
+  }
+  return copy;
+}
+export function comparisonBytes(plan: Plan, body: Record<string, any>): string {
+  return canonical(plan.version >= 2 ? comparisonBody(body) : body);
 }
 export function classify(plan: Plan, stage: Stage, observed: Snapshot): Classification {
   // Duplicate identities are positive conflict evidence, not absence. Missing
@@ -138,10 +175,11 @@ export function classify(plan: Plan, stage: Stage, observed: Snapshot): Classifi
     }
   }
   if (!validSnapshot(observed, plan.target)) return "unknown";
-  const bytes = canonical(observed.body);
-  if (bytes === canonical(plan.desired[stage]) ||
-      (stage === "packages" && bytes === canonical(plan.desired.findings))) return "desired";
+  const compare = (body: Record<string, any>) => comparisonBytes(plan, body);
+  const bytes = compare(observed.body);
+  if (bytes === compare(plan.desired[stage]) ||
+      (stage === "packages" && bytes === compare(plan.desired.findings))) return "desired";
   const baseline = stage === "packages" ? plan.baseline.body : plan.desired.packages;
-  if (bytes === canonical(baseline) || bytes === canonical(plan.baseline.body)) return "baseline";
+  if (bytes === compare(baseline) || bytes === compare(plan.baseline.body)) return "baseline";
   return "partial_or_edited";
 }
