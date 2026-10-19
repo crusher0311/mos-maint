@@ -7,6 +7,7 @@
     "npm": ">=10.0.0 <11.0.0"
   },
   "scripts": {
+    "test:auto-dvi-durable": "PROTRACTOR_OFFLINE_ALLOW_LOOPBACK=true NODE_OPTIONS='--require ./tests/helpers/deny-network-egress.cjs' node --import tsx --test tests/auto-dvi-durable.test.ts",
     "test:sticker-dynamic": "PROTRACTOR_OFFLINE_ALLOW_LOOPBACK=true NODE_OPTIONS='--require ./tests/helpers/deny-network-egress.cjs' tsx --test tests/sticker-dynamic-qr.test.ts && PROTRACTOR_OFFLINE_ALLOW_LOOPBACK=true NODE_OPTIONS='--require ./tests/helpers/deny-network-egress.cjs' tsx tests/sticker-dynamic-routes.smoke.ts && npm run test:extension-sticker-hovercode",
     "test:extension-sticker-hovercode": "PROTRACTOR_OFFLINE_ALLOW_LOOPBACK=true NODE_OPTIONS='--require ./tests/helpers/deny-network-egress.cjs' tsx tests/extension-sticker-hovercode.smoke.ts",
     "test:enterprise-vehicle-history": "NODE_OPTIONS='--require ./tests/helpers/deny-network-egress.cjs --require ./scripts/_stubs/server-only-stub.cjs' node --import tsx tests/enterprise-vehicle-history.smoke.ts && node components/vehicle-history-ui.regression.cjs",

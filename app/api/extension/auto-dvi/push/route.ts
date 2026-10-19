@@ -27,6 +27,7 @@ import { pushInspectionPackageToProtractor } from "@/lib/auto-dvi/protractor-pus
 import { publicDviPushOutcome } from "@/lib/auto-dvi/push-outcome";
 import { runWithProtractorInteractiveTransport } from "@/lib/integrations/protractor/interactive-context";
 import { trackPushToRO } from "@/lib/extension-analytics";
+import { tryDurablePush } from "@/lib/auto-dvi/durable/runtime";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -110,6 +111,10 @@ async function _POST(req: NextRequest) {
     });
     if (!guard.ok) return guard.response;
 
+    if (guard.provider === "protractor") {
+      const durable = await tryDurablePush({shopId: guard.mosShopId, actor: guard.user?.email || ""}, body, "extension");
+      if (durable) return NextResponse.json(durable.body, {status: durable.status, headers: corsHeaders});
+    }
     const vinUpper = body.vin ? String(body.vin).toUpperCase() : null;
     // Server-enforced inspection phrasing: never trust client titles for
     // the history-anchor safety property.

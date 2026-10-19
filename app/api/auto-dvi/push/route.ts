@@ -16,6 +16,7 @@ import { publicDviPushOutcome } from "@/lib/auto-dvi/push-outcome";
 import { runWithProtractorInteractiveTransport } from "@/lib/integrations/protractor/interactive-context";
 import { buildRecommendedWorkPackages } from "@/lib/auto-dvi/recommended-work";
 import { trackPushToRO } from "@/lib/extension-analytics";
+import { tryDurablePush } from "@/lib/auto-dvi/durable/runtime";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -64,6 +65,11 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
+  const isProtractor = await isProtractorShop(shopId);
+  if (isProtractor) {
+    const durable = await tryDurablePush({shopId, actor: session.email}, body, "dashboard");
+    if (durable) return NextResponse.json(durable.body, {status: durable.status});
+  }
   const items = Array.isArray(body.items) ? body.items.filter((i) => i?.name && String(i.name).trim()) : [];
   if (items.length === 0) {
     return NextResponse.json({ error: "At least one inspection item is required" }, { status: 400 });
@@ -72,7 +78,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Too many items (max ${MAX_LINES})` }, { status: 400 });
   }
 
-  const isProtractor = await isProtractorShop(shopId);
   if (!isProtractor) {
     return NextResponse.json(
       { error: "Writing the inspection to a Tekmetric RO requires the MOS extension (open the RO in Tekmetric and use the side panel)." },
