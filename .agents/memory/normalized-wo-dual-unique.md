@@ -17,6 +17,19 @@ retries from cross-number collisions. Do not remove constraints or auto-merge
 identities to make ingestion proceed; existing mixed parents need a separately
 approved repair with dependent-record ownership checked.
 
+A conflict retry must not report success under a different canonical parent ID
+than the caller will use for children.
+
+**Why:** Redirecting a losing insert to a number-matched parent while returning
+the incoming ID can leave subsequent jobs, lines and payments attached to the
+wrong or nonexistent parent. A Protractor collision can also involve unrelated
+provider IDs, rather than a same-record race.
+
+**How to apply:** Preserve safe same-record retries, but fail ambiguous ownership
+explicitly. Re-resolve the owner before retrying children. Preview destination
+number ownership as well as child ownership before splitting mixed history;
+the intended destination may already belong to a third provider record.
+
 `normalized_work_orders` has TWO unique constraints: the primary key `id`, and
 `nwo_shop_id_wo_num_idx (shop_id, work_order_number)`. The dual-writer's create
 statement is `insert ... on conflict ("id") do update` — it only reconciles

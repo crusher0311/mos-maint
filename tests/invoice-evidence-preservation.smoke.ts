@@ -9,7 +9,7 @@ const sourceIds = [{system:"protractor",idType:"invoice_id",idValue:id}];
 const previous = { _id:"stored", shopId:25, version:1, createdAt:new Date(),
   customFields:{invoiceHours:evidence}, provenance:{sourceIds,contentHash:"old"}, softDelete:{} };
 const partial = {ID:id,Type:"WorkOrder",WorkflowStage:"Invoice",InvoiceNumber:0,InvoiceTime:evidence.date};
-async function ingest(existing: any, next: any, raw: any = partial) {
+async function ingest(existing: any, next: any, raw: any = partial, expectConflict=false) {
   const writes: any[] = [];
   const db: any = {collection:()=>({findOne:async()=>existing,
     insertOne:async(d:any)=>writes.push(d),updateOne:async()=>({matchedCount:1})})};
@@ -27,12 +27,21 @@ async function ingest(existing: any, next: any, raw: any = partial) {
     upsertWorkOrder:async(d:any)=>writes.push(d),
   };
   const result = await service.ingestWorkOrder(raw);
+  if(expectConflict){
+    assert.equal(result.success,false);
+    assert.equal(result.action,"error");
+    assert.equal(writes.length,0,"Identity conflicts must stop before parent writes");
+    return null;
+  }
   assert.equal(result.success,true,result.message);
   assert.ok(writes.length);
   for (const doc of writes) assert.equal(doc.grandTotal,10);
   return writes[0];
 }
 async function main() {
+  const other={system:"protractor",idType:"invoice_id",idValue:"11111111-1111-4111-8111-111111111111"};
+  await ingest({...previous,provenance:{...previous.provenance,sourceIds:[other]}},evidence,partial,true);
+  await ingest({...previous,provenance:{...previous.provenance,sourceIds:[...sourceIds,other]}},evidence,partial,true);
   assert.deepEqual((await ingest(null,evidence)).customFields,{invoiceHours:evidence,other:"keep"});
   const updated = await ingest(previous,null);
   assert.deepEqual(updated.customFields.invoiceHours,{...evidence,sold:null,presented:null});

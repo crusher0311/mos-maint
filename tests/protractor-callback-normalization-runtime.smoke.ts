@@ -173,11 +173,12 @@ function makeRuntime(
         calls.push({ kind: `mongo.insert.${name}` });
         if (mode.failure === "mirror") throw new Error("mirror failure");
       },
-      updateOne: async (): Promise<void> => {
+      updateOne: async (): Promise<{matchedCount:number}> => {
         calls.push({ kind: `mongo.update.${name}` });
         if (mode.failure === "mirror" || mode.failure === "stamp") {
           throw new Error("mirror or stamp failure");
         }
+        return {matchedCount:1};
       },
     };
     collections.set(name, collection);
@@ -367,7 +368,7 @@ function existingWorkOrder(sourceIdValue: string): AnyDoc {
 
 async function runWorkOrder(
   mode: RuntimeMode = {},
-  id = "callback-ro-1",
+  id = "11111111-1111-4111-8111-111111111111",
 ): Promise<{ runtime: ReturnType<typeof makeRuntime>; result: any }> {
   const runtime = makeRuntime(false, mode);
   const result = await runtime.service.ingestWorkOrder({ kind: "work_order", id });
@@ -430,14 +431,14 @@ async function main(): Promise<void> {
     const callbackIdentity = {
       system: "protractor",
       idType: "work_order_id",
-      idValue: "callback-ro-1",
+      idValue: "11111111-1111-4111-8111-111111111111",
       isPrimary: true,
     };
     assert.equal(callbackPath.result.success, true);
     assert.deepEqual(callbackQuery, {
       shopId: 7,
       "provenance.sourceIds": { $elemMatch: callbackIdentity },
-      "provenance.sourceIds.idValue": "callback-ro-1",
+      "provenance.sourceIds.idValue": "11111111-1111-4111-8111-111111111111",
     }, "callback replay captures the dotted source-id predicate");
     assert.deepEqual(callbackPath.runtime.workOrderFindOneArgCounts, [1], "no Mongo hint is passed");
     assert.equal(
@@ -446,7 +447,7 @@ async function main(): Promise<void> {
       "no source-system filter",
     );
 
-    const legacyRow = existingWorkOrder("callback-ro-1");
+    const legacyRow = existingWorkOrder("11111111-1111-4111-8111-111111111111");
     const legacyPath = await runWorkOrder({
       ingestionVia: "webhook-queue-replay",
       forceUpdate: true,
@@ -515,7 +516,7 @@ async function main(): Promise<void> {
 
     const pgHit = await runWorkOrder({
       ingestionVia: "webhook-queue-replay",
-      pgWorkOrderHit: existingWorkOrder("callback-ro-1"),
+      pgWorkOrderHit: existingWorkOrder("11111111-1111-4111-8111-111111111111"),
     });
     assert.equal(pgHit.result.success, true);
     assert.equal(pgHit.runtime.workOrderQueries.length, 0, "PG hit skips Mongo fallback");

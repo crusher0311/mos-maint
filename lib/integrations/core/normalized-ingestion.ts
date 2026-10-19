@@ -6,6 +6,7 @@
  */
 
 import { MongoClient, Db, Collection, ObjectId } from 'mongodb';
+import { assertSameProtractorWorkOrder, protractorMongoIdentityFilter, ProtractorIdentityConflict } from '../../protractor-work-order-identity';
 import {
   SourceSystem,
   NormalizedVehicle,
@@ -640,6 +641,7 @@ export class NormalizedIngestionService {
           : null);
       
       if (this.adapter.sourceSystem === "protractor") {
+        if(existing)assertSameProtractorWorkOrder(existing.provenance,{sourceIds});
         mapped.customFields = preserveInvoiceIdentity(this.shopId, sourceData, existing, mapped.customFields);
       }
       const contentHash = generateContentHash(mapped);
@@ -697,8 +699,9 @@ export class NormalizedIngestionService {
           this.supabaseDualWriter!.upsertWorkOrder({ ...mapped, _id: existing._id, shopId: this.shopId, enterpriseId: this.enterpriseId, vehicleId: vehicleId || existing.vehicleId, customerId: customerId || existing.customerId, provenance: updatedProvenance, softDelete: existing.softDelete, version: existing.version + 1, createdAt: existing.createdAt, updatedAt: new Date() })
         );
         await this.shadowWriteMongo('work_order', async () => {
-          await collection.updateOne(
-            { _id: existing._id },
+          const result = await collection.updateOne(
+            { _id: existing._id, ...(this.adapter.sourceSystem==="protractor"
+              ?protractorMongoIdentityFilter(existing.provenance,{sourceIds}):{}) },
             {
               $set: {
                 ...mapped,
@@ -712,6 +715,8 @@ export class NormalizedIngestionService {
               },
             }
           );
+          if(this.adapter.sourceSystem==="protractor"&&result.matchedCount!==1)
+            throw new ProtractorIdentityConflict();
           await this._stampIngestionVia(existing._id);
         });
 
