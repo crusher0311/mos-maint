@@ -17,6 +17,7 @@ async function scenario(allFail=false,missingIndex=false,resumeIndex=0){
   const update=(doc:any,u:any)=>{
     Object.assign(doc,u.$set);
     for(const [k,v] of Object.entries(u.$inc??{}))doc[k]=(doc[k]??0)+Number(v);
+    for(const [k,v] of Object.entries(u.$max??{}))if(!doc[k]||doc[k]<(v as any))doc[k]=v;
     for(const [k,v] of Object.entries(u.$push??{}))(doc[k]??=[]).push(v);
   };
   const jobs={
@@ -86,12 +87,17 @@ async function main(){
   const mixed=await scenario();
   assert.deepEqual(mixed.attempts.slice(0,8),[1,2,3,4,5,1,2,3]);
   assert.equal(mixed.job.status,"needs-attention");
+  assert.ok(mixed.job.heldDayAdvanceAt);
+  assert.ok(mixed.job.capturedPageAt);
+  assert.ok(mixed.job.completedPageAt, "Empty, verified pages are genuine completion");
   for(const [key,cursor] of mixed.cursors){
     assert.equal(cursor.cursor,1);
     if(cursor.shopId<=3){assert.equal(cursor.unresolved,1);assert.deepEqual(Array.from(cursor.heldDays),["2026-10-16"]);}
     else assert.equal(cursor.unresolved,0,key);
   }
   const failed=await scenario(true);
+  assert.ok(failed.job.heldDayAdvanceAt);
+  assert.equal(failed.job.completedPageAt,undefined,"Held-day advancement must not report completed pages");
   assert.deepEqual(failed.attempts.slice(0,6),[1,2,3,4,5,1],"Failure streak resets after cooldown and rotates");
   assert.ok(failed.sleeps.filter(ms=>ms===15*60000).length>=2);
   const resumed=await scenario(false,false,3);

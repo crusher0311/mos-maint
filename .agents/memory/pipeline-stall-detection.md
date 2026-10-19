@@ -43,6 +43,20 @@ Better Stack alert rules on the `[OPS-ALERT]` marker.
 
 ## Operator history runners
 
+Keep dispatch permission distinct from campaign authorization when monitoring
+operator imports. A temporarily closed dispatch grant is normal between requests
+and during error cooldowns; it must not silence the campaign's stall alert.
+Callback-priority suppression must be freshly renewed and must not classify an
+error retry delay as progress.
+
+**Why:** The runner intentionally closes its request grant before sleeping, even
+while the authorized campaign and its lease remain active. Treating that closure
+as cancellation hides repeated duplicate-check failures.
+
+**How to apply:** Gate on the campaign window, ownership, operator stop and live
+leases; use verified outcomes for progress and separate bounded callback waits.
+Keep campaign stalls in the existing pipeline alert/dedup path.
+
 Treat lease renewal, cursor advancement to a held/error day, and actual imported
 or verified-present receipts as separate signals. Fixed-order retries must not
 let an early shop repeatedly trigger a fleet-wide cooldown and starve later shops.

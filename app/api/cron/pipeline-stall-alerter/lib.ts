@@ -294,6 +294,8 @@ export function summarizeQueue(
 }
 
 export type StallHit =
+  | { reason: "history_import"; campaignId: string; stalledMs: number; lastRealProgressAt: number | null;
+      signals: Record<string, number> }
   | { reason: "no_progress"; provider: ProviderKey; providerLabel: string; stalledMs: number; incompleteShops: number; lastBackfillSuccessMs: number | null }
   | { reason: "drain_wedge"; provider: "tekmetric"; providerLabel: "Tekmetric"; wedge: DrainWedge }
   | { reason: "queue_backlog"; queues: string[]; totalFailed: number; totalStalled: number };
@@ -306,7 +308,8 @@ export type StallHit =
 export function buildAlertKey(hits: StallHit[]): string {
   const tokens: string[] = [];
   for (const h of hits) {
-    if (h.reason === "no_progress") tokens.push(`progress:${h.provider}`);
+    if (h.reason === "history_import") tokens.push(`history:${h.campaignId}`);
+    else if (h.reason === "no_progress") tokens.push(`progress:${h.provider}`);
     else if (h.reason === "drain_wedge") tokens.push("wedge:tekmetric");
     else if (h.reason === "queue_backlog") tokens.push(...h.queues);
   }

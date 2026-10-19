@@ -89,6 +89,7 @@ export async function run() {
       await assertOwner(owner);
       if (Date.now() - lastWorkerCheck > 60000) { await workersSuspended(); lastWorkerCheck = Date.now(); }
       let unfinished = false, worked = false, cooldown = false;
+      let callbackWaiting = false, nonCallbackWaiting = false;
       for (const entry of weekendShopOrder<any>(job.shops, nextShopIndex)) {
         if (stopping || Date.now() >= Date.parse(WEEKEND.end) - 180000) break;
         const shopJobId = `${WEEKEND.id}:shop:${entry.shopId}`;
@@ -98,13 +99,15 @@ export async function run() {
         const cursor = await jobs.findOne({ _id: shopJobId }, { maxTimeMS: 5000 });
         if (cursor.cursor >= entry.pendingDays.length) continue;
         unfinished = true;
-        if (cursor.retryAfter > new Date()) continue;
+        if (cursor.retryAfter > new Date()) { nonCallbackWaiting = true; continue; }
         if (!callbackQuietEvidence(entry.callbackEvidence.map((d: string) => new Date(d)), new Date())) {
+          callbackWaiting = true;
           await jobs.updateOne({ _id: shopJobId }, { $set: { status: "blocked-callback-evidence" } }); continue;
         }
         const activity = await recentActivity();
-        if (activity.delayed >= 25) { log("weekend_yield", { reason: "callback_delay" }); break; }
+        if (activity.delayed >= 25) { callbackWaiting = true; nonCallbackWaiting = false; log("weekend_yield", { reason: "callback_delay" }); break; }
         if (activity.active.has(entry.shopId)) {
+          callbackWaiting = true;
           await jobs.updateOne({ _id: shopJobId }, { $set: { status: "deferred-active-shop" } }); continue;
         }
         try {
@@ -121,7 +124,8 @@ export async function run() {
           // Never open a grant before waiting: queue/activity must be fresh at dispatch.
           await sleep(Math.max(0, nextRequestAt - Date.now()));
           const fresh = await recentActivity();
-          if (fresh.active.has(entry.shopId) || fresh.delayed >= 25) continue;
+          if (fresh.active.has(entry.shopId) || fresh.delayed >= 25) { callbackWaiting = true; continue; }
+          nonCallbackWaiting = true;
           const updated = await rates.updateOne({ _id: RATE, "weekendHistory.owner": owner,
             "weekendHistory.runnerLeaseUntil": { $gt: new Date() }, "operatorStop.active": false,
             "canary.generation": job.canaryGeneration,
@@ -147,6 +151,7 @@ export async function run() {
               invoices, digest: hash(invoices), checked: invoices.length === 0, imported: invoices.length === 0,
               unresolved: 0, capturedAt: new Date() };
             await pages.insertOne(page);
+            await jobs.updateOne({ _id: WEEKEND.id, owner }, { $max: { capturedPageAt: page.capturedAt } });
           }
           assert.equal(hash(page.invoices), page.digest);
           if (!page.checked) {
@@ -168,9 +173,12 @@ export async function run() {
               page: terminal || pageLimit ? 0 : pageNumber + 1, failures: 0,
               status: "progressing", lastProgressAt: new Date() }, $inc: { unresolved } });
           consecutiveFailures = 0; worked = true;
+          if (unresolved === 0) await jobs.updateOne({ _id: WEEKEND.id, owner },
+            { $max: { completedPageAt: new Date() } });
           log("weekend_progress", { shopId: entry.shopId, day, page: pageNumber,
             invoiceCount: page.invoices.length, unresolved });
         } catch (error) {
+          nonCallbackWaiting = true;
           consecutiveFailures++;
           const failures = (cursor.failures || 0) + 1;
           await jobs.updateOne({ _id: shopJobId }, {
@@ -180,6 +188,8 @@ export async function run() {
             ...(failures >= 3 ? { $inc: { unresolved: 1 }, $push: { heldDays: entry.pendingDays[cursor.cursor] } } : {}),
           });
           log("weekend_deferred", { shopId: entry.shopId, attempts: failures, code:historyFailureCode(error) });
+          if (failures >= 3) await jobs.updateOne({ _id: WEEKEND.id, owner },
+            { $max: { heldDayAdvanceAt: new Date() } });
           if (consecutiveFailures >= 3) {
             log("weekend_yield", { reason: "repeated_errors",nextShopIndex });
             consecutiveFailures=0;cooldown=true;break;
@@ -189,6 +199,10 @@ export async function run() {
             { $set: { "weekendHistory.stopped": true } });
         }
       }
+      await jobs.updateOne({ _id: WEEKEND.id, owner }, { $set: {
+        callbackWaitUntil: callbackWaiting && !nonCallbackWaiting && !worked
+          ? new Date(Date.now() + 120000) : new Date(0),
+      } });
       // The grant has been closed by finally before waiting. Retain the fleet
       // cooldown, but resume with the next shop and a fresh failure streak.
       if(cooldown){

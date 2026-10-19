@@ -68,7 +68,9 @@ export async function ingestPage(pageId: string, owner: string) {
         const status = indexed ? "present" : "existing-needs-index-review";
         if (!indexed) unresolved++;
         await receipts.insertOne({ _id: id, campaignId: WEEKEND.id, shopId: page.shopId,
-          day: page.day, status, sourceDigest: hash(invoice) });
+          day: page.day, status, sourceDigest: hash(invoice), completedAt: new Date() });
+        if (indexed) await jobs.updateOne({ _id: WEEKEND.id, owner },
+          { $max: { verifiedPresentAt: new Date() } });
         continue;
       }
       if (Number(invoice.Total) > 0 && !expected.length) {
@@ -88,8 +90,10 @@ export async function ingestPage(pageId: string, owner: string) {
           ...result.inspections, ...result.recommendations].every(r => r.success)) {
         unresolved++; continue;
       }
-      await receipts.updateOne({ _id: id, status: "processing" },
+      const completed = await receipts.updateOne({ _id: id, status: "processing" },
         { $set: { status: "imported", completedAt: new Date() } });
+      if (completed.matchedCount === 1) await jobs.updateOne({ _id: WEEKEND.id, owner },
+        { $max: { importedInvoiceAt: new Date() } });
     } finally { clearTimeout(watchdog); }
     await sleep(250);
   }
