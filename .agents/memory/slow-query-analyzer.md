@@ -8,3 +8,13 @@ description: Durable constraints when touching Mongo/PG slow-op capture
 - Any self-observing capture pipeline needs a recursion guard (drop captures targeting its own storage table) or its flush generates captures forever.
 - Sanitizers that will face reviewer/security scrutiny need a real lexer, not regexes: PG `E'…'` backslash escapes, `''` doubling, dollar-quote tags, and nested block comments all break regex redaction; on uncertain parse, redact the remainder rather than retain it.
 - Mongo `monitorCommands` must be set at client creation, so the kill switch only removes event overhead after a process restart.
+
+Read-only operator tools must also disable persistent query telemetry before
+creating database clients.
+
+**Why:** A SELECT-only review can still write diagnostic records through normal
+application instrumentation, violating an approval boundary that permits no
+production writes.
+
+**How to apply:** Disable tracking only in the standalone review process before
+lazy client imports. Do not change the shared application configuration.
