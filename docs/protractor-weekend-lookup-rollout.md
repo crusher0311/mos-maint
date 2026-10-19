@@ -87,3 +87,14 @@ Last pre-handoff receipt baseline at 02:18:13 UTC: 7,085 imported; 32,571
 present; 2,424 existing-needs-index-review; 12 processing. The request counter
 was 2,718 of 10,000, with the original 10:00 UTC cutoff unchanged. These counts
 are not evidence of renewed progress.
+
+### Subsequent operator-approved pause before capacity maintenance
+
+At approximately 02:45 UTC on October 19, the operator requested a pause.
+The campaign was persistently marked stopped/paused and its request permit
+closed, followed by cancellation of the original Render job. Render confirmed
+terminal `canceled` status. Read-back confirmed 77 shop checkpoints retained,
+2,718 consumed requests out of the unchanged 10,000 cap, and the unchanged
+10:00 UTC expiry. No checkpoint arrays or receipts were reset, no lease was
+force-cleared, and no replacement was launched. The database plan was not
+changed. Resumption requires explicit approval and renewed prerequisite checks.
