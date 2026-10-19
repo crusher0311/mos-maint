@@ -136,3 +136,17 @@ mtime_ms = 1792420375350
 storage_uri = "gcs://replit-rams-assets-picard/rams/assets/repl:a5a4005c-4e3d-4ce9-896c-c46425944606/0fb33969-e280-46da-8273-1e68173cef60/08d21a01-612a-47a2-8701-bd2230534c47"
 storage_version_token = "1792420397284816"
 content_type = "text/markdown"
+
+[[outputs]]
+id = "L8qNztDQJdr2-8XMbyGsC"
+uri = "file://docs/reporting/invoice-preservation-release-candidates.md"
+type = "text"
+title = "Invoice-preservation release candidates"
+description = "Candidate commits, completed tests, rollout constraints, and remaining background-worker compatibility limits. Not deployed."
+logical_id = "03c2b233-a68d-468f-9a09-c77d4e6a23bc"
+content_hash = "sha256:1ff72a104725a91d6573819ffc204a197c5048dcc7bc78e1c433392680f01598"
+size = 5191
+mtime_ms = 1792421814499
+storage_uri = "gcs://replit-rams-assets-picard/rams/assets/repl:a5a4005c-4e3d-4ce9-896c-c46425944606/03c2b233-a68d-468f-9a09-c77d4e6a23bc/688b9c4a-0d90-435d-9345-551142fae395"
+storage_version_token = "1792421855486659"
+content_type = "text/markdown"
