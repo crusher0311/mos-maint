@@ -15,9 +15,7 @@ export const dynamic = "force-dynamic";
 const response = (data: unknown, status = 200) => NextResponse.json(data, {
   status, headers: { "Cache-Control": "no-store" },
 });
-async function context(id: unknown) {
-  const session = await getSession();
-  if (!session) throw new Error("Unauthorized");
+async function context(id: unknown, session: NonNullable<Awaited<ReturnType<typeof getSession>>>) {
   if (typeof id !== "string" || !ObjectId.isValid(id)) throw new Error("Invalid enterprise");
   await authorizeManager(session, id);
   return { session, id };
@@ -31,7 +29,9 @@ function failure(e: unknown) {
 }
 export async function GET(req: Request) {
   try {
-    const { session, id } = await context(new URL(req.url).searchParams.get("enterpriseId"));
+    const authenticated = await getSession();
+    if (!authenticated) return response({ error: "Unauthorized" }, 401);
+    const { session, id } = await context(new URL(req.url).searchParams.get("enterpriseId"), authenticated);
     const c = await collections(), config = await c.configs.findOne({ _id: id });
     const memberships = await historyEnterprisesForShop(Number(session.shopId));
     const membership = memberships.find(e => e.id === id);
@@ -62,11 +62,13 @@ export async function GET(req: Request) {
 }
 export async function POST(req: Request) {
   try {
+    const authenticated = await getSession();
+    if (!authenticated) return response({ error: "Unauthorized" }, 401);
     // Same-origin session writes only; no partner credential or cookie-only CSRF.
     if (req.headers.get("origin") !== new URL(req.url).origin) return response({ error: "Permission denied" }, 403);
     const text = await req.text();
     if (Buffer.byteLength(text) > 8192) return response({ error: "Request too large" }, 413);
-    const input = JSON.parse(text), { session, id } = await context(input.enterpriseId);
+    const input = JSON.parse(text), { session, id } = await context(input.enterpriseId, authenticated);
     const c = await collections(), previous = await c.configs.findOne({ _id: id });
     if ((previous?.revision ?? null) !== input.revision) return response({ error: "Configuration changed; reload first" }, 409);
     if (input.action === "configure") {

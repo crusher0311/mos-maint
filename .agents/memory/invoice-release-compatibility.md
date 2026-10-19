@@ -28,3 +28,12 @@ future code selection but does not replace the already-deployed worker image.
 **How to apply:** Preserve approved suspension and branch isolation. Before
 repair or a scheduled resume, verify the actual deployed worker revision, not
 just the configured branch or GitHub head.
+
+Do not use membership in the web service's shared environment group as the
+complete writer inventory.
+
+**Why:** The backfill-drain service was absent from that membership list despite
+being an independently deployed writer requiring the same compatibility checks.
+
+**How to apply:** Reconcile environment-group discovery with the known service
+inventory and explicitly check omitted writers, including suspended services.
