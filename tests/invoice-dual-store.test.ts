@@ -6,8 +6,10 @@ import {writeFileSync,readFileSync} from "node:fs";
 import {LocalDualMetadataStore,DUAL_SCHEMA,dualIdentity} from "../scripts/invoice-metadata-dual-store";
 import {evidenceDigest as digest,prepareInvoiceMetadataProposal} from "../scripts/invoice-metadata-repair-plan";
 import {type CurrentCase,type FinalPlan,type Approval,type Readiness} from "../scripts/invoice-metadata-executor";
+import {initializeReplica,replicaPorts,losePrimaryAtShadow,restartMember} from "./helpers/invoice-replica";
 const socket=process.env.INVOICE_DUAL_SOCKET!,port=Number(process.env.INVOICE_DUAL_PORT),marker=process.env.INVOICE_DUAL_MARKER!;
-let store=new LocalDualMetadataStore(socket,port,marker);
+const open=()=>new LocalDualMetadataStore(socket,port,marker,replicaPorts);
+let store=open();
 function fixture(explicitNull=false,n=1){
   const shop=9000+n,key=`fixture-row-${n}`,id=`00000000-0000-4000-8000-${String(n).padStart(12,"0")}`;
   const raw={ID:id,Type:"Invoice",WorkflowStage:"Invoice",InvoiceNumber:1,
@@ -47,9 +49,13 @@ async function main(){
   assert.equal(process.env.SUPABASE_PROD_DATABASE_URL,undefined);
   assert.equal(process.env.MONGODB_PASSWORD,undefined);
   assert.throws(()=>net.connect({host:"127.0.0.1",port:1}),/denied/);
+  assert.throws(()=>net.connect({host:"127.0.0.2",port}),/denied/);
+  assert.throws(()=>net.connect({host:"example.com",port}),/denied/);
+  assert.throws(()=>net.connect({path:"/tmp/unapproved.sock"}),/denied/);
   await assert.rejects(fetch("https://example.com"),/denied/);
+  await initializeReplica();
   await store.mongo.connect();
-  await store.db.collection("marker").insertOne({_id:marker as any});
+  await store.db.collection("marker").insertOne({_id:marker as any},{writeConcern:{w:"majority"}});
   await store.sql.unsafe(DUAL_SCHEMA);
   for(const explicitNull of [false,true]){
     let plan=await seed(explicitNull);
@@ -70,7 +76,7 @@ async function main(){
     await assert.rejects(store.execute(plan,approval),/Injected/);
     if(fault!=="finished")await assert.rejects(store.guarded(async()=>true),/blocked/);
     // New clients: recovery uses persisted receipts, never in-memory flags.
-    await store.close();store=new LocalDualMetadataStore(socket,port,marker);
+    await store.close();store=open();
     await store.execute(plan,approval);
     const outcome:any=await store.inspect(plan,0);
     assert.equal(outcome.fenced,false);
@@ -81,7 +87,7 @@ async function main(){
     await store.execute(plan,approve(plan));
     store.fault=fault;
     await assert.rejects(store.execute(plan,approve(plan,"rollback")),/Injected/);
-    await store.close();store=new LocalDualMetadataStore(socket,port,marker);
+    await store.close();store=open();
     await store.execute(plan,approve(plan,"rollback"));
     const result:any=await store.inspect(plan,0);
     assert.equal(result.current.shadow[0].row.custom_fields.invoiceHours,null);
@@ -130,7 +136,69 @@ async function main(){
   await store.execute(plan,approve(plan));
   assert.equal(Number((await store.sql`SELECT count(*) n FROM dual_journal WHERE phase='completed'`)[0].n),100);
   assert.equal((await store.inspect(plan,99) as any).current.shadow[0].revision,11);
-  console.log("PASS real PostgreSQL + MongoDB: CAS, absent/null rollback, durable receipts, lost responses, restart, fence, expiry, drift, holds, aliases, concurrency; no production access");
+  await replicaRecovery();
+  console.log("PASS real PostgreSQL + three-member Mongo replica: CAS, receipts, SIGKILL/election, fence, expiry, drift, rollback, no partial report; no production access");
+}
+async function replicaRecovery(){
+  for(const action of ["apply","rollback"] as const){
+    for(const mode of ["before-cas","after-majority"] as const){
+      const plan=await seed(true,3);
+      if(action==="rollback")await store.execute(plan,approve(plan));
+      const approval=approve(plan,action);
+      const killed=await losePrimaryAtShadow(store,mode,()=>store.execute(plan,approval));
+      await store.close();store=open();
+      const state:any=await store.inspect(plan,1);
+      assert.equal((await store.inspect(plan,0) as any).journal.find((j:any)=>j.id.endsWith(`:${action}`)).phase,"completed");
+      assert.equal((await store.inspect(plan,2) as any).journal.filter((j:any)=>j.id.endsWith(`:${action}`)).length,0);
+      assert.equal(state.fenced,true);
+      assert.equal(state.journal.find((j:any)=>j.id.endsWith(`:${action}`)).phase,"canonical");
+      assert.equal(state.current.canonical[0].revision,action==="apply"?11:12);
+      assert.equal(state.current.shadow[0].revision,
+        (action==="apply"?10:11)+(mode==="after-majority"?1:0));
+      let emitted=false;
+      await assert.rejects(store.guarded(async()=>{emitted=true;return "partial report";}),/blocked/);
+      assert.equal(emitted,false);
+      const before=digest(state);
+      await assert.rejects(store.execute(plan,{...approval,expiresAt:0}),/expired/);
+      assert.equal(digest(await store.inspect(plan,1)),before,"Expiry permits inspection, not replay");
+      const shadowId="shadow-2" as any;
+      const doc=await store.db.collection("owners").findOne({_id:shadowId});
+      if(mode==="after-majority"){
+        assert.ok(doc?.receipt);
+        // Matching values do not prove ownership: both receipt fields are bound.
+        for(const field of ["id","binding","missing"]){
+          await store.db.collection("owners").updateOne({_id:shadowId},
+            field==="missing"?{$unset:{receipt:""}}:{$set:{[`receipt.${field}`]:"wrong"}},
+            {writeConcern:{w:"majority"}});
+          await assert.rejects(store.execute(plan,approval),/changed/);
+          assert.equal((await store.inspect(plan,0) as any).fenced,true);
+          await store.db.collection("owners").updateOne({_id:shadowId},
+            {$set:{receipt:doc!.receipt}},{writeConcern:{w:"majority"}});
+        }
+      }else if(action==="apply")assert.equal(doc?.receipt,undefined);
+      if(action==="rollback"){
+        await store.db.collection("owners").updateOne({_id:shadowId},
+          {$set:{"owner.row.grand_total":"999.00"}},{writeConcern:{w:"majority"}});
+        await assert.rejects(store.execute(plan,approval),/changed/);
+        assert.equal((await store.inspect(plan,1) as any).current.shadow[0].row.grand_total,"999.00");
+        await assert.rejects(store.guarded(async()=>true),/blocked/);
+        // Test-only restoration, not an offered recovery operation.
+        await store.db.collection("owners").replaceOne({_id:shadowId},doc!,{writeConcern:{w:"majority"}});
+      }
+      await store.execute(plan,approval);
+      await store.execute(plan,approval);
+      assert.equal((await store.inspect(plan,0) as any).fenced,false);
+      for(let i=0;i<3;i++){
+        const result:any=await store.inspect(plan,i);
+        assert.equal(result.current.shadow[0].revision,action==="apply"?11:12);
+        assert.equal(result.current.canonical[0].revision,action==="apply"?11:12);
+      }
+      await store.guarded(async()=>{emitted=true;});
+      assert.equal(emitted,true);
+      await restartMember(killed);
+      console.log(`PASS replica ${action} ${mode}: elected survivor, fenced inspection, exact recovery`);
+    }
+  }
 }
 if(process.argv.includes("--crash")){
   const {plan,approval}=JSON.parse(readFileSync(`${socket}/crash.json`,"utf8"));

@@ -32,13 +32,16 @@ export class LocalDualMetadataStore {
   /** Failure injection is local-only; durable state is retained across reopen. */
   fault: "canonical" | "shadow" | "finished" | null = null;
   faultIndex = 0;
-  constructor(socket:string,mongoPort:number,readonly marker:string) {
+  constructor(socket:string,mongoPort:number,readonly marker:string,replicaPorts?:number[]) {
     assert.match(socket,/^\/tmp\/invoice-dual\.[A-Za-z0-9]+$/);
     assert.ok(Number.isInteger(mongoPort)&&mongoPort>1024&&mongoPort<65536);
     assert.match(marker,/^[a-f0-9]{32}$/);
     this.sql=postgres({host:socket,port:5432,database:"postgres",username:userInfo().username,
       max:2,connect_timeout:3,idle_timeout:2,onnotice:()=>{}});
-    this.mongo=new MongoClient(`mongodb://127.0.0.1:${mongoPort}/?directConnection=true`,
+    if(replicaPorts)assert.ok(replicaPorts.length===3&&replicaPorts.every(p=>Number.isInteger(p)&&p>1024&&p<65536));
+    this.mongo=new MongoClient(replicaPorts
+      ? `mongodb://${replicaPorts.map(p=>`127.0.0.1:${p}`).join(",")}/?replicaSet=invoice_disposable&retryWrites=false`
+      : `mongodb://127.0.0.1:${mongoPort}/?directConnection=true`,
       {serverSelectionTimeoutMS:3000,socketTimeoutMS:4000,maxPoolSize:2});
     this.db=this.mongo.db("invoice_dual_disposable");
   }
