@@ -151,3 +151,4 @@
 - [Durable DVI enrollment](dvi-durable-enrollment.md) — rollback disables admissions, never durable routing; legacy fallback would bypass unresolved target ownership.
 - [Chromium lost-response fixtures](chromium-lost-response-fixtures.md) — drop responses after headers to avoid transparent connection retries obscuring application behavior.
 - [Worker IPC evidence](worker-ipc-evidence.md) — drain sends before explicit exit and collect evidence through channel closure; synchronous fakes miss termination races.
+- [Held index repair boundary](held-index-repair-boundary.md) — separate evidence-bound approval and confirmed writer quiescence are required across Mongo/PostgreSQL.
