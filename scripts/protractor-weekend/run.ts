@@ -6,6 +6,9 @@ import { historyEndpoint, type ShopHistoryRequest } from "../../lib/protractor-s
 import { runWithShopHistory } from "../../lib/integrations/protractor/shop-history-context";
 import { protractorFetch } from "../../lib/integrations/protractor/client";
 import { pilotInvoiceIds } from "../../lib/protractor-afton-pilot-report";
+import {weekendShopOrder,weekendNextShopIndex} from "../../lib/protractor-weekend-scheduling";
+import {historyFailureCode,requireHistoryIdentityIndex} from "../../lib/protractor-history-existing-invoice";
+import {getClient} from "../../lib/db/drizzle";
 import {
   assertOwner, binding, collections, fleet, hash, log, RATE, recentActivity, runtime, sleep, workersSuspended,
 } from "./shared";
@@ -33,6 +36,7 @@ async function child(pageId: string, owner: string): Promise<number> {
 }
 export async function run() {
   runtime(); await workersSuspended();
+  await requireHistoryIdentityIndex(getClient());
   const { jobs, rates, pages, days } = await collections();
   const job = await jobs.findOne({ _id: WEEKEND.id, stopped: false }, { maxTimeMS: 5000 });
   assert.ok(job && ["prepared", "running", "paused"].includes(job.status), "Prepare campaign first");
@@ -79,12 +83,13 @@ export async function run() {
       } catch { stopping = true; } finally { heartbeatBusy = false; }
     }, 30000);
     let lastWorkerCheck = 0, nextRequestAt = 0, consecutiveFailures = 0;
+    let nextShopIndex = Number.isSafeInteger(job.nextShopIndex) ? job.nextShopIndex : 0;
     log("weekend_running", { shops: job.shops.length, cutoff: WEEKEND.end });
     while (!stopping && Date.now() < Date.parse(WEEKEND.end) - 180000) {
       await assertOwner(owner);
       if (Date.now() - lastWorkerCheck > 60000) { await workersSuspended(); lastWorkerCheck = Date.now(); }
-      let unfinished = false, worked = false;
-      for (const entry of job.shops) {
+      let unfinished = false, worked = false, cooldown = false;
+      for (const entry of weekendShopOrder<any>(job.shops, nextShopIndex)) {
         if (stopping || Date.now() >= Date.parse(WEEKEND.end) - 180000) break;
         const shopJobId = `${WEEKEND.id}:shop:${entry.shopId}`;
         await jobs.updateOne({ _id: shopJobId }, { $setOnInsert: {
@@ -103,6 +108,12 @@ export async function run() {
           await jobs.updateOne({ _id: shopJobId }, { $set: { status: "deferred-active-shop" } }); continue;
         }
         try {
+          // Persist fairness before attempting work. Restart resumes AFTER this
+          // shop, but its exact day/page/held receipts remain unchanged.
+          nextShopIndex=weekendNextShopIndex(job.shops.indexOf(entry),job.shops.length);
+          const rotated=await jobs.updateOne({_id:WEEKEND.id,owner,stopped:false},
+            {$set:{nextShopIndex}});
+          assert.equal(rotated.matchedCount,1,"Campaign ownership lost");
           const current = await binding(entry.shopId);
           assert.equal(current.digest, entry.bindingDigest);
           const day = entry.pendingDays[cursor.cursor], pageNumber = cursor.page;
@@ -159,7 +170,7 @@ export async function run() {
           consecutiveFailures = 0; worked = true;
           log("weekend_progress", { shopId: entry.shopId, day, page: pageNumber,
             invoiceCount: page.invoices.length, unresolved });
-        } catch {
+        } catch (error) {
           consecutiveFailures++;
           const failures = (cursor.failures || 0) + 1;
           await jobs.updateOne({ _id: shopJobId }, {
@@ -168,12 +179,21 @@ export async function run() {
               ...(failures >= 3 ? { cursor: cursor.cursor + 1, page: 0 } : {}) },
             ...(failures >= 3 ? { $inc: { unresolved: 1 }, $push: { heldDays: entry.pendingDays[cursor.cursor] } } : {}),
           });
-          log("weekend_deferred", { shopId: entry.shopId, attempts: failures });
-          if (consecutiveFailures >= 3) { log("weekend_yield", { reason: "repeated_errors" }); await sleep(15 * 60000); break; }
+          log("weekend_deferred", { shopId: entry.shopId, attempts: failures, code:historyFailureCode(error) });
+          if (consecutiveFailures >= 3) {
+            log("weekend_yield", { reason: "repeated_errors",nextShopIndex });
+            consecutiveFailures=0;cooldown=true;break;
+          }
         } finally {
           await rates.updateOne({ _id: RATE, "weekendHistory.owner": owner },
             { $set: { "weekendHistory.stopped": true } });
         }
+      }
+      // The grant has been closed by finally before waiting. Retain the fleet
+      // cooldown, but resume with the next shop and a fresh failure streak.
+      if(cooldown){
+        await sleep(Math.max(0,Math.min(15*60000,Date.parse(WEEKEND.end)-Date.now()-180000)));
+        continue;
       }
       if (!unfinished) {
         const progress = await jobs.find({ _id: { $in: job.shops.map((s: any) => `${WEEKEND.id}:shop:${s.shopId}`) } },

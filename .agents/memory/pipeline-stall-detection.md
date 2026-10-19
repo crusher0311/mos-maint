@@ -59,3 +59,16 @@ Tenant-bounded JSON identity scans are still scans: a materialized per-shop
 slice can exceed the deadline repeatedly when an absent invoice requires
 checking every row. Verify an identity-indexed plan rather than merely raising
 the timeout or bypassing duplicate protection.
+
+An identity GIN index alone does not ensure the planner uses it under LIMIT 1.
+
+**Why:** The local large-tenant fixture still chose a scan after adding the
+index. Materializing only the identity-matching candidates, rather than the
+entire tenant slice, produced indexed plans for both existing and missing IDs
+without forcing planner settings.
+
+**How to apply:** Test hit and miss plans with realistic tenant sizes. Preserve
+case-insensitive values and every Protractor source-ID type; legacy IDs are not
+limited to the current primary invoice/work-order types. Treat the helper's
+meaning as versioned: altering an immutable index function requires an index
+rebuild, not just CREATE OR REPLACE FUNCTION.

@@ -846,6 +846,12 @@ async function main() {
   }
 
   console.log("Creating indexes...");
+  // Function body contains semicolons; split only at the explicit migration boundary.
+  // Each statement is standalone so CONCURRENTLY is outside a transaction.
+  for (const statement of readFileSync(path.join(process.cwd(), "drizzle",
+    "0040_protractor_history_identity.sql"), "utf8").split("--> statement-breakpoint")) {
+    if (statement.trim()) await sql.unsafe(statement);
+  }
   for (const stmt of indexStatements) {
     await sql.unsafe(stmt);
   }

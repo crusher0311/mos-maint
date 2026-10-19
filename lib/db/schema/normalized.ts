@@ -461,6 +461,9 @@ export const normalizedWorkOrders = pgTable("normalized_work_orders", {
   // Task #552 — GIN index supporting the W3a PG-canonical change-detection
   // `provenance->'sourceIds' @> [...]` containment lookup (shopId-scoped).
   provenanceSourceIdsIdx: index("nwo_provenance_source_ids_idx").using("gin", sql`(provenance -> 'sourceIds') jsonb_path_ops`),
+  // Function is installed by migration 0040 before index creation.
+  protractorIdentityKeysIdx: index("nwo_protractor_identity_keys_v1_idx")
+    .using("gin", sql`public.protractor_identity_keys_v1(provenance)`),
 }));
 
 export const normalizedServiceJobs = pgTable("normalized_service_jobs", {
