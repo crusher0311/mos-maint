@@ -226,6 +226,14 @@ valid chronology fail despite correctly timestamped raw data in storage.
 Preserve unique-key/race protections when fixing number collisions; preview
 dependent job, line and payment ownership before repairing existing parents.
 
+Owner-split previews need an all-date financial control as well as the user's
+requested date window. **Why:** A reviewed cohort's verified invoices were all
+outside the requested period; the period report alone could pass without
+checking any reconstructed hours. **How to apply:** Compare owner-specific sold
+and presented totals with the real report SQL over a broad control window, and
+keep averages unavailable while unresolved invoice identities remain. A cohort
+preview does not establish full-fleet totals or archive-wide source agreement.
+
 Distinguish earlier sentinel-date snapshots from disagreements between two
 final invoice versions.
 
