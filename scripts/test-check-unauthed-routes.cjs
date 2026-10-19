@@ -19,6 +19,12 @@ const { AUTH_PATTERNS, sanitizeForAuthCheck, findLocalAuthHelperNames } = requir
 
 let passed = 0;
 let failed = 0;
+assert("publicReport bearer-link verification call is guarded",
+  guardMatches("export async function POST(req) { return await publicReport(await req.json(), deps); }"));
+assert("publicReport import alone is not guarded",
+  !guardMatches('import { publicReport } from "./service"; export async function POST() { return response; }'));
+assert("publicReport comment alone is not guarded",
+  !guardMatches('export async function POST() { /* publicReport() */ return response; }'));
 
 // Guard recognition must require invocation, not an import or comment.
 assert("AppFueled native wrapper call is guarded",

@@ -87,6 +87,9 @@ function sanitizeForAuthCheck(text) {
 // that proves both the positive (guarded) and negative (unguarded) cases.
 // ---------------------------------------------------------------------------
 const AUTH_PATTERNS = [
+  // Customer inspection reader verifies HMAC link scope, stored token hash,
+  // expiration/revocation and shop entitlement before returning data or media.
+  /\bpublicReport\s*\(/,
   // --- Session / admin guards ---
   //
   // requireSession() / requirePlatformAdmin() / requireAdmin() throw (via

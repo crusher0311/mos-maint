@@ -46,7 +46,7 @@ export interface Readiness {
   verifiedAt: number;
   writersQuiesced: boolean;
   quiescenceEvidenceDigest: string;
-  topology: "disposable-atomic-canonical-shadow";
+  topology: "disposable-atomic-canonical-shadow" | "disposable-pg-mongo";
 }
 export interface FinalPlan {
   version: 1;
@@ -102,8 +102,8 @@ const hashPattern = /^[a-f0-9]{64}$/;
 function equal(a: unknown, b: unknown, message: string) {
   assert.equal(digest(a), digest(b), message);
 }
-function verifyReadiness(r: Readiness, now: number) {
-  assert.equal(r.topology, "disposable-atomic-canonical-shadow", "Unsupported store topology");
+function verifyReadiness(r: Readiness, now: number, topology: Readiness["topology"] = "disposable-atomic-canonical-shadow") {
+  assert.equal(r.topology, topology, "Unsupported store topology");
   assert.ok(r.writersQuiesced && hashPattern.test(r.quiescenceEvidenceDigest), "Writer quiescence required");
   assert.ok(r.verifiedAt <= now && now - r.verifiedAt <= MAX_AGE, "Writer verification expired");
   assert.ok(r.requiredWriterIds.length > 0);
@@ -116,7 +116,7 @@ function verifyReadiness(r: Readiness, now: number) {
     assert.match(w.verificationDigest, hashPattern);
   }
 }
-function verifyCase(p: Proposal, c: CurrentCase) {
+export function verifyCase(p: Proposal, c: CurrentCase) {
   assert.deepEqual(c.holds, [], "Financial/ownership hold");
   assert.ok(c.evidenceInventory != null, "Missing complete retained evidence inventory");
   assert.equal(c.canonical.length, 1, "Unique current owner required in each store");
@@ -135,7 +135,7 @@ function verifyCase(p: Proposal, c: CurrentCase) {
 }
 export async function finalizeOfflinePlan(
   store: OfflineRepairStore, originalProposal: OriginalProposal, expectedProposalDigest: string,
-  readiness: Readiness, now = Date.now(),
+  readiness: Readiness, now = Date.now(), topology: Readiness["topology"] = "disposable-atomic-canonical-shadow",
 ): Promise<FinalPlan> {
   assert.equal(store.mode, "disposable-only", "Live execution is not implemented or authorized");
   originalProposal = structuredClone(originalProposal);
@@ -146,7 +146,7 @@ export async function finalizeOfflinePlan(
   assert.deepEqual(originalProposal.held, [], "Original proposal contains held cases");
   assert.equal(originalProposal.repairAuthorized, false);
   assert.equal(originalProposal.livePreflightRequired, true);
-  verifyReadiness(readiness, now);
+  verifyReadiness(readiness, now, topology);
   const keys = proposals.map(p => `${p.shopId}:${p.provider}:${p.sourceId.toLowerCase()}`);
   assert.equal(new Set(keys).size, keys.length, "Repeated identity");
   return store.preflight(async tx => {
@@ -163,7 +163,7 @@ export async function finalizeOfflinePlan(
       cases, readiness, preflightAt: now, expiresAt: now + MAX_AGE});
   });
 }
-function patched(c: CurrentCase, p: Proposal): CurrentCase {
+export function patched(c: CurrentCase, p: Proposal): CurrentCase {
   const next = structuredClone(c);
   for (const side of ["canonical", "shadow"] as const) {
     const owner = next[side][0];
@@ -173,7 +173,8 @@ function patched(c: CurrentCase, p: Proposal): CurrentCase {
   }
   return next;
 }
-function validateAuthorization(plan: FinalPlan, approval: Approval, now: number) {
+export function validateAuthorization(plan: FinalPlan, approval: Approval, now: number,
+  topology: Readiness["topology"] = "disposable-atomic-canonical-shadow") {
   assert.equal(plan.version, 1);
   assert.ok(plan.proposals.length > 0 && plan.proposals.length <= 100);
   assert.equal(plan.proposals.length, plan.cases.length);
@@ -186,7 +187,7 @@ function validateAuthorization(plan: FinalPlan, approval: Approval, now: number)
   assert.ok(plan.preflightAt <= approval.approvedAt && approval.approvedAt <= now);
   assert.ok(now < approval.expiresAt && now < plan.expiresAt && plan.expiresAt <= plan.preflightAt + MAX_AGE,
     "Approval or preflight expired; never silently refresh");
-  verifyReadiness(plan.readiness, now);
+  verifyReadiness(plan.readiness, now, topology);
 }
 /** One owner pair per transaction. Stop at the first rejected/ambiguous outcome. */
 export async function executeOfflinePlan(

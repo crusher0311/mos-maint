@@ -112,7 +112,10 @@ reviewed recovery procedure; do not edit timestamps on the saved plan.
 The supported adapter models both logical stores in **one disposable
 PostgreSQL transaction**. This proves the protocol and failure paths under that
 topology, not distributed atomicity between production PostgreSQL and MongoDB.
-Other topologies are rejected. There is no production store adapter.
+Other topologies are rejected by this atomic executor. A separate local
+PostgreSQL/Mongo adapter now tests durable cross-store recovery; see
+`invoice-dual-store-adapter.md`. It uses disposable schemas and is not yet
+mapped to production stores or enforced by production readers/writers.
 
 Before a future live adapter is admitted it must implement and test a durable
 cross-store recovery protocol under actual writer fencing, with authoritative
