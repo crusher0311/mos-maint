@@ -30,6 +30,19 @@ explicitly. Re-resolve the owner before retrying children. Preview destination
 number ownership as well as child ownership before splitting mixed history;
 the intended destination may already belong to a third provider record.
 
+Resolve the entire destination-number ownership chain before planning a split,
+not only the first conflicting parent.
+
+**Why:** Six occupied destinations in the inspected Protractor cohort led to
+additional number/identity mismatches further along the chain. A bounded
+recursive review found distinct final work-order numbers once all owners were
+included; replacing just the first destination would have overwritten history.
+
+**How to apply:** Follow proposed number destinations to closure with a hard
+cap, retain uncertain branches, and check dependent ownership. A collision-free
+structural model with matching child fingerprints is not financial/reporting
+verification or permission to apply the repair.
+
 `normalized_work_orders` has TWO unique constraints: the primary key `id`, and
 `nwo_shop_id_wo_num_idx (shop_id, work_order_number)`. The dual-writer's create
 statement is `insert ... on conflict ("id") do update` — it only reconciles
