@@ -159,6 +159,11 @@ async function run() {
       JSON.stringify(planGet));
 
     const addToRoPost = lookupPolicy("/api/extension/jobs/add-to-ro", "POST");
+    for (const [method, tier] of [["GET", "read"], ["POST", "write"], ["OPTIONS", "preflight"]]) {
+      const policy = lookupPolicy("/api/extension/auto-dvi/push/status", method);
+      ok(`auto-dvi push status ${method} → ${tier}`,
+        JSON.stringify(policy) === JSON.stringify([tier]), JSON.stringify(policy));
+    }
     ok("jobs/add-to-ro POST → write+provider_action",
       addToRoPost !== null &&
       addToRoPost.includes("write") &&
