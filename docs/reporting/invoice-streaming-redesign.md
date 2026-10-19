@@ -84,3 +84,19 @@ persisted and no grants, deployment or repairs were performed.
 This establishes plan/permission/protocol compatibility, not live throughput or
 coverage. A bounded report run, memory measurements and release validation
 remain necessary.
+
+## Approved bounded live run — October 19, 2026
+
+One read-only attempt for October 16–19 UTC across the ten JWT locations stopped
+at its 45-second shared deadline (45.091 seconds including unwind). It read
+92,355 records / 19,126,207 serialized bytes in 362 pages and completed three
+locations. No partial totals were published. Local runner RSS rose from about
+157.6 MiB to a sampled 176.6 MiB; peak sampled heap was 63.2 MiB. These process
+measurements are not database memory measurements.
+
+The new path is not release-ready: the deployed connection's network/query
+overhead makes small cursor fetches substantially slower than local fixtures.
+This test does not isolate network time from database execution time. A separate
+timeout-setting request precedes each page, multiplying round trips. Keep the
+feature disabled and optimize/test batching locally without extending the total
+deadline, row/byte budgets, or rerunning production without approval.

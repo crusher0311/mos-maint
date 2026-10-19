@@ -106,3 +106,14 @@ the fixed transfer budget on a retained fleet snapshot.
 complete location closures, one snapshot/admission and shared byte/row/deadline
 budgets. Prove the reader under an unprivileged role with zero permitted spill.
 Measure network latency and process memory separately before activation.
+
+Small forward-cursor batches can exhaust the shared deadline over the real
+database connection even when local snapshot evaluation is fast.
+
+**Why:** The approved live streaming test reached its deadline after only part
+of the fleet; the same saved-data scale completed in seconds locally. A separate
+timeout-setting request before every fetch adds another network round trip.
+
+**How to apply:** Test injected per-request latency and account for control
+queries as well as data queries. Optimize bounded batching without extending
+the report deadline or treating completed locations as a complete fleet.
