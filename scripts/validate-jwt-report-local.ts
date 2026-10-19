@@ -14,7 +14,7 @@ import { protractorInvoiceLaborEvidence } from "../lib/integrations/protractor/l
 import { reconcileStored } from "./invoice-stored-evidence";
 import { reviewUninvoiced, uninvoicedShape } from "./invoice-uninvoiced-review";
 import { reviewCredit } from "./invoice-credit-review";
-import { reviewInvoiceDate, reviewInvoiceChronology } from "./invoice-date-review";
+import { reviewInvoiceDate, reviewInvoiceChronology, retainDateConflict } from "./invoice-date-review";
 
 const hash = (v: string) => createHash("sha256").update(v).digest("hex");
 const same = (a: any,b: any) => a===b || (!!a&&!!b&&
@@ -64,7 +64,7 @@ async function main() {
     await local`CREATE TABLE IF NOT EXISTS credit_reviews (id text PRIMARY KEY,shop_id int,classification text,date text)`;
     assert.ok(!classify || reconcile,"Classification requires full stored reconciliation");
     await local`CREATE TABLE IF NOT EXISTS uninvoiced_review (id text PRIMARY KEY,shop_id int,classification text,shape jsonb)`;
-    const mode=(classify?"stored-reconcile-uninvoiced":reconcile?"stored-reconcile":"archive")+(credits?"-credits":"")+(dateScope?"-dates":"")+(chronology?"-chronology":"")+(heldSentinels?"-held-sentinels":"")+"-source-header";
+    const mode=(classify?"stored-reconcile-uninvoiced":reconcile?"stored-reconcile":"archive")+(credits?"-credits":"")+(dateScope?"-dates":"")+(chronology?"-chronology":"")+(heldSentinels?"-held-sentinels":"")+"-source-header-independent-date-scope";
     const completed=await local`SELECT * FROM completed_shop_copies`;
     assert.ok(completed.every(r=>r.mode===mode),"Cannot resume with a different validation mode");
     const [baseline]=await local`SELECT to_regclass('invoice_preview_baseline') present`;
@@ -254,11 +254,13 @@ async function main() {
               if(dateScope) {
                 const review=(chronology?reviewInvoiceChronology:reviewInvoiceDate)(ids,[...payloads,...ids.flatMap((key:string)=>archiveHeaders.get(key)??[])]);
                 const strict=reviewInvoiceDate(ids,[...payloads,...ids.flatMap((key:string)=>archiveHeaders.get(key)??[])]);
-                // Existing/derived invoice evidence and all reconciliation
-                // contradictions remain in the ordinary report unchanged.
-                if(present!=null||checked.evidence!=null||reason.startsWith("conflicting")||reason.startsWith("matched_copy")) {
-                  review.classification="retain_invoice_or_conflict";review.date=null;
-                  strict.classification="retain_invoice_or_conflict";strict.date=null;
+                // Date-only eligibility never establishes or replaces labor.
+                // Unknown identities/dates, in-period conflicts and verified
+                // evidence remain in the ordinary report unchanged.
+                for(const result of [review,strict]) {
+                  if(retainDateConflict(result,reason,present!=null||checked.evidence!=null,start,end)) {
+                    result.classification="retain_invoice_or_conflict";result.date=null;
+                  }
                 }
                 dateReviews.push({id,shop_id:shop,...review});
                 strictDateReviews.push({id,shop_id:shop,...strict});

@@ -178,6 +178,16 @@ hours, and did not change verified invoice totals.
 policy. Require agreement across matched copies and identity peers; never use
 it to make in-period unknown records verified or suppress contradictory dates.
 
+A labor-only conflict can retain its financial veto without blocking a period
+that its independently verified invoice date excludes.
+
+**Why:** Older drafts with fewer jobs were keeping early-September invoices in
+a report beginning September 18, despite agreeing final invoice dates.
+
+**How to apply:** Require all-copy date/identity review and peer checks. Keep
+in-period, boundary, unknown-date and identity conflicts held. Exclusion must
+never synthesize invoice evidence or select a supposedly correct labor version.
+
 An omitted regular-job collection is not covered by the confirmed
 omitted-deferred-work behavior.
 
@@ -256,6 +266,19 @@ the old snapshot still exists.
 **How to apply:** Verify the directory and disposable marker before resuming.
 If missing, rebuild a read-only preview and compare policies within that same
 run; never attribute changed source totals between runs to a reporting fix.
+
+Retained local reporting databases can exhaust workspace disk quota even when
+`df` shows ample filesystem space.
+
+**Why:** A local baseline query failed with XX000, then PostgreSQL recovery could
+not start; creating its log exposed “Disk quota exceeded.” Several obsolete
+disposable snapshots together consumed gigabytes. Removing only old generated
+snapshots allowed the completed ten-shop checkpoint to resume.
+
+**How to apply:** Inspect quota errors and sizes before repeating source reads.
+Keep the latest verified baseline and active checkpoint; verify old databases
+are stopped before deleting obsolete generated copies. A recovery interruption
+does not authorize production changes or a fresh provider import.
 
 **Why:** On 2026-10-17 the user approved up to 1,000 additional Protractor requests,
 including retries, under existing eligibility and traffic protections, followed

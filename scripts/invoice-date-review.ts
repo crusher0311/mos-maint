@@ -1,4 +1,19 @@
 /** Date-scope experiment only: does NOT establish invoice counts or labor hours. */
+export function retainDateConflict(
+  review:{classification:string;date:string|null}, reason:string,
+  hasInvoiceEvidence:boolean, start:string, end:string,
+) {
+  // Only a labor-only veto may be separated from period eligibility.
+  // The review must have inspected every matched copy; SQL still checks peers.
+  const stamp=review.date===null?NaN:Date.parse(review.date);
+  const from=Date.parse(start),to=Date.parse(end);
+  const outside=review.classification==="consistent_final_invoice_date"&&
+    Number.isFinite(stamp)&&Number.isFinite(from)&&Number.isFinite(to)&&from<=to&&
+    (stamp<from||stamp>to);
+  return hasInvoiceEvidence||reason.startsWith("matched_copy")||
+    (reason.startsWith("conflicting")&&!(reason==="conflicting_recorded_hours"&&outside));
+}
+
 export function reviewInvoiceDate(ids:string[],raws:any[]) {
   if(!raws.length)return {classification:"missing_source",date:null};
   let date:string|null=null,identity:string|null=null;

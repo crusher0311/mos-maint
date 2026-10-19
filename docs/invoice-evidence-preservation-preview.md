@@ -627,6 +627,37 @@ No exclusions or reporting policies were changed by this investigation.
 The last full verified result remains 31 unknown identities and one incomplete
 invoice. Diagnostic changes passed type checking and whitespace validation.
 
+### Independent date eligibility experiment
+
+The local validator now permits date-only exclusion for a
+`conflicting_recorded_hours` result when the separate all-copy date review proves
+a consistent final invoice date strictly outside the selected period. This
+does not generate invoice evidence, choose labor values, or change the
+reconciler. Existing/derived invoice evidence, identity conflicts, conflicting
+dates/evidence, unmatched copies and in-period or boundary dates remain held.
+The existing SQL peer-identity checks still apply.
+
+The checkpoint mode changes so old reviewed shops cannot silently reuse the
+previous policy. Regression tests cover before/after-period dates, inclusive
+boundaries, uncertain dates, existing evidence and identity/conflict vetoes;
+the full offline PostgreSQL report fixture and type checking pass. A fresh
+stored-source validation is required before claiming a lower real-data count.
+
+The full independent-date run completed after a workspace disk-quota interruption.
+All ten shop checkpoints were retained; resumption reused all ten and reread no
+shop snapshots. Two obsolete disposable databases were removed to free quota;
+the prior successful baseline and current snapshot were retained.
+
+Final report: 6,297 verified invoices, 6,296 complete-hour invoices and **17
+unknown identities**, versus 31 in the preceding run. Verified sold hours remain
+6,786.39 and presented hours 13,646.32. Four locations still produce complete
+averages; enterprise averages remain unavailable. Unknown identities by shop:
+227=4, 228=3, 230=2, 231=1, 233=5, 234=2.
+
+This establishes a narrower unknown population without choosing conflicting
+labor values. It is not complete enterprise-report verification. The run
+reported zero production writes and zero provider requests; no deployment.
+
 The source stores can change during this read-only run; it is not a fleet-wide
 atomic snapshot or a guarantee of complete upstream history.
 
