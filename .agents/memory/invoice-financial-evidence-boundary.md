@@ -15,3 +15,13 @@ financial history.
 **How to apply:** Require owner-level evidence vetoes and separate execution
 approval. An evidence-pass owner is not permission to rewrite a connected
 parent closure. Do not use job, line and payment totals as balancing targets.
+
+Offline corroboration approval is permission to review supplied accounting
+records only, not provider access or approval of any financial amount.
+
+**Why:** The operator explicitly approved the offline-only plan while the
+conflicting amounts remained unsupported by accounting records.
+
+**How to apply:** Seek separate approval for provider retrieval and production
+writes. Leave authoritative values unset until accounting evidence establishes
+the event; preserve date and identity vetoes independently.
