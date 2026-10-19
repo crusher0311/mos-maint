@@ -439,6 +439,33 @@ async function testSelectiveDefinitionExecution() {
   assert.match(summarySql, /'summary'::text dimension_key/);
   assert.match(summarySql, /NULL::text dimension_label/);
   assert.doesNotMatch(summarySql, /CASE\s+ELSE/, "summary-only business SQL must never emit an empty CASE expression");
+  const invoiceScope = { ...largeScope, shopIds: largeScope.shopIds.slice(0, 10) };
+  const invoicePlan = compileReportDefinition({
+    version: 1, id: "stream-invoices", name: "Stream invoices",
+    dateRange: { start: "2026-08-01", end: "2026-08-30" },
+    metrics: ["averageSoldHoursPerInvoice"], dimensions: ["location"],
+    comparison: { mode: "none" }, presentation: { kind: "table", limit: 500 },
+  }, invoiceScope);
+  const streamCalls: string[] = [];
+  const streamResult = await getReportingKpis(invoiceScope, invoicePlan.currentRange, {
+    executionPlan: invoicePlan.execution, invoiceFleetStreaming: true,
+    transaction: async work => work({
+      query: async text => {
+        streamCalls.push(text);
+        if (text.includes("pg_try_advisory_xact_lock")) return [{ admitted: true }];
+        return [];
+      },
+      setStatementTimeout: async () => {},
+    }),
+  });
+  assert.equal(streamResult.summary.invoiceCount, 0);
+  assert.ok(streamCalls.some(text => text.includes("REPEATABLE READ READ ONLY")));
+  assert.ok(streamCalls.some(text => text.startsWith("DECLARE invoice_metadata_cursor")));
+  assert.ok(streamCalls.some(text => text.startsWith("CLOSE invoice_metadata_cursor")));
+  assert.ok(streamCalls.every(text => !text.includes("temp_file_limit")));
+  await assert.rejects(getReportingKpis(invoiceScope, invoicePlan.currentRange, {
+    executionPlan: invoicePlan.execution, invoiceFleetStreaming: true, query: async () => [],
+  }), /resource-limited transaction/);
 }
 
 function testReportingIndexShapes() {

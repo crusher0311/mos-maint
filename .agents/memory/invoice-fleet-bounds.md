@@ -93,3 +93,16 @@ within one statement preserved exact totals while bounding the working set.
 **How to apply:** Preserve the correlation boundary and shared deadline/admission;
 never widen identity joins across shops, reset timeouts per shop, or return a
 partial fleet after a single-location failure. Retest on the target PG version.
+
+When managed PostgreSQL denies temp_file_limit, do not remove the aggregate's
+guard. A permission-free replacement must eliminate spill-producing operations,
+not merely substitute a timeout for the missing disk limit.
+
+**Why:** Supabase denied the parameter operation; parameter ACL catalog support
+does not imply tenant grant authority. Full metadata projections also exceeded
+the fixed transfer budget on a retained fleet snapshot.
+
+**How to apply:** Use a separate opt-in path, compact identity/hour projections,
+complete location closures, one snapshot/admission and shared byte/row/deadline
+budgets. Prove the reader under an unprivileged role with zero permitted spill.
+Measure network latency and process memory separately before activation.

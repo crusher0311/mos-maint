@@ -25,6 +25,7 @@ import { INVOICE_HOURS_SQL, INVOICE_HOURS_MAX_ORDERS } from "./invoice-hours-que
 import { redactedReportCause, reportRunDiagnostics } from "@/lib/report-run-diagnostics";
 import { INVOICE_FLEET_SQL, invoiceFleetParams, invoiceFleetResult } from "./invoice-fleet-aggregation";
 import { admitInvoiceFleet } from "./invoice-fleet-admission";
+import { admitInvoiceStream, streamInvoiceFleet } from "./invoice-fleet-stream";
 
 const fleetAdmitted = Symbol("invoice-fleet-transaction-admitted");
 
@@ -228,11 +229,14 @@ export async function getReportingKpis(
     executionPlan?: ReportExecutionPlan;
     recoverLabor?: typeof recoverLaborEvidence;
     invoiceFleetAggregation?: boolean;
+    invoiceFleetStreaming?: boolean;
     [fleetAdmitted]?: true;
   },
 ): Promise<ReportingKpiResponse> {
   const deadlineAt = options?.deadlineAt ?? Date.now() + REPORTING_QUERY_DEADLINE_MS;
-  const fleetMode = (options?.invoiceFleetAggregation ?? process.env.INVOICE_FLEET_AGGREGATION_ENABLED === "true") &&
+  const streamMode = (options?.invoiceFleetStreaming ?? process.env.INVOICE_FLEET_STREAM_ENABLED === "true") &&
+    !!options?.executionPlan?.stages.includes("invoice");
+  const fleetMode = (streamMode || (options?.invoiceFleetAggregation ?? process.env.INVOICE_FLEET_AGGREGATION_ENABLED === "true")) &&
     !!options?.executionPlan?.stages.includes("invoice");
   if (fleetMode) {
     // Reject invalid scope before opening a transaction or acquiring capacity.
@@ -265,7 +269,7 @@ export async function getReportingKpis(
         });
         if (fleetMode) {
           try {
-            await admitInvoiceFleet((text,params)=>runStage("invoice",tools.query,text,params,deadlineAt,
+            await (streamMode ? admitInvoiceStream : admitInvoiceFleet)((text,params)=>runStage("invoice",tools.query,text,params,deadlineAt,
               remaining=>tools.setStatementTimeout(Math.min(35_000,remaining))));
           } catch (error) {
             if (error instanceof ReportingQueryError) throw error;
@@ -641,18 +645,24 @@ export async function getReportingKpis(
       throw new ReportingQueryError("Invoice locations are outside the authorized scope.", "authorization", "invoice");
     }
     if (fleetMode) {
-      const rows=await runStage("invoice",query,INVOICE_FLEET_SQL,
-        invoiceFleetParams(scope.shopIds,invoiceIds,range.start,range.end),deadlineAt,options.beforeStage);
       try {
-        const invoice=invoiceFleetResult(invoiceIds,rows);
+        const invoice=streamMode
+          ? await streamInvoiceFleet(
+              (text,params)=>runStage("invoice",query,text,params,deadlineAt,options.beforeStage),
+              scope.shopIds,invoiceIds,range.start,range.end,deadlineAt)
+          : invoiceFleetResult(invoiceIds,await runStage("invoice",query,INVOICE_FLEET_SQL,
+              invoiceFleetParams(scope.shopIds,invoiceIds,range.start,range.end),deadlineAt,options.beforeStage));
         Object.assign(result.summary,invoice.summary);
         const empty=aggregateInvoiceHours([],range.start,range.end).empty;
         for(const location of result.byLocation)
           Object.assign(location.metrics,invoice.locations.get(Number(location.key))??empty);
       } catch(error) {
+        if (error instanceof ReportingQueryError) throw error;
         throw new ReportingQueryError((error as Error).message,"validation","invoice",error);
       }
-      result.dataQuality.notes.push("Database-side invoice aggregation uses stored invoice metadata only; it does not recover missing evidence from source caches or contact providers.");
+      result.dataQuality.notes.push(streamMode
+        ? "Bounded invoice metadata streaming verifies complete locations in one consistent snapshot. It does not contact providers or treat missing evidence as complete."
+        : "Database-side invoice aggregation uses stored invoice metadata only; it does not recover missing evidence from source caches or contact providers.");
     } else {
     const rows = await runStage("invoice", query, INVOICE_HOURS_SQL, [`{${invoiceIds.join(",")}}`, range.start.toISOString(), range.end.toISOString()], deadlineAt, options.beforeStage);
     if (rows.length > INVOICE_HOURS_MAX_ORDERS) {
