@@ -82,3 +82,14 @@ limit. A passing high-row-count fixture alone did not establish budget fitness.
 **How to apply:** Keep representative payload widths and mixed identity shapes
 in local resource tests; optimize against preserved snapshots without increasing
 the cap or repeating live reads.
+
+Shop-scoped identities allow sequential closure evaluation within one guarded
+SQL statement, without introducing application-level fan-out.
+
+**Why:** Fleet-wide intermediate materialization exceeded the spill budget even
+though the independent location calculations were small. Partitioning execution
+within one statement preserved exact totals while bounding the working set.
+
+**How to apply:** Preserve the correlation boundary and shared deadline/admission;
+never widen identity joins across shops, reset timeouts per shop, or return a
+partial fleet after a single-location failure. Retest on the target PG version.

@@ -43,6 +43,10 @@ The existing combined query still correctly trips its 100,000-row safety cap.
 
 ## New runtime blocker
 
+Subsequently resolved **locally** by partitioning intermediate work within the
+same guarded SQL statement. See invoice-fleet-local-optimization.md. The failure
+record below describes the original query and must remain attached to the capture.
+
 The opt-in guarded query failed with SQLSTATE **53400** on the real-data local
 snapshot. A second run against the preserved dump confirmed specifically
 **temporary file size exceeds temp_file_limit**, on both current metadata and

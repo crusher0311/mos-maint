@@ -165,6 +165,29 @@ test("large fleet remains capped; bounded offline location aggregates retain unk
     assert.equal(prototype.length,10);
     assert.ok(Buffer.byteLength(JSON.stringify(prototype))<8192);
     assert.deepEqual(invoiceFleetPrototypeResult(shops,prototype).summary,combined);
+    // The earlier empty-source-ID fixture understated materialization costs.
+    // Real retained rows have long identities and multiple source aliases.
+    await pg`UPDATE normalized_work_orders SET
+      provenance=jsonb_build_object('sourceSystem','protractor','fixtureOriginalId',id,
+        'sourceIds',jsonb_build_array(
+          jsonb_build_object('system','protractor','idType','work_order_id','isPrimary',true,
+            'idValue','00000000-0000-0000-0001-'||lpad(id,12,'0')),
+          jsonb_build_object('system','protractor','idType','invoice_id','isPrimary',false,
+            'idValue','00000000-0000-0000-0002-'||lpad(id,12,'0')))),
+      id=repeat(md5(id),2)
+      WHERE shop_id<=10 AND custom_fields IS NULL`;
+    await pg`ANALYZE normalized_work_orders`;
+    const wide=await pg.begin(async tx=>{
+      await admitInvoiceFleet((text,values)=>tx.unsafe(text,values as any[]));
+      return tx.unsafe(INVOICE_FLEET_PROTOTYPE_SQL,params);
+    });
+    assert.equal(wide.length,10);
+    assert.ok(Buffer.byteLength(JSON.stringify(wide))<8192);
+    assert.deepEqual(invoiceFleetPrototypeResult(shops,wide).summary,combined);
+    // Retain the separate oversized-single-location test with its original shape.
+    await pg`UPDATE normalized_work_orders SET id=provenance->>'fixtureOriginalId',
+      provenance='{"sourceSystem":"protractor","sourceIds":[]}'::jsonb
+      WHERE provenance ? 'fixtureOriginalId'`;
     assert.throws(()=>invoiceFleetPrototypeResult(shops,prototype.slice(1)));
     assert.throws(()=>combineInvoiceLocationDiagnostics([1],locations),/authorized location/);
     locations.set(1,capped);

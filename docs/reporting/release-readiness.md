@@ -29,12 +29,12 @@ identities, or relax source checks to make an average appear.
 
 ## Still required
 
-**Fresh real-data validation is blocked:** the guarded query exceeds its 64 MB
-temporary-file limit on the refreshed local snapshot, despite passing synthetic
-fixtures. The 215,655-record capture is preserved for offline optimization.
-Independent location calculations still cannot establish invoice averages for
-the requested period. See stored-snapshot-refresh-2026-10-19.md. Production
-permission alone is not sufficient to enable reporting.
+**Local resource blocker resolved; release still blocked:** the optimized query
+passes the unchanged 64 MB limit on both versions of the preserved 215,655-record
+snapshot and matches independent location totals. See
+invoice-fleet-local-optimization.md. Production permission and PostgreSQL 17
+preflight remain outstanding, and the requested period still lacks verified
+invoice evidence. Passing the query is not proof of usable invoice averages.
 
 **Production preflight found blockers after the initial local checks passed:**
 the reporting role cannot set temp_file_limit, and the earlier SQL failed against

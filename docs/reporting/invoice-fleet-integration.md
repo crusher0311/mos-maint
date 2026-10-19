@@ -1,5 +1,11 @@
 # Controlled fleet invoice aggregation
 
+Real-data optimization: the SQL evaluates complete shop-scoped closures through
+a correlated LATERAL subquery, rather than materializing the entire fleet's
+intermediate results together. This remains one statement/snapshot/admission
+with a single deadline, not app-level location fan-out. See
+invoice-fleet-local-optimization.md for measured results and remaining gates.
+
 ## Local implementation
 
 The reporting service now has an opt-in database-side aggregation path.

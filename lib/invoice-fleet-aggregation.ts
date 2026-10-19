@@ -13,7 +13,7 @@ const valid=INVOICE_VERIFIED_PREDICATE
   .replaceAll("wo.provenance->>'sourceSystem'","f.provider");
 
 /** Only execute inside the resource-limited, globally admitted transaction. */
-export const INVOICE_FLEET_SQL=`
+const INVOICE_FLEET_LOCATION_SQL=`
 WITH closure AS NOT MATERIALIZED (${closure}),
 facts AS MATERIALIZED (
   SELECT f.id,f.shop_id,f.status,f.provider,f.invoice_evidence,
@@ -85,6 +85,19 @@ SELECT s.shop_id,(g.unsupported OR EXISTS(SELECT 1 FROM unknown_groups WHERE amb
   coalesce(t.sold_covered,0) sold_covered,coalesce(t.presented_covered,0) presented_covered
 FROM unnest($1::int[]) s(shop_id)
 CROSS JOIN guards g LEFT JOIN totals t USING(shop_id) LEFT JOIN unknown_totals u USING(shop_id)
+`;
+
+// Invoice identities are shop-scoped. Evaluate one complete shop closure at a
+// time inside ONE statement/snapshot/deadline, releasing its intermediate
+// stores before the next shop. OFFSET 0 prevents flattening the correlated
+// subquery into a fleet-wide materialization. No row cap, paging or app fan-out.
+export const INVOICE_FLEET_SQL=`
+SELECT location.*
+FROM unnest($1::int[]) fleet_scope(shop_id)
+CROSS JOIN LATERAL (
+  ${INVOICE_FLEET_LOCATION_SQL.replaceAll("$1","ARRAY[fleet_scope.shop_id]")}
+  OFFSET 0
+) location
 `;
 
 export function invoiceFleetParams(authorized:number[],requested:number[],start:Date,end:Date){

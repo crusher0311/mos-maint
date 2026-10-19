@@ -108,3 +108,17 @@ mtime_ms = 1792409068934
 storage_uri = "gcs://replit-rams-assets-picard/rams/assets/repl:a5a4005c-4e3d-4ce9-896c-c46425944606/05def75b-ca37-4bea-b565-608f1f588694/30234e36-e8bb-40c6-a7a5-ac3f4f90883c"
 storage_version_token = "1792409095388976"
 content_type = "text/markdown"
+
+[[outputs]]
+id = "qHKWefXwEiZavZGPdQggy"
+uri = "file://docs/reporting/invoice-fleet-local-optimization.md"
+type = "text"
+title = "Fleet query optimization verified locally"
+description = "Real-data timings, unchanged resource limits, matching independent totals, and remaining release blockers."
+logical_id = "40e2bdd8-7b5c-41e8-b63b-1cdf33635187"
+content_hash = "sha256:671a5ca02a9db83fd0d419ad7d0388036eb09530e254fce4654544fb3ab5b349"
+size = 3165
+mtime_ms = 1792410027094
+storage_uri = "gcs://replit-rams-assets-picard/rams/assets/repl:a5a4005c-4e3d-4ce9-896c-c46425944606/40e2bdd8-7b5c-41e8-b63b-1cdf33635187/af049576-86ee-4a2a-adde-fd47690c5bd1"
+storage_version_token = "1792410068868820"
+content_type = "text/markdown"
