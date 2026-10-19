@@ -57,7 +57,7 @@ export default function TerminalHistoryImports() {
       setData(current => page.campaignId && current
         ? { ...current, campaigns: current.campaigns.map(c => c.campaignId === page.campaignId ? next.campaigns[0] : c) }
         : next);
-    } catch { setError(true); }
+    } catch { setData(null); setError(true); }
     finally { setBusy(false); }
   }
   return <section className="rounded-lg border bg-white p-4 space-y-3">
@@ -67,7 +67,7 @@ export default function TerminalHistoryImports() {
     <button type="button" disabled={busy} onClick={() => load()} className="rounded border px-3 py-2 text-sm disabled:opacity-50">
       {busy ? "Loading summary…" : "Load / refresh newest campaigns"}
     </button>
-    {error && <p role="alert">History import summary unavailable. Any displayed page is unchanged. No import state was changed. Retry the page or refresh.</p>}
-    {data && <TerminalHistoryImportsView data={data} busy={busy} onPage={load} />}
+    {error && <p role="alert">History import summary unavailable. No import state was changed. Try refreshing.</p>}
+    {data && !busy && <TerminalHistoryImportsView data={data} busy={busy} onPage={load} />}
   </section>;
 }

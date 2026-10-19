@@ -7,6 +7,7 @@
     "npm": ">=10.0.0 <11.0.0"
   },
   "scripts": {
+    "test:terminal-history-browser": "PROTRACTOR_OFFLINE_ALLOW_LOOPBACK=true NODE_OPTIONS='--require ./tests/helpers/deny-network-egress.cjs' node --import tsx --test tests/terminal-history-imports.test.ts tests/terminal-history-browser.test.ts",
     "test:invoice-owner-offline": "bash tests/run-invoice-owner-offline.sh",
     "test:dvi-request-browser": "NODE_OPTIONS='--require ./tests/helpers/deny-network-egress.cjs' node --import tsx --test tests/dvi-request-browser.test.ts tests/auto-dvi-push-outcomes.test.ts",
     "test:auto-dvi-durable": "PROTRACTOR_OFFLINE_ALLOW_LOOPBACK=true NODE_OPTIONS='--require ./tests/helpers/deny-network-egress.cjs' node --import tsx --test tests/auto-dvi-durable.test.ts",
