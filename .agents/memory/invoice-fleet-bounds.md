@@ -37,3 +37,14 @@ fast. Table statistics alone did not prevent that plan.
 **How to apply:** Preserve an expansion boundary before the identity join and
 exercise mixed populations under the same time/spill limits. Do not raise
 limits to hide a bad join order.
+
+Match production status types and managed-database privileges in release tests.
+
+**Why:** Text-column fixtures accepted workflow labels that the production
+work-order enum rejects at query planning. The managed production role also
+lacks permission to set the superuser-context temporary-file limit; a disposable
+database's superuser tests cannot establish this capability.
+
+**How to apply:** Include an enum-backed fixture and preflight the actual
+runtime role. Keep budget enforcement mandatory; do not enable an unrestricted
+query or grant broad database privileges to make tests pass.

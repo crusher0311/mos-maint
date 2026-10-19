@@ -29,6 +29,12 @@ identities, or relax source checks to make an average appear.
 
 ## Still required
 
+**Production preflight found blockers after the local checks passed:** the
+reporting role cannot set temp_file_limit, and the current SQL's status
+comparisons fail against the production enum. A hypothetical text-cast version
+plans successfully against existing indexes, but has not been applied or run.
+See invoice-fleet-production-preflight.md. Do not enable the feature yet.
+
 1. Complete release validation and an approved production preflight for the new
    opt-in database aggregation. It is now integrated into the reporting service,
    with default-off activation, global admission, read-only transactions and
