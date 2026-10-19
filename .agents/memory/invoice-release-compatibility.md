@@ -16,3 +16,15 @@ the shared ingestion path, while keeping deliberately newer main policies
 explicit. Complete sources regenerate hours; incomplete sources invalidate
 hours rather than inherit a repair. Exact-lockfile installation is separate
 from running tests against shared workspace dependencies.
+
+Inventory suspended writers as well as active writers before advancing a shared
+auto-deploy branch. A deliberate narrow worker branch must not be reset to main
+merely to make service branch names match.
+
+**Why:** Suspended services can still track the same auto-deploy branch as the
+web app while retaining a much older baseline. Pinning the branch isolates
+future code selection but does not replace the already-deployed worker image.
+
+**How to apply:** Preserve approved suspension and branch isolation. Before
+repair or a scheduled resume, verify the actual deployed worker revision, not
+just the configured branch or GitHub head.
