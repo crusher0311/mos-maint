@@ -66,3 +66,21 @@ of cursor fetches can have materially higher latency across a real network.
 Keep disabled until those pass. Existing saved reports are not retroactively
 rewritten; request a fresh report after activation. No new database migration is
 required. Source evidence preservation/repair is a separate release concern.
+
+## Read-only production compatibility check — October 19, 2026
+
+Verified against the database target used by the deployed web service, using its
+actual runtime connection. PostgreSQL 17.6 accepted read-only repeatable-read
+admission, 2 MB work_mem, disabled parallel workers and the shared transaction
+lock, despite lacking permission to SET temp_file_limit.
+
+EXPLAIN (without ANALYZE) for all ten JWT locations selected the existing
+nwo_shop_id_idx plus the per-row function scan; no sort, aggregate,
+materialization, parallel or sequential scan appeared. DECLARE / FETCH 0 / CLOSE
+also succeeded through the actual connection. No invoice rows were fetched and
+no report was executed. Both fleet switches remained disabled; no settings were
+persisted and no grants, deployment or repairs were performed.
+
+This establishes plan/permission/protocol compatibility, not live throughput or
+coverage. A bounded report run, memory measurements and release validation
+remain necessary.
