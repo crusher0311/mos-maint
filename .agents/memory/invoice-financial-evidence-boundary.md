@@ -25,3 +25,15 @@ conflicting amounts remained unsupported by accounting records.
 **How to apply:** Seek separate approval for provider retrieval and production
 writes. Leave authoritative values unset until accounting evidence establishes
 the event; preserve date and identity vetoes independently.
+
+Check retained final-invoice archives before treating a current work-order
+snapshot's zero invoice number as an unrecoverable reporting gap.
+
+**Why:** Matched archived final-invoice copies supplied positive-number evidence
+that normalized/cache WorkOrder snapshots lacked, without new provider requests.
+The current cache is not necessarily the richest retained invoice representation.
+
+**How to apply:** Match shop and native identity, verify archive integrity and
+reconcile every retained occurrence. Archive-derived evidence is still only a
+repair candidate; do not relax finality checks, hide conflicts, or infer fleet
+coverage from a convenience sample.
