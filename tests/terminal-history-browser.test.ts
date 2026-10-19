@@ -9,6 +9,8 @@ import { createHistoryFixture, summary } from "./browser/terminal-history-fixtur
 
 test("real history component: loading, repeated refresh, denied/unavailable, and recovery", { timeout: 60000 }, async () => {
   const pending: http.ServerResponse[] = [];
+  // Responses change in asynchronous handlers; observe a fresh count after awaits.
+  const pendingCount = () => pending.length;
   const requests: string[] = [];
   const fixture = await createHistoryFixture((req, res) => {
     requests.push(`${req.method} ${req.url}`);
@@ -102,7 +104,7 @@ test("real history component: loading, repeated refresh, denied/unavailable, and
     });
     await page.waitForFunction(() => (document.querySelector("section button") as HTMLButtonElement).disabled);
     await noCounts();
-    for (let i = 0; pending.length === 0 && i < 100; i++) await new Promise(r => setTimeout(r, 10));
+    for (let i = 0; pendingCount() === 0 && i < 100; i++) await new Promise(r => setTimeout(r, 10));
     assert.equal(pending.length, 1);
     assert.equal(requests.at(-1),
       "GET /api/platform-admin/terminal-history-imports?campaignId=example-history-campaign&receiptAfter=fixture-receipts");
@@ -119,7 +121,7 @@ test("real history component: loading, repeated refresh, denied/unavailable, and
       [...document.querySelectorAll("button")].find(b => b.textContent === "First receipt page")!.click();
     });
     await page.waitForFunction(() => (document.querySelector("section button") as HTMLButtonElement).disabled);
-    for (let i = 0; pending.length === 0 && i < 100; i++) await new Promise(r => setTimeout(r, 10));
+    for (let i = 0; pendingCount() === 0 && i < 100; i++) await new Promise(r => setTimeout(r, 10));
     assert.equal(pending.length, 1);
     await finish(503, { error: "Unavailable" });
     await page.waitForSelector("[role=alert]");
