@@ -4,7 +4,7 @@ import { invoiceFleetParams } from "./invoice-fleet-aggregation";
 import type { ReportingMetricValues } from "./reporting-kpi-contract";
 
 export const INVOICE_STREAM_LIMITS = Object.freeze({
-  pageRows: 256, fleetRows: 500_000, locationRows: INVOICE_HOURS_MAX_ORDERS,
+  pageRows: 1024, fleetRows: 500_000, locationRows: INVOICE_HOURS_MAX_ORDERS,
   fleetBytes: 64 * 1024 * 1024, locationBytes: 16 * 1024 * 1024,
   rowBytes: 32 * 1024,
 });

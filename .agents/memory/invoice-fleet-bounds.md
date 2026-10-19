@@ -117,3 +117,14 @@ timeout-setting request before every fetch adds another network round trip.
 **How to apply:** Test injected per-request latency and account for control
 queries as well as data queries. Optimize bounded batching without extending
 the report deadline or treating completed locations as a complete fleet.
+
+Cache stable statement-timeout settings only within a transaction, and shorten
+them as the shared deadline approaches. Keep active-query cancellation.
+
+**Why:** Reissuing the same timeout before every cursor fetch doubled the
+network request count. A transaction-local cache removes redundant round trips
+without granting another time budget to each page.
+
+**How to apply:** Never cache a failed SET or reuse the cache across connections
+or transactions. Retain caller timeout caps, and test latency on timeout-setting
+requests as well as fetches.

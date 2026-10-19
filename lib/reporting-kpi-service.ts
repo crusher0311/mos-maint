@@ -26,6 +26,7 @@ import { redactedReportCause, reportRunDiagnostics } from "@/lib/report-run-diag
 import { INVOICE_FLEET_SQL, invoiceFleetParams, invoiceFleetResult } from "./invoice-fleet-aggregation";
 import { admitInvoiceFleet } from "./invoice-fleet-admission";
 import { admitInvoiceStream, streamInvoiceFleet } from "./invoice-fleet-stream";
+import { invoiceStreamTimeout } from "./invoice-stream-timeout";
 
 const fleetAdmitted = Symbol("invoice-fleet-transaction-admitted");
 
@@ -267,10 +268,12 @@ export async function getReportingKpis(
           stage: "database_queue",
           durationMs: Date.now() - queuedAt,
         });
+        const streamTimeout = invoiceStreamTimeout(
+          ms => tools.setStatementTimeout(ms), options?.statementTimeoutMs ?? 5000);
         if (fleetMode) {
           try {
             await (streamMode ? admitInvoiceStream : admitInvoiceFleet)((text,params)=>runStage("invoice",tools.query,text,params,deadlineAt,
-              remaining=>tools.setStatementTimeout(Math.min(35_000,remaining))));
+              streamMode ? streamTimeout : remaining=>tools.setStatementTimeout(Math.min(35_000,remaining))));
           } catch (error) {
             if (error instanceof ReportingQueryError) throw error;
             throw new ReportingQueryError((error as Error).message,"validation","invoice",error);
@@ -282,6 +285,7 @@ export async function getReportingKpis(
           deadlineAt,
           ...(fleetMode ? { [fleetAdmitted]: true as const } : {}),
           beforeStage: async (remaining) => {
+            if (streamMode) return streamTimeout(remaining);
             const timeout = Math.min(options?.statementTimeoutMs ?? REPORTING_QUERY_DEADLINE_MS, remaining,
               fleetMode ? 35_000 : REPORTING_QUERY_DEADLINE_MS);
             await tools.setStatementTimeout(timeout);

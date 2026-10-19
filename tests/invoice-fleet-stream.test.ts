@@ -3,6 +3,7 @@ import postgres from "postgres";
 import { userInfo } from "node:os";
 import { admitInvoiceStream, streamInvoiceFleet, INVOICE_STREAM_SELECT } from "../lib/invoice-fleet-stream";
 import { aggregateInvoiceHours, combineInvoiceLocationDiagnostics } from "../lib/invoice-hours-contract";
+import { invoiceStreamTimeout } from "../lib/invoice-stream-timeout";
 
 const pg = postgres({ host: process.argv[2], port: 5432, username: userInfo().username,
   database: "postgres", max: 1, onnotice: () => {} });
@@ -40,14 +41,25 @@ async function main() {
     expected.set(shop, aggregateInvoiceHours(rows as any,start,end).summary);
   }
   let queries = 0;
+  let timeoutQueries = 0;
+  const latency = Number(process.argv.find(v=>v.startsWith("--latency="))?.split("=")[1] ?? 0);
+  assert.ok([0,60,100].includes(latency));
+  const delay = () => new Promise(resolve=>setTimeout(resolve,latency));
   const started = performance.now();
   const actual = await pg.begin(async tx => {
     await tx.unsafe("SET LOCAL temp_file_limit='0'");
     await tx.unsafe("SET LOCAL ROLE report_reader");
+    const deadline = Date.now()+45_000;
+    const timeout = invoiceStreamTimeout(async ms=>{
+      timeoutQueries++;
+      if(latency) await delay();
+      await tx.unsafe(`SET LOCAL statement_timeout=${ms}`);
+    });
     const query = async (text: string, params: unknown[]) => {
       assert.ok(!text.includes("temp_file_limit"),"runtime must never need privileged SET");
       queries++;
-      await tx.unsafe("SET LOCAL statement_timeout='5s'");
+      await timeout(deadline-Date.now());
+      if(latency) await delay();
       return tx.unsafe(replace(text), params as any[]);
     };
     await admitInvoiceStream(query);
@@ -56,11 +68,14 @@ async function main() {
     assert.equal((await tx.unsafe("SHOW temp_file_limit"))[0].temp_file_limit,"0");
     const plan = await tx.unsafe("EXPLAIN (FORMAT JSON) "+replace(INVOICE_STREAM_SELECT),[ids[0]]);
     assert.doesNotMatch(JSON.stringify(plan), /"Node Type":"(?:Sort|Aggregate|Materialize|Gather|Hash Join)"/);
-    return streamInvoiceFleet(query,ids,ids,start,end,Date.now()+45_000);
+    return streamInvoiceFleet(query,ids,ids,start,end,deadline);
   });
   assert.deepEqual(actual.summary, combineInvoiceLocationDiagnostics(ids,expected));
   assert.deepEqual(actual.locations,expected);
-  console.log(JSON.stringify({test:table,passed:true,elapsedMs:Math.round(performance.now()-started),queries,summary:actual.summary}));
+  assert.equal(timeoutQueries,1,"healthy run must not SET timeout before each page");
+  console.log(JSON.stringify({test:table,passed:true,latencyPerRequestMs:latency,
+    elapsedMs:Math.round(performance.now()-started),queries,timeoutQueries,
+    processMaxRssKiB:process.resourceUsage().maxRSS,summary:actual.summary}));
   await assert.rejects(streamInvoiceFleet(async()=>{throw Error("should not query");},ids,[999],start,end,Date.now()+1000),/authorized/);
   await assert.rejects(streamInvoiceFleet(async()=>[],ids,ids,start,end,0),/time budget/);
   // Forced late failure must not return a completed subset.

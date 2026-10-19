@@ -21,7 +21,7 @@ location results are persisted on a failure.
 
 ## Budgets and tradeoffs
 
-- 256 records per fetch.
+- 1,024 records per fetch.
 - 100,000 records and 16 MiB serialized metadata per location.
 - 500,000 records and 64 MiB serialized metadata for the entire report.
 - 32 KiB per record, including a guard on source evidence before transmission.
@@ -100,3 +100,35 @@ This test does not isolate network time from database execution time. A separate
 timeout-setting request precedes each page, multiplying round trips. Keep the
 feature disabled and optimize/test batching locally without extending the total
 deadline, row/byte budgets, or rerunning production without approval.
+
+## Local network-latency optimization
+
+Fetches now contain at most 1,024 records instead of 256. Fleet/location row and
+byte limits, the record-size limit, single-report admission and the absolute
+deadline are unchanged. Larger fetches trade fewer requests for higher transient
+page memory: the driver receives a page before application validation. The
+record-size guard remains fail-closed; the location byte cap is not an exact
+driver-buffer or heap cap.
+
+A transaction-local timeout setter installs a five-second server timeout once,
+then only updates it when the remaining request budget requires a smaller
+timeout (rounded down). A failed SET is not cached; the cache never crosses
+transactions. Existing active-query cancellation remains in force. An explicit
+lower caller timeout is respected.
+
+Both control requests and data requests incur the injected test latency:
+- 120,000 synthetic invoices with 60 ms/request: 11.5 seconds, 146 calls plus
+  one timeout SET; correct independent totals.
+- Retained 215,655-record snapshot with 100 ms/request: 27.3 seconds, 244 calls
+  plus one timeout SET; exact original coverage totals.
+- No elevated reader privileges or permitted temporary-file spill.
+- Timeout-cache, regression/service-wiring and TypeScript checks passed.
+
+Test-process maximum RSS was about 239 MiB (synthetic) and 266 MiB (snapshot).
+These maxima include fixture/oracle processing and are not isolated runtime
+heap measurements or production memory guarantees. Tests retain the original
+no-partial-results, scope, deadline, oversize, conflict, concurrency and
+snapshot-consistency checks.
+
+No new production report, deployment or activation occurred during this
+optimization. A separately approved bounded live retry remains necessary.
