@@ -612,9 +612,9 @@ export async function getReportingKpis(
     }
     const rows = await runStage("invoice", query, INVOICE_HOURS_SQL, [`{${invoiceIds.join(",")}}`, range.start.toISOString(), range.end.toISOString()], deadlineAt, options.beforeStage);
     if (rows.length > INVOICE_HOURS_MAX_ORDERS) {
-      throw new ReportingQueryError("Invoice evidence exceeds 100,000 stored work orders. Select fewer locations.", "validation", "invoice");
+      result.dataQuality.notes.push("Invoice coverage capped at the 100,000 stored-work-order safety limit, including identity peers. Eligible counts, unknown population, hours and averages are unavailable; the returned rows are not exact totals or lower bounds. Select fewer locations.");
     }
-    if (options.recoverLabor) {
+    if (options.recoverLabor && rows.length <= INVOICE_HOURS_MAX_ORDERS) {
       const recoveryDeadline = Math.min(deadlineAt, Date.now() + 8000);
       try {
         await withinDeadline(options.recoverLabor(rows.filter(r => !r.invoice_evidence) as LaborFact[], recoveryDeadline), recoveryDeadline, "invoice_source_cache");

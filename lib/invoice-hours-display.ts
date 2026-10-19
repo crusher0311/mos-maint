@@ -3,6 +3,7 @@ export const INVOICE_HOURS_LABELS: Record<string, string> = {
   averagePresentedHoursPerInvoice: "Average hours presented",
   averageSoldHoursPerInvoice: "Average hours sold",
   invoiceCount: "Eligible invoices",
+  invoiceEvidenceCapped: "Invoice evidence safety limit reached",
   invoicePopulationUnknown: "Unverified invoice records",
   invoiceSoldHours: "Covered sold hours",
   invoicePresentedHours: "Covered presented hours",
@@ -11,6 +12,7 @@ export const INVOICE_HOURS_LABELS: Record<string, string> = {
 };
 export function invoiceHoursDisplay(key: string, values: Record<string, number | null | undefined>): string | undefined {
   if (!["averagePresentedHoursPerInvoice", "averageSoldHoursPerInvoice"].includes(key)) return undefined;
+  if (values.invoiceEvidenceCapped === 1) return "Coverage capped — invoice counts, unknown population and averages unavailable. Select fewer locations.";
   const count = values.invoiceCount;
   const covered = values[key === "averagePresentedHoursPerInvoice" ? "invoicePresentedCovered" : "invoiceSoldCovered"];
   const unknown = values.invoicePopulationUnknown;

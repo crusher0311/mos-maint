@@ -59,7 +59,7 @@ const assert = require("node:assert/strict");
     await page.getByRole("tab", { name: "Invoice hours", exact: true }).click();
     await page.setViewportSize({ width: 390, height: 844 });
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), "mobile page fits viewport");
-    for (const scenario of ["resolved", "conflict"]) {
+    for (const scenario of ["resolved", "conflict", "capped"]) {
       await page.goto(`http://127.0.0.1:24100/invoice-hours.html?population=${scenario}`);
       await panel.getByLabel("Start date").fill("2026-09-01");
       await panel.getByLabel("End date").fill("2026-09-30");
@@ -68,6 +68,11 @@ const assert = require("node:assert/strict");
         .getByText(scenario === "resolved" ? "3.00" : "Incomplete data", { exact: true }).waitFor();
       await panel.locator("article").filter({ hasText: "Average sold" })
         .getByText(scenario === "resolved" ? "2.00" : "Incomplete data", { exact: true }).waitFor();
+      if (scenario === "capped") {
+        await panel.getByText("Invoice coverage capped.", { exact: true }).waitFor();
+        await panel.getByText(/100,000 stored-work-order safety limit/).waitFor();
+        assert.equal(await panel.locator("article").getByText("No data", { exact: true }).count(), 0);
+      }
     }
     assert.deepEqual(errors, []);
     console.log("Invoice dashboard: explicit runs, weighted cards, independent coverage, dates, location, retained results, scope isolation, custom access and mobile: PASS");

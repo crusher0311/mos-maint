@@ -38,6 +38,8 @@ export const REPORTING_KPI_CATALOG: readonly MetricDefinition[] = [
 ] as const;
 
 export interface ReportingMetricValues {
+  /** 1 means the identity closure hit its safety limit; all invoice totals are unavailable. */
+  invoiceEvidenceCapped?: number | null;
   invoiceCount?: number | null;
   invoicePopulationUnknown?: number | null;
   invoiceSoldHours?: number | null;

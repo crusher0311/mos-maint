@@ -3,6 +3,50 @@ import { extractProtractorServicePackages, getOccurrenceAwareLineKeys, getProtra
 import { recordedNumber } from "./labor-reporting-contract";
 import type { ReportingMetricValues } from "./reporting-kpi-contract";
 import { knownUninvoiced } from "./invoice-status-policy";
+import { INVOICE_HOURS_MAX_ORDERS } from "./invoice-hours-query";
+
+/** A truncated identity closure is not even a trustworthy lower-bound count:
+ * unseen peers can resolve unknowns or veto apparently complete invoices. */
+export function cappedInvoiceHours(): Partial<ReportingMetricValues> {
+  return {
+    invoiceEvidenceCapped: 1, invoiceCount: null, invoicePopulationUnknown: null,
+    invoiceSoldHours: null, invoicePresentedHours: null,
+    invoiceSoldCovered: null, invoicePresentedCovered: null,
+    averageSoldHoursPerInvoice: null, averagePresentedHoursPerInvoice: null,
+  };
+}
+
+/** Offline diagnostic only. Each entry must be a complete, independently
+ * queried location closure, not chunks of a location or rounded averages.
+ * The caller supplies the authorized scope and keeps its query/time budgets. */
+export function combineInvoiceLocationDiagnostics(
+  authorizedShopIds: readonly number[],
+  locations: ReadonlyMap<number, Partial<ReportingMetricValues>>,
+): Partial<ReportingMetricValues> {
+  const authorized = new Set(authorizedShopIds);
+  if (authorized.size !== authorizedShopIds.length ||
+      locations.size !== authorized.size || [...locations.keys()].some(id => !authorized.has(id))) {
+    throw new Error("Invoice diagnostic requires exactly one result per authorized location");
+  }
+  const rows = [...locations.values()];
+  if (rows.some(row => row.invoiceEvidenceCapped === 1)) return cappedInvoiceHours();
+  const result: Partial<ReportingMetricValues> = { invoiceEvidenceCapped: 0 };
+  for (const key of ["invoiceCount", "invoicePopulationUnknown", "invoiceSoldHours",
+    "invoicePresentedHours", "invoiceSoldCovered", "invoicePresentedCovered"] as const) {
+    result[key] = rows.every(row => typeof row[key] === "number" && Number.isFinite(row[key]) && row[key]! >= 0)
+      ? rows.reduce((sum, row) => sum + row[key]!, 0) : null;
+  }
+  for (const [average, covered, hours] of [
+    ["averageSoldHoursPerInvoice", "invoiceSoldCovered", "invoiceSoldHours"],
+    ["averagePresentedHoursPerInvoice", "invoicePresentedCovered", "invoicePresentedHours"],
+  ] as const) {
+    result[average] = result.invoicePopulationUnknown === 0 && !!result.invoiceCount &&
+      result[covered] === result.invoiceCount && result[hours] != null &&
+      rows.every(row => row.invoiceCount === 0 || row[average] != null)
+      ? result[hours]! / result.invoiceCount! : null;
+  }
+  return result;
+}
 
 export const INVOICE_HOURS_METRICS = ["averagePresentedHoursPerInvoice", "averageSoldHoursPerInvoice"] as const;
 export const INVOICE_HOURS_NOTES = [
@@ -116,6 +160,10 @@ export interface InvoiceHoursFact {
 }
 
 export function aggregateInvoiceHours(facts: InvoiceHoursFact[], start: Date, end: Date) {
+  if (facts.length > INVOICE_HOURS_MAX_ORDERS) {
+    return { summary: cappedInvoiceHours(),
+      locations: new Map<string, Partial<ReportingMetricValues>>(), empty: cappedInvoiceHours() };
+  }
   const locations = new Map<number, {
     invoices: Map<string, InvoiceEvidence>;
     unknown: Map<string, string[]>;
@@ -162,7 +210,7 @@ export function aggregateInvoiceHours(facts: InvoiceHoursFact[], start: Date, en
   }]));
   const summarize = (invoices: InvoiceEvidence[], unknown: number): Partial<ReportingMetricValues> => {
     const rows = invoices.filter(r => Date.parse(r.date) >= +start && Date.parse(r.date) <= +end);
-    const value: Partial<ReportingMetricValues> = { invoiceCount: rows.length, invoicePopulationUnknown: unknown };
+    const value: Partial<ReportingMetricValues> = { invoiceEvidenceCapped: 0, invoiceCount: rows.length, invoicePopulationUnknown: unknown };
     for (const [field, sumKey, coveredKey, averageKey] of [
       ["sold", "invoiceSoldHours", "invoiceSoldCovered", "averageSoldHoursPerInvoice"],
       ["presented", "invoicePresentedHours", "invoicePresentedCovered", "averagePresentedHoursPerInvoice"],

@@ -53,3 +53,10 @@ test("missing population or numerator is never silently treated as zero", () => 
 test("authoritative null average prevents a fabricated aggregate", () => {
   assert.equal(summarizeInvoiceHours([row(100, 300, 200, { averageSoldHoursPerInvoice: null })]).sold.value, null);
 });
+test("capped coverage never presents partial rows as totals or no data", () => {
+  const value = summarizeInvoiceHours([row(0, 0, 0, { invoiceEvidenceCapped: 1 })]);
+  assert.equal(value.capped, true);
+  assert.equal(value.count, null);
+  assert.equal(value.unknown, null);
+  assert.equal(hoursDisplay(value.sold.value, value.count, value.unknown), "Incomplete data");
+});

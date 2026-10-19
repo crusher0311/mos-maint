@@ -6,6 +6,9 @@ const KNOWN_UNINVOICED_SQL=`(wo.status::text IN (${statusList(COMMON_UNINVOICED_
   OR (coalesce(wo.provenance->>'sourceSystem','')='protractor'
     AND wo.status::text IN (${statusList(PROTRACTOR_UNINVOICED_STATUSES)})))`;
 export const INVOICE_HOURS_MAX_ORDERS = 100_000;
+// Both limits intentionally include one overflow sentinel. Never aggregate a
+// truncated closure, paginate it, or retry per location in the live request:
+// unseen peers may change evidence and fan-out would multiply the row budget.
 export const INVOICE_VERIFIED_PREDICATE = `
 wo.provenance->>'sourceSystem' = 'protractor'
 AND wo.custom_fields->'invoiceHours'->>'version' = '1'

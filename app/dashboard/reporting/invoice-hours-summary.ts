@@ -6,6 +6,7 @@ export type InvoiceHoursRow = {
 };
 
 export type HoursSummary = {
+  capped: boolean;
   count: number | null;
   unknown: number | null;
   presented: { value: number | null; covered: number | null };
@@ -24,6 +25,7 @@ function sum(rows: InvoiceHoursRow[], field: string): number | null {
 
 /** Ratios of raw totals, never means of rounded location averages. */
 export function summarizeInvoiceHours(rows: InvoiceHoursRow[]): HoursSummary {
+  const capped = rows.some(row => row.current.invoiceEvidenceCapped === 1);
   const count = sum(rows, "invoiceCount");
   const unknown = sum(rows, "invoicePopulationUnknown");
   const metric = (kind: "Presented" | "Sold") => {
@@ -36,7 +38,9 @@ export function summarizeInvoiceHours(rows: InvoiceHoursRow[]): HoursSummary {
     return { covered, value: count !== null && count > 0 && unknown === 0
       && covered === count && hours !== null && complete ? hours / count : null };
   };
-  return { count, unknown, presented: metric("Presented"), sold: metric("Sold") };
+  if (capped) return { capped, count: null, unknown: null,
+    presented: { covered: null, value: null }, sold: { covered: null, value: null } };
+  return { capped, count, unknown, presented: metric("Presented"), sold: metric("Sold") };
 }
 
 export function hoursDisplay(value: number | null, count: number | null, unknown: number | null): string {

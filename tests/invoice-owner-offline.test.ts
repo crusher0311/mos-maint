@@ -10,6 +10,83 @@ import {userInfo} from "node:os";
 import {ownerFixture} from "./fixtures/invoice-owner";
 import {planOwnerStructure} from "../scripts/invoice-owner-repair-model";
 import {reconcileOwnerCopies,queryOwnerReport,assertOwnerFinancialControl} from "../scripts/invoice-owner-report-model";
+import {aggregateInvoiceHours, combineInvoiceLocationDiagnostics} from "../lib/invoice-hours-contract";
+import {INVOICE_HOURS_SQL, INVOICE_HOURS_MAX_ORDERS} from "../lib/invoice-hours-query";
+import {invoiceHoursDisplay} from "../lib/invoice-hours-display";
+
+test("location diagnostic ratios use raw totals and preserve independent vetoes",()=>{
+  const summary=(count:number,hours:number)=>({
+    invoiceEvidenceCapped:0,invoiceCount:count,invoicePopulationUnknown:0,
+    invoiceSoldHours:hours,invoicePresentedHours:hours,
+    invoiceSoldCovered:count,invoicePresentedCovered:count,
+    averageSoldHoursPerInvoice:count?hours/count:null,
+    averagePresentedHoursPerInvoice:count?hours/count:null,
+  });
+  const rows=new Map([[1,summary(1,2)],[2,summary(99,396)],[3,summary(0,0)]]);
+  assert.equal(combineInvoiceLocationDiagnostics([1,2,3],rows).averageSoldHoursPerInvoice,3.98);
+  rows.get(1)!.averagePresentedHoursPerInvoice=null;
+  const partial=combineInvoiceLocationDiagnostics([1,2,3],rows);
+  assert.equal(partial.averagePresentedHoursPerInvoice,null);
+  assert.equal(partial.averageSoldHoursPerInvoice,3.98);
+  assert.throws(()=>combineInvoiceLocationDiagnostics([1,2,3,4],rows));
+  assert.throws(()=>combineInvoiceLocationDiagnostics([1,2,2],rows));
+});
+
+test("large fleet remains capped; bounded offline location aggregates retain unknowns and identity conflicts",async()=>{
+  const socket=process.env.INVOICE_OWNER_TEST_SOCKET;
+  assert.match(socket??"",/^\/tmp\/invoice-owner-offline\.[A-Za-z0-9]+$/);
+  const pg=postgres({host:socket,port:5432,username:userInfo().username,database:"postgres",max:1,onnotice:()=>{}});
+  const shops=Array.from({length:10},(_,i)=>i+1);
+  const start="2026-09-01T00:00:00.000Z",end="2026-09-30T23:59:59.999Z";
+  try{
+    await pg`CREATE TEMP TABLE normalized_work_orders(id text,shop_id int,status text,soft_delete jsonb,provenance jsonb,custom_fields jsonb)`;
+    await pg`SET statement_timeout='10s'`;
+    await pg`INSERT INTO normalized_work_orders
+      SELECT n::text,1+(n-1)/21000,'closed',null,
+        '{"sourceSystem":"protractor","sourceIds":[]}'::jsonb,null
+      FROM generate_series(1,210000) n`;
+    // The second copy is outside the date range, but must still veto the first.
+    await pg`INSERT INTO normalized_work_orders
+      SELECT 'peer-'||n,1,'invoiced',null,
+        '{"sourceSystem":"protractor","sourceIds":[{"system":"protractor","idType":"invoice_id","idValue":"00000000-0000-0000-0000-000000000001"}]}'::jsonb,
+        jsonb_build_object('invoiceHours',jsonb_build_object('version',1,
+          'id','00000000-0000-0000-0000-000000000001','date',
+          CASE WHEN n=1 THEN '2026-09-02T00:00:00.000Z' ELSE '2020-01-01T00:00:00.000Z' END,
+          'sold',2,'presented',3))
+      FROM generate_series(1,2) n`;
+    await pg`INSERT INTO normalized_work_orders VALUES ('unauthorized',99,'closed',null,'{}',null)`;
+    // Disposable fixture indexes only; not production guidance.
+    await pg`CREATE INDEX ON normalized_work_orders(shop_id)`;
+    await pg`CREATE INDEX ON normalized_work_orders(shop_id,(lower(custom_fields->'invoiceHours'->>'id')))`;
+    const query=(ids:number[])=>pg.unsafe(INVOICE_HOURS_SQL,[`{${ids.join(",")}}`,start,end]);
+    const summarize=(rows:any)=>aggregateInvoiceHours(rows,new Date(start),new Date(end)).summary;
+    const fleet=await query(shops);
+    assert.equal(fleet.length,INVOICE_HOURS_MAX_ORDERS+1);
+    const capped=summarize(fleet);
+    assert.equal(capped.invoiceEvidenceCapped,1);
+    for(const key of ["invoiceCount","invoicePopulationUnknown","invoiceSoldHours","invoicePresentedHours",
+      "averageSoldHoursPerInvoice","averagePresentedHoursPerInvoice"] as const)assert.equal(capped[key],null);
+    assert.match(invoiceHoursDisplay("averageSoldHoursPerInvoice",capped)!,/Coverage capped/);
+    const locations=new Map<number,ReturnType<typeof summarize>>();
+    for(const shop of shops){
+      const rows=await query([shop]);
+      assert.ok(rows.every(row=>row.shop_id===shop));
+      locations.set(shop,summarize(rows));
+    }
+    const combined=combineInvoiceLocationDiagnostics(shops,locations);
+    assert.equal(combined.invoicePopulationUnknown,210001);
+    assert.equal(combined.invoiceCount,0);
+    assert.equal(combined.averageSoldHoursPerInvoice,null);
+    assert.equal(combined.averagePresentedHoursPerInvoice,null);
+    assert.equal(combined.invoiceEvidenceCapped,0);
+    assert.throws(()=>combineInvoiceLocationDiagnostics([1],locations),/authorized location/);
+    locations.set(1,capped);
+    assert.deepEqual(combineInvoiceLocationDiagnostics(shops,locations),capped);
+    // One oversized location must not be paged or treated as complete.
+    await pg`UPDATE normalized_work_orders SET shop_id=1 WHERE shop_id<=10`;
+    assert.equal(summarize(await query([1])).invoiceEvidenceCapped,1);
+  }finally{await pg.end();}
+});
 
 test("offline guard rejects network and source credentials are absent",async()=>{
   for(const key of Object.keys(process.env))assert.doesNotMatch(key,/PASSWORD|SECRET|API_KEY|DATABASE_URL|MONGODB/);

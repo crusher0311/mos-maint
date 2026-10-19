@@ -148,8 +148,8 @@ export const REPORT_DIMENSION_TO_KPI_FIELD: Readonly<
 };
 
 export const REPORT_METRIC_VALUE_KEYS: Readonly<Record<ReportMetric, Array<keyof ReportingMetricValues>>> = {
-  averagePresentedHoursPerInvoice: ["averagePresentedHoursPerInvoice", "invoiceCount", "invoicePresentedHours", "invoicePresentedCovered", "invoicePopulationUnknown"],
-  averageSoldHoursPerInvoice: ["averageSoldHoursPerInvoice", "invoiceCount", "invoiceSoldHours", "invoiceSoldCovered", "invoicePopulationUnknown"],
+  averagePresentedHoursPerInvoice: ["averagePresentedHoursPerInvoice", "invoiceCount", "invoicePresentedHours", "invoicePresentedCovered", "invoicePopulationUnknown", "invoiceEvidenceCapped"],
+  averageSoldHoursPerInvoice: ["averageSoldHoursPerInvoice", "invoiceCount", "invoiceSoldHours", "invoiceSoldCovered", "invoicePopulationUnknown", "invoiceEvidenceCapped"],
   laborClosedROCount: ["laborClosedROCount"],
   soldLaborHours: ["soldLaborHours", "soldLaborCoveredROs", "laborClosedROCount"],
   presentedLaborHours: ["presentedLaborHours", "presentedLaborCoveredROs", "laborClosedROCount"],

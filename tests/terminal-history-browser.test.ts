@@ -52,7 +52,10 @@ test("real history component: loading, repeated refresh, denied/unavailable, and
       assert.equal(await page.$$eval("article", nodes => nodes.length), 0);
       assert.doesNotMatch(await page.$eval("section", el => el.textContent!), /Imported:|Verified present:|receipts on this page|No terminal history campaigns/);
     };
-    await noCounts();
+
+    const waitForPending = async () => {
+      for (let i = 0; pending.length === 0 && i < 100; i++) await new Promise(r => setTimeout(r, 10));
+    };
     const start = async () => {
       const before = requests.length;
       await page.click("section button");
@@ -62,7 +65,7 @@ test("real history component: loading, repeated refresh, denied/unavailable, and
       assert.equal(await page.$$eval("[role=alert]", nodes => nodes.length), 0);
       // A disabled button cannot dispatch a second fetch while the first is pending.
       await page.click("section button");
-      for (let i = 0; pending.length === 0 && i < 100; i++) await new Promise(r => setTimeout(r, 10));
+      await waitForPending();
       assert.equal(pending.length, 1);
       assert.equal(requests.length, before + 1);
     };
@@ -104,7 +107,7 @@ test("real history component: loading, repeated refresh, denied/unavailable, and
     });
     await page.waitForFunction(() => (document.querySelector("section button") as HTMLButtonElement).disabled);
     await noCounts();
-    for (let i = 0; pendingCount() === 0 && i < 100; i++) await new Promise(r => setTimeout(r, 10));
+    await waitForPending();
     assert.equal(pending.length, 1);
     assert.equal(requests.at(-1),
       "GET /api/platform-admin/terminal-history-imports?campaignId=example-history-campaign&receiptAfter=fixture-receipts");
@@ -121,7 +124,7 @@ test("real history component: loading, repeated refresh, denied/unavailable, and
       [...document.querySelectorAll("button")].find(b => b.textContent === "First receipt page")!.click();
     });
     await page.waitForFunction(() => (document.querySelector("section button") as HTMLButtonElement).disabled);
-    for (let i = 0; pendingCount() === 0 && i < 100; i++) await new Promise(r => setTimeout(r, 10));
+    await waitForPending();
     assert.equal(pending.length, 1);
     await finish(503, { error: "Unavailable" });
     await page.waitForSelector("[role=alert]");

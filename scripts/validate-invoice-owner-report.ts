@@ -13,7 +13,7 @@ import {MongoClient} from "mongodb";
 import {planOwnerStructure} from "./invoice-owner-repair-model";
 import {reconcileOwnerCopies,queryOwnerReport,assertOwnerFinancialControl} from "./invoice-owner-report-model";
 import {INVOICE_HOURS_SQL} from "../lib/invoice-hours-query";
-import {aggregateInvoiceHours} from "../lib/invoice-hours-contract";
+import {aggregateInvoiceHours,combineInvoiceLocationDiagnostics} from "../lib/invoice-hours-contract";
 import {INVOICE_HOURS_MAX_ORDERS} from "../lib/invoice-hours-query";
 import {captureFleet,retainedArchives} from "./invoice-owner-retained-sources";
 import {collectChildEvidence,auditChild,childKinds} from "./invoice-owner-financial-audit";
@@ -177,20 +177,24 @@ async function main(){
         [`{${fleetShops.join(",")}}`,start,end]);
       console.log(JSON.stringify({event:"fleet_report",label:table,rows:rows.length,
         bounded:rows.length>INVOICE_HOURS_MAX_ORDERS,
-        summary:rows.length>INVOICE_HOURS_MAX_ORDERS?null:aggregateInvoiceHours(rows as any,new Date(start),new Date(end)).summary}));
+        summary:aggregateInvoiceHours(rows as any,new Date(start),new Date(end)).summary}));
       // Keep the real fleet cap intact. Independent shop scopes cannot share
-      // invoice identities; their uncapped union is an offline diagnostic only.
-      const all:any[]=[];
+      // invoice identities. Retain only aggregates, never an uncapped row union.
+      // Ten fixed locations, one bounded query each; no paging/retry on overflow.
+      const summaries=new Map<number,ReturnType<typeof aggregateInvoiceHours>["summary"]>();
+      let diagnosticRows=0;
       for(const shop of fleetShops){
         const location=await local.unsafe(INVOICE_HOURS_SQL.replaceAll("normalized_work_orders",table),
           [`{${shop}}`,start,end]);
-        assert.ok(location.length<=INVOICE_HOURS_MAX_ORDERS,"Location report row cap reached");
-        all.push(...location);
+        assert.ok(location.every(row=>Number(row.shop_id)===shop),"Location scope mismatch");
+        diagnosticRows+=location.length;
+        const summary=aggregateInvoiceHours(location as any,new Date(start),new Date(end)).summary;
+        summaries.set(shop,summary);
         console.log(JSON.stringify({event:"location_report",label:table,shop,rows:location.length,
-          summary:aggregateInvoiceHours(location as any,new Date(start),new Date(end)).summary}));
+          summary}));
       }
-      console.log(JSON.stringify({event:"fleet_location_union_diagnostic",label:table,rows:all.length,
-        summary:aggregateInvoiceHours(all,new Date(start),new Date(end)).summary}));
+      console.log(JSON.stringify({event:"fleet_location_aggregate_diagnostic",label:table,rows:diagnosticRows,
+        offlineOnly:true,summary:combineInvoiceLocationDiagnostics(fleetShops,summaries)}));
     }
     const childDetails=await local`select table_name,reason,count(*)::int n from child_audit group by 1,2 order by 1,2`;
     const mismatchedFields=await local`select table_name,reason,f.field,count(*)::int n from child_audit,

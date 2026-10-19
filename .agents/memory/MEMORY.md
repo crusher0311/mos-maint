@@ -110,6 +110,7 @@
 - [AppFueled test traffic on QA](appfueled-qa-runtime.md) — test partner requests hit QA; keep report signing config aligned with production and verify the running process.
 - [AppFueled native contract](appfueled-native-contract.md) — connection-ID authentication is explicitly accepted; MOS shop IDs are authoritative; implementation does not authorize live setup.
 - [Demand-driven reporting compatibility](reporting-demand-driven-compatibility.md) — async/cached migrations must preserve pinned links, saved-version boundaries, schedule management, and recipient scope identity.
+- [Invoice fleet safety bounds](invoice-fleet-bounds.md) — capped identity closures are not lower-bound counts; offline location diagnostics do not authorize live fan-out.
 - [Missed Opportunities provider-cache deadline](missed-opps-provider-cache-deadline.md) — optional Protractor cache recovery can consume ~54s; bound the whole stage and fail open separately from VHI-plan coverage.
 - [Enterprise settings storage](enterprise-settings-storage.md) — cross-location settings must honor canonical PG mode and mixed numeric/string Mongo shop IDs.
 - [Entitlements span every delivery channel](product-entitlement-delivery-channels.md) — gate the target shop across dashboard, extension, signed links, partner APIs, media, and derived enrichment.

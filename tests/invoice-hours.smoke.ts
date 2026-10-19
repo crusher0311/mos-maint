@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { aggregateInvoiceHours, invoiceHoursEvidence, type InvoiceHoursFact } from "../lib/invoice-hours-contract";
 import { compileReportDefinition, executeReportDefinition } from "../lib/report-definition-compiler";
+import { getReportingKpis, normalizeReportingRange } from "../lib/reporting-kpi-service";
 import { INVOICE_HOURS_SQL } from "../lib/invoice-hours-query";
 import { invoiceHoursDisplay } from "../lib/invoice-hours-display";
 import { PROTRACTOR_UNINVOICED_STATUSES } from "../lib/invoice-status-policy";
@@ -191,6 +192,30 @@ assert.deepEqual(compileReportDefinition(definition, scope).execution.stages, ["
 assert.throws(() => compileReportDefinition({ ...definition, dimensions: ["date"] }, scope), /Invoice averages/);
 assert.throws(() => compileReportDefinition({ ...definition, dimensions: ["technician"] }, scope), /Invoice averages/);
 async function main() {
+  let cappedQueries = 0, cappedRecoveries = 0;
+  await getReportingKpis(scope, normalizeReportingRange(definition.dateRange.start, definition.dateRange.end), {
+    executionPlan: compileReportDefinition(definition, scope).execution,
+    query: () => Promise.resolve(Array.from({ length: 100001 }, () => fact(1))),
+    recoverLabor: async () => { cappedRecoveries++; return 0; },
+  });
+  assert.equal(cappedRecoveries, 0, "do not spend recovery budget on a truncated closure");
+  const capped = await executeReportDefinition(definition, scope, { serviceOptions: {
+    query: (text, params) => {
+      cappedQueries++;
+      assert.equal(text, INVOICE_HOURS_SQL);
+      assert.equal(params[0], "{1,2}");
+      return Promise.resolve(Array.from({ length: 100001 }, () => fact(1)));
+    },
+  } });
+  assert.equal(cappedQueries, 1, "no live location fan-out or pagination");
+  assert.ok(capped.metadata.dataQuality.notes.some(note => note.includes("coverage capped")));
+  for (const row of capped.rows) {
+    assert.equal(row.current.invoiceEvidenceCapped, 1, "cap status survives saved report projection");
+    assert.equal(row.current.invoiceCount, null);
+    assert.equal(row.current.invoicePopulationUnknown, null);
+    assert.equal(row.current.averageSoldHoursPerInvoice, null);
+    assert.match(invoiceHoursDisplay("averageSoldHoursPerInvoice", row.current)!, /Coverage capped/);
+  }
   const stages: string[] = [];
   const result = await executeReportDefinition(definition, scope, { serviceOptions: {
     query: (text, params, context) => {
