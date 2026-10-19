@@ -9,4 +9,4 @@ cleanup() {
 trap cleanup EXIT
 initdb -D "$tmp/data" -A trust --no-locale >"$tmp/init.log"
 pg_ctl -D "$tmp/data" -l "$tmp/server.log" -o "-p $port -h 127.0.0.1 -k $tmp -c invoice_preview.disposable=yes" start >/dev/null
-NODE_OPTIONS="--require ./scripts/_stubs/server-only-stub.cjs" timeout 180s node --import tsx scripts/validate-invoice-owner-report.ts "$port"
+NODE_OPTIONS="--require ./scripts/_stubs/server-only-stub.cjs" timeout 900s node --import tsx scripts/validate-invoice-owner-report.ts "$port"

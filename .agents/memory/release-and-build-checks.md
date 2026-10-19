@@ -16,6 +16,7 @@ Use the existing release and validation guidance before publishing or diagnosing
 - [server-only test seams](server-only-untestable-under-tsx.md): isolate pure logic for tsx tests.
 - [Repository migration test seams](repo-migration-test-seams.md): preserve fake-store boundaries in prebuild checks.
 - [Smoke version pins](smoke-version-pin-blocks-deploys.md): exact version assertions block unrelated releases.
+- [Normalized adapter entrypoint](normalized-adapter-entrypoint.md): cold tsx imports must enter through the core factory.
 - [Merge-marker verification](merge-marker-verifier.md): decorative comment separators can trigger false positives.
 - [Long-running jobs](long-running-jobs-need-workflow.md): use managed workflows or tracked background tasks, not shell detachment.
 
