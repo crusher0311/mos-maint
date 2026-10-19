@@ -137,6 +137,32 @@ async function run() {
       restrictedFailures.map((entry) => `${entry.method} ${entry.pathname}`).join(", "),
     );
 
+    // Exercise the real central policy, not a mocked route guard. Recovery
+    // must be reachable for verified provider writers but never Basic/read-only.
+    const recoveryPath = "/api/extension/auto-dvi/push/recover";
+    const verifiedRecoveryAuth = {
+      ...basicAuth,
+      principal: {
+        ...basicAuth.principal!,
+        assurance: "verified" as const,
+        capabilities: ["read", "write", "provider_action"] as sessions.ExtensionCapability[],
+      },
+    };
+    ok("DVI recovery POST permits a verified provider writer",
+      auth.enforceExtensionRoutePolicy(request(recoveryPath, "POST"), verifiedRecoveryAuth).authorized);
+    ok("DVI recovery POST rejects Basic",
+      !auth.enforceExtensionRoutePolicy(request(recoveryPath, "POST"), basicAuth).authorized);
+    for (const capabilities of [["read"], ["read", "write"], ["read", "provider_action"]]) {
+      const result = auth.enforceExtensionRoutePolicy(request(recoveryPath, "POST"), {
+        ...verifiedRecoveryAuth, principal: {...verifiedRecoveryAuth.principal,
+          capabilities: capabilities as sessions.ExtensionCapability[]},
+      });
+      ok(`DVI recovery requires both mutation capabilities (${capabilities.join(",")})`,
+        !result.authorized && auth.getAuthErrorStatus(result) === 403);
+    }
+    ok("DVI recovery OPTIONS has a preflight policy",
+      auth.enforceExtensionRoutePolicy(request(recoveryPath, "OPTIONS"), basicAuth).authorized);
+
     const wrongShop = await auth.validateExtensionToken(
       request("/api/extension/features"),
       "8",

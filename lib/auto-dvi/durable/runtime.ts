@@ -7,10 +7,10 @@ import { digest, parseRequest } from "./model";
  * NEVER remove an enrolled shop to roll back: it must not use the legacy writer
  * while durable records exist. Empty by default; no runtime provisioning. */
 export const DURABLE_DVI_ENROLLMENTS: Readonly<Record<number, {
-  admissions: boolean; capabilities?: VerifiedProtractorCapabilities;
+  admissions: boolean; recovery?: boolean; capabilities?: VerifiedProtractorCapabilities;
 }>> = Object.freeze({});
 
-export async function durableService(shopId: number): Promise<DurablePushService | null> {
+async function durableDependencies(shopId: number) {
   const policy = DURABLE_DVI_ENROLLMENTS[shopId];
   if (!policy) return null;
   const [{ getDb, getMongoClient }, { MongoDviStore }, { Repository }, { ProtractorDurableProvider },
@@ -20,11 +20,23 @@ export async function durableService(shopId: number): Promise<DurablePushService
   ]);
   const store = new MongoDviStore(await getMongoClient(), await getDb());
   await store.ready();
-  return new DurablePushService({repository: new Repository(store), admissions: policy.admissions,
+  return {repository: new Repository(store), admissions: policy.admissions,
     provider: new ProtractorDurableProvider(policy.capabilities),
-    price: async (id, request) => request.recommendedItems.length
+    price: async (id: number, request: import("./model").Request) => request.recommendedItems.length
       ? (await buildRecommendedWorkPackages({shopId: id, items: request.recommendedItems})).packages : [],
-  });
+  };
+}
+export async function durableService(shopId: number): Promise<DurablePushService | null> {
+  const deps = await durableDependencies(shopId);
+  return deps ? new DurablePushService(deps) : null;
+}
+
+export async function durableRecoveryService(shopId: number) {
+  const deps = await durableDependencies(shopId);
+  if (!deps) throw new DurableError("DURABLE_NOT_ENROLLED", 404);
+  const [{RecoveryService}, {assertRecoveryOperator}] = await Promise.all([import("./recovery"), import("./access")]);
+  return new RecoveryService({...deps, service: new DurablePushService(deps),
+    enabled: DURABLE_DVI_ENROLLMENTS[shopId].recovery === true, authorize: assertRecoveryOperator});
 }
 export function durableFailure(error: unknown): Reply {
   return {status: error instanceof DurableError ? error.status : 503, body: {

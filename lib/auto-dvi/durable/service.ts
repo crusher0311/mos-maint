@@ -30,8 +30,8 @@ export class DurablePushService {
         !target.connection || !target.connectionVersion) throw new DurableError("TARGET_CHANGED");
     return target;
   }
-  private async validateExisting(scope: Scope, op: Operation) {
-    this.deps.repository.authorize(op, scope);
+  async validateExisting(scope: Scope, op: Operation, staff = false) {
+    this.deps.repository.authorize(op, scope, staff);
     if (op.schemaVersion !== 1 || op.composerVersion !== 1 || op.comparatorVersion !== 1 ||
         op.planDigest !== digest(op.plan) || op.planBytes !== canonical(op.plan) ||
         op.requestDigest !== digest(op.request) || op.requestBytes !== canonical(op.request))
@@ -51,6 +51,13 @@ export class DurablePushService {
     const target = await this.checkedTarget(scope, request);
     const previous = await repo.target(scope, target.connection, target.guid);
     if (previous) {
+      // Another process can reserve this same request between lookup and
+      // target discovery. Return its operation rather than a false target conflict.
+      const raced = await repo.lookup(scope, clientRequestId, digest(request));
+      if (raced) {
+        await this.validateExisting(scope, raced);
+        return repo.response(raced);
+      }
       if (previous.state !== "complete") throw new DurableError("TARGET_UNRESOLVED");
       repo.authorize(previous, scope);
       if (previous.requestDigest === digest(request)) {
@@ -137,7 +144,7 @@ export class DurablePushService {
   async status(scope: Scope, id: string): Promise<Reply> {
     const op = await this.deps.repository.operation(id);
     if (!op) throw new DurableError("NOT_FOUND", 404);
-    await this.validateExisting(scope, op);
+    await this.validateExisting(scope, op, true);
     return this.deps.repository.response(op);
   }
   /** Read-only target discovery works even when the client lost the POST reply. */
@@ -159,12 +166,12 @@ export class DurablePushService {
     const repo = this.deps.repository;
     const op = await repo.operation(id);
     if (!op) throw new DurableError("NOT_FOUND", 404);
-    await this.validateExisting(scope, op);
+    await this.validateExisting(scope, op, true);
     if (op.state === "complete") {
       await repo.deliver(id).catch(() => {});
       return repo.response(op);
     }
-    const token = await repo.claim(id, scope);
+    const token = await repo.claim(id, scope, Date.now(), true);
     if (!token) return repo.response(op);
     try {
       let read: Snapshot | null = null;
@@ -182,5 +189,16 @@ export class DurablePushService {
       }
       return repo.response(latest);
     } finally { await repo.releaseClaim(id, token).catch(() => {}); }
+  }
+  /** Exact target lookup is deliberately independent of browser request storage.
+   * It exposes no request, plan, actor, prices or provider payload. */
+  async discoverOperation(scope: Scope, guid: string): Promise<Reply> {
+    const target = await this.deps.provider.target(scope, {workOrderGuid: guid} as Request);
+    if (target.shopId !== scope.shopId || target.guid !== guid || !target.connection)
+      throw new DurableError("TARGET_CHANGED");
+    const op = await this.deps.repository.target(scope, target.connection, guid);
+    if (!op) return {status: 200, body: {operationId: null, recoveryAllowed: false,
+      nextAction: "manual_verification", message: "No tracked operation. Historical uncertain pushes must be checked manually; do not resend."}};
+    return this.status(scope, op.id);
   }
 }

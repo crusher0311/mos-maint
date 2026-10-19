@@ -113,6 +113,8 @@ const POLICY_MAP: Record<string, PolicyTier[]> = {
   "/api/extension/auto-dvi/push/status|GET": ["read"],
   "/api/extension/auto-dvi/push/status|POST": ["write"],
   "/api/extension/auto-dvi/push/status|OPTIONS": ["preflight"],
+  "/api/extension/auto-dvi/push/recover|POST": ["write", "provider_action"],
+  "/api/extension/auto-dvi/push/recover|OPTIONS": ["preflight"],
   // results: write — load/save per-item technician findings (GET is modelled
   // as POST-with-action to keep one guarded JSON body shape).
   "/api/extension/auto-dvi/results|POST": ["write"],

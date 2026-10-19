@@ -9,6 +9,9 @@ import { MongoClient, type Db } from "mongodb";
 import { MongoDviStore, DURABLE_COLLECTION } from "../lib/data/repositories/auto-dvi-durable";
 import { Repository, type Store, type Transaction } from "../lib/auto-dvi/durable/repository";
 import { DurablePushService } from "../lib/auto-dvi/durable/service";
+import { RecoveryService } from "../lib/auto-dvi/durable/recovery";
+import { composePlan } from "../lib/auto-dvi/durable/compose";
+import { newOperation } from "../lib/auto-dvi/durable/model";
 import { canonical, classify, digest, DurableError, parseRequest, type Operation } from "../lib/auto-dvi/durable/model";
 import { body, scope, target, guid, resetProvider, FixtureProvider, fixtureService } from "./helpers/dvi-durable-fixture";
 
@@ -111,6 +114,199 @@ function serviceFor(store: Store, db: Db) {
   return new DurablePushService({repository: new Repository(store), provider: new FixtureProvider(db), admissions: true,
     price: async () => [{title: "Service", hours: 1, rate: 100}, {title: "Service", hours: 2, rate: 150}]});
 }
+async function recoveryFixture() {
+  const f = await fixture(), provider = new FixtureProvider(f.db);
+  const request = parseRequest(body).request;
+  const plan = composePlan(request, await provider.read(target), [{title: "Service", hours: 1, rate: 100}]);
+  const op = newOperation(scope, body.clientRequestId, request, plan);
+  await f.repo.reserve(op);
+  const token = (await f.repo.claim(op.id, scope))!;
+  await f.repo.admit(op.id, token, "packages", "original-packages");
+  await provider.write(target, "packages", plan.payloads.packages!, "0");
+  await f.repo.outcome(op.id, token, "packages", "original-packages", true);
+  await f.repo.observe(op.id, token, "packages", "desired", digest(plan.desired.packages), "1");
+  await f.repo.releaseClaim(op.id, token);
+  let authorized = true;
+  const create = (store: Store = f.store) => new RecoveryService({
+    repository: new Repository(store), provider, service: serviceFor(store, f.db), enabled: true,
+    authorize: async s => {if (!authorized || s.shopId !== 1) throw new DurableError("FORBIDDEN", 403);},
+  });
+  return {...f, op, provider, create, revoke: () => {authorized = false;}};
+}
+test("single-use recovery sends findings only, retains saved IDs, and repairs lost browser responses", async () => {
+  const f = await recoveryFixture();
+  const grant = await f.create().issue(scope, f.op.id, "findings");
+  await mode(f.db, "lost-findings");
+  const result = await f.create().consume(scope, f.op.id, "findings", grant.body.grantId);
+  assert.equal(result.body.operationState, "complete");
+  assert.deepEqual(await calls(f.db), ["packages", "findings"]);
+  const saved = await f.repo.operation(f.op.id);
+  assert.equal(saved?.planBytes, f.op.planBytes);
+  assert.equal((await serviceFor(f.store, f.db).discoverOperation({...scope, actor: "second-device"}, guid)).body.operationId, f.op.id);
+  assert.equal((await serviceFor(f.store, f.db).status(scope, f.op.id)).body.operationState, "complete");
+  await assert.rejects(f.create().consume(scope, f.op.id, "findings", grant.body.grantId));
+  assert.deepEqual(await calls(f.db), ["packages", "findings"]);
+});
+test("competing devices consume one grant at most once", async () => {
+  const f = await recoveryFixture();
+  const grant = await f.create().issue(scope, f.op.id, "findings");
+  await Promise.allSettled([1, 2].map(() => f.create().consume(scope, f.op.id, "findings", grant.body.grantId)));
+  assert.deepEqual(await calls(f.db), ["packages", "findings"]);
+});
+test("grants reject wrong operator, shop, stage, revoked access, expiry and revision changes", async () => {
+  for (const scenario of ["actor", "shop", "stage", "revoked", "expired", "revision", "digest"]) {
+    const f = await recoveryFixture();
+    const grant = await f.create().issue(scope, f.op.id, "findings");
+    if (scenario === "revoked") f.revoke();
+    if (scenario === "expired") await f.store.transaction(async tx => {
+      const key = `recovery-grant:${grant.body.grantId}`, g: any = await tx.get(key);
+      g.expiresAt = 0; await tx.put(key, g);
+    });
+    if (scenario === "revision") await f.service.reconcile(scope, f.op.id);
+    if (scenario === "digest") await f.store.transaction(async tx => {
+      const key = `operation:${f.op.id}`, op: any = await tx.get(key);
+      op.planDigest = "changed"; await tx.put(key, op);
+    });
+    await assert.rejects(f.create().consume(
+      scenario === "actor" ? {...scope, actor: "other"} : scenario === "shop" ? {...scope, shopId: 2} : scope,
+      f.op.id, scenario === "stage" ? "packages" : "findings", grant.body.grantId));
+    assert.deepEqual(await calls(f.db), ["packages"], scenario);
+  }
+});
+test("changed provider state, changed-back revision, closed target and missing concurrency block recovery", async () => {
+  for (const scenario of ["edit", "revision", "closed", "concurrency", "connection"]) {
+    const f = await recoveryFixture();
+    const grant = await f.create().issue(scope, f.op.id, "findings");
+    if (scenario === "edit") await f.db.collection("fixture_provider").updateOne({_id: "wo"} as any,
+      {$set: {"body.ServicePackages.ItemCollection.0.ServicePackageHeader.Title": "advisor edit"}});
+    if (scenario === "revision") await f.db.collection("fixture_provider").updateOne({_id: "wo"} as any, {$inc: {revision: 2}});
+    if (scenario === "closed") await f.db.collection("fixture_provider").updateOne({_id: "wo"} as any, {$set: {open: false}});
+    if (scenario === "connection") await f.db.collection("fixture_provider").updateOne({_id: "wo"} as any, {$set: {"target.connection": "changed"}});
+    if (scenario === "concurrency") f.provider.concurrencyVerified = false;
+    await assert.rejects(f.create().consume(scope, f.op.id, "findings", grant.body.grantId));
+    assert.deepEqual(await calls(f.db), ["packages"], scenario);
+  }
+});
+test("an earlier unresolved attempt remains blocked even if a read sees its desired packages", async () => {
+  const f = await recoveryFixture();
+  await f.store.transaction(async tx => {
+    const key = `operation:${f.op.id}`, op: any = await tx.get(key);
+    op.stages.packages.transportSettled = false; await tx.put(key, op);
+  });
+  await assert.rejects(f.create().issue(scope, f.op.id, "findings"), /EARLIER_REQUEST_UNRESOLVED/);
+  assert.deepEqual(await calls(f.db), ["packages"]);
+});
+test("lost recovery admission commit response never sends; consumed grant cannot be reused", async () => {
+  const f = await recoveryFixture();
+  const grant = await f.create().issue(scope, f.op.id, "findings");
+  const store = new FaultStore(f.store, (key, value) => key.startsWith("recovery-grant:") && value.consumed, true);
+  await assert.rejects(f.create(store).consume(scope, f.op.id, "findings", grant.body.grantId));
+  await assert.rejects(f.create().consume(scope, f.op.id, "findings", grant.body.grantId));
+  assert.deepEqual(await calls(f.db), ["packages"]);
+});
+test("admitted absent findings require independent quiescence and reuse the exact saved payload", async () => {
+  const f = await recoveryFixture();
+  const token = (await f.repo.claim(f.op.id, scope))!;
+  await f.repo.admit(f.op.id, token, "findings", "lost-original-findings");
+  await f.repo.outcome(f.op.id, token, "findings", "lost-original-findings", false);
+  await f.repo.releaseClaim(f.op.id, token);
+  await assert.rejects(f.create().issue(scope, f.op.id, "findings"), /EARLIER_REQUEST_UNRESOLVED/);
+  let proofValid = true;
+  const recovery = new RecoveryService({repository: f.repo, provider: f.provider, service: f.service,
+    enabled: true, authorize: async () => {},
+    proveQuiescence: async (_op, stage, attempt) => {
+      assert.equal(stage, "findings"); assert.equal(attempt, "lost-original-findings");
+      return proofValid ? "isolated-fixture-termination-evidence" : null;
+    }});
+  const grant = await recovery.issue(scope, f.op.id, "findings");
+  proofValid = false;
+  await assert.rejects(recovery.consume(scope, f.op.id, "findings", grant.body.grantId), /EARLIER_REQUEST_UNRESOLVED/);
+  proofValid = true;
+  assert.equal((await recovery.consume(scope, f.op.id, "findings", grant.body.grantId)).status, 200);
+  assert.deepEqual(await calls(f.db), ["packages", "findings"]);
+  assert.equal((await f.repo.operation(f.op.id))?.planBytes, f.op.planBytes);
+});
+test("lost receipt acknowledgment is repaired locally and historical target lookup is manual-only", async () => {
+  const f = await recoveryFixture();
+  const grant = await f.create().issue(scope, f.op.id, "findings");
+  const store = new FaultStore(f.store, key => key.startsWith("receipt:"), true);
+  await assert.rejects(f.create(store).consume(scope, f.op.id, "findings", grant.body.grantId));
+  const result = await f.service.reconcile(scope, f.op.id);
+  assert.equal(result.body.operationState, "complete");
+  assert.deepEqual(await calls(f.db), ["packages", "findings"]);
+  assert.equal(await f.db.collection("auto_dvi_applications").countDocuments(), 1);
+  const missing = await f.service.discoverOperation(scope, "22222222-2222-4222-8222-222222222222");
+  assert.equal(missing.body.nextAction, "manual_verification");
+  assert.equal(missing.body.recoveryAllowed, false);
+});
+test("real status and recovery routes recheck access, isolate shops and consume the same grant across channels", async () => {
+  const f = await recoveryFixture();
+  const loader = Module as unknown as {_load: (id: string, ...args: any[]) => any};
+  const original = loader._load;
+  let denied = false, shopId = 1, actor = scope.actor, operator = true;
+  const access = async (s: any) => {
+    if (denied || s.shopId !== 1) throw new DurableError("OPERATION_FORBIDDEN", 403);
+  };
+  loader._load = function(id, ...args) {
+    if (id === "next/server") return {NextResponse: class extends Response {
+      static json(value: any, init?: ResponseInit) { return Response.json(value, init); }
+    }};
+    if (id === "@/lib/auth") return {getSession: async () => ({shopId, email: actor})};
+    if (id === "@/lib/extension-route-wrapper") return {withExtensionErrorMarker: (fn: any) => fn};
+    if (id === "@/lib/shop-feature-access") return {AUTO_DVI_REQUIRED_FEATURES: []};
+    if (id === "@/lib/extension-route-guard") return {
+      checkShopFeatureGate: async () => null,
+      guardExtensionShopRequest: async () => ({ok: true, mosShopId: shopId, user: {email: actor}}),
+    };
+    if (id === "./access") return {assertDurableStaff: access, assertRecoveryOperator: async (s: any) => {
+      await access(s); if (!operator) throw new DurableError("OPERATOR_AUTHORIZATION_REQUIRED", 403);
+    }};
+    if (id === "./runtime") return {
+      durableService: async () => f.service, durableRecoveryService: async () => f.create(),
+      durableFailure: (e: any) => ({status: e.status || 503, body: {error: e.code || "STORE_UNAVAILABLE"}}),
+    };
+    if (id === "@/lib/integrations/protractor/interactive-context")
+      return {runWithProtractorInteractiveTransport: (_: any, fn: any) => fn()};
+    return original.call(this, id, ...args);
+  };
+  try {
+    const dashboard = require("../app/api/auto-dvi/push/status/route");
+    const extension = require("../app/api/extension/auto-dvi/push/status/route");
+    const recover = require("../app/api/auto-dvi/push/recover/route");
+    const extRecover = require("../app/api/extension/auto-dvi/push/recover/route");
+    const statusReq = new Request(`http://fixture.invalid/api?operationId=${f.op.id}&shopId=external`);
+    actor = "another-staff-member";
+    const status = await extension.GET(statusReq);
+    assert.equal(status.status, 202);
+    assert.equal(status.headers.get("cache-control"), "private, no-store");
+    assert.equal((await status.json()).request, undefined);
+    actor = scope.actor;
+    denied = true;
+    assert.equal((await dashboard.GET(statusReq)).status, 403);
+    assert.equal((await extension.POST(statusReq)).status, 403);
+    denied = false; shopId = 2;
+    assert.equal((await dashboard.GET(statusReq)).status, 403);
+    shopId = 1;
+    const request = (b: any) => new Request("http://fixture.invalid/api?shopId=external", {
+      method: "POST", headers: {origin: "http://fixture.invalid", "content-type": "application/json"},
+      body: JSON.stringify(b),
+    });
+    const authorization = {action: "authorize", operationId: f.op.id, stage: "findings"};
+    operator = false;
+    assert.equal((await recover.POST(request(authorization))).status, 403);
+    operator = true;
+    const granted = await recover.POST(request(authorization));
+    assert.equal(granted.status, 200);
+    const {grantId} = await granted.json();
+    const consume = {action: "consume", operationId: f.op.id, stage: "findings", grantId};
+    denied = true;
+    assert.equal((await extRecover.POST(request(consume))).status, 403);
+    denied = false;
+    assert.equal((await extRecover.POST(request(consume))).status, 200);
+    assert.equal((await recover.POST(request(consume))).status, 403);
+    assert.deepEqual(await calls(f.db), ["packages", "findings"]);
+  } finally { loader._load = original; }
+});
 test("canonical request validates every field and preserves repeated selections and text", () => {
   assert.equal(canonical({b: 1, a: [2, 1]}), '{"a":[2,1],"b":1}');
   for (const change of [{items: [{name: "Battery", rating: "bad"}]}, {recover: true},
@@ -299,7 +495,9 @@ test("conditional rejection, unavailable capability, wrong actor/shop and change
   assert.equal((await f.service.push(scope, body)).status, 202);
   assert.deepEqual(await calls(f.db), []);
   const op = await storedOp(f.db);
-  await assert.rejects(f.service.status({...scope, actor: "other"}, op.id), /OPERATION_FORBIDDEN/);
+  const staffResult = await f.service.status({...scope, actor: "other"}, op.id);
+  assert.equal(staffResult.body.operationId, op.id);
+  assert.equal(staffResult.body.plan, undefined);
   await assert.rejects(f.service.reconcile({...scope, shopId: 2}, op.id), /OPERATION_FORBIDDEN/);
   await f.db.collection("fixture_provider").updateOne({_id: "wo"} as any, {$set: {"target.connectionVersion": "2"}});
   await assert.rejects(f.service.reconcile(scope, op.id), /CONNECTION_CHANGED/);

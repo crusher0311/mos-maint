@@ -60,6 +60,10 @@ export interface Plan {
   itemKeys: string[]; lineCount: number; recommendedCount: number;
 }
 export interface StageRecord {
+  /** Only an affirmative completed transport or independently verified
+   * quiescence proves an older attempt cannot execute again. */
+  transportSettled?: boolean;
+  verifiedRevision?: string;
   state: StageState; revision: number; token: string | null; admittedAt: string | null;
   transport: "REST"; payloadHash: string; classification: Classification | null;
   observedHash: string | null; observedRevision: string | null; error: string | null;

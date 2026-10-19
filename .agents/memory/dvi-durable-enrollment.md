@@ -27,3 +27,14 @@ when another device has no local marker.
 **How to apply:** Keep browser records free of findings and credentials. Use
 authenticated scope and exact verified targets, fail closed on storage/status
 errors, and do not add automatic local expiry or resend-based recovery.
+
+Recovery authorization must retain the first verified package revision rather
+than replacing it with the latest reconciliation observation.
+
+**Why:** A fresh read can match saved content after an advisor changes and changes
+it back. Resetting the baseline revision on every reconciliation would erase that
+evidence and incorrectly authorize a subsequent findings write.
+
+**How to apply:** Require provider concurrency protection and an unchanged
+verified baseline; absent a separately verified termination capability, previously
+admitted ambiguous attempts remain blocked even after their content appears.

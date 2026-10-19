@@ -274,10 +274,9 @@ run; never attribute changed source totals between runs to a reporting fix.
 Retained local reporting databases can exhaust workspace disk quota even when
 `df` shows ample filesystem space.
 
-**Why:** A local baseline query failed with XX000, then PostgreSQL recovery could
-not start; creating its log exposed “Disk quota exceeded.” Several obsolete
-disposable snapshots together consumed gigabytes. Removing only old generated
-snapshots allowed the completed ten-shop checkpoint to resume.
+**Why:** Workspace quotas and filesystem free space are different limits.
+Retaining multiple disposable snapshots can prevent local database recovery
+without indicating any problem in the source data.
 
 **How to apply:** Inspect quota errors and sizes before repeating source reads.
 Keep the latest verified baseline and active checkpoint; verify old databases

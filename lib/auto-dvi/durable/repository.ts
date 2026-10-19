@@ -15,15 +15,15 @@ export interface Store {
   transaction<T>(fn: (tx: Transaction) => Promise<T>): Promise<T>;
 }
 const requestKey = (scope: Scope, key: string) => `request:${digest([scope.shopId, "protractor", key])}`;
-const operationKey = (id: string) => `operation:${id}`;
+export const operationKey = (id: string) => `operation:${id}`;
 export const targetKey = (op: Operation) => `target:${digest([op.scope.shopId, "protractor", op.plan.target.connection, op.plan.target.guid])}`;
 export interface Receipt { reply: Reply; eventId: string; operationId: string }
-interface Gate { owner: string | null; last: string; revision: number }
+export interface Gate { owner: string | null; last: string; revision: number }
 export class Repository {
   constructor(public store: Store) {}
   async operation(id: string) { return this.store.read<Operation>(operationKey(id)); }
-  authorize(op: Operation, scope: Scope) {
-    if (scope.shopId !== op.scope.shopId || scope.actor !== op.scope.actor) throw new DurableError("OPERATION_FORBIDDEN", 403);
+  authorize(op: Operation, scope: Scope, staff = false) {
+    if (!scope.actor || scope.shopId !== op.scope.shopId || (!staff && scope.actor !== op.scope.actor)) throw new DurableError("OPERATION_FORBIDDEN", 403);
   }
   async lookup(scope: Scope, key: string, requestDigest: string) {
     const id = await this.store.read<string>(requestKey(scope, key));
@@ -70,12 +70,12 @@ export class Repository {
     const gate = await this.store.read<Gate>(key);
     return gate ? this.operation(gate.owner || gate.last) : null;
   }
-  async claim(id: string, scope: Scope, now = Date.now()): Promise<string | null> {
+  async claim(id: string, scope: Scope, now = Date.now(), staff = false): Promise<string | null> {
     const token = randomUUID();
     return this.store.transaction(async tx => {
       const op = await tx.get<Operation>(operationKey(id));
       if (!op) throw new DurableError("NOT_FOUND", 404);
-      this.authorize(op, scope);
+      this.authorize(op, scope, staff);
       if (op.state === "complete" || (op.claim && op.claim.until > now)) return null;
       op.claim = {token, until: now + 30_000}; op.revision++;
       await tx.put(operationKey(id), op);
@@ -110,6 +110,7 @@ export class Repository {
       const s = op.stages[stage];
       if (s.token !== attempt || s.state !== "admitted") throw new DurableError("STALE_ATTEMPT");
       s.state = acknowledged ? "acknowledged" : "uncertain"; s.revision++;
+      s.transportSettled = acknowledged;
       s.error = acknowledged ? null : "TRANSPORT_UNCONFIRMED"; op.state = "verification_required";
     });
   }
@@ -119,7 +120,10 @@ export class Repository {
       s.classification = classification; s.observedHash = hash; s.observedRevision = revision; s.revision++;
       // Conflict is sticky: operator resolution must create an audited revision.
       if (s.state !== "conflict") {
-        if (classification === "desired") s.state = "verified";
+        if (classification === "desired") {
+          s.state = "verified";
+          if (revision && !s.verifiedRevision) s.verifiedRevision = revision;
+        }
         else if (classification === "partial_or_edited") s.state = "conflict";
         else if (s.state !== "prepared" && s.state !== "not_requested") s.state = "uncertain";
       }

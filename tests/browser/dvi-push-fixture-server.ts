@@ -2,6 +2,10 @@
 import http from "node:http";
 import { build } from "esbuild";
 async function main() {
+  const recoveryBundle = await build({
+    entryPoints: ["tests/browser/dvi-recovery-fixture.tsx"], bundle: true, write: false,
+    jsx: "automatic", platform: "browser", format: "iife",
+  });
   const bundle = await build({
     entryPoints: ["tests/browser/dvi-push-fixture.tsx"], bundle: true, write: false,
     jsx: "automatic", platform: "browser", format: "iife",
@@ -24,6 +28,10 @@ async function main() {
   <body><div id="root"></div><script src="/fixture.js"></script></body></html>`;
   http.createServer((req, res) => {
     if (req.url?.startsWith("/api/")) {
+      if (req.url.startsWith("/api/auto-dvi/push/recover")) {
+        res.writeHead(403, {"Content-Type": "application/json"});
+        res.end(JSON.stringify({error: "OFFLINE_FIXTURE_NO_AUTHORITY"})); return;
+      }
       res.setHeader("Content-Type", "application/json");
       if (req.url.startsWith("/api/auto-dvi/push/status")) {
         res.end(JSON.stringify({ok: true, durable: true, scopeKey: "offline-fixture", vin: "1HGCM82633A004352",
@@ -42,8 +50,10 @@ async function main() {
         `<script>const openPanel=setInterval(()=>{const b=document.querySelector('button');if(b){clearInterval(openPanel);b.click()}},50)</script></body>`));
       return;
     }
-    res.setHeader("Content-Type", req.url === "/fixture.js" ? "text/javascript" : "text/html");
-    res.end(req.url === "/fixture.js" ? bundle.outputFiles[0].text : html);
+    res.setHeader("Content-Type", req.url?.endsWith(".js") ? "text/javascript" : "text/html");
+    res.end(req.url === "/fixture.js" ? bundle.outputFiles[0].text :
+      req.url === "/recovery.js" ? recoveryBundle.outputFiles[0].text :
+      req.url === "/recovery" ? html.replace("/fixture.js", "/recovery.js") : html);
   }).listen(5000, "0.0.0.0", () => console.log("Offline DVI fixture listening on 5000"));
 }
 main();
