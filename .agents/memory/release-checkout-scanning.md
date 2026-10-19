@@ -2,6 +2,16 @@
 name: Release checkout scanning
 description: Keep temporary release copies outside the workspace so broad source checks do not scan them
 ---
+
+Temporary storage quotas can be exhausted despite free space reported by `df`.
+
+**Why:** Isolated Next.js release output can prevent post-merge log creation with
+EDQUOT (system error -122) before the setup script even runs.
+
+**How to apply:** Verify a small temporary-file write. After preserving candidate
+commits, bundles and validation logs, remove only disposable build output.
+Do not delete source worktrees or evidence, or rewrite setup logic to mask a
+filesystem quota failure.
 Keep temporary QA release checkouts outside the application workspace.
 
 **Why:** the data-access guard traverses nested release copies even under `.local`, treating older checkout files as new direct-database violations. Worktree metadata may also disappear across environment restores while the files remain.

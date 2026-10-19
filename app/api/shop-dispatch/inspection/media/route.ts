@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getSession } from "@/lib/auth";
 import { dispatchFailure, dispatchJson } from "@/lib/shop-dispatch/http";
 import { requireThat } from "@/lib/shop-dispatch/model";
 import { staffDependencies } from "@/lib/auto-dvi/staff/runtime";
@@ -9,6 +10,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 const media = new StaffMediaStorage();
 export async function POST(req: NextRequest) {
+  if (!await getSession()) return dispatchJson({error: "Sign in to use shop workflow"}, 401);
   try {
     const origin = req.headers.get("origin"), host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
     requireThat(origin && new URL(origin).host === host && req.headers.get("sec-fetch-site") !== "cross-site", "Same-origin upload required", 403);
@@ -31,6 +33,7 @@ export async function POST(req: NextRequest) {
   } catch (e) {return e instanceof ZodError ? dispatchJson({error: "Invalid photo request"}, 400) : dispatchFailure(e);}
 }
 export async function GET(req: NextRequest) {
+  if (!await getSession()) return dispatchJson({error: "Sign in to use shop workflow"}, 401);
   try {
     const p = req.nextUrl.searchParams;
     const file = await readStaffPhoto(p.get("visitId") ?? "", p.get("sheet") ?? "", p.get("item") ?? "", p.get("mediaId") ?? "", staffDependencies, media);
