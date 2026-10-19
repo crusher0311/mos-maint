@@ -5,6 +5,18 @@ description: Why work-order ingestion 23505s — the create path must resolve by
 
 # normalized_work_orders: PK id + natural key (shop_id, work_order_number)
 
+**Safety qualification:** Natural-key matching must not merge disjoint provider
+identities. See [reporting identity evidence](reporting-demand-driven-compatibility.md).
+
+**Why:** Stored Protractor records showed an older invoice number colliding
+with another record's work-order number; number-first matching and source-ID
+union linked distinct invoices.
+
+**How to apply:** Retain duplicate-key/race handling, but distinguish same-record
+retries from cross-number collisions. Do not remove constraints or auto-merge
+identities to make ingestion proceed; existing mixed parents need a separately
+approved repair with dependent-record ownership checked.
+
 `normalized_work_orders` has TWO unique constraints: the primary key `id`, and
 `nwo_shop_id_wo_num_idx (shop_id, work_order_number)`. The dual-writer's create
 statement is `insert ... on conflict ("id") do update` — it only reconciles

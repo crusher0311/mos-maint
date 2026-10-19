@@ -214,13 +214,17 @@ Source identity-set membership is not proof that two provider invoices are
 versions of the same invoice.
 
 **Why:** Targeted stored-data review found conflicting copies with two distinct
-provider IDs, both present in the selected normalized row's provenance. Treating
-these as older and newer versions could combine unrelated invoice labor.
+provider IDs, both present in the selected normalized row's provenance. A later
+audit found an older InvoiceNumber equaling a different record's WorkOrderNumber
+in every reviewed mixed-ID row. Number-first matching plus source-ID union can
+combine different invoices; this is not merely an older/newer version dispute.
 
 **How to apply:** Verify equivalence before resolving conflicts by chronology.
 Preserve identity vetoes even when both IDs match a row's lookup set. Also test
 source projections end to end: dropping provider Header timestamps can make
 valid chronology fail despite correctly timestamped raw data in storage.
+Preserve unique-key/race protections when fixing number collisions; preview
+dependent job, line and payment ownership before repairing existing parents.
 
 Distinguish earlier sentinel-date snapshots from disagreements between two
 final invoice versions.

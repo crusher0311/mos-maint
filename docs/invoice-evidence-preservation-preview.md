@@ -658,6 +658,41 @@ This establishes a narrower unknown population without choosing conflicting
 labor values. It is not complete enterprise-report verification. The run
 reported zero production writes and zero provider requests; no deployment.
 
+### Mixed identity linkage audit
+
+A subsequent read-only audit matched all ten previously traced mixed-ID
+normalized rows across shops 227, 229 and 230. The temporary validation
+database was absent in the new workspace session; the audit used bounded
+per-shop ID enumeration followed by exact PostgreSQL row reads and indexed
+Mongo mirror lookups, not a new fleet import.
+
+All ten rows show a cross-number collision:
+
+- The canonical PostgreSQL work-order number equals the older raw invoice's
+  InvoiceNumber, but not that invoice's raw WorkOrderNumber.
+- It also equals a different provider record's raw WorkOrderNumber.
+- The two raw provider IDs are distinct and both appear in the canonical
+  row's source IDs, marked primary.
+- Stored Mongo mirrors distinguish the two IDs and their different job sets.
+
+The current importer resolves the shop/work-order-number natural key before
+provider source identity, then merges source IDs into the selected existing
+row. The adapter now prefers WorkOrderNumber over InvoiceNumber. This is a
+concrete mechanism consistent with the stored collisions; the audit does not
+establish the historical release or exact write that first joined them.
+
+These are not legitimate financial revisions that can be resolved by picking
+the newest source payload. Prevention needs to retain unique-key/race safety
+without merging disjoint provider identities. Repair needs an explicit preview
+of parent rows, source IDs and dependent jobs, lines and payments; do not
+silently prune one ID or overwrite history.
+
+The diagnostic script is scripts/trace-invoice-identity-links.ts. It emits only
+hashed identifiers/numbers and source-state metadata. All ten collision
+patterns were asserted against its output; type checking passed. Zero
+production writes, zero provider calls and no deployment. The last report
+result remains 17 unknown identities, not reduced by this investigation.
+
 The source stores can change during this read-only run; it is not a fleet-wide
 atomic snapshot or a guarantee of complete upstream history.
 
