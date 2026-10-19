@@ -95,6 +95,15 @@ size before repeating compilation. Remove only disposable generated caches,
 preserving source, worktrees and logs. Prefer a managed console workflow for
 long-running verification and record its explicit exit result.
 
+When recovering a missing native library in a sanitized build, do not add every
+directory from the working Node process's loaded-library map to LD_LIBRARY_PATH.
+
+**Why:** Mixing that process's libc/loader paths into Bash caused an immediate
+stack-smashing abort before any test ran. This is distinct from a test failure.
+
+**How to apply:** Locate the specific missing library from a successful native
+module load and pass only its directory; retain the toolchain's own libc/loader.
+
 SQL execution fixtures must preserve production enum column types, not replace
 them with text.
 

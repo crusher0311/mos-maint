@@ -1,6 +1,17 @@
 const { chromium } = require("../../artifacts/detect-dog-workflow/node_modules/@playwright/test");
 const assert = require("node:assert/strict");
+const { execFileSync } = require("node:child_process");
+const path = require("node:path");
 (async () => {
+  // Never reuse generated population data from a previous checkout.
+  const root = path.resolve(__dirname, "../..");
+  execFileSync(process.execPath, ["--require", "./tests/helpers/deny-network-egress.cjs",
+    "--require", "./scripts/_stubs/server-only-stub.cjs", "--import", "tsx",
+    "tests/shop-dispatch-browser/invoice-population-fixtures.ts"], {
+    cwd: root, stdio: "inherit", timeout: 30000,
+    env: { PATH: process.env.PATH, HOME: process.env.HOME,
+      LD_LIBRARY_PATH: process.env.LD_LIBRARY_PATH, PROTRACTOR_OFFLINE_ALLOW_LOOPBACK: "true" },
+  });
   const browser = await chromium.launch({ executablePath: process.env.DEMO_CHROMIUM_PATH, headless: true });
   try {
     const page = await browser.newPage({ viewport: { width: 1280, height: 960 } });
