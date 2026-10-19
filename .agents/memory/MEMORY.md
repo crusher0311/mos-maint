@@ -150,3 +150,4 @@
 - [Workflow DVI boundary scope](workflow-dvi-boundary-scope.md) — offline identity contracts do not authorize persistence, release or duplicate enterprise-match work.
 - [Durable DVI enrollment](dvi-durable-enrollment.md) — rollback disables admissions, never durable routing; legacy fallback would bypass unresolved target ownership.
 - [Chromium lost-response fixtures](chromium-lost-response-fixtures.md) — drop responses after headers to avoid transparent connection retries obscuring application behavior.
+- [Worker IPC evidence](worker-ipc-evidence.md) — drain sends before explicit exit and collect evidence through channel closure; synchronous fakes miss termination races.

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
+import type { Collection } from "mongodb";
 import { WEEKEND, callbackQuietEvidence, weekendFrom } from "../../lib/protractor-weekend-policy";
 import { historyEndpoint, type ShopHistoryRequest } from "../../lib/protractor-shop-history-policy";
 import { runWithShopHistory } from "../../lib/integrations/protractor/shop-history-context";
@@ -9,28 +10,30 @@ import { pilotInvoiceIds } from "../../lib/protractor-afton-pilot-report";
 import {weekendShopOrder,weekendNextShopIndex} from "../../lib/protractor-weekend-scheduling";
 import {historyFailureCode,requireHistoryIdentityIndex} from "../../lib/protractor-history-existing-invoice";
 import {getClient} from "../../lib/db/drizzle";
+import { heldDayPush, sanitizedHeldFailure, type HeldFailure } from "../../lib/protractor-held-failure";
 import {
   assertOwner, binding, collections, fleet, hash, log, RATE, recentActivity, runtime, sleep, workersSuspended,
 } from "./shared";
 
-async function child(pageId: string, owner: string): Promise<number> {
+async function child(pageId: string, owner: string): Promise<HeldFailure> {
   return new Promise((resolve, reject) => {
+    let failure = sanitizedHeldFailure(null);
     const proc = spawn(process.execPath,
       ["--import", "tsx", "scripts/protractor-weekend/main.ts", "--ingest", pageId, owner],
       { stdio: ["ignore", "ignore", "ignore", "ipc"], env: process.env });
     proc.on("message", (message: any) => {
-      if (message?.event === "weekend_ingest_failed" && message.stage === "postgres_duplicate_check" &&
-        ["57014", "53300", "55P03", "23505", "ETIMEDOUT", "ECONNRESET", "UNCLASSIFIED"].includes(message.code)) {
-        log("weekend_ingest_failed", { pageId, stage: message.stage, code: message.code });
+      if (message?.event === "weekend_ingest_failed") {
+        failure = sanitizedHeldFailure(message);
+        log("weekend_ingest_failed", { pageId, ...failure });
       }
     });
     const timer = setTimeout(() => proc.kill("SIGKILL"),
       Math.max(1, Math.min(180000, Date.parse(WEEKEND.end) - Date.now() - 120000)));
     proc.once("error", e => { clearTimeout(timer); reject(e); });
-    proc.once("exit", code => {
+    proc.once("close", code => {
       clearTimeout(timer);
       if (code !== 0) log("weekend_ingest_exit", { pageId, exitCode: code ?? 75 });
-      resolve(code ?? 75);
+      resolve(failure);
     });
   });
 }
@@ -110,6 +113,7 @@ export async function run() {
           callbackWaiting = true;
           await jobs.updateOne({ _id: shopJobId }, { $set: { status: "deferred-active-shop" } }); continue;
         }
+        let failure: HeldFailure | undefined;
         try {
           // Persist fairness before attempting work. Restart resumes AFTER this
           // shop, but its exact day/page/held receipts remain unchanged.
@@ -155,12 +159,13 @@ export async function run() {
           }
           assert.equal(hash(page.invoices), page.digest);
           if (!page.checked) {
-            await child(pageId, owner);
+            failure = await child(pageId, owner);
             page = await pages.findOne({ _id: pageId }, { maxTimeMS: 5000 });
           }
           // A timed-out page stays at its exact position. After three attempts,
           // preserve it as unresolved and allow other days/shops to proceed.
           if (!page.checked) throw Error("Local ingestion deferred");
+          failure = undefined;
           const terminal = page.invoices.length < 100;
           const pageLimit = !terminal && pageNumber === 99;
           const unresolved = (page.unresolved || 0) + (pageLimit ? 1 : 0);
@@ -181,11 +186,24 @@ export async function run() {
           nonCallbackWaiting = true;
           consecutiveFailures++;
           const failures = (cursor.failures || 0) + 1;
-          await jobs.updateOne({ _id: shopJobId }, {
+          const checkpoints = jobs as Collection<{
+            _id: string;
+            heldDays: string[];
+            heldFailures: ReturnType<typeof heldDayPush>["heldFailures"][];
+            status: string;
+            retryAfter: Date;
+            failures: number;
+            cursor: number;
+            page: number;
+            unresolved: number;
+          }>;
+          await checkpoints.updateOne({ _id: shopJobId }, {
             $set: { status: "deferred-error", retryAfter: new Date(Date.now() + 15 * 60000),
               failures: failures >= 3 ? 0 : failures,
               ...(failures >= 3 ? { cursor: cursor.cursor + 1, page: 0 } : {}) },
-            ...(failures >= 3 ? { $inc: { unresolved: 1 }, $push: { heldDays: entry.pendingDays[cursor.cursor] } } : {}),
+            ...(failures >= 3 ? { $inc: { unresolved: 1 }, $push:
+              heldDayPush(entry.pendingDays[cursor.cursor], cursor.page,
+                failure ?? { stage: "unknown", code: historyFailureCode(error) }) } : {}),
           });
           log("weekend_deferred", { shopId: entry.shopId, attempts: failures, code:historyFailureCode(error) });
           if (failures >= 3) await jobs.updateOne({ _id: WEEKEND.id, owner },

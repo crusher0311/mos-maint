@@ -1,3 +1,4 @@
+import { heldDayFailureEvidence } from "./protractor-held-failure";
 import { createHash } from "node:crypto";
 import { extractProtractorServicePackages, getProtractorPackageIdentity, getProtractorPackageLines } from "./integrations/protractor/package-normalization";
 
@@ -137,7 +138,9 @@ export async function reviewHeldImports(store: ReviewStore, scope: ReviewScope) 
       archivedPages: pages.filter(p => p.day === day).length,
       checkpoint: days.filter(d => d.day === day).map(d => ({
         terminal: d.terminal, lastPage: d.lastPage, unresolved: d.unresolved })),
-      historicalFailureStage: "not persisted; do not infer from held status" })),
+      historicalFailures: heldDayFailureEvidence(cursor, day),
+      historicalFailureStage: heldDayFailureEvidence(cursor, day).at(-1)?.stage ?? "unknown",
+      historicalFailureCode: heldDayFailureEvidence(cursor, day).at(-1)?.code ?? "UNCLASSIFIED" })),
     counts: { rawOccurrences, uniqueInvoices: invoices.size, duplicateOccurrences,
       scopedReceipts: receipts.length, matchedScopedReceipts: seenReceipts.size, orphanReceipts,
       reviewed: rows.length, byClassification: counts },

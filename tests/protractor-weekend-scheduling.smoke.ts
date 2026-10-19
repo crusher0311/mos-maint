@@ -6,12 +6,15 @@ import ts from "typescript";
 import {WEEKEND} from "../lib/protractor-weekend-policy";
 import * as scheduling from "../lib/protractor-weekend-scheduling";
 import {historyFailureCode} from "../lib/protractor-history-existing-invoice";
+import * as heldFailure from "../lib/protractor-held-failure";
+import { EventEmitter } from "node:events";
+import { spawn } from "node:child_process";
 const compiled=ts.transpileModule(readFileSync("scripts/protractor-weekend/run.ts","utf8"),{
   compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText;
-async function scenario(allFail=false,missingIndex=false,resumeIndex=0){
+async function scenario(allFail=false,missingIndex=false,resumeIndex=0,childStage?: string,realChild=false){
   let time=Date.parse(WEEKEND.start)+3600000,writes=0,grantClosed=true;
   const attempts:number[]=[],sleeps:number[]=[];
-  const shops=[1,2,3,4,5].map(shopId=>({shopId,bindingDigest:"same",pendingDays:["2026-10-16"],callbackEvidence:[]}));
+  const shops=(realChild ? [1] : [1,2,3,4,5]).map(shopId=>({shopId,bindingDigest:"same",pendingDays:["2026-10-16"],callbackEvidence:[]}));
   const job:any={_id:WEEKEND.id,status:"prepared",stopped:false,runId:"run",canaryGeneration:"g",shops,nextShopIndex:resumeIndex};
   const cursors=new Map<string,any>(),pages=new Map<string,any>();
   const update=(doc:any,u:any)=>{
@@ -53,7 +56,7 @@ async function scenario(allFail=false,missingIndex=false,resumeIndex=0){
     },
     binding:async(shopId:number)=>{
       attempts.push(shopId);
-      if(allFail||shopId<=3)throw Object.assign(new Error("fixture database deadline"),{code:"57014"});
+      if(childStage === undefined && (allFail||shopId<=3))throw Object.assign(new Error("fixture database deadline"),{code:"57014"});
       return {digest:"same",config:{}};
     },
     collections:async()=>({jobs,rates,pages:{
@@ -64,14 +67,30 @@ async function scenario(allFail=false,missingIndex=false,resumeIndex=0){
   const fakeRequire=(name:string):any=>{
     if(name==="node:assert/strict")return assert;
     if(name==="node:crypto")return {randomUUID:()=> "owner"};
-    if(name==="node:child_process")return {spawn:()=>{throw Error("No child expected for empty pages")}};
+    if(name==="node:child_process")return {spawn:()=>{
+      assert.ok(childStage);
+      if (realChild) return spawn(process.execPath, ["--import", "tsx",
+        "tests/protractor-weekend-worker.smoke.ts", "--ipc-failure", childStage], {
+        stdio: ["ignore", "ignore", "inherit", "ipc"],
+        env: { NODE_ENV: "test", PATH: process.env.PATH, NODE_OPTIONS: "--require ./tests/helpers/deny-network-egress.cjs" },
+      });
+      const proc = new EventEmitter();
+      queueMicrotask(() => {
+        if(childStage !== "silent") proc.emit("message", {
+          event: "weekend_ingest_failed", stage: childStage, code: "57014", message: "private SQL",
+        });
+        proc.emit("close", 75);
+      });
+      return proc;
+    }};
     if(name.endsWith("/protractor-weekend-policy"))return {WEEKEND,weekendFrom:()=> "2024-10-17",callbackQuietEvidence:()=>true};
     if(name.endsWith("/protractor-weekend-scheduling"))return scheduling;
+    if(name.endsWith("/protractor-held-failure"))return heldFailure;
     if(name.endsWith("/protractor-history-existing-invoice"))return {historyFailureCode,requireHistoryIdentityIndex:async()=>{if(missingIndex)throw Error("missing index")}};
     if(name.endsWith("/db/drizzle"))return {getClient:()=>({})};
     if(name.endsWith("/protractor-shop-history-policy"))return {historyEndpoint:()=> "/Invoice/"};
     if(name.endsWith("/shop-history-context"))return {runWithShopHistory:async(_:any,__:any,fn:any)=>fn()};
-    if(name.endsWith("/client"))return {protractorFetch:async()=>({ok:true,data:[]})};
+    if(name.endsWith("/client"))return {protractorFetch:async()=>({ok:true,data:childStage ? [{ID:"fixture"}] : []})};
     if(name.endsWith("/protractor-afton-pilot-report"))return {pilotInvoiceIds:()=>{}};
     if(name==="./shared")return shared;
     throw Error(`Unexpected dependency: ${name}`);
@@ -92,7 +111,10 @@ async function main(){
   assert.ok(mixed.job.completedPageAt, "Empty, verified pages are genuine completion");
   for(const [key,cursor] of mixed.cursors){
     assert.equal(cursor.cursor,1);
-    if(cursor.shopId<=3){assert.equal(cursor.unresolved,1);assert.deepEqual(Array.from(cursor.heldDays),["2026-10-16"]);}
+    if(cursor.shopId<=3){
+      assert.equal(cursor.unresolved,1);assert.deepEqual(Array.from(cursor.heldDays),["2026-10-16"]);
+      assert.deepEqual(cursor.heldFailures,[{day:"2026-10-16",page:0,stage:"unknown",code:"57014"}]);
+    }
     else assert.equal(cursor.unresolved,0,key);
   }
   const failed=await scenario(true);
@@ -103,6 +125,24 @@ async function main(){
   const resumed=await scenario(false,false,3);
   assert.deepEqual(resumed.attempts.slice(0,2),[4,5],"Saved next-shop checkpoint survives restart");
   await scenario(false,true);
+  for(const stage of ["postgres_duplicate_check", "ingestion", "silent"]) {
+    const result = await scenario(false,false,0,stage);
+    for(const cursor of result.cursors.values()) {
+      assert.deepEqual(cursor.heldFailures,[{day:"2026-10-16",page:0,
+        stage:stage === "silent" ? "unknown" : stage,
+        code:stage === "silent" ? "UNCLASSIFIED" : "57014"}]);
+      assert.equal(cursor.cursor,1);
+      assert.equal(cursor.unresolved,1);
+    }
+  }
+  for (const stage of ["postgres_duplicate_check", "ingestion"]) {
+    const result = await scenario(false,false,0,stage,true);
+    const cursor = [...result.cursors.values()][0];
+    assert.deepEqual(cursor.heldFailures, [
+      {day:"2026-10-16",page:0,stage,code:"57014"},
+    ], "Real worker failure must survive IPC and immediate exit into the held checkpoint");
+    assert.equal(cursor.unresolved,1);
+  }
   console.log("PASS actual runner: fairness, cooldown reset, closed grants, held-day preservation, resume and index startup gate");
 }
 main().catch(e=>{console.error(e);process.exitCode=1});

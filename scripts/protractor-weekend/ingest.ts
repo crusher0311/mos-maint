@@ -6,9 +6,11 @@ import { extractJobIndexFromWorkOrder } from "../../lib/job-index";
 import { WEEKEND } from "../../lib/protractor-weekend-policy";
 import { pilotInvoiceIds } from "../../lib/protractor-afton-pilot-report";
 import { assertOwner, collections, hash, runtime, sleep } from "./shared";
+import { sanitizedHeldFailure, type HeldFailureStage } from "../../lib/protractor-held-failure";
 
 /** Both stores are checked; never overwrite an existing invoice or financial correction. */
-async function existingInvoice(shopId: number, invoice: any): Promise<boolean> {
+async function existingInvoice(shopId: number, invoice: any, stage: (value: HeldFailureStage) => void): Promise<boolean> {
+  stage("mongo_duplicate_check");
   const { db } = await collections();
   const ids = [...new Set([invoice.ID, invoice.ID.toLowerCase(), invoice.ID.toUpperCase()])];
   const mongo = await db.collection("normalized_work_orders").findOne({
@@ -16,20 +18,29 @@ async function existingInvoice(shopId: number, invoice: any): Promise<boolean> {
   }, { projection: { _id: 1 }, maxTimeMS: 5000 })
     ;
   if (mongo) return true;
+  stage("postgres_duplicate_check");
   const rows = await getClient().begin(async sql => {
     await sql.unsafe("set transaction read only");
     await sql.unsafe("set local statement_timeout='5000ms'");
-    try {
-      return await sql.unsafe(HISTORY_EXISTING_INVOICE_SQL, [shopId, invoice.ID.toLowerCase()]);
-    } catch (error) {
-      process.send?.({ event: "weekend_ingest_failed", stage: "postgres_duplicate_check",
-        code: historyFailureCode(error) });
-      throw error;
-    }
+    return await sql.unsafe(HISTORY_EXISTING_INVOICE_SQL, [shopId, invoice.ID.toLowerCase()]);
   });
   return rows.length > 0;
 }
 export async function ingestPage(pageId: string, owner: string) {
+  let stage: HeldFailureStage = "unknown";
+  try {
+    return await ingestPageWithEvidence(pageId, owner, value => { stage = value; });
+  } catch (error) {
+    // main exits immediately after this rejects; drain IPC before rethrowing.
+    if (process.send) await new Promise<void>(resolve => {
+      process.send!({ event: "weekend_ingest_failed",
+        ...sanitizedHeldFailure({ stage, code: historyFailureCode(error) }) }, () => resolve());
+    });
+    throw error;
+  }
+}
+
+async function ingestPageWithEvidence(pageId: string, owner: string, stage: (value: HeldFailureStage) => void) {
   runtime();
   assert.ok(pageId.startsWith(`${WEEKEND.id}:`));
   const { pages, receipts, jobs, db } = await collections();
@@ -42,6 +53,7 @@ export async function ingestPage(pageId: string, owner: string) {
     { ingestionVia: "backfill", dualWriteToJobIndex: true, dualWriteToRepairPatterns: false });
   let unresolved = 0;
   for (const invoice of page.invoices) {
+    stage("unknown");
     const watchdog = setTimeout(() => process.exit(75), 120000);
     try {
       await assertOwner(owner, page.shopId);
@@ -61,7 +73,9 @@ export async function ingestPage(pageId: string, owner: string) {
         }
       }
       const expected = extractJobIndexFromWorkOrder(page.shopId, invoice, "protractor");
-      if (await existingInvoice(page.shopId, invoice)) {
+      const exists = await existingInvoice(page.shopId, invoice, stage);
+      stage("unknown");
+      if (exists) {
         const indexed = !expected.length || await db.collection("job_index").findOne({
           shopId: page.shopId, workOrderId: { $in: [invoice.ID, invoice.ID.toLowerCase(), invoice.ID.toUpperCase()] },
         }, { projection: { _id: 1 }, maxTimeMS: 5000 });
@@ -81,7 +95,9 @@ export async function ingestPage(pageId: string, owner: string) {
       }
       await receipts.insertOne({ _id: id, campaignId: WEEKEND.id, shopId: page.shopId,
         day: page.day, status: "processing", sourceDigest: hash(invoice), startedAt: new Date() });
+      stage("ingestion");
       const result = await service.ingestWorkOrderWithAllEntities(invoice);
+      stage("ingestion_verification");
       const indexed = !expected.length || await db.collection("job_index").findOne({
         shopId: page.shopId, workOrderId: { $in: [invoice.ID, invoice.ID.toLowerCase(), invoice.ID.toUpperCase()] },
       }, { projection: { _id: 1 }, maxTimeMS: 5000 });
@@ -90,6 +106,7 @@ export async function ingestPage(pageId: string, owner: string) {
           ...result.inspections, ...result.recommendations].every(r => r.success)) {
         unresolved++; continue;
       }
+      stage("receipt_completion");
       const completed = await receipts.updateOne({ _id: id, status: "processing" },
         { $set: { status: "imported", completedAt: new Date() } });
       if (completed.matchedCount === 1) await jobs.updateOne({ _id: WEEKEND.id, owner },
@@ -97,6 +114,7 @@ export async function ingestPage(pageId: string, owner: string) {
     } finally { clearTimeout(watchdog); }
     await sleep(250);
   }
+  stage("unknown");
   await assertOwner(owner, page.shopId);
   await pages.updateOne({ _id: pageId }, { $set: {
     checked: true, imported: unresolved === 0, unresolved, checkedAt: new Date(),
