@@ -30,6 +30,7 @@ import {
   normalizedPayments,
 } from "./db/schema/normalized";
 import { enrichVinWithAces } from "./job-index-aces";
+import { assertSameProtractorWorkOrder, protractorWorkOrderIdentity, ProtractorIdentityConflict } from "./protractor-work-order-identity";
 
 type DrizzleDb = ReturnType<typeof import("./db/drizzle").getDb>;
 
@@ -218,6 +219,8 @@ export class SupabaseDualWriter {
   }
 
   async upsertWorkOrder(doc: any): Promise<void> {
+    const protractor=doc.provenance?.sourceSystem==="protractor";
+    const providerId=protractor?protractorWorkOrderIdentity(doc.provenance):null;
     // task #344 (W3a): vehicle_id / vehicle are now nullable in PG
     // (drizzle/0013_*) so Protractor invoices with no attached vehicle
     // are accepted instead of being silently skipped. workOrderNumber
@@ -276,13 +279,32 @@ export class SupabaseDualWriter {
     };
 
     try {
-      await (this.db as any)
+      const statement = (this.db as any)
         .insert(normalizedWorkOrders)
         .values(row)
         .onConflictDoUpdate({
           target: normalizedWorkOrders.id,
           set: updateSet,
+          ...(protractor?{setWhere:sql`
+            ${normalizedWorkOrders.shopId} = ${row.shopId}
+            AND (${normalizedWorkOrders.provenance}->>'sourceSystem' IS NULL
+              OR ${normalizedWorkOrders.provenance}->>'sourceSystem' = 'protractor')
+            AND EXISTS (SELECT 1 FROM jsonb_array_elements(
+              CASE WHEN jsonb_typeof(${normalizedWorkOrders.provenance}->'sourceIds')='array'
+              THEN ${normalizedWorkOrders.provenance}->'sourceIds' ELSE '[]'::jsonb END) s
+              WHERE s->>'system'='protractor' AND s->>'idType' IN ('invoice_id','work_order_id')
+              AND lower(s->>'idValue')=${providerId})
+            AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(
+              CASE WHEN jsonb_typeof(${normalizedWorkOrders.provenance}->'sourceIds')='array'
+              THEN ${normalizedWorkOrders.provenance}->'sourceIds' ELSE '[]'::jsonb END) s
+              WHERE s->>'system'='protractor' AND s->>'idType' IN ('invoice_id','work_order_id')
+              AND lower(coalesce(s->>'idValue',''))<>${providerId})
+          `}:{})
         });
+      if(protractor) {
+        const written=await statement.returning({id:normalizedWorkOrders.id});
+        if(written.length!==1)throw new ProtractorIdentityConflict();
+      } else await statement;
     } catch (e: any) {
       // The insert only reconciles conflicts on the primary key `id`
       // (onConflictDoUpdate target above). The table ALSO has the unique
@@ -294,6 +316,10 @@ export class SupabaseDualWriter {
       // natural key and updating it in place, keeping the write idempotent.
       const pgCode = e?.code ?? e?.cause?.code ?? null;
       if (pgCode !== "23505") throw e;
+      // A different canonical owner won this number. Do not report success
+      // under the losing ID: subsequent child writes would use that ID.
+      // A retry must resolve ownership through guarded ingestion first.
+      if(protractor)throw new ProtractorIdentityConflict();
 
       const existing = await (this.db as any)
         .select({ id: normalizedWorkOrders.id })
@@ -551,6 +577,8 @@ export class SupabaseDualWriter {
   ): Promise<any | null> {
     const cols = {
       _id: normalizedWorkOrders.id,
+      shopId: normalizedWorkOrders.shopId,
+      customFields: normalizedWorkOrders.customFields,
       provenance: normalizedWorkOrders.provenance,
       softDelete: normalizedWorkOrders.softDelete,
       version: normalizedWorkOrders.version,
@@ -580,7 +608,11 @@ export class SupabaseDualWriter {
           ),
         )
         .limit(1);
-      if (byNum[0]) return { ...byNum[0], __fromPg: true };
+      if (byNum[0]) {
+        if(sourceId0?.system==="protractor")assertSameProtractorWorkOrder(byNum[0].provenance,
+          {sourceIds:[sourceId0]});
+        return { ...byNum[0], __fromPg: true };
+      }
     }
     if (!sourceId0) return null;
     const rows = await (this.db as any)
@@ -593,6 +625,8 @@ export class SupabaseDualWriter {
         ),
       )
       .limit(1);
+    if(rows[0]&&sourceId0?.system==="protractor")
+      assertSameProtractorWorkOrder(rows[0].provenance,{sourceIds:[sourceId0]});
     return rows[0] ? { ...rows[0], __fromPg: true } : null;
   }
 
