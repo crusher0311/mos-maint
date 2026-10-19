@@ -54,7 +54,7 @@ export async function binding(shopId: number) {
     { maxTimeMS: 5000 }).limit(2).toArray();
   assert.equal(matches.length, 1, "Ambiguous or missing shop identity");
   const shop = matches[0];
-  assert.ok(shop && !weekendShopCancelled(shop) &&
+  assert.ok(shop && !weekendShopCancelled({ status: shop.status, billing: shop.billing }) &&
     isProtractorShopRecord(shop), "Shop no longer eligible");
   const config = await resolveProtractorConfig(shopId);
   assert.ok(config.configured && config.connectionId);
