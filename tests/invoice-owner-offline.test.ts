@@ -14,6 +14,7 @@ import {aggregateInvoiceHours, combineInvoiceLocationDiagnostics} from "../lib/i
 import {INVOICE_HOURS_SQL, INVOICE_HOURS_MAX_ORDERS} from "../lib/invoice-hours-query";
 import {invoiceHoursDisplay} from "../lib/invoice-hours-display";
 import {INVOICE_FLEET_PROTOTYPE_SQL,invoiceFleetPrototypeParams,invoiceFleetPrototypeResult} from "../scripts/invoice-fleet-sql-prototype";
+import {admitInvoiceFleet} from "../lib/invoice-fleet-admission";
 
 test("location diagnostic ratios use raw totals and preserve independent vetoes",()=>{
   const summary=(count:number,hours:number)=>({
@@ -31,6 +32,30 @@ test("location diagnostic ratios use raw totals and preserve independent vetoes"
   assert.equal(partial.averageSoldHoursPerInvoice,3.98);
   assert.throws(()=>combineInvoiceLocationDiagnostics([1,2,3,4],rows));
   assert.throws(()=>combineInvoiceLocationDiagnostics([1,2,2],rows));
+});
+
+test("fleet admission is database-global, read-only, and released on commit or timeout",async()=>{
+  const socket=process.env.INVOICE_OWNER_TEST_SOCKET;
+  assert.match(socket??"",/^\/tmp\/invoice-owner-offline\.[A-Za-z0-9]+$/);
+  const pg=postgres({host:socket,port:5432,username:userInfo().username,database:"postgres",max:2,onnotice:()=>{}});
+  const admit=(tx:any)=>admitInvoiceFleet((text,params)=>tx.unsafe(text,params));
+  try{
+    await pg.begin(async tx=>{
+      await admit(tx);
+      assert.equal((await tx.unsafe("SHOW transaction_read_only"))[0].transaction_read_only,"on");
+      assert.equal((await tx.unsafe("SHOW temp_file_limit"))[0].temp_file_limit,"64MB");
+      await assert.rejects(pg.begin(async other=>{await admit(other);}),/Another fleet invoice report/);
+    });
+    await assert.rejects(pg.begin(async tx=>{
+      await admit(tx);
+      await tx.unsafe("CREATE TABLE forbidden_fleet_write(id int)");
+    }),e=>(e as any).code==="25006");
+    await assert.rejects(pg.begin(async tx=>{
+      await admit(tx);await tx.unsafe("SET LOCAL statement_timeout='10ms'");
+      await tx.unsafe("SELECT pg_sleep(1)");
+    }),e=>(e as any).code==="57014");
+    await pg.begin(async tx=>{await admit(tx);});
+  }finally{await pg.end();}
 });
 
 test("large fleet remains capped; bounded offline location aggregates retain unknowns and identity conflicts",async()=>{
@@ -83,12 +108,17 @@ test("large fleet remains capped; bounded offline location aggregates retain unk
     // Single-query offline prototype: bound server spill and app output rather
     // than loading the fleet representations or making one query per shop.
     await pg`SET work_mem='2MB'`;
+    await pg`SET hash_mem_multiplier=1`;
     await pg`SET temp_file_limit='64MB'`;
     await pg`SET max_parallel_workers_per_gather=0`;
     const params=invoiceFleetPrototypeParams(shops,shops,new Date(start),new Date(end));
     assert.throws(()=>invoiceFleetPrototypeParams(shops,[99],new Date(start),new Date(end)));
     assert.throws(()=>invoiceFleetPrototypeParams(shops,[1,1],new Date(start),new Date(end)));
-    const prototype=await pg.unsafe(INVOICE_FLEET_PROTOTYPE_SQL,params);
+    const prototype=await pg.begin(async tx=>{
+      await admitInvoiceFleet((text,values)=>tx.unsafe(text,values as any[]));
+      await tx.unsafe("SET LOCAL statement_timeout='10s'");
+      return tx.unsafe(INVOICE_FLEET_PROTOTYPE_SQL,params);
+    });
     assert.equal(prototype.length,10);
     assert.ok(Buffer.byteLength(JSON.stringify(prototype))<8192);
     assert.deepEqual(invoiceFleetPrototypeResult(shops,prototype).summary,combined);
@@ -252,15 +282,42 @@ test("SQL prototype preserves duplicate hour vetoes, alias resolution and weight
         }))})},'{}')`;
     }
     const params=invoiceFleetPrototypeParams([1,2],[1,2],start,end);
-    assert.equal(invoiceFleetPrototypeResult([1,2],
-      await pg.unsafe(INVOICE_FLEET_PROTOTYPE_SQL,params)).summary.invoiceEvidenceCapped,1,
-      "Competing alias sets must not pick a row-order-dependent winner");
+    const ambiguous=await pg.unsafe(INVOICE_FLEET_PROTOTYPE_SQL,params);
+    assert.throws(()=>invoiceFleetPrototypeResult([1,2],ambiguous),/ambiguous or unsupported/);
     await pg`DELETE FROM normalized_work_orders WHERE id LIKE 'alias-%'`;
     await pg`UPDATE normalized_work_orders SET custom_fields=
       jsonb_set(custom_fields,'{invoiceHours,version}','9') WHERE id='a'`;
-    assert.equal(invoiceFleetPrototypeResult([1,2],
-      await pg.unsafe(INVOICE_FLEET_PROTOTYPE_SQL,params)).summary.invoiceEvidenceCapped,1,
-      "Unsupported evidence versions are unavailable, not silently discarded");
+    const unsupported=await pg.unsafe(INVOICE_FLEET_PROTOTYPE_SQL,params);
+    assert.throws(()=>invoiceFleetPrototypeResult([1,2],unsupported),/ambiguous or unsupported/);
+    await pg`TRUNCATE normalized_work_orders`;
+    await pg`INSERT INTO normalized_work_orders
+      SELECT n::text,1,'invoiced','{}',
+        jsonb_build_object('sourceSystem','protractor','sourceIds',jsonb_build_array(
+          jsonb_build_object('system','protractor','idType','invoice_id','idValue',
+            '00000000-0000-0000-0000-'||lpad(n::text,12,'0')))),
+        jsonb_build_object('invoiceHours',jsonb_build_object('version',1,
+          'id','00000000-0000-0000-0000-'||lpad(n::text,12,'0'),
+          'date','2026-09-12T00:00:00.000Z','sold',1,'presented',2))
+      FROM generate_series(1,8000) n`;
+    await pg`INSERT INTO normalized_work_orders
+      SELECT 'alias-'||n,1,'closed','{}',
+        jsonb_build_object('sourceSystem','protractor','sourceIds',jsonb_build_array(
+          jsonb_build_object('system','protractor','idType','invoice_id','idValue','alias-'||n),
+          jsonb_build_object('system','protractor','idType','invoice_id','idValue',
+            '00000000-0000-0000-0000-'||lpad(n::text,12,'0')))),'{}'
+      FROM generate_series(1,8000) n`;
+    await pg`CREATE INDEX ON normalized_work_orders(shop_id,(lower(custom_fields->'invoiceHours'->>'id')))`;
+    await pg`ANALYZE normalized_work_orders`;
+    const many=await pg.begin(async tx=>{
+      await admitInvoiceFleet((text,values)=>tx.unsafe(text,values as any[]));
+      await tx.unsafe("SET LOCAL statement_timeout='10s'");
+      return tx.unsafe(INVOICE_FLEET_PROTOTYPE_SQL,params);
+    });
+    const manySummary=invoiceFleetPrototypeResult([1,2],many).summary;
+    assert.equal(manySummary.invoiceCount,8000);
+    assert.equal(manySummary.invoicePopulationUnknown,0);
+    assert.equal(manySummary.averageSoldHoursPerInvoice,1);
+    assert.equal(manySummary.averagePresentedHoursPerInvoice,2);
   }finally{await pg.end();}
 });
 

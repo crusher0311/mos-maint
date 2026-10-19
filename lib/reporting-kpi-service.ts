@@ -23,6 +23,10 @@ import { laborPartitions } from "@/lib/labor-reporting-partitions";
 import { aggregateInvoiceHours, INVOICE_HOURS_NOTES, type InvoiceHoursFact } from "./invoice-hours-contract";
 import { INVOICE_HOURS_SQL, INVOICE_HOURS_MAX_ORDERS } from "./invoice-hours-query";
 import { redactedReportCause, reportRunDiagnostics } from "@/lib/report-run-diagnostics";
+import { INVOICE_FLEET_SQL, invoiceFleetParams, invoiceFleetResult } from "./invoice-fleet-aggregation";
+import { admitInvoiceFleet } from "./invoice-fleet-admission";
+
+const fleetAdmitted = Symbol("invoice-fleet-transaction-admitted");
 
 type Row = Record<string, any>;
 type ReportingStage = "business" | "technician" | "events" | "labor" | "invoice";
@@ -223,9 +227,24 @@ export async function getReportingKpis(
     transaction?: ReportingTransaction;
     executionPlan?: ReportExecutionPlan;
     recoverLabor?: typeof recoverLaborEvidence;
+    invoiceFleetAggregation?: boolean;
+    [fleetAdmitted]?: true;
   },
 ): Promise<ReportingKpiResponse> {
   const deadlineAt = options?.deadlineAt ?? Date.now() + REPORTING_QUERY_DEADLINE_MS;
+  const fleetMode = (options?.invoiceFleetAggregation ?? process.env.INVOICE_FLEET_AGGREGATION_ENABLED === "true") &&
+    !!options?.executionPlan?.stages.includes("invoice");
+  if (fleetMode) {
+    // Reject invalid scope before opening a transaction or acquiring capacity.
+    try {
+      invoiceFleetParams(scope.shopIds, options?.executionPlan?.invoiceShopIds ?? scope.shopIds, range.start, range.end);
+    } catch (error) {
+      throw new ReportingQueryError((error as Error).message,"authorization","invoice",error);
+    }
+    if (options?.query && !options[fleetAdmitted]) {
+      throw new ReportingQueryError("Fleet invoice reporting requires a resource-limited transaction.","validation","invoice");
+    }
+  }
   if (!options?.query) {
     const queuedAt = Date.now();
     const transaction: ReportingTransaction = options?.transaction ?? (async (work) =>
@@ -244,12 +263,23 @@ export async function getReportingKpis(
           stage: "database_queue",
           durationMs: Date.now() - queuedAt,
         });
+        if (fleetMode) {
+          try {
+            await admitInvoiceFleet((text,params)=>runStage("invoice",tools.query,text,params,deadlineAt,
+              remaining=>tools.setStatementTimeout(Math.min(35_000,remaining))));
+          } catch (error) {
+            if (error instanceof ReportingQueryError) throw error;
+            throw new ReportingQueryError((error as Error).message,"validation","invoice",error);
+          }
+        }
         return getReportingKpis(scope, range, {
           ...options,
           recoverLabor: options?.recoverLabor ?? recoverLaborEvidence,
           deadlineAt,
+          ...(fleetMode ? { [fleetAdmitted]: true as const } : {}),
           beforeStage: async (remaining) => {
-            const timeout = Math.min(options?.statementTimeoutMs ?? REPORTING_QUERY_DEADLINE_MS, remaining);
+            const timeout = Math.min(options?.statementTimeoutMs ?? REPORTING_QUERY_DEADLINE_MS, remaining,
+              fleetMode ? 35_000 : REPORTING_QUERY_DEADLINE_MS);
             await tools.setStatementTimeout(timeout);
           },
           query: tools.query,
@@ -610,6 +640,20 @@ export async function getReportingKpis(
     if (invoiceIds.some(id => !scope.shopIds.includes(id))) {
       throw new ReportingQueryError("Invoice locations are outside the authorized scope.", "authorization", "invoice");
     }
+    if (fleetMode) {
+      const rows=await runStage("invoice",query,INVOICE_FLEET_SQL,
+        invoiceFleetParams(scope.shopIds,invoiceIds,range.start,range.end),deadlineAt,options.beforeStage);
+      try {
+        const invoice=invoiceFleetResult(invoiceIds,rows);
+        Object.assign(result.summary,invoice.summary);
+        const empty=aggregateInvoiceHours([],range.start,range.end).empty;
+        for(const location of result.byLocation)
+          Object.assign(location.metrics,invoice.locations.get(Number(location.key))??empty);
+      } catch(error) {
+        throw new ReportingQueryError((error as Error).message,"validation","invoice",error);
+      }
+      result.dataQuality.notes.push("Database-side invoice aggregation uses stored invoice metadata only; it does not recover missing evidence from source caches or contact providers.");
+    } else {
     const rows = await runStage("invoice", query, INVOICE_HOURS_SQL, [`{${invoiceIds.join(",")}}`, range.start.toISOString(), range.end.toISOString()], deadlineAt, options.beforeStage);
     if (rows.length > INVOICE_HOURS_MAX_ORDERS) {
       result.dataQuality.notes.push("Invoice coverage capped at the 100,000 stored-work-order safety limit, including identity peers. Eligible counts, unknown population, hours and averages are unavailable; the returned rows are not exact totals or lower bounds. Select fewer locations.");
@@ -625,6 +669,7 @@ export async function getReportingKpis(
     const invoice = aggregateInvoiceHours(rows as InvoiceHoursFact[], range.start, range.end);
     Object.assign(result.summary, invoice.summary);
     for (const location of result.byLocation) Object.assign(location.metrics, invoice.locations.get(location.key) ?? invoice.empty);
+    }
     result.dataQuality.notes.push(...INVOICE_HOURS_NOTES);
     if (stages.size === 1) result.range.timestampBasis = "Verified invoice date, UTC";
   }
@@ -688,6 +733,8 @@ export async function getReportingPeriods(
     deadlineMs?: number;
     now?: () => number;
     executionPlan?: ReportExecutionPlan;
+    transaction?: ReportingTransaction;
+    invoiceFleetAggregation?: boolean;
   },
 ): Promise<ReportingPeriodResponse> {
   const now = options?.now ?? Date.now;
@@ -695,6 +742,7 @@ export async function getReportingPeriods(
   const currentStartedAt = now();
   const current = await getReportingKpis(scope, currentRange, {
     query: options?.query, deadlineAt, executionPlan: options?.executionPlan,
+    transaction: options?.transaction, invoiceFleetAggregation: options?.invoiceFleetAggregation,
   });
   console.info("[reporting-kpis] period_complete", { period: "current", durationMs: now() - currentStartedAt });
   if (!comparisonRange) return { current, comparison: null };
@@ -713,6 +761,7 @@ export async function getReportingPeriods(
     const comparisonStartedAt = now();
     const comparison = await getReportingKpis(scope, comparisonRange, {
       query: options?.query, deadlineAt, executionPlan: options?.executionPlan,
+      transaction: options?.transaction, invoiceFleetAggregation: options?.invoiceFleetAggregation,
     });
     console.info("[reporting-kpis] period_complete", { period: "comparison", durationMs: now() - comparisonStartedAt });
     return { current, comparison };

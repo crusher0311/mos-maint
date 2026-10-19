@@ -26,3 +26,14 @@ represent expensive database work.
 **How to apply:** Require concurrency/admission limits and enforceable
 transaction settings before replacing the live raw-row cap. Preserve explicit
 unavailable results for unsupported identity/evidence shapes.
+
+Test mixed known-invoice and alias populations, not just large unknown-only
+fixtures.
+
+**Why:** PostgreSQL can join invoice and unknown groups by shop before expanding
+alias arrays, creating quadratic work even though an unknown-heavy fixture is
+fast. Table statistics alone did not prevent that plan.
+
+**How to apply:** Preserve an expansion boundary before the identity join and
+exercise mixed populations under the same time/spill limits. Do not raise
+limits to hide a bad join order.

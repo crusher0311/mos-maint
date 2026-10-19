@@ -2,6 +2,11 @@
 
 ## Status
 
+**Superseded for integration status:** the assessed SQL is now in the core
+reporting library behind default-off activation and transaction admission.
+See invoice-fleet-integration.md. The assessment below records the prototype
+stage, not the current integration state.
+
 An offline prototype now exists in scripts/invoice-fleet-sql-prototype.ts.
 It is not imported by the production reporting path. The live raw-row cap,
 cache recovery, saved reports, delivery behavior, indexes and permissions are

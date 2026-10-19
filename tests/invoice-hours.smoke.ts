@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { INVOICE_FLEET_SQL } from "../lib/invoice-fleet-aggregation";
 import { aggregateInvoiceHours, invoiceHoursEvidence, type InvoiceHoursFact } from "../lib/invoice-hours-contract";
 import { compileReportDefinition, executeReportDefinition } from "../lib/report-definition-compiler";
 import { getReportingKpis, normalizeReportingRange } from "../lib/reporting-kpi-service";
@@ -192,6 +193,81 @@ assert.deepEqual(compileReportDefinition(definition, scope).execution.stages, ["
 assert.throws(() => compileReportDefinition({ ...definition, dimensions: ["date"] }, scope), /Invoice averages/);
 assert.throws(() => compileReportDefinition({ ...definition, dimensions: ["technician"] }, scope), /Invoice averages/);
 async function main() {
+  const fleetPlan=compileReportDefinition(definition,scope).execution;
+  const range=normalizeReportingRange(definition.dateRange.start,definition.dateRange.end);
+  const fleetRows=[
+    {shop_id:1,unsupported:false,eligible:1,unknown:0,sold:2,presented:3,sold_covered:1,presented_covered:1},
+    {shop_id:2,unsupported:false,eligible:99,unknown:0,sold:396,presented:495,sold_covered:99,presented_covered:99},
+  ];
+  let fleetRecovery=0;
+  const statements:string[]=[],timeouts:number[]=[];
+  const transaction:any=async(work:any)=>work({
+    query:(text:string)=>{
+      statements.push(text);
+      if(text===INVOICE_FLEET_SQL)return Promise.resolve(fleetRows);
+      if(text.startsWith("SELECT pg_try"))return Promise.resolve([{admitted:true}]);
+      assert.ok(text.startsWith("SET "));
+      return Promise.resolve([]);
+    },
+    setStatementTimeout:async(ms:number)=>{timeouts.push(ms);},
+  });
+  const fleet=await getReportingKpis(scope,range,{
+    executionPlan:fleetPlan,invoiceFleetAggregation:true,transaction,
+    recoverLabor:async()=>{fleetRecovery++;return 0;},
+  });
+  assert.equal(fleet.summary.averageSoldHoursPerInvoice,3.98);
+  assert.equal(fleet.summary.averagePresentedHoursPerInvoice,4.98);
+  assert.equal(fleetRecovery,0);
+  assert.equal(statements.filter(s=>s===INVOICE_FLEET_SQL).length,1);
+  assert.equal(statements.filter(s=>s===INVOICE_HOURS_SQL).length,0);
+  assert.ok(statements.indexOf("SET LOCAL temp_file_limit='64MB'")<statements.indexOf(INVOICE_FLEET_SQL));
+  assert.ok(timeouts.every(ms=>ms>0&&ms<=35000));
+  const compiledFleet=await executeReportDefinition(definition,scope,{serviceOptions:{
+    invoiceFleetAggregation:true,transaction,
+  }});
+  assert.equal(compiledFleet.rows[0].current.invoiceCount,1);
+  assert.equal(compiledFleet.rows[1].current.invoiceCount,99);
+  assert.equal(compiledFleet.rows[1].current.averageSoldHoursPerInvoice,4);
+  assert.equal(compiledFleet.rows[0].current.invoiceEvidenceCapped,0);
+  await assert.rejects(getReportingKpis(scope,range,{executionPlan:fleetPlan,
+    invoiceFleetAggregation:true,query:()=>Promise.resolve(fleetRows)}),/resource-limited transaction/);
+  const beforeUnauthorized=statements.length;
+  await assert.rejects(getReportingKpis(scope,range,{executionPlan:{...fleetPlan,invoiceShopIds:[99]},
+    invoiceFleetAggregation:true,transaction}),/authorized locations/);
+  await assert.rejects(getReportingKpis(scope,range,{executionPlan:fleetPlan,
+    invoiceFleetAggregation:true,transaction,deadlineAt:Date.now()-1}),/too long/);
+  assert.equal(statements.length,beforeUnauthorized,"unauthorized/expired requests issue no SQL");
+  let canceled=false;
+  await assert.rejects(getReportingKpis(scope,range,{executionPlan:fleetPlan,
+    invoiceFleetAggregation:true,deadlineAt:Date.now()+50,transaction:async(work:any)=>work({
+      setStatementTimeout:async()=>{},
+      query:(text:string)=>{
+        if(text===INVOICE_FLEET_SQL){
+          const pending:any=new Promise(()=>{});
+          pending.cancel=()=>{canceled=true;};
+          return pending;
+        }
+        return Promise.resolve(text.startsWith("SELECT pg_try")?[{admitted:true}]:[]);
+      },
+    })}),/too long/);
+  // The outer deadline and stage cancellation share a deadline; allow its
+  // already-scheduled abort handler to run before inspecting the cancel hook.
+  await new Promise(resolve=>setTimeout(resolve,5));
+  assert.equal(canceled,true);
+  for(const failure of ["busy","permissions","unsupported"]){
+    let aggregates=0;
+    const failing:any=async(work:any)=>work({
+      query:(text:string)=>{
+        if(failure==="permissions"&&text.includes("temp_file_limit"))throw Error("permission denied");
+        if(text.startsWith("SELECT pg_try"))return Promise.resolve([{admitted:failure!=="busy"}]);
+        if(text===INVOICE_FLEET_SQL){aggregates++;return Promise.resolve(fleetRows.map(r=>({...r,unsupported:true})));}
+        return Promise.resolve([]);
+      },setStatementTimeout:async()=>{},
+    });
+    await assert.rejects(getReportingKpis(scope,range,{executionPlan:fleetPlan,
+      invoiceFleetAggregation:true,transaction:failing}));
+    assert.equal(aggregates,failure==="unsupported"?1:0);
+  }
   let cappedQueries = 0, cappedRecoveries = 0;
   await getReportingKpis(scope, normalizeReportingRange(definition.dateRange.start, definition.dateRange.end), {
     executionPlan: compileReportDefinition(definition, scope).execution,

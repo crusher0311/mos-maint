@@ -29,12 +29,15 @@ identities, or relax source checks to make an average appear.
 
 ## Still required
 
-1. Implement exact large-fleet processing with a justified total resource budget.
-   The current merged code reports capped coverage honestly; it does not solve
-   exact aggregation above the existing limit.
-   An offline database-side prototype now passes the 210,000-record fixture;
-   see invoice-fleet-sql-prototype.md for its tested budget and remaining
-   integration, concurrency and evidence-shape requirements. It is not live code.
+1. Complete release validation and an approved production preflight for the new
+   opt-in database aggregation. It is now integrated into the reporting service,
+   with default-off activation, global admission, read-only transactions and
+   resource limits. Local service/compiler and disposable PostgreSQL tests pass.
+   No production setting has been enabled. See invoice-fleet-integration.md.
+   The final updated production compilation passed (exit code 0), along with
+   TypeScript, the reporting service/compiler suite, the eight-test disposable
+   PostgreSQL suite, and offline desktop/mobile reporting browser checks.
+   The signed-in production UI and real fleet results were not verified.
 2. Establish the authoritative evidence and accounting rules still missing from
    the retained-source review. Nine financial conflicts remain held. See
    invoice-owner-financial-corroboration-approval.md; plan approval is not

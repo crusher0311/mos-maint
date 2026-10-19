@@ -16,9 +16,10 @@ export function cappedInvoiceHours(): Partial<ReportingMetricValues> {
   };
 }
 
-/** Offline diagnostic only. Each entry must be a complete, independently
- * queried location closure, not chunks of a location or rounded averages.
- * The caller supplies the authorized scope and keeps its query/time budgets. */
+/** Combine complete location results, never chunks or rounded averages.
+ * Used by offline diagnostics and the globally admitted database aggregate.
+ * This helper does not authorize live per-location query fan-out: the caller
+ * supplies the authorized scope and enforces a total resource budget. */
 export function combineInvoiceLocationDiagnostics(
   authorizedShopIds: readonly number[],
   locations: ReadonlyMap<number, Partial<ReportingMetricValues>>,
