@@ -2,6 +2,13 @@
 
 ## Status
 
+**Background compatibility follow-up:** a narrow, separately pinned source-hours
+candidate is now prepared. See
+[background compatibility evidence](invoice-background-hours-compatibility.md)
+for the candidate, portable patch, exact-lockfile validation and remaining
+approval boundaries. The inventory below describes the original candidates,
+not a claim that the older background adapter already generated hours.
+
 Prepared and tested locally. **Not pushed or deployed.** Production reporting
 settings, database permissions, backfills and repair data remain unchanged.
 No production provider requests or live worker startup occurred.

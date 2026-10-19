@@ -154,3 +154,4 @@
 - [Worker IPC evidence](worker-ipc-evidence.md) — drain sends before explicit exit and collect evidence through channel closure; synchronous fakes miss termination races.
 - [Held index repair boundary](held-index-repair-boundary.md) — separate evidence-bound approval and confirmed writer quiescence are required across Mongo/PostgreSQL.
 - [Invoice financial evidence boundary](invoice-financial-evidence-boundary.md) — normalization explanations, retained agreement and repair approval are separate decisions.
+- [Invoice release compatibility](invoice-release-compatibility.md) — source-evidence backports must match pinned service policy, not silently inherit newer main behavior.
