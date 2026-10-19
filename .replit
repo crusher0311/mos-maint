@@ -35,6 +35,10 @@ args = "Offline terminal history"
 task = "workflow.run"
 args = "Offline staff inspection"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Offline Protractor exports"
+
 [[workflows.workflow]]
 name = "MOS Maintenance MVP"
 author = "agent"
@@ -104,6 +108,18 @@ outputType = "console"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "PROTRACTOR_OFFLINE_ALLOW_LOOPBACK=true NODE_OPTIONS='--require ./tests/helpers/deny-network-egress.cjs --require ./scripts/_stubs/server-only-stub.cjs' node --import tsx tests/browser/staff-inspection-fixture-server.ts"
+
+[[workflows.workflow]]
+name = "Offline Protractor exports"
+author = "agent"
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "PROTRACTOR_OFFLINE_ALLOW_LOOPBACK=true NODE_OPTIONS='--require ./tests/helpers/deny-network-egress.cjs' node --import tsx tests/browser/protractor-export-fixture-server.ts"
+waitForPort = 8099
 
 [[ports]]
 localPort = 3000

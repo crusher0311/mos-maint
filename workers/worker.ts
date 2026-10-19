@@ -31,6 +31,7 @@ import {
   logProtractorPolicyDenial,
 } from "@/lib/integrations/protractor/outbound-policy.cjs";
 import { selectBackfillWorkerKinds } from "./worker-registration";
+import { processProtractorExport, exportHeartbeat } from "./processors/protractor-export";
 import {
   startTekmetricIncrementalLoop,
   stopTekmetricIncrementalLoop,
@@ -126,6 +127,9 @@ export async function startWorkers(): Promise<void> {
   }
 
   const built = [
+    ...(process.env.PROTRACTOR_EXPORTS_ENABLED === "1" ? [
+      buildWorker(QUEUE_NAMES.PROTRACTOR_EXPORT, processProtractorExport, 1),
+    ] : []),
     buildWorker(
       QUEUE_NAMES.TEKMETRIC_FULLPAGE,
       processTekmetricFullPage,
@@ -151,12 +155,25 @@ export async function startWorkers(): Promise<void> {
   ].filter((w): w is BullWorker => w !== null);
 
   workers.push(...built);
+  // Heartbeat only after the dedicated consumer has actually connected.
+  const exportWorker = built.find(w => w.name === QUEUE_NAMES.PROTRACTOR_EXPORT);
+  let exportTimer: NodeJS.Timeout | undefined;
+  if (exportWorker) {
+    await exportWorker.waitUntilReady();
+    const beat = () => void (async () => {
+      if (exportWorker.isRunning() && (await exportWorker.client).status === "ready") await exportHeartbeat();
+    })().catch(() => console.warn("[Exports] Heartbeat unavailable"));
+    beat();
+    exportTimer = setInterval(beat, 30_000);
+    exportTimer.unref();
+  }
 
   console.log(`[Worker] Started ${workers.length} BullMQ workers`);
 
   const shutdown = async (signal: string) => {
     console.log(`[Worker] Received ${signal}, draining workers…`);
     stopTekmetricIncrementalLoop();
+    if (exportTimer) clearInterval(exportTimer);
     await Promise.allSettled(workers.map((w) => w.close()));
     console.log("[Worker] All workers closed");
     process.exit(0);

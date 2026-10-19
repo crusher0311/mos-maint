@@ -155,3 +155,4 @@
 - [Held index repair boundary](held-index-repair-boundary.md) — separate evidence-bound approval and confirmed writer quiescence are required across Mongo/PostgreSQL.
 - [Invoice financial evidence boundary](invoice-financial-evidence-boundary.md) — normalization explanations, retained agreement and repair approval are separate decisions.
 - [Invoice release compatibility](invoice-release-compatibility.md) — source-evidence backports must match pinned service policy, not silently inherit newer main behavior.
+- [Protractor export coverage](protractor-export-coverage.md) — explicit outbound grants, latest-snapshot limitations, and no live activation or DVI authorization.

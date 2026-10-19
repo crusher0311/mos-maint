@@ -234,7 +234,7 @@ export default function EnterpriseUserAccessPage() {
             Back to Dashboard
           </Link>
           
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
                 <Building2 className="w-6 h-6 text-blue-600" />
@@ -244,7 +244,13 @@ export default function EnterpriseUserAccessPage() {
                 <p className="text-gray-600">{enterprise.name} - Manage your locations and team</p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Link
+                href="/dashboard/enterprise/exports"
+                className="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
+              >
+                Daily Protractor Exports
+              </Link>
               <Link
                 href="/dashboard/enterprise/settings"
                 className="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"

@@ -42,6 +42,7 @@ import type { Queue as BullQueue } from "bullmq";
 import { getRedisConnection } from "./connection";
 
 export const QUEUE_NAMES = {
+  PROTRACTOR_EXPORT: "protractor-export",
   TEKMETRIC_FULLPAGE: "tekmetric-fullpage",
   TEKMETRIC_PREPASS: "tekmetric-prepass",
   DRAIN_TEKMETRIC: "drain-tekmetric",

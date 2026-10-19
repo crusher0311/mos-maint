@@ -32,6 +32,13 @@ import {
 } from "./queues";
 import type { JobsOptions } from "bullmq";
 
+/** Export queue is fail-closed. Never substitute web-tier execution. */
+export async function enqueueProtractorExport(enterpriseId: string, revision: number, shopId: number) {
+  return safeAdd(QUEUE_NAMES.PROTRACTOR_EXPORT, "page", { enterpriseId, revision, shopId },
+    `export_${enterpriseId}_${revision}_${shopId}`, { attempts: 1, removeOnComplete: true,
+      removeOnFail: true, commandTimeoutMs: 2000 });
+}
+
 export type EnqueueResult =
   | { enqueued: true; jobId: string; queue: QueueName }
   | {

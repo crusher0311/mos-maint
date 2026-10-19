@@ -1,0 +1,59 @@
+.page {
+  --export-ink: #182b43;
+  --export-accent: #2458b8;
+  --export-wash: #f2f6fc;
+  color: var(--export-ink);
+  background: var(--export-wash);
+  min-height: 100dvh;
+}
+
+.panel {
+  background: #fefefe;
+  border: 1px solid #dce4ee;
+  border-radius: 0.85rem;
+  box-shadow: 0 2px 5px rgb(24 43 67 / 3%);
+}
+
+.input {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.5rem;
+  padding: 0.65rem 0.8rem;
+  background: #fefefe;
+  color: var(--export-ink);
+}
+
+.input:focus-visible {
+  outline: 2px solid var(--export-accent);
+  outline-offset: 2px;
+}
+
+.primary {
+  background: var(--export-accent);
+  color: #f8faff;
+  padding: 0.65rem 1rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.secondary {
+  border: 1px solid #cbd5e1;
+  background: #fefefe;
+  padding: 0.6rem 0.9rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.primary:disabled,
+.secondary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.primary:focus-visible,
+.secondary:focus-visible {
+  outline: 2px solid var(--export-accent);
+  outline-offset: 3px;
+}
