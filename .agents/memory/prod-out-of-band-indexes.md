@@ -18,4 +18,8 @@ Do not treat `CREATE INDEX CONCURRENTLY` as proof that a fleet-wide index build 
 
 **How to apply:** Keep a bounded server-side deadline, an independent cancellation path, and fresh-connection probes. Stop after repeated capacity failures rather than repeatedly rebuilding. Killing a client does not prove the database operation stopped: verify server-side progress and index validity before restarting dependent imports. A heartbeat is not import progress.
 
+For long DDL, retain a native query-cancellation mechanism (for example, psql's SIGINT handler sends a PostgreSQL cancellation request) rather than relying only on a second SQL session calling `pg_cancel_backend`. **Why:** fresh authenticated SQL connections became unavailable during these failures, including the intended safety checks. Native cancellation still needs subsequent server-side confirmation; it is not a substitute for a server-side statement timeout.
+
 Follow-up dashboard evidence from the incident showed committed-memory spikes around 8.4 GB against a roughly 4.66 GB commit limit, swap growth, and CPU below full utilization. This makes memory pressure a stronger lead than CPU saturation; normal-looking headline RAM percentages can hide commit pressure. It does not prove an OOM kill or restart without database logs. Check committed memory and swap, not just cache-inclusive memory totals, before recommending capacity changes or retrying DDL.
+
+After the operator's compute upgrade to the XL-equivalent configuration, the same 32 MB session-limited build completed with healthy fresh connections and a valid index. This supports increasing capacity for maintenance, not removing runtime request, concurrency or deadline safeguards.

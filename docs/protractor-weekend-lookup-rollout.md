@@ -98,3 +98,29 @@ terminal `canceled` status. Read-back confirmed 77 shop checkpoints retained,
 10:00 UTC expiry. No checkpoint arrays or receipts were reset, no lease was
 force-cleared, and no replacement was launched. The database plan was not
 changed. Resumption requires explicit approval and renewed prerequisite checks.
+
+### Upgraded-instance rebuild and authorized restart
+
+The operator increased compute, then explicitly approved one monitored rebuild
+and subsequently authorized resumption. Database settings changed to 4 GB shared
+buffers and 240 connections. Three initial checks and checks throughout the
+build completed in roughly 0.4 seconds.
+
+The rebuilt index was confirmed valid and ready at 02:54:01 UTC, size 208 MB.
+The production lookup used the intended index for both a hit (15.996 ms) and
+a miss (0.1 ms). All six callback-reliability regression suites passed.
+
+A replacement one-off job, `job-dbaocj6q1p3s73cf9ua0`, was created at 02:54 UTC
+on the existing callback-worker artifact. Its isolated startup patch contains
+only the tested weekend runner/ingester, lookup helper and scheduling helper,
+with deployed-file hash checks before replacement. No main-app deployment was
+performed. The original job remains canceled; no leases or receipts were
+cleared. Admission resumes against the same 2,718-request counter, 10,000 cap
+and 10:00 UTC cutoff. Job creation alone is not proof of actual invoice progress;
+verify the replacement's claim and completion evidence.
+
+The replacement claim was verified at 02:55:38 UTC with the request count at
+2,719. At 02:56:04 UTC, the campaign was running and a newly completed import
+was verified: imported receipts increased from 7,085 to 7,086, with completion
+at 02:55:59 UTC. This establishes actual renewed invoice progress, not fleet
+completion. Original held/ambiguous receipts were not replayed or cleared.
