@@ -122,3 +122,17 @@ mtime_ms = 1792410027094
 storage_uri = "gcs://replit-rams-assets-picard/rams/assets/repl:a5a4005c-4e3d-4ce9-896c-c46425944606/40e2bdd8-7b5c-41e8-b63b-1cdf33635187/af049576-86ee-4a2a-adde-fd47690c5bd1"
 storage_version_token = "1792410068868820"
 content_type = "text/markdown"
+
+[[outputs]]
+id = "okAJPSxxyGvmOd_CkJE5K"
+uri = "file://docs/reporting/invoice-metadata-repair-plan-100.md"
+type = "text"
+title = "100-invoice metadata repair plan"
+description = "Sanitized plan summary, local validation results, and required safeguards. No production changes applied."
+logical_id = "0fb33969-e280-46da-8273-1e68173cef60"
+content_hash = "sha256:4de48bbb7760a48200eb1a0f0341e5bafd234ddd7f80e37843d8ea80d3315749"
+size = 5306
+mtime_ms = 1792420375350
+storage_uri = "gcs://replit-rams-assets-picard/rams/assets/repl:a5a4005c-4e3d-4ce9-896c-c46425944606/0fb33969-e280-46da-8273-1e68173cef60/08d21a01-612a-47a2-8701-bd2230534c47"
+storage_version_token = "1792420397284816"
+content_type = "text/markdown"
