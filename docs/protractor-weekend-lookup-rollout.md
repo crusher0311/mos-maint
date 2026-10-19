@@ -57,3 +57,33 @@ No production migration, runner restart, deployment or provider request was
 performed while building these fixes. Previously held work and existing records
 needing indexing review remain separate recovery work; they are not replayed
 automatically by this change.
+
+## Approved production attempt — 2026-10-19 UTC
+
+The operator subsequently approved the targeted index and controlled handoff.
+The handoff did **not** take place:
+
+- The initial concurrent build was stopped after fresh connection timeouts
+  occurred from both the workspace and a read-only Render diagnostic job.
+  A subsequent independent SQL check confirmed no active index build and an
+  invalid, unready 16 kB index. That unfinished index was removed for the retry.
+- A second build used session-only maintenance memory of 32 MB instead of the
+  database's 512 MB default, a 15-minute statement deadline, an independent
+  cancellation connection, and fresh-connection probes. It progressed beyond
+  70% of its table scan before connection availability failed again.
+- Both the second build client and the pending handoff process were stopped.
+  A bounded safety watcher subsequently confirmed a successful database
+  connection at 02:25:26 UTC, zero active builds for this index, and an invalid,
+  unready index. The watcher has finished. This confirms the build is no longer
+  running, not that the index is usable or overall application health has been
+  verified. Recheck index state before any future rollout.
+- No third build attempt is authorized by this execution. Do not rerun the
+  migration blindly: concurrent `IF NOT EXISTS` can retain an invalid index.
+- The original Render runner was not canceled or replaced. Campaign
+  checkpoints, ambiguous receipts, deadline, request cap and canary settings
+  were not reset or widened. No unrelated app release was made.
+
+Last pre-handoff receipt baseline at 02:18:13 UTC: 7,085 imported; 32,571
+present; 2,424 existing-needs-index-review; 12 processing. The request counter
+was 2,718 of 10,000, with the original 10:00 UTC cutoff unchanged. These counts
+are not evidence of renewed progress.
