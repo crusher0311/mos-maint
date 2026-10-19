@@ -26,7 +26,14 @@
     if (storage.getItem(key(context)) !== JSON.stringify(record)) throw Error(warning);
     return {...draft, workOrderGuid: context.workOrderGuid, clientScopeKey: context.scopeKey, clientRequestId: record.clientRequestId};
   }
-  const api = {warning, read, prepare};
+  function statusMessage(context) {
+    const state = context.operation?.operationState;
+    if (state === 'complete') return 'Completed: the saved inspection was verified and recorded. This does not send your later edits. Do not resend the inspection.';
+    if (state === 'conflict') return 'Conflicting: the saved inspection needs authorized review. Do not resend the inspection.';
+    if (context.operation) return 'Pending verification: the saved inspection is not yet confirmed complete. Do not resend the inspection.';
+    return 'Status not confirmed: no saved operation was found. Existing request ownership is unchanged. Do not resend the inspection.';
+  }
+  const api = {warning, read, prepare, statusMessage};
   if (typeof module === 'object') module.exports = api;
   else root.MosDviRequest = api;
 })(typeof globalThis === 'object' ? globalThis : this);

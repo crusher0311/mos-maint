@@ -9243,11 +9243,13 @@ let autoDviFindings = {};
 // Survives photo/voice/generate checklist rebuilds and navigation back to an
 // affected RO within this panel. Never clear on generate or a findings edit.
 const autoDviVerificationByWorkOrder = new Map();
+const autoDviStatusByWorkOrder = new Map();
+const autoDviStatusChecks = new Set();
 function autoDviWorkOrderKey(context = currentContext) {
   return JSON.stringify([context?.provider, context?.shopId,
     context?.roId || context?.roNumber || String(context?.vin || '').toUpperCase()]);
 }
-async function discoverAutoDviPush(context) {
+async function discoverAutoDviPush(context, readOnly = false) {
   const query = new URLSearchParams({
     shopId: String(context.shopId), vin: context.vin,
     roNumber: String(context.roNumber || context.roId || ''),
@@ -9258,19 +9260,57 @@ async function discoverAutoDviPush(context) {
     options: {method: 'GET'},
   });
   if (!result?.ok) throw Error(result?.message || MosDviRequest.warning);
+  if (readOnly) return result;
   if (result.durable && (result.operation || MosDviRequest.read(localStorage, result)))
     throw Error(MosDviRequest.warning);
   return result;
 }
+async function checkAutoDviStatus() {
+  const context = {...currentContext};
+  const key = autoDviWorkOrderKey(context);
+  if (context.provider !== 'protractor' || autoDviInFlight || autoDviStatusChecks.has(key)) return;
+  autoDviStatusChecks.add(key);
+  renderAutoDviVerification(false);
+  try {
+    const result = await discoverAutoDviPush(context, true);
+    if (result.durable && (result.operation || MosDviRequest.read(localStorage, result)))
+      autoDviVerificationByWorkOrder.set(key, MosDviRequest.warning);
+    autoDviStatusByWorkOrder.set(key, result.durable ? MosDviRequest.statusMessage(result)
+      : 'Durable status is not available for this work order. Existing request ownership is unchanged.');
+  } catch {
+    autoDviVerificationByWorkOrder.set(key, MosDviRequest.warning);
+    autoDviStatusByWorkOrder.set(key, 'Status check failed. Existing request ownership is unchanged. Do not resend the inspection.');
+  } finally {
+    autoDviStatusChecks.delete(key);
+    if (autoDviWorkOrderKey() === key) renderAutoDviVerification(false);
+  }
+}
 function renderAutoDviVerification(refresh = true) {
+  const key = autoDviWorkOrderKey();
   const message = autoDviVerificationByWorkOrder.get(autoDviWorkOrderKey());
   const warning = document.getElementById('auto-dvi-verification-warning');
   if (warning) {
-    warning.textContent = message ? `Verification needed: ${message}` : '';
-    warning.hidden = !message;
+    warning.setAttribute('aria-live', 'polite');
+    warning.textContent = autoDviStatusByWorkOrder.get(key) || (message ? `Verification needed: ${message}` : '');
+    warning.hidden = !warning.textContent;
+    let control = document.getElementById('auto-dvi-status-control');
+    if (!control) {
+      control = document.createElement('div');
+      control.id = 'auto-dvi-status-control';
+      const check = document.createElement('button');
+      check.id = 'auto-dvi-check-status';
+      check.type = 'button';
+      check.addEventListener('click', checkAutoDviStatus);
+      control.append(check, document.createTextNode(' Read-only — does not send or retry the inspection.'));
+      warning.after(control);
+    }
+    control.hidden = currentContext?.provider !== 'protractor';
+    const check = document.getElementById('auto-dvi-check-status');
+    check.textContent = autoDviStatusChecks.has(key) ? 'Checking status…' : 'Check status';
+    check.disabled = autoDviInFlight || autoDviStatusChecks.has(key);
   }
   const button = document.getElementById('auto-dvi-push-btn');
-  if (button) button.disabled = autoDviInFlight || !!message;
+  if (button) button.disabled = autoDviInFlight || autoDviStatusChecks.has(key) || !!message;
   if (refresh && !message && currentContext?.provider === 'protractor') {
     const context = {...currentContext};
     const key = autoDviWorkOrderKey(context);

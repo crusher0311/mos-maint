@@ -313,6 +313,22 @@ test("real browser: dashboard and extension persist before send, block after rel
       await page.waitForFunction(() => document.body.textContent?.includes("Do not resend"));
       assert.equal(await disabled(), true);
       assert.equal(posts, 1);
+      for (const [state, label] of [
+        ["in_progress", "Pending verification:"],
+        ["conflict", "Conflicting:"],
+        ["complete", "Completed:"],
+      ]) {
+        remote = {...context, operation: {operationId: "saved-operation", operationState: state}};
+        await page.evaluate(() => Array.from(document.querySelectorAll("button")).find(b => b.textContent === "Check status")!.click());
+        await page.waitForFunction((text) => document.body.textContent?.includes(text), {}, label);
+        assert.equal(await disabled(), true, `${state} must not authorize a replacement`);
+        assert.equal(posts, 1, "Check status must never POST");
+      }
+      remote = {...context, ok: false, message: "Unauthorized"};
+      await page.evaluate(() => Array.from(document.querySelectorAll("button")).find(b => b.textContent === "Check status")!.click());
+      await page.waitForFunction(() => document.body.textContent?.includes("Status check failed"));
+      assert.equal(await disabled(), true);
+      assert.equal(posts, 1);
       await session.close();
     }
   } finally { await browser.close(); }

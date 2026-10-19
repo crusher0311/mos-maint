@@ -96,6 +96,8 @@ function ExistingAutoDviPanel({
   const [pushNeedsVerification, setPushNeedsVerification] = useState(false);
   const [checkingPush, setCheckingPush] = useState(true);
   const [pushStatusReady, setPushStatusReady] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const statusSequence = useRef(0);
   const pushLock = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -119,18 +121,41 @@ function ExistingAutoDviPanel({
   const findingsRef = useRef(findings);
   findingsRef.current = findings;
 
-  async function discoverPush() {
+  async function discoverPush(readOnly = false) {
     const query = new URLSearchParams({vin, roNumber: roNumber.trim()});
     const response = await fetch(`/api/auto-dvi/push/status?${query}`, {cache: "no-store"});
     const context = await response.json();
     if (!response.ok || !context.ok) throw Error(context.message || DVI_PUSH_UNCERTAIN_MESSAGE);
+    if (readOnly) return context;
     if (context.durable && (context.operation || dviRequest.read(localStorage, context))) {
       setPushNeedsVerification(true);
       throw Error(DVI_PUSH_UNCERTAIN_MESSAGE);
     }
     return context;
   }
+  async function checkPushStatus() {
+    const sequence = ++statusSequence.current;
+    setCheckingPush(true);
+    try {
+      const context = await discoverPush(true);
+      if (sequence !== statusSequence.current) return;
+      if (context.durable && (context.operation || dviRequest.read(localStorage, context))) {
+        setPushNeedsVerification(true);
+      }
+      setStatusMessage(context.durable ? dviRequest.statusMessage(context)
+        : "Durable status is not available for this work order. Existing request ownership is unchanged.");
+    } catch {
+      if (sequence === statusSequence.current) {
+        setStatusMessage("Status check failed. Existing request ownership is unchanged. Do not resend the inspection.");
+        setPushNeedsVerification(true);
+      }
+    } finally {
+      if (sequence === statusSequence.current) setCheckingPush(false);
+    }
+  }
   useEffect(() => {
+    ++statusSequence.current;
+    setStatusMessage(null);
     if (!isProtractor) { setCheckingPush(false); return; }
     let active = true;
     setCheckingPush(true);
@@ -138,7 +163,7 @@ function ExistingAutoDviPanel({
     discoverPush().then(() => { if (active) setPushStatusReady(true); }).catch((err) => {
       if (active) setError(err.message);
     }).finally(() => { if (active) setCheckingPush(false); });
-    return () => { active = false; };
+    return () => { active = false; ++statusSequence.current; };
   }, [vin, roNumber, isProtractor]);
 
   function emptyFinding(): Finding {
@@ -517,7 +542,15 @@ function ExistingAutoDviPanel({
                 <Loader2 className="w-4 h-4 animate-spin" /> Building this vehicle&apos;s inspection…
               </div>
             )}
-            {(error || pushNeedsVerification) && <DviPushNotice message={pushNeedsVerification ? DVI_PUSH_UNCERTAIN_MESSAGE : error!} needsVerification={pushNeedsVerification} />}
+            {!statusMessage && (error || pushNeedsVerification) && <DviPushNotice message={pushNeedsVerification ? DVI_PUSH_UNCERTAIN_MESSAGE : error!} needsVerification={pushNeedsVerification} />}
+            {isProtractor && <div className="my-2 text-sm">
+              <button type="button" onClick={checkPushStatus} disabled={checkingPush || pushing}
+                className="rounded border border-gray-300 px-3 py-1.5 disabled:opacity-50">
+                {checkingPush ? "Checking status…" : "Check status"}
+              </button>
+              <span className="ml-2 text-xs text-gray-600">Read-only — does not send or retry the inspection.</span>
+              {statusMessage && <p role="status" aria-live="polite" className="mt-2">{statusMessage}</p>}
+            </div>}
             {success && <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">{success}</div>}
 
             {items && !loading && (
