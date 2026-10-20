@@ -1,3 +1,4 @@
+- [Keytag hidden-field policy](keytag-hidden-field-policy.md) — user-approved visibility-based validation, without making optional fields required or widening other API contracts.
 - [Tekmetric DVI webhook evidence](tekmetric-dvi-webhook-evidence.md) — live messages distinguish inspection views from estimate views; customer prefix is a name; receipt time is not event time.
 - [MyOilSticker legacy data](myoilsticker-legacy-db.md) — legacy platform's data is db `test` on the SAME cluster; user migration tooling is operator-gated, collisions link-only, scraped SMS creds never copied.
 - [Plan-pregen storm](plan-pregen-storm.md) — speeding up a slow cron unleashes its completion-triggered fan-out (web event-loop starvation); clean Mongo + uniform slowness = web CPU, not DB.

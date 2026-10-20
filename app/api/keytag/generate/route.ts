@@ -34,11 +34,11 @@ interface KeytagConfig {
 }
 
 interface KeytagRequest {
-  customerName: string;
-  vehicleInfo: string;
+  customerName?: string;
+  vehicleInfo?: string;
   vin?: string;
-  roNumber: string;
-  mileage: string | number;
+  roNumber?: string;
+  mileage?: string | number;
   previewConfig?: KeytagConfig;
   designerLayout?: DesignerLayout;
   // Output format. Defaults to PNG (existing desktop popup-print path). Set
@@ -67,7 +67,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
     }
     
-    if (!body || !body.customerName || !body.roNumber) {
+    if (!body) {
+      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+
+    const db = await getDb();
+    const shop = await db.collection("shops").findOne(
+      { shopId },
+      { projection: { keytagConfig: 1 } }
+    );
+
+    const config: KeytagConfig = body.previewConfig || shop?.keytagConfig || {};
+    const designerLayout = body.designerLayout || config.designerLayout;
+
+    // Match rendering, including duplicate elements. Legacy layouts retain
+    // their validations; visibility does not make optional fields required.
+    const displays = (type: DesignerElement["type"]) => !designerLayout ||
+      designerLayout.elements.some(element => element.type === type && element.visible);
+    if ((displays("customerName") && !body.customerName) ||
+        (displays("roNumber") && !body.roNumber)) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
@@ -76,7 +94,7 @@ export async function POST(req: NextRequest) {
     // future mileage math cannot reintroduce the string-concatenation bug,
     // and garbage values never print.
     let parsedMileage: number | undefined;
-    if (body.mileage !== undefined && body.mileage !== null && body.mileage !== "") {
+    if (displays("mileage") && body.mileage !== undefined && body.mileage !== null && body.mileage !== "") {
       const parsed = parseMileageInput(body.mileage);
       if (parsed === null || isAbsurdMileage(parsed)) {
         return NextResponse.json(
@@ -87,14 +105,8 @@ export async function POST(req: NextRequest) {
       parsedMileage = parsed;
     }
     
-    const db = await getDb();
-    const shop = await db.collection("shops").findOne(
-      { shopId },
-      { projection: { keytagConfig: 1 } }
-    );
-
-    const config: KeytagConfig = body.previewConfig || shop?.keytagConfig || {};
-    const designerLayout = body.designerLayout || config.designerLayout;
+    const roNumber = body.roNumber ?? "";
+    const filename = roNumber ? `keytag-${roNumber}` : "keytag";
 
     const paper = resolvePaperSize(designerLayout?.paperSize);
 
@@ -110,10 +122,10 @@ export async function POST(req: NextRequest) {
           textColor: designerLayout.textColor || "#000000",
         },
         {
-          customerName: body.customerName,
-          vehicleInfo: body.vehicleInfo,
+          customerName: body.customerName ?? "",
+          vehicleInfo: body.vehicleInfo ?? "",
           vin: body.vin,
-          roNumber: body.roNumber,
+          roNumber,
           mileage: parsedMileage ?? "",
         },
         paper.renderWidth,
@@ -125,10 +137,10 @@ export async function POST(req: NextRequest) {
       imageBuffer = await renderKeytagLegacy(
         { colors: config.colors },
         {
-          customerName: body.customerName,
-          vehicleInfo: body.vehicleInfo,
+          customerName: body.customerName ?? "",
+          vehicleInfo: body.vehicleInfo ?? "",
           vin: body.vin,
-          roNumber: body.roNumber,
+          roNumber,
           mileage: parsedMileage ?? "",
         },
         paper.renderWidth,
@@ -152,7 +164,7 @@ export async function POST(req: NextRequest) {
           'Content-Type': 'application/pdf',
           // `inline` so iOS opens the system PDF preview (with the AirPrint
           // share button) instead of triggering a download.
-          'Content-Disposition': `inline; filename="keytag-${body.roNumber}.pdf"`,
+          'Content-Disposition': `inline; filename="${filename}.pdf"`,
           'X-Keytag-Size': paper.id,
           'X-Keytag-Width': `${paper.widthIn.toFixed(3)}in`,
           'X-Keytag-Height': `${paper.heightIn.toFixed(3)}in`,
@@ -164,7 +176,7 @@ export async function POST(req: NextRequest) {
     return new NextResponse(new Uint8Array(imageBuffer), {
       headers: {
         'Content-Type': 'image/png',
-        'Content-Disposition': `inline; filename="keytag-${body.roNumber}.png"`,
+        'Content-Disposition': `inline; filename="${filename}.png"`,
         'X-Keytag-Size': paper.id,
         'X-Keytag-Width': `${paper.widthIn.toFixed(3)}in`,
         'X-Keytag-Height': `${paper.heightIn.toFixed(3)}in`,
