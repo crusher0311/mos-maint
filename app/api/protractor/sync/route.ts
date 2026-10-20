@@ -25,6 +25,7 @@ import {
   updatePartCrossReferences,
 } from "@/lib/job-index";
 import { runProtractorBackfill } from "@/lib/integrations/protractor/sync";
+import { assertBackgroundSyncAllowed } from "@/lib/integrations/protractor/onboarding";
 import pLimit from "p-limit";
 
 export const runtime = "nodejs";
@@ -38,6 +39,20 @@ export async function POST(req: NextRequest) {
   }
 
   const shopId = Number(session.shopId);
+  if (!Number.isSafeInteger(shopId) || shopId <= 0) {
+    return NextResponse.json({ error: "Invalid shop" }, { status: 403 });
+  }
+  // This endpoint fans out into bulk history/template work, not bounded staff
+  // validation. Check before config, database work, or detached backfill.
+  try {
+    await assertBackgroundSyncAllowed();
+  } catch {
+    return NextResponse.json({
+      ok: false,
+      code: "PROTRACTOR_HISTORY_SYNC_RESTRICTED",
+      error: "Bulk sync is unavailable until historical import access is approved. Your saved Protractor connection is unchanged.",
+    }, { status: 409 });
+  }
   const config = await resolveProtractorConfig(shopId);
   
   if (!config.configured) {

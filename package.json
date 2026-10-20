@@ -7,6 +7,7 @@
     "npm": ">=10.0.0 <11.0.0"
   },
   "scripts": {
+    "test:protractor-onboarding": "bash tests/run-protractor-onboarding.sh",
     "test:invoice-metadata-executor": "bash tests/run-invoice-metadata-executor.sh",
     "test:invoice-metadata-plan": "env -i PATH=\"$PATH\" HOME=\"$HOME\" NODE_OPTIONS='--require ./tests/helpers/deny-network-egress.cjs' node --import tsx tests/invoice-metadata-repair-plan.smoke.ts",
     "test:invoice-evidence-local": "env -i PATH=\"$PATH\" HOME=\"$HOME\" NODE_OPTIONS='--require ./tests/helpers/deny-network-egress.cjs --require ./scripts/_stubs/server-only-stub.cjs' sh -c 'node --import tsx tests/invoice-evidence-preservation.smoke.ts && node --import tsx tests/invoice-evidence-local-preview.smoke.ts && node --import tsx tests/invoice-stored-evidence.smoke.ts'",

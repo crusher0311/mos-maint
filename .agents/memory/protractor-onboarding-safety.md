@@ -5,6 +5,17 @@ description: Keep credential validation separate from historical imports and pre
 
 Treat credential validation as an authenticated, shop-scoped foreground operation, not permission to import history. Saving a connection must not launch background imports inside the foreground capability or clear existing data merely to reconnect.
 
+The operator clarified on October 20, 2026 that onboarding availability is for
+every new Protractor integration, not a selected-shop exception.
+
+**Why:** The requested restoration is general onboarding access, rather than a
+per-shop allowlist. This does not authorize unrestricted history or removal of
+emergency and transport protections.
+
+**How to apply:** Diagnose general authenticated onboarding admission without
+requiring a shop selection merely to inspect policy. Actual credential tests and
+connection writes still need an authorized shop context.
+
 **Why:** Callback-only reopening blocked new-store connection checks before credentials reached Protractor, while the old successful-connect path immediately performed destructive cleanup and historical work. Simply allowing the connection check would have left that second failure intact. A saved connection is not proof of imported history or callback delivery.
 
 **How to apply:** Keep history durably pending until background access is approved, preserve same-binding reconnect state, and report restrictions separately from rejected credentials. Production rollout and actual callback delivery need separate verification; offline tests cannot establish either.

@@ -83,15 +83,15 @@ constructing isolated test environments. Keep external network denial and
 credentials excluded. Do not install packages or weaken a test before comparing
 native module loading in the ordinary and sanitized processes.
 
-Use an absolute preload path for the offline network guard in a repository-wide
-build.
+Network-denial controls must remain valid across child-process working-directory
+changes.
 
-**Why:** Route-security tests spawn Node with a temporary working directory.
-A relative `NODE_OPTIONS=--require ./tests/...` then fails before the scanner
-runs, making an authorized route look like an auth-lint failure.
+**Why:** A guard that depends on the parent's working directory can fail before
+a child test starts, producing a misleading test failure instead of exercising
+the intended security check.
 
-**How to apply:** Resolve the guard from the workspace root before starting the
-credential-free build; retain that same guard in child processes.
+**How to apply:** Preserve credential isolation and verify inherited guards can
+load from each subprocess's working directory.
 
 Temporary filesystem quotas can stop a build without a useful compiler log,
 even when `df` reports ample free disk.

@@ -880,7 +880,7 @@ function ProtractorSection({ status, onUpdate }: {
     configured: boolean;
     connectionId?: string;
     webhookToken?: string;
-    initialSyncState?: "running" | "complete" | "failed";
+    initialSyncState?: "pending" | "running" | "complete" | "failed";
     initialSyncVehicles?: number | null;
     initialSyncError?: string | null;
   };
@@ -947,18 +947,10 @@ function ProtractorSection({ status, onUpdate }: {
       });
 
       if (res.ok) {
-        setMessage({ type: "success", text: "Connected! Syncing your first vehicles in the background." });
+        setMessage({ type: "success", text: "Protractor connected. Historical imports require separate approval; saved sync progress is unchanged." });
+        setConnectionId("");
+        setApiKey("");
         onUpdate();
-        // Fire-and-forget background sync - don't await
-        fetch("/api/protractor/sync", { method: "POST" }).catch(() => {});
-        // Parity with the Tekmetric Connect flow: poll the parent
-        // status fetch for ~30s so the section flips to the Connected
-        // block and the initial-sync indicator transitions without a
-        // manual refresh.
-        for (let i = 0; i < 15; i++) {
-          await new Promise((r) => setTimeout(r, 2000));
-          onUpdate();
-        }
         return;
       } else {
         const data = await res.json();
@@ -979,7 +971,7 @@ function ProtractorSection({ status, onUpdate }: {
       const res = await fetch("/api/protractor/sync", { method: "POST" });
       const data = await res.json();
       if (res.ok) {
-        setMessage({ type: "success", text: `Synced ${data.vehicles || 0} vehicles` });
+        setMessage({ type: "success", text: `Synced ${data.vehiclesSynced || 0} vehicles` });
       } else {
         setMessage({ type: "error", text: data.error || "Sync failed" });
       }
@@ -1014,6 +1006,11 @@ function ProtractorSection({ status, onUpdate }: {
             <CheckCircle className="w-4 h-4" />
             <span>Connected to Protractor</span>
           </div>
+          {(!status.initialSyncState || status.initialSyncState === "pending") && (
+            <div className="text-xs text-amber-700 mt-2">
+              Historical sync is pending an approved import. Your connection is saved.
+            </div>
+          )}
           {status.initialSyncState === "running" && (
             <div className="flex items-center gap-2 text-xs text-green-700 mt-2">
               <Loader2 className="w-3 h-3 animate-spin" />
@@ -1027,7 +1024,7 @@ function ProtractorSection({ status, onUpdate }: {
           )}
           {status.initialSyncState === "failed" && (
             <div className="text-xs text-amber-700 mt-2">
-              Initial sync had a hiccup{status.initialSyncError ? `: ${status.initialSyncError}` : ""}. The nightly sync will catch up — or click Sync Now below.
+              Historical sync needs attention{status.initialSyncError ? `: ${status.initialSyncError}` : ""}. Existing progress is retained; an approved import is required to resume.
             </div>
           )}
         </div>
@@ -1079,6 +1076,9 @@ function ProtractorSection({ status, onUpdate }: {
             <Trash2 className="w-4 h-4" />
           </button>
         </div>
+        <p className="text-xs text-gray-500">
+          Sync Now requires approved bulk-import access. Connecting does not start an import or confirm callback delivery.
+        </p>
       </div>
     );
   }
