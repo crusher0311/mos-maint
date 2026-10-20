@@ -100,3 +100,21 @@ than waiting for provider confirmation; this was not approval to enable writes.
 and concurrency/termination evidence distinct from passing fixture tests.
 Independently sourced setup labels cannot be replaced with values echoed by
 inspection upserts.
+
+Protractor's Swagger schema is resolved relative to `/IntegrationServices/2.0`,
+not the host root, and was publicly readable at
+`https://integration.protractor.com/IntegrationServices/2.0/swagger/docs/v1`.
+
+**Why:** The host-root path returned 404 while the unauthenticated UI returned
+401, making documentation access appear blocked.
+
+**How to apply:** Use the credential-free schema first; do not persist
+credential-bearing UI URLs or infer unsupported capabilities from missing docs.
+
+The user chose to skip further provider confirmation and remove the NO-GO
+designation, not to enable enrollment or certify missing guarantees.
+
+**Why:** Closing research and authorizing live writes are separate decisions.
+
+**How to apply:** Preserve factual unknowns without labeling this investigation
+NO-GO or restarting the skipped work automatically.

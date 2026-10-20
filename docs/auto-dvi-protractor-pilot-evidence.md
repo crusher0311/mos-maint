@@ -1,11 +1,17 @@
 # Protractor durable DVI pilot evidence
 
-## Status: pilot executed; safety certification remains blocked
+## Status: pilot executed; further confirmation skipped at user direction
 
-This records a completed bounded pilot and a **NO-GO** assessment, not a
-capability certificate. Several required guarantees remain unestablished.
+This records a completed bounded pilot, not a capability certificate.
+The user requested removal of the NO-GO designation and chose to skip further
+confirmation. Several provider guarantees remain unestablished.
 No verified adapter was installed. `DURABLE_DVI_ENROLLMENTS` remains empty.
 The separate operator recovery/grant implementation is outside this pilot.
+
+The subsequent documentation research and ready-to-send provider questions are
+recorded in [provider confirmation](auto-dvi-protractor-provider-confirmation.md).
+Authoritative concurrency/termination confirmation remains outstanding; that
+document is not a submitted support ticket or a capability certificate.
 
 ## Authorization and target
 
@@ -125,7 +131,7 @@ The pilot's full-body Note probe cannot establish a valid conditional-write
 contract; nor should the durable composer's current full-body payload be
 certified without a provider-approved writable projection.
 
-**Decision: NO-GO.** The API guide and bounded pilot do not meet the durable
+**Disposition: further confirmation skipped at user direction.** The API guide and bounded pilot do not establish the durable
 provider's concurrency/termination contract. A read normalizer alone is not a
 safe capability adapter. Lack of a documented contract is not proof that a newer
 provider API cannot offer one; obtain authoritative confirmation before more
