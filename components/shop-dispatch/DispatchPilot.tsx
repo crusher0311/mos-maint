@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useDispatchBoard } from "@/lib/shop-dispatch/client";
 import { elapsed } from "@/lib/shop-dispatch/model";
 import { isVisitVisible } from "@/lib/shop-dispatch/source-preferences";
@@ -12,6 +12,7 @@ import { ScheduleCalendar } from "./ScheduleCalendar";
 import { Timeline } from "./Timeline";
 import { VisitDetail } from "./VisitDetail";
 import { IntakeForm } from "./IntakeForm";
+import NewWorkOrderModal from "../NewWorkOrderModal";
 import { DviEntry } from "./DviEntry";
 import { SheetManager } from "./SheetManager";
 import { useSheetCatalog } from "./use-sheet-catalog";
@@ -39,6 +40,7 @@ export default function DispatchPilot() {
   const [sheetsLocked, setSheetsLocked] = useState(false);
   const [intakeLocked, setIntakeLocked] = useState(false);
   const [showIntake, setShowIntake] = useState(false);
+  const [showNewRO, setShowNewRO] = useState(false);
   const [openInspection, setOpenInspection] = useState(false);
   const navigationLocked = scheduleLocked || inspectionLocked || intakeLocked || sheetsLocked;
   // Clock display only. Fetch polling and visibility refresh belong to useDispatchBoard.
@@ -61,6 +63,20 @@ export default function DispatchPilot() {
     (customerPlan === "all" || v.transport.customerPlan === customerPlan) &&
     (ride === "all" || v.transport.ride === ride) && (loaner === "all" || v.transport.loaner === loaner));
   const detail = snapshot?.board.visits.find(v => v.id === selected);
+  const consumedHandoff = useRef("");
+  useEffect(() => {
+    if (!snapshot || navigationLocked) return;
+    const params = new URLSearchParams(window.location.search);
+    const visitId = params.get("visit");
+    if (!visitId || params.get("dvi") !== "1") return;
+    // The server handoff is only a navigation request. It cannot invent a
+    // visit or use an ID absent from the current authenticated shop snapshot.
+    const visit = snapshot.board.visits.find(value => value.id === visitId && !value.closed);
+    const key = `${snapshot.shopId}:${visitId}`;
+    if (!visit || consumedHandoff.current === key) return;
+    consumedHandoff.current = key;
+    setView("dispatch"); setSelected(visit.id); setSelectedJob(null); setOpenInspection(true);
+  }, [snapshot, navigationLocked]);
   useEffect(() => {
     if (view === "dispatch" && selected && selectedJob) {
       document.getElementById(`job-${selectedJob}`)?.scrollIntoView?.({ block: "center" });
@@ -107,10 +123,11 @@ export default function DispatchPilot() {
         </fieldset>
          {view === "dispatch" && work && (detail ? <VisitDetail key={detail.id} visit={detail} shopId={snapshot.shopId} refresh={refresh} {...work} openInspection={openInspection} onInspectionLockChange={setInspectionLocked} onIntakeLockChange={setIntakeLocked} navigationLocked={navigationLocked} onBack={() => { if (!navigationLocked) { setSelected(null); setOpenInspection(false); } }} /> : <>
            {snapshot.actor.manager && <section className={styles.panel} aria-label="Check-in and new repair order">
-             <div className={styles.row}><div><h2>Check in / create RO</h2><small>Record arrival, explicitly confirm a new repair order, then start DVI. Existing tickets can start DVI below.</small></div>
-               <button className={styles.primary} data-testid="dispatch-check-in" disabled={work.busy || intakeLocked} aria-expanded={showIntake} onClick={() => setShowIntake(!showIntake)}>{showIntake ? "Hide check-in" : "Check in / create RO"}</button>
+              <div className={styles.row}><div><h2>Arrival & repair orders</h2><small>Create a confirmed Protractor RO using the same advisor workflow as the dashboard. Arrival photos carry forward to DVI as documentation.</small></div>
+                <div className={styles.actions}><button className={styles.primary} data-testid="dispatch-create-new-ro" disabled={work.busy || navigationLocked} onClick={() => setShowNewRO(true)}>Create New RO</button>
+                <button data-testid="dispatch-check-in" disabled={work.busy || intakeLocked} aria-expanded={showIntake} onClick={() => setShowIntake(!showIntake)}>{showIntake ? "Hide local check-in" : "Local check-in only"}</button></div>
              </div>
-             {showIntake && <IntakeForm board={snapshot.board} shopId={snapshot.shopId} busy={work.busy} refresh={refresh} onLockChange={setIntakeLocked} select={id => { setSelected(id); setOpenInspection(false); }} />}
+              {showIntake && <IntakeForm board={snapshot.board} shopId={snapshot.shopId} busy={work.busy} refresh={refresh} onLockChange={setIntakeLocked} select={id => { setSelected(id); setOpenInspection(false); }} />}
            </section>}
           <div className={styles.stats}>
             <div className={styles.stat}><small>Open vehicles</small><strong>{open.length}</strong><small>{open.filter(v => v.transport.customerPlan === "waiting").length} customers waiting · {open.filter(v => v.transport.customerPlan === "drop-off").length} drop-offs</small></div>
@@ -167,5 +184,6 @@ export default function DispatchPilot() {
         {view === "sheets" && <SheetManager api={sheets} onLockChange={setSheetsLocked} />}
         <footer><small>Server-backed pilot · revision {snapshot.board.revision} · board saved {dateLabel(snapshot.board.updatedAt)}. Upstream reads are verified per fetched work order. Workflow check-in is local; ticket writes require explicit confirmation and server verification.</small></footer>
       </>}
-  </main>;
+    <NewWorkOrderModal isOpen={showNewRO} onClose={() => setShowNewRO(false)} onCreated={() => { void refresh(); }} />
+   </main>;
 }

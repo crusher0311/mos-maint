@@ -5,6 +5,7 @@ import type { TicketIntent, WorkflowIntake } from "@/lib/shop-dispatch/intake-ty
 import { IntakeForm } from "./IntakeForm";
 import { useIntake } from "./use-intake";
 import { DviEntry } from "./DviEntry";
+import NewWorkOrderModal from "../NewWorkOrderModal";
 import { dateLabel } from "./helpers";
 import styles from "./pilot.module.css";
 import css from "./Intake.module.css";
@@ -29,7 +30,7 @@ export function VisitIntake({ visit, board, shopId, manager, busy, refresh, onLo
   const [ticketPreview,setTicketPreview]=useState<{sourceId:string;ro:string;customer:string;vehicle:string;sourceStatus:string}|null>(null);
   const [previewError,setPreviewError]=useState("");
   const [previewBusy,setPreviewBusy]=useState(false);
-  const [confirmedCreate, setConfirmedCreate] = useState(false);
+  const [showNewRO, setShowNewRO] = useState(false);
   const [revision, setRevision] = useState(board.revision);
   const [storageReady, setStorageReady] = useState(false);
   const [storageError, setStorageError] = useState("");
@@ -37,16 +38,15 @@ export function VisitIntake({ visit, board, shopId, manager, busy, refresh, onLo
   useEffect(() => {
     try {
       const raw = sessionStorage.getItem(key);
-      if (raw) { const value = JSON.parse(raw); setRoNumber(value.roNumber ?? ""); setConfirmedLink(value.confirmedLink === true); setConfirmedCreate(value.confirmedCreate === true); setRevision(value.revision); }
+      if (raw) { const value = JSON.parse(raw); setRoNumber(value.roNumber ?? ""); setConfirmedLink(value.confirmedLink === true); setRevision(value.revision); }
       setStorageReady(true);
     } catch { setStorageError("Ticket draft could not be recovered. Actions disabled to protect the original request."); }
   }, [key]);
   useEffect(() => {
     if (!storageReady) return;
-    try { sessionStorage.setItem(key, JSON.stringify({ roNumber, confirmedLink, confirmedCreate, revision })); }
+    try { sessionStorage.setItem(key, JSON.stringify({ roNumber, confirmedLink, revision })); }
     catch { setStorageError("Ticket draft cannot be preserved. Actions disabled."); }
-  }, [key, storageReady, roNumber, confirmedLink, confirmedCreate, revision]);
-  const identityReady = !!intake?.details.identityConfirmed && !!(intake.details.contactId || intake.details.newCustomer) && !!(intake.details.vehicleId || intake.details.newVehicle);
+  }, [key, storageReady, roNumber, confirmedLink, revision]);
   const locked = busy || detailsLocked || api.busy || !!api.pending || !api.ready || !storageReady || !!storageError;
   async function link(event: FormEvent) {
     event.preventDefault();
@@ -94,12 +94,14 @@ export function VisitIntake({ visit, board, shopId, manager, busy, refresh, onLo
           <label className={styles.check}><input disabled={!ticketPreview} type="checkbox" checked={confirmedLink&&!!ticketPreview} onChange={e => setConfirmedLink(e.target.checked)} />I confirm the displayed customer, vehicle and RO belong to this visit. Resolve any differing intake identity before linking.</label>
           <button type="submit" disabled={!confirmedLink||!ticketPreview||previewBusy}>Verify & link existing ticket</button></fieldset></form>
           <div className={css.step}><h3>Create a new upstream ticket</h3>
-            {!identityReady && <p className={styles.warning}>Save intake with a confirmed existing or new customer and vehicle first. Local check-in alone is not enough.</p>}
-            <label className={styles.check}><input type="checkbox" disabled={locked || !identityReady} checked={confirmedCreate} onChange={e => setConfirmedCreate(e.target.checked)} />I explicitly confirm creation of a new upstream repair order for {intake?.details.customer || "this customer"} / {intake?.details.vehicle || "this vehicle"}, including any new identities entered above.</label>
-            <button disabled={locked || !identityReady || !confirmedCreate} onClick={() => { if (window.confirm("Create this new repair order upstream? This is not a local-only check-in. Uncertain outcomes require verification, not another creation.")) void api.send({ action: "create", requestId: crypto.randomUUID(), revision, visitId: visit.id, confirmed: true }); }}>Create upstream ticket</button>
+            <p><small>Use the same guided repair-order form as the dashboard. Local intake is not sent as a second creation request. After creation, explicitly look up and link the official number above if you want to attach it to this local visit; DVI handoff opens the confirmed imported visit.</small></p>
+            <button disabled={locked} onClick={() => setShowNewRO(true)}>Create New RO</button>
           </div></>}
-        <button disabled={locked} onClick={() => { if (window.confirm("Review the ticket action draft against the latest displayed board and use its revision?")) { setRevision(current.revision); setConfirmedCreate(false); setConfirmedLink(false); } }}>Review latest ticket revision</button><small>Draft revision {revision} · board {current.revision}</small>
+        <button disabled={locked} onClick={() => { if (window.confirm("Review the ticket action draft against the latest displayed board and use its revision?")) { setRevision(current.revision); setConfirmedLink(false); } }}>Review latest ticket revision</button><small>Draft revision {revision} · board {current.revision}</small>
       </>}
     </section>
+    <NewWorkOrderModal isOpen={showNewRO} onClose={() => setShowNewRO(false)} onCreated={number => {
+      setRoNumber(String(number)); setConfirmedLink(false); setTicketPreview(null); void refresh?.();
+    }} />
   </section>;
 }

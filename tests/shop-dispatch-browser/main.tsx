@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import DispatchPilot from "../../components/shop-dispatch/DispatchPilot";
 import SheetManager from "../../components/shop-dispatch/SheetManager";
 import { createSheetFixture } from "./sheet-fixture";
+import { createNewROFixture, NewROPreview, NEW_RO_NUMBER } from "./new-ro-fixture";
 import { TechnicianSkills } from "../../components/shop-dispatch/TechnicianSkills";
 import { RosterImport } from "../../components/shop-dispatch/RosterImport";
 import { CommandForm } from "../../components/shop-dispatch/CommandForm";
@@ -16,8 +17,9 @@ import { timelineInstant } from "../../lib/shop-dispatch/timeline";
 import styles from "../../components/shop-dispatch/pilot.module.css";
 import { actorFor,applyCommand,emptyBoard,type Command } from "../../lib/shop-dispatch/model";
 import { paletteFromPixels, resolveWorkflowBranding } from "../../lib/shop-dispatch/branding";
-import { STAFF_SHEET_TEMPLATES } from "../../lib/auto-dvi/staff/model";
+import { STAFF_SHEET_TEMPLATES, initialInspection } from "../../lib/auto-dvi/staff/model";
 const sheetParams = new URLSearchParams(location.search);
+if (sheetParams.has("newRO")) void import("./new-ro.css");
 const sheetFixture = createSheetFixture(sheetParams);
 const variant = new URLSearchParams(location.search).get("logo") ?? "colorful";
 const canvas = document.createElement("canvas");
@@ -39,6 +41,7 @@ function importRo(ro:string,stage="Unassigned"){
  board=applyCommand(board,{type:"sync",workOrderId:sourceId},actor,new Date().toISOString(),
  {sourceId,ro,vehicle:"Synthetic imported vehicle",customer:"",sourceStatus:stage,jobs:[]});
 }
+if (sheetParams.has("newROArrived")) importRo(String(NEW_RO_NUMBER));
 if(new URLSearchParams(location.search).has("sources")){importRo("123");importRo("124","VehicleInBay");}
 act({type:"technician",id:"tech",name:"Test Technician",email:"tech@example.test",active:true});
 act({type:"visit",id:"visit",ro:"TEST-001",vehicle:"Fictional Test Vehicle",customer:"Test customer"});
@@ -114,8 +117,17 @@ if(new URLSearchParams(location.search).has("schedule")){
 }
 if (new URLSearchParams(location.search).has("warnings")) board.jobs[0].sourceRemoved = true;
 const realFetch=window.fetch.bind(window);
+const newROFixture = createNewROFixture(sheetParams, () => {
+  importRo(String(NEW_RO_NUMBER));
+  return board.visits.find(visit => visit.ro === String(NEW_RO_NUMBER))!.id;
+});
 window.fetch=async(input,init)=>{
  const url=String(input);
+ if(sheetParams.has("newRO")){
+  if(url.startsWith("/api/jobs/search"))return Response.json({results:[]});
+  const response=await newROFixture(url,init);
+  if(response)return response;
+ }
  if(!url.startsWith("/api/shop-dispatch"))throw new Error("Offline fixture blocked unexpected request");
   if(url==="/api/shop-dispatch/inspection/sheets"){
    // Sheets are opt-in; ordinary fixture modes retain their existing UI.
@@ -124,6 +136,15 @@ window.fetch=async(input,init)=>{
   }
  try {
   if(url.startsWith("/api/shop-dispatch/inspection")){
+   if(sheetParams.has("newRO")){
+    if(url.startsWith("/api/shop-dispatch/inspection/release"))return Response.json({enabled:false,canPublish:false});
+    if(url.startsWith("/api/shop-dispatch/inspection/pilot"))return Response.json({enabled:false,operation:null});
+    if(init?.method==="POST")return Response.json({error:"Offline fixture only supports read-only initialized inspection."},{status:403});
+    const enabled=sheetParams.has("newROArrived");
+    return Response.json({enabled,canEdit:enabled,canReview:enabled,record:null,
+     inspection:enabled?initialInspection(STAFF_SHEET_TEMPLATES[0]):null,
+     catalog:enabled?STAFF_SHEET_TEMPLATES:[],boardRevision:board.revision});
+   }
    if(init?.method==="POST")return Response.json({error:"Read-only visual fixture. Persistent writes are covered by the isolated inspection tests."},{status:409});
    const enabled=new URLSearchParams(location.search).has("dvi");
    return Response.json({enabled,canEdit:enabled,canReview:enabled,record:null,inspection:null,
@@ -195,4 +216,4 @@ if(new URLSearchParams(location.search).has("operations")){
  board.visits[0].promiseAt=new Date(Date.now()+3600000).toISOString();
 }
 const params=new URLSearchParams(location.search);
-createRoot(document.getElementById("root")!).render(<><div style={{padding:12,background:"#ffe6a0",color:"#222"}}>OFFLINE UI TEST FIXTURE · synthetic data · no production connection</div>{params.has("sheets")?<main className={styles.root} style={{padding:24}}><SheetManager /></main>:params.has("operations")?<main className={styles.root} style={{padding:24}}><OperationsPanel board={board} actor={actor} now={Date.now()} busy={false} mutate={async()=>false} select={()=>{}}/><JobCard board={board} job={board.jobs[0]} actor={actor} now={Date.now()} busy={false} mutate={async()=>false}/></main>:params.has("schedule")?<main className={styles.root} style={{padding:24}}><ScheduleCalendar shopId={999} board={board} busy={false} refresh={async()=>{}} select={()=>{}}/></main>:params.has("assignments")?<main className={styles.root} style={{padding:24,maxWidth:950}}><JobCard job={board.jobs[0]} board={board} actor={actor} now={Date.now()} busy={false} mutate={async()=>false}/></main>:params.has("roster")?<RosterPreview/>:params.has("skills")?<main className={styles.root}><TechnicianSkills board={board} actor={actor} busy={false} mutate={async()=>false}/></main>:<DispatchPilot/>}</>);
+createRoot(document.getElementById("root")!).render(<><div style={{padding:12,background:"#ffe6a0",color:"#222"}}>OFFLINE UI TEST FIXTURE · synthetic data · no production connection</div>{params.has("newRO")?<NewROPreview/>:params.has("sheets")?<main className={styles.root} style={{padding:24}}><SheetManager /></main>:params.has("operations")?<main className={styles.root} style={{padding:24}}><OperationsPanel board={board} actor={actor} now={Date.now()} busy={false} mutate={async()=>false} select={()=>{}}/><JobCard board={board} job={board.jobs[0]} actor={actor} now={Date.now()} busy={false} mutate={async()=>false}/></main>:params.has("schedule")?<main className={styles.root} style={{padding:24}}><ScheduleCalendar shopId={999} board={board} busy={false} refresh={async()=>{}} select={()=>{}}/></main>:params.has("assignments")?<main className={styles.root} style={{padding:24,maxWidth:950}}><JobCard job={board.jobs[0]} board={board} actor={actor} now={Date.now()} busy={false} mutate={async()=>false}/></main>:params.has("roster")?<RosterPreview/>:params.has("skills")?<main className={styles.root}><TechnicianSkills board={board} actor={actor} busy={false} mutate={async()=>false}/></main>:<DispatchPilot/>}</>);

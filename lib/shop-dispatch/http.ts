@@ -18,7 +18,7 @@ export async function dispatchSession(session:SessionInfo|null):Promise<SessionI
   requireThat(entitlements.isFeatureEnabled("shop_workflow"),"Shop workflow pilot is not enabled for this location. Ask your platform administrator to enable it.",403);
   return session;
 }
-export async function requestBody(req:Request):Promise<unknown>{
+export async function requestBody(req:Request,maxBytes=220000):Promise<unknown>{
   // Cookie-authenticated mutations only. Same-origin form/API callers must send
   // JSON; no CORS or extension write path is exposed by the pilot.
   const origin=req.headers.get("origin");
@@ -30,7 +30,7 @@ export async function requestBody(req:Request):Promise<unknown>{
   const reader=req.body?.getReader();requireThat(reader,"Request body required",400);
   const chunks:Uint8Array[]=[];let size=0;
   for(;;){const next=await reader.read();if(next.done)break;size+=next.value.length;
-    if(size>220000){await reader.cancel();throw new DispatchError(413,"Request too large");}chunks.push(next.value);}
+    if(size>maxBytes){await reader.cancel();throw new DispatchError(413,"Request too large");}chunks.push(next.value);}
   try{return JSON.parse(Buffer.concat(chunks).toString("utf8"));}
   catch{throw new DispatchError(400,"Invalid JSON");}
 }

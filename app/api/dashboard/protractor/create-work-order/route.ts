@@ -6,6 +6,10 @@ import { finalizeProtractorWorkOrderCreation } from "@/lib/integrations/protract
 import { runWithProtractorInteractiveTransport } from "@/lib/integrations/protractor/interactive-context";
 import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
 import { resolveClientRequestId } from "@/lib/idempotent-create-id";
+import { randomUUID } from "node:crypto";
+import { admitGuidedRO, confirmGuidedRO } from "@/lib/data/repositories/guided-ro-operations";
+import { DispatchError, requireThat } from "@/lib/shop-dispatch/model";
+import { requestBody } from "@/lib/shop-dispatch/http";
 
 // Task #936: bounded upstream deadline so the wizard's final create step can
 // never spin forever. WO create can legitimately push several service
@@ -31,8 +35,10 @@ export async function POST(req: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
+    requireThat(user.disabled !== true && user.active !== false && user.status !== "inactive" && user.mustChangePassword !== true,
+      "Current active user required",403);
 
-    const body = await req.json();
+    const body = await requestBody(req,512000) as Record<string,any>;
     const { contactId, vehicleId, vin, concernText, concerns, note, mileage, servicePackages, clientRequestId } = body;
 
     if (!contactId || !vehicleId) {
@@ -40,6 +46,8 @@ export async function POST(req: NextRequest) {
     }
 
     const shopId = Number(sess.shopId);
+    requireThat(Number.isSafeInteger(shopId)&&shopId>0,"Current shop required",403);
+    requireThat(body.expectedShopId === undefined || body.expectedShopId === shopId,"The active shop changed; recover the original shop's draft.",409);
 
     // Task #891: refuse to push empty shells. A package with no real title
     // AND no lines would land in Protractor as an "Untitled" $0 job — the
@@ -62,6 +70,13 @@ export async function POST(req: NextRequest) {
 
     // Task #891: per-step timings — WO create was reported at 15-20s with no
     // visibility into where the time goes.
+    const workOrderId = resolveClientRequestId("workOrder",shopId,String(sess.userId ?? user.email ?? ""),clientRequestId ?? randomUUID())!;
+    requireThat(workOrderId,"Valid creation request identity required",400);
+    const {recoveryOnly, ...payload} = body;
+    const admission = await admitGuidedRO(db,{id:workOrderId,shopId,actor:String(sess.userId),payload,recoveryOnly:recoveryOnly === true});
+    if (!admission.admitted) return admission.result
+      ? NextResponse.json(admission.result)
+      : NextResponse.json({ok:false,pendingVerification:true,error:"Ticket creation is unconfirmed. Verification does not create another ticket."},{status:202});
     const tStart = Date.now();
     // Task #936: interactive lane (priority pool, capped retries) + a
     // client-pinned WO ID so a wizard retry after a timeout upserts the SAME
@@ -89,9 +104,14 @@ export async function POST(req: NextRequest) {
             // Task #937: derive the upstream ID server-side (hash of
             // kind+shop+user+key) so the wizard's retry stays duplicate-safe
             // without letting a caller target an existing record's UUID.
-            workOrderId: resolveClientRequestId("workOrder", shopId, String(sess.userId ?? user.email ?? ""), clientRequestId),
+            workOrderId,
+            maxRetries: 0,
           },
-        ),
+        ).then(async outcome => {
+          // Save late success even if the HTTP deadline already elapsed.
+          if (outcome.ok) await confirmGuidedRO(db,workOrderId,outcome);
+          return outcome;
+        }),
         UPSTREAM_DEADLINE_MS,
         `wizard-create-work-order shop=${shopId}`,
         { ok: false, error: SLOW_UPSTREAM_MSG, timedOut: true } as any,
@@ -103,7 +123,7 @@ export async function POST(req: NextRequest) {
     if (!result.ok) {
       const timedOut = (result as any).timedOut === true;
       console.error(`[Create WO] timing shop=${shopId} create=${createMs}ms FAILED${timedOut ? " (upstream deadline exceeded)" : ""}: ${result.error}`);
-      return NextResponse.json({ error: result.error }, { status: timedOut ? 504 : 500 });
+      return NextResponse.json({ error: result.error, pendingVerification:true }, { status: timedOut ? 504 : 500 });
     }
 
     // Task #891: finalize (WO re-fetch + dashboard snapshot + normalize) is
@@ -137,7 +157,8 @@ export async function POST(req: NextRequest) {
         : {}),
     });
   } catch (err: any) {
+    if (err instanceof DispatchError) return NextResponse.json({error:err.message},{status:err.status});
     console.error("[Create Work Order] Error:", err.message);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json({ error: "Creation outcome is unconfirmed. Verify the original request before trying another.",pendingVerification:true }, { status: 500 });
   }
 }

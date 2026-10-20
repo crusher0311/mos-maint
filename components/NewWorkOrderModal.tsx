@@ -33,6 +33,8 @@ import {
   HelpCircle,
 } from "lucide-react";
 import { getMatchConfidenceBadge } from "@/lib/aces-tier-badge";
+import { useRORecovery } from "./use-ro-recovery";
+import { ArrivalPhotoPicker, RORecoveryPanel } from "./RORecoveryPanel";
 
 const US_STATES = [
   "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD",
@@ -48,7 +50,6 @@ const CA_PROVINCES = [
 // deadline (35s contact/vehicle, 45s work order) so a truly wedged request
 // can never spin the wizard's button forever.
 const WIZARD_CREATE_TIMEOUT_MS = 45_000;
-const WIZARD_CREATE_WO_TIMEOUT_MS = 60_000;
 const SLOW_UPSTREAM_MSG = "Protractor is responding slowly — please try again.";
 
 async function postJsonWithTimeout(url: string, body: unknown, timeoutMs: number): Promise<Response> {
@@ -220,7 +221,7 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
   const [createdWO, setCreatedWO] = useState<number | null>(null);
   // Task #913: jobs that Protractor accepted only as $0 header-only shells
   // (server couldn't resolve any parts/labor lines from cache or template).
-  const [packagesWithoutLines, setPackagesWithoutLines] = useState<Array<{ title: string; code?: string }>>([]);
+  const [packagesWithoutLines] = useState<Array<{ title: string; code?: string }>>([]);
 
   const [createNewCustomer, setCreateNewCustomer] = useState(false);
   const [newCustomer, setNewCustomer] = useState<Record<string, string>>({ firstName: "", lastName: "" });
@@ -242,9 +243,19 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
   const [vinDecoding, setVinDecoding] = useState(false);
   const [vinDecoded, setVinDecoded] = useState(false);
   const [plateLooking, setPlateLooking] = useState(false);
+  const recovery = useRORecovery(isOpen, number => {
+    setCreatedWO(number);
+    setStep("confirm");
+    onCreated?.(number);
+  });
+  const rememberedContext = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!isOpen) {
+    const context = recovery.session ? `${recovery.session.shopId}:${recovery.session.actorKey}` : null;
+    const contextChanged = context !== null && rememberedContext.current !== null && context !== rememberedContext.current;
+    if (context !== null) rememberedContext.current = context;
+    if (contextChanged) setRoSettings(null);
+    if (!isOpen || contextChanged) {
       setStep("concern");
       setContactSearch("");
       setContacts([]);
@@ -292,7 +303,7 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
       // previous session's Protractor record instead of creating a new one.
       resetRequestIds(createRequestIdsRef.current);
     }
-  }, [isOpen]);
+  }, [isOpen, recovery.session?.shopId, recovery.session?.actorKey]);
 
   useEffect(() => {
     if (isOpen && !roSettings) {
@@ -300,7 +311,7 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
         setRoSettings(data);
       }).catch(() => {});
     }
-  }, [isOpen]);
+  }, [isOpen, roSettings, recovery.session?.shopId]);
 
   useEffect(() => {
     if (step === "jobs" && selectedVehicle) {
@@ -802,9 +813,7 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
         seen.add(c);
         return true;
       });
-      const res = await postJsonWithTimeout(
-        "/api/dashboard/protractor/create-work-order",
-        {
+      await recovery.create({
           contactId: selectedContact.id,
           vehicleId: selectedVehicle.id,
           vin: selectedVehicle.vin || undefined,
@@ -813,16 +822,7 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
           mileage: mileageInput ? Number(mileageInput) : undefined,
           servicePackages: selectedJobs.length > 0 ? selectedJobs : undefined,
           clientRequestId: getOrCreateRequestId(createRequestIdsRef.current, "workOrder"),
-        },
-        WIZARD_CREATE_WO_TIMEOUT_MS,
-      );
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to create work order");
-      clearRequestId(createRequestIdsRef.current, "workOrder");
-      setCreatedWO(data.workOrderNumber);
-      setPackagesWithoutLines(Array.isArray(data.packagesWithoutLines) ? data.packagesWithoutLines : []);
-      setStep("confirm");
-      if (onCreated) onCreated(data.workOrderNumber);
+      });
     } catch (err: any) {
       setCreateError(err.message);
     } finally {
@@ -902,6 +902,15 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
   }
 
   if (!isOpen) return null;
+  if (recovery.ready && recovery.session?.payload) return <RORecoveryPanel recovery={recovery} onClose={onClose} />;
+  if (!recovery.ready) return <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Recover repair order">
+    <section className="bg-white rounded-xl shadow-2xl w-full max-w-2xl p-6 space-y-4">
+      <h2 className="text-lg font-semibold text-gray-900">Checking shop and saved repair order</h2>
+      {recovery.error ? <><p className="text-sm text-red-700" role="alert">{recovery.error}</p><button className="text-blue-600 text-sm" onClick={recovery.reload}>Retry recovery</button></> :
+        <div className="h-16 rounded-lg bg-gray-100 animate-pulse" aria-busy="true" role="status" aria-label="Loading saved repair order" />}
+      <button className="block text-sm text-gray-600" onClick={onClose}>Close</button>
+    </section>
+  </div>;
 
   const draftConcernText = (cleanedText || concern).trim();
   const draftIsBeingEdited = editingConcernIndex !== null;
@@ -969,6 +978,8 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 py-4">
+          {recovery.error && <p role="alert" className="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 p-3 rounded-lg">{recovery.error}</p>}
+          <fieldset disabled={recovery.busy} className="border-0 p-0 m-0 min-w-0">
           {step === "customer" && (
             <div className="space-y-4">
               <div className="flex gap-2 mb-2">
@@ -1153,6 +1164,7 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
 
           {step === "vehicle" && (
             <div className="space-y-4">
+              <ArrivalPhotoPicker recovery={recovery} />
               <div className="flex items-center gap-2 text-sm text-gray-600 bg-gray-50 px-3 py-2 rounded-lg">
                 <User className="w-4 h-4 text-blue-500" />
                 <span className="font-medium">{contactDisplay}</span>
@@ -2091,6 +2103,7 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
               </button>
             </div>
           )}
+          </fieldset>
         </div>
 
         {step !== "confirm" && (

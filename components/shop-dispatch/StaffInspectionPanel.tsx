@@ -4,6 +4,7 @@ import { blankFinding, instanceKey, missingFor, missingRequirements, type Findin
 import { useStaffInspection } from "./use-staff-inspection";
 import { ReleasePanel } from "./ReleasePanel";
 import { PilotInspectionPanel } from "./PilotInspectionPanel";
+import { ArrivalPhotoDocumentation } from "./ArrivalPhotoDocumentation";
 import styles from "./pilot.module.css";
 import ui from "./StaffInspectionPanel.module.css";
 
@@ -82,6 +83,7 @@ function InspectionEditor({ visitId, shopId, closed, onLockChange, startRequeste
   const reviewAllowed = !closed && !data.record?.closed && data.enabled && data.canReview && !api.busy && !api.pending && !api.conflict && !dirty;
   return <section className={`${styles.panel} ${ui.panel}`} data-testid="staff-inspection-panel" aria-label="Internal staff inspection">
     <div className={ui.heading}><div><div className={styles.eyebrow}>Staff workspace · Internal only</div><h2>Vehicle inspection</h2><p>Document findings in their original measured units. This does not release a vehicle, authorize work, or change dispatch capacity.</p></div><span className={styles.chip}>{inspection ? `Revision ${inspection.revision} · Evidence ${inspection.evidenceRevision}` : "Not initialized"}</span></div>
+    <ArrivalPhotoDocumentation visitId={visitId} />
     {readOnly && <p className={styles.notice}>Read only · {closed || data.record?.closed ? "This visit is closed." : !data.enabled ? "The inspection gate is off. Existing evidence is preserved." : "Inspection edit permission is required."}</p>}
     {data.error && <p className={styles.notice} role="status">{data.error}</p>}
     {api.error && <p className={styles.error} role="alert">{api.error}</p>}
