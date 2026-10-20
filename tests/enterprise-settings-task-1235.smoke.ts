@@ -56,7 +56,7 @@ async function run() {
   assert.throws(() => parseEnterpriseSettingCategories(["branding", "unknown"]));
 
   const copyRouteSource = readFileSync(
-    new URL("../app/api/enterprise/copy-settings/route.ts", import.meta.url),
+    new URL("../lib/enterprise-settings-http.ts", import.meta.url),
     "utf8",
   );
   assert.equal(

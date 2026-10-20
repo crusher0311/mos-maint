@@ -317,7 +317,7 @@ async function run() {
   // Every category now goes through the canonical-aware shared shop
   // repository; the copy handler must not acquire Mongo directly.
   const copyRouteSource = readFileSync(
-    new URL("../app/api/enterprise/copy-settings/route.ts", import.meta.url),
+    new URL("../lib/enterprise-settings-http.ts", import.meta.url),
     "utf8",
   );
   assert.equal(copyRouteSource.includes("getDb"), false);

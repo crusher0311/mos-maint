@@ -3,7 +3,7 @@ import { getSession } from "@/lib/auth";
 import { getEnterpriseByShopId } from "@/lib/enterprise";
 import { listShopsByShopIds } from "@/lib/data/repositories/shops";
 import { canManageEnterpriseSettings } from "@/lib/enterprise-settings-catalog";
-import { copySettingsPost } from "@/app/api/enterprise/copy-settings/route";
+import { copySettingsPost } from "@/lib/enterprise-settings-http";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,6 +14,7 @@ export const dynamic = "force-dynamic";
  * come from the shared settings contract.
  */
 export async function POST(req: NextRequest) {
+  if (!await getSession()) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   return copySettingsPost(req, {
     forceCategory: "stickers",
     legacyStickerResponse: true,
