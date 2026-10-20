@@ -2,6 +2,7 @@ import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 import { NextRequest, NextResponse } from "next/server";
 import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
 import { getOpenAI, trackOpenAiCall } from "@/lib/ai";
+import { concernAssistantFailure } from "@/lib/concern-assistant-failure";
 import { getDb } from "@/lib/mongo";
 import {
   findConversationRoundResults,
@@ -437,8 +438,9 @@ async function _POST(request: NextRequest) {
 
     return NextResponse.json({ error: "Unknown action" }, { status: 400, headers: corsHeaders });
   } catch (error: any) {
-    console.error("[Concern Assistant] POST error:", error);
-    return NextResponse.json({ error: error.message || "Failed to process request" }, { status: 500, headers: corsHeaders });
+    const failure = concernAssistantFailure(error);
+    console.error("[Concern Assistant] POST error:", failure.diagnostic);
+    return NextResponse.json(failure.body, { status: failure.status, headers: corsHeaders });
   }
 }
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getOpenAI, trackOpenAiCall } from "@/lib/ai";
+import { concernAssistantFailure } from "@/lib/concern-assistant-failure";
 import { getDb } from "@/lib/mongo";
 import {
   findConversationRoundResults,
@@ -499,7 +500,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   } catch (error: any) {
-    console.error("[Dashboard Concern Assistant] Error:", error);
-    return NextResponse.json({ error: error.message || "Failed to process request" }, { status: 500 });
+    const failure = concernAssistantFailure(error);
+    console.error("[Dashboard Concern Assistant] Error:", failure.diagnostic);
+    return NextResponse.json(failure.body, { status: failure.status });
   }
 }
