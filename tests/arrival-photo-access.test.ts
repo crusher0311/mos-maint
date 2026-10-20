@@ -3,8 +3,10 @@ import assert from "node:assert/strict";
 import {randomUUID} from "node:crypto";
 const Module=require("module"),original=Module._load;
 const id=randomUUID();let writes=0,reads=0,confirmed=true,readAllowed=true;
+let signedIn=true;
 let access={shopId:66,actor:"advisor",enabled:true,canEdit:true,authority:{}};
 Module._load=function(path:string,...args:any[]){
+  if(path==="@/lib/auth")return {getSession:async()=>signedIn?{email:"advisor@example.invalid"}:null};
   if(path==="@/lib/auto-dvi/staff/access")return {staffAccess:async()=>access};
   if(path==="@/lib/auto-dvi/workflow-policy")return {effectiveInspectionPermission:()=>({allowed:readAllowed})};
   if(path==="@/lib/data/repositories/shop-dispatch")return {readDispatchBoard:async()=>({visits:[{id:"visit",provider:"protractor",sourceId:id}]})};
@@ -24,6 +26,9 @@ function request(origin="https://fixture.invalid",extra={}){
     body:JSON.stringify({requestId:randomUUID(),workOrderId:id,mime:"image/png",base64:"iVBORw0KGgo=", ...extra})});
 }
 test("arrival writes require DVI edit authority, same origin and a confirmed native receipt",async()=>{
+  signedIn=false;assert.equal((await route.POST(request())).status,401);
+  assert.equal((await route.GET(new Request("https://fixture.invalid/api/dashboard/protractor/arrival-photos?visitId=visit"))).status,401);
+  signedIn=true;assert.equal(writes,0);assert.equal(reads,0);
   access.canEdit=false;assert.equal((await route.POST(request())).status,403);assert.equal(writes,0);
   access.canEdit=true;assert.equal((await route.POST(request("https://other.invalid"))).status,403);assert.equal(writes,0);
   confirmed=false;assert.equal((await route.POST(request())).status,503);assert.equal(writes,0);
