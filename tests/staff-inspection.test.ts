@@ -95,7 +95,8 @@ test("competing edits reject stale revision without overwriting; sheet switch pr
     command: {type: "select", sheet: "other@1", keepActive: false}}, f.deps);
   assert.equal(current.inspection!.sheets[0].active, false);
   assert.equal(current.inspection!.sheets[0].results["tire.lf"].values.inner, 7);
-  assert.deepEqual(current.inspection!.sheets[1].results, {});
+  assert.deepEqual(current.inspection!.sheets[1].results, current.inspection!.sheets[0].results,
+    "Matching items reuse this visit's saved findings when switching sheets");
   current = await mutateStaff({visitId: "visit-one", revision: current.inspection!.revision, requestId: randomUUID(),
     command: {type: "select", sheet: "fixture@1", keepActive: true}}, f.deps);
   assert.equal(current.inspection!.sheets.filter(s => s.active).length, 2);

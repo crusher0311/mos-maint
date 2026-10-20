@@ -16,6 +16,17 @@ independently controlled feature.
 shop's DVI entitlement, then apply staff/manager permissions separately. Workflow
 access alone must not grant DVI or sheet-editing authority.
 
+Sheet definitions used by inspections are immutable versions. Catalog edits and
+archival must not change existing inspection evidence or enable provider sends.
+Only matching measurement identities within the same visit may automatically
+reuse findings; historical visits remain reference evidence.
+
+**Why:** Managers need to improve sheets without rewriting what a technician
+actually inspected, and sheet administration is not approval for live rollout.
+
+**How to apply:** Preserve embedded definitions and separate catalog authority
+from admissions, provider write permissions and enterprise-sharing policies.
+
 The user wants prior DVI findings to return on subsequent visits and to be shared
 across enterprise locations like vehicle history. They also want multiple DVI
 sheets with overlapping items automatically reusing inspection work within the

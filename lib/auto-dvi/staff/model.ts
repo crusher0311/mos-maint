@@ -48,6 +48,12 @@ export interface StaffInspection {
 }
 export const blankFinding = (): FindingInput => ({rating: null, notes: "", recommendation: "", naReason: "", values: {}});
 export const instanceKey = (s: StaffSheet) => `${s.id}@${s.version}`;
+export function sameInspectionItem(a: StaffItem, b: StaffItem) {
+  const fields = (item: StaffItem) => JSON.stringify(item.fields.map(f => ({
+    id: f.id, type: f.type, unit: f.unit ?? "", options: f.options ?? [],
+  })).sort((x, y) => x.id.localeCompare(y.id)));
+  return a.procedure === b.procedure && (a.position ?? "") === (b.position ?? "") && fields(a) === fields(b);
+}
 export function initialInspection(sheet: StaffSheet): StaffInspection {
   return {version: 1, revision: 0, sheets: [{key: instanceKey(sheet), sheet: structuredClone(sheet),
     active: true, selection: "default", results: {}}], startedAt: null, evidenceRevision: 0, ready: null, reviewed: null};
@@ -99,6 +105,12 @@ export function applyStaffCommand(state: StaffInspection, command: StaffCommand,
     if (!instance) {
       requireThat(next.sheets.length < 20, "Sheet capacity reached", 409);
       instance = {key: command.sheet, sheet: structuredClone(sheet), active: true, selection: "manual", results: {}};
+      for (const item of sheet.items) {
+        const prior = next.sheets.flatMap(s => s.sheet.items.filter(old => sameInspectionItem(old, item))
+          .map(old => s.results[old.id]).filter((finding): finding is Finding => !!finding))
+          .sort((a,b) => b.at.localeCompare(a.at))[0];
+        if (prior) instance.results[item.id] = structuredClone(prior);
+      }
       next.sheets.push(instance);
     }
     if (!command.keepActive) next.sheets.forEach(s => {s.active = false;});
@@ -115,6 +127,12 @@ export function applyStaffCommand(state: StaffInspection, command: StaffCommand,
       requireThat(item, "Item not found", 404);
       const value = validateFinding(item, command.finding);
       instance.results[item.id] = {...value, photos: instance.results[item.id]?.photos ?? [], actor, at};
+      for (const other of next.sheets) {
+        if (other === instance) continue;
+        for (const target of other.sheet.items.filter(candidate => sameInspectionItem(item, candidate))) {
+          other.results[target.id] = structuredClone(instance.results[item.id]);
+        }
+      }
       if (value.rating || value.notes || value.recommendation || Object.keys(value.values).length) next.startedAt ??= at;
     }
     next.evidenceRevision++;

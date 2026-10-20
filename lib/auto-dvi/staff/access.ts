@@ -1,4 +1,3 @@
-import { z } from "zod";
 import { createHash } from "node:crypto";
 import { getSession } from "@/lib/auth";
 import { cookies } from "next/headers";
@@ -7,27 +6,9 @@ import { getEnterpriseByShopId } from "@/lib/enterprise";
 import { getFeatureEntitlements } from "@/lib/featureResolver";
 import { readStaffConfiguration } from "@/lib/data/repositories/workflow-inspections";
 import { effectiveInspectionPermission, type InspectionAuthority } from "../workflow-policy";
-import { sheetSchema, instanceKey } from "./model";
 import { requireThat } from "@/lib/shop-dispatch/model";
-import { pilotConfigurationSchema } from "../pilot/model";
-
-const rules = z.object({read: z.enum(["allow", "deny"]).optional(), edit: z.enum(["allow", "deny"]).optional(),
-  sensitive: z.enum(["allow", "deny"]).optional(), publish: z.enum(["allow", "deny"]).optional()}).strict();
-export const configurationSchema = z.object({
-  version: z.literal(1), enabledShopIds: z.array(z.number().int().positive()).max(500),
-  sheets: z.array(sheetSchema).min(1).max(20), defaultSheet: z.string().max(80),
-  rules, individual: z.record(z.string(), rules).default({}),
-  pilot: pilotConfigurationSchema.optional(),
-  release: z.object({
-    enabledShopIds: z.array(z.number().int().positive()).max(500),
-    publicPhone: z.string().max(40),
-    defaultExpiryDays: z.number().int().min(1).max(365),
-  }).strict().optional(),
-}).strict().superRefine((c, ctx) => {
-  if (!c.sheets.some(s => instanceKey(s) === c.defaultSheet) ||
-    new Set(c.sheets.map(instanceKey)).size !== c.sheets.length)
-    ctx.addIssue({code: "custom", message: "A unique approved default sheet is required"});
-});
+import {configurationSchema, selectableSheets} from "./configuration";
+export {configurationSchema} from "./configuration";
 export async function staffAccess() {
   const cookieToken = (await cookies()).get("session_token")?.value;
   requireThat(cookieToken && !/^exts?_/.test(cookieToken), "Dashboard cookie session required", 401);
@@ -48,7 +29,8 @@ export async function staffAccess() {
   requireThat(!enterpriseId || enterprise!.shopIds.map(Number).includes(shopId), "Enterprise membership changed", 403);
   const raw = await readStaffConfiguration(enterpriseId ? `enterprise:${enterpriseId}` : `shop:${shopId}`);
   const {_id, ...document} = raw ?? {};
-  const config = raw ? configurationSchema.parse(document) : null;
+  const stored = raw ? configurationSchema.parse(document) : null;
+  const config = stored ? {...stored, sheets: selectableSheets(stored)} : null;
   const roleMap = {owner: "owner", admin: "manager", manager: "manager", advisor: "advisor", technician: "technician", tech: "technician"} as const;
   // Use current membership documents, never a browser role or stale session role.
   const roles = [...new Set(members.map(m => roleMap[m.role as keyof typeof roleMap]).filter(Boolean))];

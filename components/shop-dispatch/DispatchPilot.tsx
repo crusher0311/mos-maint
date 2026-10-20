@@ -13,13 +13,16 @@ import { Timeline } from "./Timeline";
 import { VisitDetail } from "./VisitDetail";
 import { IntakeForm } from "./IntakeForm";
 import { DviEntry } from "./DviEntry";
+import { SheetManager } from "./SheetManager";
+import { useSheetCatalog } from "./use-sheet-catalog";
 import { contrast, dateLabel, minutes, projection, resolvedBranding } from "./helpers";
 import { normalizeRoNumber } from "./ro-number";
 import styles from "./pilot.module.css";
 
-type View = "dispatch" | "work" | "manage" | "settings" | "audit" | "schedule" | "operations";
+type View = "dispatch" | "work" | "manage" | "settings" | "audit" | "schedule" | "operations" | "sheets";
 export default function DispatchPilot() {
   const api = useDispatchBoard();
+  const sheets = useSheetCatalog();
   const { snapshot, error, busy, lastReceived, refresh, needsRetry, retry } = api;
   const [view, setView] = useState<View>("dispatch");
   const [selected, setSelected] = useState<string | null>(null);
@@ -33,10 +36,11 @@ export default function DispatchPilot() {
   const [showHiddenStatuses, setShowHiddenStatuses] = useState(false);
   const [scheduleLocked, setScheduleLocked] = useState(false);
   const [inspectionLocked, setInspectionLocked] = useState(false);
+  const [sheetsLocked, setSheetsLocked] = useState(false);
   const [intakeLocked, setIntakeLocked] = useState(false);
   const [showIntake, setShowIntake] = useState(false);
   const [openInspection, setOpenInspection] = useState(false);
-  const navigationLocked = scheduleLocked || inspectionLocked || intakeLocked;
+  const navigationLocked = scheduleLocked || inspectionLocked || intakeLocked || sheetsLocked;
   // Clock display only. Fetch polling and visibility refresh belong to useDispatchBoard.
   useEffect(() => { const timer = window.setInterval(() => setTick(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
   const brand = resolvedBranding(snapshot).brand;
@@ -88,6 +92,7 @@ export default function DispatchPilot() {
       <>
         {scheduleLocked && <div className={styles.error} role="alert">Resolve the pending schedule save before switching workspaces. Stay on Schedule and retry the unconfirmed change if prompted.</div>}
          {(inspectionLocked || intakeLocked) && <div className={styles.notice} role="status">Finish or resolve the pending request and save or explicitly discard inspection drafts before leaving this workspace.</div>}
+         {sheetsLocked && <div className={styles.notice} role="status">Publish or explicitly discard the sheet draft before leaving Sheets. An unconfirmed save must be retried with its original request.</div>}
          <fieldset disabled={navigationLocked} style={{border:0,padding:0,margin:0,minWidth:0}} aria-label="Workflow navigation">
         <nav className={styles.nav} aria-label="Pilot workspace">
           <button data-testid="pilot-dispatch" aria-current={view === "dispatch" ? "page" : undefined} onClick={() => navigate("dispatch")}>Dispatch</button>
@@ -96,6 +101,7 @@ export default function DispatchPilot() {
           {snapshot.actor.manager && <button data-testid="pilot-operations" aria-current={view === "operations" ? "page" : undefined} onClick={() => navigate("operations")}>Operations</button>}
           {snapshot.actor.manager && <button data-testid="pilot-schedule" aria-current={view === "schedule" ? "page" : undefined} onClick={() => navigate("schedule")}>Schedule</button>}
           <button data-testid="pilot-settings" aria-current={view === "settings" ? "page" : undefined} onClick={() => navigate("settings")}>Brand settings</button>
+          {!sheets.forbidden && <button data-testid="pilot-sheets" aria-current={view === "sheets" ? "page" : undefined} onClick={() => navigate("sheets")}>Sheets</button>}
           <button data-testid="pilot-audit" aria-current={view === "audit" ? "page" : undefined} onClick={() => navigate("audit")}>Audit</button>
         </nav>
         </fieldset>
@@ -158,6 +164,7 @@ export default function DispatchPilot() {
         {view === "schedule" && snapshot.actor.manager && <ScheduleCalendar shopId={snapshot.shopId} board={snapshot.board} busy={busy || needsRetry} refresh={refresh} onLockChange={setScheduleLocked} select={visitId => { if (!scheduleLocked) { setView("dispatch"); setSelected(visitId); } }} />}
         {view === "settings" && work && <BrandSettings key={snapshot.shopId} snapshot={snapshot} {...work} saveEnterpriseBrand={api.saveEnterpriseBrand} />}
         {view === "audit" && <AuditView board={snapshot.board} />}
+        {view === "sheets" && <SheetManager api={sheets} onLockChange={setSheetsLocked} />}
         <footer><small>Server-backed pilot · revision {snapshot.board.revision} · board saved {dateLabel(snapshot.board.updatedAt)}. Upstream reads are verified per fetched work order. Workflow check-in is local; ticket writes require explicit confirmation and server verification.</small></footer>
       </>}
   </main>;

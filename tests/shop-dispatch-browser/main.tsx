@@ -2,6 +2,8 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import DispatchPilot from "../../components/shop-dispatch/DispatchPilot";
+import SheetManager from "../../components/shop-dispatch/SheetManager";
+import { createSheetFixture } from "./sheet-fixture";
 import { TechnicianSkills } from "../../components/shop-dispatch/TechnicianSkills";
 import { RosterImport } from "../../components/shop-dispatch/RosterImport";
 import { CommandForm } from "../../components/shop-dispatch/CommandForm";
@@ -15,6 +17,8 @@ import styles from "../../components/shop-dispatch/pilot.module.css";
 import { actorFor,applyCommand,emptyBoard,type Command } from "../../lib/shop-dispatch/model";
 import { paletteFromPixels, resolveWorkflowBranding } from "../../lib/shop-dispatch/branding";
 import { STAFF_SHEET_TEMPLATES } from "../../lib/auto-dvi/staff/model";
+const sheetParams = new URLSearchParams(location.search);
+const sheetFixture = createSheetFixture(sheetParams);
 const variant = new URLSearchParams(location.search).get("logo") ?? "colorful";
 const canvas = document.createElement("canvas");
 canvas.width = 80; canvas.height = 40;
@@ -113,6 +117,11 @@ const realFetch=window.fetch.bind(window);
 window.fetch=async(input,init)=>{
  const url=String(input);
  if(!url.startsWith("/api/shop-dispatch"))throw new Error("Offline fixture blocked unexpected request");
+  if(url==="/api/shop-dispatch/inspection/sheets"){
+   // Sheets are opt-in; ordinary fixture modes retain their existing UI.
+   if(!sheetParams.has("sheets"))return Response.json({error:"Sheets fixture is not enabled."},{status:403});
+   return await sheetFixture(init);
+  }
  try {
   if(url.startsWith("/api/shop-dispatch/inspection")){
    if(init?.method==="POST")return Response.json({error:"Read-only visual fixture. Persistent writes are covered by the isolated inspection tests."},{status:409});
@@ -186,4 +195,4 @@ if(new URLSearchParams(location.search).has("operations")){
  board.visits[0].promiseAt=new Date(Date.now()+3600000).toISOString();
 }
 const params=new URLSearchParams(location.search);
-createRoot(document.getElementById("root")!).render(<><div style={{padding:12,background:"#ffe6a0",color:"#222"}}>OFFLINE UI TEST FIXTURE · synthetic data · no production connection</div>{params.has("operations")?<main className={styles.root} style={{padding:24}}><OperationsPanel board={board} actor={actor} now={Date.now()} busy={false} mutate={async()=>false} select={()=>{}}/><JobCard board={board} job={board.jobs[0]} actor={actor} now={Date.now()} busy={false} mutate={async()=>false}/></main>:params.has("schedule")?<main className={styles.root} style={{padding:24}}><ScheduleCalendar shopId={999} board={board} busy={false} refresh={async()=>{}} select={()=>{}}/></main>:params.has("assignments")?<main className={styles.root} style={{padding:24,maxWidth:950}}><JobCard job={board.jobs[0]} board={board} actor={actor} now={Date.now()} busy={false} mutate={async()=>false}/></main>:params.has("roster")?<RosterPreview/>:params.has("skills")?<main className={styles.root}><TechnicianSkills board={board} actor={actor} busy={false} mutate={async()=>false}/></main>:<DispatchPilot/>}</>);
+createRoot(document.getElementById("root")!).render(<><div style={{padding:12,background:"#ffe6a0",color:"#222"}}>OFFLINE UI TEST FIXTURE · synthetic data · no production connection</div>{params.has("sheets")?<main className={styles.root} style={{padding:24}}><SheetManager /></main>:params.has("operations")?<main className={styles.root} style={{padding:24}}><OperationsPanel board={board} actor={actor} now={Date.now()} busy={false} mutate={async()=>false} select={()=>{}}/><JobCard board={board} job={board.jobs[0]} actor={actor} now={Date.now()} busy={false} mutate={async()=>false}/></main>:params.has("schedule")?<main className={styles.root} style={{padding:24}}><ScheduleCalendar shopId={999} board={board} busy={false} refresh={async()=>{}} select={()=>{}}/></main>:params.has("assignments")?<main className={styles.root} style={{padding:24,maxWidth:950}}><JobCard job={board.jobs[0]} board={board} actor={actor} now={Date.now()} busy={false} mutate={async()=>false}/></main>:params.has("roster")?<RosterPreview/>:params.has("skills")?<main className={styles.root}><TechnicianSkills board={board} actor={actor} busy={false} mutate={async()=>false}/></main>:<DispatchPilot/>}</>);

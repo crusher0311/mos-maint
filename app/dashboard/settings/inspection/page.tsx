@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { ClipboardCheck, Save, Loader2, Plus, Trash2, AlertCircle } from "lucide-react";
+import { SheetSettingsLink } from "@/components/shop-dispatch/SheetSettingsLink";
 
 interface InspectionItem {
   id: string;
@@ -117,6 +118,7 @@ export default function InspectionSettingsPage() {
   return (
     <div className="flex-1 p-8 overflow-auto">
       <div className="max-w-4xl mx-auto space-y-6">
+        <SheetSettingsLink />
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-blue-100 rounded-lg">
