@@ -2,8 +2,8 @@
 import assert from "node:assert/strict";
 import {createHash} from "node:crypto";
 import {readFileSync,writeFileSync} from "node:fs";
-import postgres from "postgres";
-import {MongoClient} from "mongodb";
+import postgres from "../lib/invoice-repair/postgres-client";
+import {MongoClient} from "../lib/invoice-repair/mongo-client";
 const hash=(v:unknown)=>createHash("sha256").update(String(v)).digest("hex");
 const list=(v:any):any[]=>Array.isArray(v)?v:Array.isArray(v?.ItemCollection)?v.ItemCollection:[];
 const refs=(p:any)=>(p?.sourceIds??[]).filter((s:any)=>s.system==="protractor"&&["invoice_id","work_order_id"].includes(s.idType))

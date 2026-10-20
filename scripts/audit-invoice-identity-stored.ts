@@ -4,8 +4,8 @@
  */
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { MongoClient } from "mongodb";
-import postgres from "postgres";
+import { MongoClient } from "../lib/invoice-repair/mongo-client";
+import postgres from "../lib/invoice-repair/postgres-client";
 import { invoiceHoursEvidence } from "../lib/invoice-hours-contract";
 
 const hash=(v:string)=>createHash("sha256").update(v).digest("hex");

@@ -152,7 +152,6 @@
 - [Durable DVI enrollment](dvi-durable-enrollment.md) — rollback disables admissions, never durable routing; legacy fallback would bypass unresolved target ownership.
 - [Chromium lost-response fixtures](chromium-lost-response-fixtures.md) — drop responses after headers to avoid transparent connection retries obscuring application behavior.
 - [Worker IPC evidence](worker-ipc-evidence.md) — drain sends before explicit exit and collect evidence through channel closure; synchronous fakes miss termination races.
-- [Held index repair boundary](held-index-repair-boundary.md) — separate evidence-bound approval and confirmed writer quiescence are required across Mongo/PostgreSQL.
-- [Invoice financial evidence boundary](invoice-financial-evidence-boundary.md) — normalization explanations, retained agreement and repair approval are separate decisions.
+- [Invoice repair safety](invoice-repair-safety-index.md) — maintenance fencing, financial evidence, native CAS and reviewed hold-registry authority.
 - [Invoice release compatibility](invoice-release-compatibility.md) — source-evidence backports must match pinned service policy, not silently inherit newer main behavior.
 - [Protractor export coverage](protractor-export-coverage.md) — explicit outbound grants, latest-snapshot limitations, and no live activation or DVI authorization.

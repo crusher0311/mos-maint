@@ -27,3 +27,15 @@ partially committed entry when replay begins at the first entry in a plan.
 just matching metadata. Do not drop the fence or silently extend expired write
 approval to make recovery proceed. Local cooperative fencing is not proof that
 production readers and writers enforce it.
+
+A coordinator connection's advisory lock alone cannot prove a different store
+has drained. Persist access admission before invoking the other store, and keep
+ambiguous admissions until their outcomes are established.
+
+**Why:** Losing the PostgreSQL connection releases its lock even when a Mongo
+command may still be executing. A repair could otherwise admit during that
+unobserved write.
+
+**How to apply:** Never treat session termination or a lease TTL as proof that
+cross-store work stopped. Require durable unresolved-access checks at repair
+admission as well as durable repair fences at ordinary access.

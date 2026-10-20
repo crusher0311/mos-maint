@@ -1,5 +1,5 @@
 import {getDb,getMongoClient} from "../lib/mongo";
-import postgres from "postgres";
+import postgres from "../lib/invoice-repair/postgres-client";
 import {writeFileSync} from "node:fs";
 import candidates from "../docs/reporting/jwt-701-september-recovery-candidates.json";
 

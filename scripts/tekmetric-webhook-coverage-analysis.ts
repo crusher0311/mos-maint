@@ -15,7 +15,7 @@
  *   - JSON dump at scripts/output/tekmetric-webhook-coverage-<timestamp>.json
  */
 
-import { MongoClient } from "mongodb";
+import { MongoClient } from "../lib/invoice-repair/mongo-client";
 import { writeFileSync, mkdirSync } from "fs";
 import { resolve } from "path";
 

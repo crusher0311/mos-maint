@@ -6,7 +6,7 @@
  *
  * Dry-run by default; pass --confirm to write.
  */
-import postgres from "postgres";
+import postgres from "../lib/invoice-repair/postgres-client";
 import { drizzle } from "drizzle-orm/postgres-js";
 
 function rowsOf(res: any): any[] {

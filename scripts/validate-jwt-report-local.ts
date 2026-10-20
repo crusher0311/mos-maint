@@ -6,8 +6,8 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { userInfo } from "node:os";
-import { MongoClient } from "mongodb";
-import postgres from "postgres";
+import { MongoClient } from "../lib/invoice-repair/mongo-client";
+import postgres from "../lib/invoice-repair/postgres-client";
 import { invoiceHoursEvidence, aggregateInvoiceHours, type InvoiceEvidence } from "../lib/invoice-hours-contract";
 import { INVOICE_HOURS_SQL, INVOICE_HOURS_INDEX_SQL, INVOICE_HOURS_MAX_ORDERS } from "../lib/invoice-hours-query";
 import { protractorInvoiceLaborEvidence } from "../lib/integrations/protractor/labor-evidence";

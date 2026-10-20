@@ -1,4 +1,4 @@
-import postgres from "postgres";
+import postgres from "../lib/invoice-repair/postgres-client";
 import { LABOR_REPORT_SQL } from "../lib/labor-reporting-query";
 import { aggregateLaborFacts, type LaborFact } from "../lib/labor-reporting-aggregate";
 import { recoverLaborEvidence } from "../lib/labor-reporting-recovery";

@@ -1,4 +1,4 @@
-import { MongoClient } from 'mongodb';
+import { MongoClient } from '../lib/invoice-repair/mongo-client';
 
 async function auditFieldExtraction() {
   const username = process.env.MONGODB_USERNAME;

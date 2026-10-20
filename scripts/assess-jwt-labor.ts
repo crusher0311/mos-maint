@@ -3,7 +3,7 @@
  * Uses the app's canonical enterprise membership, and explicitly targets the
  * external production PG connection (not the workspace database).
  */
-import postgres from "postgres";
+import postgres from "../lib/invoice-repair/postgres-client";
 import { getDb, getMongoClient } from "../lib/mongo";
 
 async function main() {

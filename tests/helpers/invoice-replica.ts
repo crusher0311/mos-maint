@@ -26,9 +26,9 @@ export async function initializeReplica(){
   try{
     await client.db("admin").command({replSetInitiate:{_id:"invoice_disposable",
       members:replicaPorts.map((p,i)=>({_id:i,host:`127.0.0.1:${p}`})),
-      settings:{electionTimeoutMillis:1000}}});
+      settings:{electionTimeoutMillis:5000}}});
   }finally{await client.close();}
-  await primary();
+  await waitForReplica();
 }
 export async function restartMember(port:number){
   const result=spawnSync("mongod",["--dbpath",`${root}/mongo-${port}`,"--bind_ip","127.0.0.1",
@@ -37,6 +37,9 @@ export async function restartMember(port:number){
     "--logpath",`${root}/mongo-${port}.log`,"--pidfilepath",`${root}/mongo-${port}.pid`],
     {timeout:20000,encoding:"utf8"});
   assert.equal(result.status,0,result.stderr);
+  await waitForReplica();
+}
+async function waitForReplica(){
   // Require all members to catch up before the next fault; never kill a second
   // voter while the first is still recovering.
   const deadline=Date.now()+30000;

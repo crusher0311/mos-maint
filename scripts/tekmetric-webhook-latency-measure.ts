@@ -34,7 +34,7 @@
  *   p95 trends down vs the immediately-pre-deploy baseline.
  */
 
-import { MongoClient } from "mongodb";
+import { MongoClient } from "../lib/invoice-repair/mongo-client";
 import { writeFileSync, mkdirSync } from "fs";
 import { resolve } from "path";
 

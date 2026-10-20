@@ -1,4 +1,4 @@
-import postgres from "postgres";
+import postgres from "../lib/invoice-repair/postgres-client";
 import { readFileSync, writeFileSync } from "node:fs";
 
 // Read-only identity investigation. Input contains only native invoice/WO IDs

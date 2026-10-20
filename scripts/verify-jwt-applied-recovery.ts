@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
-import postgres from "postgres";
+import postgres from "../lib/invoice-repair/postgres-client";
 async function main() {
   const bundle=JSON.parse(readFileSync(process.argv[2],"utf8"));
   const result=JSON.parse(readFileSync(process.argv[3],"utf8"));

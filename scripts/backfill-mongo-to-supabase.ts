@@ -33,7 +33,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
+import postgres from "../lib/invoice-repair/postgres-client";
 import { getDb as getMongoDb } from "../lib/mongo";
 import { ObjectId } from "mongodb";
 import * as pgSchema from "../lib/db/schema";

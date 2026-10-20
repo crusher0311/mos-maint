@@ -1,8 +1,8 @@
 /** Bounded stored-only audit. No provider imports or production mutations. */
 import assert from "node:assert/strict";
 import {createHash} from "node:crypto";
-import postgres from "postgres";
-import {MongoClient} from "mongodb";
+import postgres from "../lib/invoice-repair/postgres-client";
+import {MongoClient} from "../lib/invoice-repair/mongo-client";
 const hash=(v:unknown)=>createHash("sha256").update(String(v)).digest("hex");
 const targets=new Map([
   [227,["24e7e83c1d","519710e3d6","78921649","b24a68b2","cf68e0e8"]],

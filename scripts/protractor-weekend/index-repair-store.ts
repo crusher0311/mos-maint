@@ -1,11 +1,15 @@
 import type { Db, MongoClient } from "mongodb";
 import type { RepairStore } from "../../lib/protractor-index-repair";
 import { heldReviewStore } from "./review-store";
+import { databaseFence } from "../../lib/invoice-repair/guarded-drivers";
 
 export function indexRepairStore(db: Db, client: MongoClient, pg: any): RepairStore {
   return {
     ...heldReviewStore(db, pg),
     async insertOnly(manifest, rows, revalidate) {
+      const fence = databaseFence(db);
+      if (!fence) throw Error("Index repair requires the mandatory database boundary");
+      return fence.run(async () => {
       // Refuse to create indexes in production. Existing natural-key uniqueness is required.
       const indexes = await db.collection("job_index").listIndexes({ maxTimeMS: 5000 }).toArray();
       if (!indexes.some(i => i.unique && !i.partialFilterExpression && !i.sparse &&
@@ -41,6 +45,7 @@ export function indexRepairStore(db: Db, client: MongoClient, pg: any): RepairSt
         if (session.inTransaction()) await session.abortTransaction().catch(() => {});
         throw Error("Repair not confirmed; reconcile exact manifest before retry. No ingestion replay.");
       } finally { await session.endSession(); }
+      });
     },
   };
 }

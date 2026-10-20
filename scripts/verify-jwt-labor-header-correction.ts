@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {readFileSync,writeFileSync} from "node:fs";
-import postgres from "postgres";
+import postgres from "../lib/invoice-repair/postgres-client";
 import {cents} from "../lib/jwt-labor-header-correction-guard";
 async function main(){
  const baseline=JSON.parse(readFileSync("docs/reporting/jwt-701-september-reconciliation.json","utf8"));

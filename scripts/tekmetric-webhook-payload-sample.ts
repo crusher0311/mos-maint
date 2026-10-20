@@ -5,7 +5,7 @@
  * therefore which API follow-up calls we can safely skip.
  */
 
-import { MongoClient } from "mongodb";
+import { MongoClient } from "../lib/invoice-repair/mongo-client";
 
 function normalizeEventType(raw: string): string {
   if (!raw) return "(empty)";

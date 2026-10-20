@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import postgres from "postgres";
+import postgres from "../lib/invoice-repair/postgres-client";
 
 // Task #1020 — fresh environments must get the COMPLETE schema, not just the
 // normalized_* tables. db:generate is dead (journal drift since 0012), so this

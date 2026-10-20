@@ -1,5 +1,5 @@
 import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
+import postgres from "@/lib/invoice-repair/postgres-client";
 import * as schema from "./schema";
 import { instrumentPgClientForSlowQueries } from "@/lib/slow-query/tracker";
 

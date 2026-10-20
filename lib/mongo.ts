@@ -1,5 +1,5 @@
 // lib/mongo.ts
-import { MongoClient, Db } from "mongodb";
+import { MongoClient, Db } from "@/lib/invoice-repair/mongo-client";
 import {
   attachMongoSlowQueryMonitor,
   mongoMonitorEnabled,

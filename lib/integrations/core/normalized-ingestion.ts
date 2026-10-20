@@ -6,6 +6,7 @@
  */
 
 import { MongoClient, Db, Collection, ObjectId } from 'mongodb';
+import { databaseFence } from "@/lib/invoice-repair/guarded-drivers";
 import { assertSameProtractorWorkOrder, protractorMongoIdentityFilter, ProtractorIdentityConflict } from '../../protractor-work-order-identity';
 import {
   SourceSystem,
@@ -190,6 +191,18 @@ export class NormalizedIngestionService {
     }
     
     this.db = db;
+    const repairFence = databaseFence(db);
+    if (repairFence) {
+      for (const name of Object.getOwnPropertyNames(NormalizedIngestionService.prototype)) {
+        if (!/^(ingest|replay|writeToJobIndex|recordIngestion)/.test(name)) continue;
+        const original = (this as any)[name].bind(this);
+        (this as any)[name] = (...args: any[]) => repairFence.run(async () => {
+          const result = await original(...args);
+          if (result?.success === false || Number(result?.errors) > 0) repairFence.retainUnknown();
+          return result;
+        });
+      }
+    }
     this.adapter = adapter;
     this.shopId = shopId;
     this.enterpriseId = enterpriseId;

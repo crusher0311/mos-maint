@@ -1,5 +1,5 @@
 import {readFileSync,writeFileSync} from "node:fs";
-import postgres from "postgres";
+import postgres from "../lib/invoice-repair/postgres-client";
 import {getDb,getMongoClient} from "../lib/mongo";
 import {recoverJwtSource} from "./recover-jwt-approved-invoices";
 const native=JSON.parse(readFileSync("/tmp/jwt-native-september.json","utf8"));

@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
-import postgres from "postgres";
+import postgres from "../lib/invoice-repair/postgres-client";
 import { drizzle } from "drizzle-orm/postgres-js";
 import * as schema from "../lib/db/schema";
 import { getAdapter, generateContentHash } from "../lib/integrations/core/normalized-adapter";

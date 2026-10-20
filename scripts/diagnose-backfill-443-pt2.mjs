@@ -1,6 +1,8 @@
-import { MongoClient } from "mongodb";
+// Run with: node --import tsx scripts/diagnose-backfill-443-pt2.mjs
+// Both stores must pass the installed repair fence; no raw-driver fallback.
+import { MongoClient } from "../lib/invoice-repair/mongo-client.ts";
 import { writeFileSync } from "fs";
-import postgres from "postgres";
+import { fencedPostgres as postgres } from "../lib/invoice-repair/postgres-client.ts";
 
 const u = `mongodb+srv://${encodeURIComponent(process.env.MONGODB_USERNAME)}:${encodeURIComponent(process.env.MONGODB_PASSWORD)}@mos-maintenance-mvp.tiixipi.mongodb.net/mos-maintenance-mvp?retryWrites=true&w=majority`;
 const c = new MongoClient(u);

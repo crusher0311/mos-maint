@@ -1,5 +1,5 @@
 /** Bounded read-only identity preview. Never calls the provider or writes DBs. */
-import postgres from "postgres";
+import postgres from "../lib/invoice-repair/postgres-client";
 import {readFileSync, writeFileSync} from "node:fs";
 import {createHash} from "node:crypto";
 import {getEnterpriseByShopId} from "../lib/enterprise";

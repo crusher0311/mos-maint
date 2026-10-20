@@ -1,4 +1,4 @@
-import { MongoClient } from "mongodb";
+import { MongoClient } from "../lib/invoice-repair/mongo-client";
 import * as dotenv from "dotenv";
 dotenv.config({ path: ".env.local" });
 

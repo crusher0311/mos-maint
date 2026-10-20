@@ -3,7 +3,7 @@
  * Run: npx tsx scripts/inspect-state-street-shopware.ts --production-provider-read
  * Output deliberately excludes credentials, contacts, and provider payloads.
  */
-import { MongoClient } from "mongodb";
+import { MongoClient } from "../lib/invoice-repair/mongo-client";
 
 async function main() {
   if (process.argv.slice(2).some(arg => arg !== "--production-provider-read")) {

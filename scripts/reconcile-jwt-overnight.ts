@@ -2,7 +2,7 @@
 import {readFileSync} from "node:fs";
 import {createHash} from "node:crypto";
 import assert, {AssertionError} from "node:assert/strict";
-import postgres from "postgres";
+import postgres from "../lib/invoice-repair/postgres-client";
 import {getDb,getMongoClient} from "../lib/mongo";
 import {verifyOvernightHeader} from "../lib/jwt-overnight-header-guard";
 import {cents} from "../lib/jwt-labor-header-correction-guard";

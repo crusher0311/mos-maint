@@ -16,7 +16,7 @@
  *   npx tsx scripts/enrich-orphan-tekmetric-rows.ts --apply --limit=500
  */
 
-import { MongoClient } from "mongodb";
+import { MongoClient } from "../lib/invoice-repair/mongo-client";
 import { getVehicle, getCustomer } from "@/lib/integrations/tekmetric/client";
 
 const APPLY = process.argv.includes("--apply");

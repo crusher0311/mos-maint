@@ -1,5 +1,5 @@
 #!/usr/bin/env npx tsx
-import { MongoClient } from 'mongodb';
+import { MongoClient } from '../lib/invoice-repair/mongo-client';
 import * as dotenv from 'dotenv';
 import { CUSTOMER_SOURCE_INDEX } from './lib/customer-source-index';
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env npx tsx
-import { MongoClient, Db } from 'mongodb';
+import { MongoClient, Db } from '../lib/invoice-repair/mongo-client';
 import * as dotenv from 'dotenv';
 
 dotenv.config({ path: '.env.local' });

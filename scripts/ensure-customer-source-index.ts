@@ -5,7 +5,7 @@
  * npx tsx scripts/ensure-customer-source-index.ts --apply --confirm-shared-production
  * No callback writes, provider calls, dropped indexes, or app DB helpers.
  */
-import { MongoClient } from "mongodb";
+import { MongoClient } from "../lib/invoice-repair/mongo-client";
 import { CUSTOMER_SOURCE_INDEX, planCustomerSourceIndex } from "./lib/customer-source-index";
 
 function mongoUri() {

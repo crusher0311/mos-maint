@@ -1,4 +1,4 @@
-import postgres from "postgres";
+import postgres from "../lib/invoice-repair/postgres-client";
 import { checkMissedOpportunityMongoIndexes } from "../lib/data/repositories/missed-opportunities";
 
 const REQUIRED_INDEXES = {

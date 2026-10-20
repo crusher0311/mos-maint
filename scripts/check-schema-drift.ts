@@ -27,7 +27,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import postgres from "postgres";
+import postgres from "../lib/invoice-repair/postgres-client";
 import { getTableConfig, PgTable } from "drizzle-orm/pg-core";
 import * as schema from "../lib/db/schema";
 

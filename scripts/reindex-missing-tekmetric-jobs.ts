@@ -34,7 +34,7 @@
  */
 
 import fs from "fs";
-import { MongoClient, Db } from "mongodb";
+import { MongoClient, Db } from "../lib/invoice-repair/mongo-client";
 import { getVehicle } from "@/lib/integrations/tekmetric/client";
 import { indexTekmetricWorkOrderJobs } from "@/lib/integrations/tekmetric/job-index";
 

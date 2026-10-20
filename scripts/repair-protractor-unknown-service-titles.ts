@@ -44,7 +44,7 @@
 import fs from "fs";
 import { getDb as getMongoDb } from "../lib/mongo";
 import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
+import postgres from "../lib/invoice-repair/postgres-client";
 import { sql } from "drizzle-orm";
 
 // Dedicated client: big shops' candidate scans can exceed the DB's default

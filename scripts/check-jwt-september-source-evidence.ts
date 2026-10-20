@@ -1,4 +1,4 @@
-import postgres from "postgres";
+import postgres from "../lib/invoice-repair/postgres-client";
 import {readFileSync,writeFileSync} from "node:fs";
 import {protractorInvoiceLaborEvidence} from "../lib/integrations/protractor/labor-evidence";
 import {findCachedWorkOrdersByIds} from "../lib/data/repositories/protractor-work-orders";

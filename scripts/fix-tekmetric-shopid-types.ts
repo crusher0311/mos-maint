@@ -18,7 +18,7 @@
  *   npx tsx scripts/fix-tekmetric-shopid-types.ts --apply     # actually mutate
  */
 
-import { MongoClient } from "mongodb";
+import { MongoClient } from "../lib/invoice-repair/mongo-client";
 
 const APPLY = process.argv.includes("--apply");
 

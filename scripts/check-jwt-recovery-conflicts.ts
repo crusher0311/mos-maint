@@ -1,4 +1,4 @@
-import postgres from "postgres";
+import postgres from "../lib/invoice-repair/postgres-client";
 import { readFileSync } from "node:fs";
 import { captureApprovedRecoverySource } from "../lib/jwt-approved-recovery-source";
 

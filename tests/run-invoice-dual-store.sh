@@ -5,6 +5,7 @@ if [[ "${INVOICE_DUAL_CLEAN:-}" != yes ]]; then
   exec env -i PATH="$PATH" HOME="$HOME" INVOICE_DUAL_CLEAN=yes bash "$0"
 fi
 umask 077
+node --import tsx tests/invoice-repair-access-inventory.test.ts
 tmp=$(mktemp -d /tmp/invoice-dual.XXXXXX)
 cleanup() {
   for pid in "$tmp"/mongo-*.pid; do
@@ -40,3 +41,9 @@ done
 INVOICE_DUAL_SOCKET="$tmp" INVOICE_DUAL_PORT="$port" INVOICE_DUAL_PORTS="$ports" INVOICE_DUAL_MARKER="$marker" \
   NODE_OPTIONS="--require ./tests/helpers/invoice-dual-network-guard.cjs" \
   timeout 240s node --import tsx tests/invoice-dual-store.test.ts
+INVOICE_DUAL_SOCKET="$tmp" INVOICE_DUAL_PORT="$port" INVOICE_DUAL_PORTS="$ports" INVOICE_DUAL_MARKER="$marker" \
+  NODE_OPTIONS="--require ./tests/helpers/invoice-dual-network-guard.cjs" \
+  timeout 120s node --import tsx tests/invoice-native-schema.test.ts
+INVOICE_DUAL_SOCKET="$tmp" INVOICE_DUAL_PORT="$port" INVOICE_DUAL_PORTS="$ports" INVOICE_DUAL_MARKER="$marker" \
+  NODE_OPTIONS="--require ./tests/helpers/invoice-dual-network-guard.cjs" \
+  timeout 120s node --import tsx tests/invoice-mandatory-fence.test.ts

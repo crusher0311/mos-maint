@@ -1,5 +1,5 @@
 /** Read-only location/month triage. Count differences are NOT identity proof. */
-import postgres from "postgres";
+import postgres from "../lib/invoice-repair/postgres-client";
 import {readFileSync,writeFileSync} from "node:fs";
 import {getEnterpriseByShopId} from "../lib/enterprise";
 import {getMongoClient} from "../lib/mongo";

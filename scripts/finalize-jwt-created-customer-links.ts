@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
-import postgres from "postgres";
+import postgres from "../lib/invoice-repair/postgres-client";
 import { captureApprovedRecoverySource } from "../lib/jwt-approved-recovery-source";
 import { getAdapter } from "../lib/integrations/core/normalized-adapter";
 async function main() {
