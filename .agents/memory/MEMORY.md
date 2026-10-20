@@ -115,6 +115,7 @@
 - [Enterprise settings storage](enterprise-settings-storage.md) — cross-location settings must honor canonical PG mode and mixed numeric/string Mongo shop IDs.
 - [Entitlements span every delivery channel](product-entitlement-delivery-channels.md) — gate the target shop across dashboard, extension, signed links, partner APIs, media, and derived enrichment.
 - [Mongo update path conflicts](mongo-update-path-conflicts.md) — one update cannot target the same field in both `$set` and `$setOnInsert`; simplistic fakes may miss this runtime failure.
+- [Mongo optional fields](mongo-optional-fields.md) — undefined optional properties can persist as null; validate real Mongo readback before enabling strict-schema configurations.
 - [Instance-scoped provider isolation](instance-scoped-provider-isolation.md) — bind deny lists only to the platform's stable replica ID; deferred callbacks must persist full replay semantics before acknowledgment.
 - [Protractor relay EC2 deployment](protractor-relay-ec2-deployment.md) — Base64-preserve SSH PEM; build separately when old Buildx blocks Compose, then drain and start with `--no-build`.
 - [Relay canary response-size stop](protractor-relay-canary-response-size.md) — hard-cap pacing passed, but three REST GETs exceeded the relay’s 5 MB response cap; stay closed until safely attributed.
