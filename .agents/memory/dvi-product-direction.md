@@ -6,6 +6,18 @@ MOS Auto DVI is positioned as a REPLACEMENT for third-party DVI providers (AutoF
 
 ## Historical findings and multiple sheets
 
+Use the existing Create New RO workflow from both the dashboard and workflow
+board, not a separate local check-in flow presented as RO creation. The user
+wants confirmed RO creation to continue directly into DVI, with optional vehicle
+photos captured during intake carried into that visit's DVI.
+
+**Why:** The separate workflow intake omitted concern follow-up questions and
+left users expecting a Protractor ticket when only a local visit existed.
+
+**How to apply:** Share the guided customer/vehicle/concern experience across
+entry points. Preserve intake photos through the confirmed RO-to-DVI handoff,
+keep DVI feature-gated, and distinguish uncertain creation from confirmed ROs.
+
 The user confirmed DVI should be feature-gated as a product, including inspection
 sheet creation and management, rather than automatically available with Shop Workflow.
 
