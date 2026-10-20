@@ -4,6 +4,8 @@ import { createServiceItem } from "@/lib/integrations/protractor";
 import { runWithProtractorInteractiveTransport } from "@/lib/integrations/protractor/interactive-context";
 import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
 import { resolveClientRequestId } from "@/lib/idempotent-create-id";
+import { prepareCheckInNative } from "@/lib/auto-dvi/staff/check-in-native";
+import { requestBody,dispatchFailure } from "@/lib/shop-dispatch/http";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,7 +23,7 @@ export async function POST(req: NextRequest) {
     const sess = await getSession();
     if (!sess) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const body = await req.json();
+    const body = await requestBody(req,512000) as Record<string,any>;
     const { ownerId, vin, year, make, model, submodel, color, engine, transmission, odometer, licensePlate, clientRequestId } = body;
 
     if (!ownerId) {
@@ -31,6 +33,8 @@ export async function POST(req: NextRequest) {
     const shopId = Number(sess.shopId);
     if (body.expectedShopId !== undefined && body.expectedShopId !== shopId)
       return NextResponse.json({ error: "The active shop changed. Reopen the matching draft." }, { status: 409 });
+    const draft=await prepareCheckInNative(body,shopId,sess.email,"vehicle");
+    if(draft&&!draft.send)return NextResponse.json(draft.result??{error:"Vehicle creation is pending verification; do not create another vehicle.",pendingVerification:true},{status:draft.result?200:202});
     // Client-pinned vehicle ID: a wizard retry after a timeout upserts the
     // SAME service item instead of creating a duplicate vehicle.
     const result = await runWithProtractorInteractiveTransport(
@@ -58,7 +62,10 @@ export async function POST(req: NextRequest) {
             vehicleId: resolveClientRequestId("vehicle", shopId, sess.email, clientRequestId),
             soapTimeoutMs: SOAP_TIMEOUT_MS,
           },
-        ),
+        ).then(async result=>{
+          if(draft&&result.ok)await draft.confirm({success:true,vehicleId:result.vehicleId,vehicle:result.vehicle});
+          return result;
+        }),
         UPSTREAM_DEADLINE_MS,
         `wizard-create-vehicle shop=${shopId}`,
         { ok: false, error: SLOW_UPSTREAM_MSG, timedOut: true } as any,
@@ -79,7 +86,6 @@ export async function POST(req: NextRequest) {
       vehicle: result.vehicle,
     });
   } catch (err: any) {
-    console.error("[Create Vehicle] Error:", err);
-    return NextResponse.json({ error: err.message || "Internal error" }, { status: 500 });
+    return dispatchFailure(err);
   }
 }

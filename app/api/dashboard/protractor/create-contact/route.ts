@@ -4,6 +4,8 @@ import { createContact } from "@/lib/integrations/protractor";
 import { runWithProtractorInteractiveTransport } from "@/lib/integrations/protractor/interactive-context";
 import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
 import { resolveClientRequestId } from "@/lib/idempotent-create-id";
+import { prepareCheckInNative } from "@/lib/auto-dvi/staff/check-in-native";
+import { requestBody,dispatchFailure } from "@/lib/shop-dispatch/http";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,7 +20,7 @@ export async function POST(req: NextRequest) {
     const sess = await getSession();
     if (!sess) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const body = await req.json();
+    const body = await requestBody(req,512000) as Record<string,any>;
     const { firstName, lastName, phone1, phone2, email, company, street, city, province, postalCode, country, marketingSource, note, clientRequestId } = body;
 
     if (!firstName || !lastName) {
@@ -28,6 +30,8 @@ export async function POST(req: NextRequest) {
     const shopId = Number(sess.shopId);
     if (body.expectedShopId !== undefined && body.expectedShopId !== shopId)
       return NextResponse.json({ error: "The active shop changed. Reopen the matching draft." }, { status: 409 });
+    const draft=await prepareCheckInNative(body,shopId,sess.email,"contact");
+    if(draft&&!draft.send)return NextResponse.json(draft.result??{error:"Customer creation is pending verification; do not create another customer.",pendingVerification:true},{status:draft.result?200:202});
     // Interactive lane (priority pool, 1 retry) + a client-pinned contact ID so
     // a wizard retry after a timeout upserts the SAME contact (no duplicates —
     // Protractor's POST /Contact/{id} is an upsert by ID).
@@ -53,13 +57,16 @@ export async function POST(req: NextRequest) {
           },
           {
             priority: true,
-            maxRetries: 1,
+            maxRetries: draft ? 0 : 1,
             // Task #937: derive the upstream ID server-side (hash of
             // kind+shop+user+key) so the wizard's retry stays duplicate-safe
             // without letting a caller target an existing record's UUID.
             contactId: resolveClientRequestId("contact", shopId, sess.email, clientRequestId),
           },
-        ),
+        ).then(async result=>{
+          if(draft&&result.ok)await draft.confirm({success:true,contactId:result.contactId,contact:result.contact});
+          return result;
+        }),
         UPSTREAM_DEADLINE_MS,
         `wizard-create-contact shop=${shopId}`,
         { ok: false, error: SLOW_UPSTREAM_MSG, timedOut: true } as any,
@@ -80,7 +87,6 @@ export async function POST(req: NextRequest) {
       contact: result.contact,
     });
   } catch (err: any) {
-    console.error("[Create Contact] Error:", err);
-    return NextResponse.json({ error: err.message || "Internal error" }, { status: 500 });
+    return dispatchFailure(err);
   }
 }

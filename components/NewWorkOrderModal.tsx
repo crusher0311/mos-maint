@@ -35,6 +35,10 @@ import {
 import { getMatchConfidenceBadge } from "@/lib/aces-tier-badge";
 import { useRORecovery } from "./use-ro-recovery";
 import { ArrivalPhotoPicker, RORecoveryPanel } from "./RORecoveryPanel";
+import { ROSharedDraftPanel, VehicleArrivalCapture } from "./ROSharedDraftPanel";
+import type { ROSession } from "./ro-session-store";
+import { ROOdometerCapture } from "./ROOdometerCapture";
+import type { OdometerCapture } from "./ro-odometer";
 
 const US_STATES = [
   "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD",
@@ -52,7 +56,7 @@ const CA_PROVINCES = [
 const WIZARD_CREATE_TIMEOUT_MS = 45_000;
 const SLOW_UPSTREAM_MSG = "Protractor is responding slowly — please try again.";
 
-async function postJsonWithTimeout(url: string, body: unknown, timeoutMs: number): Promise<Response> {
+async function postJsonWithTimeout(url: string, body: unknown, timeoutMs: number, afterNative?: () => Promise<void>): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -69,6 +73,7 @@ async function postJsonWithTimeout(url: string, body: unknown, timeoutMs: number
     throw err;
   } finally {
     clearTimeout(timer);
+    await afterNative?.();
   }
 }
 
@@ -172,9 +177,11 @@ interface NewWorkOrderModalProps {
   isOpen: boolean;
   onClose: () => void;
   onCreated?: (workOrderNumber: number) => void;
+  requestedDraftId?: string;
+  requireSharedDraft?: boolean;
 }
 
-export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWorkOrderModalProps) {
+export default function NewWorkOrderModal({ isOpen, onClose, onCreated, requestedDraftId, requireSharedDraft }: NewWorkOrderModalProps) {
   const [step, setStep] = useState<Step>("concern");
 
   const [contactSearch, setContactSearch] = useState("");
@@ -188,6 +195,10 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
   const [loadingVehicles, setLoadingVehicles] = useState(false);
   const [vehicleError, setVehicleError] = useState("");
   const [mileageInput, setMileageInput] = useState("");
+  const [arrivalVin, setArrivalVin] = useState("");
+  const [arrivalVinConfirmed, setArrivalVinConfirmed] = useState(false);
+  const [arrivalMileageConfirmed, setArrivalMileageConfirmed] = useState(false);
+  const [odometerCapture, setOdometerCapture] = useState<OdometerCapture | null>(null);
 
   const [concern, setConcern] = useState("");
   const [concernStage, setConcernStage] = useState<"start" | "questions" | "result">("start");
@@ -247,7 +258,7 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
     setCreatedWO(number);
     setStep("confirm");
     onCreated?.(number);
-  });
+  }, requestedDraftId, requireSharedDraft);
   const rememberedContext = useRef<string | null>(null);
   const requestScope = useRef({ key: "", epoch: 0 });
   const scopeKey = `${isOpen}:${recovery.session?.shopId}:${recovery.session?.actorKey}`;
@@ -266,8 +277,9 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
   }
   const draftContext = useRef<string | null>(null);
   const draftFields = { step, contactSearch, contacts, selectedContact, vehicles, selectedVehicle, mileageInput,
+    arrivalVin, arrivalVinConfirmed, arrivalMileageConfirmed, odometerCapture,
     concern, concernStage, questions, exchanges, answers, cleanedText, conversationId, savedConcerns, editingConcernIndex,
-    noteText, jobTab, selectedJobs, createNewCustomer, newCustomer, createNewVehicle, newVehicle };
+    noteText, jobTab, selectedJobs, createNewCustomer, newCustomer, createNewVehicle, newVehicle, vinDecoded, ocrResult };
   const serializedDraft = JSON.stringify(draftFields);
   useEffect(() => {
     if (!isOpen || !recovery.ready) { draftContext.current = null; return; }
@@ -278,6 +290,13 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
 
   async function resumeUnsentDraft() {
     const restored = await recovery.resumeDraft();
+    restoreDraftFields(restored);
+  }
+  async function resumeServerDraft() {
+    const restored = await recovery.resumeSharedDraft();
+    restoreDraftFields(restored);
+  }
+  function restoreDraftFields(restored: ROSession | null) {
     if (!restored) return;
     const draft = restored.draft;
     if (!draft) { recovery.acceptDraft(); return; }
@@ -290,11 +309,15 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
           !Array.isArray(d.selectedJobs)) throw new Error("Invalid saved draft.");
       setStep(d.step); setContactSearch(d.contactSearch); setContacts(d.contacts); setSelectedContact(d.selectedContact);
       setVehicles(d.vehicles); setSelectedVehicle(d.selectedVehicle); setMileageInput(d.mileageInput);
+      setArrivalVin(d.arrivalVin || ""); setArrivalVinConfirmed(d.arrivalVinConfirmed === true);
+      setArrivalMileageConfirmed(d.arrivalMileageConfirmed === true);
+      setOdometerCapture(d.odometerCapture ?? null);
       setConcern(d.concern); setConcernStage(d.concernStage); setQuestions(d.questions); setExchanges(d.exchanges);
       setAnswers(d.answers); setCleanedText(d.cleanedText); setConversationId(d.conversationId);
       setSavedConcerns(d.savedConcerns); setEditingConcernIndex(d.editingConcernIndex); setNoteText(d.noteText);
       setJobTab(d.jobTab); setSelectedJobs(d.selectedJobs); setCreateNewCustomer(d.createNewCustomer);
       setNewCustomer(d.newCustomer); setCreateNewVehicle(d.createNewVehicle); setNewVehicle(d.newVehicle);
+      setVinDecoded(d.vinDecoded === true); setOcrResult(typeof d.ocrResult === "string" ? d.ocrResult : null);
       recovery.acceptDraft();
     } catch {
       setCreateError("This saved draft could not be read. Close and reopen to discard it explicitly.");
@@ -316,6 +339,8 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
       setSelectedVehicle(null);
       setVehicleError("");
       setMileageInput("");
+      setArrivalVin(""); setArrivalVinConfirmed(false); setArrivalMileageConfirmed(false);
+      setOdometerCapture(null);
       setConcern("");
       setConcernStage("start");
       setQuestions([]);
@@ -667,6 +692,7 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
         "/api/dashboard/protractor/create-contact",
         original,
         WIZARD_CREATE_TIMEOUT_MS,
+        recovery.refreshAfterNative,
       );
       const data = await res.json();
       if (epoch !== requestScope.current.epoch) return;
@@ -733,6 +759,7 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
         "/api/dashboard/protractor/create-vehicle",
         original,
         WIZARD_CREATE_TIMEOUT_MS,
+        recovery.refreshAfterNative,
       );
       const data = await res.json();
       if (epoch !== requestScope.current.epoch) return;
@@ -770,6 +797,7 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
       const res = await fetch(`/api/vin/decode?vin=${encodeURIComponent(vin)}`);
       const data = await res.json();
       if (data.decoded) {
+        setArrivalVin(vin); setArrivalVinConfirmed(false);
         setNewVehicle(prev => ({
           ...prev,
           vin,
@@ -812,6 +840,7 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Plate lookup failed");
       if (!data.success) throw new Error(data.error || "No VIN found for this plate");
+      if (data.vin) { setArrivalVin(data.vin); setArrivalVinConfirmed(false); }
       setNewVehicle(prev => ({
         ...prev,
         vin: data.vin || prev.vin || "",
@@ -848,6 +877,7 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
       if (!res.ok) throw new Error(data.error || "Failed to process image");
       const result = data.result;
       if (result.vin) {
+        setArrivalVin(result.vin); setArrivalVinConfirmed(false);
         setNewVehicle(prev => ({ ...prev, vin: result.vin }));
         setOcrResult(`VIN detected: ${result.vin} (${result.confidence} confidence)`);
         handleVinDecode(result.vin);
@@ -978,16 +1008,26 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
   }
 
   if (!isOpen) return null;
+  if (recovery.ready && recovery.sharedBlocked && recovery.session?.payload) return <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Resume shared repair order">
+    <section className="bg-white rounded-xl w-full max-w-2xl max-h-[90dvh] overflow-y-auto py-4">
+      <div className="px-6 flex justify-between gap-3"><h2 className="text-lg font-semibold">Resume the original check-in</h2><button onClick={onClose} className="text-sm text-gray-500">Close</button></div>
+      <ROSharedDraftPanel recovery={recovery} fields={serializedDraft} onResume={resumeServerDraft} />
+      {recovery.error && <p role="alert" className="px-6 text-sm text-red-700">{recovery.error}</p>}
+    </section>
+  </div>;
   if (recovery.ready && recovery.session?.payload) return <RORecoveryPanel recovery={recovery} onClose={onClose} />;
   if (recovery.ready && recovery.needsResume) return <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Resume unfinished repair order">
     <section className="bg-white rounded-xl shadow-2xl w-full max-w-2xl p-6 space-y-4">
       <h2 className="text-lg font-semibold">Unfinished repair order</h2>
       <p>Resume your saved details and {recovery.session?.photos.length ?? 0} arrival photos, or discard them and start over.</p>
       <p>Unsent details are saved on this device for this shop and advisor for seven days after the last edit. Pending provider requests are kept until resolved. Resuming does not create or send anything to Protractor.</p>
+      <ROSharedDraftPanel recovery={recovery} fields={serializedDraft} onResume={resumeServerDraft} />
       {recovery.error && <p role="alert">{recovery.error}</p>}
       {createError && <p role="alert">{createError}</p>}
-      <button disabled={recovery.busy} onClick={resumeUnsentDraft}>Resume draft</button>{" "}
-      <button disabled={recovery.busy || !!recovery.session?.pendingCreates?.contact || !!recovery.session?.pendingCreates?.vehicle} onClick={recovery.discardDraft}>Discard draft</button>{" "}
+      <button disabled={recovery.busy || !!recovery.session?.shared} onClick={resumeUnsentDraft}>{recovery.sharedSupported ? "Resume device-only draft" : "Resume draft"}</button>{" "}
+      <button disabled={recovery.busy || !!recovery.session?.pendingCreates?.contact || !!recovery.session?.pendingCreates?.vehicle} onClick={() => {
+        if (window.confirm("Discard this unsent draft and its arrival photos? Pending native requests cannot be discarded.")) void recovery.discardDraft();
+      }}>Discard draft</button>{" "}
       <button onClick={onClose}>Close</button>
     </section>
   </div>;
@@ -996,10 +1036,11 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
     return <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Recover pending customer or vehicle">
       <section className="bg-white rounded-xl shadow-2xl w-full max-w-2xl p-6 space-y-4">
         <h2 className="text-lg font-semibold">Pending {contactPending ? "customer" : "vehicle"} creation</h2>
-        <p>The original request is retained. Explicit retry sends the same details and request identity, not a new record. This draft cannot expire or be discarded until the request is resolved.</p>
+        <p>{recovery.session.shared ? "The original request is server recorded. Verification can return its confirmation; an uncertain native send is never recreated on another device." : "The original request is retained. Explicit retry sends the same details and request identity, not a new record."} This draft cannot expire or be discarded until the request is resolved.</p>
+        <ROSharedDraftPanel recovery={recovery} fields={serializedDraft} onResume={resumeServerDraft} />
         {(contactError || vehicleError || recovery.error) && <p role="alert">{contactError || vehicleError || recovery.error}</p>}
-        <button disabled={creatingContact || creatingVehicle} onClick={contactPending ? handleCreateContact : handleCreateVehicle}>
-          Retry {contactPending ? "customer" : "vehicle"} creation
+        <button disabled={creatingContact || creatingVehicle || recovery.sharedBlocked} onClick={contactPending ? handleCreateContact : handleCreateVehicle}>
+          {recovery.session.shared ? "Verify" : "Retry"} {contactPending ? "customer" : "vehicle"} creation
         </button>{" "}
         <button onClick={onClose}>Close</button>
       </section>
@@ -1049,7 +1090,7 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[94dvh] sm:max-h-[90dvh] flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <div className="flex items-center gap-3">
             <FileText className="w-5 h-5 text-blue-600" />
@@ -1060,7 +1101,8 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
           </button>
         </div>
 
-        <div className="flex items-center gap-1 px-6 py-3 border-b border-gray-100 bg-gray-50">
+        <ROSharedDraftPanel recovery={recovery} fields={serializedDraft} onResume={resumeServerDraft} />
+        <div className="flex items-center gap-1 px-3 sm:px-6 py-3 border-b border-gray-100 bg-gray-50 overflow-x-auto shrink-0">
           {steps.map((s, i) => {
             const Icon = s.icon;
             const isActive = s.key === step;
@@ -1081,7 +1123,7 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
 
         <div className="flex-1 overflow-y-auto px-6 py-4">
           {recovery.error && <p role="alert" className="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 p-3 rounded-lg">{recovery.error}</p>}
-          <fieldset disabled={recovery.busy} className="border-0 p-0 m-0 min-w-0">
+          <fieldset disabled={recovery.busy || recovery.sharedBlocked || creatingContact || creatingVehicle || creating} className="border-0 p-0 m-0 min-w-0">
           {step === "customer" && (
             <div className="space-y-4">
               <div className="flex gap-2 mb-2">
@@ -1267,6 +1309,16 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
           {step === "vehicle" && (
             <div className="space-y-4">
               <ArrivalPhotoPicker recovery={recovery} />
+              {recovery.sharedSupported && <VehicleArrivalCapture vin={createNewVehicle ? newVehicle.vin || arrivalVin : arrivalVin || selectedVehicle?.vin || ""}
+                mileage={mileageInput} vinConfirmed={arrivalVinConfirmed} mileageConfirmed={arrivalMileageConfirmed}
+                onVinChange={value => { setArrivalVin(value); setArrivalVinConfirmed(false);
+                  if (createNewVehicle) setNewVehicle(previous => ({ ...previous, vin: value })); }}
+                onMileageChange={value => { setMileageInput(value); setArrivalMileageConfirmed(false);
+                  setOdometerCapture(previous => previous ? { ...previous, confirmed: null } : null); }}
+                onVinConfirm={setArrivalVinConfirmed} onMileageConfirm={setArrivalMileageConfirmed} />}
+              {recovery.sharedSupported && <ROOdometerCapture recovery={recovery} capture={odometerCapture} onCapture={setOdometerCapture}
+                onApply={(reading, capture) => { setMileageInput(reading); setArrivalMileageConfirmed(true); setOdometerCapture(capture);
+                  if (createNewVehicle) setNewVehicle(previous => ({ ...previous, odometer: reading })); }} />}
               <div className="flex items-center gap-2 text-sm text-gray-600 bg-gray-50 px-3 py-2 rounded-lg">
                 <User className="w-4 h-4 text-blue-500" />
                 <span className="font-medium">{contactDisplay}</span>
@@ -1326,7 +1378,7 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
                                 {v.vin && <span>VIN: {v.vin}</span>}
                                 {v.plate && <span>Plate: {v.plate}</span>}
                                 {v.color && <span>{v.color}</span>}
-                                {v.odometer && <span>{v.odometer.toLocaleString()} mi</span>}
+                                {v.odometer && <span>{v.odometer.toLocaleString()} {recovery.sharedSupported ? recovery.distanceUnit ?? "shop units" : "mi"}</span>}
                               </div>
                             </div>
                             <ChevronRight className="w-4 h-4 text-gray-400" />
@@ -1487,9 +1539,16 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
                     {isFieldVisible("vehicle", "odometer") && (
                       <div>
                         <label className="block text-xs font-medium text-gray-700 mb-1">
-                          Odometer {isFieldRequired("vehicle", "odometer") && <span className="text-red-500">*</span>}
+                          Odometer {recovery.sharedSupported && <span className="font-normal">({recovery.distanceUnit ?? "shop unit not verified"})</span>} {isFieldRequired("vehicle", "odometer") && <span className="text-red-500">*</span>}
                         </label>
-                        <input type="number" value={newVehicle.odometer || ""} onChange={e => setNewVehicle(p => ({ ...p, odometer: e.target.value }))} placeholder="45000" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                        <input type="number" value={newVehicle.odometer || ""} onChange={e => {
+                          const value = e.target.value;
+                          setNewVehicle(p => ({ ...p, odometer: value }));
+                          if (recovery.session?.shared) {
+                            setMileageInput(value); setArrivalMileageConfirmed(false);
+                            setOdometerCapture(previous => previous ? { ...previous, confirmed: null } : null);
+                          }
+                        }} placeholder="45000" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
                       </div>
                     )}
                     {isFieldVisible("vehicle", "licensePlate") && (
@@ -1566,15 +1625,16 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
                       <input
                         type="number"
                         value={mileageInput}
-                        onChange={e => setMileageInput(e.target.value)}
+                        onChange={e => { setMileageInput(e.target.value); setArrivalMileageConfirmed(false);
+                          setOdometerCapture(previous => previous ? { ...previous, confirmed: null } : null); }}
                         placeholder="Enter current mileage..."
                         className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       />
-                      <span className="text-xs text-gray-400">miles</span>
+                      <span className="text-xs text-gray-400">{recovery.sharedSupported ? recovery.distanceUnit ?? "shop units" : "miles"}</span>
                     </div>
                     {selectedVehicle.odometer && (
                       <p className="text-xs text-gray-400 mt-1">
-                        Last known reading: {selectedVehicle.odometer.toLocaleString()} mi — enter actual mileage if available
+                        Last known reading: {selectedVehicle.odometer.toLocaleString()} {recovery.sharedSupported ? recovery.distanceUnit ?? "shop units" : "mi"} — enter actual mileage if available
                       </p>
                     )}
                   </div>

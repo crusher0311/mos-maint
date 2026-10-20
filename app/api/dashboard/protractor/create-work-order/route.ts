@@ -10,6 +10,7 @@ import { randomUUID } from "node:crypto";
 import { admitGuidedRO, confirmGuidedRO } from "@/lib/data/repositories/guided-ro-operations";
 import { DispatchError, requireThat } from "@/lib/shop-dispatch/model";
 import { requestBody } from "@/lib/shop-dispatch/http";
+import { prepareCheckInNative } from "@/lib/auto-dvi/staff/check-in-native";
 
 // Task #936: bounded upstream deadline so the wizard's final create step can
 // never spin forever. WO create can legitimately push several service
@@ -72,7 +73,9 @@ export async function POST(req: NextRequest) {
     // visibility into where the time goes.
     const workOrderId = resolveClientRequestId("workOrder",shopId,String(sess.userId ?? user.email ?? ""),clientRequestId ?? randomUUID())!;
     requireThat(workOrderId,"Valid creation request identity required",400);
-    const {recoveryOnly, ...payload} = body;
+    const {recoveryOnly, _guidedDraft, ...payload} = body;
+    const shared=await prepareCheckInNative(body,shopId,String(user.email??""),"ro");
+    if(shared&&!shared.send)return NextResponse.json(shared.result??{ok:false,pendingVerification:true,error:"Creation remains unconfirmed; do not create another ticket."},{status:shared.result?200:202});
     const admission = await admitGuidedRO(db,{id:workOrderId,shopId,actor:String(sess.userId),payload,recoveryOnly:recoveryOnly === true});
     if (!admission.admitted) return admission.result
       ? NextResponse.json(admission.result)
@@ -109,7 +112,10 @@ export async function POST(req: NextRequest) {
           },
         ).then(async outcome => {
           // Save late success even if the HTTP deadline already elapsed.
-          if (outcome.ok) await confirmGuidedRO(db,workOrderId,outcome);
+          if (outcome.ok) {
+            await confirmGuidedRO(db,workOrderId,outcome);
+            if(shared)await shared.confirm(outcome);
+          }
           return outcome;
         }),
         UPSTREAM_DEADLINE_MS,

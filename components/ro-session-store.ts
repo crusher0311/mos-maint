@@ -1,5 +1,6 @@
 // Browser-only persistence. Never expire an unresolved provider write.
-export type ArrivalPhoto = { requestId: string; blob: Blob; name: string; uploaded?: { id: string; mime: string; url: string } };
+export type ArrivalPhoto = { requestId: string; blob: Blob; name: string; serverSaved?: boolean; missingOnDevice?: boolean;
+  originalSize?: number; uploaded?: { id: string; mime: string; url: string } };
 export type ConfirmedRO = { workOrderId: string; workOrderNumber: number; packagesWithoutLines: Array<{ title: string; code?: string }> };
 export type ROSession = {
   shopId: number;
@@ -11,6 +12,7 @@ export type ROSession = {
   draft?: { version: 1; fields: string };
   updatedAt?: number;
   pendingCreates?: Partial<Record<"contact" | "vehicle", Record<string, unknown>>>;
+  shared?: { id: string; revision: number; deviceId: string };
 };
 export function hasPendingCreates(value: ROSession) { return !!(value.pendingCreates?.contact || value.pendingCreates?.vehicle); }
 export const DRAFT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;

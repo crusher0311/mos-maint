@@ -18,6 +18,28 @@ left users expecting a Protractor ticket when only a local visit existed.
 entry points. Preserve intake photos through the confirmed RO-to-DVI handoff,
 keep DVI feature-gated, and distinguish uncertain creation from confirmed ROs.
 
+Check-in must support moving from desktop to phone and back before a native
+customer, vehicle or RO exists. The user wants vehicle entry and VIN, odometer
+and arrival photos in the same guided draft, without texting a link.
+
+**Why:** Advisors need to begin at the desk, capture details beside the vehicle,
+and finish at the desk without duplicate entry or duplicate native records.
+
+**How to apply:** Use authenticated, shop-scoped server drafts and a QR resume
+entry, clearly distinguish local unsynced photos from server-confirmed uploads,
+and fence conflicting devices and unresolved native operations. Keep deployment
+separate from local implementation approval.
+
+Preserve existing VIN/license-plate photo interpretation during mobile handoff;
+the user also requested OpenAI interpretation of odometer photos.
+
+**Why:** Mobile check-in should extend existing photo-assisted vehicle entry,
+not regress it to manual-only entry.
+
+**How to apply:** Keep the source photo, require explicit confirmation of the
+reading and units before changing mileage, and distinguish total odometer from
+trip readings or unreadable displays.
+
 The user confirmed DVI should be feature-gated as a product, including inspection
 sheet creation and management, rather than automatically available with Shop Workflow.
 

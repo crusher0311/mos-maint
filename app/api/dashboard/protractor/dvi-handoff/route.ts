@@ -8,6 +8,7 @@ import { getSession } from "@/lib/auth";
 import { createHash } from "node:crypto";
 import { cookies } from "next/headers";
 import { DispatchError } from "@/lib/shop-dispatch/model";
+import { findShopByShopId,type ShopDoc } from "@/lib/data/repositories/shops";
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
 export async function GET(){
@@ -16,7 +17,13 @@ export async function GET(){
     if(!session?.email||!token||session.token!==token||session.isTestAuth||session.token==="dev-auto-login"||/^exts?_/.test(token))
       return dispatchJson({error:"Dashboard sign-in required"},401);
     const context={shopId:Number(session.shopId),actorKey:createHash("sha256").update(`staff|${session.shopId}|${session.email.toLowerCase()}`).digest("hex")};
-    try{const a=await staffAccess();return dispatchJson({enabled:a.canEdit,...context});}
+    try{
+      const a=await staffAccess();
+      if(!a.canEdit)return dispatchJson({enabled:false,...context});
+      const shop=await findShopByShopId<ShopDoc & {preferences?:{distanceUnit?:string}}>(a.shopId,{"preferences.distanceUnit":1});
+      return dispatchJson({enabled:true,...context,sharedDrafts:{version:1},odometerScan:{version:1},
+        distanceUnit:shop?.preferences?.distanceUnit==="kilometers"?"kilometers":"miles"});
+    }
     catch(e){if(e instanceof DispatchError&&e.status===403)return dispatchJson({enabled:false,...context});throw e;}
   }catch(e){return dispatchFailure(e);}
 }

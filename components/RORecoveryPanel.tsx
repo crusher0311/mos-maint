@@ -7,9 +7,11 @@ type Recovery = ReturnType<typeof useRORecovery>;
 export function ArrivalPreview({ photo }: { photo: ArrivalPhoto }) {
   const [url, setUrl] = useState("");
   useEffect(() => {
+    if (photo.missingOnDevice) { setUrl(""); return; }
     const value = URL.createObjectURL(photo.blob); setUrl(value);
     return () => URL.revokeObjectURL(value);
-  }, [photo.blob]);
+  }, [photo.blob, photo.missingOnDevice]);
+  if (photo.missingOnDevice) return <div className="w-full h-24 rounded-lg border border-dashed border-amber-300 bg-amber-50 flex items-center justify-center p-3 text-xs text-amber-800 text-center">Photo is only on the original device. Save it there to continue here.</div>;
   return <img src={url || undefined} alt={`Arrival documentation: ${photo.name}`} className="w-full h-24 object-cover rounded-lg" />;
 }
 export function ArrivalPhotoPicker({ recovery }: { recovery: Recovery }) {
@@ -20,13 +22,19 @@ export function ArrivalPhotoPicker({ recovery }: { recovery: Recovery }) {
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
       {(["camera", "upload"] as const).map(source => <label key={source} className="text-gray-700">{source === "camera" ? "Capture arrival photo" : "Upload arrival photo"}
         <input className="block w-full text-xs mt-1" type="file" accept="image/jpeg,image/png,image/webp" capture={source === "camera" ? "environment" : undefined}
-          disabled={!recovery.enabled || !recovery.ready || recovery.busy || !!recovery.session?.payload} onChange={event => {
+           disabled={!recovery.enabled || !recovery.ready || recovery.busy || recovery.sharedBlocked || !!recovery.session?.payload} onChange={event => {
             const file = event.target.files?.[0]; event.target.value = ""; if (file) void recovery.addPhoto(file);
           }} /></label>)}
     </div>
     {!!recovery.session?.photos.length && <ul className="grid grid-cols-2 sm:grid-cols-3 gap-3">{recovery.session.photos.map(photo => <li key={photo.requestId}>
       <ArrivalPreview photo={photo} /><span className="block text-xs text-gray-500 truncate">{photo.name}</span>
-      <button className="text-xs text-red-600 mt-1" disabled={recovery.busy} onClick={() => void recovery.removePhoto(photo.requestId)}>Remove arrival photo</button>
+       <span className={`block text-xs mt-1 ${photo.serverSaved ? "text-blue-700" : "text-amber-800"}`}>
+         {photo.uploaded ? "Attached to confirmed RO" : photo.serverSaved ? "Server saved · available on either device" :
+           photo.missingOnDevice ? "Not synchronized · original device required" : "Device only · not synchronized"}
+       </span>
+       <button className="text-xs text-red-600 mt-1" disabled={recovery.busy || recovery.sharedBlocked} onClick={() => {
+         if (window.confirm("Remove this arrival photo from the draft? This does not change any confirmed repair order.")) void recovery.removePhoto(photo.requestId);
+       }}>Remove arrival photo</button>
     </li>)}</ul>}
   </section>;
 }
@@ -46,7 +54,7 @@ export function RORecoveryPanel({ recovery, onClose }: { recovery: Recovery; onC
       {recovery.error && <p role="alert" className="text-sm text-red-700 bg-red-50 border border-red-200 p-3 rounded-lg">{recovery.error}</p>}
       {!!value?.photos.length && <section><h3 className="text-sm font-semibold text-gray-900 mb-3">Arrival documentation · {remaining ? `${remaining} awaiting upload` : "saved"}</h3>
         <ul className="grid grid-cols-2 sm:grid-cols-3 gap-3">{value.photos.map(photo => <li key={photo.requestId}><ArrivalPreview photo={photo} />
-          <span className="block text-xs text-gray-500 mt-1">{photo.uploaded ? "Upload confirmed" : "Retained on this device"}</span></li>)}</ul>
+           <span className="block text-xs text-gray-500 mt-1">{photo.uploaded ? "Attached to confirmed RO" : photo.serverSaved ? "Server saved · awaiting RO attachment" : photo.missingOnDevice ? "Original device required · not synchronized" : "Device only · not synchronized"}</span></li>)}</ul>
         <p className="text-xs text-gray-500 mt-2">Arrival photos do not evaluate any inspection checklist item.</p></section>}
       {!!result?.packagesWithoutLines.length && <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
         <strong>Some jobs need parts or labor lines in Protractor</strong><ul className="list-disc pl-5 mt-2">{result.packagesWithoutLines.map((job, index) =>
@@ -58,7 +66,7 @@ export function RORecoveryPanel({ recovery, onClose }: { recovery: Recovery; onC
         {result && !remaining && <button className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 text-sm disabled:opacity-50" disabled={recovery.busy || !recovery.ready} onClick={async () => { if (await recovery.finish()) onClose(); }}>Done</button>}
         {result && remaining > 0 && !recovery.enabled && <button className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 text-sm" disabled={recovery.busy} onClick={onClose}>Done · keep photos for later</button>}
       </div>
-      <p className="text-xs text-gray-500">Kept on this browser until completion. Do not clear site data while creation or uploads are unconfirmed. Closing does not discard the original request.</p>
+       <p className="text-xs text-gray-500">{value?.shared ? "Confirmed server saves can be resumed by this advisor in this shop. Device-only changes or photos do not transfer." : "Kept on this browser until completion."} Do not clear site data while creation or uploads are unconfirmed. Closing does not discard the original request.</p>
     </section>
   </div>;
 }

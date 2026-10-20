@@ -1,6 +1,7 @@
 import { z,ZodError } from "zod";
 import { staffAccess } from "@/lib/auto-dvi/staff/access";
 import { getSession } from "@/lib/auth";
+import { CheckInDrafts,draftFenceSchema } from "@/lib/data/repositories/check-in-drafts";
 import { ROArrivalPhotos } from "@/lib/data/repositories/ro-arrival-photos";
 import { effectiveInspectionPermission } from "@/lib/auto-dvi/workflow-policy";
 import { readDispatchBoard } from "@/lib/data/repositories/shop-dispatch";
@@ -16,14 +17,23 @@ async function requirePhotoSession(){
   return staffAccess();
 }
 const upload=z.object({requestId:z.string().uuid(),workOrderId:z.string().uuid().transform(s=>s.toLowerCase()),
-  mime:z.enum(["image/jpeg","image/png","image/webp"]),base64:z.string().max(5592408).regex(/^[A-Za-z0-9+/]+={0,2}$/)}).strict();
+  mime:z.enum(["image/jpeg","image/png","image/webp"]),base64:z.string().max(5592408).regex(/^[A-Za-z0-9+/]+={0,2}$/),_guidedDraft:draftFenceSchema.optional()}).strict();
 export async function POST(req:Request){
   try{
     const a=await requirePhotoSession();requireThat(a.canEdit,"DVI arrival photos are not enabled",403);
     const input=upload.parse(await requestBody(req,5700000));
+    const drafts=new CheckInDrafts();
+    if(input._guidedDraft){
+      const row=await drafts.fence(a,input._guidedDraft);
+      requireThat(row.session.result?.workOrderId===input.workOrderId,"Draft RO does not match",409);
+      const source=await drafts.photo(a,input._guidedDraft.id,input.requestId);
+      requireThat(source.mime===input.mime&&source.bytes.equals(Buffer.from(input.base64,"base64")),"Draft photo does not match",409);
+    }
     await photos.requireConfirmed(a.shopId,input.workOrderId);
     const fresh=await staffAccess();requireThat(fresh.canEdit&&fresh.shopId===a.shopId&&fresh.actor===a.actor,"Access changed",403);
-    return dispatchJson({photo:await photos.put(a.shopId,input.workOrderId,input.requestId,input.mime,Buffer.from(input.base64,"base64"))});
+    const photo=await photos.put(a.shopId,input.workOrderId,input.requestId,input.mime,Buffer.from(input.base64,"base64"));
+    if(input._guidedDraft)await drafts.attachPhoto(a,input._guidedDraft,input.requestId,input.workOrderId,photo);
+    return dispatchJson({photo});
   }catch(e){return e instanceof ZodError||e instanceof SyntaxError?dispatchJson({error:"Invalid arrival photo"},400):dispatchFailure(e);}
 }
 export async function GET(req:Request){
