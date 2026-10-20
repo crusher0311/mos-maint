@@ -148,7 +148,7 @@
 - [Sticker QR compatibility](sticker-qr-compatibility.md) — preserve printed HoverCode targets; publish cached images and target metadata together.
 - [Cron network fault injection](cron-fault-injection.md) — PostgreSQL parameter descriptions must reach the driver before execution acknowledgments can be lost.
 - [Workflow ticket intake safety](workflow-ticket-intake-safety.md) — explicit ticket writes are approved; appointment writes remain excluded, and timed-out admissions require exact-ID recovery.
-- [Workflow DVI boundary scope](workflow-dvi-boundary-scope.md) — manual staff persistence approved; production activation, provider writes, release and duplicate enterprise matching remain excluded.
+- [Workflow DVI boundary scope](workflow-dvi-boundary-scope.md) — CAR Experts synthetic writes have an accepted-risk exception; implementation handoff is separate from live activation.
 - [Durable DVI enrollment](dvi-durable-enrollment.md) — rollback disables admissions, never durable routing; legacy fallback would bypass unresolved target ownership.
 - [Chromium lost-response fixtures](chromium-lost-response-fixtures.md) — drop responses after headers to avoid transparent connection retries obscuring application behavior.
 - [Worker IPC evidence](worker-ipc-evidence.md) — drain sends before explicit exit and collect evidence through channel closure; synchronous fakes miss termination races.

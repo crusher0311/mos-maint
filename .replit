@@ -39,6 +39,10 @@ args = "Offline staff inspection"
 task = "workflow.run"
 args = "Offline Protractor exports"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Offline CAR Experts DVI pilot"
+
 [[workflows.workflow]]
 name = "MOS Maintenance MVP"
 author = "agent"
@@ -121,6 +125,18 @@ task = "shell.exec"
 args = "PROTRACTOR_OFFLINE_ALLOW_LOOPBACK=true NODE_OPTIONS='--require ./tests/helpers/deny-network-egress.cjs' node --import tsx tests/browser/protractor-export-fixture-server.ts"
 waitForPort = 8099
 
+[[workflows.workflow]]
+name = "Offline CAR Experts DVI pilot"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "PROTRACTOR_OFFLINE_ALLOW_LOOPBACK=true NODE_OPTIONS='--require ./tests/helpers/deny-network-egress.cjs --require ./scripts/_stubs/server-only-stub.cjs' node --import tsx tests/browser/workflow-dvi-pilot-fixture-server.ts"
+waitForPort = 8100
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
 [[ports]]
 localPort = 3000
 externalPort = 3000
@@ -140,6 +156,10 @@ externalPort = 3001
 [[ports]]
 localPort = 8099
 externalPort = 8099
+
+[[ports]]
+localPort = 8100
+externalPort = 5173
 
 [[ports]]
 localPort = 24087

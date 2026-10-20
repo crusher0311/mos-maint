@@ -10,6 +10,8 @@
 .summary div { overflow-wrap: anywhere; }
 .summary strong { display: block; }
 .lock { padding: 14px; background: var(--paper); border: 1px solid var(--line); border-radius: 8px; }
+.fixture { margin: 16px 0; padding: 14px 16px; border: 1px solid #d1a17b; border-left: 3px solid var(--accent); border-radius: 8px; background: #fff0df; color: #674020; }
+.fixture p { margin: 6px 0 12px; }
 .form fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 .form textarea { resize: vertical; }
 @media(max-width:767px) { .summary { grid-template-columns: 1fr; } }

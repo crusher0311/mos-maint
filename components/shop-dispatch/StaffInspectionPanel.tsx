@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { blankFinding, instanceKey, missingFor, missingRequirements, type FindingInput, type Finding, type StaffItem, type SheetInstance } from "@/lib/auto-dvi/staff/model";
 import { useStaffInspection } from "./use-staff-inspection";
 import { ReleasePanel } from "./ReleasePanel";
+import { PilotInspectionPanel } from "./PilotInspectionPanel";
 import styles from "./pilot.module.css";
 import ui from "./StaffInspectionPanel.module.css";
 
@@ -102,6 +103,7 @@ function InspectionEditor({ visitId, shopId, closed }: { visitId: string; shopId
         <button disabled={!reviewAllowed || !inspection.startedAt || !!missing.length} onClick={() => void api.command({ type: "review" })}>Record advisor review</button>
       </div><small>Readiness and review reference saved evidence only. Any evidence change makes earlier markers stale. These markers do not authorize customer release.</small>
       <ReleasePanel visitId={visitId} shopId={shopId} inspection={inspection} />
+      <PilotInspectionPanel visitId={visitId} shopId={shopId} evidenceRevision={inspection.evidenceRevision} blocked={dirty || locked} />
     </>}
   </section>;
 }

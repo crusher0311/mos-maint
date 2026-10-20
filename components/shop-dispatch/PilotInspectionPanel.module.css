@@ -1,0 +1,17 @@
+.panel { margin-top: 22px; padding: 18px; border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 8px; background: var(--paper); min-width: 0; }
+.heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 10px; }
+.heading h3 { margin: 5px 0 0; }
+.candidates { border: 0; padding: 0; margin: 16px 0; min-width: 0; display: grid; gap: 8px; }
+.candidates legend { font-weight: 700; margin-bottom: 10px; }
+.candidate { display: flex !important; align-items: center; gap: 10px; border: 1px solid var(--line); background: var(--panel); border-radius: 6px; padding: 12px; min-height: 44px; }
+.candidate span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.candidate small { display: block; }
+.operation { border-top: 1px solid var(--line); padding-top: 16px; margin-top: 18px; overflow-wrap: anywhere; }
+.lines { list-style: none; padding: 0; margin: 12px 0; display: grid; gap: 8px; }
+.lines li { border: 1px solid var(--line); border-radius: 6px; padding: 12px; background: var(--panel); }
+.lines p { margin: 5px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.metadata { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 12px 0; }
+.confirm { display: grid; gap: 12px; margin-top: 16px; }
+.confirm label { align-items: start; line-height: 1.6; }
+.unavailable { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 14px; }
+@media (max-width: 767px) { .panel { padding: 14px; } .candidate { align-items: start; } }

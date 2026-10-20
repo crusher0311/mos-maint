@@ -71,6 +71,11 @@ export async function discoverDurableTarget(scope: Scope, params: URLSearchParam
  * before its legacy filtering/pricing. Transport metadata is not request content. */
 export async function tryDurablePush(scope: Scope, raw: unknown, channel: "dashboard" | "extension"): Promise<Reply | null> {
   try {
+    // Permanent pilot routing fence, including rollback. The visit-scoped
+    // accepted-risk writer must never overlap either legacy VIN writer.
+    if (scope.shopId === 66) return {status: 409, body: {ok: false,
+      error: "WORKFLOW_SYNTHETIC_PILOT_ONLY", recoveryAllowed: false,
+      message: "CAR Experts test inspections must be sent from the saved Shop Workflow visit. Legacy pushes are disabled, including during pilot rollback."}};
     const service = await durableService(scope.shopId);
     if (!service) return null;
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new DurableError("INVALID_REQUEST", 400);

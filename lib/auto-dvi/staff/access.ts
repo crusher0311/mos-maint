@@ -9,6 +9,7 @@ import { readStaffConfiguration } from "@/lib/data/repositories/workflow-inspect
 import { effectiveInspectionPermission, type InspectionAuthority } from "../workflow-policy";
 import { sheetSchema, instanceKey } from "./model";
 import { requireThat } from "@/lib/shop-dispatch/model";
+import { pilotConfigurationSchema } from "../pilot/model";
 
 const rules = z.object({read: z.enum(["allow", "deny"]).optional(), edit: z.enum(["allow", "deny"]).optional(),
   sensitive: z.enum(["allow", "deny"]).optional(), publish: z.enum(["allow", "deny"]).optional()}).strict();
@@ -16,6 +17,7 @@ export const configurationSchema = z.object({
   version: z.literal(1), enabledShopIds: z.array(z.number().int().positive()).max(500),
   sheets: z.array(sheetSchema).min(1).max(20), defaultSheet: z.string().max(80),
   rules, individual: z.record(z.string(), rules).default({}),
+  pilot: pilotConfigurationSchema.optional(),
   release: z.object({
     enabledShopIds: z.array(z.number().int().positive()).max(500),
     publicPhone: z.string().max(40),

@@ -26,6 +26,10 @@ export function IntakeForm({ board, shopId, busy, appointment, visitId, initial,
   const [lookupError, setLookupError] = useState("");
   const [completedVisitId, setCompletedVisitId] = useState<string | null>(null);
   const [completedReceipt, setCompletedReceipt] = useState(false);
+  const [fixtureBusy, setFixtureBusy] = useState(false);
+  const [fixtureError, setFixtureError] = useState("");
+  const [fixtureLoaded, setFixtureLoaded] = useState(false);
+  const fixtureActive = useRef(false);
   const lookupToken = useRef(0);
   const api = useIntake(shopId, scope, refresh);
   useEffect(() => {
@@ -56,6 +60,25 @@ export function IntakeForm({ board, shopId, busy, appointment, visitId, initial,
   }, [api.saved, api.savedScope, api.savedAction, api.savedRequestId,scope, appointment]);
   function change(values: Partial<IntakeDetails>) { setDraft(previous => ({ ...previous, ...values })); }
   function identity(values: Partial<IntakeDetails>) { lookupToken.current++; setLookupBusy(false); change({ ...values, identityConfirmed: false }); }
+  async function useSyntheticFixture() {
+    if (fixtureActive.current || shopId !== 66 || visitId || appointment || locked) return;
+    fixtureActive.current = true; setFixtureBusy(true); setFixtureError("");
+    try {
+      const response = await fetch("/api/shop-dispatch/inspection/pilot-fixture", { credentials: "include", cache: "no-store" });
+      const value = await response.json();
+      if (!response.ok || value.enabled !== true) throw new Error("Synthetic pilot fixture is unavailable. No identity fields were changed.");
+      const parsed = intakeDetailsSchema.safeParse(value.details);
+      if (!parsed.success || !parsed.data.contactId || !parsed.data.vehicleId) throw new Error("Synthetic fixture identity is incomplete. No fields were changed.");
+      const fixture = parsed.data;
+      lookupToken.current++; setLookupBusy(false); setContacts(null); setVehicles(null); setQuery(""); setLookupError("");
+      setDraft(previous => ({ ...previous, customer: fixture.customer, vehicle: fixture.vehicle,
+        contactId: fixture.contactId, vehicleId: fixture.vehicleId, newCustomer: fixture.newCustomer, newVehicle: fixture.newVehicle,
+        identityConfirmed: false, mileage: previous.mileage ?? fixture.mileage }));
+      setFixtureLoaded(true);
+    } catch (cause) {
+      setFixtureError(cause instanceof Error ? cause.message : "Synthetic fixture is unavailable.");
+    } finally { fixtureActive.current = false; setFixtureBusy(false); }
+  }
   async function lookup(kind: "contacts" | "vehicles") {
     const token = ++lookupToken.current;
     setLookupBusy(true); setLookupError("");
@@ -72,6 +95,7 @@ export function IntakeForm({ board, shopId, busy, appointment, visitId, initial,
   }
   async function submit(event: FormEvent) {
     event.preventDefault(); setValidation("");
+    if (fixtureActive.current) return;
     const parsed = intakeDetailsSchema.safeParse({ ...draft, concerns: concerns.split("\n").map(v => v.trim()).filter(Boolean) });
     if (!parsed.success) { setValidation(parsed.error.issues.map(v => `${v.path.join(".")}: ${v.message}`).join(" · ")); return; }
     const requestId=crypto.randomUUID();
@@ -87,7 +111,7 @@ export function IntakeForm({ board, shopId, busy, appointment, visitId, initial,
   }
   const returnedVisit = (api.saved ?? board).visits.find(v => v.id === (visitId || completedVisitId));
   const completed = !visitId && (completedReceipt || !!completedVisitId || api.savedScope === scope && api.savedAction === "checkIn");
-  const locked = busy || api.busy || !!api.pending || !loaded || !api.ready || !!storageError || completed;
+  const locked = busy || api.busy || !!api.pending || !loaded || !api.ready || !!storageError || completed || fixtureBusy;
   return <section className={`${styles.panel} ${css.section}`} data-testid={`intake-${scope}`}>
     <div className={styles.eyebrow}>Workflow check-in / {appointment ? "appointment" : visitId ? "visit details" : "walk-in"}</div>
     <h2>{visitId ? "Intake details" : appointment ? appointment.title || "Appointment check-in" : "Check in a walk-in"}</h2>
@@ -99,10 +123,18 @@ export function IntakeForm({ board, shopId, busy, appointment, visitId, initial,
       if (!window.confirm("Start a different walk-in? The recorded visit stays on the board.")) return;
       if (!api.clearReceipt()) return;
       setCompletedVisitId(null); setCompletedReceipt(false); change(empty()); setConcerns(""); setRevision(api.saved?.revision ?? board.revision);
-      setContacts(null); setVehicles(null); setQuery(""); setValidation("");
+      setContacts(null); setVehicles(null); setQuery(""); setValidation(""); setFixtureLoaded(false); setFixtureError("");
     }}>Start a different walk-in</button>}
     {api.pending && <div className={styles.notice} role="alert">An intake request for {api.pending.scope} is unconfirmed. Draft editing is paused. Retry sends the exact same request ID, payload and revision.
       <button type="button" disabled={busy || api.busy} onClick={() => void api.send()}>Retry identical intake request</button></div>}
+    {shopId === 66 && !visitId && !appointment && <aside className={css.fixture} aria-label="Synthetic pilot vehicle">
+      <strong>Synthetic-only inspection pilot</strong>
+      <p>Use the approved test customer and vehicle, never a real customer vehicle. Your concern, arrival plan, commitment times and entered mileage are preserved. This does not check in or create an official ticket.</p>
+      <button type="button" disabled={locked} onClick={() => void useSyntheticFixture()}>Use synthetic pilot vehicle</button>
+      {fixtureBusy && <div className={styles.skeleton} role="status" aria-label="Loading approved synthetic vehicle" />}
+      {fixtureLoaded && <p role="status">Synthetic identity loaded. Review the fields and explicitly confirm the customer/vehicle pairing before continuing. Check-in and Create official ticket remain separate actions.</p>}
+      {fixtureError && <p className={styles.error} role="alert">{fixtureError}</p>}
+    </aside>}
     <form onSubmit={submit} className={css.form}><fieldset disabled={locked}><div className={css.steps}>
       <section><h3><span className={css.number}>01</span> Customer & vehicle identity</h3>
         <div className={styles.fields}>

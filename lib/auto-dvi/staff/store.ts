@@ -3,6 +3,7 @@ import type { BindingAdmission, WorkflowInspection, WorkflowInspectionRepository
 import { applyBindingAdmission } from "../workflow-binding-state";
 import { digest } from "../../shop-dispatch/service";
 import { requireThat } from "../../shop-dispatch/model";
+import { pilotOperationSchema, type PilotOperation } from "../pilot/model";
 import { applyStaffCommand, initialInspection, instanceKey, photoSchema, sheetSchema, findingSchema,
   type Photo, type StaffCommand, type StaffInspection, type StaffSheet } from "./model";
 
@@ -39,11 +40,12 @@ const releaseAdmissionSchema = z.object({requestId: z.string().uuid(), digest: z
   actor: z.string(), visitId: z.string(), at: z.string().datetime(),
   rejected: z.boolean().optional()}).strict();
 export type ReleaseAdmission = z.infer<typeof releaseAdmissionSchema>;
-export interface ShopState {version: 1; revision: number; records: WorkflowInspection[]; receipts: StaffReceipt[]; events: StaffEvent[]; uploads: UploadReservation[]; releaseAdmissions?: ReleaseAdmission[]}
+export interface ShopState {version: 1; revision: number; records: WorkflowInspection[]; receipts: StaffReceipt[]; events: StaffEvent[]; uploads: UploadReservation[]; releaseAdmissions?: ReleaseAdmission[]; pilotOperations?: PilotOperation[]}
 export const emptyShopState = (): ShopState => ({version: 1, revision: 0, records: [], receipts: [], events: [], uploads: []});
 export function validateShopState(raw: unknown): ShopState {
   return z.object({version: z.literal(1), revision, records: z.array(bindingSchema).max(500), uploads: z.array(uploadSchema).max(5000),
     releaseAdmissions: z.array(releaseAdmissionSchema).max(5000).optional(),
+    pilotOperations: z.array(pilotOperationSchema).max(500).optional(),
     receipts: z.array(z.object({requestId: z.string().uuid(), digest: z.string().length(64), actor: z.string(), visitId: z.string(), revision}).strict()).max(5000),
     events: z.array(z.object({requestId: z.string().uuid(), actor: z.string(), at: z.string().datetime(), visitId: z.string(),
       before: staffStateSchema.nullable(), after: staffStateSchema}).strict()).max(5000),
@@ -58,6 +60,14 @@ export interface StaffPersistence {
 }
 export class StaffRepository implements WorkflowInspectionRepository {
   constructor(readonly persistence: StaffPersistence) {}
+  /** Pilot admission shares the evidence CAS; never a cross-store snapshot. */
+  async mutatePilot(shopId: number, authorize: () => Promise<void>, change: (state: ShopState) => void) {
+    await authorize();
+    const state = await this.persistence.read(shopId);
+    change(state);
+    await authorize();
+    requireThat(await this.save(shopId, state), "Pilot state changed; reload status. Do not send a replacement.", 409);
+  }
   /** Linearization point shared with evidence/photo CAS. Only opaque release
    * receipt metadata enters this bounded aggregate; snapshots live separately. */
   async admitRelease(shopId: number, raw: ReleaseAdmission,
