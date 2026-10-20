@@ -6,6 +6,16 @@ MOS Auto DVI is positioned as a REPLACEMENT for third-party DVI providers (AutoF
 
 ## Historical findings and multiple sheets
 
+The user confirmed DVI should be feature-gated as a product, including inspection
+sheet creation and management, rather than automatically available with Shop Workflow.
+
+**Why:** DVI must support building out configurable sheets while remaining an
+independently controlled feature.
+
+**How to apply:** Gate DVI entry points and sheet-management APIs by the target
+shop's DVI entitlement, then apply staff/manager permissions separately. Workflow
+access alone must not grant DVI or sheet-editing authority.
+
 The user wants prior DVI findings to return on subsequent visits and to be shared
 across enterprise locations like vehicle history. They also want multiple DVI
 sheets with overlapping items automatically reusing inspection work within the

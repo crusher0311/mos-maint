@@ -11,7 +11,8 @@ const collections = ["workflow_staff_inspections", "workflow_staff_inspection_co
   "workflow_dvi_pilot_rollouts"];
 /** Operator-only; never called by a route or application startup. No destructive
  * cleanup, role mutation, billing change, enterprise override or TTL creation. */
-export async function configureCarExpertsPilot(action: "plan" | "provision" | "activate" | "rollback", connection: string) {
+export async function configureCarExpertsPilot(action: "plan" | "provision" | "activate" | "rollback", connection: string,
+  allRecordsTestInstanceApproved = false) {
   requireThat(!isIdentityPgCanonical(), "Canonical PG identity mode requires a separately reviewed operator plan", 409);
   const db = await getDb();
   const shop = await db.collection("shops").findOne({shopId: PILOT_SHOP}, {maxTimeMS: 3000});
@@ -33,6 +34,7 @@ export async function configureCarExpertsPilot(action: "plan" | "provision" | "a
   }
   if (action === "plan") return {shopId: PILOT_SHOP, configurationExists: !!config,
     staffEnabled: config?.enabledShopIds?.includes(PILOT_SHOP) === true, providerAdmissions: config?.pilot?.admissions === true,
+    targetScope: config?.pilot?.targetScope ?? "synthetic_fixture",
     sheet: "manual-safety@1", retention: "until separately approved cleanup", rollbackOwner: "requesting operator"};
   if (action === "provision") {
     for (const name of collections) {
@@ -46,7 +48,7 @@ export async function configureCarExpertsPilot(action: "plan" | "provision" | "a
         pilot: {admissions: false, connectionHash: connection, labels: {green: "OK", yellow: "Requires Future Attention", red: "Required"},
           labelEvidence: "synthetic_roundtrip_only"}});
       await db.collection("workflow_staff_inspection_config").insertOne({_id: configId, ...value} as any,
-        {writeConcern: {w: "majority", j: true}});
+        {writeConcern: {w: "majority", j: true}, ignoreUndefined: true});
     }
   } else {
     requireThat(config, "Provision approved pilot storage/configuration first", 409);
@@ -63,13 +65,16 @@ export async function configureCarExpertsPilot(action: "plan" | "provision" | "a
       requireThat(changed.matchedCount === 1, "Shop flags changed concurrently; stop and inspect", 409);
     }
     const updated = {...config, enabledShopIds: action === "activate" ? [PILOT_SHOP] : [],
-      pilot: {...config.pilot, admissions: action === "activate"}};
+      pilot: {...config.pilot, admissions: action === "activate",
+        ...(action === "activate" && allRecordsTestInstanceApproved ? {targetScope: "shop_test_instance"} : {})}};
     const result = await db.collection("workflow_staff_inspection_config").replaceOne(config, updated,
       {writeConcern: {w: "majority", j: true}});
     requireThat(result.matchedCount === 1, "Pilot configuration changed concurrently; stop and inspect", 409);
   }
   await db.collection("workflow_dvi_pilot_rollouts").insertOne({shopId: PILOT_SHOP, action, at: new Date(),
-    approvedSheet: "manual-safety@1", syntheticOnly: true, concurrencyCertified: false, terminationCertified: false,
+    approvedSheet: "manual-safety@1",
+    syntheticOnly: !(allRecordsTestInstanceApproved || config?.pilot?.targetScope === "shop_test_instance"),
+    concurrencyCertified: false, terminationCertified: false,
     customerPublicationChanged: false, retention: "until separately approved cleanup", rollbackOwner: "requesting operator",
     note: "Operator command; serving UI/readback verification is a separate required rollout observation."},
   {writeConcern: {w: "majority", j: true}});

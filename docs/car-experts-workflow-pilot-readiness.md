@@ -1,5 +1,38 @@
 # CAR Experts Shop Workflow DVI pilot
 
+## Updated usability scope — October 20, 2026
+
+The operator clarified that the entire CAR Experts Protractor instance (shop 66)
+is available for testing. This supersedes the synthetic-only record restriction
+below, not the shop boundary or duplicate-send protections.
+
+The new release adds direct Start/Continue DVI entry on open workflow tickets and
+Check in / Create RO on Dispatch, with a confirmed-ticket handoff into inspection.
+The optional sample vehicle is no longer the required user journey.
+
+Backend permission remains explicitly scoped. Missing `pilot.targetScope` means
+the legacy `synthetic_fixture` policy. After verifying the new serving release,
+the authorized operator may enable all records using:
+
+```
+node --import tsx scripts/configure-car-experts-workflow-pilot.ts activate --operator-approved --serving-build-verified --all-records-test-instance-approved
+```
+
+Do not set this field while the older strict configuration parser is serving.
+It is not a global feature switch: provider sends still require shop 66, the
+configured connection, current staff review, an open native work order, a saved
+preview and explicit confirmation. Existing imported tickets are accepted under
+the new scope; uncertain ticket creation must still be resolved first.
+Preview records pin their scope and provider baseline. Changed identities,
+changed content, closed orders and duplicate/uncertain sends remain guarded.
+Customer publication and priced-work writes remain excluded.
+
+Provisioning now omits undefined optional sheet positions before Mongo
+serialization; a real Mongo round-trip test covers the strict reader.
+No new live activation or native write is implied by these code changes.
+
+## Original pilot implementation record
+
 ## Status
 
 Preparation only. No activation, new provider writes, or end-to-end demonstration

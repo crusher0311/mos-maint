@@ -131,7 +131,7 @@ export const STAFF_SHEET_TEMPLATES: StaffSheet[] = [sheetSchema.parse({
   id: "manual-safety", version: 1, name: "Manual vehicle inspection",
   items: [
     ...CATALOG.filter(i => i.id !== "brakes" && i.id !== "battery").map(i => ({
-      id: i.id, name: i.name, procedure: `manual-${i.id}`, position: i.position,
+      id: i.id, name: i.name, procedure: `manual-${i.id}`, ...(i.position ? {position: i.position} : {}),
       fields: i.fields, required: true, requiredFields: i.kind === "tire" ? ["unit", "inner", "center", "outer", "beforePsi"] : [],
       notesRequired: true, photoRequired: false, recommendationRequired: false,
     })),

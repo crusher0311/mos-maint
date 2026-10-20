@@ -74,6 +74,95 @@ async function fixture() {
 }
 const send = (id: string, visitId = "visit-one") => ({action: "send", visitId, previewId: id, confirmed: true});
 
+async function enableAllRecords(f: Awaited<ReturnType<typeof fixture>>, imported = true) {
+  f.setAccess({config: {...f.access.config!, pilot: {...f.access.config!.pilot!, targetScope: "shop_test_instance"}}});
+  if (imported) await f.db.collection("fixture_boards").updateOne({_id: "shop:66" as any}, {$set: {ticketIntents: []}});
+  const guid = (await f.deps.board.read(66)).visits[0].sourceId!;
+  const order = f.orders.get(guid)!;
+  order.Contact.ID = randomUUID();
+  order.ServiceItem.ID = randomUUID();
+  order.ServiceItem.VIN = "TEST-INSTANCE-VEHICLE";
+  return {guid, order};
+}
+
+test("all-records scope supports existing imported open tickets and arbitrary test customers", async () => {
+  const f = await fixture();
+  await enableAllRecords(f);
+  await f.ready();
+  const preview = await f.preview();
+  const result = await executePilot(send(preview.operation!.id), f.deps);
+  assert.equal(result.operation!.state, "confirmed");
+  assert.equal(f.sends, 1);
+  await executePilot(send(preview.operation!.id), f.deps);
+  assert.equal(f.sends, 1);
+  const operation = (await f.repository.persistence.read(66)).pilotOperations![0];
+  assert.equal(operation.targetScope, "shop_test_instance");
+});
+
+test("new confirmed tickets can flow into inspection with non-fixture identities", async () => {
+  const f = await fixture();
+  await enableAllRecords(f, false);
+  await f.ready();
+  const preview = await f.preview();
+  assert.equal((await executePilot(send(preview.operation!.id), f.deps)).operation!.state, "confirmed");
+});
+
+test("all-records opt-in still rejects closed native orders and identity changes before send", async () => {
+  const f = await fixture();
+  const {order} = await enableAllRecords(f);
+  await f.ready();
+  order.Completed = true;
+  await assert.rejects(f.preview(), /Open work order/);
+  order.Completed = false;
+  const preview = await f.preview();
+  order.Contact.ID = randomUUID();
+  await assert.rejects(executePilot(send(preview.operation!.id), f.deps), /changed since preview/);
+  assert.equal(f.sends, 0);
+});
+
+test("legacy scope does not silently permit existing customer tickets", async () => {
+  const f = await fixture();
+  await f.db.collection("fixture_boards").updateOne({_id: "shop:66" as any}, {$set: {ticketIntents: []}});
+  await f.ready();
+  await assert.rejects(f.preview(), /synthetic fixture/);
+  assert.equal(f.sends, 0);
+});
+
+test("all-records permission stays in shop 66 and does not bypass uncertain ticket recovery", async () => {
+  const f = await fixture();
+  await enableAllRecords(f, false);
+  await f.ready();
+  await f.db.collection("fixture_boards").updateOne({_id: "shop:66" as any}, {$set: {"ticketIntents.0.status": "pending"}});
+  await assert.rejects(f.preview(), /Recover the existing ticket/);
+  assert.equal(f.sends, 0);
+  f.setAccess({shopId: 1});
+  await assert.rejects(executePilot({action: "preview", requestId: randomUUID(), visitId: "visit-one",
+    evidenceRevision: 0, selected: [{sheet: "fixture@1", item: "tire.lf"}]}, f.deps), /CAR Experts test instance/);
+  assert.equal(f.sends, 0);
+});
+
+test("all-records lost response stays one send and readback detects vehicle replacement", async () => {
+  const f = await fixture();
+  const {order} = await enableAllRecords(f);
+  await f.ready();
+  f.setMode("lost");
+  const preview = await f.preview();
+  await executePilot(send(preview.operation!.id), f.deps);
+  await executePilot(send(preview.operation!.id), f.deps);
+  assert.equal(f.sends, 1);
+  const operation = (await f.repository.persistence.read(66)).pilotOperations![0];
+  order.ServiceItem.ID = randomUUID();
+  assert.equal(classifyPilot(operation, order), "conflict");
+});
+
+test("approved production sheet survives real Mongo serialization with omitted positions", async () => {
+  const {STAFF_SHEET_TEMPLATES, sheetSchema} = await import("../lib/auto-dvi/staff/model");
+  const f = await fixture();
+  await f.db.collection("sheet_roundtrip").insertOne({sheets: STAFF_SHEET_TEMPLATES});
+  const stored = await f.db.collection("sheet_roundtrip").findOne({});
+  for (const sheet of stored!.sheets) assert.deepEqual(sheetSchema.parse(sheet), STAFF_SHEET_TEMPLATES[0]);
+});
+
 test("real workflow concern package shape survives preview through native readback", async () => {
   const {buildConcernServicePackages} = await import("../lib/integrations/protractor/client");
   const f = await fixture(); await f.ready();
@@ -178,7 +267,7 @@ test("partial native outcome, provider edit, closed order, wrong shop, revoked p
   order.ServicePackages.ItemCollection[0].ServicePackageLines.ItemCollection[0].Price = "100.00";
   await assert.rejects(executePilot(send(q.operation!.id), g.deps), /Provider order changed/);
   order.Completed = true;
-  await assert.rejects(g.preview(), /Open synthetic/);
+  await assert.rejects(g.preview(), /Open work order/);
   g.setAccess({shopId: 1});
   await assert.rejects(executePilot(send(q.operation!.id), g.deps), /CAR Experts/);
   g.setAccess({shopId: 66, canEdit: false});
@@ -236,7 +325,7 @@ test("provider read must match the exact order and connection; confirmed observa
   const f = await fixture(); await f.ready(); const p = await f.preview();
   const guid = p.operation!.workOrderGuid;
   f.orders.get(guid)!.ID = randomUUID();
-  await assert.rejects(executePilot(send(p.operation!.id), f.deps), /Exact synthetic/);
+  await assert.rejects(executePilot(send(p.operation!.id), f.deps), /Exact order\/customer\/vehicle/);
   f.orders.get(guid)!.ID = guid;
   f.deps.provider.connection = async () => connectionHash("other-connection");
   await assert.rejects(executePilot(send(p.operation!.id), f.deps), /connection changed/);

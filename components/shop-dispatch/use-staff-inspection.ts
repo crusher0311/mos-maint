@@ -41,7 +41,7 @@ export function useStaffInspection(visitId: string, _shopId?: number) {
       const response = await fetch(`${endpoint}?visitId=${encodeURIComponent(visitId)}`, { credentials: "include", cache: "no-store" });
       const value = await response.json() as InspectionResponse;
       if (!response.ok || !validResponse(value)) throw new Error(value.error || "Inspection could not be loaded.");
-      if (compare) setLatest(value); else setData(value);
+      if (compare) setLatest(value); else { setData(value); setError(""); }
       if (value.bindingRequest) {
         const recovered: Pending = { kind: "command", body: recoveryRequest(visitId, value.bindingRequest) };
         setPending(recovered);
@@ -99,6 +99,16 @@ export function useStaffInspection(visitId: string, _shopId?: number) {
   }
   async function command(command: InspectionRequest["command"]) {
     if (!data || pending || conflict || sending.current) return null;
+    // Starting has no item draft to rebase. Read current availability and board
+    // revision after ticket creation; never replay a pending binding or POST.
+    if (command.type === "initialize") {
+      sending.current = true; setBusy(true);
+      const current = await load();
+      sending.current = false; setBusy(false);
+      if (!current || current.bindingRequest || !current.enabled || !current.canEdit || current.record?.closed || !current.catalog.length) return null;
+      if (current.inspection) return current;
+      return send({ kind: "command", body: { visitId, requestId: crypto.randomUUID(), revision: 0, command: { type: "initialize", boardRevision: current.boardRevision } } });
+    }
     return send({ kind: "command", body: { visitId, requestId: crypto.randomUUID(), revision: data.inspection?.revision ?? 0, command } });
   }
   async function upload(sheet: string, item: string, file: File, provenance: "camera" | "upload") {

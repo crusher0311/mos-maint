@@ -14,7 +14,7 @@ async function main() {
   const config = await resolveProtractorConfig(PILOT_SHOP);
   if (!config.configured || config.shopId !== PILOT_SHOP) throw Error("Exact shop connection required");
   console.log(JSON.stringify(await configureCarExpertsPilot(action as "plan" | "provision" | "activate" | "rollback",
-    connectionHash(config.connectionId))));
+    connectionHash(config.connectionId), process.argv.includes("--all-records-test-instance-approved"))));
 }
 main().catch(() => {
   console.error("Pilot command stopped. Inspect the authorized operator environment; do not repeat an uncertain mutation automatically.");

@@ -3,6 +3,7 @@ import { requireThat } from "../../shop-dispatch/model";
 import { deriveIdempotentUpstreamId } from "../../idempotent-create-id";
 import { assertBinding, currentVisit, type StaffDependencies } from "../staff/service";
 import type { StaffInspection } from "../staff/model";
+import { z } from "zod";
 import { checkOrder, classifyPilot, inspectionPayload, PILOT_SHOP, pilotRequestSchema, project, riskNotice,
   SYNTHETIC_CONTACT, SYNTHETIC_VEHICLE, type PilotOperation } from "./model";
 
@@ -15,7 +16,7 @@ export interface PilotDependencies extends StaffDependencies {
 }
 async function context(visitId: string, deps: PilotDependencies, write: boolean, actor?: string) {
   const access = await deps.access();
-  requireThat(access.shopId === PILOT_SHOP, "CAR Experts synthetic pilot only", 403);
+  requireThat(access.shopId === PILOT_SHOP, "CAR Experts test instance only", 403);
   requireThat(!actor || access.actor === actor, "Signed-in account changed", 403);
   if (write) requireThat(access.canEdit && access.canReview && access.config?.pilot?.admissions,
     "Pilot sends require enabled advisor/manager/owner access", 403);
@@ -25,7 +26,9 @@ async function context(visitId: string, deps: PilotDependencies, write: boolean,
   requireThat(record, "Initialize and save this visit's inspection first", 409);
   assertBinding(board, record, visitId, write);
   const intent = board.ticketIntents?.find(i => i.visitId === visitId);
-  requireThat(visit.provider === "protractor" && intent?.status === "confirmed" &&
+  requireThat(visit.provider === "protractor" && z.string().uuid().safeParse(visit.sourceId).success,
+    "An open Protractor ticket is required; create or recover its ticket first", 409);
+  if (access.config?.pilot?.targetScope !== "shop_test_instance") requireThat(intent?.status === "confirmed" &&
     intent.workOrderId === visit.sourceId &&
     intent.workOrderId === deriveIdempotentUpstreamId("workOrder", PILOT_SHOP, "workflow-intake", visitId) &&
     intent.contactId === SYNTHETIC_CONTACT && intent.vehicleId === SYNTHETIC_VEHICLE &&
@@ -35,7 +38,7 @@ async function context(visitId: string, deps: PilotDependencies, write: boolean,
   const inspection = record.results.staff as StaffInspection | undefined;
   requireThat(inspection, "Saved inspection required", 409);
   if (write) requireThat(inspection.reviewed?.revision === inspection.evidenceRevision, "Review the current saved evidence first", 409);
-  return {access, record, inspection, guid: intent.workOrderId};
+  return {access, record, inspection, guid: visit.sourceId!};
 }
 function publicOperation(op?: PilotOperation) {
   return op ? {id: op.id, visitId: op.visitId, workOrderGuid: op.guid, evidenceRevision: op.evidenceRevision,
@@ -93,8 +96,9 @@ export async function executePilot(raw: unknown, deps: PilotDependencies) {
   if (req.action === "preview") {
     requireThat(current.inspection.evidenceRevision === req.evidenceRevision, "Saved evidence changed; reload and review", 409);
     const lines = project(current.inspection, req.selected, policy.labels);
-    const baseline = checkOrder(await deps.provider.read(current.guid, policy.connectionHash), current.guid);
+    const baseline = checkOrder(await deps.provider.read(current.guid, policy.connectionHash), current.guid, policy.targetScope);
     const op: PilotOperation = {id: req.requestId, actor: initial.access.actor, visitId: req.visitId,
+      targetScope: policy.targetScope ?? "synthetic_fixture",
       guid: current.guid, connectionHash: policy.connectionHash, requestHash: digest(req),
       evidenceRevision: req.evidenceRevision, evidenceHash: digest(current.inspection), policyHash: digest(policy),
       createdAt: deps.now(), selected: req.selected, lines, baseline, payload: inspectionPayload(lines),
@@ -112,7 +116,7 @@ export async function executePilot(raw: unknown, deps: PilotDependencies) {
   requireThat(existing, "Saved preview required", 409);
   requireThat(Date.parse(deps.now()) - Date.parse(existing.createdAt) <= 15 * 60000, "Preview expired; review a new preview", 409);
   requireThat(existing.guid === current.guid && existing.policyHash === digest(policy), "Preview target or policy changed", 409);
-  const before = checkOrder(await deps.provider.read(current.guid, policy.connectionHash), current.guid);
+  const before = checkOrder(await deps.provider.read(current.guid, policy.connectionHash), current.guid, existing.targetScope);
   requireThat(digest(before) === digest(existing.baseline), "Provider order changed since preview; preview again", 409);
   // Same aggregate CAS as staff edits: selection cannot race an evidence save.
   await deps.repository.mutatePilot(PILOT_SHOP, authorize, state => {

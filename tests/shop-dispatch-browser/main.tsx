@@ -14,6 +14,7 @@ import { timelineInstant } from "../../lib/shop-dispatch/timeline";
 import styles from "../../components/shop-dispatch/pilot.module.css";
 import { actorFor,applyCommand,emptyBoard,type Command } from "../../lib/shop-dispatch/model";
 import { paletteFromPixels, resolveWorkflowBranding } from "../../lib/shop-dispatch/branding";
+import { STAFF_SHEET_TEMPLATES } from "../../lib/auto-dvi/staff/model";
 const variant = new URLSearchParams(location.search).get("logo") ?? "colorful";
 const canvas = document.createElement("canvas");
 canvas.width = 80; canvas.height = 40;
@@ -113,6 +114,12 @@ window.fetch=async(input,init)=>{
  const url=String(input);
  if(!url.startsWith("/api/shop-dispatch"))throw new Error("Offline fixture blocked unexpected request");
  try {
+  if(url.startsWith("/api/shop-dispatch/inspection")){
+   if(init?.method==="POST")return Response.json({error:"Read-only visual fixture. Persistent writes are covered by the isolated inspection tests."},{status:409});
+   const enabled=new URLSearchParams(location.search).has("dvi");
+   return Response.json({enabled,canEdit:enabled,canReview:enabled,record:null,inspection:null,
+    catalog:enabled?STAFF_SHEET_TEMPLATES:[],boardRevision:board.revision});
+  }
   if(url.startsWith("/api/shop-dispatch/schedule")){
    if(init?.method==="POST")return Response.json({error:"Offline preview is read-only."},{status:409});
    const parsed=new URL(url,location.origin),query=Object.fromEntries(parsed.searchParams);

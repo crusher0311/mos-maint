@@ -1,15 +1,24 @@
 "use client";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { Board, Visit } from "@/lib/shop-dispatch/model";
 import type { TicketIntent, WorkflowIntake } from "@/lib/shop-dispatch/intake-types";
 import { IntakeForm } from "./IntakeForm";
 import { useIntake } from "./use-intake";
+import { DviEntry } from "./DviEntry";
 import { dateLabel } from "./helpers";
 import styles from "./pilot.module.css";
 import css from "./Intake.module.css";
 
-export function VisitIntake({ visit, board, shopId, manager, busy, refresh }: { visit: Visit; board: Board; shopId?: number; manager: boolean; busy: boolean; refresh?: () => Promise<void> }) {
+export function VisitIntake({ visit, board, shopId, manager, busy, refresh, onLockChange, onOpenInspection }: { visit: Visit; board: Board; shopId?: number; manager: boolean; busy: boolean; refresh?: () => Promise<void>; onLockChange?: (locked: boolean) => void; onOpenInspection?: () => void }) {
   const api = useIntake(shopId, `tickets:${visit.id}`, refresh);
+  const [detailsLocked, setDetailsLocked] = useState(false);
+  const requestLocked = detailsLocked || api.busy || !!api.pending;
+  const lockCallback = useRef(onLockChange);
+  lockCallback.current = onLockChange;
+  useEffect(() => {
+    lockCallback.current?.(requestLocked);
+    return () => lockCallback.current?.(false);
+  }, [requestLocked]);
   const current = api.saved && api.saved.revision >= board.revision ? api.saved : board;
   const latest = current.visits.find(v => v.id === visit.id) ?? visit;
   const intake = (latest as Visit & { intake?: WorkflowIntake }).intake;
@@ -38,7 +47,7 @@ export function VisitIntake({ visit, board, shopId, manager, busy, refresh }: { 
     catch { setStorageError("Ticket draft cannot be preserved. Actions disabled."); }
   }, [key, storageReady, roNumber, confirmedLink, confirmedCreate, revision]);
   const identityReady = !!intake?.details.identityConfirmed && !!(intake.details.contactId || intake.details.newCustomer) && !!(intake.details.vehicleId || intake.details.newVehicle);
-  const locked = busy || api.busy || !!api.pending || !api.ready || !storageReady || !!storageError;
+  const locked = busy || detailsLocked || api.busy || !!api.pending || !api.ready || !storageReady || !!storageError;
   async function link(event: FormEvent) {
     event.preventDefault();
     if(!ticketPreview||!confirmedLink)return;
@@ -55,12 +64,13 @@ export function VisitIntake({ visit, board, shopId, manager, busy, refresh }: { 
           <div><small>Needed by</small><strong>{dateLabel(intake.details.neededBy)}</strong></div>
           <div><small>Promise / next update</small><strong>{dateLabel(intake.details.promiseAt)} / {dateLabel(intake.details.nextUpdateAt)}</strong><small>{intake.details.commitmentsConfirmed ? "Customer commitments confirmed" : "Commitments not confirmed"}</small></div></div>
         <h3>Recorded concerns</h3><ul>{intake.details.concerns.map((concern, index) => <li key={index}>{concern}</li>)}</ul></> : <div className={styles.empty}>No workflow intake record. Existing imported work and local dispatch remain unchanged.</div>}
-      {manager && !visit.closed && <details><summary>{intake ? "Review or update intake details" : "Record intake details"}</summary><IntakeForm board={current} shopId={shopId} busy={busy || api.busy || !!api.pending} visitId={visit.id} initial={intake?.details ?? undefined} refresh={refresh} /></details>}
+      {manager && !visit.closed && <details><summary>{intake ? "Review or update intake details" : "Record intake details"}</summary><IntakeForm board={current} shopId={shopId} busy={busy || api.busy || !!api.pending} visitId={visit.id} initial={intake?.details ?? undefined} refresh={refresh} onLockChange={setDetailsLocked} /></details>}
     </div>
     <section className={styles.panel} data-testid="visit-ticket-actions"><div className={styles.eyebrow}>Controlled upstream action</div><h2>Repair order / ticket</h2>
       <p><small>Linking verifies an existing upstream RO. Creation can write a new customer, vehicle and work order upstream; it does not authorize repairs or assign work. General upstream writeback is not available.</small></p>
       {intents.map(intent => <article className={css.lock} key={intent.id} data-testid={`ticket-intent-${intent.id}`}><strong>{intent.status === "confirmed" ? "Confirmed ticket" : intent.status === "uncertain" ? "Ticket outcome uncertain" : "Ticket pending verification"}</strong><p>{intent.message}</p><small>{dateLabel(intent.createdAt)} · attempted stages: {intent.attempted.join(", ") || "none recorded"}{intent.workOrderId ? ` · work order ${intent.workOrderId}` : ""}</small></article>)}
       {latest.sourceId && <p>Linked upstream work order: <strong>{latest.sourceId}</strong> · RO {latest.ro}</p>}
+      {latest.sourceId && onOpenInspection && <div className={styles.actions}><small>Ticket linked. Continue into the saved inspection workspace; findings are never sent automatically.</small><DviEntry key={latest.sourceId} visitId={visit.id} shopId={shopId} closed={latest.closed} busy={locked} onOpen={onOpenInspection} /></div>}
       {(api.error || storageError) && <div className={styles.error} role="alert">{storageError || api.error}</div>}
       {api.notice && <p role="status">{api.notice}</p>}
       {api.pending && <div className={styles.notice} role="alert">An intake request ({api.pending.scope}) has an unconfirmed outcome. Do not submit a new ticket action.<button disabled={busy || api.busy} onClick={() => void api.send()}>Retry identical request</button></div>}

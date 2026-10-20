@@ -8,9 +8,9 @@ import styles from "./pilot.module.css";
 import css from "./Intake.module.css";
 
 export type IntakeAppointment = { id: string; title?: string; customer?: string; contactId?: string | null; vehicleId?: string | null; vehicle?: string; concerns?: string[]; mileage?: number | null };
-type Props = { board: Board; shopId?: number; busy: boolean; appointment?: IntakeAppointment; visitId?: string; initial?: IntakeDetails; refresh?: () => Promise<void>; select?: (id: string) => void };
+type Props = { board: Board; shopId?: number; busy: boolean; appointment?: IntakeAppointment; visitId?: string; initial?: IntakeDetails; refresh?: () => Promise<void>; select?: (id: string) => void; onLockChange?: (locked: boolean) => void };
 const empty = (): IntakeDetails => ({ customer: "", vehicle: "", contactId: null, vehicleId: null, newCustomer: null, newVehicle: null, identityConfirmed: false, concerns: [], mileage: null, customerPlan: "unknown", neededBy: null, promiseAt: null, nextUpdateAt: null, commitmentsConfirmed: false });
-export function IntakeForm({ board, shopId, busy, appointment, visitId, initial, refresh, select }: Props) {
+export function IntakeForm({ board, shopId, busy, appointment, visitId, initial, refresh, select, onLockChange }: Props) {
   const scope = visitId ? `visit:${visitId}` : appointment ? `appointment:${appointment.id}` : "walk-in";
   const key = `shop-dispatch:intake:${shopId}:draft:${scope}`;
   const [draft, setDraft] = useState<IntakeDetails>(() => initial ?? { ...empty(), customer: appointment?.customer ?? "", vehicle: appointment?.vehicle ?? appointment?.title ?? "", contactId: appointment?.contactId ?? null, vehicleId: appointment?.vehicleId ?? null, concerns: appointment?.concerns ?? [], mileage: appointment?.mileage ?? null });
@@ -32,6 +32,13 @@ export function IntakeForm({ board, shopId, busy, appointment, visitId, initial,
   const fixtureActive = useRef(false);
   const lookupToken = useRef(0);
   const api = useIntake(shopId, scope, refresh);
+  const lockCallback = useRef(onLockChange);
+  lockCallback.current = onLockChange;
+  const requestLocked = api.busy || !!api.pending;
+  useEffect(() => {
+    lockCallback.current?.(requestLocked);
+    return () => lockCallback.current?.(false);
+  }, [requestLocked]);
   useEffect(() => {
     try {
       const raw = sessionStorage.getItem(key);
@@ -128,8 +135,8 @@ export function IntakeForm({ board, shopId, busy, appointment, visitId, initial,
     {api.pending && <div className={styles.notice} role="alert">An intake request for {api.pending.scope} is unconfirmed. Draft editing is paused. Retry sends the exact same request ID, payload and revision.
       <button type="button" disabled={busy || api.busy} onClick={() => void api.send()}>Retry identical intake request</button></div>}
     {shopId === 66 && !visitId && !appointment && <aside className={css.fixture} aria-label="Synthetic pilot vehicle">
-      <strong>Synthetic-only inspection pilot</strong>
-      <p>Use the approved test customer and vehicle, never a real customer vehicle. Your concern, arrival plan, commitment times and entered mileage are preserved. This does not check in or create an official ticket.</p>
+      <strong>CAR Experts test instance · optional sample vehicle</strong>
+      <p>Choose any customer and vehicle in this test instance, or load the sample identity below. Your concern, arrival plan, commitment times and entered mileage are preserved. This does not check in or create an official ticket.</p>
       <button type="button" disabled={locked} onClick={() => void useSyntheticFixture()}>Use synthetic pilot vehicle</button>
       {fixtureBusy && <div className={styles.skeleton} role="status" aria-label="Loading approved synthetic vehicle" />}
       {fixtureLoaded && <p role="status">Synthetic identity loaded. Review the fields and explicitly confirm the customer/vehicle pairing before continuing. Check-in and Create official ticket remain separate actions.</p>}

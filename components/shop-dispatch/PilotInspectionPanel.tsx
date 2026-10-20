@@ -16,10 +16,10 @@ export function PilotInspectionPanel({ visitId, shopId, blocked, evidenceRevisio
 }) {
   const api = usePilotInspection(visitId, shopId, evidenceRevision, blocked);
   const data = api.data;
-  if (api.loading) return <div className={styles.skeleton} role="status" aria-label="Loading synthetic inspection pilot" />;
+  if (api.loading) return <div className={styles.skeleton} role="status" aria-label="Loading CAR Experts inspection test" />;
   if (data && !data.enabled && !data.operation) return null;
-  if (!data) return shopId === 66 ? <section className={css.unavailable} aria-label="Synthetic pilot availability">
-    <h3>Synthetic DVI test</h3><p className={styles.notice}>Unavailable for this visit. The pilot requires an initialized inspection and the approved synthetic vehicle.</p>
+  if (!data) return shopId === 66 ? <section className={css.unavailable} aria-label="CAR Experts test availability">
+    <h3>CAR Experts DVI test</h3><p className={styles.notice}>Unavailable for this visit. Start a saved inspection on an open ticket. Sending also requires server-confirmed permission and test-instance availability.</p>
     <p role="status"><small>{api.error}</small></p><button type="button" disabled={api.busy} onClick={() => void api.load()}>Check pilot availability</button>
   </section> : null;
   const operation = data.operation;
@@ -27,10 +27,10 @@ export function PilotInspectionPanel({ visitId, shopId, blocked, evidenceRevisio
   const validPreview = operation?.state === "preview" && api.previewId === operation.id && operation.evidenceRevision === data.evidenceRevision && data.evidenceRevision === evidenceRevision;
   const labelSource = typeof data.labelEvidence === "string" ? data.labelEvidence
     : data.labelEvidence && typeof data.labelEvidence === "object" && "source" in data.labelEvidence && typeof data.labelEvidence.source === "string" ? data.labelEvidence.source : null;
-  return <section className={css.panel} aria-label="Synthetic saved findings pilot" data-testid="pilot-inspection-panel">
-    <div className={css.heading}><div><div className={styles.eyebrow}>CAR Experts · synthetic test only</div><h3>Send saved inspection findings</h3></div><span className={styles.chip}>{operation ? states[operation.state] : "Not sent"}</span></div>
-    <p>This pilot writes selected saved findings to the approved synthetic work order only. No photos, pricing, customer publication, or automatic ticket creation.</p>
-    <p className={styles.notice}><strong>Test data only. Not for a real customer vehicle.</strong><br />Native label evidence is not independently verified{labelSource ? ` · source: ${labelSource}` : ""}. A synthetic round trip does not certify provider behavior.</p>
+  return <section className={css.panel} aria-label="CAR Experts saved findings test" data-testid="pilot-inspection-panel">
+    <div className={css.heading}><div><div className={styles.eyebrow}>CAR Experts · Protractor test instance</div><h3>Send saved inspection findings</h3></div><span className={styles.chip}>{operation ? states[operation.state] : "Not sent"}</span></div>
+    <p>This test writes selected saved findings to this visit’s linked work order in the CAR Experts test instance. No photos, pricing, customer publication, or automatic ticket creation.</p>
+    <p className={styles.notice}><strong>External write to the CAR Experts test instance. Review the target work order before sending.</strong><br />Native label evidence is not independently verified{labelSource ? ` · source: ${labelSource}` : ""}. A test-instance round trip does not certify provider behavior.</p>
     {data.warning && <p className={styles.notice}>{data.warning}</p>}
     {blocked && <p className={styles.notice}>Pilot writes are paused. Save or discard inspection drafts and resolve any pending request or conflict. Read-only visits cannot send.</p>}
     {!data.canSend && !api.admitted && <p><small>Sending is not currently authorized or available for this visit.</small></p>}
@@ -56,9 +56,9 @@ export function PilotInspectionPanel({ visitId, shopId, blocked, evidenceRevisio
       <ul className={css.lines}>{operation.lines.map(line => <li key={line.key}><strong>{line.title}</strong><p>{line.result}</p>{line.notes && <p>{line.notes}</p>}</li>)}</ul>
       {operation.state === "preview" && <div className={css.confirm}><h4>2. Review risk, then confirm separately</h4>
         <label className={styles.check}><input type="checkbox" checked={api.acknowledged} disabled={locked || !validPreview} onChange={event => api.setAcknowledged(event.target.checked)} />
-          I reviewed this frozen preview. I understand this writes synthetic saved findings to the external work order, native labels are not independently verified, and a partial or uncertain outcome must not be resent.</label>
+          I reviewed this frozen preview and target work order. I understand this writes saved findings to the external CAR Experts test-instance work order, native labels are not independently verified, and a partial or uncertain outcome must not be resent.</label>
         <div><button type="button" className={styles.primary} disabled={locked || !validPreview || !api.acknowledged} onClick={() => {
-          if (window.confirm("Send these frozen saved findings to the approved synthetic work order? This is an external write. Do not resend if the outcome is uncertain.")) void api.write("send");
+          if (window.confirm("Send these frozen saved findings to this CAR Experts test-instance work order? This is an external write. Do not resend if the outcome is uncertain.")) void api.write("send");
         }}>Send saved findings</button></div>
       </div>}
       {operation.state === "confirmed" && <p role="status">Selected findings matched exact readback. This is not provider certification and does not independently verify native labels.</p>}

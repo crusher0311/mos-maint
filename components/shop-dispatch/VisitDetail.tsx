@@ -1,23 +1,33 @@
 "use client";
+import { useEffect, useRef, useState } from "react";
 import type { Transport, Visit } from "@/lib/shop-dispatch/model";
 import { CommandForm } from "./CommandForm";
 import { JobCard, type WorkProps } from "./JobCard";
 import { VehicleHistoryPanel } from "./VehicleHistoryPanel";
 import { VisitIntake } from "./VisitIntake";
 import { StaffInspectionPanel } from "./StaffInspectionPanel";
+import { DviEntry } from "./DviEntry";
 import { dateLabel, iso, localDate, nullableNumber, projection } from "./helpers";
 import styles from "./pilot.module.css";
 
-export function VisitDetail({ visit, shopId, onBack, refresh, ...work }: WorkProps & { visit: Visit; shopId?: number; onBack: () => void; refresh?: () => Promise<void> }) {
+export function VisitDetail({ visit, shopId, onBack, refresh, openInspection = false, navigationLocked = false, onInspectionLockChange, onIntakeLockChange, ...work }: WorkProps & { visit: Visit; shopId?: number; onBack: () => void; refresh?: () => Promise<void>; openInspection?: boolean; navigationLocked?: boolean; onInspectionLockChange?: (locked: boolean) => void; onIntakeLockChange?: (locked: boolean) => void }) {
+  const inspectionSection = useRef<HTMLDivElement>(null);
+  const [startRequested, setStartRequested] = useState(openInspection);
+  function focusInspection() {
+    setStartRequested(true);
+    inspectionSection.current?.scrollIntoView?.({ block: "start" });
+    inspectionSection.current?.focus();
+  }
+  useEffect(() => { if (openInspection) focusInspection(); }, [openInspection]);
   const { board, actor, busy, mutate, now } = work;
   const jobs = board.jobs.filter(j => j.visitId === visit.id);
   const unresolved = ["needed", "arranged"].includes(visit.transport.ride) || ["requested", "assigned"].includes(visit.transport.loaner);
   const canClose = jobs.every(j => j.status === "completed") && !unresolved;
   return <section data-testid="pilot-visit-detail">
-    <div className={styles.row}><button onClick={onBack}>← Back to dispatch</button><span className={styles.chip}>{visit.closed ? "Closed · history" : "Open visit"} · {visit.provider === "manual" ? "Manual intake" : "Protractor intake"}</span></div>
+    <div className={styles.row}><button disabled={navigationLocked} onClick={onBack}>← Back to dispatch</button><span className={styles.chip}>{visit.closed ? "Closed · history" : "Open visit"} · {visit.provider === "manual" ? "Manual intake" : "Protractor intake"}</span><DviEntry visitId={visit.id} shopId={shopId} closed={visit.closed} busy={busy || navigationLocked} onOpen={focusInspection} /></div>
     <div className={styles.panel} style={{ marginTop: 16 }}>
       <div className={styles.row}><div><div className={styles.eyebrow}>Repair order {visit.ro}</div><h1>{visit.vehicle}</h1><p>{visit.customer || "Customer not supplied"}</p></div>
-        {actor.manager && !visit.closed && <button disabled={busy || !canClose} data-testid="close-visit" onClick={() => { if (window.confirm("Close this visit? Its jobs and transport history will remain viewable, but changes will be locked.")) void mutate({ type: "close", visitId: visit.id }); }}>Close visit</button>}
+        {actor.manager && !visit.closed && <button disabled={busy || navigationLocked || !canClose} data-testid="close-visit" onClick={() => { if (window.confirm("Close this visit? Its jobs and transport history will remain viewable, but changes will be locked.")) void mutate({ type: "close", visitId: visit.id }); }}>Close visit</button>}
       </div>
       <div className={styles.metrics}>
         <div><small>Arrival</small><strong>{dateLabel(visit.arrivalAt)}</strong></div>
@@ -28,12 +38,14 @@ export function VisitDetail({ visit, shopId, onBack, refresh, ...work }: WorkPro
       {actor.manager && !visit.closed && !canClose && <p><small>To close: complete every job, finish arranged rides, and resolve requested or assigned loaners.</small></p>}
       {visit.provider === "protractor" && <div className={styles.notice}>
         Upstream status: {visit.sourceStatus || "Not supplied"} · Fetched {dateLabel(visit.sourceFetchedAt)}<br />
-        Imported jobs require manager authorization. Removed packages are blocked for review. Upstream status never silently completes local work. Only explicitly confirmed ticket creation can write upstream; local dispatch does not write back.
+        Imported jobs require manager authorization. Removed packages are blocked for review. Upstream status never silently completes local work. Ticket creation and authorized inspection sends require separate explicit confirmation; local dispatch does not write back.
         {actor.manager && !visit.closed && visit.sourceId && <div className={styles.actions}><button disabled={busy} onClick={() => void mutate({ type: "sync", workOrderId: visit.sourceId! })}>Refresh this work order</button></div>}
       </div>}
     </div>
-    <VisitIntake visit={visit} board={board} shopId={shopId} manager={actor.manager} busy={busy} refresh={refresh} />
-    <StaffInspectionPanel visitId={visit.id} shopId={shopId} closed={visit.closed} />
+    <VisitIntake visit={visit} board={board} shopId={shopId} manager={actor.manager} busy={busy} refresh={refresh} onLockChange={onIntakeLockChange} onOpenInspection={focusInspection} />
+    <div ref={inspectionSection} tabIndex={-1} aria-label="DVI workspace">
+      <StaffInspectionPanel visitId={visit.id} shopId={shopId} closed={visit.closed} onLockChange={onInspectionLockChange} startRequested={startRequested} />
+    </div>
     {shopId !== undefined && <VehicleHistoryPanel visitId={visit.id} shopId={shopId} />}
     <div className={styles.grid}><section>
       <h2>Individual jobs <small> / {jobs.length}</small></h2>

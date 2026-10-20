@@ -5,13 +5,16 @@ import { requireThat } from "../../shop-dispatch/model";
 import type { StaffInspection } from "../staff/model";
 
 export const PILOT_SHOP = 66;
-// Approved synthetic entities, not arbitrary existing customer identities.
+// Legacy fixture remains the default until an operator opts this test instance in.
 export const SYNTHETIC_CONTACT = "027fd019-e180-4fa6-98ac-4f551989966f";
 export const SYNTHETIC_VEHICLE = "5d837301-83ab-4bc3-ae52-44485e3af1e0";
 export const SYNTHETIC_VIN = "1M8GDM9AXKP042788";
-export const riskNotice = "Synthetic test pilot: provider concurrency protection and timeout termination are unverified. Do not edit this order in Protractor while sending. An uncertain send is never automatically repeated.";
+export const riskNotice = "CAR Experts test instance: provider concurrency protection and timeout termination are unverified. Do not edit this order in Protractor while sending. An uncertain send is never automatically repeated.";
+export const targetScopeSchema = z.enum(["synthetic_fixture", "shop_test_instance"]);
+export type PilotTargetScope = z.infer<typeof targetScopeSchema>;
 export const pilotConfigurationSchema = z.object({
   admissions: z.boolean(),
+  targetScope: targetScopeSchema.optional(),
   connectionHash: z.string().regex(/^[a-f0-9]{64}$/),
   labels: z.object({green: z.string().min(1).max(100), yellow: z.string().min(1).max(100), red: z.string().min(1).max(100)}).strict(),
   labelEvidence: z.enum(["synthetic_roundtrip_only", "shop_configuration"]),
@@ -26,6 +29,7 @@ export const pilotRequestSchema = z.discriminatedUnion("action", [
   z.object({action: z.literal("reconcile"), visitId: z.string().min(1).max(100)}).strict(),
 ]);
 export const pilotOperationSchema = z.object({
+  targetScope: targetScopeSchema.optional(),
   id: z.string().uuid(), actor: z.string(), visitId: z.string(), guid: z.string().uuid(), connectionHash: z.string(),
   requestHash: z.string(), evidenceRevision: z.number().int().nonnegative(),
   evidenceHash: z.string(), policyHash: z.string(), createdAt: z.string().datetime(),
@@ -54,16 +58,20 @@ export function project(inspection: StaffInspection, selected: {sheet: string; i
 }
 export function inspectionPayload(lines: PilotOperation["lines"]) {
   return {ItemCollection: [{ID: randomUUID(), Chapter: "Inspection",
-    ServicePackageHeader: {Title: "MOS synthetic workflow inspection", Description: "Accepted-risk test findings only; no priced work or repair authorization."},
+    ServicePackageHeader: {Title: "MOS vehicle inspection", Description: "Inspection findings only; no priced work or repair authorization."},
     ServicePackageInspectionLines: {ItemCollection: lines.map((line, index) => ({
       ID: randomUUID(), Rank: index + 1, Type: "Line", Title: line.title, Result: line.result, Notes: line.notes,
     }))}}]};
 }
-export function checkOrder(raw: any, guid: string) {
-  requireThat(raw?.ID?.toLowerCase() === guid && raw.Contact?.ID?.toLowerCase() === SYNTHETIC_CONTACT &&
-    raw.ServiceItem?.ID?.toLowerCase() === SYNTHETIC_VEHICLE && raw.ServiceItem?.VIN?.toUpperCase() === SYNTHETIC_VIN,
-  "Exact synthetic order/customer/vehicle identity could not be verified", 409);
-  requireThat(raw.Type === "WorkOrder" && raw.Completed === false, "Open synthetic work order required", 409);
+export function checkOrder(raw: any, guid: string, scope: PilotTargetScope = "synthetic_fixture") {
+  requireThat(raw?.ID?.toLowerCase() === guid &&
+    z.string().uuid().safeParse(raw.Contact?.ID).success &&
+    z.string().uuid().safeParse(raw.ServiceItem?.ID).success,
+  "Exact order/customer/vehicle identity could not be verified", 409);
+  if (scope === "synthetic_fixture") requireThat(raw.Contact.ID.toLowerCase() === SYNTHETIC_CONTACT &&
+    raw.ServiceItem.ID.toLowerCase() === SYNTHETIC_VEHICLE && raw.ServiceItem.VIN?.toUpperCase() === SYNTHETIC_VIN,
+    "Exact synthetic order/customer/vehicle identity could not be verified", 409);
+  requireThat(raw.Type === "WorkOrder" && raw.Completed === false, "Open work order required", 409);
   const packages = raw.ServicePackages?.ItemCollection;
   requireThat(Array.isArray(packages), "Complete nested provider packages required", 409);
   const ids = new Set<string>();
@@ -84,7 +92,7 @@ export function checkOrder(raw: any, guid: string) {
  * is not proof. Unknown/provider-added variants deliberately do not normalize. */
 export function classifyPilot(op: PilotOperation, raw: any): PilotOperation["state"] {
   try {
-    checkOrder(raw, op.guid);
+    checkOrder(raw, op.guid, op.targetScope);
     const bytes = canonical(raw);
     if (bytes === canonical(op.baseline)) return "pending";
     const expected = structuredClone(op.baseline);

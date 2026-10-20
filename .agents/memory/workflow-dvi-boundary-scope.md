@@ -57,3 +57,16 @@ the serving app; a merge-ready implementation is not an enabled pilot.
 **How to apply:** Keep activation and real native readback as separate operator
 work after the serving build is verified. Do not report offline fixture results
 as evidence of live activation.
+
+The user subsequently clarified that **all records in the CAR Experts Protractor
+instance are available for testing**, with nothing requiring the earlier
+single-synthetic-vehicle restriction. They want DVI-enabled staff to start from
+an open ticket, or create a new RO and continue directly into DVI.
+
+**Why:** The synthetic-only entry path prevented testing real shop usability.
+
+**How to apply:** This supersedes the earlier synthetic-record-only scope for
+CAR Experts Protractor shop 66. Keep exact shop/connection binding, staff permissions,
+closed-order checks, explicit provider-write confirmation and uncertain-send
+recovery. It does not authorize testing records at other shops, automatic
+customer messaging/publication, or bypassing DVI entitlements.

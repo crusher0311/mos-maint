@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { blankFinding, instanceKey, missingFor, missingRequirements, type FindingInput, type Finding, type StaffItem, type SheetInstance } from "@/lib/auto-dvi/staff/model";
 import { useStaffInspection } from "./use-staff-inspection";
 import { ReleasePanel } from "./ReleasePanel";
@@ -15,17 +15,36 @@ function inputOf(finding?: Finding): FindingInput {
 function stamp(value: { actor: string; at: string; revision: number } | null, evidence: number) {
   return value ? `${value.revision === evidence ? "Current" : "Stale — evidence changed"} · ${value.actor} · ${new Date(value.at).toLocaleString()} · evidence ${value.revision}` : "Not recorded";
 }
-export function StaffInspectionPanel({ visitId, shopId, closed = false }: { visitId: string; shopId?: number; closed?: boolean }) {
-  return <InspectionEditor key={`${shopId}:${visitId}`} visitId={visitId} shopId={shopId} closed={closed} />;
+export function StaffInspectionPanel({ visitId, shopId, closed = false, onLockChange, startRequested = false }: { visitId: string; shopId?: number; closed?: boolean; onLockChange?: (locked: boolean) => void; startRequested?: boolean }) {
+  return <InspectionEditor key={`${shopId}:${visitId}`} visitId={visitId} shopId={shopId} closed={closed} onLockChange={onLockChange} startRequested={startRequested} />;
 }
-function InspectionEditor({ visitId, shopId, closed }: { visitId: string; shopId?: number; closed: boolean }) {
+function InspectionEditor({ visitId, shopId, closed, onLockChange, startRequested }: { visitId: string; shopId?: number; closed: boolean; onLockChange?: (locked: boolean) => void; startRequested: boolean }) {
   const api = useStaffInspection(visitId, shopId);
+  const startConsumed = useRef(false);
+  const commandRef = useRef(api.command);
+  commandRef.current = api.command;
+  useEffect(() => {
+    const data = api.data;
+    if (!startRequested || startConsumed.current || !data || api.loading) return;
+    startConsumed.current = true;
+    if (closed || data.record?.closed || data.inspection || data.bindingRequest || api.pending || api.conflict) return;
+    // Only the explicit Start DVI entry requests initialization. Ordinary visit
+    // navigation is read-only until the advisor presses Start DVI in this panel.
+    // command rechecks current server access: this panel may predate ticket creation.
+    void commandRef.current({ type: "initialize", boardRevision: data.boardRevision });
+  }, [startRequested, api.data, api.loading, api.pending, api.conflict, closed]);
   const [drafts, setDrafts] = useState<Drafts>({});
   const [sheetChoice, setSheetChoice] = useState("");
   const [keepActive, setKeepActive] = useState(false);
   const [retryFile, setRetryFile] = useState<File | undefined>();
   const dirty = Object.keys(drafts).length > 0;
   const shouldWarnBeforeLeave = dirty || !!api.pending || api.busy;
+  const lockCallback = useRef(onLockChange);
+  lockCallback.current = onLockChange;
+  useEffect(() => {
+    lockCallback.current?.(shouldWarnBeforeLeave);
+    return () => lockCallback.current?.(false);
+  }, [shouldWarnBeforeLeave]);
   useEffect(() => {
     if (!shouldWarnBeforeLeave) return;
     const warn = (event: BeforeUnloadEvent) => {
@@ -83,7 +102,7 @@ function InspectionEditor({ visitId, shopId, closed }: { visitId: string; shopId
       }}>Discard drafts and reload latest</button></div>
     </div>}
     {api.latest && <details open><summary>Server comparison · no local entries replaced</summary><div className={ui.compare}><div><h3>Your entries / loaded evidence</h3><pre>{JSON.stringify({ inspection, unsavedEntries: drafts }, null, 2)}</pre></div><div><h3>Latest server evidence</h3><pre>{JSON.stringify(api.latest.inspection, null, 2)}</pre></div></div></details>}
-    {!inspection ? <div className={styles.empty}><h3>No staff inspection yet</h3><p>Initialize to create the default approved sheet. Initialization alone does not start inspection work.</p><button className={styles.primary} disabled={locked || !data.catalog.length} onClick={() => void api.command({ type: "initialize", boardRevision: data.boardRevision })}>Initialize inspection</button>{!data.catalog.length && <p>No approved sheets are available. Ask a manager to provision a sheet.</p>}</div> : <>
+    {!inspection ? <div className={styles.empty}><h3>Start a digital vehicle inspection</h3><p>Create a saved DVI with the shop’s approved inspection sheet. Inspection work is recorded when you save your first finding. This never creates a provider ticket or sends findings.</p><button className={styles.primary} disabled={locked || !data.catalog.length} onClick={() => void api.command({ type: "initialize", boardRevision: data.boardRevision })}>Start DVI</button>{!data.catalog.length && <p>No approved sheets are available. Ask a manager to provision a sheet.</p>}</div> : <>
       <div className={ui.status}><span><small>Work</small><br />{inspection.startedAt ? `Started ${new Date(inspection.startedAt).toLocaleString()}` : "Not started"}</span><span><small>Readiness</small><br />{stamp(inspection.ready, inspection.evidenceRevision)}</span><span><small>Advisor review</small><br />{stamp(inspection.reviewed, inspection.evidenceRevision)}</span></div>
       <details><summary>Manage approved sheets · multiple sheets may be active</summary><div className={styles.form}>
         <label>Approved sheet version<select value={sheetChoice} disabled={locked} onChange={event => setSheetChoice(event.target.value)}><option value="">Choose a sheet</option>{data.catalog.map(sheet => <option key={instanceKey(sheet)} value={instanceKey(sheet)}>{sheet.name} · v{sheet.version}</option>)}</select></label>

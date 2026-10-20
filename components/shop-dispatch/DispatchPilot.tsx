@@ -11,6 +11,8 @@ import { OperationsPanel } from "./OperationsPanel";
 import { ScheduleCalendar } from "./ScheduleCalendar";
 import { Timeline } from "./Timeline";
 import { VisitDetail } from "./VisitDetail";
+import { IntakeForm } from "./IntakeForm";
+import { DviEntry } from "./DviEntry";
 import { contrast, dateLabel, minutes, projection, resolvedBranding } from "./helpers";
 import { normalizeRoNumber } from "./ro-number";
 import styles from "./pilot.module.css";
@@ -30,6 +32,11 @@ export default function DispatchPilot() {
   const [history, setHistory] = useState(false);
   const [showHiddenStatuses, setShowHiddenStatuses] = useState(false);
   const [scheduleLocked, setScheduleLocked] = useState(false);
+  const [inspectionLocked, setInspectionLocked] = useState(false);
+  const [intakeLocked, setIntakeLocked] = useState(false);
+  const [showIntake, setShowIntake] = useState(false);
+  const [openInspection, setOpenInspection] = useState(false);
+  const navigationLocked = scheduleLocked || inspectionLocked || intakeLocked;
   // Clock display only. Fetch polling and visibility refresh belong to useDispatchBoard.
   useEffect(() => { const timer = window.setInterval(() => setTick(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
   const brand = resolvedBranding(snapshot).brand;
@@ -56,7 +63,7 @@ export default function DispatchPilot() {
       setSelectedJob(null);
     }
   }, [view, selected, selectedJob]);
-  function navigate(next: View) { if (scheduleLocked) return; setView(next); setSelected(null); setSelectedJob(null); }
+  function navigate(next: View) { if (navigationLocked) return; setView(next); setSelected(null); setSelectedJob(null); setOpenInspection(false); }
   return <main className={styles.root} style={theme} data-testid="dispatch-pilot">
     <header className={styles.header}>
       <div className={styles.identity}>{brand.logo && <img className={styles.logo} src={brand.logo} alt={`${brand.name} logo`} />}
@@ -80,7 +87,8 @@ export default function DispatchPilot() {
       <section aria-busy="true" aria-label="Loading pilot data"><p>Connecting to the signed-in location…</p><div className={styles.skeleton} /><div className={styles.skeleton} /><div className={styles.skeleton} /></section> :
       <>
         {scheduleLocked && <div className={styles.error} role="alert">Resolve the pending schedule save before switching workspaces. Stay on Schedule and retry the unconfirmed change if prompted.</div>}
-        <fieldset disabled={scheduleLocked} style={{border:0,padding:0,margin:0,minWidth:0}} aria-label="Workflow navigation">
+         {(inspectionLocked || intakeLocked) && <div className={styles.notice} role="status">Finish or resolve the pending request and save or explicitly discard inspection drafts before leaving this workspace.</div>}
+         <fieldset disabled={navigationLocked} style={{border:0,padding:0,margin:0,minWidth:0}} aria-label="Workflow navigation">
         <nav className={styles.nav} aria-label="Pilot workspace">
           <button data-testid="pilot-dispatch" aria-current={view === "dispatch" ? "page" : undefined} onClick={() => navigate("dispatch")}>Dispatch</button>
           <button data-testid="pilot-work" aria-current={view === "work" ? "page" : undefined} onClick={() => navigate("work")}>My work</button>
@@ -91,7 +99,13 @@ export default function DispatchPilot() {
           <button data-testid="pilot-audit" aria-current={view === "audit" ? "page" : undefined} onClick={() => navigate("audit")}>Audit</button>
         </nav>
         </fieldset>
-        {view === "dispatch" && work && (detail ? <VisitDetail key={detail.id} visit={detail} shopId={snapshot.shopId} refresh={refresh} {...work} onBack={() => setSelected(null)} /> : <>
+         {view === "dispatch" && work && (detail ? <VisitDetail key={detail.id} visit={detail} shopId={snapshot.shopId} refresh={refresh} {...work} openInspection={openInspection} onInspectionLockChange={setInspectionLocked} onIntakeLockChange={setIntakeLocked} navigationLocked={navigationLocked} onBack={() => { if (!navigationLocked) { setSelected(null); setOpenInspection(false); } }} /> : <>
+           {snapshot.actor.manager && <section className={styles.panel} aria-label="Check-in and new repair order">
+             <div className={styles.row}><div><h2>Check in / create RO</h2><small>Record arrival, explicitly confirm a new repair order, then start DVI. Existing tickets can start DVI below.</small></div>
+               <button className={styles.primary} data-testid="dispatch-check-in" disabled={work.busy || intakeLocked} aria-expanded={showIntake} onClick={() => setShowIntake(!showIntake)}>{showIntake ? "Hide check-in" : "Check in / create RO"}</button>
+             </div>
+             {showIntake && <IntakeForm board={snapshot.board} shopId={snapshot.shopId} busy={work.busy} refresh={refresh} onLockChange={setIntakeLocked} select={id => { setSelected(id); setOpenInspection(false); }} />}
+           </section>}
           <div className={styles.stats}>
             <div className={styles.stat}><small>Open vehicles</small><strong>{open.length}</strong><small>{open.filter(v => v.transport.customerPlan === "waiting").length} customers waiting · {open.filter(v => v.transport.customerPlan === "drop-off").length} drop-offs</small></div>
             <div className={styles.stat}><small>Active sessions</small><strong>{activeJobs.length}</strong><small>{minutes(activeJobs.reduce((sum, j) => sum + elapsed(j, now).activeMs, 0))} active time</small></div>
@@ -109,17 +123,20 @@ export default function DispatchPilot() {
             {snapshot.actor.manager && <label className={styles.check}><input data-testid="pilot-show-hidden-statuses" type="checkbox" checked={showHiddenStatuses} onChange={e => setShowHiddenStatuses(e.target.checked)} />Show hidden statuses · this view only</label>}
             <small>Source status visibility applies to Dispatch only, not technician job states or My work.</small>
           </section>
-          <Timeline board={snapshot.board} visits={visits} now={now} select={setSelected} />
+           <Timeline board={snapshot.board} visits={visits} now={now} select={id => { if (!intakeLocked) { setSelected(id); setOpenInspection(false); } }} />
           <section className={styles.panel}><h2>Vehicle journeys <small>/ {visits.length}</small></h2>
             {visits.map(visit => {
               const jobs = snapshot.board.jobs.filter(j => j.visitId === visit.id);
-              return <button className={styles.visit} key={visit.id} data-testid={`visit-${visit.id}`} onClick={() => setSelected(visit.id)}>
+               return <article className={`${styles.visit} ${styles.panel}`} key={visit.id}>
+                 <button className={styles.visit} data-testid={`visit-${visit.id}`} disabled={intakeLocked} onClick={() => { setSelected(visit.id); setOpenInspection(false); }}>
                 <div className={styles.row}><div><strong>{visit.vehicle}</strong><small>#{visit.ro} · {visit.customer || "Customer not supplied"} · {visit.provider}</small></div><div><strong>{jobs.filter(j => j.status === "completed").length}/{jobs.length} complete</strong><small>Promise {dateLabel(visit.promiseAt)}</small></div></div>
                 <div className={styles.actions}><span className={styles.chip}>{visit.transport.customerPlan}</span><span className={styles.chip}>Ride: {visit.transport.ride}</span><span className={styles.chip}>Loaner: {visit.transport.loaner}{visit.transport.loanerId ? ` · ${visit.transport.loanerId}` : ""}</span></div>
                 <small>{projection(snapshot.board, visit, now)}</small>
                 {visit.sourceStatus && <small>Source status: {visit.sourceStatus}{!isVisitVisible(visit, snapshot.board.sourceStatuses) ? " · hidden by saved preferences" : ""}</small>}
                 {jobs.some(j => j.sourceRemoved) && <small className={styles.warning}>Warning: a package was removed upstream. Manager review required.</small>}
-              </button>;
+                 </button>
+                 <div className={styles.actions}><DviEntry visitId={visit.id} shopId={snapshot.shopId} closed={visit.closed} busy={work.busy || intakeLocked} onOpen={() => { setSelected(visit.id); setOpenInspection(true); }} /></div>
+               </article>;
             })}
             {!visits.length && <div className={styles.empty}><h3>No {history ? "closed" : "open"} visits match this view.</h3><p>{snapshot.actor.manager ? "Provider callbacks feed visits automatically. Check Show hidden statuses or source preferences in Roster & intake; recover a missing visit by RO number, or create a manual visit if needed." : "Provider callbacks feed visits automatically. A manager reviews and assigns work. Your assigned jobs remain available in My work even when their source status is hidden here."}</p><button onClick={() => { setSearch(""); setCustomerPlan("all"); setRide("all"); setLoaner("all"); }}>Clear search & transport filters</button></div>}
           </section>
