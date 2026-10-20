@@ -49,6 +49,14 @@ const mocks = new Map<string, any>();
 mocks.set("@/lib/auth", {
   getSession: async () => dashboardSession,
 });
+// The legacy (non-shared) wizard checks its exact actor/shop draft slot.
+// Real shared-draft concurrency and receipts are covered by guided-ro-route.test.
+mocks.set("@/lib/data/db", {
+  getDb: async () => ({collection: (name:string) => {
+    assert.equal(name,"guided_check_in_drafts");
+    return {findOne:async()=>null};
+  }}),
+});
 
 mocks.set("@/lib/idempotent-create-id", {
   resolveClientRequestId: (
@@ -221,6 +229,12 @@ async function run(): Promise<void> {
   assert.equal(transportCalls.length, 0, "unauthenticated create must not reach transport");
 
   dashboardSession = { shopId: "42", email: "advisor@example.test" };
+  const crossOrigin = await createContactRoute.POST(request("/api/dashboard/protractor/create-contact",{
+    method:"POST",headers:{"content-type":"application/json",origin:"https://other.invalid"},
+    body:JSON.stringify({firstName:"Ada",lastName:"Lovelace"}),
+  }));
+  assert.equal(crossOrigin.status,403);
+  assert.equal(transportCalls.length,0,"cross-origin create must not reach transport");
   const createResponse = await createContactRoute.POST(
     request("/api/dashboard/protractor/create-contact", {
       method: "POST",
@@ -229,7 +243,7 @@ async function run(): Promise<void> {
         lastName: "Lovelace",
         clientRequestId: "create-1",
       }),
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", origin: "http://localhost" },
     }),
   );
   assert.equal(createResponse.status, 200);
