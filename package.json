@@ -7,6 +7,7 @@
     "npm": ">=10.0.0 <11.0.0"
   },
   "scripts": {
+    "test:protractor-settings-browser": "env -i PATH=\"$PATH\" HOME=\"$HOME\" PROTRACTOR_OFFLINE_ALLOW_LOOPBACK=true NODE_OPTIONS='--require ./tests/helpers/deny-network-egress.cjs' node --import tsx --test tests/protractor-settings-browser.test.ts",
     "test:protractor-onboarding": "bash tests/run-protractor-onboarding.sh",
     "test:invoice-metadata-executor": "bash tests/run-invoice-metadata-executor.sh",
     "test:invoice-metadata-plan": "env -i PATH=\"$PATH\" HOME=\"$HOME\" NODE_OPTIONS='--require ./tests/helpers/deny-network-egress.cjs' node --import tsx tests/invoice-metadata-repair-plan.smoke.ts",

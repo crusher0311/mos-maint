@@ -14,3 +14,5 @@ do
     NODE_OPTIONS='--require ./tests/helpers/deny-network-egress.cjs --require ./scripts/_stubs/server-only-stub.cjs' \
     timeout 60s node --import tsx "$test"
 done
+
+npm run test:protractor-settings-browser
