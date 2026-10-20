@@ -7,10 +7,21 @@ import {readStaffPhoto, attachStaffPhoto} from "../../lib/auto-dvi/staff/media";
 import {requestBody} from "../../lib/shop-dispatch/http";
 import {releaseCommand, releaseSnapshot, publicReport, type ReleaseDependencies} from "../../lib/auto-dvi/release/service";
 import {MongoReleaseStorage} from "../../lib/auto-dvi/release/store";
+import {ROArrivalPhotos} from "../../lib/data/repositories/ro-arrival-photos";
+import {randomUUID} from "node:crypto";
 
-export async function createStaffBrowserFixture(releases = false) {
+export async function createStaffBrowserFixture(releases = false, arrivals = false) {
   const isolated = await isolatedStaffDatabase(27817);
   const fixture = await staffFixture(isolated.client);
+  const arrivalPhotos = new ROArrivalPhotos(async () => fixture.db);
+  if (arrivals) {
+    const board = await fixture.deps.board.read(1), workOrderId = randomUUID();
+    Object.assign(board.visits[0], {provider: "protractor", sourceId: workOrderId, sourceStatus: "WorkOrder"});
+    await fixture.deps.board.save(1, board.revision, board);
+    fixture.deps.arrivalPhotos = arrivalPhotos;
+    await arrivalPhotos.put(1, workOrderId, randomUUID(), "image/png",
+      Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==", "base64"));
+  }
   if (releases) fixture.setAccess({config: {...fixture.access.config!, release: {
     enabledShopIds: [1], publicPhone: "555-0100", defaultExpiryDays: 7}}});
   const bundle = await build({entryPoints: ["tests/browser/staff-inspection-fixture.tsx"], bundle: true, write: false,
@@ -36,6 +47,16 @@ export async function createStaffBrowserFixture(releases = false) {
         branding: async () => ({name: "Synthetic sending shop", phone: "555-0100", primary: "#285746", logo: null}),
         secret: () => "isolated-browser-signing-key-no-production-use", publicEntitled: async () => true};
       calls.push(`${req.method} ${url.pathname}`);
+      if (url.pathname === "/api/dashboard/protractor/arrival-photos") {
+        const board = await fixture.deps.board.read(1);
+        const visit = board.visits.find(v => v.id === url.searchParams.get("visitId") || v.sourceId === url.searchParams.get("workOrderId"));
+        if (!visit?.sourceId) {reply({photos: []}); return;}
+        if (url.searchParams.has("mediaId")) {
+          const file = await arrivalPhotos.read(1, visit.sourceId, url.searchParams.get("mediaId")!);
+          res.setHeader("Content-Type", file.mime); res.end(file.bytes);
+        } else reply({photos: await arrivalPhotos.list(1, visit.sourceId)});
+        return;
+      }
       if (url.pathname === "/api/workflow-report" || url.pathname === "/api/shop-dispatch/inspection/release") {
         if (req.method === "GET") reply(await releaseSnapshot(url.searchParams.get("visitId")!, releaseDeps));
         else {
@@ -75,7 +96,7 @@ export async function createStaffBrowserFixture(releases = false) {
   }};
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  void createStaffBrowserFixture().then(fixture => {
+  void createStaffBrowserFixture(false, true).then(fixture => {
     void fixture.fixture.initialize().then(() => fixture.server.listen(8099, "0.0.0.0", () => console.log("Isolated staff inspection fixture ready on 8099")));
     process.once("SIGTERM", () => {void fixture.close().then(() => process.exit(0));});
   });

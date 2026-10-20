@@ -39,7 +39,14 @@ export const findingSchema = z.object({
 }).strict();
 export type FindingInput = z.infer<typeof findingSchema>;
 export type Photo = z.infer<typeof photoSchema>;
-export interface Finding extends FindingInput { photos: Photo[]; actor: string; at: string }
+export const arrivalAssociationSchema = z.object({
+  id: z.string().regex(/^[a-f0-9]{24}$/), workOrderId: z.string().uuid(),
+  mime: z.enum(["image/jpeg", "image/png", "image/webp"]),
+  provenance: z.literal("arrival"), capturedAt: z.string().datetime(),
+  actor: z.string(), at: z.string().datetime(),
+}).strict();
+export type ArrivalAssociation = z.infer<typeof arrivalAssociationSchema>;
+export interface Finding extends FindingInput { photos: Photo[]; arrivalPhotos?: ArrivalAssociation[]; actor: string; at: string }
 export interface SheetInstance { key: string; sheet: StaffSheet; active: boolean; selection: "default" | "manual"; results: Record<string, Finding> }
 export interface StaffInspection {
   version: 1; revision: number; sheets: SheetInstance[]; startedAt: string | null;
@@ -85,6 +92,8 @@ export function missingRequirements(s: StaffInspection) {
     missingFor(i, x.results[i.id]).map(message => ({sheet: x.key, item: i.id, name: i.name, message}))));
 }
 export const commandSchema = z.discriminatedUnion("type", [
+  z.object({type: z.literal("associate-arrival"), sheet: z.string().max(80), item: z.string().max(80),
+    mediaId: z.string().regex(/^[a-f0-9]{24}$/)}).strict(),
   z.object({type: z.literal("save"), sheet: z.string().max(80), item: z.string().max(80), finding: findingSchema}).strict(),
   z.object({type: z.literal("select"), sheet: z.string().max(80), keepActive: z.boolean()}).strict(),
   z.object({type: z.literal("active"), sheet: z.string().max(80), active: z.boolean()}).strict(),
@@ -92,7 +101,7 @@ export const commandSchema = z.discriminatedUnion("type", [
   z.object({type: z.literal("review")}).strict(),
 ]);
 export type StaffCommand = z.infer<typeof commandSchema>;
-export function applyStaffCommand(state: StaffInspection, command: StaffCommand, catalog: StaffSheet[], actor: string, at: string, canReview: boolean): StaffInspection {
+export function applyStaffCommand(state: StaffInspection, command: Exclude<StaffCommand, {type: "associate-arrival"}>, catalog: StaffSheet[], actor: string, at: string, canReview: boolean): StaffInspection {
   const next = structuredClone(state);
   if (command.type === "ready" || command.type === "review") {
     requireThat(next.startedAt && !missingRequirements(next).length, "Complete the missing inspection requirements first", 409);
@@ -126,7 +135,8 @@ export function applyStaffCommand(state: StaffInspection, command: StaffCommand,
       const item = instance.sheet.items.find(i => i.id === command.item);
       requireThat(item, "Item not found", 404);
       const value = validateFinding(item, command.finding);
-      instance.results[item.id] = {...value, photos: instance.results[item.id]?.photos ?? [], actor, at};
+      instance.results[item.id] = {...value, photos: instance.results[item.id]?.photos ?? [],
+        ...(instance.results[item.id]?.arrivalPhotos ? {arrivalPhotos: instance.results[item.id].arrivalPhotos} : {}), actor, at};
       for (const other of next.sheets) {
         if (other === instance) continue;
         for (const target of other.sheet.items.filter(candidate => sameInspectionItem(item, candidate))) {

@@ -44,4 +44,11 @@ export class ROArrivalPhotos {
     requireThat(row,"Arrival photo not found",404);
     return {mime:String(row.mime),bytes:Buffer.from(row.bytes.buffer??row.bytes)};
   }
+  async reference(shopId:number,workOrderId:string,id:string){
+    const row=await (await this.db()).collection(MEDIA).findOne({_id:id,shopId,workOrderId} as any,
+      {projection:{bytes:0},maxTimeMS:5000});
+    requireThat(row,"Arrival photo not found for this visit",404);
+    return {id,workOrderId,mime:row.mime as "image/jpeg"|"image/png"|"image/webp",
+      capturedAt:new Date(row.createdAt).toISOString(),provenance:"arrival" as const};
+  }
 }

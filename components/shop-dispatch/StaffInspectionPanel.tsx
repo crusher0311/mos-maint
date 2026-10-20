@@ -83,7 +83,12 @@ function InspectionEditor({ visitId, shopId, closed, onLockChange, startRequeste
   const reviewAllowed = !closed && !data.record?.closed && data.enabled && data.canReview && !api.busy && !api.pending && !api.conflict && !dirty;
   return <section className={`${styles.panel} ${ui.panel}`} data-testid="staff-inspection-panel" aria-label="Internal staff inspection">
     <div className={ui.heading}><div><div className={styles.eyebrow}>Staff workspace · Internal only</div><h2>Vehicle inspection</h2><p>Document findings in their original measured units. This does not release a vehicle, authorize work, or change dispatch capacity.</p></div><span className={styles.chip}>{inspection ? `Revision ${inspection.revision} · Evidence ${inspection.evidenceRevision}` : "Not initialized"}</span></div>
-    <ArrivalPhotoDocumentation visitId={visitId} />
+    <ArrivalPhotoDocumentation visitId={visitId} disabled={locked || dirty}
+      targets={inspection?.sheets.filter(s => s.active).flatMap(s => s.sheet.items.filter(i => s.results[i.id]?.rating).map(i => ({
+        key: JSON.stringify([s.key, i.id]), label: `${s.sheet.name} · ${i.name}`,
+        associated: s.results[i.id].arrivalPhotos?.map(p => p.id) ?? [],
+      }))) ?? []}
+      onAssociate={(target, mediaId) => { const [sheet, item] = JSON.parse(target); void api.command({type: "associate-arrival", sheet, item, mediaId}); }} />
     {readOnly && <p className={styles.notice}>Read only · {closed || data.record?.closed ? "This visit is closed." : !data.enabled ? "The inspection gate is off. Existing evidence is preserved." : "Inspection edit permission is required."}</p>}
     {data.error && <p className={styles.notice} role="status">{data.error}</p>}
     {api.error && <p className={styles.error} role="alert">{api.error}</p>}
@@ -151,6 +156,14 @@ function InspectionItem({ item, sheet, visitId, value, dirty, disabled, onChange
     </form>
     {missing.length > 0 && <p className={ui.missing}>Missing from saved evidence: {missing.join(" · ")}</p>}
     {saved && <small className={ui.metadata}>Last item save: {saved.actor} · {new Date(saved.at).toLocaleString()}</small>}
+    {!!saved?.arrivalPhotos?.length && <details><summary>Associated arrival documentation · {saved.arrivalPhotos.length}</summary>
+      <p><small>Linked from arrival documentation, not captured during this evaluation. Does not satisfy required inspection photos.</small></p>
+      <ul className={ui.photos}>{saved.arrivalPhotos.map(photo => {
+        const url = `/api/dashboard/protractor/arrival-photos?${new URLSearchParams({visitId, mediaId: photo.id})}`;
+        return <li key={photo.id}><a href={url} target="_blank" rel="noreferrer"><img src={url} alt={`Arrival documentation associated with ${item.name}`} loading="lazy" />Open arrival photo</a>
+          <small>Arrival saved {new Date(photo.capturedAt).toLocaleString()}<br />Associated by {photo.actor} · {new Date(photo.at).toLocaleString()}</small></li>;
+      })}</ul>
+    </details>}
     <details><summary>Photo documentation · {saved?.photos.length ?? 0} saved {item.photoRequired ? "· required" : "· optional"}</summary>
       <ul className={ui.photos}>{saved?.photos.map(photo => {
         const url = `/api/shop-dispatch/inspection/media?${new URLSearchParams({ visitId, sheet: sheet.key, item: item.id, mediaId: photo.id })}`;

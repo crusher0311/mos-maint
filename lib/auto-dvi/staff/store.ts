@@ -4,7 +4,7 @@ import { applyBindingAdmission } from "../workflow-binding-state";
 import { digest } from "../../shop-dispatch/service";
 import { requireThat } from "../../shop-dispatch/model";
 import { pilotOperationSchema, type PilotOperation } from "../pilot/model";
-import { applyStaffCommand, initialInspection, instanceKey, photoSchema, sheetSchema, findingSchema,
+import { arrivalAssociationSchema, type ArrivalAssociation, applyStaffCommand, initialInspection, instanceKey, photoSchema, sheetSchema, findingSchema,
   type Photo, type StaffCommand, type StaffInspection, type StaffSheet } from "./model";
 
 const identitySchema = z.object({version: z.literal(1), shopId: z.number().int().positive(), workflowVisitId: z.string().min(1),
@@ -18,7 +18,8 @@ const marker = z.object({revision, actor: z.string(), at: z.string().datetime()}
 export const staffStateSchema = z.object({
   version: z.literal(1), revision, evidenceRevision: revision, startedAt: z.string().datetime().nullable(), ready: marker, reviewed: marker,
   sheets: z.array(z.object({key: z.string(), sheet: sheetSchema, active: z.boolean(), selection: z.enum(["default", "manual"]),
-    results: z.record(z.string(), findingSchema.extend({photos: z.array(photoSchema).max(6), actor: z.string(), at: z.string().datetime()})),
+    results: z.record(z.string(), findingSchema.extend({photos: z.array(photoSchema).max(6),
+      arrivalPhotos: z.array(arrivalAssociationSchema).max(12).optional(), actor: z.string(), at: z.string().datetime()})),
   }).strict()).min(1).max(20),
 }).strict();
 const bindingSchema = z.object({
@@ -163,6 +164,7 @@ export class StaffRepository implements WorkflowInspectionRepository {
     shopId: number; visitId: string; requestId: string; expectedRevision: number; actor: string; at: string;
     command: StaffCommand | {type: "initialize"} | {type: "photo"; sheet: string; item: string; photo: Photo};
     catalog: StaffSheet[]; defaultSheet: string; canReview: boolean;
+    arrivalPhoto?: ArrivalAssociation;
     authorize: () => Promise<void>;
   }) {
     const {shopId, visitId, requestId, actor, command} = input;
@@ -205,6 +207,22 @@ export class StaffRepository implements WorkflowInspectionRepository {
         finding.photos.push(photoSchema.parse(command.photo));
         reservation.state = "committed";
         next.startedAt ??= input.at; next.revision++; next.evidenceRevision++;
+      } else if (command.type === "associate-arrival") {
+        const photo = arrivalAssociationSchema.parse(input.arrivalPhoto);
+        requireThat(record.identity.shopId === shopId && record.identity.provider === "protractor" &&
+          record.identity.providerWorkOrderId === photo.workOrderId && photo.id === command.mediaId,
+          "Arrival photo must belong to this inspection visit", 403);
+        next = structuredClone(current);
+        const sheet = next.sheets.find(s => s.key === command.sheet && s.active);
+        const finding = sheet?.results[command.item];
+        requireThat(sheet?.sheet.items.some(i => i.id === command.item) && finding?.rating,
+          "Save an evaluation for this item before associating an arrival photo", 409);
+        const links = finding.arrivalPhotos ??= [];
+        if (!links.some(p => p.id === photo.id)) {
+          requireThat(links.length < 12, "Twelve arrival photos per item maximum", 409);
+          links.push(photo);
+          next.revision++; next.evidenceRevision++;
+        }
       } else next = applyStaffCommand(current, command, input.catalog, actor, input.at, input.canReview);
     }
     record.results.staff = next; record.revision++;

@@ -7,6 +7,7 @@ import { digest } from "../../shop-dispatch/service";
 import { idSchema, requireThat, type Board } from "../../shop-dispatch/model";
 import type { WorkflowInspection } from "../workflow-binding-contract";
 import { terminalSourceStatus } from "../../shop-dispatch/source-preferences";
+import type { ROArrivalPhotos } from "../../data/repositories/ro-arrival-photos";
 
 export const staffRequestSchema = z.object({
   visitId: idSchema, requestId: z.string().uuid(), revision: z.number().int().nonnegative(),
@@ -17,6 +18,7 @@ export interface StaffDependencies {
   board: BindingDependencies["workflow"];
   repository: StaffRepository;
   now(): string;
+  arrivalPhotos?: Pick<ROArrivalPhotos, "reference">;
 }
 export function currentVisit(board: Board, id: string) {
   const visit = board.visits.find(v => v.id === id);
@@ -96,10 +98,18 @@ export async function mutateStaff(raw: unknown, deps: StaffDependencies) {
     }
   }
   const context = await writeContext(req.visitId, deps, access);
+  let arrivalPhoto;
+  if (req.command.type === "associate-arrival") {
+    const identity = context.record.identity;
+    requireThat(identity.provider === "protractor" && identity.providerWorkOrderId && deps.arrivalPhotos,
+      "Arrival documentation requires a linked Protractor visit", 409);
+    arrivalPhoto = {...await deps.arrivalPhotos.reference(access.shopId, identity.providerWorkOrderId, req.command.mediaId),
+      actor: access.actor, at: deps.now()};
+  }
   await deps.repository.mutate({
     shopId: access.shopId, visitId: req.visitId, requestId: req.requestId, expectedRevision: req.revision,
     actor: access.actor, at: deps.now(), command: req.command.type === "initialize" ? {type: "initialize"} : req.command,
-    catalog: context.access.config!.sheets, defaultSheet: context.access.config!.defaultSheet, canReview: context.access.canReview,
+    catalog: context.access.config!.sheets, defaultSheet: context.access.config!.defaultSheet, canReview: context.access.canReview, arrivalPhoto,
     authorize: async () => {
       const latest = await writeContext(req.visitId, deps, {...access, identity: context.record.identity});
       requireThat(digest(latest.access.config) === digest(context.access.config), "Inspection policy changed; reload", 409);

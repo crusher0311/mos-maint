@@ -157,3 +157,4 @@
 - [Invoice repair safety](invoice-repair-safety-index.md) — maintenance fencing, financial evidence, native CAS and reviewed hold-registry authority.
 - [Invoice release compatibility](invoice-release-compatibility.md) — source-evidence backports must match pinned service policy, not silently inherit newer main behavior.
 - [Protractor export coverage](protractor-export-coverage.md) — explicit outbound grants, latest-snapshot limitations, and no live activation or DVI authorization.
+- [Arrival photo associations](arrival-association-policy.md) — internal context only; saved evaluation required, with inspection evidence and release selections kept separate.
