@@ -207,15 +207,18 @@ test("dashboard and extension warn and block repeat clicks for partial/uncertain
       set innerHTML(_html: string) {
         // Model DOM replacement, discarding the old button and its properties.
         button = {disabled: false, textContent: "Write", addEventListener() {}};
-        warning = {hidden: true, textContent: ""};
+        warning = {hidden: true, textContent: "", attributes: {} as Record<string, string>,
+          setAttribute(name: string, value: string) { this.attributes[name] = value; }};
       },
       classList: {remove() {}}, querySelectorAll: () => [],
     };
     const notifications: any[] = [];
+    const statusControl = {hidden: false};
+    const statusButton = {textContent: "", disabled: false};
     const generateButton = {disabled: false, textContent: "Generate"};
     const ext: any = {console: {error() {}}, autoDviInFlight: false, autoDviData: {items: [{id: "a", name: "Battery"}]},
       currentContext: {provider: "protractor", shopId: 1, vin: "FIXTURE", roId: "RO-A"},
-      document: {getElementById: (id: string) => id === "auto-dvi-btn" ? generateButton : id === "auto-dvi-body" ? body : id === "auto-dvi-push-btn" ? button : warning,
+      document: {getElementById: (id: string) => id === "auto-dvi-btn" ? generateButton : id === "auto-dvi-body" ? body : id === "auto-dvi-push-btn" ? button : id === "auto-dvi-status-control" ? statusControl : id === "auto-dvi-check-status" ? statusButton : id === "auto-dvi-verification-warning" ? warning : null,
         querySelectorAll: () => [{checked: true, dataset: {idx: "0"}}]},
       autoDviVoiceBtn: () => null, autoDviRecorder: null, escapeAutoDviHtml: (s: any) => String(s || ""),
       autoDviLoadSavedFindings: async () => {},
