@@ -37,3 +37,14 @@ being an independently deployed writer requiring the same compatibility checks.
 
 **How to apply:** Reconcile environment-group discovery with the known service
 inventory and explicitly check omitted writers, including suspended services.
+
+Repository-wide discovery also includes QA and retired services; membership is
+not proof that they share the repair's data target.
+
+**Why:** The live repository inventory contains both primary production workers
+and separate QA/legacy services. Treating discovery as rollout authorization
+would widen a narrow repair release or reactivate a retired process.
+
+**How to apply:** Verify each candidate's data-target and resume policy before
+reviewing writer coverage. Never deploy/resume old services merely to make the
+verification inventory pass, or silently omit them without evidence.
