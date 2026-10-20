@@ -37,6 +37,17 @@ export function createNewROFixture(params: URLSearchParams, onImported: () => st
       if (body.action === "review") return Response.json({ questions: ["At what speed?", "When do you hear the rattle?"] });
       if (body.action === "cleanup") return Response.json({ cleanedText: "Customer reports a front-left rattle over bumps below 25 mph." });
     }
+    if (path === "/api/dashboard/protractor/create-contact" || path === "/api/dashboard/protractor/create-vehicle") {
+      if (body.expectedShopId !== state.shopId) return Response.json({ error: "Shop context changed." }, { status: 409 });
+      const kind = path.endsWith("create-contact") ? "contact" : "vehicle";
+      const key = `offline-related:${kind}:${state.shopId}:${state.actorKey}`;
+      const receipt = JSON.parse(sessionStorage.getItem(key) ?? "null");
+      if (receipt && JSON.stringify(receipt) !== JSON.stringify(body)) throw new Error("Retry changed the frozen related request");
+      sessionStorage.setItem(key, JSON.stringify(body));
+      // Synthetic provider committed before the first response was lost.
+      if (!receipt) throw new Error("Disconnected after provider accepted related creation");
+      return Response.json({ success: true, [`${kind}Id`]: `${kind}-offline-created` });
+    }
     if (path.startsWith("/api/dashboard/protractor/contacts?")) return Response.json({ contacts: [
       { id: "contact-offline", firstName: "Mara", lastName: "Ortiz", fileAs: "Ortiz, Mara", company: "", phone: "(555) 010-0147", email: "mara@example.test" },
     ] });

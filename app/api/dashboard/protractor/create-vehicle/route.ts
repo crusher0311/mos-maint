@@ -29,6 +29,8 @@ export async function POST(req: NextRequest) {
     }
 
     const shopId = Number(sess.shopId);
+    if (body.expectedShopId !== undefined && body.expectedShopId !== shopId)
+      return NextResponse.json({ error: "The active shop changed. Reopen the matching draft." }, { status: 409 });
     // Client-pinned vehicle ID: a wizard retry after a timeout upserts the
     // SAME service item instead of creating a duplicate vehicle.
     const result = await runWithProtractorInteractiveTransport(

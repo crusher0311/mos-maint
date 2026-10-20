@@ -29,6 +29,7 @@ export function offlineRODatabase() {
           }
           return {
             get(key: unknown) { return request(() => records.get(keyOf(key))); },
+            getAll() { return request(() => [...records.values()]); },
             count() { return request(() => records.size); },
             put(value: { shopId: number; actorKey: string }) { return request(() => { records.set(keyOf([value.shopId, value.actorKey]), value); }); },
             delete(key: unknown) { return request(() => records.delete(keyOf(key))); },

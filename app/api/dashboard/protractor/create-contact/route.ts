@@ -26,6 +26,8 @@ export async function POST(req: NextRequest) {
     }
 
     const shopId = Number(sess.shopId);
+    if (body.expectedShopId !== undefined && body.expectedShopId !== shopId)
+      return NextResponse.json({ error: "The active shop changed. Reopen the matching draft." }, { status: 409 });
     // Interactive lane (priority pool, 1 retry) + a client-pinned contact ID so
     // a wizard retry after a timeout upserts the SAME contact (no duplicates —
     // Protractor's POST /Contact/{id} is an upsert by ID).

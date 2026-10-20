@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { confirmedRO, photoAllowed, readROSession, removeROSession, safeLocalHref, saveROSession, submitFrozenRO, MAX_PHOTOS, type ROSession, type JsonPost } from "./ro-session-store";
+import { confirmedRO, photoAllowed, readROSession, removeROSession, safeLocalHref, saveROSession, submitFrozenRO, hasPendingCreates, MAX_PHOTOS, type ROSession, type JsonPost } from "./ro-session-store";
 
 async function capability() {
   const controller = new AbortController();
@@ -44,6 +44,8 @@ export function useRORecovery(open: boolean, onCreated?: (number: number) => voi
   const callback = useRef(onCreated);
   callback.current = onCreated;
   const generation = useRef(0);
+  const draftWrites = useRef(Promise.resolve());
+  const [needsResume, setNeedsResume] = useState(false);
   function adopt(value: ROSession) { current.current = value; setSession(value); }
   useEffect(() => {
     if (!open) { setReady(false); return; }
@@ -54,6 +56,7 @@ export function useRORecovery(open: boolean, onCreated?: (number: number) => voi
     setReady(false); setError(""); setSession(null); current.current = null;
     void (async () => {
       try {
+        await draftWrites.current;
         const cap = await capability();
         const saved = await readROSession(cap.shopId, cap.actorKey);
         if (generation.current !== token) return;
@@ -67,6 +70,7 @@ export function useRORecovery(open: boolean, onCreated?: (number: number) => voi
         }
         if (value.result && (!value.payload || !confirmedRO({ ...value.result, ok: true })))
           throw new Error("Saved confirmation is invalid. Do not create another RO; contact support.");
+        setNeedsResume(!!saved && !saved.payload);
         adopt(value); setEnabled(cap.enabled); setReady(true);
       } catch (cause) {
         if (generation.current === token) setError(cause instanceof Error ? cause.message : "RO recovery unavailable.");
@@ -90,16 +94,19 @@ export function useRORecovery(open: boolean, onCreated?: (number: number) => voi
     return cap;
   }
   async function persist(value: ROSession) {
+    await draftWrites.current;
+    if (!value.payload && current.current?.handoffRequestId === value.handoffRequestId)
+      value = { ...value, draft: current.current.draft };
     const saved = await saveROSession(value);
     adopt(saved.session);
-    if (saved.session.payload !== value.payload)
+    if (!saved.claimed || saved.session.payload !== value.payload)
       throw new Error("Another saved RO owns this browser’s recovery slot. The existing request is preserved; verify it before continuing.");
     return saved.session;
   }
   async function run(action: () => Promise<void>) {
     if (active.current || !ready) return;
     active.current = true; setBusy(true); setError("");
-    try { await action(); }
+    try { await draftWrites.current; await action(); }
     catch (cause) { setError(cause instanceof Error ? cause.message : "Request failed. Your original RO and photos are retained."); }
     finally {
       active.current = false; setBusy(false);
@@ -127,6 +134,7 @@ export function useRORecovery(open: boolean, onCreated?: (number: number) => voi
       const value = current.current!;
       await checkShop(value);
       if (value.payload) throw new Error("An original creation request is already retained. Verify it instead.");
+      if (hasPendingCreates(value)) throw new Error("Resolve pending customer or vehicle creation first.");
       const frozen = JSON.stringify(payload);
       if (frozen.length > 256 * 1024) throw new Error("RO details exceed safe local storage limits. Reduce job details.");
       const claim = await saveROSession({ ...value, payload: frozen }, true);
@@ -135,6 +143,59 @@ export function useRORecovery(open: boolean, onCreated?: (number: number) => voi
       const confirmed = await submitFrozenRO(claim.session, !claim.claimed, post, persist);
       adopt(confirmed); callback.current?.(confirmed.result!.workOrderNumber);
       await uploadPhotos(confirmed);
+    });
+  }
+  function saveDraft(fields: string) {
+    if (!ready || needsResume || !current.current || current.current.payload) return;
+    const value = { ...current.current, draft: { version: 1 as const, fields } };
+    const token = generation.current;
+    current.current = value;
+    draftWrites.current = draftWrites.current.then(async () => {
+      if (fields.length > 256 * 1024) throw new Error("Draft is too large to save. Reduce job details before closing.");
+      const saved = await saveROSession(value, false, true);
+      if (!saved.claimed) throw new Error("Another tab owns this draft. Close and reopen to recover it.");
+    }).catch(cause => {
+      if (generation.current === token) setError(cause instanceof Error ? cause.message : "Draft could not be saved.");
+    });
+  }
+  async function prepareRelated(kind: "contact" | "vehicle", body: Record<string, unknown>, fields: string) {
+    if (fields.length > 256 * 1024 || JSON.stringify(body).length > 256 * 1024)
+      throw new Error("Draft is too large to preserve. Reduce details before creating a record.");
+    await draftWrites.current;
+    const value = current.current!;
+    await checkShop(value);
+    if (value.payload) throw new Error("Creation details are frozen.");
+    const original = value.pendingCreates?.[kind] ?? body;
+    await persist({ ...value, draft: { version: 1, fields },
+      pendingCreates: { ...value.pendingCreates, [kind]: original } });
+    return original;
+  }
+  async function finishRelated(kind: "contact" | "vehicle", fields: string) {
+    const value = current.current!;
+    const pendingCreates = { ...value.pendingCreates };
+    delete pendingCreates[kind];
+    // Selection and removal of the uncertain marker commit together.
+    await draftWrites.current;
+    const saved = await saveROSession({ ...value, pendingCreates, draft: { version: 1, fields } }, false, false, kind);
+    if (!saved.claimed) throw new Error("The recovered selection could not be saved. Reopen to recover the original request.");
+    adopt(saved.session);
+  }
+  async function resumeDraft(): Promise<ROSession | null> {
+    let restored: ROSession | null = null;
+    await run(async () => {
+      await checkShop(current.current!);
+      restored = current.current!;
+    });
+    return restored;
+  }
+  function discardDraft() {
+    return run(async () => {
+      const value = current.current!;
+      await checkShop(value);
+      if (value.payload || hasPendingCreates(value)) throw new Error("Submitted requests cannot be discarded.");
+      await removeROSession(value);
+      adopt({ shopId: value.shopId, actorKey: value.actorKey, photos: [], handoffRequestId: crypto.randomUUID() });
+      setNeedsResume(false);
     });
   }
   function verify() {
@@ -183,6 +244,8 @@ export function useRORecovery(open: boolean, onCreated?: (number: number) => voi
     try { await checkShop(current.current); await removeROSession(current.current); current.current = null; setSession(null); return true; }
     catch (cause) { setError(cause instanceof Error ? cause.message : "Could not finish this RO."); return false; }
   }
-  return { session, enabled, ready, busy, error, create, verify, addPhoto, removePhoto, retryPhotos, continueDvi, finish,
+  return { session, enabled, ready, busy, error, needsResume, saveDraft, resumeDraft, discardDraft,
+    prepareRelated, finishRelated,
+    acceptDraft: () => setNeedsResume(false), checkContext: () => checkShop(current.current!), create, verify, addPhoto, removePhoto, retryPhotos, continueDvi, finish,
     reload: () => setAttempt(value => value + 1) };
 }

@@ -249,6 +249,57 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
     onCreated?.(number);
   });
   const rememberedContext = useRef<string | null>(null);
+  const requestScope = useRef({ key: "", epoch: 0 });
+  const scopeKey = `${isOpen}:${recovery.session?.shopId}:${recovery.session?.actorKey}`;
+  if (requestScope.current.key !== scopeKey) requestScope.current = { key: scopeKey, epoch: requestScope.current.epoch + 1 };
+  // Late reads from a closed wizard or another shop must never populate a new draft.
+  async function fetch(input: RequestInfo | URL, init?: RequestInit) {
+    const epoch = requestScope.current.epoch;
+    const response = await globalThis.fetch(input, init);
+    const json = response.json.bind(response);
+    response.json = async () => {
+      const data = await json();
+      if (requestScope.current.epoch !== epoch) throw new Error("The wizard context changed. Reopen to continue.");
+      return data;
+    };
+    return response;
+  }
+  const draftContext = useRef<string | null>(null);
+  const draftFields = { step, contactSearch, contacts, selectedContact, vehicles, selectedVehicle, mileageInput,
+    concern, concernStage, questions, exchanges, answers, cleanedText, conversationId, savedConcerns, editingConcernIndex,
+    noteText, jobTab, selectedJobs, createNewCustomer, newCustomer, createNewVehicle, newVehicle };
+  const serializedDraft = JSON.stringify(draftFields);
+  useEffect(() => {
+    if (!isOpen || !recovery.ready) { draftContext.current = null; return; }
+    const context = `${recovery.session?.shopId}:${recovery.session?.actorKey}`;
+    if (draftContext.current !== context) { draftContext.current = context; return; }
+    if (!recovery.needsResume && !recovery.session?.payload) recovery.saveDraft(serializedDraft);
+  }, [serializedDraft, isOpen, recovery.ready, recovery.needsResume, recovery.session?.shopId, recovery.session?.actorKey]);
+
+  async function resumeUnsentDraft() {
+    const restored = await recovery.resumeDraft();
+    if (!restored) return;
+    const draft = restored.draft;
+    if (!draft) { recovery.acceptDraft(); return; }
+    try {
+      if (draft.version !== 1) throw new Error("Unsupported saved draft.");
+      const d = JSON.parse(draft.fields) as typeof draftFields;
+      if (!d || !["concern", "customer", "vehicle", "note", "jobs", "confirm"].includes(d.step) ||
+          !["start", "questions", "result"].includes(d.concernStage) ||
+          !Array.isArray(d.questions) || !Array.isArray(d.exchanges) || !Array.isArray(d.savedConcerns) ||
+          !Array.isArray(d.selectedJobs)) throw new Error("Invalid saved draft.");
+      setStep(d.step); setContactSearch(d.contactSearch); setContacts(d.contacts); setSelectedContact(d.selectedContact);
+      setVehicles(d.vehicles); setSelectedVehicle(d.selectedVehicle); setMileageInput(d.mileageInput);
+      setConcern(d.concern); setConcernStage(d.concernStage); setQuestions(d.questions); setExchanges(d.exchanges);
+      setAnswers(d.answers); setCleanedText(d.cleanedText); setConversationId(d.conversationId);
+      setSavedConcerns(d.savedConcerns); setEditingConcernIndex(d.editingConcernIndex); setNoteText(d.noteText);
+      setJobTab(d.jobTab); setSelectedJobs(d.selectedJobs); setCreateNewCustomer(d.createNewCustomer);
+      setNewCustomer(d.newCustomer); setCreateNewVehicle(d.createNewVehicle); setNewVehicle(d.newVehicle);
+      recovery.acceptDraft();
+    } catch {
+      setCreateError("This saved draft could not be read. Close and reopen to discard it explicitly.");
+    }
+  }
 
   useEffect(() => {
     const context = recovery.session ? `${recovery.session.shopId}:${recovery.session.actorKey}` : null;
@@ -596,31 +647,44 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
   }
 
   async function handleCreateContact() {
-    const validationError = validateNewCustomer();
+    const validationError = recovery.session?.pendingCreates?.contact ? null : validateNewCustomer();
     if (validationError) {
       setContactError(validationError);
       return;
     }
     setCreatingContact(true);
     setContactError("");
+    const epoch = requestScope.current.epoch;
     try {
+      await recovery.checkContext();
+      if (epoch !== requestScope.current.epoch) return;
+      const original = await recovery.prepareRelated("contact",
+        { ...newCustomer, clientRequestId: getOrCreateRequestId(createRequestIdsRef.current, "contact"), expectedShopId: recovery.session!.shopId },
+        serializedDraft);
+      if (epoch !== requestScope.current.epoch) return;
+      const customer = original as Record<string, string>;
       const res = await postJsonWithTimeout(
         "/api/dashboard/protractor/create-contact",
-        { ...newCustomer, clientRequestId: getOrCreateRequestId(createRequestIdsRef.current, "contact") },
+        original,
         WIZARD_CREATE_TIMEOUT_MS,
       );
       const data = await res.json();
+      if (epoch !== requestScope.current.epoch) return;
       if (!res.ok) throw new Error(data.error || "Failed to create customer");
-      clearRequestId(createRequestIdsRef.current, "contact");
+      if (data.success !== true || typeof data.contactId !== "string" || !data.contactId) throw new Error("Customer creation is not confirmed. Retry the retained request.");
       const contact: Contact = {
         id: data.contactId,
-        firstName: newCustomer.firstName || "",
-        lastName: newCustomer.lastName || "",
-        fileAs: `${newCustomer.lastName}, ${newCustomer.firstName}`,
-        company: newCustomer.company || "",
-        phone: newCustomer.phone1 || "",
-        email: newCustomer.email || "",
+        firstName: customer.firstName || "",
+        lastName: customer.lastName || "",
+        fileAs: `${customer.lastName}, ${customer.firstName}`,
+        company: customer.company || "",
+        phone: customer.phone1 || "",
+        email: customer.email || "",
       };
+      await recovery.finishRelated("contact", JSON.stringify({ ...draftFields, selectedContact: contact,
+        createNewCustomer: false, step: "vehicle", vehicles: [], selectedVehicle: null, createNewVehicle: false }));
+      if (epoch !== requestScope.current.epoch) return;
+      clearRequestId(createRequestIdsRef.current, "contact");
       setSelectedContact(contact);
       setCreateNewCustomer(false);
       setStep("vehicle");
@@ -649,34 +713,46 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
 
   async function handleCreateVehicle() {
     if (!selectedContact) return;
-    const validationError = validateNewVehicle();
+    const validationError = recovery.session?.pendingCreates?.vehicle ? null : validateNewVehicle();
     if (validationError) {
       setVehicleError(validationError);
       return;
     }
     setCreatingVehicle(true);
     setVehicleError("");
+    const epoch = requestScope.current.epoch;
     try {
+      await recovery.checkContext();
+      if (epoch !== requestScope.current.epoch) return;
+      const original = await recovery.prepareRelated("vehicle",
+        { ...newVehicle, ownerId: selectedContact.id, clientRequestId: getOrCreateRequestId(createRequestIdsRef.current, "vehicle"), expectedShopId: recovery.session!.shopId },
+        serializedDraft);
+      if (epoch !== requestScope.current.epoch) return;
+      const vehicleFields = original as Record<string, string>;
       const res = await postJsonWithTimeout(
         "/api/dashboard/protractor/create-vehicle",
-        { ...newVehicle, ownerId: selectedContact.id, clientRequestId: getOrCreateRequestId(createRequestIdsRef.current, "vehicle") },
+        original,
         WIZARD_CREATE_TIMEOUT_MS,
       );
       const data = await res.json();
+      if (epoch !== requestScope.current.epoch) return;
       if (!res.ok) throw new Error(data.error || "Failed to create vehicle");
-      clearRequestId(createRequestIdsRef.current, "vehicle");
+      if (data.success !== true || typeof data.vehicleId !== "string" || !data.vehicleId) throw new Error("Vehicle creation is not confirmed. Retry the retained request.");
       const vehicle: Vehicle = {
         id: data.vehicleId,
-        vin: newVehicle.vin || "",
-        year: newVehicle.year ? Number(newVehicle.year) : null,
-        make: newVehicle.make || "",
-        model: newVehicle.model || "",
-        submodel: newVehicle.submodel || "",
-        engine: newVehicle.engine || "",
-        color: newVehicle.color || "",
-        plate: newVehicle.licensePlate || "",
-        odometer: newVehicle.odometer ? Number(newVehicle.odometer) : null,
+        vin: vehicleFields.vin || "",
+        year: vehicleFields.year ? Number(vehicleFields.year) : null,
+        make: vehicleFields.make || "",
+        model: vehicleFields.model || "",
+        submodel: vehicleFields.submodel || "",
+        engine: vehicleFields.engine || "",
+        color: vehicleFields.color || "",
+        plate: vehicleFields.licensePlate || "",
+        odometer: vehicleFields.odometer ? Number(vehicleFields.odometer) : null,
       };
+      await recovery.finishRelated("vehicle", JSON.stringify({ ...draftFields, selectedVehicle: vehicle, createNewVehicle: false }));
+      if (epoch !== requestScope.current.epoch) return;
+      clearRequestId(createRequestIdsRef.current, "vehicle");
       setSelectedVehicle(vehicle);
       setCreateNewVehicle(false);
     } catch (err: any) {
@@ -903,6 +979,32 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated }: NewWor
 
   if (!isOpen) return null;
   if (recovery.ready && recovery.session?.payload) return <RORecoveryPanel recovery={recovery} onClose={onClose} />;
+  if (recovery.ready && recovery.needsResume) return <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Resume unfinished repair order">
+    <section className="bg-white rounded-xl shadow-2xl w-full max-w-2xl p-6 space-y-4">
+      <h2 className="text-lg font-semibold">Unfinished repair order</h2>
+      <p>Resume your saved details and {recovery.session?.photos.length ?? 0} arrival photos, or discard them and start over.</p>
+      <p>Unsent details are saved on this device for this shop and advisor for seven days after the last edit. Pending provider requests are kept until resolved. Resuming does not create or send anything to Protractor.</p>
+      {recovery.error && <p role="alert">{recovery.error}</p>}
+      {createError && <p role="alert">{createError}</p>}
+      <button disabled={recovery.busy} onClick={resumeUnsentDraft}>Resume draft</button>{" "}
+      <button disabled={recovery.busy || !!recovery.session?.pendingCreates?.contact || !!recovery.session?.pendingCreates?.vehicle} onClick={recovery.discardDraft}>Discard draft</button>{" "}
+      <button onClick={onClose}>Close</button>
+    </section>
+  </div>;
+  if (recovery.ready && (recovery.session?.pendingCreates?.contact || recovery.session?.pendingCreates?.vehicle)) {
+    const contactPending = !!recovery.session.pendingCreates.contact;
+    return <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Recover pending customer or vehicle">
+      <section className="bg-white rounded-xl shadow-2xl w-full max-w-2xl p-6 space-y-4">
+        <h2 className="text-lg font-semibold">Pending {contactPending ? "customer" : "vehicle"} creation</h2>
+        <p>The original request is retained. Explicit retry sends the same details and request identity, not a new record. This draft cannot expire or be discarded until the request is resolved.</p>
+        {(contactError || vehicleError || recovery.error) && <p role="alert">{contactError || vehicleError || recovery.error}</p>}
+        <button disabled={creatingContact || creatingVehicle} onClick={contactPending ? handleCreateContact : handleCreateVehicle}>
+          Retry {contactPending ? "customer" : "vehicle"} creation
+        </button>{" "}
+        <button onClick={onClose}>Close</button>
+      </section>
+    </div>;
+  }
   if (!recovery.ready) return <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Recover repair order">
     <section className="bg-white rounded-xl shadow-2xl w-full max-w-2xl p-6 space-y-4">
       <h2 className="text-lg font-semibold text-gray-900">Checking shop and saved repair order</h2>

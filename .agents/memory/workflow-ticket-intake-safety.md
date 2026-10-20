@@ -26,3 +26,15 @@ does not establish upstream failure.
 unattempted stages, and retain uncertain state when exact-ID evidence is
 incomplete. Missing/partial records may require upstream operator resolution;
 do not imply that a timeout canceled work.
+
+Unsubmitted wizard recovery is device-local and requires an explicit resume;
+use seven days since the last edit as its retention window. Do not apply that
+window to submitted requests whose provider outcome may still need recovery,
+including customer and vehicle creation before the RO itself is submitted.
+
+**Why:** Customer details and arrival photos should not remain indefinitely on
+a shared advisor device, but deleting an uncertain submission could encourage
+a duplicate provider write.
+
+**How to apply:** Preserve shop/advisor isolation and never treat restoring
+local fields as consent to create a customer, vehicle, ticket, or DVI.

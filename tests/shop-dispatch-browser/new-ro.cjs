@@ -54,6 +54,7 @@ const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
         const read = db.transaction("sessions", "readonly").objectStore("sessions").get([999, "offline-mara-advisor"]);
         read.onsuccess = () => { db.close(); resolve(read.result ? {
           payload: read.result.payload, result: read.result.result,
+          draft: read.result.draft, updatedAt: read.result.updatedAt,
           photos: read.result.photos.map(photo => ({ requestId: photo.requestId, size: photo.blob.size, type: photo.blob.type, uploaded: photo.uploaded })),
         } : null); };
       };
@@ -70,6 +71,21 @@ const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     assert.equal(await page.getByPlaceholder("Type answer...").count(), 2);
     await page.getByPlaceholder("Type answer...").nth(0).fill("Front left");
     await page.getByPlaceholder("Type answer...").nth(1).fill("Below 25 mph");
+    await page.waitForFunction(() => new Promise(resolve => {
+      const open = indexedDB.open("mos-confirmed-ro", 1);
+      open.onsuccess = () => {
+        const db = open.result;
+        const read = db.transaction("sessions").objectStore("sessions").get([999, "offline-mara-advisor"]);
+        read.onsuccess = () => { db.close(); resolve(read.result?.draft?.fields.includes("Below 25 mph")); };
+      };
+    }));
+    await page.reload();
+    await page.getByRole("button", { name: "Resume draft", exact: true }).waitFor();
+    assert.equal((await calls(page, "create-work-order")).length, 0);
+    assert.equal((await calls(page, "concern-assistant")).length, 0, "Reload does not rerun guided concern requests");
+    await page.getByRole("button", { name: "Resume draft", exact: true }).click();
+    assert.equal(await page.getByPlaceholder("Type answer...").nth(0).inputValue(), "Front left");
+    assert.equal(await page.getByPlaceholder("Type answer...").nth(1).inputValue(), "Below 25 mph");
     await page.screenshot({ path: path.join(screenshotDir, "new-ro-followups.png") });
     await page.getByRole("button", { name: "Generate Write-up", exact: true }).click();
     const cleanup = await page.evaluate(() => window.__newROFixture.calls.find(call => call.body?.action === "cleanup").body);
@@ -84,6 +100,20 @@ const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     await selectVehicle(page, true);
     await page.getByRole("button", { name: "Search", exact: true }).click();
     await page.getByRole("button", { name: "Add", exact: true }).click();
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    await page.getByTestId("dispatch-create-new-ro").click();
+    await page.getByRole("button", { name: "Resume draft", exact: true }).waitFor();
+    const unsent = await savedSession(page);
+    const fields = JSON.parse(unsent.draft.fields);
+    assert.equal(fields.selectedContact.id, "contact-offline");
+    assert.equal(fields.selectedVehicle.id, "vehicle-offline");
+    assert.equal(fields.mileageInput, "84217");
+    assert.equal(fields.noteText, "Customer waiting; call before repairs.");
+    assert.equal(fields.selectedJobs.length, 1);
+    assert.equal(unsent.photos.length, 1);
+    await page.reload();
+    await page.getByRole("button", { name: "Resume draft", exact: true }).click();
+    assert.equal((await calls(page, "create-work-order")).length, 0);
     await page.getByRole("button", { name: "Create Work Order with 1 Job", exact: true }).click();
     await page.getByRole("button", { name: "Verify creation", exact: true }).waitFor();
     await page.getByRole("alert").filter({ hasText: "Creation is not confirmed" }).waitFor();
@@ -162,6 +192,73 @@ const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     await normal.getByRole("button", { name: "Local check-in only", exact: true }).click();
     await normal.getByRole("heading", { name: "Check in a walk-in", exact: true }).waitFor();
     assert.deepEqual(await normal.evaluate(() => window.__newROFixture.blocked), []);
+    const draftPage = await newPage("");
+    await draftPage.getByPlaceholder(/What did the customer say/).fill("Keep only for original advisor");
+    await draftPage.getByRole("button", { name: "Cancel", exact: true }).click();
+    await draftPage.evaluate(() => { window.__newROFixture.actorKey = "other-advisor"; });
+    await draftPage.getByTestId("dispatch-create-new-ro").click();
+    await draftPage.getByRole("heading", { name: "New Work Order", exact: true }).waitFor();
+    assert.equal(await draftPage.getByPlaceholder(/What did the customer say/).inputValue(), "");
+    async function relatedRecovery() {
+    const related = await newPage("");
+    await related.getByRole("button", { name: "Skip", exact: true }).click();
+    await related.getByRole("button", { name: "Create New", exact: true }).click();
+    await related.locator('input[type="text"]').nth(0).fill("Offline");
+    await related.locator('input[type="text"]').nth(1).fill("Recovery");
+    await related.getByRole("button", { name: "Create Customer & Continue", exact: true }).click();
+    await related.getByRole("alert").filter({ hasText: "Disconnected after provider accepted" }).waitFor();
+    const contactAttempt = (await calls(related, "create-contact"))[0].body;
+    await related.reload();
+    await related.getByRole("button", { name: "Resume draft", exact: true }).waitFor();
+    assert.equal(await related.getByRole("button", { name: "Discard draft", exact: true }).isDisabled(), true);
+    assert.equal((await calls(related, "create-contact")).length, 0);
+    await related.getByRole("button", { name: "Resume draft", exact: true }).click();
+    await related.getByRole("button", { name: "Retry customer creation", exact: true }).click();
+    await related.getByRole("button", { name: "Create New", exact: true }).waitFor();
+    assert.deepEqual((await calls(related, "create-contact"))[0].body, contactAttempt);
+    await related.getByRole("button", { name: "Create New", exact: true }).click();
+    await related.getByPlaceholder("Toyota", { exact: true }).fill("Toyota");
+    await related.getByRole("button", { name: "Create Vehicle & Continue", exact: true }).click();
+    await related.getByRole("alert").filter({ hasText: "Disconnected after provider accepted" }).waitFor();
+    const vehicleAttempt = (await calls(related, "create-vehicle"))[0].body;
+    await related.reload();
+    await related.getByRole("button", { name: "Resume draft", exact: true }).click();
+    assert.equal((await calls(related, "create-vehicle")).length, 0);
+    await related.getByRole("button", { name: "Retry vehicle creation", exact: true }).click();
+    await related.getByPlaceholder("Enter current mileage...").waitFor();
+    assert.deepEqual((await calls(related, "create-vehicle"))[0].body, vehicleAttempt);
+    assert.equal((await calls(related, "create-work-order")).length, 0);
+    }
+    await draftPage.getByRole("button", { name: "Cancel", exact: true }).click();
+    await draftPage.evaluate(() => { window.__newROFixture.actorKey = "offline-mara-advisor"; });
+    await draftPage.getByTestId("dispatch-create-new-ro").click();
+    await draftPage.getByRole("button", { name: "Resume draft", exact: true }).waitFor();
+    await draftPage.evaluate(() => { window.__newROFixture.shopId = 1000; });
+    await draftPage.getByRole("button", { name: "Resume draft", exact: true }).click();
+    await draftPage.getByRole("alert").filter({ hasText: "active shop or signed-in advisor changed" }).waitFor();
+    assert.equal((await calls(draftPage, "create-work-order")).length, 0);
+    await draftPage.reload();
+    await draftPage.getByRole("button", { name: "Discard draft", exact: true }).click();
+    await draftPage.getByRole("heading", { name: "New Work Order", exact: true }).waitFor();
+    assert.equal(await draftPage.getByPlaceholder(/What did the customer say/).inputValue(), "");
+    await draftPage.getByPlaceholder(/What did the customer say/).fill("Expired unsent details");
+    await draftPage.getByRole("button", { name: "Cancel", exact: true }).click();
+    await draftPage.getByTestId("dispatch-create-new-ro").click();
+    await draftPage.getByRole("button", { name: "Resume draft", exact: true }).waitFor();
+    await draftPage.evaluate(() => new Promise(resolve => {
+      const open = indexedDB.open("mos-confirmed-ro", 1);
+      open.onsuccess = () => {
+        const db = open.result;
+        const tx = db.transaction("sessions", "readwrite"), store = tx.objectStore("sessions");
+        const read = store.get([999, "offline-mara-advisor"]);
+        read.onsuccess = () => store.put({ ...read.result, updatedAt: Date.now() - 8 * 86400000 });
+        tx.oncomplete = () => { db.close(); resolve(); };
+      };
+    }));
+    await draftPage.reload();
+    await draftPage.getByRole("heading", { name: "New Work Order", exact: true }).waitFor();
+    assert.equal(await draftPage.getByPlaceholder(/What did the customer say/).inputValue(), "");
+    await relatedRecovery();
     assert.deepEqual(errors, []);
     assert.deepEqual(outbound, []);
     console.log("PASS: real Chromium + IndexedDB; guided concern flow, multiple concerns, notes/mileage/jobs, 202 verification-only recovery, frozen UUID/blob reload, confirmed reload, exact photo retry, exact DVI retry/navigation, arrival view, no-entitlement completion, workflow shared entry, mobile width. No outbound requests or live writes.");

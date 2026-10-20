@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { confirmedRO, photoAllowed, safeLocalHref, submitFrozenRO, type ROSession, type JsonPost } from "./ro-session-store";
+import { confirmedRO, photoAllowed, safeLocalHref, submitFrozenRO, readROSession, saveROSession, removeROSession, DRAFT_RETENTION_MS, type ROSession, type JsonPost } from "./ro-session-store";
+import { offlineRODatabase } from "./ro-recovery.offline-fixture";
 
 const requestId = "f037c214-b117-446e-87b4-d361893cf458";
 const workOrderId = "1809c214-b117-446e-87b4-d361893cf458";
@@ -9,6 +10,48 @@ const payload = JSON.stringify({ clientRequestId: requestId, contactId: "contact
   servicePackages: [{ source: "canned", title: "Brake diagnosis", lines: [{ quantity: 1, unitPrice: 137.5 }] }] });
 const session = (): ROSession => ({ shopId: 66, actorKey: "offline-advisor", payload, photos: [], handoffRequestId: requestId });
 const success = { ok: true, workOrderId, workOrderNumber: 18427 };
+
+test("unsent drafts expire across scopes; legacy photos and unresolved provider receipts survive", async () => {
+  const fixture = offlineRODatabase();
+  Object.assign(globalThis, { indexedDB: fixture.indexedDB });
+  const old = Date.now() - DRAFT_RETENTION_MS - 1000;
+  const unsent = { ...session(), payload: undefined, updatedAt: old, draft: { version: 1 as const, fields: "{}" } };
+  fixture.records.set(JSON.stringify([66, "offline-advisor"]), unsent);
+  fixture.records.set(JSON.stringify([67, "offline-advisor"]), { ...unsent, shopId: 67 });
+  fixture.records.set(JSON.stringify([68, "offline-advisor"]), { ...session(), shopId: 68, updatedAt: old });
+  fixture.records.set(JSON.stringify([69, "offline-advisor"]), { ...unsent, shopId: 69, updatedAt: undefined });
+  fixture.records.set(JSON.stringify([70, "offline-advisor"]), { ...unsent, shopId: 70, pendingCreates: { contact: { clientRequestId: requestId } } });
+  assert.equal(await readROSession(66, "offline-advisor"), null);
+  assert.equal(await readROSession(67, "offline-advisor"), null);
+  assert.equal((await readROSession(68, "offline-advisor"))?.payload, payload);
+  assert.ok((await readROSession(69, "offline-advisor"))?.updatedAt, "legacy arrival-only draft receives a retention timestamp");
+  const pending = (await readROSession(70, "offline-advisor"))!;
+  assert.equal(pending.pendingCreates?.contact?.clientRequestId, requestId);
+  await assert.rejects(removeROSession(pending), "uncertain related writes cannot be discarded");
+  await saveROSession({ ...pending, pendingCreates: undefined });
+  assert.equal((await readROSession(70, "offline-advisor"))?.pendingCreates?.contact?.clientRequestId, requestId,
+    "a stale unsent writer cannot erase a pending creation");
+  assert.equal((await saveROSession({ ...pending, payload }, true)).claimed, false,
+    "a stale tab cannot submit an RO while a related creation is uncertain");
+});
+
+test("draft-only updates preserve photos; other advisors and stale draft identities cannot overwrite or discard", async () => {
+  const fixture = offlineRODatabase();
+  Object.assign(globalThis, { indexedDB: fixture.indexedDB });
+  const unsent = { ...session(), payload: undefined };
+  await saveROSession(unsent);
+  await saveROSession({ ...unsent, photos: [{ requestId, blob: new Blob(["image"], { type: "image/png" }), name: "arrival.png" }] });
+  await saveROSession({ ...unsent, draft: { version: 1, fields: '{"concern":"Rattle"}' } }, false, true);
+  const saved = (await readROSession(66, "offline-advisor"))!;
+  assert.equal(saved.photos.length, 1);
+  assert.equal(saved.draft?.fields, '{"concern":"Rattle"}');
+  assert.equal(await readROSession(66, "other-advisor"), null);
+  const stale = { ...unsent, handoffRequestId: "different-draft" };
+  assert.equal((await saveROSession(stale)).claimed, false);
+  await assert.rejects(removeROSession(stale));
+  await removeROSession(saved);
+  assert.equal(await readROSession(66, "offline-advisor"), null);
+});
 
 test("only explicit confirmed official RO responses are successful", () => {
   assert.equal(confirmedRO(success)?.workOrderNumber, 18427);

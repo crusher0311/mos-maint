@@ -8,7 +8,12 @@ export type ROSession = {
   payload?: string;
   result?: ConfirmedRO;
   handoffRequestId: string;
+  draft?: { version: 1; fields: string };
+  updatedAt?: number;
+  pendingCreates?: Partial<Record<"contact" | "vehicle", Record<string, unknown>>>;
 };
+export function hasPendingCreates(value: ROSession) { return !!(value.pendingCreates?.contact || value.pendingCreates?.vehicle); }
+export const DRAFT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 export const MAX_PHOTOS = 12;
 export const MAX_PHOTO_BYTES = 4 * 1024 * 1024;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -38,27 +43,54 @@ function openStore(): Promise<IDBDatabase> {
 export async function readROSession(shopId: number, actorKey: string): Promise<ROSession | null> {
   const db = await openStore();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction("sessions", "readonly");
+    const tx = db.transaction("sessions", "readwrite");
+    const all = tx.objectStore("sessions").getAll();
+    all.onsuccess = () => {
+      for (const saved of all.result as ROSession[]) {
+        if (!saved.payload && !hasPendingCreates(saved) && !saved.updatedAt)
+          tx.objectStore("sessions").put({ ...saved, updatedAt: Date.now() });
+        else if (!saved.payload && !hasPendingCreates(saved) && Date.now() - saved.updatedAt! > DRAFT_RETENTION_MS)
+          tx.objectStore("sessions").delete([saved.shopId, saved.actorKey]);
+      }
+    };
     const request = tx.objectStore("sessions").get([shopId, actorKey]);
     let value: ROSession | null = null;
-    request.onsuccess = () => { value = request.result ?? null; };
+    request.onsuccess = () => {
+      value = request.result ?? null;
+      if (value && !value.payload && !hasPendingCreates(value) && value.updatedAt && Date.now() - value.updatedAt > DRAFT_RETENTION_MS) {
+        tx.objectStore("sessions").delete([shopId, actorKey]);
+        value = null;
+      }
+    };
     tx.oncomplete = () => { db.close(); resolve(value); };
     tx.onabort = tx.onerror = () => { db.close(); reject(new Error("Saved RO could not be recovered. Do not create another.")); };
   });
 }
 // Atomic initial claim: a second tab must verify the saved payload, never send a
 // second provider write. Limit records as well as per-record blobs.
-export async function saveROSession(value: ROSession, claim = false): Promise<{ session: ROSession; claimed: boolean }> {
+export async function saveROSession(value: ROSession, claim = false, draftOnly = false, resolvedKind?: "contact" | "vehicle"): Promise<{ session: ROSession; claimed: boolean }> {
   const db = await openStore();
   return new Promise((resolve, reject) => {
     const tx = db.transaction("sessions", "readwrite");
     const store = tx.objectStore("sessions");
-    let session = value;
+    let session: ROSession = { ...value, updatedAt: Date.now() };
     let claimed = true;
     const request = store.get([value.shopId, value.actorKey]);
     request.onsuccess = () => {
       const existing = request.result as ROSession | undefined;
+      if (existing && existing.handoffRequestId !== value.handoffRequestId) { session = existing; claimed = false; return; }
       if (existing?.payload && (claim || !value.payload || value.payload !== existing.payload)) { session = existing; claimed = false; return; }
+      if (existing && hasPendingCreates(existing) && value.payload) { session = existing; claimed = false; return; }
+      if (!draftOnly && existing && (["contact", "vehicle"] as const).some(kind =>
+        existing.pendingCreates?.[kind] && value.pendingCreates?.[kind] &&
+        JSON.stringify(existing.pendingCreates[kind]) !== JSON.stringify(value.pendingCreates[kind]))) {
+        session = existing; claimed = false; return;
+      }
+      if (draftOnly && existing) session = { ...existing, draft: value.draft, updatedAt: Date.now() };
+      for (const kind of ["contact", "vehicle"] as const) {
+        if (existing?.pendingCreates?.[kind] && resolvedKind !== kind)
+          session = { ...session, pendingCreates: { ...session.pendingCreates, [kind]: existing.pendingCreates[kind] } };
+      }
       if (existing?.result && !value.result) session = { ...value, result: existing.result };
       const count = store.count();
       count.onsuccess = () => {
@@ -78,7 +110,8 @@ export async function removeROSession(value: ROSession) {
     const request = store.get([value.shopId, value.actorKey]);
     request.onsuccess = () => {
       // A stale tab cannot discard a different newly-created request.
-      if (request.result?.payload !== value.payload) { tx.abort(); return; }
+      if (request.result?.payload !== value.payload || request.result?.handoffRequestId !== value.handoffRequestId) { tx.abort(); return; }
+      if (hasPendingCreates(request.result)) { tx.abort(); return; }
       store.delete([value.shopId, value.actorKey]);
     };
     tx.oncomplete = () => { db.close(); resolve(); };
