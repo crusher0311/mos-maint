@@ -144,17 +144,14 @@
 - [JWT recovery](jwt-eligible-recovery.md) — eligible-first, budget-preserving handoffs; [scoped history](protractor-scoped-history.md) covers concurrent shop imports and separate budgets.
 - [Shop workflow prototype](shop-workflow-prototype-scope.md) — vehicle visits contain multi-technician jobs; UI evaluation does not authorize production scheduling or live integrations.
 - [Burnett scheduling policy](burnett-scheduling-policy.md) — user-approved weekday store hours apply to all active technicians; do not infer other locations or bay schedules.
-- [Tire DVI demo scope](tire-dvi-demo-scope.md) — fictional manual-measurement presentation; green documentation is required; no production rollout or video-task dependency.
+- [Pilot scope boundaries](pilot-scope-index.md) — tire demo, workflow DVI, durable enrollment, Protractor exports and degraded-readiness authorization.
 - [Workflow shared branding](workflow-shared-branding.md) — inherited display logos stay separate from stricter manual-upload drafts; keep deliberate overrides intact.
 - [Enterprise history sharing boundary](enterprise-history-sharing.md) — shared reads never widen current-shop writes; signed/partner redistribution needs its own grant.
 - [Sticker QR compatibility](sticker-qr-compatibility.md) — preserve printed HoverCode targets; publish cached images and target metadata together.
 - [Cron network fault injection](cron-fault-injection.md) — PostgreSQL parameter descriptions must reach the driver before execution acknowledgments can be lost.
 - [Workflow ticket intake safety](workflow-ticket-intake-safety.md) — explicit ticket writes are approved; appointment writes remain excluded, and timed-out admissions require exact-ID recovery.
-- [Workflow DVI boundary scope](workflow-dvi-boundary-scope.md) — CAR Experts synthetic writes have an accepted-risk exception; implementation handoff is separate from live activation.
-- [Durable DVI enrollment](dvi-durable-enrollment.md) — rollback disables admissions, never durable routing; legacy fallback would bypass unresolved target ownership.
 - [Chromium lost-response fixtures](chromium-lost-response-fixtures.md) — drop responses after headers to avoid transparent connection retries obscuring application behavior.
 - [Worker IPC evidence](worker-ipc-evidence.md) — drain sends before explicit exit and collect evidence through channel closure; synchronous fakes miss termination races.
 - [Invoice repair safety](invoice-repair-safety-index.md) — maintenance fencing, financial evidence, native CAS and reviewed hold-registry authority.
 - [Invoice release compatibility](invoice-release-compatibility.md) — source-evidence backports must match pinned service policy, not silently inherit newer main behavior.
-- [Protractor export coverage](protractor-export-coverage.md) — explicit outbound grants, latest-snapshot limitations, and no live activation or DVI authorization.
 - [Arrival photo associations](arrival-association-policy.md) — internal context only; saved evaluation required, with inspection evidence and release selections kept separate.
