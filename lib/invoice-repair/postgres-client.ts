@@ -1,6 +1,7 @@
 import postgres from "postgres";
 import { InvoiceFence } from "./fence";
 import { guardPostgres } from "./guarded-drivers";
+import { instrumentPgClientForSlowQueries } from "../slow-query/tracker";
 
 /**
  * Production/script factory. Both pools use the exact same caller-supplied
@@ -12,7 +13,7 @@ const fencedPostgres: typeof postgres = ((...args: any[]) => {
   const coordinatorArgs = typeof args[0] === "string"
     ? [args[0], { ...args[1], max: 2, idle_timeout: 20 }]
     : [{ ...args[0], max: 2, idle_timeout: 20 }];
-  const coordinator = (postgres as any)(...coordinatorArgs);
+  const coordinator = instrumentPgClientForSlowQueries((postgres as any)(...coordinatorArgs));
   const guarded = guardPostgres(client, new InvoiceFence(coordinator));
   const end = client.end.bind(client);
   client.end = async (...options: any[]) => {

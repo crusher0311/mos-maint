@@ -8,7 +8,6 @@ import { testNativeEvidence } from "./invoice-native-evidence.test";
 import {
   READ_NATIVE_POSTGRES, NATIVE_BSON_READ_OPTIONS, mapNativePostgres, mapNativeMongo,
   nativePostgresCas, nativeMongoCas, invoiceField, bsonWithoutInvoice,
-  executeProductionInvoiceRepair,
 } from "../scripts/invoice-native-schema";
 
 const store = new LocalDualMetadataStore(process.env.INVOICE_DUAL_SOCKET!,
@@ -112,7 +111,6 @@ async function main() {
     _id: "undefined", shopId: new Int32(9100), status: "closed", provenance: source,
     softDelete: {}, customFields: {}, financial: undefined,
   }), /Unsupported BSON value/);
-  assert.throws(() => executeProductionInvoiceRepair(), /disabled/);
   await testNativeEvidence(store.sql, store.db);
   console.log("Native invoice schema checks passed: real PG columns, BSON IDs/types, metadata-only CAS and drift vetoes");
 }

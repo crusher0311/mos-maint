@@ -1,6 +1,6 @@
 /**
- * Production-shaped execution preparation, constrained to the existing
- * disposable socket/marker constructor. There is NO live connection factory.
+ * Shared native execution engine. The disposable subclass retains its socket
+ * restrictions; the server entry uses a separately authenticated target guard.
  */
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -16,6 +16,8 @@ import { requireHoldCoverage } from "../lib/invoice-repair/hold-registry";
 import { requireRepairApproval } from "../lib/invoice-repair/approvals";
 import { verifyInvoiceRepairWriters } from "../lib/invoice-repair/writer-verification";
 import { INVOICE_FENCE_LOCK } from "../lib/invoice-repair/fence";
+import type postgres from "postgres";
+import type { Db } from "mongodb";
 
 type Evidence = Awaited<ReturnType<typeof readNativeInvoiceEvidence>>;
 type Pair = Pick<Evidence, "canonical" | "shadow">;
@@ -27,7 +29,10 @@ export interface NativeRepairPlan {
 }
 const equal = (a: unknown, b: unknown) => assert.equal(digest(a), digest(b), "Bound native state/evidence changed");
 
-export class DisposableNativeInvoiceStore extends LocalDualMetadataStore {
+export class NativeInvoiceStore {
+  constructor(readonly sql: ReturnType<typeof postgres>, readonly db: Db,
+    private readonly targetGuard: (tx: any) => Promise<void>) {}
+  protected guard(tx: any) { return this.targetGuard(tx); }
   nativeFault: "canonical" | "shadow" | "completed" | null = null;
   private async exclusive(tx: any) {
     await this.guard(tx);
@@ -93,6 +98,33 @@ export class DisposableNativeInvoiceStore extends LocalDualMetadataStore {
     return digest({ writer: plan.writerDigest, entries: plan.entries.map(e =>
       ({ source: e.original.source, inventory: e.original.inventoryDigest, holds: e.holdDigest })) });
   }
+  /** Fresh validation before granting consent; never performs a repair. */
+  async validateForApproval(plan: NativeRepairPlan, action: "apply" | "rollback") {
+    assert.ok(action === "apply" || action === "rollback");
+    assert.equal(plan.version, 1);
+    assert.ok(plan.entries.length > 0 && plan.entries.length <= 100);
+    assert.ok(plan.preparedAt <= Date.now() && Date.now() < plan.expiresAt);
+    assert.ok(plan.expiresAt <= plan.preparedAt + 300_000);
+    assert.equal(plan.original.repairAuthorized, false);
+    assert.equal(plan.original.livePreflightRequired, true);
+    assert.deepEqual(plan.original.held, []);
+    equal(plan.original.proposals, plan.entries.map(e => e.proposal));
+    await this.sql.begin(async (tx: any) => {
+      await this.exclusive(tx);
+      equal(await verifyInvoiceRepairWriters(tx), plan.writerDigest);
+      const [fence] = await tx.unsafe("SELECT operation FROM invoice_repair_fence WHERE id=1");
+      assert.equal(fence?.operation, null, "Unresolved repairs require recovery, not a new approval");
+      for (const entry of plan.entries) {
+        const current = await readNativeInvoiceEvidence(tx, this.db, entry.proposal.shopId, entry.proposal.sourceId);
+        equal(current.source, entry.original.source);
+        equal(current.inventoryDigest, entry.original.inventoryDigest);
+        equal({canonical: current.canonical, shadow: current.shadow},
+          action === "apply" ? {canonical: entry.original.canonical, shadow: entry.original.shadow} : entry.apply);
+        equal(await requireHoldCoverage(tx, entry.proposal, [entry.proposal.sourceId],
+          current.inventoryDigest, entry.holdReview), entry.holdDigest);
+      }
+    });
+  }
   async executeNative(plan: NativeRepairPlan, action: "apply" | "rollback", approvalId: string, actor: string) {
     plan = structuredClone(plan);
     assert.equal(plan.version, 1);
@@ -124,7 +156,7 @@ export class DisposableNativeInvoiceStore extends LocalDualMetadataStore {
           assert.ok(plan.preparedAt <= Date.now() && Date.now() < plan.expiresAt, "Native preflight expired");
           assert.ok(plan.expiresAt <= plan.preparedAt + 5 * 60_000);
           await requireRepairApproval(tx, approvalId, actor, {
-            action, planDigest: digest(plan), evidenceDigest: DisposableNativeInvoiceStore.evidenceDigest(plan),
+            action, planDigest: digest(plan), evidenceDigest: NativeInvoiceStore.evidenceDigest(plan),
           });
           equal(await verifyInvoiceRepairWriters(tx), plan.writerDigest);
           const [fence] = await tx.unsafe("SELECT operation FROM invoice_repair_fence WHERE id=1 FOR UPDATE");
@@ -215,4 +247,17 @@ export class DisposableNativeInvoiceStore extends LocalDualMetadataStore {
       return { fenced: fence.operation !== null, results };
     });
   }
+}
+
+/** Fixture connection restrictions stay intact; both paths use the same engine. */
+export class DisposableNativeInvoiceStore extends NativeInvoiceStore {
+  private readonly local: LocalDualMetadataStore;
+  readonly mongo: LocalDualMetadataStore["mongo"];
+  constructor(...args: ConstructorParameters<typeof LocalDualMetadataStore>) {
+    const local = new LocalDualMetadataStore(...args);
+    super(local.sql, local.db, tx => local.guard(tx));
+    this.local = local;
+    this.mongo = local.mongo;
+  }
+  close() { return this.local.close(); }
 }

@@ -360,6 +360,13 @@ async function main() {
         offenders.push(file);
       }
     }
+    // Dedicated repair pools must stay visible as well as ordinary queries.
+    // These constructors use config objects/spread arguments, not just url.
+    for (const file of ["lib/invoice-repair/runtime.ts", "lib/invoice-repair/postgres-client.ts",
+      "lib/invoice-repair/production-store.ts"]) {
+      if (!readFileSync(file, "utf8").includes("instrumentPgClientForSlowQueries") && !offenders.includes(file))
+        offenders.push(file);
+    }
     assert.deepEqual(
       offenders,
       [],

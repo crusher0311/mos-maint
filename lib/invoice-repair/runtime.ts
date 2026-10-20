@@ -1,6 +1,7 @@
 import postgres from "postgres";
 import { InvoiceFence } from "./fence";
 import { guardMongoClient, guardPostgres } from "./guarded-drivers";
+import { instrumentPgClientForSlowQueries } from "../slow-query/tracker";
 
 let fence: InvoiceFence | undefined;
 async function heartbeat(coordinator: ReturnType<typeof postgres>) {
@@ -21,7 +22,9 @@ export function invoiceFence(): InvoiceFence {
     if (!url) throw Error("Invoice repair coordinator is not configured");
     // Separate pool: keeping a shared lock cannot exhaust the caller's pool
     // while it waits for its own transaction connection.
-    const coordinator = postgres(url, { max: 4, connect_timeout: 5, idle_timeout: 20 });
+    const coordinator = instrumentPgClientForSlowQueries(
+      postgres(url, { max: 4, connect_timeout: 5, idle_timeout: 20 }),
+    );
     fence = new InvoiceFence(coordinator);
     if (process.env.RENDER_SERVICE_ID && process.env.RENDER_INSTANCE_ID && process.env.RENDER_GIT_COMMIT) {
       // Evidence collection must continue while the data fence is closed.

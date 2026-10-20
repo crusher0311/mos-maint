@@ -163,6 +163,5 @@ export function bsonWithoutInvoice(owner: NativeMongoOwner): string {
 }
 
 // No environment flag can turn an incomplete adapter into a production one.
-export function executeProductionInvoiceRepair(): never {
-  throw new Error("Production invoice repair disabled: mandatory sink fencing and authenticated complete evidence are not established");
-}
+// The separately authenticated, disabled-by-default server entry lives in
+// lib/invoice-repair/production-entry.ts. Schema helpers never activate it.

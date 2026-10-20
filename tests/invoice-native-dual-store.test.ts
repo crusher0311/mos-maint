@@ -6,6 +6,7 @@ import { HoldRegistry } from "../lib/invoice-repair/hold-registry";
 import { recordRepairApproval } from "../lib/invoice-repair/approvals";
 import { InvoiceFence } from "../lib/invoice-repair/fence";
 import { guardPostgres } from "../lib/invoice-repair/guarded-drivers";
+import { testProductionEntry } from "./invoice-production-entry.test";
 
 export async function testNativeProtocol(sql: any, db: any) {
   const native = new DisposableNativeInvoiceStore(process.env.INVOICE_DUAL_SOCKET!,
@@ -62,6 +63,7 @@ export async function testNativeProtocol(sql: any, db: any) {
     assert.equal(restored.canonical.fullState, source.canonical.fullState);
     assert.equal(Object.hasOwn(restored.shadow.target.custom_fields, "invoiceHours"), false);
     assert.equal((await sql.unsafe("SELECT operation FROM invoice_repair_fence WHERE id=1"))[0].operation, null);
+    await testProductionEntry(sql, db, original, { [shopId]: review });
     await assert.rejects(native.executeNative(plan, "apply", apply, actor), /changed|reapply/);
     console.log("Native two-store protocol passed: authenticated persisted action binding, canonical/shadow lost responses, fencing, retry and rollback");
   } finally {

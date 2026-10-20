@@ -200,8 +200,9 @@ coverage or approve any financial values.
 `DisposableNativeInvoiceStore` uses native rows/documents, complete bounded
 evidence reads, the control schema, grants and hold reviews. Its constructor
 retains the guarded Unix socket, loopback Mongo and random dual-marker checks.
-There is no production connection factory or live execution route.
-`executeProductionInvoiceRepair()` still throws unconditionally.
+The server-only production connection factory and authenticated execution entry
+are now prepared in `lib/invoice-repair/production-store.ts` and
+`production-entry.ts`. There is still no registered HTTP route or scheduled job.
 
 The authenticated facade derives the actor from the existing platform-admin
 session for hold operations, grant issuance and native execution. Every native
@@ -227,3 +228,42 @@ Native tests cover apply/retry/rollback, canonical/shadow lost responses,
 read/write blocking, actor/action/digest rejection, hold coverage and evidence
 drift. The original envelope suite retains the larger multi-entry/process-exit
 tests; those are not claimed as native replica-failover tests.
+
+### Prepared production entry (not activated)
+
+The native engine is shared by disposable and production-shaped connections.
+The production entry first requires explicit server-side activation and a
+non-impersonated, non-test platform-administrator session. It accepts no actor
+identity from the command. Configuration is trusted server input, not browser
+JSON; importing the module opens no connections and reads no credentials.
+
+Before accessing repair state, its dedicated maintenance clients verify the
+expected PostgreSQL database/role and the same pre-approved 64-character
+installation key in both PostgreSQL and Mongo. Mongo uses primary,
+majority-consistent reads and disables retryable writes. These clients cannot
+use ordinary access admission: they would block on their own repair fence.
+Every native phase still requires the installed exclusion, drained admissions,
+writer verification, evidence and hold coverage, and persisted approval.
+
+Commands are prepare, approve, execute and inspect. Approval refreshes native
+state, writer verification and hold coverage before creating an actor/action/
+plan/evidence-bound grant. Execution rechecks these conditions at every phase;
+changes between approval validation and grant insertion cannot authorize a stale
+write. An unresolved repair cannot obtain a new ordinary approval by silently
+extending its plan. Expired plans may be inspected. Apply and rollback require
+separate grants. Driver errors are not forwarded as native-row or credential
+details; an uncertain response directs the operator to persisted state.
+
+The isolated test bundles the real server entry, substituting only the session
+provider. It uses actual disposable PostgreSQL and a three-member Mongo replica
+set; deployment-verification responses remain offline fixtures. Tests verify
+disabled mode, denied staff/test/impersonation/password-reset sessions,
+installation and database/role mismatch, missing/wrong-actor grants, native
+apply/rollback and expired-plan inspection. Nothing connects this test to live
+credentials or installs the control schema in production.
+
+Before live use: complete release validation, deploy verified compatible readers
+and writers, separately approve a drained installation with the same random key
+in both stores, establish current writer and reviewed hold evidence, run a fresh
+bounded preflight and obtain specific repair approval. No step is implicitly
+authorized by the presence of this entry point.

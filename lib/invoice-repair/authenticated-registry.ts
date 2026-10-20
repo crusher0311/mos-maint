@@ -3,7 +3,7 @@ import { getSession } from "@/lib/auth";
 import type { HoldRegistry, RepairScope } from "./hold-registry";
 import type postgres from "postgres";
 import { recordRepairApproval, type RepairApprovalBinding } from "./approvals";
-import type { DisposableNativeInvoiceStore, NativeRepairPlan } from "@/scripts/invoice-native-dual-store";
+import type { NativeInvoiceStore, NativeRepairPlan } from "@/scripts/invoice-native-dual-store";
 
 async function actor() {
   const session = await getSession();
@@ -35,7 +35,7 @@ export async function recordAuthenticatedRepairApproval(sql: ReturnType<typeof p
   return recordRepairApproval(sql, principal.actorId, binding);
 }
 export async function executeAuthenticatedNativeRepair(
-  store: DisposableNativeInvoiceStore, plan: NativeRepairPlan, action: "apply" | "rollback", approvalId: string,
+  store: NativeInvoiceStore, plan: NativeRepairPlan, action: "apply" | "rollback", approvalId: string,
 ) {
   const principal = await actor();
   return store.executeNative(plan, action, approvalId, principal.actorId);

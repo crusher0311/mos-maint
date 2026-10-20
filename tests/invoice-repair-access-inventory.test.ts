@@ -18,7 +18,16 @@ function scan(root: string) {
     if (entry.isDirectory()) { scan(file); continue; }
     if (!/\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/.test(file)) continue;
     const text = readFileSync(file, "utf8");
-    if (!/(normalized_work_orders|normalizedWorkOrders|NORMALIZED_COLLECTIONS|NormalizedIngestionService|SupabaseDualWriter)/.test(text)) continue;
+    if (!/(normalized_work_orders|normalizedWorkOrders|NORMALIZED_COLLECTIONS|NormalizedIngestionService|SupabaseDualWriter|NativeInvoiceStore)/.test(text)) continue;
+    if (file === "lib/invoice-repair/production-store.ts") {
+      // Dedicated maintenance clients cannot use ordinary admission guards:
+      // they operate under the repair engine's exclusion and exact binding.
+      assert.match(text, /assert\.equal\(config\?\.enabled, true/);
+      assert.match(text, /rows\[0\]\.installation_key, config\.installationKey/);
+      assert.match(text, /binding\?\.installationKey, config\.installationKey/);
+      assert.match(text, /new NativeInvoiceStore\(sql, db, guard\)/);
+      continue;
+    }
     if (local.has(file)) {
       assert.match(text, /invoice_preview\.disposable|\/tmp\/invoice-|127\.0\.0\.1/,
         `Disposable endpoint restriction missing: ${file}`);
