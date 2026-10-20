@@ -3,10 +3,12 @@ import assert from "node:assert/strict";
 import {randomUUID} from "node:crypto";
 import {ObjectId,type Db} from "mongodb";
 import {isolatedStaffDatabase} from "./helpers/staff-inspection-fixture";
+import {getProtractorInteractiveTransportContext} from "../lib/integrations/protractor/interactive-context";
 const Module=require("module"),original=Module._load;
 let db:Db,isolated:Awaited<ReturnType<typeof isolatedStaffDatabase>>,calls=0,late=false;
 let resolveWrite:((value:unknown)=>void)|undefined;
 let capturedId="";
+let finalizeScope:{shopId:number;active:boolean}|undefined;
 Module._load=function(id:string,...args:any[]){
   if(id==="next/headers")return {cookies:async()=>({get:()=>({value:"fixture-session"})})};
   if(id==="@/lib/mongo")return {getDb:async()=>db};
@@ -14,7 +16,11 @@ Module._load=function(id:string,...args:any[]){
     calls++;capturedId=options.workOrderId;
     return late ? new Promise(resolve=>{resolveWrite=resolve;}) : {ok:true,workOrderId:capturedId,workOrderNumber:4321};
   }};
-  if(id==="@/lib/integrations/protractor/work-order-service")return {finalizeProtractorWorkOrderCreation:async()=>{}};
+  if(id==="@/lib/integrations/protractor/work-order-service")return {finalizeProtractorWorkOrderCreation:async(shop:number)=>{
+    const scope=getProtractorInteractiveTransportContext();
+    finalizeScope=scope?{shopId:scope.shopId,active:scope.active}:undefined;
+    assert.equal(scope?.shopId,shop);assert.equal(scope?.active,true);
+  }};
   if(id==="@/lib/with-upstream-timeout")return {withUpstreamTimeout:async(promise:Promise<any>,_ms:number,_tag:string,fallback:any)=>{
     if(!late)return promise;
     return Promise.race([promise,new Promise(resolve=>setTimeout(()=>resolve(fallback),10))]);
@@ -37,6 +43,7 @@ const payload=()=>({contactId:randomUUID(),vehicleId:randomUUID(),clientRequestI
 test("real route confirms once and retries only read the durable receipt",async()=>{
   const body=payload();const first=await route.POST(request(body));
   assert.equal(first.status,200);assert.equal((await first.json()).workOrderNumber,4321);
+  assert.deepEqual(finalizeScope,{shopId:66,active:true});
   const count=calls;
   assert.equal((await route.POST(request({...body,recoveryOnly:true}))).status,200);
   assert.equal((await route.POST(request(body))).status,200);

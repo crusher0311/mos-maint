@@ -132,9 +132,10 @@ export async function POST(req: NextRequest) {
     // background so the user gets their WO number as soon as Protractor has
     // accepted the work order.
     const tFinalize = Date.now();
-    finalizeProtractorWorkOrderCreation(shopId, result.workOrderId, {
+    runWithProtractorInteractiveTransport(shopId, () => finalizeProtractorWorkOrderCreation(shopId, result.workOrderId, {
       logPrefix: "[Create WO]",
-    })
+      interactive: true,
+    }))
       .then(() => {
         console.log(
           `[Create WO] timing shop=${shopId} wo=${result.workOrderNumber} create=${createMs}ms finalize(bg)=${Date.now() - tFinalize}ms`,

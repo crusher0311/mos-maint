@@ -21,7 +21,7 @@ import { NormalizedIngestionService } from "@/lib/integrations/core/normalized-i
 export async function finalizeProtractorWorkOrderCreation(
   shopId: number,
   workOrderId: string | null | undefined,
-  opts: { logPrefix?: string } = {},
+  opts: { logPrefix?: string; interactive?: boolean } = {},
 ): Promise<void> {
   const prefix = opts.logPrefix || "[Protractor Create WO]";
 
@@ -35,8 +35,12 @@ export async function finalizeProtractorWorkOrderCreation(
           {},
           0,
           shopId,
+          opts.interactive ? {priority:true,maxRetries:0,timeoutMs:12000} : undefined,
         );
-        if (woResult.ok && woResult.data) {
+        if (!woResult.ok || !woResult.data) {
+          // Do not report a successful snapshot or log raw provider errors.
+          console.warn(`${prefix} dashboard snapshot unavailable; shop=${shopId}; existing RO requires read-only refresh`);
+        } else {
           await upsertProtractorWorkOrderSnapshot(shopId, woResult.data);
           console.log(`${prefix} Snapshotted WO ${workOrderId} to dashboard`);
 

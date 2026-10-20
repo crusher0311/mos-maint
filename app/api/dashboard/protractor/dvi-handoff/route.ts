@@ -2,7 +2,7 @@ import { ZodError } from "zod";
 import { staffAccess } from "@/lib/auto-dvi/staff/access";
 import { handoffRO } from "@/lib/auto-dvi/staff/ro-handoff";
 import { readDispatchBoard,saveDispatchBoard } from "@/lib/data/repositories/shop-dispatch";
-import { fetchDispatchWorkOrder } from "@/lib/shop-dispatch/protractor";
+import { fetchGuidedROIntake } from "@/lib/auto-dvi/staff/ro-handoff-provider";
 import { dispatchJson,dispatchFailure,requestBody } from "@/lib/shop-dispatch/http";
 import { getSession } from "@/lib/auth";
 import { createHash } from "node:crypto";
@@ -23,7 +23,7 @@ export async function GET(){
 export async function POST(req:Request){
   try{return dispatchJson(await handoffRO(await requestBody(req),{
     access:staffAccess,read:readDispatchBoard,save:saveDispatchBoard,
-    fetch:fetchDispatchWorkOrder,now:()=>new Date().toISOString(),
+    fetch:fetchGuidedROIntake,now:()=>new Date().toISOString(),
   }));}
   catch(e){return e instanceof ZodError?dispatchJson({error:"Invalid confirmed RO"},400):dispatchFailure(e);}
 }
