@@ -19,6 +19,7 @@ import {
   renewProtractorPhysicalTransportLease,
 } from "@/lib/data/repositories/api-usage";
 import { getDb } from "@/lib/mongo";
+import { saveVehicleSnapshot } from "./vehicle-snapshot";
 import {
   findDeferredWorkByShopAndVin,
   upsertDeferredWorkSnapshot,
@@ -3569,32 +3570,7 @@ export async function upsertProtractorVehicleSnapshot(
   vehicle: ProtractorVehicle
 ): Promise<void> {
   const db = await getDb();
-  const now = new Date();
-  
-  await db.collection("protractor_vehicles").updateOne(
-    { shopId, vin: vin.toUpperCase() },
-    {
-      $set: {
-        shopId,
-        vin: vin.toUpperCase(),
-        protractorId: vehicle.ID,
-        year: vehicle.Year ?? null,
-        make: vehicle.Make ?? null,
-        model: vehicle.Model ?? null,
-        color: vehicle.Color ?? null,
-        engine: vehicle.Engine ?? null,
-        transmission: vehicle.Transmission ?? null,
-        odometer: vehicle.Usage ?? vehicle.Odometer ?? null,
-        odometerDate: vehicle.OdometerDate ?? null,
-        licensePlate: vehicle.LicensePlate ?? null,
-        ownerId: vehicle.OwnerID ?? null,
-        fetchedAt: now,
-        source: "protractor",
-      },
-      $setOnInsert: { createdAt: now },
-    },
-    { upsert: true }
-  );
+  await saveVehicleSnapshot(db, shopId, vin, vehicle);
 }
 
 export async function upsertProtractorWorkOrderSnapshot(

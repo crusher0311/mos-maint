@@ -5,6 +5,12 @@ description: Why the production log feed contains errors from apps other than MO
 
 # Better Stack shared log feed
 
+Select callback diagnostic fields rather than returning raw access-log messages.
+
+**Why:** Render access logs can include Protractor authentication parameters in callback query strings, even when filtering only for vehicle-update events.
+
+**How to apply:** Filter application-prefixed callback messages or select event, shop ID, outcome and reason explicitly. Do not return raw request paths or unfiltered message payloads.
+
 ## MCP query-help parameter mismatch
 
 Use `source_id` (not `id`) for the live `queryHelp` callback.
