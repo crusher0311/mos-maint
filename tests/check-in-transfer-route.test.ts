@@ -67,7 +67,18 @@ test("real transfer routes require cookie authentication, selected current-shop 
   users[1].shopIds=[];assert.equal((await route.POST(request("",accept))).status,403);users[1].shopIds=[66];
   enabled=false;assert.equal((await route.POST(request("",accept))).status,403);enabled=true;
   shopId=67;assert.equal((await route.POST(request("",accept))).status,403);shopId=66;
-  assert.equal((await route.POST(request("",accept))).status,200);
+  const accepted=await route.POST(request("",accept));
+  assert.equal(accepted.status,200);
+  const receipt=(await accepted.json()).draft;
+  // An exact retry after a lost acknowledgement is read-only. A different
+  // device cannot use the old acceptance request to take the draft again.
+  const retry=await route.POST(request("",accept));
+  assert.equal(retry.status,200);
+  assert.equal((await retry.json()).draft.revision,receipt.revision);
+  assert.equal((await route.POST(request("",{...accept,deviceId:randomUUID()}))).status,409);
+  const persisted=await db.collection("guided_check_in_drafts").findOne({id});
+  assert.equal(persisted!.ownershipHistory.length,1);
+  assert.equal(persisted!.session.handoffRequestId,id);
   assert.equal((await draftRoute.GET(request(`?id=${id}`))).status,200);
   denied=email;assert.equal((await draftRoute.GET(request(`?id=${id}`))).status,403);denied=undefined;
   email="sender@example.invalid";assert.equal((await draftRoute.GET(request(`?id=${id}`))).status,404);
