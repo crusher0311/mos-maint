@@ -1,3 +1,4 @@
+import { getSession } from "@/lib/auth";
 import { staffAccess,staffMemberAccess } from "@/lib/auto-dvi/staff/access";
 import { CheckInDrafts } from "@/lib/data/repositories/check-in-drafts";
 import { dispatchFailure,dispatchJson,requestBody } from "@/lib/shop-dispatch/http";
@@ -7,6 +8,7 @@ export const runtime="nodejs";
 export const dynamic="force-dynamic";
 const drafts=new CheckInDrafts();
 async function access(){
+  requireThat(await getSession(),"Sign in required",401);
   const a=await staffAccess();
   requireThat(a.canEdit&&a.canReview,"Advisor check-in access required",403);
   return a;
