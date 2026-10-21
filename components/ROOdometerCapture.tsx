@@ -28,7 +28,7 @@ export function ROOdometerCapture({ recovery, capture, onCapture, onApply }: {
       <p className="mt-1 text-xs text-gray-500">Photograph the total odometer, not Trip A or Trip B. The original photo stays in arrival documentation; no inspection finding is created.</p></div>
     <label className={`inline-flex items-center gap-2 border-2 border-dashed rounded-lg px-3 py-2.5 text-sm ${disabled ? "border-gray-200 text-gray-400" : "border-blue-200 text-blue-700 cursor-pointer"}`}>
       <Camera className="w-4 h-4" />{recovery.busy ? "Saving photo / reading odometer" : "Scan odometer photo"}
-      <input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" disabled={disabled}
+      <input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif" capture="environment" disabled={disabled}
         onChange={async event => {
           const file = event.target.files?.[0]; event.target.value = "";
           if (!file) return;

@@ -21,7 +21,7 @@ export function ArrivalPhotoPicker({ recovery }: { recovery: Recovery }) {
     {!recovery.enabled && <p className="text-xs text-gray-500">Arrival photo uploads require DVI access. Repair order creation is still available normally.</p>}
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
       {(["camera", "upload"] as const).map(source => <label key={source} className="text-gray-700">{source === "camera" ? "Capture arrival photo" : "Upload arrival photo"}
-        <input className="block w-full text-xs mt-1" type="file" accept="image/jpeg,image/png,image/webp" capture={source === "camera" ? "environment" : undefined}
+        <input className="block w-full text-xs mt-1" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif" capture={source === "camera" ? "environment" : undefined}
            disabled={!recovery.enabled || !recovery.ready || recovery.busy || recovery.sharedBlocked || !!recovery.session?.payload} onChange={event => {
             const file = event.target.files?.[0]; event.target.value = ""; if (file) void recovery.addPhoto(file);
           }} /></label>)}

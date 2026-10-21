@@ -3,8 +3,23 @@ import { MAX_PHOTO_BYTES, photoAllowed } from "./ro-session-store";
 /** Normalize large camera images before assigning a durable upload identity. */
 export async function prepareROPhoto(file: File): Promise<File> {
   if (!file.size) throw new Error("This photo is empty. Please take it again.");
+  if (file.size > 40 * 1024 * 1024) throw new Error("This photo exceeds 40 MB. Choose a smaller photo.");
+  const header = new Uint8Array(await file.slice(0, 32).arrayBuffer());
+  const brands = new TextDecoder("ascii").decode(header);
+  const heic = /image\/hei[cf]/i.test(file.type) || /\.hei[cf]$/i.test(file.name) ||
+    (brands.slice(4, 8) === "ftyp" && /heic|heix|hevc|hevx|mif1|msf1/.test(brands.slice(8)));
+  if (heic) {
+    try {
+      const { heicTo } = await import("heic-to/csp");
+      const image = await heicTo({ blob: file, type: "image/jpeg", quality: 0.9 });
+      if (!image?.size) throw new Error("Empty conversion");
+      file = new File([image], file.name.replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" });
+    } catch {
+      throw new Error("This iPhone photo could not be converted. The photo was not saved. Try taking a new photo or choose another image.");
+    }
+  }
   if (!["image/jpeg", "image/png", "image/webp"].includes(file.type))
-    throw new Error("This photo format is not supported. Choose JPEG, PNG or WebP. On iPhone, use Camera → Formats → Most Compatible, then take a new photo.");
+    throw new Error("Choose a JPEG, PNG, WebP, HEIC or HEIF photo.");
   if (photoAllowed(file)) return file;
   if (file.size > 40 * 1024 * 1024) throw new Error("This photo exceeds 40 MB. Choose a smaller photo.");
   const url = URL.createObjectURL(file);

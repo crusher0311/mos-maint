@@ -12,6 +12,12 @@ MOS Auto DVI is positioned as a REPLACEMENT for third-party DVI providers (AutoF
 
 ## Historical findings and multiple sheets
 
+Phone-photo compatibility must include higher-bit-depth HEIC, not just ordinary 8-bit samples.
+
+**Why:** An older browser decoder passed an 8-bit HEIC but rejected the synthetic 12-bit sample; a current decoder passed both. MIME types can also be empty on camera uploads.
+
+**How to apply:** Keep real encoded-image regression coverage when changing conversion libraries. Convert before assigning upload identities, preserve the server size limit, and never mark failed conversion as a saved photo.
+
 Use the existing Create New RO workflow from both the dashboard and workflow
 board, not a separate local check-in flow presented as RO creation. The user
 wants confirmed RO creation to continue directly into DVI, with optional vehicle
