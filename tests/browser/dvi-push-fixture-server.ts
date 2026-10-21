@@ -2,6 +2,9 @@
 import http from "node:http";
 import { build } from "esbuild";
 async function main() {
+  const transferBundle=await build({entryPoints:["tests/browser/check-in-transfer-fixture.tsx"],bundle:true,write:false,
+    jsx:"automatic",platform:"browser",format:"iife"});
+  let transferOffered=false,transferRevision=1;
   const recoveryBundle = await build({
     entryPoints: ["tests/browser/dvi-recovery-fixture.tsx"], bundle: true, write: false,
     jsx: "automatic", platform: "browser", format: "iife",
@@ -27,6 +30,20 @@ async function main() {
   .block{display:block}button{padding:10px 16px;margin-top:16px}</style></head>
   <body><div id="root"></div><script src="/fixture.js"></script></body></html>`;
   http.createServer((req, res) => {
+    if(req.url==="/transfer.js"){res.setHeader("Content-Type","text/javascript");res.end(transferBundle.outputFiles[0].text);return;}
+    if(req.url==="/transfer"){res.setHeader("Content-Type","text/html");res.end(html.replace("/fixture.js","/transfer.js"));return;}
+    if(req.url?.startsWith("/api/dashboard/protractor/check-in-drafts/transfer")){
+      res.setHeader("Content-Type","application/json");
+      if(req.method==="POST"){
+        let body="";req.on("data",chunk=>body+=chunk);req.on("end",()=>{
+          const input=JSON.parse(body);transferOffered=input.action==="offer";transferRevision++;
+          res.end(JSON.stringify({draft:{revision:transferRevision}}));
+        });return;
+      }
+      if(req.url.includes("?email=")){res.end(JSON.stringify({coworker:{email:"recipient@example.invalid",actor:"b".repeat(64)}}));return;}
+      res.end(JSON.stringify({offers:transferOffered?[{id:"14850000-0000-4000-8000-000000000001",revision:transferRevision,
+        from:"a".repeat(64),offeredAt:"2026-10-20T12:00:00Z"}]:[]}));return;
+    }
     if (req.url?.startsWith("/api/")) {
       if (req.url.startsWith("/api/auto-dvi/push/recover")) {
         res.writeHead(403, {"Content-Type": "application/json"});

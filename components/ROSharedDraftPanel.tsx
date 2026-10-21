@@ -5,6 +5,7 @@ import QRCode from "qrcode";
 import { Cloud, CloudOff, Monitor, Smartphone, RefreshCw, ShieldCheck } from "lucide-react";
 import { handoffHref } from "./ro-shared-draft-client";
 import type { useRORecovery } from "./use-ro-recovery";
+import { ROCoworkerTransfer } from "./ROCoworkerTransfer";
 
 type Recovery = ReturnType<typeof useRORecovery>;
 export function ROSharedDraftPanel({ recovery, fields, onResume }: {
@@ -56,6 +57,7 @@ export function ROSharedDraftPanel({ recovery, fields, onResume }: {
       </button>
     </div>
     {expanded && <div className="border-t border-blue-100 p-3 space-y-3">
+      {id && <ROCoworkerTransfer recovery={recovery} fields={fields}/>}
       {!!recovery.serverDraft && <div className="rounded-lg bg-white/70 border border-blue-100 p-3">
         <p className="text-sm font-medium text-gray-800">Resume your server check-in on this device</p>
         <p className="text-xs text-gray-600 mt-1">This explicitly transfers editing to this device. The other device must resume again before changing or creating anything.</p>

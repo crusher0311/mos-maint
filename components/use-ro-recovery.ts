@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { confirmedRO, photoAllowed, readROSession, removeROSession, safeLocalHref, saveROSession, submitFrozenRO, hasPendingCreates, MAX_PHOTOS, type ROSession, type JsonPost } from "./ro-session-store";
 import { applySharedReceipt, deleteSharedDraft, draftFence, getSharedDraft, hydrateSharedDraft, sharedSnapshotSaved, SharedDraftError, uploadSharedPhoto, writeSharedDraft, type SharedDraft } from "./ro-shared-draft-client";
 import { parseOdometerSuggestion, type DistanceUnit, type OdometerCapture } from "./ro-odometer";
+import { checkInTransferRequest } from "./ro-shared-draft-client";
 
 async function capability() {
   const controller = new AbortController();
@@ -60,7 +61,7 @@ export function useRORecovery(open: boolean, onCreated?: (number: number) => voi
   const sharedCapability = useRef(false);
   const localOnlyChosen = useRef(false);
   const legacyPending = !!session && !session.shared && (localOnlyChosen.current || !!session.payload || hasPendingCreates(session));
-  const sharedBlocked = sharedStatus === "conflict" ||
+  const sharedBlocked = !!serverDraft?.transfer || sharedStatus === "conflict" ||
     (!!session?.shared && session.shared.deviceId !== deviceId.current) ||
     (!!serverDraft && !legacyPending && (serverDraft.id !== session?.handoffRequestId ||
       (!!session?.shared && serverDraft.ownerDeviceId !== deviceId.current)));
@@ -458,6 +459,23 @@ export function useRORecovery(open: boolean, onCreated?: (number: number) => voi
       setServerDraft(await getSharedDraft(current.current!, requestedDraftId));
     });
   }
+  function transferDraft(action:"offer"|"cancel",fields:string,email?:string) {
+    return run(async()=>{
+      await draftWrites.current;
+      let value=current.current!;
+      await checkShop(value);
+      if(!value.shared)throw new Error("Save the check-in to the server first.");
+      if(action==="offer"){
+        value=await persist({...value,draft:{version:1,fields}});
+      }
+      const remote=action==="cancel"?await getSharedDraft(value,value.shared!.id):serverDraft;
+      const result=await checkInTransferRequest("",{action,...value.shared,
+        ...(action==="cancel"&&remote?{revision:remote.revision}:{}),...(email?{email}:{})});
+      setServerDraft(result.draft);
+      adopt(applySharedReceipt(value,result.draft,deviceId.current));
+      setSharedStatus("saved");
+    });
+  }
   async function scanOdometer(file: File): Promise<Pick<OdometerCapture, "photoRequestId" | "suggestion"> | null> {
     let result: Pick<OdometerCapture, "photoRequestId" | "suggestion"> | null = null;
     await run(async () => {
@@ -494,7 +512,7 @@ export function useRORecovery(open: boolean, onCreated?: (number: number) => voi
     return result;
   }
   return { session, enabled, ready, busy, error, needsResume, saveDraft, resumeDraft, discardDraft,
-    sharedSupported, serverDraft, sharedStatus, sharedBlocked, localDraftExists, shareDraft, resumeSharedDraft, refreshSharedDraft,
+    sharedSupported, serverDraft, sharedStatus, sharedBlocked, localDraftExists, shareDraft, resumeSharedDraft, refreshSharedDraft, transferDraft,
     refreshAfterNative: refreshNativeFence,
     odometerSupported, distanceUnit, scanOdometer, readSavedOdometer, lastOdometerPhotoId,
     prepareRelated, finishRelated,

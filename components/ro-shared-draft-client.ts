@@ -15,7 +15,12 @@ export type SharedDraft = {
   id: string; revision: number; ownerDeviceId: string; updatedAt: string;
   session: Omit<ROSession, "photos" | "shared">;
   photos: SharedPhoto[];
+  transfer?: {from:string;to:string;recipientEmail:string;offeredAt:string} | null;
 };
+export const TRANSFER_ENDPOINT = `${SHARED_DRAFT_ENDPOINT}/transfer`;
+export async function checkInTransferRequest(query = "", body?: unknown) {
+  return json(`${TRANSFER_ENDPOINT}${query}`,body);
+}
 export class SharedDraftError extends Error {
   constructor(message: string, public status: number) { super(message); }
 }

@@ -11,7 +11,7 @@ let capturedId="";
 let finalizeScope:{shopId:number;active:boolean}|undefined;
 Module._load=function(id:string,...args:any[]){
   if(id==="@/lib/auto-dvi/staff/check-in-access"||id==="./check-in-access")return {checkInAccess:async()=>({shopId:66,actor:createHash("sha256").update("staff|66|advisor@example.invalid").digest("hex")})};
-  if(id==="next/headers")return {cookies:async()=>({get:()=>({value:"fixture-session"})})};
+  if(id==="next/headers")return {cookies:async()=>({get:()=>({value:"fixture-session"})}),headers:async()=>new Headers()};
   if(id==="@/lib/mongo"||id==="@/lib/data/db")return {getDb:async()=>db};
   if(id==="@/lib/integrations/protractor")return {createProtractorWorkOrder:async(_shop:number,_body:any,options:any)=>{
     calls++;capturedId=options.workOrderId;

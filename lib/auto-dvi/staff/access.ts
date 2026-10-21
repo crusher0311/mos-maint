@@ -16,6 +16,10 @@ export async function staffAccess() {
   requireThat(session?.email && session.token === cookieToken && !session.isTestAuth && session.token !== "dev-auto-login" && !session.mustChangePassword, "Verified sign-in required", 401);
   const shopId = Number(session.shopId), email = session.email.toLowerCase();
   requireThat(Number.isSafeInteger(shopId) && shopId > 0, "Current shop required", 403);
+  return staffMemberAccess(shopId,email);
+}
+/** Server-side membership lookup; this does not authenticate a browser. */
+export async function staffMemberAccess(shopId:number,email:string) {
   const [users, entitlements, enterprise] = await Promise.all([
     listUsers({email}), getFeatureEntitlements(shopId), getEnterpriseByShopId(shopId),
   ]);

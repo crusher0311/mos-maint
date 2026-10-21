@@ -38,3 +38,16 @@ a duplicate provider write.
 
 **How to apply:** Preserve shop/advisor isolation and never treat restoring
 local fields as consent to create a customer, vehicle, ticket, or DVI.
+
+Coworker handoff is an explicit ownership offer and acceptance, not broader
+shop-wide access to drafts. Native customer, vehicle and RO identities must
+survive an advisor change without being regenerated.
+
+**Why:** The user authorized selected-coworker takeover, not public QR grants.
+Provider creation identities can depend on the originating advisor; moving
+an unresolved operation to another advisor risks creating a different record
+instead of recovering the first one.
+
+**How to apply:** Resolve uncertain native operations before offering a
+transfer, recheck both advisors' current permissions at acceptance, and keep
+links as selectors requiring ordinary authenticated shop access.
