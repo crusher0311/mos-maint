@@ -1,4 +1,5 @@
 "use client";
+import { prepareROPhoto } from "./ro-photo-input";
 
 import { useState, useEffect, useRef } from "react";
 import {
@@ -796,6 +797,7 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated, requeste
     try {
       const res = await fetch(`/api/vin/decode?vin=${encodeURIComponent(vin)}`);
       const data = await res.json();
+      if (!res.ok || !data.decoded) throw new Error("VIN decoding is unavailable or no match was found. Check the VIN, then retry or enter vehicle details manually.");
       if (data.decoded) {
         setArrivalVin(vin); setArrivalVinConfirmed(false);
         setNewVehicle(prev => ({
@@ -810,7 +812,8 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated, requeste
         }));
         setVinDecoded(true);
       }
-    } catch {
+    } catch (error) {
+      setVehicleError(error instanceof Error ? error.message : "VIN decoding failed. Enter vehicle details manually or retry.");
     } finally {
       setVinDecoding(false);
     }
@@ -866,6 +869,7 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated, requeste
     setOcrResult(null);
     setVehicleError("");
     try {
+      file = await prepareROPhoto(file);
       const formData = new FormData();
       formData.append("image", file);
       formData.append("type", "auto");
@@ -1312,7 +1316,10 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated, requeste
               {recovery.sharedSupported && <VehicleArrivalCapture vin={createNewVehicle ? newVehicle.vin || arrivalVin : arrivalVin || selectedVehicle?.vin || ""}
                 mileage={mileageInput} vinConfirmed={arrivalVinConfirmed} mileageConfirmed={arrivalMileageConfirmed}
                 onVinChange={value => { setArrivalVin(value); setArrivalVinConfirmed(false);
-                  if (createNewVehicle) setNewVehicle(previous => ({ ...previous, vin: value })); }}
+                  if (createNewVehicle) {
+                    setNewVehicle(previous => ({ ...previous, vin: value }));
+                    if (value.length === 17) void handleVinDecode(value);
+                  } }}
                 onMileageChange={value => { setMileageInput(value); setArrivalMileageConfirmed(false);
                   setOdometerCapture(previous => previous ? { ...previous, confirmed: null } : null); }}
                 onVinConfirm={setArrivalVinConfirmed} onMileageConfirm={setArrivalMileageConfirmed} />}

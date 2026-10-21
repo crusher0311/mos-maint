@@ -87,6 +87,8 @@ const file = { name: "odometer.png", mimeType: "image/png", buffer: png };
     }
     const shared = await context();
     const phone = await newDraft(shared, "odometer=km&loseDraftAck");
+    await phone.getByLabel("VIN · 17 characters", { exact: true }).fill("1HGCM82633A004352");
+    await phone.getByText("VIN decoded — vehicle details auto-filled", { exact: true }).waitFor();
     const scan = phone.getByLabel("Scan VIN / Plate Photo");
     assert.equal(await scan.getAttribute("capture"), "environment");
     await scan.setInputFiles({ ...file, name: "vin.png" });

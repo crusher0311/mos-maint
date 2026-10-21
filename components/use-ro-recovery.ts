@@ -1,4 +1,5 @@
 "use client";
+import { prepareROPhoto } from "./ro-photo-input";
 import { useEffect, useRef, useState } from "react";
 import { confirmedRO, photoAllowed, readROSession, removeROSession, safeLocalHref, saveROSession, submitFrozenRO, hasPendingCreates, MAX_PHOTOS, type ROSession, type JsonPost } from "./ro-session-store";
 import { applySharedReceipt, deleteSharedDraft, draftFence, getSharedDraft, hydrateSharedDraft, sharedSnapshotSaved, SharedDraftError, uploadSharedPhoto, writeSharedDraft, type SharedDraft } from "./ro-shared-draft-client";
@@ -370,7 +371,7 @@ export function useRORecovery(open: boolean, onCreated?: (number: number) => voi
     return run(async () => {
       const value = current.current!;
       if (value.payload) throw new Error("Creation details are frozen.");
-      if (!photoAllowed(file)) throw new Error("Choose a JPEG, PNG or WebP photo up to 4 MB.");
+      file = await prepareROPhoto(file);
       if (value.photos.length >= MAX_PHOTOS) throw new Error(`Up to ${MAX_PHOTOS} arrival photos can be retained.`);
       const cap = await checkShop(value);
       if (!cap.enabled) throw new Error("Arrival photo uploads require DVI access. You can still create a repair order normally.");
@@ -483,6 +484,7 @@ export function useRORecovery(open: boolean, onCreated?: (number: number) => voi
       const cap = await checkShop(value);
       if (cap.odometerScan?.version !== 1 || !value.shared || !cap.enabled)
         throw new Error("Odometer interpretation requires an enabled server draft and arrival photo access. Enter mileage manually instead.");
+      file = await prepareROPhoto(file);
       if (value.payload || !photoAllowed(file) || value.photos.length >= MAX_PHOTOS)
         throw new Error("Choose a JPEG, PNG or WebP photo up to 4 MiB before creation. A draft can retain up to 12 photos.");
       const photoRequestId = crypto.randomUUID();
