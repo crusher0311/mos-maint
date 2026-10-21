@@ -2,6 +2,12 @@
 name: DVI product direction & write paths
 description: MOS Auto DVI is a native DVI replacement; where inspections can(not) be written per provider
 ---
+Keep check-in device-handoff details collapsed by default, but expose the explicit resume action when ownership blocks editing.
+
+**Why:** The user requested a compact mobile form; hiding the required resume action then made the desktop concern field appear broken.
+
+**How to apply:** Preserve ownership fencing and explicit takeover consent. Keep the reason and primary recovery action visible outside collapsed explanatory controls.
+
 MOS Auto DVI is positioned as a REPLACEMENT for third-party DVI providers (AutoFlow/AutoVitals/AS1), not an integrator with them — the inspection lives natively in MOS (checklist, G/Y/R ratings, notes/recommendations, GridFS media) and reaches CARFAX via the $0 "Inspected: …" WO package.
 
 ## Historical findings and multiple sheets

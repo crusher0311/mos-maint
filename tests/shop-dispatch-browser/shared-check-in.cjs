@@ -69,6 +69,22 @@ const file = { name: "odometer.png", mimeType: "image/png", buffer: png };
       await page.getByRole("button", { name: "Next: Add Jobs", exact: true }).click();
       await page.getByRole("button", { name: "Skip & Create Work Order", exact: true }).click();
     }
+    {
+      const ctx = await context();
+      const source = await startShared(ctx);
+      const draft = await source.evaluate(key => JSON.parse(localStorage.getItem(key)), slot);
+      const computer = await ctx.newPage();
+      await computer.goto(`${origin}/?draft=${draft.id}`);
+      await computer.getByRole("heading", { name: "Resume before editing", exact: true }).waitFor();
+      const concern = computer.getByPlaceholder("What did the customer say? e.g. 'Car is making a grinding noise when braking...'");
+      await computer.getByRole("button", { name: "Resume on this device", exact: true }).click();
+      await concern.fill("Vehicle overheats while idling");
+      assert.equal(await concern.inputValue(), "Vehicle overheats while idling");
+      assert.equal(await computer.getByRole("button", { name: "Device handoff", exact: true }).getAttribute("aria-expanded"), "false");
+      assert.equal((await computer.evaluate(() => window.__newROFixture.calls)).filter(c => /create-(contact|vehicle|work-order)$/.test(c.path)).length, 0);
+      await ctx.close();
+      console.log("PASS collapsed resume unlocks computer concern typing without creating a native record");
+    }
     const shared = await context();
     const phone = await newDraft(shared, "odometer=km&loseDraftAck");
     const scan = phone.getByLabel("Scan VIN / Plate Photo");
@@ -104,9 +120,10 @@ const file = { name: "odometer.png", mimeType: "image/png", buffer: png };
     await desktop.getByRole("button", { name: "Device handoff", exact: true }).click();
     await desktop.getByRole("button", { name: "Hide handoff", exact: true }).click();
     assert.equal(await desktop.getByRole("button", { name: "Resume server check-in here", exact: true }).count(), 0);
-    await desktop.getByRole("button", { name: "Device handoff", exact: true }).click();
-    await desktop.getByRole("button", { name: "Resume server check-in here", exact: true }).click();
+    await desktop.getByRole("button", { name: "Resume on this device", exact: true }).click();
     await desktop.getByLabel("Odometer reading", { exact: true }).waitFor();
+    assert.equal(await desktop.getByLabel("Odometer reading", { exact: true }).isEnabled(), true,
+      "compact resume must unlock the restored form without expanding handoff");
     assert.equal(await desktop.getByLabel("Odometer reading", { exact: true }).inputValue(), "64747");
     await desktop.getByText("Confirmed 64,747 miles.", { exact: false }).waitFor();
     await desktop.getByText("VIN detected:", { exact: false }).waitFor();

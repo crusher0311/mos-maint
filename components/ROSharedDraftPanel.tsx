@@ -47,10 +47,20 @@ export function ROSharedDraftPanel({ recovery, fields, onResume }: {
             recovery.sharedStatus === "saving" ? "Saving check-in to server" : id ? "Changes are not synchronized" : "One check-in. Either device."}
         </h3>
         <p className="text-xs text-gray-600 mt-1" role="status" aria-live="polite">
-          {synced ? `Details and ${photoCount} arrival ${photoCount === 1 ? "photo" : "photos"} confirmed. No customer, vehicle or RO is created by switching devices.` :
+          {recovery.sharedBlocked ? recovery.serverDraft?.transfer
+            ? "Editing is paused for a coworker transfer. Open Device handoff to review it."
+            : canResume
+              ? "A saved check-in is waiting. Resume it on this device to unlock the fields; this does not create another ticket."
+              : "Editing is paused to protect saved work. Open Device handoff to review the check-in before continuing."
+            : synced ? `Details and ${photoCount} arrival ${photoCount === 1 ? "photo" : "photos"} confirmed. No customer, vehicle or RO is created by switching devices.` :
             id ? "Your device copy is retained. Save and confirm before switching devices." :
               "Save this guided check-in, then capture vehicle details on your phone and continue here."}
         </p>
+        {recovery.sharedBlocked && canResume && !recovery.serverDraft?.transfer && <button
+          type="button" disabled={recovery.busy} onClick={onResume}
+          className="mt-2 min-h-11 rounded-lg bg-blue-600 px-3 py-2 text-xs font-medium text-white disabled:opacity-50 inline-flex items-center gap-2">
+          <Monitor className="w-4 h-4" />Resume on this device
+        </button>}
       </div>
       <button type="button" aria-expanded={expanded} onClick={() => setExpanded(v => !v)} className="text-xs font-medium text-blue-700 py-1 shrink-0">
         {expanded ? "Hide handoff" : "Device handoff"}
