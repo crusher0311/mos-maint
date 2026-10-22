@@ -37,3 +37,10 @@ was idle on ClientRead and independent query plans already used the index.
 **How to apply:** Check catalog validity, server progress and backend state before
 retrying or classifying a client cleanup exit as a failed build. Do not rebuild
 a valid index solely because the wrapper has not exited.
+
+For unattended psql maintenance, prefer separate `-c` commands and ignored
+stdin over a streamed stdin script.
+**Why:** Even an explicit trailing quit left the client alive after a successful
+concurrent build in this environment. Repeated SIGINT did not close the idle client.
+**How to apply:** Retain independent catalog/progress verification and deadlines;
+never infer that an open client means the server is still building.

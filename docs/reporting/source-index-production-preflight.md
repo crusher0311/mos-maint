@@ -125,3 +125,44 @@ the reporting snapshot directory. The client-lifecycle cause is not established.
 No later indexes, population, deployment or reader activation were started.
 The service-job index has operator-only repo parity in
 drizzle/0042_reporting_service_job_cursor.sql.
+
+## Line-item build independently verified
+
+At 2026-10-22 15:05:52 UTC, independent read-only catalog and plan checks
+confirmed reporting_src_lines_cursor valid and ready, with no active build.
+Its size was approximately 2.07 GB (decimal). First, next and exact source
+query plans all selected it without Sort or Seq Scan.
+
+The maintenance client again stayed alive after the server completed; its
+backend was idle on ClientRead. The client was terminated only after the
+independent verification. The wrapper's nonzero cleanup exit does not indicate
+an invalid index. The retry sequence excludes this already-valid index.
+The remaining runner now supplies separate psql -c commands with stdin ignored,
+rather than streaming a script on stdin. No change to build resource limits.
+Evidence: reporting_src_lines_cursor-independent-verification.json in the
+ignored reporting snapshot directory; operator-only schema parity is
+drizzle/0043_reporting_line_item_cursor.sql.
+
+Population, deployment and report activation remain unchanged. The payments
+and three provider-cache indexes are a separate monitored sequence.
+
+## Remaining sequence completed
+
+The remaining four-index sequence exited successfully on 2026-10-22.
+Payments, Protractor work orders, invoices and invoice cache indexes are all
+valid/ready, with no build progress remaining. Each completed with exit code
+zero, no cancellation and no captured error SQLSTATE. The new noninteractive
+psql invocation exited normally for every build.
+
+Payments occupies 42,385,408 bytes; each currently empty PG provider-cache
+index occupies 8,192 bytes. First/next/exact payments plans use the new index
+without Sort or Seq Scan. Tiny empty caches legitimately retain sequential
+plans; this does not imply their Mongo equivalents are empty.
+Across those four builds, the maximum probe was 921 ms with zero lock waiters.
+The earlier line-item sequence peaked at 1,173 ms and one lock waiter, below
+the approved thresholds.
+
+All seven reporting source indexes are now installed. Per-index build and
+plan receipts are in generated-artifacts/reporting-snapshots; schema parity
+for the last four is drizzle/0044_reporting_payment_cache_cursors.sql.
+No population, deployment or report activation was performed by this sequence.
