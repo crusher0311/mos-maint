@@ -208,3 +208,18 @@ observation time 21:29:01 UTC. Health showed one active query, no lock waiters
 or old idle transactions, and all 44 triggers enabled. Reports remained
 disabled, no Protractor calls occurred, and enumeration is still incomplete.
 Earlier receipts were archived before the current same-name receipt was written.
+
+## Workspace-interrupted continuation
+
+The next authorized continuation launched at approximately 21:32 UTC on
+2026-10-22, from 60,289 documents. A workspace restart terminated its tracked
+shell and lost its output log before a final receipt was written. The existing
+hour-continuation receipt still describes the preceding run, not this attempt.
+
+Independent production readback at 21:59:25 UTC confirmed 68,118 saved documents
+(7,829 additional), 19,566 identities, and advancement to channel 2. Inventory
+phase remains, with no failure, verification, publication or reviews. The
+retained feed token has observation time 21:58:51 UTC. Health showed one active
+query, no lock waits or old idle transactions, and all 44 triggers enabled.
+No automatic restart was attempted; a new run must not silently reset the
+interrupted attempt's approved time or record budget.
