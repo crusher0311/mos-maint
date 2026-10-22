@@ -68,3 +68,27 @@ Then use a bounded operator pilot with independent feed catch-up, retaining the
 existing inventory checkpoint. Record busy rates, event counts, inventory
 throughput, freshness and final verification separately. Keep shared readers
 disabled and do not create financial/hold reviews automatically.
+
+## Read-only production preflight
+
+At 2026-10-22 16:13:30 UTC, the approved read-only check found no migration
+prerequisite blockers on PostgreSQL 17.6:
+
+- Target matched the deployed web service's database configuration; both shared
+  reporting switches were off.
+- All eleven target tables were ordinary, nonpartitioned tables with a NOT NULL
+  integer shop_id and installer ownership.
+- Each table had exactly the expected enabled statement-level reporting trigger,
+  with no condition or arguments, bound to the original invalidator.
+- The installed function body matched the reviewed original. Its definer was
+  restricted, and builder execution remained revoked.
+- Installer schema-create, role-administration and object ownership prerequisites
+  passed. The new scoped function did not already exist.
+- Health snapshot: four active queries, zero lock waiters, zero old idle
+  transactions, and no active index builds.
+
+Receipt: generated-artifacts/reporting-snapshots/scoped-invalidation-preflight-20261022.json
+(ignored). The receipt binds the reviewed migration hash. This was not an
+installation or a lock-acquisition test; conditions must be refreshed before
+applying the transactional migration. No production writes, population,
+deployment, report activation, or Protractor calls occurred in this check.
