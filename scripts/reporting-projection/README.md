@@ -12,6 +12,9 @@ and source-query performance blocker. No shared switch or deployment changed.
 The local PostgreSQL query optimization and candidate source indexes are documented
 in `docs/reporting/source-query-scale-validation.md`. Matching production indexes
 remain a separate prerequisite; synthetic timings are not production evidence.
+The separately approved first work-order cursor index is now valid in production;
+first/next/exact plans use it without sorting. Other source indexes remain pending.
+See `docs/reporting/source-index-production-preflight.md` for the build receipt.
 The earlier design/prototype notes below are not current installation status.
 
 ## Gated stored-source worker

@@ -53,3 +53,33 @@ This is not an assurance of idle workload or disk headroom.
 The candidate SQL is `scripts/reporting-projection/source-indexes.sql`.
 Detailed sanitized catalog/plan evidence is retained locally under
 `generated-artifacts/reporting-snapshots/source-index-preflight-20261022.json`.
+
+## Approved first build completed
+
+On October 22, 2026 at 13:51:55 UTC, the separately approved work-order index
+build completed with exit code zero and without cancellation.
+`reporting_src_nwo_cursor` is valid and ready, occupies 305,184,768 bytes
+(about 291 MiB), and no build remains active for that table.
+
+Before starting, the target was reverified, both shared switches were off, and
+three fresh-connection probes passed. Supabase's public incident at that time
+concerned EU management/project lifecycle operations, not the Oregon database.
+The user-provided infrastructure screenshot showed 463.17 GB used of 606 GB.
+
+The build used CREATE INDEX CONCURRENTLY, 32 MB maintenance memory, no parallel
+maintenance workers, an eight-minute statement timeout and two-second lock
+timeout. Independent fresh-connection probes ran every five seconds, with
+native psql SIGINT cancellation configured on failure or unhealthy thresholds.
+Across 25 baseline/monitor probes, maximum connection-plus-probe time was 839 ms,
+maximum active queries was five and lock waiters remained zero. These probes
+measure database responsiveness, not direct CPU or filesystem telemetry.
+
+Post-build EXPLAIN (without ANALYZE) confirmed first/next/exact source plans
+use the new index for both candidate selection and row lookup, with no Sort or
+Seq Scan. This confirms the intended access path, not end-to-end report latency.
+
+Only this index was installed. Other source indexes remain unapproved/unbuilt;
+no population was resumed, no reviews added, no code deployed and neither shared
+reporting switch enabled. Repo parity is retained in the operator-only
+`drizzle/0041_reporting_work_order_cursor.sql`, deliberately not auto-executed by
+startup or deployment.
