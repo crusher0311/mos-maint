@@ -166,3 +166,25 @@ All seven reporting source indexes are now installed. Per-index build and
 plan receipts are in generated-artifacts/reporting-snapshots; schema parity
 for the last four is drizzle/0044_reporting_payment_cache_cursors.sql.
 No population, deployment or report activation was performed by this sequence.
+
+## Subsequent approved bounded population pilot
+
+At 2026-10-22 15:09 UTC, fresh read-only checks confirmed production targeting,
+both shared flags off, all seven indexes valid/ready, no active index build,
+and the installed invalidator ACL correction intact. No permission correction
+was reapplied. The operator-only builder then ran four ticks within its
+60-second work budget for MOS shop 227.
+
+At 15:10:58 UTC, the resumed inventory held 32 documents and 32 identities
+(previously zero). Tick results were busy/4 steps, busy/7, deferred/11, busy/10.
+There was no stored failure. Independent readback at 15:11:09 confirmed the
+32 committed entries, inventory phase/channel 0, no publication, and no reviews.
+This is progress beyond the previous source timeout, not a verified report.
+The Mongo feed still had an epoch observed_at and must not be treated as fresh.
+
+The pilot ended; no ongoing population runner was left active. Customer reads
+remain disabled and no Protractor calls or deployment occurred. Performance
+and contention require investigation before committing to a longer population:
+32 source entries in this pilot is not evidence of acceptable fleet throughput.
+Receipts: permission-verification-20261022.json, population-pilot-20261022.json,
+and population-stopped-20261022.json in the ignored snapshot directory.
