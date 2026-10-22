@@ -6,6 +6,7 @@ import { InvoiceProjectionWorker } from "../lib/reporting-projection/worker";
 import { StoredInvoiceInventory } from "../lib/reporting-projection/source";
 import { ProjectionInvalidation, changedShops, FEED_LIMITS } from "../lib/reporting-projection/invalidation";
 import { projectionRuntime } from "../lib/reporting-projection/runtime";
+import { feedFailureCategory } from "../lib/reporting-projection/feed-diagnostics";
 import { readProjection, projectionCacheToken } from "../lib/reporting-projection/reader";
 import { classify, hash, LIMITS, PARSER_VERSION, type SourceDocument, type SourceInventory } from "../lib/reporting-projection/contract";
 import { getReportingKpis, normalizeReportingRange } from "../lib/reporting-kpi-service";
@@ -399,6 +400,7 @@ async function main() {
     const feed: any[] = [];
     const consumed: number[] = [];
     let streamError = 0;
+    let partialFailureAt = -1;
     const feedDb: any = {
       watch: (_pipeline: any, options: any) => {
         let position = options.resumeAfter?.position ?? 0;
@@ -407,6 +409,9 @@ async function main() {
           // Matches mongodb 6.19 tryNext: events do not advance this property.
           get resumeToken() { return cachedToken; },
           tryNext: async () => {
+            if (position === partialFailureAt) throw Object.assign(Error("PRIVATE_PAYLOAD"), {
+              name: "MongoOperationTimeoutError", stack: "PRIVATE_STACK", cause: { token: "PRIVATE_TOKEN" },
+            });
             if (streamError) throw Object.assign(Error("synthetic stream error"), { code: streamError });
             if (position >= feed.length) { cachedToken = { position }; return null; }
             consumed.push(position);
@@ -459,6 +464,42 @@ async function main() {
     streamError = 89;
     assert.equal((await feedWorker.poll()).status, "stream_unavailable");
     assert.deepEqual((await query("SELECT resume_token FROM reporting_invoice.change_cursors"))[0].resume_token, beforeUnavailable);
+    assert.equal(+new Date((await query("SELECT observed_at FROM reporting_invoice.change_cursors"))[0].observed_at), 0);
+    streamError = 0;
+    // A timeout after consuming some events must replay from the last committed
+    // token, including when recovery uses an entirely new consumer.
+    const resumePosition = beforeUnavailable.position;
+    feed.push(insert(227), insert(227), insert(227));
+    partialFailureAt = resumePosition + 2;
+    const captured: unknown[] = [];
+    const originalWarn = console.warn;
+    console.warn = (...args) => { captured.push(args); };
+    let timeoutResult: Awaited<ReturnType<typeof feedWorker.poll>>;
+    try { timeoutResult = await feedWorker.poll(); } finally { console.warn = originalWarn; }
+    assert.equal(timeoutResult.status, "stream_unavailable");
+    assert.ok("diagnostic" in timeoutResult);
+    assert.equal(timeoutResult.diagnostic?.category, "timeout");
+    assert.equal(timeoutResult.diagnostic?.stage, "read_event");
+    assert.equal(timeoutResult.diagnostic?.events, 2);
+    assert.ok(!JSON.stringify([captured, timeoutResult]).includes("PRIVATE_"));
+    assert.deepEqual((await query("SELECT resume_token FROM reporting_invoice.change_cursors"))[0].resume_token, beforeUnavailable);
+    partialFailureAt = -1;
+    const recovered = new ProjectionInvalidation(sql, feedDb);
+    assert.equal((await recovered.poll()).status, "caught_up");
+    assert.equal(consumed.filter(n => n === resumePosition).length, 2);
+    assert.equal((await query("SELECT resume_token FROM reporting_invoice.change_cursors"))[0].resume_token.position, feed.length);
+    assert.ok(+new Date((await query("SELECT observed_at FROM reporting_invoice.change_cursors"))[0].observed_at) > 0);
+    await recovered.close();
+    for (const [error, category] of [
+      [{ name: "MongoNetworkError" }, "network"],
+      [{ name: "MongoServerSelectionError" }, "server_selection"],
+      [{ code: 18 }, "authorization"], [{ code: 286 }, "history_gap"],
+      [{ code: "55P03" }, "database_lock_timeout"],
+      [{ code: "57014" }, "database_query_cancelled"],
+      [{ code: "25P02" }, "database_transaction_aborted"],
+      [{ name: "AbortError" }, "cancelled"],
+      [{ name: "PRIVATE_NAME", code: "PRIVATE_CODE", message: "PRIVATE_MESSAGE" }, "unknown"],
+    ] as const) assert.equal(feedFailureCategory(error), category);
     const gapBuild = await begin(230);
     streamError = 286;
     assert.equal((await feedWorker.poll()).status, "stream_gap");
@@ -480,6 +521,19 @@ async function main() {
     assert.notEqual(runtimeBuild.phase, "complete");
     await assert.rejects(() => read([231]), /unavailable/);
     await runtime.close();
+    // An error after a successful worker tick must reach the operator, not be
+    // silently replaced by the worker's deferred/complete status.
+    let polls = 0;
+    const postFailureDb: any = { ...feedDb, watch: (...args: any[]) => {
+      if (++polls === 2) throw Object.assign(Error("PRIVATE_OPEN_FAILURE"), { code: 89 });
+      return feedDb.watch(...args);
+    } };
+    const postFailureRuntime = projectionRuntime(sql, sql, postFailureDb);
+    const postFailure = await postFailureRuntime.tick(231);
+    assert.equal(postFailure.status, "stream_unavailable");
+    assert.equal("diagnostic" in postFailure && postFailure.diagnostic?.category, "network");
+    await assert.rejects(() => read([231]), /unavailable/);
+    await postFailureRuntime.close();
     // Four runtime ticks can poll at most eight batches. A retained backlog
     // larger than that cannot certify freshness even when every poll progresses.
     feed.length = 0; consumed.length = 0;

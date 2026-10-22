@@ -50,6 +50,10 @@ export function projectionRuntime(reporting: ReturnType<typeof postgres>, source
       if (!id) return { status: "disabled" };
       const result = await worker.tick(id, { signal, inventoryOnly: changes.status !== "caught_up" });
       const after = await invalidation.poll(signal);
+      // Do not hide a failed post-work poll behind a successful inventory tick.
+      // The saved worker checkpoint remains committed; operators must stop.
+      if (!["caught_up", "draining"].includes(after.status))
+        return { ...after, buildId: id, workerStatus: result.status };
       // Never report a publication as fresh based on a poll made before source
       // reads. The reader independently checks revision, watcher age and expiry.
       const [valid] = result.status === "complete" ? await reporting.unsafe(`SELECT b.id

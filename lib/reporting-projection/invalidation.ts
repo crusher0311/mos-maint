@@ -2,6 +2,7 @@ import type postgres from "postgres";
 import type { Db, ChangeStream } from "mongodb";
 import { EJSON } from "bson";
 import { builderEnabled as enabled } from "./contract";
+import { feedFailureCategory } from "./feed-diagnostics";
 
 export const FEED_LIMITS = { events: 100, budgetMs: 1500, awaitMs: 100 } as const;
 
@@ -44,6 +45,13 @@ export class ProjectionInvalidation {
   constructor(private readonly sql: ReturnType<typeof postgres>, private readonly db: Db) {}
   async poll(signal?: AbortSignal) {
     if (!enabled()) return { status: "disabled" };
+    let stage = "transaction";
+    let events = 0;
+    const started = Date.now();
+    const diagnostic = (error: unknown) => ({
+      category: feedFailureCategory(error), stage, events,
+      elapsedMs: Date.now() - started,
+    });
     // Serializes stream consumers across processes without a lease-expiry race.
     return this.sql.begin(async tx => {
       await tx.unsafe("SET LOCAL statement_timeout='2000ms'");
@@ -60,6 +68,7 @@ export class ProjectionInvalidation {
           WHERE phase IN ('inventory','verify','project')`);
       }
       try {
+        stage = "open_stream";
         this.stream = this.db.watch([{ $match: { $or: [
           { "ns.coll": { $in: [
             "normalized_work_orders", "normalized_service_jobs", "normalized_line_items", "normalized_payments",
@@ -74,10 +83,11 @@ export class ProjectionInvalidation {
           timeoutMS: 1000,
         });
         const deadline = Date.now() + FEED_LIMITS.budgetMs;
-        let events = 0, caughtUp = false, fleet = false;
+        let caughtUp = false, fleet = false;
         let lastEventToken: any = null;
         const shops = new Set<number>();
         while (events < FEED_LIMITS.events && Date.now() < deadline && !signal?.aborted) {
+          stage = "read_event";
           const event = await this.stream.tryNext();
           if (!event) { caughtUp = true; break; }
           events++;
@@ -91,6 +101,7 @@ export class ProjectionInvalidation {
           if (affected === null) fleet = true;
           else affected.forEach(shop => shops.add(shop));
         }
+        stage = "persist_invalidation";
         if (fleet) await tx.unsafe("UPDATE reporting_invoice.scopes SET revision=revision+1,invalidated_at=clock_timestamp()");
         else if (shops.size) await tx.unsafe(`UPDATE reporting_invoice.scopes
           SET revision=revision+1,invalidated_at=clock_timestamp() WHERE shop_id=ANY($1::int[])`,
@@ -99,28 +110,34 @@ export class ProjectionInvalidation {
           : lastEventToken ?? this.stream.resumeToken;
         // Bounded draining is progress, not freshness. Only an observed empty
         // stream WITH a resumable token can certify catch-up.
+        stage = "persist_cursor";
         if (token) await tx.unsafe(`INSERT INTO reporting_invoice.change_cursors(name,resume_token,observed_at)
           VALUES('mongo',$1::text::jsonb,$2) ON CONFLICT(name) DO UPDATE
           SET resume_token=excluded.resume_token,observed_at=excluded.observed_at`,
         [JSON.stringify(EJSON.serialize(token)), caughtUp ? new Date() : new Date(0)]);
+        stage = "close_stream";
         await this.close();
+        stage = "commit";
         return { status: caughtUp && token ? "caught_up" : "draining", events };
       } catch (error) {
+        const failure = diagnostic(error);
+        console.warn("[invoice-projection-feed]", failure);
         await this.close().catch(() => {});
         // Network/timeout errors aren't proof of history loss. Keep the durable
         // token and retry it next time; withdraw watcher freshness meanwhile.
         if (![260, 280, 286].includes(Number((error as any)?.code))) {
           await tx.unsafe("UPDATE reporting_invoice.change_cursors SET observed_at='epoch' WHERE name='mongo'");
-          return { status: "stream_unavailable" };
+          return { status: "stream_unavailable", diagnostic: failure };
         }
         await tx.unsafe("UPDATE reporting_invoice.scopes SET revision=revision+1,invalidated_at=clock_timestamp()");
         await tx.unsafe(`UPDATE reporting_invoice.builds SET phase='failed',failure='stream_gap'
           WHERE phase IN ('inventory','verify','project')`);
         await tx.unsafe("DELETE FROM reporting_invoice.change_cursors WHERE name='mongo'");
         // Persist the gap before reporting failure. No source payload/error text is logged.
-        return { status: "stream_gap" };
+        return { status: "stream_gap", diagnostic: failure };
       }
     }).catch(async error => {
+      console.warn("[invoice-projection-feed-transaction]", diagnostic(error));
       // A failed commit must replay from the durable token, not the advanced stream.
       await this.close();
       throw error;
