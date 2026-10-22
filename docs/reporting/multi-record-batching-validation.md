@@ -77,3 +77,26 @@ projection and evidence review remain outstanding.
 
 Receipts: population-batch-pilot-20261022.json and
 population-stopped-20261022.json under the ignored reporting snapshot directory.
+
+## Approved 15-minute continuation
+
+2026-10-22 17:14:56–17:29:57 UTC: refreshed permissions, source indexes,
+scoped invalidation and health prerequisites before resuming the same build.
+The operator enforced a 900-second deadline and 5,000 additional-document cap,
+checking health and the saved build before each tick.
+
+171 deferred ticks committed 4,275 documents, increasing inventory from 395
+to 4,670 documents and from 401 to 4,680 identities. The final tick was cancelled
+at the configured deadline; elapsed time including final status reads was
+900,794 ms. No busy or failed tick was reported. This is approximately
+285 documents per minute, not an end-to-end reporting completion estimate.
+
+Independent readback at 17:30:26 UTC confirmed these counts, inventory/channel 0,
+no stored failure, no publication, and zero reviews. Mongo has a saved resume
+token but its freshness remains epoch: catch-up is not established. Health
+showed three active queries, zero lock waiters and zero old idle transactions;
+all 44 scoped triggers remained enabled. Reports stayed disabled and there
+were zero Protractor calls. No further population was automatically started.
+
+Receipt: population-continuation-pilot-20261022.json; independent readback:
+population-stopped-20261022.json in the ignored reporting snapshot directory.
