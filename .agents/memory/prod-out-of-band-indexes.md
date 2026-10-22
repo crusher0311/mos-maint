@@ -23,3 +23,17 @@ For long DDL, retain a native query-cancellation mechanism (for example, psql's 
 Follow-up dashboard evidence from the incident showed committed-memory spikes around 8.4 GB against a roughly 4.66 GB commit limit, swap growth, and CPU below full utilization. This makes memory pressure a stronger lead than CPU saturation; normal-looking headline RAM percentages can hide commit pressure. It does not prove an OOM kill or restart without database logs. Check committed memory and swap, not just cache-inclusive memory totals, before recommending capacity changes or retrying DDL.
 
 After the operator's compute upgrade to the XL-equivalent configuration, the same 32 MB session-limited build completed with healthy fresh connections and a valid index. This supports increasing capacity for maintenance, not removing runtime request, concurrency or deadline safeguards.
+
+Retain sanitized SQLSTATEs from maintenance failures, not just client exit codes.
+**Why:** Discarding psql stderr hid the actual reason an index build stopped;
+elapsed time suggested a deadline, but exit code 3 alone could not confirm it.
+**How to apply:** Use psql `VERBOSITY=sqlstate` and record only parsed error codes.
+Keep connection details and raw server messages out of operator logs. Verify
+index validity and absence of active server work even after a nonzero exit.
+
+Distinguish maintenance-client liveness from server-side build liveness.
+**Why:** A psql client stayed open after a concurrent index was valid; the backend
+was idle on ClientRead and independent query plans already used the index.
+**How to apply:** Check catalog validity, server progress and backend state before
+retrying or classifying a client cleanup exit as a failed build. Do not rebuild
+a valid index solely because the wrapper has not exited.

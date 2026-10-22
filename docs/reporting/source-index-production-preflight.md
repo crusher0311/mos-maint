@@ -105,3 +105,23 @@ No later index was attempted. Both shared reporting switches remain off.
 Do not silently rerun CREATE INDEX IF NOT EXISTS over the invalid object.
 Any retry needs approved invalid-index cleanup and a revised build deadline,
 with the same independent health probes and cancellation safeguards.
+
+## Service-job retry independently verified
+
+The user approved cleanup of only the invalid service-job index and a retry
+with a 20-minute statement limit. Cleanup succeeded; the retry used unchanged
+32 MB memory and five-second health checks, with sanitized SQLSTATE capture.
+At 14:30:03 UTC, an independent read-only check confirmed both work-order and
+service-job indexes valid/ready, and first/next/exact service-job query plans
+all used reporting_src_jobs_cursor without Sort or Seq Scan.
+
+The psql client remained open after completion: its backend was idle on
+ClientRead, with no active index build. The idle client was terminated locally
+after that independent verification. A nonzero wrapper exit from this cleanup
+must not be interpreted as a failed database build or authorize another retry.
+Independent evidence is retained in jobs-independent-verification.json under
+the reporting snapshot directory. The client-lifecycle cause is not established.
+
+No later indexes, population, deployment or reader activation were started.
+The service-job index has operator-only repo parity in
+drizzle/0042_reporting_service_job_cursor.sql.
