@@ -223,3 +223,17 @@ retained feed token has observation time 21:58:51 UTC. Health showed one active
 query, no lock waits or old idle transactions, and all 44 triggers enabled.
 No automatic restart was attempted; a new run must not silently reset the
 interrupted attempt's approved time or record budget.
+
+## Post-restart authorized continuation
+
+2026-10-22 22:00:33–23:00:33 UTC: the newly approved one-hour run saved
+17,725 additional documents, reaching 85,843 documents and 19,566 identities
+on channel 2. It stopped at its deadline (3,600,426 ms), with 710 outcomes and
+final cancelled_tick, not a build failure.
+
+Independent readback at 23:00:46 UTC confirmed inventory phase, no failure,
+verification or publication, and zero reviews. The retained Mongo token had
+observation time 23:00:32 UTC. Health showed four active queries, no lock
+waiters or old idle transactions, and all 44 triggers enabled. Reports remained
+disabled and no Protractor calls occurred. Inventory is still incomplete;
+the saved record count does not establish a completion percentage.
