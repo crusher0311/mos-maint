@@ -9,6 +9,9 @@ The ACL correction is now applied; the corrected local runtime admitted a build
 but timed out before committing its first source document. No report is ready.
 See `docs/reporting/projection-correction-2026-10-22.md` for the execution record
 and source-query performance blocker. No shared switch or deployment changed.
+The local PostgreSQL query optimization and candidate source indexes are documented
+in `docs/reporting/source-query-scale-validation.md`. Matching production indexes
+remain a separate prerequisite; synthetic timings are not production evidence.
 The earlier design/prototype notes below are not current installation status.
 
 ## Gated stored-source worker

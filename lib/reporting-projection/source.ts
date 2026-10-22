@@ -2,13 +2,7 @@ import assert from "node:assert/strict";
 import { EJSON } from "bson";
 import type { Db } from "mongodb";
 import { hash, LIMITS, UUID, type Query, type SourceDocument, type SourceInventory } from "./contract";
-
-const pg = {
-  normalized_work_orders: "id",
-  normalized_service_jobs: "id", normalized_line_items: "id", normalized_payments: "id",
-  protractor_work_orders: "work_order_id", protractor_invoices: "invoice_id",
-  protractor_invoice_cache: "invoice_id",
-} as const;
+import { PG_SOURCE_KEYS as pg, pgSourceQuery } from "./source-query";
 const mongo = [
   "normalized_work_orders", "normalized_service_jobs", "normalized_line_items", "normalized_payments",
   "protractor_work_orders", "protractor_invoices", "protractor_invoice_cache",
@@ -28,12 +22,9 @@ export class StoredInvoiceInventory implements SourceInventory {
     const [store, table] = channel.split(".");
     let doc: any, native: string, cursor: string;
     if (store === "pg") {
-      const column = pg[table as keyof typeof pg];
       // Size check in PostgreSQL prevents an oversized row crossing the wire.
-      const rows = await this.query(`SELECT ${column}::text AS cursor,
-        CASE WHEN octet_length(to_jsonb(t)::text)<=$3 THEN to_jsonb(t)::text END AS state
-        FROM ${table} t WHERE shop_id=$1 AND ($2::text IS NULL OR ${column}::text COLLATE "C" ${exact ? "=" : ">"} $2)
-        ORDER BY ${column}::text COLLATE "C" LIMIT 1`, [shop, key, LIMITS.documentBytes]);
+      const rows = await this.query(pgSourceQuery(table, key, exact), [shop, key, LIMITS.documentBytes]);
+      assert.ok(rows.length <= 1, "ambiguous_source_key");
       if (!rows.length) return null;
       assert.ok(rows[0].state, "source_document_byte_limit");
       native = rows[0].state; cursor = rows[0].cursor; doc = JSON.parse(native);

@@ -36,3 +36,12 @@ not a guaranteed bounded per-shop path either.
 **How to apply:** Inspect actual indexes and non-executing query plans for each
 source channel. Test realistic size and cross-shop skew, preserve cursor order,
 and review any index installation separately; do not merely raise deadlines.
+
+Keep C-collated source cursor ordering stable when optimizing reads, and select
+the narrow key before materializing the raw row.
+**Why:** Durable inventory checkpoints and source digests depend on stable
+ordering and exact serialized bytes. Changing collation/order to exploit an
+unrelated index can skip previously unvisited records on resume.
+**How to apply:** Pair shop-plus-expression indexes with an exact matching
+predicate; compare old/new cursor and payload bytes, and test actual prepared
+generic plans, not just unprepared queries with plan_cache_mode set.
