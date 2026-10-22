@@ -50,3 +50,30 @@ A fresh bounded live pilot is needed to measure actual inventory gain. Mongo
 enumeration, complete verification/project time under network latency, feed
 catch-up, and financial review completeness remain separate gates. Do not enable
 reports because an unreviewed synthetic build reached its complete phase.
+
+## Approved 60-second production pilot
+
+2026-10-22 16:55:26 UTC: after fresh target, flag, permission, index, scoped-function
+body/ACL, trigger and health checks, the restricted operator resumed MOS 227.
+No migration or deployment was performed. There was no separate feed-drain
+budget; runtime's normal before/after feed checks stayed inside the pilot.
+
+The 60-second work budget completed in 60,879 ms including bounded in-flight
+completion and final status reads. Thirteen ticks committed 310 documents
+(12 x 25 plus 10), increasing inventory from 85 to 395 documents and from 85
+to 401 identities. Every tick returned deferred; none reported busy, failed,
+or complete. No financial reviews were added.
+
+Independent readback at 16:55:34 UTC confirmed the same counts, inventory
+phase/channel 0, no stored failure or publication, and epoch feed freshness.
+Post-run health: one active query, no lock waiters or old idle transactions;
+all 44 scoped triggers remained enabled. The pilot stopped and all connections
+closed. Shared reader/builder switches stayed off; zero Protractor calls.
+
+Compared with 53 records in the preceding approximately one-minute pilot,
+310 is about 5.8 times as many. This is an observed short-run comparison, not
+an end-to-end completion forecast; later channels, feed catch-up, verification,
+projection and evidence review remain outstanding.
+
+Receipts: population-batch-pilot-20261022.json and
+population-stopped-20261022.json under the ignored reporting snapshot directory.
