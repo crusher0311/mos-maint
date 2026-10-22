@@ -669,6 +669,18 @@ async function main() {
     await assert.rejects(()=>feedRuntime.catchUp({polls:41}));
     await feedRuntime.close();
     console.log("PASS independent feed catch-up respects budgets, exact events, cancellation and truthful freshness");
+    const inventoryOnlyRuntime = projectionRuntime(sql, sql, feedDb);
+    let inventoryOnlyStatus = "";
+    for (let i = 0; i < 10 && inventoryOnlyStatus !== "awaiting_feed"; i++) {
+      inventoryOnlyStatus = (await inventoryOnlyRuntime.tick(95603, undefined, { inventoryOnly: true })).status;
+    }
+    assert.equal(inventoryOnlyStatus, "awaiting_feed");
+    const [inventoryOnlyBuild] = await query("SELECT phase,verified_at,published_at FROM reporting_invoice.builds WHERE shop_id=95603");
+    assert.equal(inventoryOnlyBuild.phase, "inventory");
+    assert.equal(inventoryOnlyBuild.verified_at, null);
+    assert.equal(inventoryOnlyBuild.published_at, null);
+    await inventoryOnlyRuntime.close();
+    console.log("PASS inventory-only runtime stops before verification even with a caught-up feed");
     const retryCursor = (await query("SELECT resume_token FROM reporting_invoice.change_cursors"))[0].resume_token;
     let attempts = 0;
     const retryOptions: any[] = [];

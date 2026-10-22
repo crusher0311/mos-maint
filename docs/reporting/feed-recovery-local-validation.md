@@ -142,3 +142,35 @@ Receipts: feed-continuation-progress-20261022.json,
 feed-continuation-only-pilot-20261022.json,
 feed-continuation-only-confirmation-20261022.json, and the independent
 population-stopped-20261022.json in the ignored snapshot directory.
+
+## Inventory-only continuation guard
+
+Before the next authorized inventory run, the runtime gained an explicit
+inventory-only option. The operator now uses it even when the feed is caught
+up, and stops on the inventory boundary rather than entering verification
+within the same tick. Defaults for other runtime callers are unchanged.
+
+The disposable PostgreSQL installation/worker suite and TypeScript checks
+passed. A new regression test runs the runtime against a caught-up feed and
+confirms it stops with inventory phase retained and no verification/publication.
+
+## Resumed one-hour inventory outcome
+
+2026-10-22 18:19:41–19:19:42 UTC: the approved continuation stopped at its
+one-hour deadline (3,600,356 ms), not on a source failure. It saved 16,649
+additional documents, increasing inventory from 8,495 to 25,144 documents and
+from 8,505 to 19,566 identities. The cursor advanced from channel 0 to 1.
+There were 666 outcomes; the last was deadline cancellation during the
+post-worker feed poll, with the worker's saved result retained.
+
+Independent readback at 19:20:03 UTC confirmed those counts, inventory phase,
+no failure, no verification, no publication and zero reviews. Health showed
+three active queries, no lock waiters or old idle transactions, and all 44
+scoped triggers enabled. The Mongo resume token remained present but its
+freshness marker was epoch: catch-up was not established at the end of this
+run. Reports stayed disabled and no Protractor calls occurred.
+
+Inventory remains incomplete. Any further feed catch-up or population requires
+new approval; these counts are source records/identities, not verified invoices.
+Receipt: population-hour-continuation-pilot-20261022.json, with independent
+population-stopped-20261022.json in the ignored snapshot directory.

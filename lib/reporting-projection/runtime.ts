@@ -55,7 +55,7 @@ export function projectionRuntime(reporting: ReturnType<typeof postgres>, source
       return { ...lastFailure, status: options.signal?.aborted ? "cancelled" : lastFailure?.status ?? "draining",
         events, polls: completed, retries };
     },
-    async tick(shop: number, signal?: AbortSignal) {
+    async tick(shop: number, signal?: AbortSignal, options: { inventoryOnly?: boolean } = {}) {
       if (!enabled()) return { status: "disabled" };
       assert.ok(Number.isSafeInteger(shop) && shop > 0);
       if (signal?.aborted) return { status: "cancelled_tick" };
@@ -67,7 +67,7 @@ export function projectionRuntime(reporting: ReturnType<typeof postgres>, source
       if (current && changes.status === "caught_up") return { status: "fresh" };
       const id = await worker.start(shop);
       if (!id) return { status: "disabled" };
-      const result = await worker.tick(id, { signal, inventoryOnly: changes.status !== "caught_up" });
+      const result = await worker.tick(id, { signal, inventoryOnly: options.inventoryOnly || changes.status !== "caught_up" });
       const after = await invalidation.poll(signal);
       // Do not hide a failed post-work poll behind a successful inventory tick.
       // The saved worker checkpoint remains committed; operators must stop.
