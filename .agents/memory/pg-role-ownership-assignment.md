@@ -13,3 +13,9 @@ tests did not expose this distinction.
 grant explicit temporary SET membership for owner assignment and revoke that
 SET permission afterward. Never make the definer a superuser or broaden runtime
 membership to work around ownership rules. Keep installation transactional.
+
+Perform owner-only ACL changes before removing temporary owner authority.
+**Why:** A non-owner REVOKE can emit a warning instead of aborting the transaction,
+leaving PUBLIC EXECUTE intact even though installation reports success.
+**How to apply:** Assert effective function privileges in non-superuser migration
+tests; rejection of a direct trigger-function call is not proof of an ACL denial.

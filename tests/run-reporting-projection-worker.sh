@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+bash tests/run-reporting-projection-installation.sh
 umask 077
 tmp=$(mktemp -d /tmp/reporting-worker.XXXXXX)
 trap 'pg_ctl -D "$tmp/data" -m immediate stop >/dev/null 2>&1 || true; rm -rf "$tmp"' EXIT

@@ -21,6 +21,11 @@ Run the independent, credential-free acceptance suite:
 bash tests/run-reporting-projection-worker.sh
 ```
 
+This includes the non-superuser installation regression suite. Run that portion
+alone with `bash tests/run-reporting-projection-installation.sh`; pass PostgreSQL
+bin directories to test a PG16/PG17 matrix. See the installation record for the
+known post-transfer function-ACL warning discovered by this stricter fixture.
+
 This runner uses only synthetic data, a fresh Unix-socket PostgreSQL instance,
 an empty environment and the network-denial preload. No retained customer
 fixture is required. It exercises the actual SQL candidate, worker, source

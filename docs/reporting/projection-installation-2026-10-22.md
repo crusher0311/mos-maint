@@ -32,6 +32,47 @@ constraints and triggers. It passed evidence/coverage, invalidation, restricted
 operational CRUD/TRUNCATE and reporting-role isolation tests before installation.
 No Protractor requests were made.
 
+### Non-superuser installation regression coverage
+
+Run `bash tests/run-reporting-projection-installation.sh` with PostgreSQL 16+
+on PATH. To exercise multiple installed versions, pass their **bin directories**
+as arguments (for example, `/path/to/pg16/bin /path/to/pg17/bin`).
+The worker acceptance runner also invokes this installation suite.
+Verified locally on PostgreSQL 16.10 and 17.6; the combined installation/worker
+acceptance runner passed on 16.10.
+
+Each version gets a fresh private `/tmp` cluster with TCP disabled, synthetic
+data, an empty inherited environment, network-denial preload, and unconditional
+cleanup. No database URL or credentials are accepted. The fixture administrator
+only bootstraps roles and grants; the actual, unchanged migration runs through
+a separate NOSUPERUSER CREATEROLE login.
+
+Coverage includes the original missing-SET failure, late missing-dependency
+rollback (including transactional roles and triggers), successful owner
+assignment and removal of temporary SET permission, repeated-install refusal,
+default API grants including a BYPASSRLS service role, registry RLS with a
+SELECT-only/no-policy control, non-UUID text coverage IDs, and real DML under
+the migration-created builder/invalidator roles. Operational CRUD and TRUNCATE
+are exercised on every source table and must increment reporting revisions.
+Both reporting roles must fail INSERT/UPDATE/DELETE/TRUNCATE against source
+invoices, payments, holds, coverage reviews and accounting reviews.
+
+**Additional finding, not changed by this test-only work:** after transferring
+the invalidation function and revoking installer SET membership, the later
+function `REVOKE ... FROM PUBLIC` runs without the owner's authority. PostgreSQL
+warns rather than failing the installation, and PUBLIC EXECUTE remains. The
+suite prints `KNOWN GAP` when it observes this. Direct invocation of a trigger
+function is rejected by PostgreSQL, but that is not proof of an EXECUTE ACL
+denial. Correcting ACL ordering needs separate migration/security review; this
+test work does not alter the SQL or any installed database.
+
+The installation tests verify text IDs persist in the registry and projection
+items. This is **not** an end-to-end text-ID worker claim: an additional worker
+probe using `hold-review:<uuid>` instead of a UUID produced zero verified
+invoices. The shared hold-coverage validator still requires UUID review IDs.
+The established worker suite retains UUID fixtures; accepting valid text
+identifiers through the full coverage path is a separate follow-up.
+
 ## Population attempt: incomplete
 
 An explicitly scoped operator process used the restricted reporting builder role,
