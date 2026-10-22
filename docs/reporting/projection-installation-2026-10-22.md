@@ -54,3 +54,7 @@ mark the feed fresh artificially, disable triggers or relax review requirements.
 
 Production report results remain unchanged. Installation success is not
 population success and does not authorize activating the reader.
+
+For the offline-tested bounded-drain correction and a separately approved
+operator resumption, see [JWT-701 resumption](projection-jwt-701-resumption.md).
+That correction does not change this installation/population receipt.

@@ -153,3 +153,4 @@
 - [Invoice identity casing](invoice-provider-id-case.md) — mixed-case provider UUIDs can defeat both lowercase and uppercase exact-containment probes; absence needs case-normalized verification.
 - [Reporting projection direction](reporting-projection-direction.md) — build from retained evidence locally; discuss production tables before installation, without bypassing evidence review.
 - [Postgres role ownership](pg-role-ownership-assignment.md) — CREATEROLE does not imply SET membership for assigning restricted function owners; test non-superuser installation.
+- [Reporting feed progress](reporting-feed-progress.md) — inventory progress is not freshness; Mongo 6.19 tryNext leaves event resumeToken stale, so persist consumed event IDs.

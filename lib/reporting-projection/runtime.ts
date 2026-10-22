@@ -1,5 +1,6 @@
 import type postgres from "postgres";
 import type { Db } from "mongodb";
+import assert from "node:assert/strict";
 import { builderEnabled as enabled } from "./contract";
 import { StoredInvoiceInventory } from "./source";
 import { InvoiceProjectionWorker } from "./worker";
@@ -21,16 +22,25 @@ export function projectionRuntime(reporting: ReturnType<typeof postgres>, source
     close: () => invalidation.close(),
     async tick(shop: number, signal?: AbortSignal) {
       if (!enabled()) return { status: "disabled" };
-      const changes = await invalidation.poll();
-      if (changes.status !== "caught_up") return changes;
+      assert.ok(Number.isSafeInteger(shop) && shop > 0);
+      if (signal?.aborted) return { status: "cancelled_tick" };
+      const changes = await invalidation.poll(signal);
+      if (!["caught_up", "draining"].includes(changes.status)) return changes;
       const [current] = await reporting.unsafe(`SELECT b.id FROM reporting_invoice.scopes s
         JOIN reporting_invoice.builds b ON b.id=s.published WHERE s.shop_id=$1 AND b.revision=s.revision
         AND b.verified_at>clock_timestamp()-interval '4 minutes'`, [shop]);
-      if (current) return { status: "fresh" };
+      if (current && changes.status === "caught_up") return { status: "fresh" };
       const id = await worker.start(shop);
       if (!id) return { status: "disabled" };
-      const result = await worker.tick(id, { signal });
-      await invalidation.poll();
+      const result = await worker.tick(id, { signal, inventoryOnly: changes.status !== "caught_up" });
+      const after = await invalidation.poll(signal);
+      // Never report a publication as fresh based on a poll made before source
+      // reads. The reader independently checks revision, watcher age and expiry.
+      const [valid] = result.status === "complete" ? await reporting.unsafe(`SELECT b.id
+        FROM reporting_invoice.builds b JOIN reporting_invoice.scopes s ON s.shop_id=b.shop_id
+        WHERE b.id=$1 AND b.revision=s.revision AND b.verified_at>clock_timestamp()-interval '5 minutes'`, [id]) : [];
+      if (result.status === "complete" && (after.status !== "caught_up" || !valid))
+        return { status: "awaiting_verification", buildId: id, feed: after.status };
       console.info("[invoice-projection]", { shopId: shop, buildId: id, ...result });
       return { ...result, buildId: id };
     },

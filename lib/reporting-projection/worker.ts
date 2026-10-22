@@ -37,7 +37,7 @@ export class InvoiceProjectionWorker {
       WHERE id=$1 AND phase IN ('inventory','verify','project')`, [id]);
   }
 
-  async tick(id: string, options: { signal?: AbortSignal; steps?: number; budgetMs?: number } = {}) {
+  async tick(id: string, options: { signal?: AbortSignal; steps?: number; budgetMs?: number; inventoryOnly?: boolean } = {}) {
     if (!enabled()) return { status: "disabled", steps: 0 };
     const steps = options.steps ?? LIMITS.tickSteps, budget = options.budgetMs ?? LIMITS.tickMs;
     assert.ok(Number.isSafeInteger(steps) && steps > 0 && steps <= LIMITS.tickSteps);
@@ -46,14 +46,14 @@ export class InvoiceProjectionWorker {
     let completed = 0;
     while (completed < steps && Date.now() < deadline && !options.signal?.aborted) {
       // One small transaction per document/identity. Lost responses replay durable state.
-      const status = await this.step(id, deadline, options.signal);
+      const status = await this.step(id, deadline, options.signal, options.inventoryOnly);
       if (status !== "progress") return { status, steps: completed };
       completed++;
     }
     return { status: options.signal?.aborted ? "cancelled_tick" : "deferred", steps: completed };
   }
 
-  private async step(id: string, deadline: number, signal?: AbortSignal): Promise<string> {
+  private async step(id: string, deadline: number, signal?: AbortSignal, inventoryOnly = false): Promise<string> {
     return this.sql.begin(async tx => {
       await tx.unsafe("SET LOCAL statement_timeout='2000ms'");
       await tx.unsafe("SET LOCAL lock_timeout='250ms'");
@@ -68,16 +68,31 @@ export class InvoiceProjectionWorker {
         await tx.unsafe("UPDATE reporting_invoice.builds SET phase='failed',failure=$2 WHERE id=$1", [id, reason]);
         return "failed";
       };
-      if (String(b.revision) !== String(scope.revision) || b.parser_version !== PARSER_VERSION ||
+      if (b.parser_version !== PARSER_VERSION ||
         JSON.stringify(b.channels) !== JSON.stringify(this.source.channels)) return fail("source_or_parser_changed");
       if (signal?.aborted || Date.now() >= deadline) return "deferred";
+      if (inventoryOnly && b.phase !== "inventory") return "awaiting_feed";
+      // A scope revision is a freshness veto, not proof that this inventory's
+      // exact source versions changed. Preserve durable inventory across traffic.
+      // A new verification pass must compare every source key/digest, including
+      // insertions/deletions, and remain in one unchanged revision.
+      if (b.phase !== "inventory" && String(b.revision) !== String(scope.revision)) {
+        await tx.unsafe(`UPDATE reporting_invoice.builds SET phase='verify',channel=0,cursor=NULL,
+          digest=$2,revision=$3,verified_at=clock_timestamp(),checkpoint=NULL WHERE id=$1`,
+        [id, EMPTY_DIGEST, scope.revision]);
+        // Resetting the checkpoint reprocesses every item before publication.
+        // Avoid a single unbounded UPDATE of up to 100,000 fact rows here.
+        return "progress";
+      }
 
       if (b.phase === "inventory" || b.phase === "verify") {
         const channel = this.source.channels[b.channel];
         if (!channel) {
           if (b.phase === "inventory") {
+            if (inventoryOnly) return "awaiting_feed";
             await tx.unsafe(`UPDATE reporting_invoice.builds SET phase='verify',channel=0,cursor=NULL,
-              inventory_digest=digest,digest=$2,verified_at=clock_timestamp() WHERE id=$1`, [id, EMPTY_DIGEST]);
+              inventory_digest=digest,digest=$2,revision=$3,verified_at=clock_timestamp() WHERE id=$1`,
+            [id, EMPTY_DIGEST, scope.revision]);
           } else {
             if (b.digest !== b.inventory_digest) return fail("inventory_changed");
             await tx.unsafe("UPDATE reporting_invoice.builds SET phase='project' WHERE id=$1", [id]);
@@ -106,6 +121,12 @@ export class InvoiceProjectionWorker {
           if (b.identity_count + added > LIMITS.identities) return fail("identity_limit");
           await tx.unsafe(`UPDATE reporting_invoice.builds SET document_count=document_count+1,
             identity_count=$2 WHERE id=$1`, [id, b.identity_count + added]);
+        } else {
+          // Fail on a real changed/new source version even when broad revisions
+          // keep arriving. Do not repeatedly reset past a known evidence veto.
+          const [original] = await tx.unsafe(`SELECT digest FROM reporting_invoice.sources
+            WHERE build_id=$1 AND channel=$2 AND source_key=$3`, [id, channel, doc.key]);
+          if (!original || original.digest !== doc.digest) return fail("source_changed");
         }
         await tx.unsafe("UPDATE reporting_invoice.builds SET cursor=$2,digest=$3 WHERE id=$1",
           [id, doc.key, hash([b.digest, channel, doc.key, doc.digest])]);

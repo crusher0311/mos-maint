@@ -4,7 +4,8 @@ import { randomUUID } from "node:crypto";
 import postgres from "postgres";
 import { InvoiceProjectionWorker } from "../lib/reporting-projection/worker";
 import { StoredInvoiceInventory } from "../lib/reporting-projection/source";
-import { ProjectionInvalidation } from "../lib/reporting-projection/invalidation";
+import { ProjectionInvalidation, changedShops, FEED_LIMITS } from "../lib/reporting-projection/invalidation";
+import { projectionRuntime } from "../lib/reporting-projection/runtime";
 import { readProjection, projectionCacheToken } from "../lib/reporting-projection/reader";
 import { classify, hash, LIMITS, PARSER_VERSION, type SourceDocument, type SourceInventory } from "../lib/reporting-projection/contract";
 import { getReportingKpis, normalizeReportingRange } from "../lib/reporting-kpi-service";
@@ -109,8 +110,10 @@ async function main() {
       await query(`INSERT INTO invoice_repair_hold_scopes VALUES($1,'protractor',0) ON CONFLICT DO NOTHING`, [b.shop_id]);
       await query(`INSERT INTO invoice_repair_hold_reviews(id,shop_id,provider,scope_revision,inventory_digest,expires_at,review_reference,actor)
         VALUES($1,$2,'protractor',0,$3,clock_timestamp()+interval '5 minutes','synthetic-review','synthetic-reviewer')`, [randomUUID(), b.shop_id, b.inventory_digest]);
-      assert.equal((await worker.tick(build)).status, "failed", "Review change must invalidate original generation");
-      return begin(b.shop_id);
+      await worker.tick(build, { steps: 1 });
+      assert.equal((await query("SELECT phase FROM reporting_invoice.builds WHERE id=$1", [build]))[0].phase,
+        "verify", "Review change must restart verification without discarding the inventory");
+      return build;
     };
     const start = new Date("2026-09-01"), end = new Date("2026-09-30T23:59:59.999Z");
     const read = (shops = [1]) => readProjection(query, shops, shops, start, end);
@@ -275,17 +278,144 @@ async function main() {
     let event: any = { _id: { token: 1 } }, failStream = false;
     const stream: any = {
       get resumeToken() { return { token: 1 }; },
-      tryNext: async () => { if (failStream) throw Error("synthetic history gap"); const next = event; event = null; return next; },
+      tryNext: async () => { if (failStream) throw Object.assign(Error("synthetic history gap"), { code: 286 }); const next = event; event = null; return next; },
       close: async () => {},
     };
     const invalidator = new ProjectionInvalidation(sql, { watch: () => stream } as any);
-    assert.equal((await invalidator.poll()).status, "invalidated");
+    assert.equal((await invalidator.poll()).status, "caught_up");
     assert.equal((await invalidator.poll()).status, "caught_up");
     failStream = true;
     assert.equal((await invalidator.poll()).status, "stream_gap");
     assert.equal((await query("SELECT * FROM reporting_invoice.change_cursors")).length, 0);
     await invalidator.close();
     console.log("PASS durable change cursor, source invalidation, missed-stream gap fails closed");
+
+    // Real installed PG triggers remain conservative; mutations must not erase
+    // an in-progress inventory, nor be treated as clearance for publication.
+    source.set(Array.from({ length: 30 }, (_, i) => raw(100 + i)));
+    await freshWatcher();
+    const active = await begin(227);
+    for (let i = 0; i < 30; i++) {
+      await query("INSERT INTO normalized_work_orders(id,shop_id) VALUES($1,999)", [`traffic-${i}`]);
+      await worker.tick(active, { steps: 1, inventoryOnly: true });
+    }
+    assert.equal((await query("SELECT document_count FROM reporting_invoice.builds WHERE id=$1", [active]))[0].document_count, 30);
+    await until(active, "verify");
+    await worker.tick(active, { steps: 5 });
+    const beforeRetry = (await query("SELECT document_count FROM reporting_invoice.builds WHERE id=$1", [active]))[0].document_count;
+    await query("INSERT INTO normalized_work_orders(id,shop_id) VALUES('verify-traffic',999)");
+    await worker.tick(active, { steps: 1 });
+    const [retry] = await query("SELECT * FROM reporting_invoice.builds WHERE id=$1", [active]);
+    assert.equal(retry.phase, "verify");
+    assert.equal(retry.cursor, null);
+    assert.equal(retry.document_count, beforeRetry);
+    // Simulate process restart: durable verification/inventory must be enough.
+    const restarted = new InvoiceProjectionWorker(sql, source);
+    assert.equal(await restarted.start(227), active);
+    await until(active, "complete");
+    assert.equal((await read([227])).summary.invoicePopulationUnknown, 30);
+    console.log("PASS sustained PG traffic preserves inventory; revision veto restarts verification; no automatic clearance");
+
+    // Deletes, new keys behind the cursor, project changes and expiry remain vetoes.
+    source.set([raw(200), raw(201)]);
+    const deleted = await begin(228);
+    await until(deleted, "verify");
+    source.records.pop();
+    await until(deleted, "failed");
+    source.set([raw(202)]);
+    const expired = await begin(229);
+    await until(expired, "project");
+    await query("UPDATE reporting_invoice.builds SET verified_at=clock_timestamp()-interval '6 minutes' WHERE id=$1", [expired]);
+    assert.equal((await worker.tick(expired)).status, "failed");
+    assert.equal((await query("SELECT failure FROM reporting_invoice.builds WHERE id=$1", [expired]))[0].failure, "verification_expired");
+
+    // Mongo stream fixture reopens strictly from the persisted token, not a local
+    // cursor. Every consumed event is accounted for, including after rollback.
+    const feed: any[] = [];
+    const consumed: number[] = [];
+    let streamError = 0;
+    const feedDb: any = {
+      watch: (_pipeline: any, options: any) => {
+        let position = options.resumeAfter?.position ?? 0;
+        let cachedToken = options.resumeAfter ?? null;
+        return {
+          // Matches mongodb 6.19 tryNext: events do not advance this property.
+          get resumeToken() { return cachedToken; },
+          tryNext: async () => {
+            if (streamError) throw Object.assign(Error("synthetic stream error"), { code: streamError });
+            if (position >= feed.length) { cachedToken = { position }; return null; }
+            consumed.push(position);
+            return { ...feed[position++], _id: { position } };
+          },
+          close: async () => {},
+        };
+      },
+      listCollections: () => ({ toArray: async () => [{ name: "fixture" }] }),
+      collection: () => ({ findOne: async () => null }),
+    };
+    await query("UPDATE reporting_invoice.change_cursors SET resume_token=$1::text::jsonb", [JSON.stringify({ position: 0 })]);
+    const insert = (shop: number) => ({ operationType: "insert", fullDocument: { shopId: shop } });
+    feed.push(...Array.from({ length: 350 }, () => insert(999)));
+    const feedWorker = new ProjectionInvalidation(sql, feedDb);
+    const [scopeBefore] = await query("SELECT revision FROM reporting_invoice.scopes WHERE shop_id=227");
+    assert.equal((await feedWorker.poll()).status, "draining");
+    assert.equal(consumed.length, FEED_LIMITS.events);
+    assert.equal(+new Date((await query("SELECT observed_at FROM reporting_invoice.change_cursors"))[0].observed_at), 0);
+    assert.equal((await query("SELECT revision FROM reporting_invoice.scopes WHERE shop_id=227"))[0].revision, scopeBefore.revision);
+    await feedWorker.close();
+    const secondConsumer = new ProjectionInvalidation(sql, feedDb);
+    await secondConsumer.poll();
+    await feedWorker.poll(); // interleaved consumers cannot rewind durable cursor
+    assert.equal((await secondConsumer.poll()).status, "caught_up");
+    assert.deepEqual(consumed, Array.from({ length: 350 }, (_, i) => i));
+    assert.deepEqual(changedShops({ operationType: "delete", fullDocumentBeforeChange: { shopId: "227" } }), [227]);
+    assert.equal(changedShops({ operationType: "delete" }), null);
+    assert.equal(changedShops({ operationType: "update", fullDocument: { shopId: 999 } }), null);
+    assert.deepEqual(changedShops({ operationType: "update", fullDocument: { shopId: 999 },
+      fullDocumentBeforeChange: { shopId: 999 }, updateDescription: { updatedFields: { status: "open" } } }), [999]);
+    assert.equal(changedShops({ operationType: "update", fullDocument: { shopId: 999 },
+      fullDocumentBeforeChange: { shopId: 227 }, updateDescription: { updatedFields: { shopId: 999 } } }), null);
+    feed.push({ operationType: "delete" });
+    await feedWorker.poll();
+    assert.notEqual((await query("SELECT revision FROM reporting_invoice.scopes WHERE shop_id=227"))[0].revision, scopeBefore.revision);
+
+    // Inject a crash after stream consumption and cursor writes but before commit.
+    feed.push(insert(227));
+    const [durableBefore] = await query("SELECT resume_token FROM reporting_invoice.change_cursors");
+    const crashSql: any = {
+      begin: (fn: any) => sql.begin(async tx => { await fn(tx); throw Error("injected commit rollback"); }),
+    };
+    const crashing = new ProjectionInvalidation(crashSql, feedDb);
+    await assert.rejects(() => crashing.poll(), /injected commit rollback/);
+    assert.deepEqual((await query("SELECT resume_token FROM reporting_invoice.change_cursors"))[0].resume_token, durableBefore.resume_token);
+    await feedWorker.poll();
+    assert.equal(consumed.at(-1), consumed.at(-2), "Uncommitted event must replay");
+    const beforeUnavailable = (await query("SELECT resume_token FROM reporting_invoice.change_cursors"))[0].resume_token;
+    streamError = 89;
+    assert.equal((await feedWorker.poll()).status, "stream_unavailable");
+    assert.deepEqual((await query("SELECT resume_token FROM reporting_invoice.change_cursors"))[0].resume_token, beforeUnavailable);
+    const gapBuild = await begin(230);
+    streamError = 286;
+    assert.equal((await feedWorker.poll()).status, "stream_gap");
+    assert.equal((await query("SELECT failure FROM reporting_invoice.builds WHERE id=$1", [gapBuild]))[0].failure, "stream_gap");
+    assert.equal((await query("SELECT * FROM reporting_invoice.change_cursors")).length, 0);
+    streamError = 0;
+    assert.equal((await feedWorker.poll()).status, "draining"); // fresh epoch replays fixture; never marks backlog fresh
+    await feedWorker.close(); await secondConsumer.close();
+    console.log("PASS bounded feed, exact unrelated-shop scope, deletes/moves, cursor loss, interleaved consumers and commit crash replay");
+
+    // Runtime admits durable inventory even when every bounded drain has work.
+    await query("UPDATE reporting_invoice.change_cursors SET resume_token=$1::text::jsonb", [JSON.stringify({ position: 0 })]);
+    feed.push(...Array.from({ length: 1000 }, () => insert(999)));
+    const runtime = projectionRuntime(sql, sql, feedDb);
+    const running = await runtime.tick(231);
+    assert.ok("buildId" in running);
+    const [runtimeBuild] = await query("SELECT * FROM reporting_invoice.builds WHERE shop_id=231");
+    assert.ok(runtimeBuild);
+    assert.notEqual(runtimeBuild.phase, "complete");
+    await assert.rejects(() => read([231]), /unavailable/);
+    await runtime.close();
+    console.log("PASS runtime admission under sustained backlog without publication or fake freshness");
     // Real-role migration boundary: ordinary writes succeed without any reporting grants.
     await query("CREATE ROLE projection_operational_test NOLOGIN");
     await query("GRANT USAGE ON SCHEMA public TO projection_operational_test");
