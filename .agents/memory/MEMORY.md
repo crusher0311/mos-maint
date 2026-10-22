@@ -155,3 +155,4 @@
 - [Invoice repair safety](invoice-repair-safety-index.md) — maintenance fencing, financial evidence, native CAS and reviewed hold-registry authority.
 - [Invoice release compatibility](invoice-release-compatibility.md) — source-evidence backports must match pinned service policy, not silently inherit newer main behavior.
 - [Arrival photo associations](arrival-association-policy.md) — internal context only; saved evaluation required, with inspection evidence and release selections kept separate.
+- [Invoice identity casing](invoice-provider-id-case.md) — mixed-case provider UUIDs can defeat both lowercase and uppercase exact-containment probes; absence needs case-normalized verification.
