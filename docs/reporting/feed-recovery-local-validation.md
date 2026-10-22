@@ -96,3 +96,24 @@ partial-consumption retry with exact replay and committed-event counts.
 No live database access, population, feed polling, deployment, or shared flag
 change occurred during this local implementation. A separately approved bounded
 feed-only run is still required to establish behavior under production latency.
+
+## Approved production feed-only test with new limits
+
+2026-10-22 18:03:45 UTC: refreshed production target, flags, permissions, indexes,
+scoped function and health checks passed. One authorized feed-only invocation
+processed 4,000 committed events across 40 polls in 27,906 ms, returning
+`draining` with zero retries. It stopped at the poll cap, not the time cap.
+This demonstrates progress under the new timeout, not complete catch-up or
+proof of long-run reliability.
+
+Independent readback at 18:04:03 UTC confirmed unchanged inventory of 8,495
+documents / 8,505 identities, no build failure/publication/reviews, durable
+Mongo token present and epoch freshness (still not caught up). Health showed
+two active queries, no lock waiters or old idle transactions, and all 44 scoped
+triggers enabled. No population, Protractor calls, migration or deployment.
+Shared builder and reader flags remained disabled.
+
+The diagnostic-only and confirmation receipts contain this run. The preceding
+failed diagnostic receipts were preserved as
+feed-diagnostic-original-timeout-20261022.json and
+feed-only-original-timeout-20261022.json in the ignored snapshot directory.
