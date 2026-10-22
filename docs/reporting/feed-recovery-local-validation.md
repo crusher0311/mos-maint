@@ -117,3 +117,28 @@ The diagnostic-only and confirmation receipts contain this run. The preceding
 failed diagnostic receipts were preserved as
 feed-diagnostic-original-timeout-20261022.json and
 feed-only-original-timeout-20261022.json in the ignored snapshot directory.
+
+## Approved 15-minute feed continuation — caught up
+
+2026-10-22 18:07:03–18:14:27 UTC: after refreshed prerequisites, the bounded
+feed-only operator processed 64,377 committed events over 644 polls in 443,530 ms
+(approximately 7 minutes 24 seconds). All 17 batches succeeded, with zero
+retries. It stopped on `caught_up`, before either the 15-minute or 100,000-event
+limit. The operator checked database health and unchanged inventory before
+each batch; no population method was invoked.
+
+Independent readback at 18:14:39 UTC confirmed a saved feed observation time of
+18:14:27 UTC instead of epoch. Inventory remained 8,495 documents / 8,505
+identities, channel 0, with no failure, publication or reviews. Health showed
+one active query, no lock waiters or old idle transactions, and all 44 scoped
+triggers enabled. Shared builder/read flags remained off; no Protractor calls,
+deployment or migration occurred.
+
+Catch-up was established at that observation time, not promised indefinitely
+after the operator stopped. Inventory, verification, projection and evidence
+review remain separate requirements before readers can be enabled.
+
+Receipts: feed-continuation-progress-20261022.json,
+feed-continuation-only-pilot-20261022.json,
+feed-continuation-only-confirmation-20261022.json, and the independent
+population-stopped-20261022.json in the ignored snapshot directory.
