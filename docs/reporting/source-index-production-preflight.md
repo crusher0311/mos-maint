@@ -83,3 +83,25 @@ no population was resumed, no reviews added, no code deployed and neither shared
 reporting switch enabled. Repo parity is retained in the operator-only
 `drizzle/0041_reporting_work_order_cursor.sql`, deliberately not auto-executed by
 startup or deployment.
+
+## Approved remaining sequence stopped at service jobs
+
+The subsequent approved sequential run stopped on its first index,
+`reporting_src_jobs_cursor`, at 14:07:04 UTC. It had reached the table-validation
+phase (roughly 2.0 million of 4.95 million blocks scanned in that phase).
+psql exited with code 3 around the eight-minute statement deadline. The health
+monitor did not request cancellation. The original wrapper discarded stderr,
+so the exact server SQLSTATE was not retained; a statement timeout is strongly
+consistent with the timing but is not proven by a captured error message.
+
+83 preflight/monitor probes stayed within thresholds: maximum 1,747 ms, maximum
+six active queries and zero lock waiters. At 14:07:36 UTC, a fresh read-only
+catalog inspection confirmed no index build was active. The work-order index
+remains valid. The service-job index is ready but **invalid**, occupies
+989,175,808 bytes, and cannot serve the intended query plans. It can still add
+write maintenance overhead; cleanup/rebuild requires an explicit operator step.
+
+No later index was attempted. Both shared reporting switches remain off.
+Do not silently rerun CREATE INDEX IF NOT EXISTS over the invalid object.
+Any retry needs approved invalid-index cleanup and a revised build deadline,
+with the same independent health probes and cancellation safeguards.
