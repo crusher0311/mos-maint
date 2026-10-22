@@ -4,7 +4,7 @@ import { EJSON } from "bson";
 import { builderEnabled as enabled } from "./contract";
 import { feedFailureCategory } from "./feed-diagnostics";
 
-export const FEED_LIMITS = { events: 100, budgetMs: 1500, awaitMs: 100 } as const;
+export const FEED_LIMITS = { events: 100, budgetMs: 3500, readTimeoutMs: 3000, awaitMs: 100 } as const;
 
 /** Only event-time ownership is authoritative. updateLookup alone can reflect a
  * later move, and deletes without preimages cannot safely be scoped. */
@@ -43,8 +43,10 @@ export function changedShops(event: any): number[] | null {
 export class ProjectionInvalidation {
   private stream: ChangeStream | null = null;
   constructor(private readonly sql: ReturnType<typeof postgres>, private readonly db: Db) {}
-  async poll(signal?: AbortSignal) {
+  async poll(signal?: AbortSignal, outerDeadline = Infinity) {
     if (!enabled()) return { status: "disabled" };
+    if (signal?.aborted) return { status: "cancelled" };
+    if (Date.now() >= outerDeadline) return { status: "budget_exhausted" };
     let stage = "transaction";
     let events = 0;
     const started = Date.now();
@@ -68,6 +70,10 @@ export class ProjectionInvalidation {
           WHERE phase IN ('inventory','verify','project')`);
       }
       try {
+        if (signal?.aborted) return { status: "cancelled" };
+        if (Date.now() >= outerDeadline) return { status: "budget_exhausted" };
+        const timeoutMS = Math.min(FEED_LIMITS.readTimeoutMs, outerDeadline - Date.now() - 10);
+        if (timeoutMS <= 1) return { status: "budget_exhausted" };
         stage = "open_stream";
         this.stream = this.db.watch([{ $match: { $or: [
           { "ns.coll": { $in: [
@@ -79,17 +85,21 @@ export class ProjectionInvalidation {
         ] } }], {
           ...(cursor?.resume_token ? { resumeAfter: EJSON.deserialize(cursor.resume_token) } : {}),
           fullDocument: "updateLookup", fullDocumentBeforeChange: "whenAvailable",
-          maxAwaitTimeMS: FEED_LIMITS.awaitMs, batchSize: FEED_LIMITS.events,
-          timeoutMS: 1000,
+          // The Mongo driver requires maxAwaitTimeMS < timeoutMS.
+          maxAwaitTimeMS: Math.min(FEED_LIMITS.awaitMs, timeoutMS - 1), batchSize: FEED_LIMITS.events,
+          timeoutMS,
         });
-        const deadline = Date.now() + FEED_LIMITS.budgetMs;
+        const deadline = Math.min(outerDeadline, Date.now() + FEED_LIMITS.budgetMs);
         let caughtUp = false, fleet = false;
         let lastEventToken: any = null;
         const shops = new Set<number>();
         while (events < FEED_LIMITS.events && Date.now() < deadline && !signal?.aborted) {
+          // Mongo 6.19 refreshes its timeout on every tryNext(), so don't admit
+          // another read that could spend beyond the caller's remaining budget.
+          if (Date.now() + timeoutMS > outerDeadline) break;
           stage = "read_event";
           const event = await this.stream.tryNext();
-          if (!event) { caughtUp = true; break; }
+          if (!event) { caughtUp = !signal?.aborted && Date.now() < deadline; break; }
           events++;
           if (["drop", "rename", "dropDatabase", "invalidate"].includes(event.operationType))
             throw Object.assign(new Error("source_namespace_gap"), { code: 286 });
@@ -118,7 +128,7 @@ export class ProjectionInvalidation {
         stage = "close_stream";
         await this.close();
         stage = "commit";
-        return { status: caughtUp && token ? "caught_up" : "draining", events };
+        return { status: signal?.aborted ? "cancelled" : caughtUp && token ? "caught_up" : "draining", events };
       } catch (error) {
         const failure = diagnostic(error);
         console.warn("[invoice-projection-feed]", failure);

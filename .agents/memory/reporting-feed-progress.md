@@ -60,3 +60,12 @@ unrelated index can skip previously unvisited records on resume.
 **How to apply:** Pair shop-plus-expression indexes with an exact matching
 predicate; compare old/new cursor and payload bytes, and test actual prepared
 generic plans, not just unprepared queries with plan_cache_mode set.
+
+MongoDB 6.19 refreshes its change-stream timeout on each `tryNext()` call.
+**Why:** A per-operation timeout alone does not bound a multi-read drain; resetting
+the budget on each attempt can silently exceed the operator's approved window.
+The driver also requires `maxAwaitTimeMS` to remain below the clipped timeout.
+**How to apply:** Preserve an absolute caller deadline across reads and retries,
+clip the driver timeout and await duration together, and separately account for
+bounded transaction completion/cleanup. Retry from committed tokens, not the
+advanced in-memory cursor.

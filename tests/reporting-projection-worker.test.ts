@@ -669,6 +669,113 @@ async function main() {
     await assert.rejects(()=>feedRuntime.catchUp({polls:41}));
     await feedRuntime.close();
     console.log("PASS independent feed catch-up respects budgets, exact events, cancellation and truthful freshness");
+    const retryCursor = (await query("SELECT resume_token FROM reporting_invoice.change_cursors"))[0].resume_token;
+    let attempts = 0;
+    const retryOptions: any[] = [];
+    const retryDb: any = { ...feedDb, watch: (pipeline: any, options: any) => {
+      retryOptions.push(options);
+      if (++attempts <= 2) throw Object.assign(Error("PRIVATE_TIMEOUT"), { name: "MongoOperationTimeoutError" });
+      return feedDb.watch(pipeline, options);
+    } };
+    const retryRuntime = projectionRuntime(sql, sql, retryDb);
+    const recoveredDrain = await retryRuntime.catchUp({ polls: 5, budgetMs: 10000 });
+    assert.equal(recoveredDrain.status, "caught_up");
+    assert.equal(recoveredDrain.polls, 3); assert.equal(recoveredDrain.retries, 2);
+    assert.equal(attempts, 3);
+    assert.ok(retryOptions.every(o => o.timeoutMS === 3000));
+    assert.ok(retryOptions.every(o => JSON.stringify(o.resumeAfter) === JSON.stringify(retryCursor)));
+    await retryRuntime.close();
+    for (const [error, expectedAttempts] of [
+      [Object.assign(Error("private"), { name: "MongoOperationTimeoutError" }), 3],
+      [Object.assign(Error("private"), { name: "MongoNetworkError" }), 3],
+      [Object.assign(Error("private"), { name: "MongoServerSelectionError" }), 3],
+      [Object.assign(Error("private"), { code: 18 }), 1],
+      [Object.assign(Error("private"), { name: "UnknownPrivateError" }), 1],
+    ] as const) {
+      let calls = 0;
+      const failing = projectionRuntime(sql, sql, { ...feedDb, watch: () => { calls++; throw error; } });
+      const result = await failing.catchUp({ polls: 10, budgetMs: 10000 });
+      assert.equal(result.status, "stream_unavailable"); assert.equal(calls, expectedAttempts);
+      assert.equal(result.polls, expectedAttempts);
+      assert.deepEqual((await query("SELECT resume_token FROM reporting_invoice.change_cursors"))[0].resume_token, retryCursor);
+      await failing.close();
+    }
+    // A late-but-successful first read (> the old 1s timeout) is accepted.
+    let slowTimeout = 0;
+    const slowDb: any = { ...feedDb, watch: (_pipeline: any, options: any) => {
+      slowTimeout = options.timeoutMS;
+      return { resumeToken: retryCursor, close: async () => {}, tryNext: async () => {
+        await new Promise(resolve => setTimeout(resolve, 1100)); return null;
+      } };
+    } };
+    const slowRuntime = projectionRuntime(sql, sql, slowDb);
+    assert.equal((await slowRuntime.catchUp({ polls: 1, budgetMs: 5000 })).status, "caught_up");
+    assert.equal(slowTimeout, 3000);
+    await slowRuntime.close();
+    for (const cancelledBackoff of [false, true]) {
+      const controller = new AbortController();
+      let calls = 0;
+      const shortDb: any = { ...feedDb, watch: () => {
+        calls++;
+        if (cancelledBackoff) setTimeout(() => controller.abort(), 10);
+        throw Object.assign(Error("private"), { name: "MongoOperationTimeoutError" });
+      } };
+      const shortRuntime = projectionRuntime(sql, sql, shortDb);
+      const result = await shortRuntime.catchUp({ polls: 10, budgetMs: cancelledBackoff ? 5000 : 50, signal: controller.signal });
+      assert.equal(calls, 1, "Deadline/cancellation must prevent a retry");
+      assert.equal(result.status, cancelledBackoff ? "cancelled" : "stream_unavailable");
+      await shortRuntime.close();
+    }
+    let forbiddenWatch = 0;
+    const stoppedFeed = new ProjectionInvalidation(sql, { watch: () => { forbiddenWatch++; throw Error("must not open"); } } as any);
+    assert.equal((await stoppedFeed.poll(AbortSignal.abort())).status, "cancelled");
+    assert.equal((await stoppedFeed.poll(undefined, Date.now() - 1)).status, "budget_exhausted");
+    assert.equal(forbiddenWatch, 0);
+    // A shorter caller budget clips the Mongo operation timeout.
+    let clippedTimeout = 0;
+    const clippedFeed = new ProjectionInvalidation(sql, { watch: (_p: any, o: any) => {
+      clippedTimeout = o.timeoutMS;
+      assert.ok(o.maxAwaitTimeMS < o.timeoutMS);
+      return { resumeToken: retryCursor, tryNext: async () => null, close: async () => {} };
+    } } as any);
+    await clippedFeed.poll(undefined, Date.now() + 500);
+    assert.ok(clippedTimeout > 0 && clippedTimeout <= 500);
+    await clippedFeed.close();
+    await clippedFeed.poll(undefined, Date.now() + 80);
+    assert.ok(clippedTimeout > 0 && clippedTimeout < 80);
+    await clippedFeed.close();
+    let partialAttempts = 0;
+    const replayPositions: number[] = [];
+    const partialDb: any = { watch: (_p: any, options: any) => {
+      const attempt = ++partialAttempts;
+      let position = options.resumeAfter.position;
+      return {
+        get resumeToken() { return { position }; },
+        close: async () => {},
+        tryNext: async () => {
+          if (attempt === 1 && position === retryCursor.position + 2)
+            throw Object.assign(Error("private"), { name: "MongoOperationTimeoutError" });
+          if (position >= retryCursor.position + 3) return null;
+          replayPositions.push(position++);
+          return { ...insert(999), _id: { position } };
+        },
+      };
+    } };
+    const partialRuntime = projectionRuntime(sql, sql, partialDb);
+    const partialResult = await partialRuntime.catchUp({ polls: 4, budgetMs: 10000 });
+    assert.equal(partialResult.status, "caught_up");
+    assert.equal(partialResult.events, 3, "Only committed events count");
+    assert.equal(partialAttempts, 2);
+    assert.deepEqual(replayPositions, [0,1,0,1,2].map(n => n + retryCursor.position));
+    await partialRuntime.close();
+    let gapAttempts = 0;
+    const gapRuntime = projectionRuntime(sql, sql, { watch: () => {
+      gapAttempts++; throw Object.assign(Error("private"), { code: 286 });
+    } } as any);
+    assert.equal((await gapRuntime.catchUp({ polls: 10, budgetMs: 10000 })).status, "stream_gap");
+    assert.equal(gapAttempts, 1);
+    await gapRuntime.close();
+    console.log("PASS bounded feed retries, checkpoint resume, delayed reads, nonretryable errors, cancellation and caller deadlines");
     source.set([raw(910),raw(911)]);
     source.records[0].identities=[identity(910),identity(911)];
     source.records[1].identities=[identity(911),identity(912)];

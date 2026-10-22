@@ -68,3 +68,31 @@ the ignored reporting snapshot directory. Next work should test a bounded
 feed timeout/retry policy locally, preserving total deadlines, exact replay
 and immediate stops for history-gap/authorization failures; do not simply
 restart population or remove freshness gates.
+
+## Local bounded timeout/retry verification
+
+The subsequent local-only change increases the feed operation timeout to 3,000 ms
+and the per-poll event-loop budget to 3,500 ms. Feed catch-up passes its original
+deadline into every poll. Mongo's operation timeout is clipped to that remaining
+budget; `maxAwaitTimeMS` remains strictly smaller. No new event read is admitted
+unless its operation timeout fits inside the outer deadline. Existing SQL and
+cleanup operations remain separately timeout-bounded; this is not a promise of
+instantaneous connection closure at the deadline.
+
+Only the explicit `catchUp` entry retries, at most twice per invocation, for
+allowlisted timeout/network/server-selection failures. Attempts consume the
+same poll/time budget. Backoff of 100/200 ms occurs outside the transaction and
+responds to cancellation. Each attempt reopens from the committed cursor.
+Authorization, unknown errors, confirmed gaps and database transaction failures
+are not retried. Ordinary inventory ticks still stop on feed failures.
+
+Disposable PostgreSQL 16.10 installation/worker tests and TypeScript checking
+passed. New tests cover two failures followed by recovery, retry exhaustion,
+all retryable classes, authorization/unknown/gap immediate stops, a 1.1-second
+successful read, caller deadline clipping (including below the normal await
+duration), cancellation during backoff, pre-cancelled/expired admission, and
+partial-consumption retry with exact replay and committed-event counts.
+
+No live database access, population, feed polling, deployment, or shared flag
+change occurred during this local implementation. A separately approved bounded
+feed-only run is still required to establish behavior under production latency.

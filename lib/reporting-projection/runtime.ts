@@ -27,14 +27,33 @@ export function projectionRuntime(reporting: ReturnType<typeof postgres>, source
       assert.ok(Number.isSafeInteger(polls) && polls > 0 && polls <= 40);
       assert.ok(Number.isSafeInteger(budget) && budget > 0 && budget <= 60_000);
       const deadline = Date.now() + budget;
-      let events = 0, completed = 0;
+      // Retry only this explicitly bounded feed-drain entry. Inventory ticks
+      // continue to stop immediately on a feed error.
+      let events = 0, completed = 0, retries = 0;
+      let lastFailure: Awaited<ReturnType<typeof invalidation.poll>> | undefined;
       while (completed < polls && Date.now() < deadline && !options.signal?.aborted) {
-        const result = await invalidation.poll(options.signal);
+        const result = await invalidation.poll(options.signal, deadline);
         completed++;
         events += "events" in result ? result.events ?? 0 : 0;
-        if (result.status !== "draining") return { ...result, events, polls: completed };
+        if (result.status === "stream_unavailable" && "diagnostic" in result &&
+            ["timeout", "network", "server_selection"].includes(result.diagnostic?.category ?? "") &&
+            retries < 2 && completed < polls && Date.now() < deadline && !options.signal?.aborted) {
+          lastFailure = result;
+          // Outside the transaction: no scope/advisory lock during backoff.
+          await new Promise<void>(resolve => {
+            const done = () => { clearTimeout(timer); options.signal?.removeEventListener("abort", done); resolve(); };
+            const timer = setTimeout(done, Math.min(100 * (retries + 1), deadline - Date.now()));
+            options.signal?.addEventListener("abort", done, { once: true });
+            if (options.signal?.aborted) done();
+          });
+          retries++;
+          continue;
+        }
+        if (result.status !== "draining") return { ...result, events, polls: completed, retries };
+        lastFailure = undefined;
       }
-      return { status: options.signal?.aborted ? "cancelled" : "draining", events, polls: completed };
+      return { ...lastFailure, status: options.signal?.aborted ? "cancelled" : lastFailure?.status ?? "draining",
+        events, polls: completed, retries };
     },
     async tick(shop: number, signal?: AbortSignal) {
       if (!enabled()) return { status: "disabled" };
