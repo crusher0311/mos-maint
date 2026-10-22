@@ -1,6 +1,6 @@
 import type postgres from "postgres";
 import type { Db } from "mongodb";
-import { enabled } from "./contract";
+import { builderEnabled as enabled } from "./contract";
 import { StoredInvoiceInventory } from "./source";
 import { InvoiceProjectionWorker } from "./worker";
 import { ProjectionInvalidation } from "./invalidation";

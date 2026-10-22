@@ -1,7 +1,7 @@
 import type postgres from "postgres";
 import type { Db, ChangeStream } from "mongodb";
 import { EJSON } from "bson";
-import { enabled } from "./contract";
+import { builderEnabled as enabled } from "./contract";
 
 /** The stream is operational read-only. Resume token and invalidation commit together.
  * A lost/expired token invalidates everything before reopening; never skip a gap. */

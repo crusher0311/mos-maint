@@ -1,5 +1,14 @@
 # Dedicated invoice reporting: production migration proposal
 
+## Reconciliation status — October 22, 2026
+
+**Do not install either SQL candidate yet.** The original design below predates
+the merged worker. See `RELEASE-RECONCILIATION.md` for the authoritative compatibility
+matrix and blockers. The runtime currently uses `reporting_invoice`, not the
+`invoice_reporting` name proposed below. Requirements below remain design goals,
+not a claim that the current candidate implements them. In particular, the
+candidate does install operational triggers, contrary to this proposal.
+
 **Status: proposed; not approved or installed.** Prepared 2026-10-22 from
 `schema.sql`, `model.ts` and the production work contract in `README.md`.
 Target: the **existing external PostgreSQL database**, not a new Replit database.

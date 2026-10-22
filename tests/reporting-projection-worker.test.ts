@@ -58,14 +58,28 @@ async function main() {
       CREATE TABLE invoice_repair_hold_reviews(id uuid PRIMARY KEY,shop_id int,provider text,scope_revision bigint,
         inventory_digest text,reviewed_at timestamptz DEFAULT clock_timestamp(),expires_at timestamptz);
       CREATE TABLE invoice_repair_holds(id uuid PRIMARY KEY,shop_id int,provider text,source_id text,resolved_at timestamptz);`);
-    await query(readFileSync("scripts/reporting-projection/production-schema.sql", "utf8"));
+    const migrationConnection = await sql.reserve();
+    try {
+      await migrationConnection.unsafe(readFileSync("scripts/reporting-projection/production-schema.sql", "utf8"));
+    } finally { await migrationConnection.release(); }
     const source = new SyntheticSource();
     source.set([raw(1)]);
     const worker = new InvoiceProjectionWorker(sql, source);
     assert.equal(await worker.start(1), null);
     assert.equal((await worker.tick(randomUUID())).status, "disabled");
     assert.equal(source.calls, 0, "Disabled gate must do no source reads");
-    process.env.REPORTING_INVOICE_PROJECTION_ENABLED = "true"; // synthetic process only
+    process.env.REPORTING_INVOICE_PROJECTION_ENABLED = "true"; // retired flag must not activate either lane
+    assert.equal(await worker.start(1), null);
+    const { enabled: readerEnabled, builderEnabled } = await import("../lib/reporting-projection/contract");
+    assert.equal(readerEnabled(), false);
+    process.env.REPORTING_INVOICE_PROJECTION_BUILD_ENABLED = "true"; // synthetic process only
+    assert.equal(builderEnabled(), true);
+    assert.equal(readerEnabled(), false, "Shadow builder must not select customer reporting");
+    process.env.REPORTING_INVOICE_PROJECTION_READ_ENABLED = "true";
+    assert.equal(readerEnabled(), true);
+    delete process.env.REPORTING_INVOICE_PROJECTION_BUILD_ENABLED;
+    assert.equal(await worker.start(1), null, "Read activation must not start background work");
+    process.env.REPORTING_INVOICE_PROJECTION_BUILD_ENABLED = "true";
     const freshWatcher = () => query(`INSERT INTO reporting_invoice.change_cursors(name,observed_at)
       VALUES('mongo',clock_timestamp()) ON CONFLICT(name) DO UPDATE SET observed_at=excluded.observed_at`);
     await freshWatcher();
@@ -276,6 +290,69 @@ async function main() {
     assert.equal((await query("SELECT * FROM reporting_invoice.change_cursors")).length, 0);
     await invalidator.close();
     console.log("PASS durable change cursor, source invalidation, missed-stream gap fails closed");
+    // Real-role migration boundary: ordinary writes succeed without any reporting grants.
+    await query("CREATE ROLE projection_operational_test NOLOGIN");
+    await query("GRANT USAGE ON SCHEMA public TO projection_operational_test");
+    await query("GRANT INSERT,UPDATE,DELETE,SELECT,TRUNCATE ON normalized_work_orders TO projection_operational_test");
+    const [beforeRole]=await query("SELECT revision FROM reporting_invoice.scopes WHERE shop_id=30");
+    await sql.begin(async tx => {
+      await tx.unsafe("SET LOCAL ROLE projection_operational_test");
+      await tx.unsafe("INSERT INTO normalized_work_orders(id,shop_id) VALUES('role-probe',99)");
+      await tx.unsafe("UPDATE normalized_work_orders SET shop_id=98 WHERE id='role-probe'");
+      await tx.unsafe("DELETE FROM normalized_work_orders WHERE id='role-probe'");
+      await tx.unsafe("TRUNCATE normalized_work_orders");
+    });
+    assert.equal((await query("SELECT id FROM normalized_work_orders WHERE id='role-probe'")).length, 0);
+    const [afterRole]=await query("SELECT revision FROM reporting_invoice.scopes WHERE shop_id=30");
+    assert.equal(Number(afterRole.revision),Number(beforeRole.revision)+4);
+    for(const role of ["projection_operational_test","reporting_invoice_invalidator"]) {
+      for(const text of [
+        "UPDATE reporting_invoice.reviews SET revoked_at=now()",
+        "UPDATE public.invoice_repair_holds SET resolved_at=now()",
+        "DELETE FROM reporting_invoice.items",
+      ]) await assert.rejects(()=>sql.begin(async tx=>{
+        await tx.unsafe(`SET LOCAL ROLE ${role}`);
+        await tx.unsafe(text);
+      }),(e:any)=>e.code==="42501");
+    }
+    await assert.rejects(()=>sql.begin(async tx=>{
+      await tx.unsafe("SET LOCAL ROLE reporting_invoice_invalidator");
+      await tx.unsafe("INSERT INTO public.normalized_work_orders(id,shop_id) VALUES('forbidden',1)");
+    }),(e:any)=>e.code==="42501");
+    const [fn]=await query(`SELECT prosecdef,proconfig,pg_get_userbyid(proowner) AS owner
+      FROM pg_proc WHERE oid='reporting_invoice.invalidate_statement()'::regprocedure`);
+    assert.equal(fn.prosecdef,true);
+    assert.equal(fn.owner,"reporting_invoice_invalidator");
+    assert.ok(fn.proconfig.includes("search_path=pg_catalog, pg_temp"));
+    const [execute]=await query(`SELECT has_function_privilege('projection_operational_test',
+      'reporting_invoice.invalidate_statement()','EXECUTE') AS allowed`);
+    assert.equal(execute.allowed,false);
+    await query("CREATE ROLE projection_builder_test NOLOGIN");
+    await query("GRANT USAGE ON SCHEMA reporting_invoice TO projection_builder_test");
+    await query(`GRANT SELECT,INSERT,UPDATE,DELETE ON reporting_invoice.scopes,
+      reporting_invoice.builds,reporting_invoice.sources,reporting_invoice.items,
+      reporting_invoice.refs,reporting_invoice.change_cursors TO projection_builder_test`);
+    await query("GRANT SELECT ON reporting_invoice.reviews TO projection_builder_test");
+    await sql.begin(async tx=>{
+      await tx.unsafe("SET LOCAL ROLE projection_builder_test");
+      await tx.unsafe("INSERT INTO reporting_invoice.scopes(shop_id) VALUES(999)");
+    });
+    for(const text of [
+      "UPDATE public.normalized_work_orders SET shop_id=1",
+      "UPDATE public.normalized_service_jobs SET shop_id=1",
+      "UPDATE public.normalized_line_items SET shop_id=1",
+      "UPDATE public.normalized_payments SET shop_id=1",
+      "UPDATE public.invoice_repair_holds SET resolved_at=now()",
+      "DELETE FROM public.invoice_repair_hold_reviews",
+      "UPDATE reporting_invoice.reviews SET revoked_at=now()",
+    ]) await assert.rejects(()=>sql.begin(async tx=>{
+      await tx.unsafe("SET LOCAL ROLE projection_builder_test");
+      await tx.unsafe(text);
+    }),(e:any)=>e.code==="42501");
+    const [membership]=await query(`SELECT pg_has_role('projection_builder_test',
+      'reporting_invoice_invalidator','MEMBER') AS allowed`);
+    assert.equal(membership.allowed,false);
+    console.log("PASS restricted operational CRUD/TRUNCATE invalidates; definer cannot mutate operational/hold/review/fact records");
   } finally { await sql.end(); }
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

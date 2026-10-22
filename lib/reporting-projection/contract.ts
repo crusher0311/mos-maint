@@ -2,7 +2,10 @@ import { createHash } from "node:crypto";
 import { previewStoredEvidence } from "../../scripts/invoice-evidence-local-preview";
 
 export const PARSER_VERSION = "stored-invoice-projection-1";
-export const enabled = () => process.env.REPORTING_INVOICE_PROJECTION_ENABLED === "true";
+// Independent switches: shadow population must never select the customer reader.
+// The old combined flag intentionally enables neither path.
+export const builderEnabled = () => process.env.REPORTING_INVOICE_PROJECTION_BUILD_ENABLED === "true";
+export const enabled = () => process.env.REPORTING_INVOICE_PROJECTION_READ_ENABLED === "true";
 export const hash = (value: unknown): string =>
   createHash("sha256").update(JSON.stringify(value)).digest("hex");
 export const EMPTY_DIGEST = hash([]);

@@ -1,5 +1,9 @@
 -- REVIEW CANDIDATE ONLY. Never installed by startup, deployment or this task.
 -- Separate schema from the disposable prototype. See README for role/rollout requirements.
+BEGIN;
+SET LOCAL lock_timeout='2s';
+-- Fail closed if this role/schema already exists; never reuse an unverified role.
+CREATE ROLE reporting_invoice_invalidator NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
 CREATE SCHEMA reporting_invoice;
 CREATE TABLE reporting_invoice.scopes (
  shop_id integer PRIMARY KEY CHECK(shop_id>0), revision bigint NOT NULL DEFAULT 0,
@@ -54,11 +58,19 @@ CREATE TABLE reporting_invoice.change_cursors (
 );
 -- Install triggers only after separate schema/index/role review. Covers canonical
 -- owner, financial-child, cache and registry changes (including deletes/TRUNCATE).
-CREATE FUNCTION reporting_invoice.invalidate_statement() RETURNS trigger LANGUAGE plpgsql AS $$
+CREATE FUNCTION reporting_invoice.invalidate_statement() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
 BEGIN
  UPDATE reporting_invoice.scopes SET revision=revision+1,invalidated_at=clock_timestamp();
  RETURN NULL;
 END $$;
+-- The function owner cannot write operational records, reviews, holds, facts or
+-- cursors. Application writers receive no reporting privileges or membership.
+GRANT USAGE, CREATE ON SCHEMA reporting_invoice TO reporting_invoice_invalidator;
+GRANT SELECT(revision), UPDATE(revision,invalidated_at)
+ ON reporting_invoice.scopes TO reporting_invoice_invalidator;
+ALTER FUNCTION reporting_invoice.invalidate_statement() OWNER TO reporting_invoice_invalidator;
+REVOKE CREATE ON SCHEMA reporting_invoice FROM reporting_invoice_invalidator;
 -- Fleet-wide conservative invalidation avoids incorrect scope inference from deleted
 -- rows or moved owners. No raw invoice data is persisted by this trigger.
 DO $$
@@ -68,10 +80,12 @@ BEGIN
   'normalized_payments','protractor_work_orders','protractor_invoices','protractor_invoice_cache',
   'invoice_repair_hold_scopes','invoice_repair_holds','invoice_repair_hold_reviews']
  LOOP
-  EXECUTE format('CREATE TRIGGER reporting_invoice_invalidate AFTER INSERT OR UPDATE OR DELETE OR TRUNCATE ON %I FOR EACH STATEMENT EXECUTE FUNCTION reporting_invoice.invalidate_statement()',t);
+  EXECUTE format('CREATE TRIGGER reporting_invoice_invalidate AFTER INSERT OR UPDATE OR DELETE OR TRUNCATE ON %I.%I FOR EACH STATEMENT EXECUTE FUNCTION reporting_invoice.invalidate_statement()','public',t);
  END LOOP;
 END $$;
 CREATE TRIGGER reporting_invoice_review_invalidate AFTER INSERT OR UPDATE OR DELETE OR TRUNCATE
  ON reporting_invoice.reviews FOR EACH STATEMENT EXECUTE FUNCTION reporting_invoice.invalidate_statement();
 REVOKE ALL ON SCHEMA reporting_invoice FROM PUBLIC;
 REVOKE ALL ON ALL TABLES IN SCHEMA reporting_invoice FROM PUBLIC;
+REVOKE ALL ON FUNCTION reporting_invoice.invalidate_statement() FROM PUBLIC;
+COMMIT;

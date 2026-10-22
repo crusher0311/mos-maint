@@ -25,10 +25,11 @@ adapter, projection reader, KPI integration and cache-key separation.
   bounded worker entry for a separately approved operator scheduler. There is
   deliberately no startup hook, new cron registration, connection discovery,
   provider fetch, automatic migration, or implicit fleet/shop discovery.
-- `REPORTING_INVOICE_PROJECTION_ENABLED=true` is the explicit gate. It defaults
-  off; neither this task nor its tests change shared configuration. The same
-  gate selects the reporting KPI reader. Do not enable it before installing and
-  verifying the schema, restricted roles, change stream and reviews.
+- `REPORTING_INVOICE_PROJECTION_BUILD_ENABLED=true` enables the worker and change
+  consumer only. `REPORTING_INVOICE_PROJECTION_READ_ENABLED=true` selects the KPI
+  reader independently. Both default off. The retired combined flag enables
+  neither path. Shadow rollout enables BUILD first, keeps READ off, and verifies
+  schema, roles, inventory, reviews and freshness before approving READ.
 - Supply a reporting-only writer connection, a **read-only** source PostgreSQL
   connection, and read-only MongoDB access with change-stream/list-collection
   privileges. The worker may SELECT the existing hold registry and review
@@ -106,7 +107,9 @@ approval. This task performs none of them. Generation data is not automatically
 deleted; an approved retention job must preserve published generations and
 their review/audit references.
 
-This is a **disposable-database prototype**, not an application route, production
+## Original disposable prototype
+
+The code described below is a **disposable-database prototype**, not an application route, production
 migration, repair tool, or deployable replacement for the current report.
 Every exported database operation requires the disposable database marker.
 Do not set that marker on a real database to bypass this boundary.

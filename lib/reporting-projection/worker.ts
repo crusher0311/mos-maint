@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import type postgres from "postgres";
 import { requireHoldCoverage } from "../invoice-repair/hold-registry";
 import {
-  classify, EMPTY_DIGEST, enabled, hash, LIMITS, PARSER_VERSION, UUID,
+  classify, EMPTY_DIGEST, builderEnabled as enabled, hash, LIMITS, PARSER_VERSION, UUID,
   type Copy, type Review, type SourceInventory,
 } from "./contract";
 
