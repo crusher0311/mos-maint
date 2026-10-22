@@ -14,3 +14,14 @@ provider change log.
 **How to apply:** Preserve MOS-observed coverage language and require separate
 approval for live rollout. Do not claim every intermediate change, deletion
 detection or full history. New datasets need their own confirmed contract.
+
+Synthetic export preparation authorizes only fictional receiver traffic and
+read-only readiness assessment, not real delivery or production setup.
+
+**Why:** The user approved testing and assessment before considering a one-shop
+pilot; implementation being merged is not activation approval.
+
+**How to apply:** Keep destination ownership, exact shop redistribution authority,
+schedule/timezone, snapshot choice, secret installation and explicit resume as
+separate pilot gates. Workspace deployment/env metadata cannot establish the
+state of separately hosted production web and worker services.
