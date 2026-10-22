@@ -27,6 +27,8 @@ import { INVOICE_FLEET_SQL, invoiceFleetParams, invoiceFleetResult } from "./inv
 import { admitInvoiceFleet } from "./invoice-fleet-admission";
 import { admitInvoiceStream, streamInvoiceFleet } from "./invoice-fleet-stream";
 import { invoiceStreamTimeout } from "./invoice-stream-timeout";
+import { enabled as invoiceProjectionEnabled } from "./reporting-projection/contract";
+import { readProjection } from "./reporting-projection/reader";
 
 const fleetAdmitted = Symbol("invoice-fleet-transaction-admitted");
 
@@ -235,9 +237,10 @@ export async function getReportingKpis(
   },
 ): Promise<ReportingKpiResponse> {
   const deadlineAt = options?.deadlineAt ?? Date.now() + REPORTING_QUERY_DEADLINE_MS;
-  const streamMode = (options?.invoiceFleetStreaming ?? process.env.INVOICE_FLEET_STREAM_ENABLED === "true") &&
+  const projectionMode = invoiceProjectionEnabled();
+  const streamMode = !projectionMode && (options?.invoiceFleetStreaming ?? process.env.INVOICE_FLEET_STREAM_ENABLED === "true") &&
     !!options?.executionPlan?.stages.includes("invoice");
-  const fleetMode = (streamMode || (options?.invoiceFleetAggregation ?? process.env.INVOICE_FLEET_AGGREGATION_ENABLED === "true")) &&
+  const fleetMode = !projectionMode && (streamMode || (options?.invoiceFleetAggregation ?? process.env.INVOICE_FLEET_AGGREGATION_ENABLED === "true")) &&
     !!options?.executionPlan?.stages.includes("invoice");
   if (fleetMode) {
     // Reject invalid scope before opening a transaction or acquiring capacity.
@@ -648,7 +651,16 @@ export async function getReportingKpis(
     if (invoiceIds.some(id => !scope.shopIds.includes(id))) {
       throw new ReportingQueryError("Invoice locations are outside the authorized scope.", "authorization", "invoice");
     }
-    if (fleetMode) {
+    if (projectionMode) {
+      const invoice = await readProjection(
+        (text, params) => runStage("invoice", query, text, params ?? [], deadlineAt, options.beforeStage),
+        scope.shopIds, invoiceIds, range.start, range.end);
+      Object.assign(result.summary, invoice.summary);
+      const empty = aggregateInvoiceHours([], range.start, range.end).empty;
+      for (const location of result.byLocation)
+        Object.assign(location.metrics, invoice.locations.get(Number(location.key)) ?? empty);
+      result.dataQuality.notes.push("Stored-evidence projection: financial/ownership reviews and authoritative hold coverage are rechecked. Unresolved populations remain unavailable; no provider or fallback source scan is performed.");
+    } else if (fleetMode) {
       try {
         const invoice=streamMode
           ? await streamInvoiceFleet(

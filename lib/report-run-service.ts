@@ -10,6 +10,7 @@ import {
   findReportRun,
   findReportRunByKey,
   updateReportRunStage,
+  supersedeProjectionReportRun,
 } from "@/lib/data/repositories/report-runs";
 import { findReportingRecipient } from "@/lib/data/repositories/reporting-subscriptions";
 import { executeReportDefinition, compileReportDefinition, ReportDefinitionError } from "@/lib/report-definition-compiler";
@@ -17,6 +18,18 @@ import type { ReportDefinitionV1 } from "@/lib/report-definition-contract";
 import { classifyReportFailure, redactedReportCause, reportRunDiagnostics } from "@/lib/report-run-diagnostics";
 import { resolveReportingScope } from "@/lib/reporting-scope";
 import { randomUUID } from "node:crypto";
+import { enabled as projectionEnabled } from "./reporting-projection/contract";
+import { projectionCacheToken } from "./reporting-projection/reader";
+import { getClient } from "./db/drizzle";
+
+async function currentProjectionToken(definition: ReportDefinitionV1, shops: number[]) {
+  if (!projectionEnabled() || !definition.metrics.some(m =>
+    m === "averageSoldHoursPerInvoice" || m === "averagePresentedHoursPerInvoice")) return undefined;
+  return getClient().begin(async tx => {
+    await tx.unsafe("SET LOCAL statement_timeout='2000ms'");
+    return projectionCacheToken(async (text, params) => tx.unsafe(text, params), shops);
+  }) as Promise<string>;
+}
 
 type SessionLike = { email: string; shopId?: number; role?: string; isPlatformAdmin?: boolean; enterpriseId?: string | null };
 
@@ -86,6 +99,7 @@ export async function requestReportRun(session: SessionLike, input: {
     definition: authorized.definition,
     scopeRequest: authorized.scopeRequest,
     authorizedShopIds: authorized.executionShopIds,
+    projectionToken: await currentProjectionToken(authorized.definition, authorized.executionShopIds),
     force: input.force,
     refreshEnabled: input.refreshEnabled,
   });
@@ -105,9 +119,11 @@ export async function lookupReportRun(session: SessionLike, input: {
     definition: authorized.definition,
     scopeRequest: authorized.scopeRequest,
     authorizedShopIds: authorized.executionShopIds,
+    projectionToken: await currentProjectionToken(authorized.definition, authorized.executionShopIds),
   };
   const current = await findReportRunByKey(key);
   if (current) return current;
+  if (key.projectionToken) return null;
   // Historical filtered runs keyed the original full authorization set.
   // Never execute that wider scope, but preserve access to its saved snapshot.
   const legacy = await findReportRunByKey({ ...key, authorizedShopIds: authorized.scope.shopIds });
@@ -146,12 +162,25 @@ export async function processNextReportRun() {
     if (JSON.stringify(currentIds) !== JSON.stringify(run.authorizedShopIds)) {
       throw new Error("Authorized reporting scope changed; run the report again");
     }
+    const projectionToken = await currentProjectionToken(run.definition, currentIds);
+    const supersede = async (token: string | undefined) => {
+      const replacement = await enqueueReportRun({
+        requestedBy: run.requestedBy, reportId: run.reportId, reportVersion: run.reportVersion,
+        definition: authorized.definition, scopeRequest: authorized.scopeRequest,
+        authorizedShopIds: currentIds, projectionToken: token, refreshEnabled: run.refreshEnabled,
+      });
+      await supersedeProjectionReportRun(run._id);
+      return { claimed: 1, status: "projection_superseded", runId: run._id, replacement };
+    };
+    if (projectionToken !== run.projectionToken) return supersede(projectionToken);
     await updateReportRunStage(run._id, "query");
     stage = "query";
     const result = await reportRunDiagnostics.run({ correlationId }, () => executeReportDefinition(run.definition, authorized.scope, {
       serviceOptions: { deadlineMs: 5 * 60_000 },
       maxDeadlineMs: 5 * 60_000,
     }));
+    const afterToken = await currentProjectionToken(run.definition, currentIds);
+    if (projectionToken !== afterToken) return supersede(afterToken);
     stage = "persist";
     await updateReportRunStage(run._id, "persist");
     await completeReportRun(run._id, result);

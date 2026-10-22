@@ -21,6 +21,7 @@ export interface ReportRunDocument extends Document {
   definition: ReportDefinitionV1;
   scopeRequest: CustomReportScopeRequest;
   authorizedShopIds: number[];
+  projectionToken?: string;
   status: ReportRunStatus;
   stage: string;
   attempts: number;
@@ -47,9 +48,11 @@ export function reportRunCacheKey(input: {
   definition: ReportDefinitionV1;
   scopeRequest: CustomReportScopeRequest;
   authorizedShopIds: number[];
+  projectionToken?: string;
 }) {
   return createHash("sha256").update(JSON.stringify({
     executionVersion: REPORT_RUN_EXECUTION_VERSION,
+    ...(input.projectionToken ? { projectionToken: input.projectionToken } : {}),
     // Invalidate only invoice-average results produced by the former population
     // rules; leave saved legacy report cache keys and pinned definitions intact.
     ...(input.definition.metrics.some(metric =>
@@ -86,6 +89,7 @@ export async function enqueueReportRun(input: {
   definition: ReportDefinitionV1;
   scopeRequest: CustomReportScopeRequest;
   authorizedShopIds: number[];
+  projectionToken?: string;
   force?: boolean;
   refreshEnabled?: boolean;
   now?: Date;
@@ -102,6 +106,7 @@ export async function enqueueReportRun(input: {
     definition: input.definition,
     scopeRequest: input.scopeRequest,
     authorizedShopIds: [...input.authorizedShopIds].sort((a, b) => a - b),
+    ...(input.projectionToken ? { projectionToken: input.projectionToken } : {}),
     status: "queued",
     stage: "queued",
     attempts: 0,
@@ -220,6 +225,17 @@ export async function cancelReportRun(id: string, requestedBy: string) {
     { $set: { status: "cancelled", stage: "cancelled", completedAt: new Date() } },
     { returnDocument: "after" },
   );
+}
+
+/** Preserve an existing saved result/link while moving automatic refresh to the
+ * newly authorized projection-generation key. Never overwrite the old snapshot. */
+export async function supersedeProjectionReportRun(id: string) {
+  const run = await findReportRun(id);
+  if (!run) return;
+  await (await collection()).updateOne({ _id: id, status: "running" }, {
+    $set: { status: run.result ? "succeeded" : "cancelled", stage: "projection_superseded",
+      refreshEnabled: false, completedAt: new Date() },
+  });
 }
 
 export async function enqueueActiveReportRefreshes(now = new Date(), limit = 10) {
