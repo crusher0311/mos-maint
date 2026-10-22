@@ -1,12 +1,19 @@
 # Local invoice reporting projection
 
+Production status, October 22, 2026: the reporting and hold-registry schema was
+installed under explicit approval. The first shop-227 population attempt could
+not pass live change-feed admission; no invoice build or report was produced.
+Both shared switches remain off. See
+`docs/reporting/projection-installation-2026-10-22.md` for the execution record.
+The earlier design/prototype notes below are not current installation status.
+
 ## Gated stored-source worker
 
 The disposable prototype below remains unchanged. The production-capable,
 **disabled-by-default** implementation is in `lib/reporting-projection/`.
-`production-schema.sql` is an uninstalled review candidate, not a migration
-hook. It must be reconciled with the separately reviewed rollout package before
-installation; running the application does not create any tables or triggers.
+`production-schema.sql` is the explicit operator migration, not a startup hook.
+It refuses existing objects and must not be rerun against the installed database.
+Running the application does not create any tables or triggers.
 
 Run the independent, credential-free acceptance suite:
 

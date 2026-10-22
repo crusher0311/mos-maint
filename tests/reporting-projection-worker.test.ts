@@ -54,10 +54,6 @@ async function main() {
       await query(`CREATE TABLE ${table}(id text PRIMARY KEY,shop_id int,provenance jsonb,raw_data jsonb)`);
     for (const table of ["protractor_work_orders", "protractor_invoices", "protractor_invoice_cache"])
       await query(`CREATE TABLE ${table}(shop_id int,${table === "protractor_work_orders" ? "work_order_id" : "invoice_id"} text,payload jsonb)`);
-    await query(`CREATE TABLE invoice_repair_hold_scopes(shop_id int,provider text,revision bigint DEFAULT 0,PRIMARY KEY(shop_id,provider));
-      CREATE TABLE invoice_repair_hold_reviews(id uuid PRIMARY KEY,shop_id int,provider text,scope_revision bigint,
-        inventory_digest text,reviewed_at timestamptz DEFAULT clock_timestamp(),expires_at timestamptz);
-      CREATE TABLE invoice_repair_holds(id uuid PRIMARY KEY,shop_id int,provider text,source_id text,resolved_at timestamptz);`);
     const migrationConnection = await sql.reserve();
     try {
       await migrationConnection.unsafe(readFileSync("scripts/reporting-projection/production-schema.sql", "utf8"));
@@ -111,8 +107,8 @@ async function main() {
         [randomUUID(), b.shop_id, item.identity, hash(refs), b.inventory_digest, PARSER_VERSION, dispositions[item.identity] ?? "invoice"]);
       }
       await query(`INSERT INTO invoice_repair_hold_scopes VALUES($1,'protractor',0) ON CONFLICT DO NOTHING`, [b.shop_id]);
-      await query(`INSERT INTO invoice_repair_hold_reviews(id,shop_id,provider,scope_revision,inventory_digest,expires_at)
-        VALUES($1,$2,'protractor',0,$3,clock_timestamp()+interval '5 minutes')`, [randomUUID(), b.shop_id, b.inventory_digest]);
+      await query(`INSERT INTO invoice_repair_hold_reviews(id,shop_id,provider,scope_revision,inventory_digest,expires_at,review_reference,actor)
+        VALUES($1,$2,'protractor',0,$3,clock_timestamp()+interval '5 minutes','synthetic-review','synthetic-reviewer')`, [randomUUID(), b.shop_id, b.inventory_digest]);
       assert.equal((await worker.tick(build)).status, "failed", "Review change must invalidate original generation");
       return begin(b.shop_id);
     };
@@ -182,7 +178,7 @@ async function main() {
     assert.equal(result.summary.averagePresentedHoursPerInvoice, null, "Missing labor is not zero");
     await assert.rejects(() => read([1, 2, 3]), /unavailable/, "No partial fleet publication");
     const beforeHold = await projectionCacheToken(query, [2]);
-    await query("INSERT INTO invoice_repair_holds(id,shop_id,provider,source_id) VALUES($1,2,'protractor',NULL)", [randomUUID()]);
+    await query("INSERT INTO invoice_repair_holds(id,shop_id,provider,source_id,kind,reason_reference,created_by) VALUES($1,2,'protractor',NULL,'financial','synthetic-hold','synthetic-reviewer')", [randomUUID()]);
     await assert.rejects(() => read([2]), /unavailable/, "Hold trigger invalidates publication");
     assert.notEqual(await projectionCacheToken(query, [2]), beforeHold);
     console.log("PASS missing labor, held scopes, fleet completeness");
