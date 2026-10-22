@@ -147,13 +147,27 @@ async function main() {
     for (const role of ["projection_operational", ...apiRoles, "reporting_invoice_builder"]) {
       assert.equal((await admin`SELECT pg_has_role(${role},'reporting_invoice_invalidator','SET') AS allowed`)[0].allowed, false);
     }
-    // Do not confuse "trigger functions can only be called as triggers" with
-    // an ACL denial. The non-owner REVOKE after SET removal currently emits a
-    // warning, leaving PUBLIC EXECUTE. Track separately; no migration edits here.
-    const [execute] = await q(`SELECT has_function_privilege('reporting_invoice_builder',
-      'reporting_invoice.invalidate_statement()','EXECUTE') AS allowed`);
-    if (execute.allowed)
-      console.log("KNOWN GAP: PUBLIC function EXECUTE survives non-owner REVOKE; see installation notes");
+    const assertNoExecute = async () => {
+      for (const role of ["reporting_invoice_builder", "projection_operational", ...apiRoles]) {
+        const [execute] = await q(`SELECT has_function_privilege('${role}',
+          'reporting_invoice.invalidate_statement()','EXECUTE') AS allowed`);
+        assert.equal(execute.allowed, false, `${role} must not have EXECUTE`);
+      }
+    };
+    await assertNoExecute();
+    // Reproduce the installed ACL gap, then apply the exact operator correction
+    // as the non-superuser installer, twice to establish safe repeatability.
+    await asRole("reporting_invoice_invalidator",
+      "GRANT EXECUTE ON FUNCTION reporting_invoice.invalidate_statement() TO PUBLIC");
+    const correction = readFileSync("scripts/reporting-projection/correct-invalidator-execute.sql", "utf8");
+    await install(correction);
+    await install(correction);
+    await assertNoExecute();
+    assert.equal((await q("SELECT pg_has_role(current_user,'reporting_invoice_invalidator','SET') AS allowed"))[0].allowed, false);
+    const revisionAfterCorrection = Number((await q("SELECT revision FROM reporting_invoice.scopes WHERE shop_id=1"))[0].revision);
+    await asRole("projection_operational", "INSERT INTO normalized_work_orders(id) VALUES('post-correction')");
+    assert.equal(Number((await q("SELECT revision FROM reporting_invoice.scopes WHERE shop_id=1"))[0].revision), revisionAfterCorrection + 1);
+    await asRole("projection_operational", "DELETE FROM normalized_work_orders WHERE id='post-correction'");
     for (const role of restricted) {
       for (const table of [...operational.map(t => `public.${t}`), ...registry.map(t => `public.${t}`), "reporting_invoice.reviews"]) {
         // Real DML, not only catalog assertions. INSERT reaches permission

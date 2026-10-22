@@ -19,3 +19,9 @@ Perform owner-only ACL changes before removing temporary owner authority.
 leaving PUBLIC EXECUTE intact even though installation reports success.
 **How to apply:** Assert effective function privileges in non-superuser migration
 tests; rejection of a direct trigger-function call is not proof of an ACL denial.
+
+Create dependent triggers before removing the installer's EXECUTE access.
+**Why:** PostgreSQL checks function EXECUTE at CREATE TRIGGER time, even though
+later operational DML can fire the existing trigger without that privilege.
+**How to apply:** Create triggers, revoke PUBLIC execution as the function owner,
+then revoke temporary SET membership, all inside the installation transaction.

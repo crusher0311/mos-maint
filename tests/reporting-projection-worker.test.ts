@@ -10,6 +10,7 @@ import { readProjection, projectionCacheToken } from "../lib/reporting-projectio
 import { classify, hash, LIMITS, PARSER_VERSION, type SourceDocument, type SourceInventory } from "../lib/reporting-projection/contract";
 import { getReportingKpis, normalizeReportingRange } from "../lib/reporting-kpi-service";
 import { reportRunCacheKey } from "../lib/data/repositories/report-runs";
+import { requireHoldCoverage } from "../lib/invoice-repair/hold-registry";
 
 const identity = (n: number) => `10000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
 const raw = (n: number, sold = 2, deferred = 1): any => ({
@@ -108,8 +109,20 @@ async function main() {
         [randomUUID(), b.shop_id, item.identity, hash(refs), b.inventory_digest, PARSER_VERSION, dispositions[item.identity] ?? "invoice"]);
       }
       await query(`INSERT INTO invoice_repair_hold_scopes VALUES($1,'protractor',0) ON CONFLICT DO NOTHING`, [b.shop_id]);
+      const coverageId = b.shop_id === 1 ? `hold-review:${randomUUID()}` : randomUUID();
       await query(`INSERT INTO invoice_repair_hold_reviews(id,shop_id,provider,scope_revision,inventory_digest,expires_at,review_reference,actor)
-        VALUES($1,$2,'protractor',0,$3,clock_timestamp()+interval '5 minutes','synthetic-review','synthetic-reviewer')`, [randomUUID(), b.shop_id, b.inventory_digest]);
+        VALUES($1,$2,'protractor',0,$3,clock_timestamp()+interval '5 minutes','synthetic-review','synthetic-reviewer')`, [coverageId, b.shop_id, b.inventory_digest]);
+      if (b.shop_id === 1) {
+        const coverage = (id: string, shopId = b.shop_id, digest = b.inventory_digest, sources = [identity(1)]) =>
+          requireHoldCoverage({ unsafe: query }, { shopId, provider: "protractor" }, sources, digest, id);
+        for (const id of ["", " ", "bad\nid", "bad\0id"])
+          await assert.rejects(() => coverage(id), /Invalid hold coverage review ID/);
+        for (const id of [` ${coverageId}`, `${coverageId} `, "missing-review", "' OR true --"])
+          await assert.rejects(() => coverage(id), /coverage review/);
+        await assert.rejects(() => coverage(coverageId, 99999), /coverage review/);
+        await assert.rejects(() => coverage(coverageId, b.shop_id, "f".repeat(64)), /coverage review/);
+        await assert.rejects(() => coverage(coverageId, b.shop_id, b.inventory_digest, ["not-a-uuid"]));
+      }
       await worker.tick(build, { steps: 1 });
       assert.equal((await query("SELECT phase FROM reporting_invoice.builds WHERE id=$1", [build]))[0].phase,
         "verify", "Review change must restart verification without discarding the inventory");

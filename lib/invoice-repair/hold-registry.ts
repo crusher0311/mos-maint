@@ -73,7 +73,11 @@ export class HoldRegistry {
 export async function requireHoldCoverage(
   tx: Query, scope: RepairScope, sourceIds: string[], inventoryDigest: string, reviewId: string,
 ) {
-  validateScope(scope); assert.match(inventoryDigest, hash); assert.match(reviewId, uuid);
+  validateScope(scope); assert.match(inventoryDigest, hash);
+  // Registry IDs are opaque text, not necessarily UUIDs. Preserve exact identity
+  // (never trim or normalize); SQL below still checks scope, digest and freshness.
+  assert.ok(typeof reviewId === "string" && reviewId.trim().length > 0 &&
+    !/[\u0000-\u001f\u007f]/.test(reviewId), "Invalid hold coverage review ID");
   assert.ok(sourceIds.length > 0 && sourceIds.length <= 100);
   sourceIds.forEach(id => assert.match(id, uuid));
   const reviews = await tx.unsafe(`SELECT r.id,r.scope_revision::text,r.inventory_digest

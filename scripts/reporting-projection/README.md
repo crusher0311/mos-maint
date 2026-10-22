@@ -5,6 +5,8 @@ installed under explicit approval. The first shop-227 population attempt could
 not pass live change-feed admission; no invoice build or report was produced.
 Both shared switches remain off. See
 `docs/reporting/projection-installation-2026-10-22.md` for the execution record.
+The locally prepared ACL/text-review-ID correction and production steps are in
+`docs/reporting/projection-correction-2026-10-22.md`; they are not applied by deployment.
 The earlier design/prototype notes below are not current installation status.
 
 ## Gated stored-source worker
@@ -24,7 +26,7 @@ bash tests/run-reporting-projection-worker.sh
 This includes the non-superuser installation regression suite. Run that portion
 alone with `bash tests/run-reporting-projection-installation.sh`; pass PostgreSQL
 bin directories to test a PG16/PG17 matrix. See the installation record for the
-known post-transfer function-ACL warning discovered by this stricter fixture.
+post-transfer function-ACL issue and its separately prepared correction.
 
 This runner uses only synthetic data, a fresh Unix-socket PostgreSQL instance,
 an empty environment and the network-denial preload. No retained customer

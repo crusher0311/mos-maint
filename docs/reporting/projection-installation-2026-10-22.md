@@ -57,7 +57,7 @@ are exercised on every source table and must increment reporting revisions.
 Both reporting roles must fail INSERT/UPDATE/DELETE/TRUNCATE against source
 invoices, payments, holds, coverage reviews and accounting reviews.
 
-**Additional finding, not changed by this test-only work:** after transferring
+**Historical finding from the test-only merge:** after transferring
 the invalidation function and revoking installer SET membership, the later
 function `REVOKE ... FROM PUBLIC` runs without the owner's authority. PostgreSQL
 warns rather than failing the installation, and PUBLIC EXECUTE remains. The
@@ -71,7 +71,11 @@ items. This is **not** an end-to-end text-ID worker claim: an additional worker
 probe using `hold-review:<uuid>` instead of a UUID produced zero verified
 invoices. The shared hold-coverage validator still requires UUID review IDs.
 The established worker suite retains UUID fixtures; accepting valid text
-identifiers through the full coverage path is a separate follow-up.
+identifiers through the full coverage path was a separate follow-up.
+
+Both findings are now addressed locally, with strict ACL assertions and text-ID
+worker coverage. Production has not been corrected or repopulated. See
+`projection-correction-2026-10-22.md` for the separate operator package.
 
 ## Population attempt: incomplete
 

@@ -125,7 +125,6 @@ GRANT SELECT(revision), UPDATE(revision,invalidated_at)
  ON reporting_invoice.scopes TO reporting_invoice_invalidator;
 ALTER FUNCTION reporting_invoice.invalidate_statement() OWNER TO reporting_invoice_invalidator;
 REVOKE CREATE ON SCHEMA reporting_invoice FROM reporting_invoice_invalidator;
-REVOKE SET OPTION FOR reporting_invoice_invalidator FROM CURRENT_USER;
 -- Fleet-wide conservative invalidation avoids incorrect scope inference from deleted
 -- rows or moved owners. No raw invoice data is persisted by this trigger.
 DO $$
@@ -140,9 +139,14 @@ BEGIN
 END $$;
 CREATE TRIGGER reporting_invoice_review_invalidate AFTER INSERT OR UPDATE OR DELETE OR TRUNCATE
  ON reporting_invoice.reviews FOR EACH STATEMENT EXECUTE FUNCTION reporting_invoice.invalidate_statement();
+-- Trigger creation requires EXECUTE; revoke only after all triggers exist,
+-- explicitly acting as owner before dropping temporary SET authority.
+SET LOCAL ROLE reporting_invoice_invalidator;
+REVOKE ALL ON FUNCTION reporting_invoice.invalidate_statement() FROM PUBLIC;
+RESET ROLE;
+REVOKE SET OPTION FOR reporting_invoice_invalidator FROM CURRENT_USER;
 REVOKE ALL ON SCHEMA reporting_invoice FROM PUBLIC;
 REVOKE ALL ON ALL TABLES IN SCHEMA reporting_invoice FROM PUBLIC;
-REVOKE ALL ON FUNCTION reporting_invoice.invalidate_statement() FROM PUBLIC;
 CREATE ROLE reporting_invoice_builder NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
 GRANT reporting_invoice_builder TO CURRENT_USER WITH SET TRUE, INHERIT FALSE;
 GRANT USAGE ON SCHEMA reporting_invoice,public TO reporting_invoice_builder;
