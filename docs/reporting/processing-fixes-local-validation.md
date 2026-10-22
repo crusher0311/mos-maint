@@ -92,3 +92,36 @@ Receipt: generated-artifacts/reporting-snapshots/scoped-invalidation-preflight-2
 installation or a lock-acquisition test; conditions must be refreshed before
 applying the transactional migration. No production writes, population,
 deployment, report activation, or Protractor calls occurred in this check.
+
+## Approved production installation and bounded pilot
+
+After refreshing the target/permission/index/migration checks, the user-approved
+transactional migration committed at 2026-10-22 16:16:04 UTC. All 44 replacement
+triggers were verified enabled and bound to the scoped function. Builder
+EXECUTE, installer SET, and definer schema CREATE remained revoked.
+The receipt binds the same migration hash as the preflight.
+
+The restricted operator runtime then:
+
+- Drained 4,000 Mongo change events in 40 polls, taking 24.94 seconds and stopping
+  at the approved poll cap. Status remained draining, not caught_up.
+- Resumed the existing JWT-701/MOS-227 inventory checkpoint with a 60-second
+  work budget. Four ticks committed 15, 15, 15 and 8 steps: 53 new documents and
+  identities, increasing the durable total from 32 to 85.
+- Returned deferred on all four ticks, with no busy outcome or stored failure.
+  Deferred here means the work budget ended, not report completion.
+
+Independent readback at 16:18:24 UTC confirmed 85 documents/identities, inventory
+phase/channel 0, no publication or reviews, and epoch feed freshness. Health
+showed one active query, zero lock waiters and zero old idle transactions; all
+44 triggers remained enabled. Both bounded stages stopped, with no ongoing
+population runner. Shared flags stayed off; no deployment or Protractor calls.
+
+Receipts (ignored reporting snapshot directory):
+scoped-invalidation-install-20261022.json, feed-pilot-20261022.json,
+population-pilot-20261022.json and population-stopped-20261022.json.
+
+This improves on the preceding pilot's 32 committed records but does not prove
+adequate full-shop throughput. Source reads remain single-document and the
+feed backlog has not been exhausted. Do not enable reporting or infer a
+completion ETA from these small pilots.
