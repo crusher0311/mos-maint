@@ -174,3 +174,22 @@ Inventory remains incomplete. Any further feed catch-up or population requires
 new approval; these counts are source records/identities, not verified invoices.
 Receipt: population-hour-continuation-pilot-20261022.json, with independent
 population-stopped-20261022.json in the ignored snapshot directory.
+
+## Follow-on catch-up and one-hour inventory outcome
+
+2026-10-22 19:21:26 UTC: the approved feed catch-up processed 1,347 events in
+14 polls, zero retries, and 8,966 ms, reaching caught_up without changing
+inventory. Fresh permission/index checks passed before inventory resumed.
+
+The continuation stopped at its one-hour deadline at 20:21:45 UTC
+(3,600,191 ms). It saved another 17,175 documents, reaching 42,319 documents
+and 19,566 identities on channel 1. All work stayed in inventory; the last
+of 688 outcomes was cancellation at the approved deadline, not a build failure.
+
+Independent readback at 20:21:59 UTC confirmed the checkpoint, no failure,
+no verification/publication, and zero reviews. The feed token was retained
+with observation time 20:21:44 UTC. Health showed one active query, no lock
+waiters or old idle transactions, and all 44 triggers enabled. Reports remained
+disabled and no Protractor calls occurred. Enumeration is not yet complete.
+Previous same-name receipts were archived before this run; current receipts
+use the names above and feed-continuation-only-confirmation-20261022.json.
