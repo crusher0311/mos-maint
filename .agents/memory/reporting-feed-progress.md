@@ -37,6 +37,14 @@ not a guaranteed bounded per-shop path either.
 source channel. Test realistic size and cross-shop skew, preserve cursor order,
 and review any index installation separately; do not merely raise deadlines.
 
+Keep invalidation scoping conservative when reducing reporting contention.
+**Why:** Unrelated-shop operational transactions can block a reporting scope
+under fleet-wide triggers, but reducing invalidation without old/new ownership
+would allow stale reports after moves or deletes.
+**How to apply:** Use authoritative event-time ownership for both sides of a
+move; retain fleet-wide fallback for unknown ownership and TRUNCATE. Treat a
+tested local trigger change as a separate production migration, not deployment.
+
 Keep C-collated source cursor ordering stable when optimizing reads, and select
 the narrow key before materializing the raw row.
 **Why:** Durable inventory checkpoints and source digests depend on stable

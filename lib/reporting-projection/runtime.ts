@@ -20,6 +20,22 @@ export function projectionRuntime(reporting: ReturnType<typeof postgres>, source
   const invalidation = new ProjectionInvalidation(reporting, mongo);
   return {
     close: () => invalidation.close(),
+    /** Operator/scheduler entry independent of inventory. Never enables readers.
+     * Bound each invocation; caller must provide its own scheduling lifecycle. */
+    async catchUp(options: { polls?: number; budgetMs?: number; signal?: AbortSignal } = {}) {
+      const polls = options.polls ?? 10, budget = options.budgetMs ?? 15_000;
+      assert.ok(Number.isSafeInteger(polls) && polls > 0 && polls <= 40);
+      assert.ok(Number.isSafeInteger(budget) && budget > 0 && budget <= 60_000);
+      const deadline = Date.now() + budget;
+      let events = 0, completed = 0;
+      while (completed < polls && Date.now() < deadline && !options.signal?.aborted) {
+        const result = await invalidation.poll(options.signal);
+        completed++;
+        events += "events" in result ? result.events ?? 0 : 0;
+        if (result.status !== "draining") return { ...result, events, polls: completed };
+      }
+      return { status: options.signal?.aborted ? "cancelled" : "draining", events, polls: completed };
+    },
     async tick(shop: number, signal?: AbortSignal) {
       if (!enabled()) return { status: "disabled" };
       assert.ok(Number.isSafeInteger(shop) && shop > 0);

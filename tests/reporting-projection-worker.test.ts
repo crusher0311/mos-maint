@@ -279,7 +279,7 @@ async function main() {
     const started = Date.now();
     await delayedWorker.tick(latencyBuild, { steps: 1 });
     const elapsed = Date.now() - started;
-    assert.equal(calls, 12, "One one-identity inventory step has twelve reporting SQL round trips");
+    assert.equal(calls, 8, "Batched inventory bookkeeping reduces twelve reporting round trips to eight");
     assert.ok(elapsed >= calls * rtt - 10);
     assert.equal((await query("SELECT document_count FROM reporting_invoice.builds WHERE id=$1", [latencyBuild]))[0].document_count, 1);
     await worker.cancel(latencyBuild);
@@ -489,6 +489,7 @@ async function main() {
     for (let i = 0; i < 8; i++) {
       const result = await feedWorker.poll();
       assert.equal(result.status, "draining");
+      assert.ok("events" in result);
       assert.equal(result.events, FEED_LIMITS.events);
       assert.equal(+new Date((await query("SELECT observed_at FROM reporting_invoice.change_cursors"))[0].observed_at), 0);
     }
@@ -563,6 +564,74 @@ async function main() {
       'reporting_invoice_invalidator','MEMBER') AS allowed`);
     assert.equal(membership.allowed,false);
     console.log("PASS restricted operational CRUD/TRUNCATE invalidates; definer cannot mutate operational/hold/review/fact records");
+    const migrationClient = await sql.reserve();
+    try { await migrationClient.unsafe(readFileSync("scripts/reporting-projection/scoped-invalidation.sql", "utf8")); }
+    finally { await migrationClient.release(); }
+    await query("INSERT INTO reporting_invoice.scopes(shop_id) VALUES(900),(901) ON CONFLICT DO NOTHING");
+    const revisions = async () => (await query("SELECT shop_id,revision::int FROM reporting_invoice.scopes WHERE shop_id IN (900,901) ORDER BY shop_id")).map(r=>r.revision);
+    let before = await revisions();
+    await query("INSERT INTO normalized_work_orders(id,shop_id) VALUES('scoped-1',900),('scoped-2',900)");
+    assert.deepEqual(await revisions(),[before[0]+1,before[1]],"Bulk insert only invalidates its owner once");
+    before=await revisions();
+    await query("UPDATE normalized_work_orders SET shop_id=901 WHERE id='scoped-1'");
+    assert.deepEqual(await revisions(),before.map(n=>n+1),"Moves invalidate old and new owners");
+    before=await revisions();
+    await query("DELETE FROM normalized_work_orders WHERE id='scoped-1'");
+    assert.deepEqual(await revisions(),[before[0],before[1]+1]);
+    before=await revisions();
+    await query("UPDATE normalized_work_orders SET shop_id=900 WHERE id='missing'");
+    assert.deepEqual(await revisions(),before,"Empty statement does not invalidate");
+    await query("INSERT INTO normalized_work_orders(id,shop_id) VALUES('unknown-owner',NULL)");
+    assert.deepEqual(await revisions(),before.map(n=>n+1),"Unknown owner falls back fleet-wide");
+    before=await revisions();
+    await query("TRUNCATE normalized_work_orders");
+    assert.deepEqual(await revisions(),before.map(n=>n+1));
+    source.set([raw(900)]);
+    const scopedBuild=await worker.start(900);assert.ok(scopedBuild);
+    let scopedUnlock!:()=>void, scopedEntered!:()=>void;
+    const scopedReady=new Promise<void>(r=>{scopedEntered=r;});
+    const scopedWait=new Promise<void>(r=>{scopedUnlock=r;});
+    const unrelated=sql.begin(async tx=>{
+      await tx.unsafe("INSERT INTO normalized_work_orders(id,shop_id) VALUES('unrelated-write',901)");
+      scopedEntered();await scopedWait;
+    });
+    await scopedReady;
+    try { assert.equal((await worker.tick(scopedBuild,{steps:1})).status,"deferred"); }
+    finally { scopedUnlock();await unrelated; }
+    assert.equal((await query("SELECT document_count FROM reporting_invoice.builds WHERE id=$1",[scopedBuild]))[0].document_count,1);
+    await worker.cancel(scopedBuild);
+    console.log("PASS scoped invalidation bulk/move/delete/empty/unknown/truncate and unrelated open transaction");
+
+    feed.length=0;consumed.length=0;
+    feed.push(...Array.from({length:801},()=>insert(999)));
+    await query("UPDATE reporting_invoice.change_cursors SET resume_token=$1::text::jsonb,observed_at='epoch'",[JSON.stringify({position:0})]);
+    const feedRuntime=projectionRuntime(sql,sql,feedDb);
+    const drain=await feedRuntime.catchUp({polls:8,budgetMs:15000});
+    assert.equal(drain.status,"draining");assert.equal(drain.events,800);assert.equal(drain.polls,8);
+    const finish=await feedRuntime.catchUp({polls:2,budgetMs:15000});
+    assert.equal(finish.status,"caught_up");assert.equal(finish.events,1);
+    const cancelled=AbortSignal.abort();
+    assert.equal((await feedRuntime.catchUp({signal:cancelled})).polls,0);
+    await assert.rejects(()=>feedRuntime.catchUp({polls:41}));
+    await feedRuntime.close();
+    console.log("PASS independent feed catch-up respects budgets, exact events, cancellation and truthful freshness");
+    source.set([raw(910),raw(911)]);
+    source.records[0].identities=[identity(910),identity(911)];
+    source.records[1].identities=[identity(911),identity(912)];
+    const batchBuild=await worker.start(910);assert.ok(batchBuild);
+    const rollbackSql:any={begin:(fn:any)=>sql.begin(async tx=>{
+      await fn(tx);throw Error("inventory_commit_rollback");
+    })};
+    await assert.rejects(()=>new InvoiceProjectionWorker(rollbackSql,source).tick(batchBuild,{steps:1}),
+      /inventory_commit_rollback/);
+    assert.equal((await query("SELECT document_count FROM reporting_invoice.builds WHERE id=$1",[batchBuild]))[0].document_count,0);
+    assert.equal((await query("SELECT count(*)::int AS n FROM reporting_invoice.refs WHERE build_id=$1",[batchBuild]))[0].n,0);
+    await worker.tick(batchBuild,{steps:2});
+    const [batched]=await query("SELECT document_count,identity_count,cursor FROM reporting_invoice.builds WHERE id=$1",[batchBuild]);
+    assert.equal(batched.document_count,2);assert.equal(batched.identity_count,3);assert.equal(batched.cursor,source.records[1].key);
+    assert.equal((await query("SELECT count(*)::int AS n FROM reporting_invoice.refs WHERE build_id=$1",[batchBuild]))[0].n,4);
+    await worker.cancel(batchBuild);
+    console.log("PASS atomic batched checkpoint rollback/replay, shared identities and complete references");
   } finally { await sql.end(); }
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

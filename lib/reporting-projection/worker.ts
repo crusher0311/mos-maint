@@ -109,18 +109,28 @@ export class InvoiceProjectionWorker {
         assert.ok(doc.identities.length <= 101, "source_identity_limit");
         if (b.phase === "inventory") {
           if (b.document_count >= LIMITS.documents) return fail("document_limit");
-          await tx.unsafe(`INSERT INTO reporting_invoice.sources VALUES($1,$2,$3,$4)`,
-            [id, channel, doc.key, doc.digest]);
-          let added = 0;
-          for (const identity of doc.identities) {
-            const inserted = await tx.unsafe("INSERT INTO reporting_invoice.items(build_id,identity) VALUES($1,$2) ON CONFLICT DO NOTHING RETURNING identity", [id, identity]);
-            added += inserted.length;
-            await tx.unsafe(`INSERT INTO reporting_invoice.refs VALUES($1,$2,$3,$4,$5,$6,$7)`,
-              [id, identity, channel, doc.key, doc.digest, doc.owner, doc.ambiguous]);
-          }
-          if (b.identity_count + added > LIMITS.identities) return fail("identity_limit");
-          await tx.unsafe(`UPDATE reporting_invoice.builds SET document_count=document_count+1,
-            identity_count=$2 WHERE id=$1`, [id, b.identity_count + added]);
+          // One bounded statement for all identities and the durable checkpoint.
+          // Source, references and cursor commit together, including after replay.
+          const [saved] = await tx.unsafe(`WITH src AS (
+            INSERT INTO reporting_invoice.sources VALUES($1,$2,$3,$4) RETURNING build_id
+          ), incoming AS MATERIALIZED (
+            SELECT DISTINCT jsonb_array_elements_text($5::text::jsonb) AS identity
+          ), added AS (
+            INSERT INTO reporting_invoice.items(build_id,identity)
+            SELECT $1,identity FROM incoming ON CONFLICT DO NOTHING RETURNING identity
+          ), refs AS (
+            INSERT INTO reporting_invoice.refs
+            SELECT $1,i.identity,$2,$3,$4,$6,$7 FROM incoming i
+            CROSS JOIN (SELECT count(*) FROM added) a CROSS JOIN src RETURNING build_id
+          )
+          UPDATE reporting_invoice.builds SET document_count=document_count+1,
+            identity_count=identity_count+(SELECT count(*) FROM added),
+            cursor=$3,digest=$8
+          WHERE id=$1 RETURNING identity_count`,
+          [id, channel, doc.key, doc.digest, JSON.stringify(doc.identities), doc.owner, doc.ambiguous,
+            hash([b.digest, channel, doc.key, doc.digest])]);
+          if (saved.identity_count > LIMITS.identities) return fail("identity_limit");
+          return "progress";
         } else {
           // Fail on a real changed/new source version even when broad revisions
           // keep arriving. Do not repeatedly reset past a known evidence veto.

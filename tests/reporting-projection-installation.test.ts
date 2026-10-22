@@ -193,6 +193,21 @@ async function main() {
     await assert.rejects(() => install(), (e: any) => e.code === "42P07");
     assert.equal(await snapshot(), beforeRepeat, "Repeated install must leave existing data, triggers and permissions unchanged");
     console.log("PASS repeated installation refused without changing installed state");
+    // Mirror real source ownership columns for the scoped-trigger migration.
+    for (const table of operational) await q(`ALTER TABLE public.${table} ADD COLUMN shop_id integer`);
+    await install(readFileSync("scripts/reporting-projection/scoped-invalidation.sql", "utf8"));
+    const [scopedAcl] = await q(`SELECT
+      has_function_privilege('reporting_invoice_builder','reporting_invoice.invalidate_shops()','EXECUTE') AS builder_execute,
+      pg_has_role(current_user,'reporting_invoice_invalidator','SET') AS installer_set,
+      (SELECT pg_get_userbyid(proowner) FROM pg_proc WHERE oid='reporting_invoice.invalidate_shops()'::regprocedure) AS owner`);
+    assert.equal(scopedAcl.builder_execute,false);assert.equal(scopedAcl.installer_set,false);
+    assert.equal(scopedAcl.owner,"reporting_invoice_invalidator");
+    await asRole("projection_operational", "INSERT INTO normalized_work_orders(id,shop_id) VALUES('scoped-operational',227)");
+    await asRole("projection_operational", "UPDATE normalized_work_orders SET shop_id=228 WHERE id='scoped-operational'");
+    await asRole("projection_operational", "DELETE FROM normalized_work_orders WHERE id='scoped-operational'");
+    const [createAcl]=await q("SELECT has_schema_privilege('reporting_invoice_invalidator','reporting_invoice','CREATE') AS allowed");
+    assert.equal(createAcl.allowed,false);
+    console.log("PASS scoped invalidation migration with non-superuser installer and restricted ownership");
   } finally {
     await installer.end();
     await admin.end();
