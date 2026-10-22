@@ -49,6 +49,11 @@ It installs candidate indexes only in that disposable database.
 
 ## Production prerequisite review
 
+The approved read-only catalog/plan review has now completed. See
+`source-index-production-preflight.md`: matching indexes are absent, four
+sources are large, and free volume capacity remains unverified. No indexes
+were installed or source queries executed during that check.
+
 Before requesting index installation:
 
 1. Read live index definitions, validity and source table sizes for every PG
