@@ -45,6 +45,13 @@ would allow stale reports after moves or deletes.
 move; retain fleet-wide fallback for unknown ownership and TRUNCATE. Treat a
 tested local trigger change as a separate production migration, not deployment.
 
+Distinguish batch wire limits from database working-memory limits.
+**Why:** Selecting ten source candidates then returning a byte-capped prefix
+reduces network work but can still materialize all ten bounded candidates on the
+database. A 32 MiB output cap does not prove 32 MiB server memory use.
+**How to apply:** Keep candidate count and per-row caps explicit, preserve a
+contiguous prefix for cursor safety, and measure production capacity separately.
+
 Keep C-collated source cursor ordering stable when optimizing reads, and select
 the narrow key before materializing the raw row.
 **Why:** Durable inventory checkpoints and source digests depend on stable

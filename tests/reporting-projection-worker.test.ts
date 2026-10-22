@@ -619,19 +619,72 @@ async function main() {
     source.records[0].identities=[identity(910),identity(911)];
     source.records[1].identities=[identity(911),identity(912)];
     const batchBuild=await worker.start(910);assert.ok(batchBuild);
+    const batchSource: SourceInventory = {
+      channels:source.channels,
+      next:source.next.bind(source),load:source.load.bind(source),
+      nextBatch:async(channel,_shop,after,limit)=>channel===source.channels[0]
+        ? source.records.filter(d=>after===null||d.key>after).slice(0,limit):[],
+    };
     const rollbackSql:any={begin:(fn:any)=>sql.begin(async tx=>{
       await fn(tx);throw Error("inventory_commit_rollback");
     })};
-    await assert.rejects(()=>new InvoiceProjectionWorker(rollbackSql,source).tick(batchBuild,{steps:1}),
+    await assert.rejects(()=>new InvoiceProjectionWorker(rollbackSql,batchSource).tick(batchBuild,{steps:2}),
       /inventory_commit_rollback/);
     assert.equal((await query("SELECT document_count FROM reporting_invoice.builds WHERE id=$1",[batchBuild]))[0].document_count,0);
     assert.equal((await query("SELECT count(*)::int AS n FROM reporting_invoice.refs WHERE build_id=$1",[batchBuild]))[0].n,0);
-    await worker.tick(batchBuild,{steps:2});
+    await new InvoiceProjectionWorker(sql,batchSource).tick(batchBuild,{steps:2});
     const [batched]=await query("SELECT document_count,identity_count,cursor FROM reporting_invoice.builds WHERE id=$1",[batchBuild]);
     assert.equal(batched.document_count,2);assert.equal(batched.identity_count,3);assert.equal(batched.cursor,source.records[1].key);
     assert.equal((await query("SELECT count(*)::int AS n FROM reporting_invoice.refs WHERE build_id=$1",[batchBuild]))[0].n,4);
     await worker.cancel(batchBuild);
     console.log("PASS atomic batched checkpoint rollback/replay, shared identities and complete references");
+    const pgSource=new StoredInvoiceInventory((text,params)=>query(text,params),feedDb);
+    for(let i=0;i<23;i++) await query("INSERT INTO protractor_work_orders(shop_id,work_order_id,payload) VALUES($1,$2,$3::text::jsonb)",
+      [930,identity(930+i),JSON.stringify({rawPayload:raw(930+i)})]);
+    const firstPage=await pgSource.nextBatch("pg.protractor_work_orders",930,null,10);
+    assert.equal(firstPage.length,10);
+    const secondPage=await pgSource.nextBatch("pg.protractor_work_orders",930,firstPage[9].key,10);
+    const finalPage=await pgSource.nextBatch("pg.protractor_work_orders",930,secondPage[9].key,10);
+    assert.equal(finalPage.length,3);
+    let previous:string|null=null;
+    for(const d of [...firstPage,...secondPage,...finalPage]){
+      assert.deepEqual(d,await pgSource.next("pg.protractor_work_orders",930,previous));previous=d.key;
+    }
+    assert.deepEqual(await pgSource.nextBatch("pg.protractor_work_orders",930,previous,10),[]);
+    console.log("PASS actual PostgreSQL batch paging preserves exact single-row bytes/digests and exhaustion");
+    source.set(Array.from({length:10},(_,i)=>raw(960+i)));
+    const latencyBatch=await worker.start(960);assert.ok(latencyBatch);calls=0;
+    await new InvoiceProjectionWorker(delayedSql,batchSource).tick(latencyBatch,{steps:10});
+    assert.equal(calls,8,"Ten batched records share the eight reporting exchanges");
+    assert.equal((await query("SELECT document_count FROM reporting_invoice.builds WHERE id=$1",[latencyBatch]))[0].document_count,10);
+    await worker.cancel(latencyBatch);
+    await query(`INSERT INTO protractor_work_orders(shop_id,work_order_id,payload)
+      SELECT 970,'byte-'||i,jsonb_build_object('padding',repeat('x',12*1024*1024))
+      FROM generate_series(1,3) i`);
+    const boundedPage=await pgSource.nextBatch("pg.protractor_work_orders",970,null,10);
+    assert.equal(boundedPage.length,2,"32 MiB wire budget must return a contiguous prefix");
+    assert.equal((await pgSource.nextBatch("pg.protractor_work_orders",970,boundedPage[1].key,10)).length,1);
+    await query(`INSERT INTO protractor_work_orders(shop_id,work_order_id,payload)
+      VALUES(971,'oversized',jsonb_build_object('padding',repeat('x',17*1024*1024)))`);
+    await assert.rejects(()=>pgSource.nextBatch("pg.protractor_work_orders",971,null,10),/source_document_byte_limit/);
+    console.log("PASS ten-document RTT sharing, 32 MiB contiguous prefix and oversized-row rejection");
+    if(process.argv[3]==="--batch-scale"){
+      source.set(Array.from({length:20000},(_,i)=>raw(100000+i)));
+      const scaleWorker=new InvoiceProjectionWorker(sql,batchSource);
+      const scaleBuild=await scaleWorker.start(940);assert.ok(scaleBuild);
+      const scaleStart=Date.now();let ticks=0;
+      while(Date.now()-scaleStart<240000){
+        const outcome=await scaleWorker.tick(scaleBuild);ticks++;
+        if(outcome.status==="complete")break;
+        assert.ok(!["failed","cancelled"].includes(outcome.status),JSON.stringify(outcome));
+      }
+      const [scale]=await query("SELECT phase,document_count,identity_count FROM reporting_invoice.builds WHERE id=$1",[scaleBuild]);
+      assert.equal(scale.phase,"complete");assert.equal(scale.document_count,20000);assert.equal(scale.identity_count,20000);
+      const [unknown]=await query("SELECT count(*)::int AS n FROM reporting_invoice.items WHERE build_id=$1 AND classification='unresolved'",[scaleBuild]);
+      assert.equal(unknown.n,20000,"No financial reviews must remain unresolved");
+      console.log(JSON.stringify({scaleRecords:20000,elapsedMs:Date.now()-scaleStart,ticks,phase:scale.phase,
+        fixture:"synthetic source, real disposable PostgreSQL, no network latency",unreviewed:unknown.n}));
+    }
   } finally { await sql.end(); }
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

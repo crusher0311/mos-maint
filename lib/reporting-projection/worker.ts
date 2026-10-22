@@ -45,15 +45,17 @@ export class InvoiceProjectionWorker {
     const deadline = Date.now() + budget;
     let completed = 0;
     while (completed < steps && Date.now() < deadline && !options.signal?.aborted) {
-      // One small transaction per document/identity. Lost responses replay durable state.
-      const status = await this.step(id, deadline, options.signal, options.inventoryOnly);
+      // Bounded source batches; projection identities remain individual.
+      // Lost responses replay the entire transaction from durable state.
+      const status = await this.step(id, deadline, options.signal, options.inventoryOnly, Math.min(10, steps - completed));
+      if (status.startsWith("batch:")) { completed += Number(status.slice(6)); continue; }
       if (status !== "progress") return { status, steps: completed };
       completed++;
     }
     return { status: options.signal?.aborted ? "cancelled_tick" : "deferred", steps: completed };
   }
 
-  private async step(id: string, deadline: number, signal?: AbortSignal, inventoryOnly = false): Promise<string> {
+  private async step(id: string, deadline: number, signal?: AbortSignal, inventoryOnly = false, batchSize = 1): Promise<string> {
     return this.sql.begin(async tx => {
       await tx.unsafe("SET LOCAL statement_timeout='2000ms'");
       await tx.unsafe("SET LOCAL lock_timeout='250ms'");
@@ -99,7 +101,11 @@ export class InvoiceProjectionWorker {
           }
           return "progress";
         }
-        const doc = await this.source.next(channel, b.shop_id, b.cursor);
+        const docs = this.source.nextBatch
+          ? await this.source.nextBatch(channel, b.shop_id, b.cursor, batchSize)
+          : await this.source.next(channel, b.shop_id, b.cursor).then(d => d ? [d] : []);
+        assert.ok(docs.length <= batchSize);
+        const doc = docs[0];
         if (signal?.aborted || Date.now() >= deadline) return "deferred";
         if (!doc) {
           await tx.unsafe("UPDATE reporting_invoice.builds SET channel=channel+1,cursor=NULL WHERE id=$1", [id]);
@@ -108,39 +114,62 @@ export class InvoiceProjectionWorker {
         assert.ok(doc.key !== b.cursor, "Inventory cursor did not advance");
         assert.ok(doc.identities.length <= 101, "source_identity_limit");
         if (b.phase === "inventory") {
-          if (b.document_count >= LIMITS.documents) return fail("document_limit");
-          // One bounded statement for all identities and the durable checkpoint.
+          if (b.document_count + docs.length > LIMITS.documents) return fail("document_limit");
+          assert.ok(Buffer.byteLength(JSON.stringify(docs)) <= LIMITS.identityBytes, "source_batch_byte_limit");
+          let digest = b.digest, previous = b.cursor;
+          const sources = [], references = [];
+          for (const d of docs) {
+            assert.ok(d.key !== previous && d.identities.length <= 101);
+            if (channel.startsWith("pg.") && previous !== null)
+              assert.ok(Buffer.compare(Buffer.from(d.key), Buffer.from(previous)) > 0, "batch_cursor_order");
+            sources.push({key:d.key,digest:d.digest});
+            for (const identity of new Set(d.identities))
+              references.push({identity,key:d.key,digest:d.digest,owner:d.owner,ambiguous:d.ambiguous});
+            digest = hash([digest,channel,d.key,d.digest]); previous = d.key;
+          }
+          // One bounded statement for all documents/identities and the checkpoint.
           // Source, references and cursor commit together, including after replay.
           const [saved] = await tx.unsafe(`WITH src AS (
-            INSERT INTO reporting_invoice.sources VALUES($1,$2,$3,$4) RETURNING build_id
+            INSERT INTO reporting_invoice.sources
+            SELECT $1,$2,s.key,s.digest FROM jsonb_to_recordset($4::text::jsonb) AS s(key text,digest text)
+            RETURNING build_id
           ), incoming AS MATERIALIZED (
-            SELECT DISTINCT jsonb_array_elements_text($5::text::jsonb) AS identity
+            SELECT * FROM jsonb_to_recordset($5::text::jsonb)
+              AS r(identity text,key text,digest text,owner text,ambiguous boolean)
           ), added AS (
             INSERT INTO reporting_invoice.items(build_id,identity)
-            SELECT $1,identity FROM incoming ON CONFLICT DO NOTHING RETURNING identity
+            SELECT DISTINCT $1,identity FROM incoming ON CONFLICT DO NOTHING RETURNING identity
           ), refs AS (
             INSERT INTO reporting_invoice.refs
-            SELECT $1,i.identity,$2,$3,$4,$6,$7 FROM incoming i
-            CROSS JOIN (SELECT count(*) FROM added) a CROSS JOIN src RETURNING build_id
+            SELECT $1,i.identity,$2,i.key,i.digest,i.owner,i.ambiguous FROM incoming i
+            CROSS JOIN (SELECT count(*) FROM added) a
+            CROSS JOIN (SELECT count(*) FROM src) s RETURNING build_id
           )
-          UPDATE reporting_invoice.builds SET document_count=document_count+1,
+          UPDATE reporting_invoice.builds SET document_count=document_count+$6,
             identity_count=identity_count+(SELECT count(*) FROM added),
-            cursor=$3,digest=$8
+            cursor=$3,digest=$7
           WHERE id=$1 RETURNING identity_count`,
-          [id, channel, doc.key, doc.digest, JSON.stringify(doc.identities), doc.owner, doc.ambiguous,
-            hash([b.digest, channel, doc.key, doc.digest])]);
+          [id, channel, previous, JSON.stringify(sources), JSON.stringify(references), docs.length,digest]);
           if (saved.identity_count > LIMITS.identities) return fail("identity_limit");
-          return "progress";
+          return `batch:${docs.length}`;
         } else {
           // Fail on a real changed/new source version even when broad revisions
           // keep arriving. Do not repeatedly reset past a known evidence veto.
-          const [original] = await tx.unsafe(`SELECT digest FROM reporting_invoice.sources
-            WHERE build_id=$1 AND channel=$2 AND source_key=$3`, [id, channel, doc.key]);
-          if (!original || original.digest !== doc.digest) return fail("source_changed");
+          let digest = b.digest, previous = b.cursor;
+          for (const d of docs) {
+            assert.ok(d.key !== previous);
+            if (channel.startsWith("pg.") && previous !== null)
+              assert.ok(Buffer.compare(Buffer.from(d.key),Buffer.from(previous)) > 0);
+            digest = hash([digest,channel,d.key,d.digest]); previous = d.key;
+          }
+          const [comparison] = await tx.unsafe(`SELECT bool_and(s.digest IS NOT NULL AND s.digest=d.digest) AS matches
+            FROM jsonb_to_recordset($3::text::jsonb) AS d(key text,digest text)
+            LEFT JOIN reporting_invoice.sources s ON s.build_id=$1 AND s.channel=$2 AND s.source_key=d.key`,
+          [id,channel,JSON.stringify(docs.map(d=>({key:d.key,digest:d.digest})))]);
+          if (!comparison.matches) return fail("source_changed");
+          await tx.unsafe("UPDATE reporting_invoice.builds SET cursor=$2,digest=$3 WHERE id=$1",[id,previous,digest]);
+          return `batch:${docs.length}`;
         }
-        await tx.unsafe("UPDATE reporting_invoice.builds SET cursor=$2,digest=$3 WHERE id=$1",
-          [id, doc.key, hash([b.digest, channel, doc.key, doc.digest])]);
-        return "progress";
       }
 
       // A completed rescan is deliberately short lived, not a promise of cross-store atomicity.

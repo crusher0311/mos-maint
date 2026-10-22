@@ -8,4 +8,4 @@ initdb -D "$tmp/data" -A trust --no-locale >"$tmp/init.log"
 pg_ctl -D "$tmp/data" -l "$tmp/server.log" -o "-p 5432 -h '' -k $tmp -c invoice_preview.disposable=yes" start >/dev/null
 env -i PATH="$PATH" HOME="$HOME" \
   NODE_OPTIONS="--require ./tests/helpers/deny-network-egress.cjs --require ./scripts/_stubs/server-only-stub.cjs" \
-  node --import tsx tests/reporting-projection-worker.test.ts "$tmp"
+  node --import tsx tests/reporting-projection-worker.test.ts "$tmp" "${1:-}"

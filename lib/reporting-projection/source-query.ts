@@ -11,19 +11,27 @@ export const PG_SOURCE_KEYS = {
  * Preserve existing cursor order and digests. Select a narrow key first; never
  * serialize every candidate's potentially large raw payload before LIMIT.
  * Separate first/next/exact plans also work with generic prepared plans. */
-export function pgSourceQuery(table: string, key: string | null, exact: boolean) {
+export function pgSourceQuery(table: string, key: string | null, exact: boolean, limit = 1) {
+  assert.ok(Number.isSafeInteger(limit) && limit >= 1 && limit <= 10 && (!exact || limit === 1));
   assert.ok(Object.hasOwn(PG_SOURCE_KEYS, table));
   const column = PG_SOURCE_KEYS[table as keyof typeof PG_SOURCE_KEYS];
   assert.ok(!exact || key !== null);
   const predicate = key === null ? "" : `AND ${column}::text COLLATE "C" ${exact ? "=" : ">"} $2::text COLLATE "C"`;
   // Keep $2 typed even on the first page, without an OR around the index range.
-  return `WITH candidate AS MATERIALIZED (
+  const query = `WITH candidate AS MATERIALIZED (
     SELECT ${column} FROM public.${table}
     WHERE shop_id=$1 ${predicate} AND $2::text IS NOT DISTINCT FROM $2::text
-    ORDER BY ${column}::text COLLATE "C" LIMIT 1
+    ORDER BY ${column}::text COLLATE "C" LIMIT ${limit}
   )
   SELECT t.${column}::text AS cursor,
     CASE WHEN octet_length(to_jsonb(t)::text)<=$3 THEN to_jsonb(t)::text END AS state
   FROM candidate c JOIN public.${table} t
     ON t.shop_id=$1 AND t.${column}::text COLLATE "C"=c.${column}::text COLLATE "C"`;
+  if (limit === 1) return query;
+  // At most ten bounded rows are materialized; only a 32 MiB prefix crosses
+  // the wire. An oversized single row retains its null-state failure marker.
+  return `WITH page AS MATERIALIZED (${query}), bounded AS (
+    SELECT *,sum(coalesce(octet_length(state),0)) OVER (ORDER BY cursor COLLATE "C") AS bytes
+    FROM page
+  ) SELECT cursor,state FROM bounded WHERE bytes<=33554432 ORDER BY cursor COLLATE "C"`;
 }

@@ -16,14 +16,14 @@ export class StoredInvoiceInventory implements SourceInventory {
   readonly channels = [...Object.keys(pg).map(t => `pg.${t}`), ...mongo.map(t => `mongo.${t}`)];
   constructor(private readonly query: Query, private readonly db: Db) {}
 
-  private async read(channel: string, shop: number, key: string | null, exact: boolean) {
+  private async read(channel: string, shop: number, key: string | null, exact: boolean, supplied?: any) {
     assert.ok(this.channels.includes(channel));
     assert.ok(Number.isSafeInteger(shop) && shop > 0);
     const [store, table] = channel.split(".");
     let doc: any, native: string, cursor: string;
     if (store === "pg") {
       // Size check in PostgreSQL prevents an oversized row crossing the wire.
-      const rows = await this.query(pgSourceQuery(table, key, exact), [shop, key, LIMITS.documentBytes]);
+      const rows = supplied ? [supplied] : await this.query(pgSourceQuery(table, key, exact), [shop, key, LIMITS.documentBytes]);
       assert.ok(rows.length <= 1, "ambiguous_source_key");
       if (!rows.length) return null;
       assert.ok(rows[0].state, "source_document_byte_limit");
@@ -82,5 +82,20 @@ export class StoredInvoiceInventory implements SourceInventory {
       owner, ambiguous, raws } satisfies SourceDocument;
   }
   next(channel: string, shop: number, after: string | null) { return this.read(channel, shop, after, false); }
+  async nextBatch(channel: string, shop: number, after: string | null, limit: number) {
+    assert.ok(Number.isSafeInteger(limit) && limit > 0 && limit <= 10);
+    assert.ok(this.channels.includes(channel) && Number.isSafeInteger(shop) && shop > 0);
+    // Mongo retains its bounded single-document path until a BSON-order batch
+    // implementation has independent index/size evidence.
+    if (!channel.startsWith("pg.") || limit === 1) {
+      const doc = await this.next(channel, shop, after); return doc ? [doc] : [];
+    }
+    const rows = await this.query(pgSourceQuery(channel.split(".")[1], after, false, limit),
+      [shop, after, LIMITS.documentBytes]);
+    assert.ok(rows.length <= limit);
+    const docs = [];
+    for (const row of rows) docs.push((await this.read(channel, shop, after, false, row))!);
+    return docs;
+  }
   load(channel: string, shop: number, key: string) { return this.read(channel, shop, key, true); }
 }

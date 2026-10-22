@@ -24,6 +24,7 @@ export interface SourceInventory {
   readonly channels: readonly string[];
   /** Exactly one document, keyset ordered; null is authoritative end of channel. */
   next(channel: string, shop: number, after: string | null): Promise<SourceDocument | null>;
+  nextBatch?(channel: string, shop: number, after: string | null, limit: number): Promise<SourceDocument[]>;
   load(channel: string, shop: number, key: string): Promise<SourceDocument | null>;
 }
 export type Copy = { channel: string; key: string; digest: string; owner: string | null; ambiguous: boolean };
