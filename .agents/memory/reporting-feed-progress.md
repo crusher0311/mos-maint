@@ -26,3 +26,13 @@ skip evidence.
 **How to apply:** Persist consumed event `_id`s; use a post-batch token only
 after an observed empty batch. Recheck this behavior when changing driver
 versions and keep crash/replay tests representative of the installed driver.
+
+`LIMIT 1` does not bound source enumeration work when cursor ordering cannot
+use the shop's index.
+**Why:** The first production inventory read timed out with no committed source
+rows; its plan scanned the shop and sorted roughly 19,000 rows for C-collated
+text IDs. Native-ID order instead filtered the global primary key, which is
+not a guaranteed bounded per-shop path either.
+**How to apply:** Inspect actual indexes and non-executing query plans for each
+source channel. Test realistic size and cross-shop skew, preserve cursor order,
+and review any index installation separately; do not merely raise deadlines.

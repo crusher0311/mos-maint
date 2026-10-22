@@ -5,8 +5,10 @@ installed under explicit approval. The first shop-227 population attempt could
 not pass live change-feed admission; no invoice build or report was produced.
 Both shared switches remain off. See
 `docs/reporting/projection-installation-2026-10-22.md` for the execution record.
-The locally prepared ACL/text-review-ID correction and production steps are in
-`docs/reporting/projection-correction-2026-10-22.md`; they are not applied by deployment.
+The ACL correction is now applied; the corrected local runtime admitted a build
+but timed out before committing its first source document. No report is ready.
+See `docs/reporting/projection-correction-2026-10-22.md` for the execution record
+and source-query performance blocker. No shared switch or deployment changed.
 The earlier design/prototype notes below are not current installation status.
 
 ## Gated stored-source worker
