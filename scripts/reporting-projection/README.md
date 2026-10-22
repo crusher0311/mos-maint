@@ -47,16 +47,25 @@ Full workspace TypeScript check passed after this implementation.
 
 ## Production work still required
 
+The database design is now specified in
+[Production migration proposal](PRODUCTION-MIGRATION-PROPOSAL.md), including the
+versioned source-adapter handoff, access matrix, retention, query plans, sizing,
+rollback and bounded JWT-701 acceptance gates. This is a proposal for discussion,
+not approved installation SQL. `schema.sql` and `model.ts` remain local-only.
+The adapter, worker and integration below are still required; do not treat the
+proposal as an implementation or as evidence/hold clearance.
+
 1. **Source inventory and clearance adapter.** Read canonical owners, retained
    archives and relevant copies with bounded, resumable enumeration. Validate
    current financial/ownership evidence and authoritative hold coverage. The
    fixture's clearance and inventory booleans must not become user-supplied
    production approval flags. Persist reviewed input versions and cutoffs;
    detect stale review and cross-store source changes.
-2. **Reviewed migration and access roles.** The SQL here is local-only. Prepare
-   production schema naming, grants, retention, query plans, storage estimates
-   and rollback. Use read-only operational credentials and reporting-only write
-   permissions. Installation requires approval, not a startup hook.
+2. **Migration approval and implementation.** Review the linked proposal with
+   the user and database owner, settle its open decisions, then separately
+   implement and test the approved migration and roles. Use read-only operational
+   credentials and reporting-only write permissions. Installation requires
+   explicit approval, never a startup hook.
 3. **Worker and report integration.** Replace the prototype's whole in-memory
    manifest with durable bounded work items. Add admission/deadline/memory caps,
    cancellation and observability. Tie fact invalidation to source changes and

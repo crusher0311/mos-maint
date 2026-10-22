@@ -1,4 +1,7 @@
 -- LOCAL PROTOTYPE ONLY. Not a deploy/startup migration.
+-- Production design and approval gates: PRODUCTION-MIGRATION-PROPOSAL.md.
+-- This fixture schema intentionally remains unchanged; do not install it in
+-- the external PostgreSQL database or remove the disposable guard in model.ts.
 CREATE SCHEMA invoice_projection;
 CREATE TABLE invoice_projection.builds (
  id uuid PRIMARY KEY,
