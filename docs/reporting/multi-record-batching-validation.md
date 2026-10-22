@@ -100,3 +100,26 @@ were zero Protractor calls. No further population was automatically started.
 
 Receipt: population-continuation-pilot-20261022.json; independent readback:
 population-stopped-20261022.json in the ignored reporting snapshot directory.
+
+## Approved one-hour continuation: early safety stop
+
+2026-10-22 17:32:36–17:46:12 UTC: fresh prerequisites passed before resuming
+with a one-hour/20,000-additional-document limit. After 816,506 ms the feed
+returned `stream_unavailable`, triggering the configured early stop.
+153 deferred ticks committed 3,825 documents: 4,670 became 8,495 documents,
+and 4,680 became 8,505 identities. No automatic restart was performed.
+
+Independent readback at 17:46:26 UTC confirmed inventory/channel 0, no stored
+build failure or publication, zero reviews, and the durable Mongo token still
+present with epoch freshness. Health showed two active queries, no lock waiters,
+no old idle transactions, and all 44 scoped triggers enabled. Customer readers
+remained off and no Protractor calls were made.
+
+The feed handler maps non-history-gap exceptions to `stream_unavailable`
+without retaining their error classification. The receipt therefore does not
+establish whether the cause was a timeout, network fault, or another feed
+exception. Do not describe this as proven source-history loss or successful
+catch-up. Diagnose that limitation before recommending another long run.
+
+Receipt: population-hour-continuation-pilot-20261022.json in the ignored
+reporting snapshot directory.
