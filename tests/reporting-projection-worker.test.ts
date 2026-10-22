@@ -235,6 +235,58 @@ async function main() {
     assert.equal((await worker.tick(concurrent)).status, "cancelled");
     console.log("PASS source rescan changes, project-time changes, concurrent workers, cancellation");
 
+    // Reproduce pilot contention with real production trigger SQL: another
+    // shop's operational write locks our scope, even with no second builder.
+    source.set([raw(840)]);
+    const contested = await worker.start(840);
+    assert.ok(contested);
+    let unlockTrigger!: () => void, triggerEntered!: () => void;
+    const triggerReady = new Promise<void>(r => { triggerEntered = r; });
+    const triggerWait = new Promise<void>(r => { unlockTrigger = r; });
+    const operational = sql.begin(async tx => {
+      await tx.unsafe("INSERT INTO public.normalized_work_orders(id,shop_id) VALUES('contention-other-shop',841)");
+      triggerEntered();
+      await triggerWait;
+    });
+    await triggerReady;
+    try {
+      assert.equal((await worker.tick(contested, { steps: 1 })).status, "busy");
+      assert.equal((await query("SELECT document_count FROM reporting_invoice.builds WHERE id=$1", [contested]))[0].document_count, 0);
+    } finally { unlockTrigger(); await operational; }
+    await worker.tick(contested, { steps: 1 });
+    assert.equal((await query("SELECT document_count FROM reporting_invoice.builds WHERE id=$1", [contested]))[0].document_count, 1);
+    await worker.cancel(contested);
+    console.log("PASS unrelated-shop operational trigger reproduces busy; checkpoint resumes without loss");
+
+    // Deterministic round-trip count plus artificial RTT, not a production
+    // performance forecast. Uses real SQL/transactions in disposable PG.
+    source.set([raw(850)]);
+    const latencyBuild = await worker.start(850); assert.ok(latencyBuild);
+    let calls = 0;
+    const rtt = 20;
+    const lag = async () => { calls++; await new Promise(r => setTimeout(r, rtt)); };
+    const delayedSql = {
+      begin: async (fn: any) => {
+        await lag(); // BEGIN
+        const result = await sql.begin(tx => fn({
+          unsafe: async (text: string, params?: any[]) => { await lag(); return tx.unsafe(text, params); },
+        }));
+        await lag(); // COMMIT acknowledgment
+        return result;
+      },
+    } as any;
+    const delayedWorker = new InvoiceProjectionWorker(delayedSql, source);
+    const started = Date.now();
+    await delayedWorker.tick(latencyBuild, { steps: 1 });
+    const elapsed = Date.now() - started;
+    assert.equal(calls, 12, "One one-identity inventory step has twelve reporting SQL round trips");
+    assert.ok(elapsed >= calls * rtt - 10);
+    assert.equal((await query("SELECT document_count FROM reporting_invoice.builds WHERE id=$1", [latencyBuild]))[0].document_count, 1);
+    await worker.cancel(latencyBuild);
+    console.log(JSON.stringify({ diagnostic: "inventory_round_trips", calls, injectedRttMs: rtt, elapsedMs: elapsed,
+      excludesSourceReads: true }));
+    source.set([raw(3, 10)]); // Restore the shared fixture for the following cap tests.
+
     const capped = await begin(5);
     await query("UPDATE reporting_invoice.builds SET document_count=$2 WHERE id=$1", [capped, LIMITS.documents]);
     assert.equal((await worker.tick(capped)).status, "failed");
@@ -428,6 +480,25 @@ async function main() {
     assert.notEqual(runtimeBuild.phase, "complete");
     await assert.rejects(() => read([231]), /unavailable/);
     await runtime.close();
+    // Four runtime ticks can poll at most eight batches. A retained backlog
+    // larger than that cannot certify freshness even when every poll progresses.
+    feed.length = 0; consumed.length = 0;
+    feed.push(...Array.from({ length: FEED_LIMITS.events * 8 + 1 }, () => insert(999)));
+    await query("UPDATE reporting_invoice.change_cursors SET resume_token=$1::text::jsonb,observed_at='epoch'",
+      [JSON.stringify({ position: 0 })]);
+    for (let i = 0; i < 8; i++) {
+      const result = await feedWorker.poll();
+      assert.equal(result.status, "draining");
+      assert.equal(result.events, FEED_LIMITS.events);
+      assert.equal(+new Date((await query("SELECT observed_at FROM reporting_invoice.change_cursors"))[0].observed_at), 0);
+    }
+    assert.equal(consumed.length, 800);
+    assert.equal((await feedWorker.poll()).status, "caught_up");
+    assert.equal(consumed.length, 801);
+    assert.equal(new Set(consumed).size, 801);
+    assert.ok(+new Date((await query("SELECT observed_at FROM reporting_invoice.change_cursors"))[0].observed_at) > 0);
+    await feedWorker.close();
+    console.log("PASS eight bounded polls advance 800 events but cannot certify an 801-event backlog fresh");
     console.log("PASS runtime admission under sustained backlog without publication or fake freshness");
     // Real-role migration boundary: ordinary writes succeed without any reporting grants.
     await query("CREATE ROLE projection_operational_test NOLOGIN");
