@@ -150,3 +150,13 @@ completion is not proof of successful normalization.
 **How to apply:** Keep provider identity checks alongside the version guard.
 Recovery of normalization must use retained evidence and independent durable
 retry bookkeeping, not replay successful provider fetches or export deliveries.
+
+Do not interpret Protractor `Header.DeletionTime` alone as a deleted work order.
+
+**Why:** In a verified daily batch, every invoice-stage work-order snapshot had
+a nonzero DeletionTime equal to InvoiceTime, while retaining Type=WorkOrder and
+Completed=false. Those fields alone do not establish cancellation or deletion.
+
+**How to apply:** Preserve provider fields in raw exports, use explicit workflow
+evidence for classification, and never issue downstream deletes or discard
+invoiced work orders solely because that header field is populated.
