@@ -14,7 +14,10 @@ Read alongside `protractor-organization-exports.md` for the receiver contract.
 
 ## Dedicated service configuration and cost proposal — 2026-10-23
 
-**Proposal only: no service or secret has been created.**
+**Service proposal only: no dedicated export service has been created.**
+PG schema and restricted credentials have since been staged; see
+`scripts/protractor-export-pg/production-login.md` and `release-readiness.md`.
+Historical Mongo setup sections below are not the current control-state plan.
 
 | Setting | Proposed value |
 |---|---|
@@ -29,7 +32,7 @@ Read alongside `protractor-organization-exports.md` for the receiver contract.
 | Build command | `npm ci --include=dev --legacy-peer-deps` |
 | Start command | `node --import tsx workers/export-only.ts` |
 | Shutdown grace | 60 seconds, exceeding the application's 25-second drain bound |
-| Persistent disk | None; checkpoints remain in Mongo and queue state in Redis |
+| Persistent disk | None; export checkpoints live in PostgreSQL and queue state in Redis |
 | Initial export flag | `PROTRACTOR_EXPORTS_ENABLED=0` |
 | Initial operating state | Suspended after staging; no continuous disabled restart loop |
 | Commissioned availability | Continuous, to process delivery retries and retention |
