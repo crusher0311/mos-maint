@@ -53,3 +53,40 @@ Sanitized rollout receipt, updated by that monitor:
 Do not assume a future main push updates this web service: branch and automatic
 deployment are deliberately pinned. Returning web to main requires review of
 the combined release, not a blind configuration reset.
+
+## Approved sender correction and fictional receiver check
+
+On 2026-10-23, user approved deploying the IPv4 pinning correction and sending
+one fictional test, with real exports still disabled.
+
+- Candidate `95c1f5d2` extends the export-only release by exactly two files:
+  sender address-family handling and its real loopback socket regression test.
+- 13 focused tests passed in the isolated candidate. Main-workspace typecheck
+  also passed before packaging; Render performs its normal full build.
+- Deployment requested: `dep-dbdmf3mi0phs73aaa5f0`. No settings were enabled,
+  and the dedicated worker remains suspended.
+- Test runs only after exact-commit live verification and disabled-runtime
+  checks. It uses the released sender module from the operator environment,
+  not the suspended production worker.
+- Test payload contains zero records and is explicitly marked synthetic.
+  The destination was supplied by the user for testing; no customer/provider
+  records are loaded. MOS shop 298 is the selected Telle store context.
+- One POST only, with an admission receipt written before transmission.
+  No automatic retry after an ambiguous response.
+- A matching ACK proves connectivity/protocol acceptance only. The ephemeral
+  test signing key is not a configured production destination secret, so this
+  does not establish receiver signature validation or durable deduplication.
+
+Completion evidence:
+`generated-artifacts/reporting-snapshots/export-transport-deployment-20261023.json`
+and `export-fictional-webhook-test-20261023.json` in that same directory.
+The fictional-test receipt is created only when the post-deploy test begins.
+
+### Result
+
+At 14:14 UTC the corrected release was live and runtime-verified with exports
+disabled, worker suspended, and unrelated services unchanged. One fictional
+POST received HTTP 200, but the response did not contain the exact matching
+X-MOS-Acknowledgment header. Delivery is therefore unconfirmed, not accepted.
+No retry was performed. The receiver must acknowledge the incoming delivery ID
+after committing the batch before another test can establish protocol acceptance.
