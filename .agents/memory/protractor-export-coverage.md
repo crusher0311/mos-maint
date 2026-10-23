@@ -78,3 +78,16 @@ requires an array result.
 selection in a loopback-only fixture whenever changing custom lookup handling.
 For an explicitly IPv4-validated sender, keep connection family consistent with
 that validation; do not disable pinning or introduce a second DNS resolution.
+
+The optional Cosmos receiver preserves immutable observations and publishes a
+delivery only through its completed receipt, rather than updating a latest-only row.
+
+**Why:** An older delivery can arrive after a newer one, and a timeout can occur
+after only some records commit. Blind upserts would regress data or conceal partial
+delivery. Signing success alone does not establish storage completion.
+
+**How to apply:** Derive latest views only from completed deliveries with an explicit
+observation-time tie policy. Do not remove claims or receipts independently of their
+records. Receiver tests with an in-memory adapter are not proof of real Cosmos
+permissions, driver behavior or latency; verify fictional records in an isolated
+container before approving customer data.
