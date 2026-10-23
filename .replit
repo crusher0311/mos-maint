@@ -175,7 +175,7 @@ externalPort = 5000
 
 [nix]
 channel = "stable-25_05"
-packages = ["mongodb", "unzip", "libuuid", "chromium", "glib"]
+packages = ["mongodb", "unzip", "libuuid", "chromium", "glib", "redis"]
 
 [deployment]
 deploymentTarget = "autoscale"
