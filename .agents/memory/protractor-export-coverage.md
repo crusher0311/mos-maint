@@ -101,3 +101,13 @@ mistakenly treated as evidence that Azure was in use. The user clarified otherwi
 **How to apply:** Do not require Azure infrastructure for webhook testing. Treat the
 Cosmos adapter as optional, and keep secure signing setup and real-data activation
 separate from local receiver preparation.
+
+Check entity-specific export availability before instructing a receiver to accept
+real records. An empty invoice export cache does not establish absent shop history.
+
+**Why:** A verified shop can have no invoice rows in either Mongo or PG export-source
+caches; retained work-order or reporting evidence is a different dataset.
+
+**How to apply:** Keep bounded sample selection read-only and scoped to the approved
+entity. Do not silently substitute a work order, another shop, or a provider fetch
+for an approved stored-invoice test.
