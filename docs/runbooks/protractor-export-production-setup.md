@@ -67,6 +67,22 @@ collection default collation and query/index compatibility before installation.
 Compare keys/options, not just names. Stop on conflicting existing definitions;
 do not drop/rebuild or impose uniqueness automatically.
 
+The startup preflight checks all five named export indexes against the exact
+ordered keys above, requires nonunique definitions, and requires the TTL to be
+exactly 7776000 seconds (no TTL on other indexes). It also requires the existing
+work-order `{shopId:1,workOrderId:1}` index and both invoice cursor indexes.
+Source indexes may retain any existing name and uniqueness setting, but must
+have the exact ordered keys. Hidden, sparse, partial, or non-simple-collation
+indexes do not satisfy these requirements. All six collections must exist with
+simple (or absent) default collation: source queries inherit that default and
+merge cursors using binary ordering. A simple index alone cannot compensate for
+a non-simple collection default. Mongo sources remain required in PG canonical
+mode because exports read both stores. Metadata read failures stop startup;
+preflight never creates, drops, or modifies indexes.
+
+Offline regression check (no credentials or database access):
+`env -i PATH="$PATH" HOME="$HOME" NODE_OPTIONS='--require ./tests/helpers/deny-network-egress.cjs --require ./scripts/_stubs/server-only-stub.cjs' node --import tsx --test tests/protractor-export-prerequisites.test.ts`
+
 Before the two populated-source index builds, refresh collection/index sizes,
 capacity and health checks, agree stop thresholds and install sequentially.
 The earlier reporting database checks do not establish Mongo index capacity.

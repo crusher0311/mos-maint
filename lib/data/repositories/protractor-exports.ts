@@ -1,4 +1,5 @@
 import { getDb } from "@/lib/data/db";
+import type { Db, IndexDescriptionInfo } from "mongodb";
 import { type ExportConfig, type Entity } from "@/lib/protractor-exports/contract";
 import { isIdentityPgCanonical } from "@/lib/db/wave4-write-mode";
 import { findEnterpriseById as pgEnterprise } from "@/lib/data/repositories/pg/identity";
@@ -39,13 +40,57 @@ export async function workerAvailable() {
   const row = await (await collections()).health.findOne({ _id: "worker" });
   return !!row && row.seenAt.getTime() > Date.now() - 90_000;
 }
-export async function prerequisites() {
-  const c = await collections();
-  for (const [collection, name] of [
-    [c.configs, "export_active"], [c.history, "export_history_ttl"],
-    [c.states, "export_status"], [c.states, "export_retention"],
-  ] as const) {
-    if (!(await collection.indexExists(name))) throw new Error("Export indexes require operator setup");
+// Keep in sync with docs/runbooks/protractor-export-production-setup.md.
+const exportIndexes = [
+  { collection: "protractor_export_configs", name: "export_active", key: { paused: 1, revoked: 1, _id: 1 } },
+  { collection: "protractor_export_states", name: "export_status", key: { enterpriseId: 1, revision: 1, shopId: 1 } },
+  { collection: "protractor_export_states", name: "export_retention", key: { "pending.createdAt": 1 } },
+  { collection: "protractor_export_history", name: "export_history_ttl", key: { acceptedAt: 1 }, ttl: 7776000 },
+  { collection: "protractor_export_history", name: "export_history_enterprise_accepted", key: { enterpriseId: 1, acceptedAt: -1 } },
+] as const;
+const sourceIndexes = [
+  { collection: "protractor_work_orders", key: { shopId: 1, workOrderId: 1 } },
+  { collection: "protractor_invoices", key: { shopId: 1, invoiceId: 1 } },
+  { collection: "protractor_invoice_cache", key: { shopId: 1, invoiceId: 1 } },
+] as const;
+
+function simpleCollation(collation: { locale?: string } | undefined) {
+  return collation === undefined || collation.locale === "simple";
+}
+function compatibleIndex(index: IndexDescriptionInfo, key: object, ttl?: number) {
+  const actual = Object.entries(index.key), expected = Object.entries(key);
+  return actual.length === expected.length &&
+    actual.every(([field, direction], i) => field === expected[i][0] && direction === expected[i][1]) &&
+    index.expireAfterSeconds === ttl && !index.hidden && !index.sparse &&
+    index.partialFilterExpression === undefined && simpleCollation(index.collation);
+}
+
+/** Read-only preflight: never repair indexes from a worker. Mongo sources remain
+ * required in PG canonical mode because the exporter reads both stores. */
+export async function prerequisites(database?: Pick<Db, "collection" | "listCollections">) {
+  const db = database ?? await getDb();
+  for (const collection of new Set([...exportIndexes, ...sourceIndexes].map(spec => spec.collection))) {
+    const fail = (requirement: string): never => {
+      throw new Error(`Export indexes require operator setup: ${collection} ${requirement}`);
+    };
+    // sourcePage uses the collection default and merges cursors with JS binary
+    // ordering. Even an explicitly simple index cannot fix a non-simple query.
+    const metadata = await db.listCollections({ name: collection }, { nameOnly: false }).toArray();
+    if (metadata.length !== 1 || metadata[0].type !== "collection")
+      fail("collection missing or unsupported");
+    if (!simpleCollation(metadata[0].options?.collation))
+      fail("requires simple default collation");
+    const indexes = await db.collection(collection).listIndexes().toArray();
+    for (const spec of exportIndexes.filter(spec => spec.collection === collection)) {
+      const index = indexes.find(index => index.name === spec.name);
+      if (!index || index.unique || !compatibleIndex(index, spec.key, "ttl" in spec ? spec.ttl : undefined))
+        fail(`${spec.name} missing or incompatible`);
+    }
+    for (const spec of sourceIndexes.filter(spec => spec.collection === collection)) {
+      // Existing source index names (and uniqueness) are operator-owned.
+      if (!indexes.some(index => compatibleIndex(index, spec.key)))
+        fail("source cursor index missing or incompatible");
+    }
   }
 }
 
