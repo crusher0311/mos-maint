@@ -40,6 +40,23 @@ async function main(){
     await assert.rejects(()=>writer.upsertWorkOrder(doc("old",prov(b))));
     await writer.upsertWorkOrder({...doc("old",prov(a)),grandTotal:20});
     assert.equal(Number((await pg`select grand_total from normalized_work_orders where id='old'`)[0].grand_total),20);
+    const versioned=(stamp:string,stage:string,total:number)=>({...doc("versioned",prov(a),"400"),
+      grandTotal:total,rawPayload:{ID:a,Header:{LastModifiedTime:stamp},WorkflowStage:stage}});
+    await writer.upsertWorkOrder(versioned("2026-10-22T16:49:58.310-04:00","Invoice",50));
+    await assert.rejects(()=>writer.upsertWorkOrder(versioned("2026-10-22T15:46:41.223-04:00","InspectionInProgress",10)));
+    await assert.rejects(()=>writer.upsertWorkOrder({...doc("versioned",prov(a),"400"),grandTotal:1}));
+    await assert.rejects(()=>writer.upsertWorkOrder(versioned("2026-10-22T16:49:58.310-04:00","InspectionInProgress",10)));
+    await writer.upsertWorkOrder(versioned("2026-10-22T16:49:58.310-04:00","Invoice",50));
+    await writer.upsertWorkOrder(versioned("2026-10-22T21:00:00Z","Invoice",60));
+    assert.equal(Number((await pg`select grand_total from normalized_work_orders where id='versioned'`)[0].grand_total),60);
+    await Promise.allSettled([
+      writer.upsertWorkOrder(versioned("2026-10-22T20:59:59Z","InspectionInProgress",5)),
+      writer.upsertWorkOrder(versioned("2026-10-22T21:01:00Z","Invoice",70)),
+    ]);
+    assert.equal(Number((await pg`select grand_total from normalized_work_orders where id='versioned'`)[0].grand_total),70);
+    await writer.upsertWorkOrder(versioned("2026-10-22T21:01:00.123456Z","Invoice",80));
+    await writer.upsertWorkOrder(versioned("2026-10-22T21:01:00.123456Z","Invoice",80));
+    await assert.rejects(()=>writer.upsertWorkOrder(versioned("2026-10-22T21:01:00.123455Z","Invoice",79)));
     await pg`update normalized_work_orders set provenance=${JSON.stringify({...prov(a),sourceIds:[...prov(a).sourceIds,...prov(b).sourceIds]})}::text::jsonb where id='old'`;
     await assert.rejects(()=>writer.findWorkOrderByNaturalKey(1,prov(a).sourceIds[0],"100"));
     await assert.rejects(()=>writer.findWorkOrderByNaturalKey(1,prov(a).sourceIds[0],null));
