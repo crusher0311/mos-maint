@@ -66,3 +66,15 @@ those workloads or change their operating schedule.
 **How to apply:** Use a separately scoped export-only process for the pilot.
 Keep existing suspended services and their schedules unchanged unless explicitly
 approved. Local lifecycle verification is not approval to install or activate it.
+
+Mocked HTTPS requests do not validate Node's real address-family selection.
+
+**Why:** The first public receiver readiness check failed before HTTP with
+ERR_INVALID_IP_ADDRESS despite passing transport mocks. Node's automatic
+family selection called the single-address DNS override with all:true, which
+requires an array result.
+
+**How to apply:** Keep SSRF address pinning intact and exercise actual Node socket
+selection in a loopback-only fixture whenever changing custom lookup handling.
+For an explicitly IPv4-validated sender, keep connection family consistent with
+that validation; do not disable pinning or introduce a second DNS resolution.

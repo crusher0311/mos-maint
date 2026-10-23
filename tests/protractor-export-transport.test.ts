@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import https from "node:https";
 import dns from "node:dns/promises";
 import { EventEmitter } from "node:events";
+import net from "node:net";
 import { syncBuiltinESMExports } from "node:module";
 import { deliver, signature } from "../lib/protractor-exports/transport";
 
@@ -47,11 +48,39 @@ test("production transport requires exact ACK and refreshes retry signatures", a
     assert.notEqual(first.headers["x-mos-timestamp"], last.headers["x-mos-timestamp"]);
     assert.notEqual(first.headers["x-mos-signature"], last.headers["x-mos-signature"]);
     for (const attempt of attempts) {
+      assert.equal(attempt.options.family, 4);
       assert.equal(attempt.headers["x-mos-signature"], `v1=${signature("ephemeral-fixture",
         attempt.headers["x-mos-timestamp"], "synthetic-delivery", body)}`);
       attempt.options.lookup("receiver.example", {}, (error: unknown, address: string) => {
         assert.equal(error, null); assert.equal(address, "8.8.8.8");
       });
+    }
+    // Exercise Node's real address-selection behavior, not only a mocked HTTPS
+    // request. Remap the already-validated fixture IP to loopback in this test.
+    const server = net.createServer(socket => socket.end());
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const socket = net.createConnection({
+          host: "localhost", port: (server.address() as net.AddressInfo).port,
+          family: first.options.family, autoSelectFamily: true,
+          lookup: (_host, options, cb) => {
+            assert.notEqual(options.all, true);
+            first.options.lookup(_host, options, (error: Error | null, address: string, family: number) => {
+              assert.equal(address, "8.8.8.8");
+              cb(error, "127.0.0.1", family);
+            });
+          },
+        });
+        socket.setTimeout(2000, () => socket.destroy(new Error("loopback timeout")));
+        socket.once("error", reject);
+        socket.once("connect", () => { socket.destroy(); resolve(); });
+      });
+    } finally {
+      await new Promise<void>(resolve => server.close(() => resolve()));
     }
   } finally { t.mock.restoreAll(); syncBuiltinESMExports(); }
 });
