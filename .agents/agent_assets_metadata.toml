@@ -150,3 +150,17 @@ mtime_ms = 1792421814499
 storage_uri = "gcs://replit-rams-assets-picard/rams/assets/repl:a5a4005c-4e3d-4ce9-896c-c46425944606/03c2b233-a68d-468f-9a09-c77d4e6a23bc/688b9c4a-0d90-435d-9345-551142fae395"
 storage_version_token = "1792421855486659"
 content_type = "text/markdown"
+
+[[outputs]]
+id = "Ihgr8YmByhNhrxb70qrG4"
+uri = "file://generated-artifacts/reporting-snapshots/shop283-one-invoice-20261023.azure-request.json"
+type = "unspecified"
+title = "Exact invoice JSON sent to Azure"
+description = "Verified byte-for-byte against the recorded request hash: 5,856 bytes. Contains real invoice and customer data; no API key or authentication headers."
+logical_id = "6c5ea506-a0c8-448c-a71b-4b100d4a3d56"
+content_hash = "sha256:12bd6cd769b47f836288d69c88717057f0cf1629b68d99caa0d2511fc626fef0"
+size = 5856
+mtime_ms = 1792773292796
+storage_uri = "gcs://replit-rams-assets-picard/rams/assets/repl:a5a4005c-4e3d-4ce9-896c-c46425944606/6c5ea506-a0c8-448c-a71b-4b100d4a3d56/49a278b4-62ee-4cfb-8b17-4539b8f2cde4"
+storage_version_token = "1792773299103772"
+content_type = "application/octet-stream"
