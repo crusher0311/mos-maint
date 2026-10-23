@@ -128,8 +128,11 @@ Daily export coverage must reconcile retained invoice identities across stores;
 a normalized PostgreSQL date-range result is not a complete invoice inventory.
 
 **Why:** A one-day comparison found an additional invoice in the Mongo work-order
-cache that the PostgreSQL date-based selection did not return. All HTTP deliveries
-had succeeded, so delivery success concealed a source-selection gap.
+cache that the PostgreSQL date-based selection did not return. An exact lookup
+confirmed PostgreSQL held an earlier inspection-stage snapshot with no close date,
+not an absent record. Its write timestamp was newer than the invoiced Mongo cache,
+so database update time alone did not prove newer provider content. All HTTP
+deliveries had succeeded, concealing the source-selection gap.
 
 **How to apply:** Union and deduplicate verified invoice snapshots by provider ID,
 use the raw timestamp with explicit timezone semantics, and report source coverage
