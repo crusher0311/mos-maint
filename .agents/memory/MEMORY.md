@@ -156,3 +156,4 @@
 - [Reporting feed progress](reporting-feed-progress.md) — inventory progress is not freshness; Mongo 6.19 tryNext leaves event resumeToken stale, so persist consumed event IDs.
 - [Export worker fixtures](export-worker-fixture-boundaries.md) — queue completion is not delivery recovery while the engine lease remains; tsx dynamic imports can bypass path-only stubs.
 - [Outbound export boundaries](protractor-export-coverage.md) — separate activation approval, restricted PG state, real DNS tests, and completed-receipt consumption for Cosmos.
+- [Local normalization recovery](protractor-local-normalization.md) — independent retries, mixed-store association safety, and real PG transaction adapter verification.

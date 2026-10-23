@@ -38,7 +38,7 @@ type DrizzleDb = ReturnType<typeof import("./db/drizzle").getDb>;
 export class SupabaseDualWriter {
   private db: DrizzleDb;
 
-  constructor(db: DrizzleDb) {
+  constructor(db: DrizzleDb, private options: { skipVehicleEnrichment?: boolean } = {}) {
     this.db = db;
   }
 
@@ -53,7 +53,7 @@ export class SupabaseDualWriter {
     let acesYear: number | null = null;
     let acesMake: string | null = null;
     let acesModel: string | null = null;
-    if (acesDecodedAt == null && doc.vin) {
+    if (!this.options.skipVehicleEnrichment && acesDecodedAt == null && doc.vin) {
       const enriched = await enrichVinWithAces(doc.vin);
       if (enriched) {
         acesVehicleId = enriched.acesVehicleId;
@@ -125,6 +125,10 @@ export class SupabaseDualWriter {
       ...row,
       id: undefined,
       createdAt: undefined,
+      ...(this.options.skipVehicleEnrichment ? {
+        acesVehicleId: undefined, acesEngineId: undefined,
+        acesDecodedAt: undefined, vinDecoded: undefined,
+      } : {}),
     };
 
     try {
