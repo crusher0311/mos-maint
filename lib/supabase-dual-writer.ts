@@ -31,6 +31,7 @@ import {
 } from "./db/schema/normalized";
 import { enrichVinWithAces } from "./job-index-aces";
 import { assertSameProtractorWorkOrder, protractorWorkOrderIdentity, ProtractorIdentityConflict } from "./protractor-work-order-identity";
+import { protractorSnapshotFreshness, ProtractorSnapshotWriteConflict } from "./protractor-snapshot-freshness";
 
 type DrizzleDb = ReturnType<typeof import("./db/drizzle").getDb>;
 
@@ -287,6 +288,7 @@ export class SupabaseDualWriter {
           set: updateSet,
           ...(protractor?{setWhere:sql`
             ${normalizedWorkOrders.shopId} = ${row.shopId}
+            AND ${protractorSnapshotFreshness(sql`${normalizedWorkOrders.rawData}`, doc.rawPayload)}
             AND (${normalizedWorkOrders.provenance}->>'sourceSystem' IS NULL
               OR ${normalizedWorkOrders.provenance}->>'sourceSystem' = 'protractor')
             AND EXISTS (SELECT 1 FROM jsonb_array_elements(
@@ -303,7 +305,7 @@ export class SupabaseDualWriter {
         });
       if(protractor) {
         const written=await statement.returning({id:normalizedWorkOrders.id});
-        if(written.length!==1)throw new ProtractorIdentityConflict();
+        if(written.length!==1)throw new ProtractorSnapshotWriteConflict();
       } else await statement;
     } catch (e: any) {
       // The insert only reconciles conflicts on the primary key `id`
