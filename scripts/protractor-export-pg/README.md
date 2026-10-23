@@ -76,8 +76,9 @@ retry across reconstructed repositories, receipt creation, window completion,
 manual retry, retention and revoke.
 
 Run the source-index, engine, transport, lifecycle, synthetic receiver and real
-Redis suites as well. The real Redis suite still substitutes a durable file
-repository; it does not yet prove combined Redis + PostgreSQL process recovery.
+Redis suites as well. `npm run test:export-worker-real-redis` combines disposable
+PostgreSQL and Redis with actual worker termination, commit-boundary gates and
+cron wake-ups after unmodified engine lease expiry (allow about 16 minutes).
 Local schema tests use PG16; the deployed PG17 target and grants still require
 read-only preflight and explicit installation approval.
 

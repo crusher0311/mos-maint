@@ -7,6 +7,8 @@ const root = process.cwd();
 Module._load = function (id, parent, main) {
   const parentFile = parent?.filename || "";
   const absolute = (id.startsWith(".") ? path.resolve(path.dirname(parentFile), id) : id).replace(/\.ts$/, "");
+  if (id === "@/lib/queue/producer" && process.env.EXPORT_FIXTURE_SCHEDULER === "1")
+    return require("./export-worker-scheduler.ts").producer;
   if (absolute === path.join(root, "lib/protractor-exports/store") ||
       id === "@/lib/protractor-exports/store" ||
       id === "@/lib/data/repositories/protractor-exports")
@@ -18,7 +20,7 @@ Module._load = function (id, parent, main) {
   }
   // Fail closed rather than allowing a future entry-point import to load a real
   // database, scheduler, or provider. Queue registrations are also checked in Redis.
-  if (/^(?:mongodb|postgres|pg|dotenv)(?:\/|$)/.test(id) ||
+  if (/^(?:mongodb|pg|dotenv)(?:\/|$)/.test(id) ||
       /(?:start-worker|workers\/worker|lib\/queue)/.test(absolute))
     throw Error("Forbidden export integration module");
   return load.call(this, id, parent, main);

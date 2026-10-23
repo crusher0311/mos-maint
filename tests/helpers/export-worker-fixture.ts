@@ -1,63 +1,53 @@
-import { readFileSync, writeFileSync, renameSync, appendFileSync } from "node:fs";
+import { appendFileSync } from "node:fs";
 import { join } from "node:path";
 import { request } from "node:http";
-import { matchesAutoflowOutboxRow } from "./autoflow-outbox-fake";
+import { fixturePg } from "./export-worker-pg";
+import { checkPgExportSchema } from "../../lib/protractor-exports/pg-store";
 
 const directory = process.env.EXPORT_FIXTURE_DIRECTORY!;
 if (!/^\/tmp\/export-worker-real-/.test(directory)) throw Error("Missing synthetic fixture");
 export const event = (name: string) => appendFileSync(join(directory, "events"), `${name}\n`);
-function read(name: string): any {
-  return JSON.parse(readFileSync(join(directory, `${name}.json`), "utf8"), (key, value) =>
-    ["leaseUntil", "retryAt", "seenAt"].includes(key) && typeof value === "string" ? new Date(value) : value);
+const { sql, collections } = fixturePg();
+async function gate(point: string) {
+  if (process.env.EXPORT_FIXTURE_CRASH_POINT !== point) return;
+  event(point);
+  await new Promise<void>(() => {}); // Parent kills the actual worker at this boundary.
 }
-function write(name: string, value: unknown) {
-  const file = join(directory, `${name}.json`);
-  writeFileSync(`${file}.tmp`, JSON.stringify(value)); renameSync(`${file}.tmp`, file);
-}
-function collection(name: string) {
-  function mutate(query: any, update: any, upsert = false) {
-    const rows = read(name);
-    let row = rows.find((r: any) => matchesAutoflowOutboxRow(r, query));
-    const inserted = !row;
-    if (!row && !upsert) return null;
-    if (!row) { row = { _id: query._id }; rows.push(row); }
-    for (const [key, value] of Object.entries({ ...(inserted ? update.$setOnInsert : {}), ...update.$set })) {
-      const parts = key.split("."), leaf = parts.pop()!;
-      let target = row; for (const part of parts) target = target[part] ??= {};
-      target[leaf] = value;
-    }
-    for (const key of Object.keys(update.$unset ?? {})) {
-      const parts = key.split("."), leaf = parts.pop()!;
-      let target = row; for (const part of parts) target = target[part];
-      delete target[leaf];
-    }
-    write(name, rows);
-    return row;
-  }
-  return {
-    async findOne(query: any) { return read(name).find((r: any) => matchesAutoflowOutboxRow(r, query)) ?? null; },
-    async updateOne(query: any, update: any, options: any = {}) {
-      return { matchedCount: mutate(query, update, options.upsert) ? 1 : 0 };
-    },
-    async findOneAndUpdate(query: any, update: any) { return mutate(query, update); },
+for (const name of ["states", "hashes", "history"]) {
+  const collection = collections[name];
+  const update = collection.updateOne.bind(collection);
+  collection.updateOne = async (query: any, mutation: any, options: any) => {
+    const point = name === "hashes" ? "hash" : name === "history" ? "receipt" :
+      mutation.$set?.["pending.acceptedAt"] ? "acceptance" :
+      mutation.$unset?.pending !== undefined ? "checkpoint" : undefined;
+    if (point) await gate(`before-${point}`);
+    const result = await update(query, mutation, options);
+    // update resolves only after COMMIT, not merely after UPDATE RETURNING.
+    if (point) await gate(`after-${point}`);
+    return result;
   };
 }
-const collections = Object.fromEntries(["states", "hashes", "history", "health"].map(n => [n, collection(n)]));
 export const store = {
   async prerequisites() {
     event("preflight");
     if (process.env.EXPORT_FIXTURE_PREFLIGHT === "hang") await new Promise(() => {});
     if (process.env.EXPORT_FIXTURE_PREFLIGHT === "gate")
       await new Promise<void>(resolve => process.once("message", () => resolve()));
+    await checkPgExportSchema(sql);
   },
   async collections() { return collections; },
-  async getConfig() { return read("config"); },
+  async getConfig(id: string) { return collections.configs.findOne({ _id: id }); },
+  async workerAvailable() {
+    const row = await collections.health.findOne({ _id: "worker" });
+    return !!row && row.seenAt.getTime() > Date.now() - 90000;
+  },
   stateId: () => "synthetic-state",
   async maintainExportRetention() { event("heartbeat"); },
 };
 export const transport = {
   revealSecret: () => "synthetic-only",
   async deliver(_destination: string, _secret: string, id: string, body: string) {
+    await gate("before-send");
     event("delivery");
     return new Promise<void>((resolve, reject) => {
       const req = request({ host: "127.0.0.1", port: Number(process.env.EXPORT_FIXTURE_RECEIVER_PORT),

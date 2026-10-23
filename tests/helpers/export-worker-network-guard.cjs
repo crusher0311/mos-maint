@@ -6,6 +6,10 @@ const connect = net.Socket.prototype.connect;
 net.Socket.prototype.connect = function (...args) {
   const target = Array.isArray(args[0]) ? args[0][0] : args[0];
   const host = typeof target === "object" ? target?.host : args[1];
+  const socket = process.env.EXPORT_FIXTURE_PG_SOCKET;
+  const socketPath = typeof target === "object" ? target?.path : target;
+  if (/^\/tmp\/export-pg\.[A-Za-z0-9]+$/.test(socket || "") &&
+      socketPath === `${socket}/.s.PGSQL.5432`) return connect.apply(this, args);
   if (host !== "127.0.0.1") return deny();
   return connect.apply(this, args);
 };

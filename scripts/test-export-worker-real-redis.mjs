@@ -1,8 +1,7 @@
 import { spawn } from "node:child_process";
 // Never inherit production credentials, NODE_OPTIONS, dotenv hooks or app flags.
-const child = spawn(process.execPath, [
-  "--require", "./tests/helpers/export-worker-network-guard.cjs",
-  "--import", "tsx", "--test", "tests/protractor-export-worker-real-redis.test.ts",
+const child = spawn("bash", [
+  "tests/run-protractor-export-pg.sh", "worker",
 ], {
   stdio: "inherit",
   env: { PATH: process.env.PATH, NODE_ENV: "test" },
