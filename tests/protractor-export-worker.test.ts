@@ -36,10 +36,12 @@ const flush = () => new Promise(resolve => setImmediate(resolve));
 test("configuration fails closed; disabled mode requires no credentials", () => {
   assert.equal(validateExportWorkerEnvironment({}), false);
   const env = { PROTRACTOR_EXPORTS_ENABLED: "1", REDIS_URL: "redis://synthetic",
-    MONGODB_URI: "mongodb://synthetic", DATABASE_URL: "postgres://synthetic",
+    MONGODB_URI: "mongodb://synthetic", PROTRACTOR_EXPORT_DATABASE_URL: "postgres://synthetic",
+    PROTRACTOR_EXPORT_DATABASE_ROLE: "export_runtime",
     PROTRACTOR_EXPORT_ENCRYPTION_KEY: "a".repeat(64) };
   assert.equal(validateExportWorkerEnvironment(env), true);
-  for (const key of ["REDIS_URL", "MONGODB_URI", "PROTRACTOR_EXPORT_ENCRYPTION_KEY", "DATABASE_URL"])
+  for (const key of ["REDIS_URL", "MONGODB_URI", "PROTRACTOR_EXPORT_ENCRYPTION_KEY",
+    "PROTRACTOR_EXPORT_DATABASE_URL", "PROTRACTOR_EXPORT_DATABASE_ROLE"])
     assert.throws(() => validateExportWorkerEnvironment({ ...env, [key]: "" }));
   assert.equal(validateExportWorkerEnvironment({ ...env, IDENTITY_PG_CANONICAL: "1",
     DATABASE_URL: "postgres://synthetic" }), true);

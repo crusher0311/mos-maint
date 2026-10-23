@@ -36,19 +36,28 @@ deletes at most 1,000 receipts per heartbeat. Source records are never deleted.
    The three empty collections installed earlier stay untouched.
    If any state/config/delivery exists, STOP and design a reviewed import.
    This package has no automatic state-copy path and must not reset a baseline.
-3. Confirm the application's existing PG target and runtime role. The repository
-   uses DATAONE_DATABASE_URL, otherwise DATABASE_URL, exactly as the existing
-   PG repository does; do not substitute a different database implicitly.
+3. Use the same reviewed production PG database, but a separate restricted
+   login. Export control state requires PROTRACTOR_EXPORT_DATABASE_URL and
+   PROTRACTOR_EXPORT_DATABASE_ROLE on web, dispatcher and export worker.
+   It never falls back to DATAONE_DATABASE_URL or DATABASE_URL; those remain
+   unchanged for raw sources and identity. The dedicated pool requires TLS.
 4. Review this SQL against production permissions and any existing objects.
    Installation is additive and transactional, not startup/deploy DDL.
    PUBLIC/anon/authenticated are denied schema/table access; ownership/runtime
    role grants must be reviewed. Never grant browser roles access to secrets or
    pending bodies. Do not add this private schema to Supabase exposed schemas.
-5. After explicit installation approval, apply schema.sql with the approved
-   operator. If installer and runtime roles differ, approve narrow schema USAGE
-   and the exact table grants in [permissions-review.md](permissions-review.md)
-   separately (the version marker needs SELECT only). No role creation or
-   superuser grant is included.
+5. Review [install-reviewed.psql](install-reviewed.psql) for explicit approval.
+   This one-time package creates mos_export_owner and mos_export_runtime as
+   NOLOGIN roles, installs schema.sql under the owner, grants only the required
+   runtime access, and removes temporary installer ownership access. Existing
+   role names abort rather than being repurposed. It grants no superuser power
+   and never changes the shared application role.
+   Role preparation, schema installation, grants, and cleanup are separate
+   transactions: failure stops psql and may leave unused NOLOGIN roles or
+   temporary installer membership. Inspect and complete reviewed cleanup;
+   do not rerun blindly or delete schema/data to recover.
+   Secure runtime credential provisioning and LOGIN enablement are separate
+   approved operator steps. No password appears in this package.
 6. Verify strict schema/index preflight under the actual runtime role.
    Verify existing raw-source index prerequisites; the Mongo source indexes
    installed earlier remain useful. No raw-data migration is required.
@@ -81,6 +90,20 @@ PostgreSQL and Redis with actual worker termination, commit-boundary gates and
 cron wake-ups after unmodified engine lease expiry (allow about 16 minutes).
 Local schema tests use PG16; the deployed PG17 target and grants still require
 read-only preflight and explicit installation approval.
+
+The dedicated connection checks the actual login/current role in every
+transaction. Broad roles, memberships, schema/database CREATE, export-object
+ownership, marker writes and excess table grants fail closed. Missing/wrong
+configuration cannot use the shared application connection. The pool is lazy
+(no import-time connections), at most two connections per process, with five
+second connect/statement and one second lock timeouts. Database errors are
+sanitized before escaping the repository.
+
+The local connection test executes the exact psql installation package as a
+non-superuser in a second disposable database, checks the initial NOLOGIN
+state, enables only that disposable login, and exercises the real dedicated
+adapter. It tests absent/shared credentials, wrong actual login, privileged
+role drift, inherited broad-role drift and forbidden DDL.
 
 Installation now aborts transactionally on incompatible column types/nullability,
 ID collation, named indexes, or version-marker contents instead of relying on

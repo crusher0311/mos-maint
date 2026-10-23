@@ -4,7 +4,7 @@ import { type ExportConfig, type Entity } from "@/lib/protractor-exports/contrac
 import { isIdentityPgCanonical } from "@/lib/db/wave4-write-mode";
 import { findEnterpriseById as pgEnterprise } from "@/lib/data/repositories/pg/identity";
 import { findEnterpriseById as mongoEnterprise } from "@/lib/data/repositories/enterprise";
-import { getClient } from "@/lib/db/drizzle";
+import { exportSql } from "@/lib/protractor-exports/pg-connection";
 import { pgExportCollection, checkPgExportSchema, expirePgExportHistory, type ExportSql } from "@/lib/protractor-exports/pg-store";
 
 export interface Pending {
@@ -21,13 +21,7 @@ export interface ExportState {
   attempts: number; retryAt?: Date; lease?: string; leaseUntil?: Date;
 }
 // Every statement gets a bounded transaction; no production DDL or Mongo fallback.
-export const exportSql: ExportSql = {
-  unsafe: (query, parameters = []) => getClient().begin(async tx => {
-    await tx.unsafe("SET LOCAL statement_timeout = '5000ms'");
-    await tx.unsafe("SET LOCAL lock_timeout = '1000ms'");
-    return tx.unsafe(query, parameters);
-  }) as Promise<any>,
-};
+export { exportSql };
 export async function collections(sql: ExportSql = exportSql) {
   return {
     configs: pgExportCollection<ExportConfig>(sql, "configs"),

@@ -14,6 +14,16 @@ migrating those is a separate effort and must not silently become a prerequisite
 approved PG installation and coordinated release; leave existing empty Mongo
 collections untouched. Keep raw-data migration and service activation separate.
 
+Export state must use a dedicated restricted PG login, not the application's
+shared PG identity.
+
+**Why:** The read-only production review confirmed the shared app connection uses
+the broadly privileged postgres role. Narrowing that role could break unrelated
+features; adding a restricted role alone does not make the app use it.
+
+**How to apply:** Keep export-state credentials separate with no shared fallback.
+Keep raw-source clients unchanged and require actual-role checks before state DML.
+
 For parameterized JSONB in the export adapter, bind JSON text through an explicit
 text cast before casting to JSONB.
 

@@ -1,5 +1,12 @@
 # Export PostgreSQL permission proposal — NOT approval to install
 
+The exact proposed new-role package is now `install-reviewed.psql`. It creates
+separate NOLOGIN owner/runtime roles and leaves secure login provisioning for a
+separately approved step. Export state uses its own connection and validates the
+actual restricted login; it no longer uses the shared application PG client.
+The existing-role grants below remain reference only, not authorization to
+reuse a broad role. No production installation has been performed.
+
 Validated on disposable PostgreSQL 16.10, with no production connections.
 Production PostgreSQL 17 still requires read-only review. Do not run DDL, create
 roles, grant membership, change flags, start delivery or deploy from this proposal.
