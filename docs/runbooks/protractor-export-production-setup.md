@@ -1,7 +1,37 @@
 # Protractor webhook export production setup package
 
-Status: prepared locally; **not installed or approved for activation**.
+Status: **approved database preparation installed and verified on 2026-10-23**.
+Worker/service setup, secrets, enablement and customer delivery remain unapproved.
 Read alongside `protractor-organization-exports.md` for the receiver contract.
+
+## Database installation receipt — 2026-10-23
+
+After explicit database-only approval, bounded Mongo checks confirmed a writable
+primary, approximately 69 GiB free filesystem capacity, no lock queues or active
+index builds, and simple/default collection collations. The initial dbStats
+request with freeStorage timed out at three seconds; ordinary dbStats returned
+filesystem capacity in 53 ms without the expensive internal free-storage scan.
+
+The operator created the three empty export collections and all seven missing
+manifest indexes sequentially. The existing work-order compound index was reused.
+No conflicting indexes were changed or dropped, no source records were changed,
+and no destination was configured. Health was checked before each build and
+periodically while the invoice-cache index built. Stop thresholds were free
+space under 20% or 20 GiB, lock queue at least five, connection utilization at
+least 80%, dirty cache at least 20%, failed primary status, concurrent index
+build before admission, or failed/slow health probes. All gates passed.
+
+Final health at 11:14:46 UTC: 74,048,372,736 bytes free, zero queued requests,
+zero index builds, 205 current / 2,795 available connections, 1.92% dirty cache.
+Independent strict application preflight at 11:15:00 UTC passed against actual
+metadata. Export configuration, state and history collections all remained empty;
+worker heartbeat was absent. No feature flags, secrets, services, cron schedules,
+reporting jobs or provider calls were changed/started.
+
+Sanitized operator receipts are in the ignored snapshot directory:
+`export-index-install-20261023.json` and `export-index-verification-20261023.json`.
+Database preparation does not certify PG source query plans or live worker/receiver
+behavior; these remain gated before commissioning and delivery.
 
 ## Ordered production execution proposal
 
