@@ -157,6 +157,7 @@
     "prestart": "node scripts/validate-production-env.cjs",
     "start:with-workers": "node scripts/start-with-workers.js",
     "worker": "tsx workers/worker.ts",
+    "worker:protractor-exports": "tsx workers/export-only.ts",
     "test:queue-feature-flag": "tsx tests/queue-feature-flag.smoke.ts",
     "test:sidebar-estimate-assist-nav": "tsx tests/sidebar-estimate-assist-nav.smoke.ts",
     "test:queue-readiness": "tsx tests/queue-readiness.smoke.ts",

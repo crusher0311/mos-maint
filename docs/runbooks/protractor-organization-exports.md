@@ -1,6 +1,9 @@
 # Daily Protractor organization exports
 
 ## Deployment is not activation
+Production installation and activation gates are collected in
+[the local setup package](protractor-export-production-setup.md).
+
 This feature is OFF unless `PROTRACTOR_EXPORTS_ENABLED=1`. Do not set it as part
 of deployment. No backfill, customer delivery, index creation or database cutover
 is authorized by this implementation. Development Mongo is production: tests must

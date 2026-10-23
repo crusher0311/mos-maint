@@ -25,3 +25,13 @@ pilot; implementation being merged is not activation approval.
 schedule/timezone, snapshot choice, secret installation and explicit resume as
 separate pilot gates. Workspace deployment/env metadata cannot establish the
 state of separately hosted production web and worker services.
+
+Export activation must not resume unrelated backfill work.
+
+**Why:** The general queue worker starts backfill consumers and an incremental
+loop alongside optional exports. A webhook pilot is not permission to restart
+those workloads or change their operating schedule.
+
+**How to apply:** Use a separately scoped export-only process for the pilot.
+Keep existing suspended services and their schedules unchanged unless explicitly
+approved. Local lifecycle verification is not approval to install or activate it.
