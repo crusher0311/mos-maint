@@ -178,3 +178,17 @@ mtime_ms = 1792773469008
 storage_uri = "gcs://replit-rams-assets-picard/rams/assets/repl:a5a4005c-4e3d-4ce9-896c-c46425944606/0cd21a10-e103-4f75-9c13-c1ab87cbdc87/20713dad-d7f9-4ec9-bace-d42f642cba48"
 storage_version_token = "1792773497824479"
 content_type = "application/octet-stream"
+
+[[outputs]]
+id = "M5ZI5zDLdnNo4MBZaTjh-"
+uri = "file://generated-artifacts/reporting-snapshots/shop283-invoices-20261022.requests.json"
+type = "unspecified"
+title = "October 22 invoice payloads — MOS 283"
+description = "All 18 invoice payloads sent individually to Azure, collected into a JSON array for comparison. Contains real customer data; no API keys."
+logical_id = "3407b475-ac76-4da9-90a4-95955b990352"
+content_hash = "sha256:230c668614d309afba31ec3cde36301d515fb7ec863e2338de3bebcd0c1c9ab0"
+size = 623078
+mtime_ms = 1792773712228
+storage_uri = "gcs://replit-rams-assets-picard/rams/assets/repl:a5a4005c-4e3d-4ce9-896c-c46425944606/3407b475-ac76-4da9-90a4-95955b990352/b7172e33-0965-412c-a67c-287a6b30730b"
+storage_version_token = "1792773740908678"
+content_type = "application/octet-stream"
