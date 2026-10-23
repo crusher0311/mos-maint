@@ -63,7 +63,10 @@ export async function deliver(destination: string, secret: string, id: string, b
   const timestamp = String(Math.floor(Date.now() / 1000));
   return new Promise<void>((resolve, reject) => {
     const req = request(url, {
-      method: "POST", agent: false,
+      // resolveDestination validates and pins IPv4. Without an explicit family,
+      // Node's autoSelectFamily asks lookup for an array (all:true), while this
+      // pinned lookup deliberately returns one vetted address.
+      method: "POST", agent: false, family: 4,
       lookup: (_hostname, _options, cb) => cb(null, address, 4),
       headers: { "content-type": "application/json", "content-length": Buffer.byteLength(body),
         "x-mos-delivery-id": id, "x-mos-timestamp": timestamp,
