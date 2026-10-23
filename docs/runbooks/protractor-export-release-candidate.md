@@ -1,6 +1,8 @@
 # Export-only release candidate
 
-Prepared locally on 2026-10-23. Not pushed or deployed.
+Prepared locally on 2026-10-23. The dedicated release branch has now been pushed;
+the disabled web deployment is live and runtime-verified. See
+`scripts/protractor-export-pg/disabled-deployment.md` for rollout state.
 
 - Live baseline: `ad56fc491260de75415388a49893ece6c5791685`.
 - Candidate commit: `ae1445a4`.

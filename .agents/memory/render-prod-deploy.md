@@ -5,6 +5,25 @@ description: Prod runs on Render and builds from GitHub main; merging a fix to m
 
 # Prod runs on Render — merging to main is not deploying
 
+Narrow releases may pin web to a dedicated release branch with auto-deploy off,
+while the callback service continues tracking main.
+
+**Why:** Export-only release staging deliberately excluded unverified combined
+reporting changes and unrelated asset deletions on local main.
+
+**How to apply:** Inspect each service's current branch and auto-deploy setting.
+Do not assume a main push updates web or restore main tracking without reviewing
+the combined release. Preserve unrelated workers' branches and suspension.
+
+A GitHub integration reconnect is not necessarily a Git-provider reconnect.
+
+**Why:** Git push continued returning 403 after reconnecting the GitHub App
+integration; reconnecting GitHub under account Git Providers restored push.
+
+**How to apply:** After one failed retry, consult current Replit Git documentation
+and distinguish Git-provider authorization from connector authorization. Never
+request a token in chat or repeatedly retry the same rejected credentials.
+
 Service-level environment listings omit values inherited from linked Render
 environment groups.
 
