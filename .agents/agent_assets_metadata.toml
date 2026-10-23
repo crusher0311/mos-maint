@@ -192,3 +192,17 @@ mtime_ms = 1792773712228
 storage_uri = "gcs://replit-rams-assets-picard/rams/assets/repl:a5a4005c-4e3d-4ce9-896c-c46425944606/3407b475-ac76-4da9-90a4-95955b990352/b7172e33-0965-412c-a67c-287a6b30730b"
 storage_version_token = "1792773740908678"
 content_type = "application/octet-stream"
+
+[[outputs]]
+id = "xcl2o3ssDRj03xuYGkLZS"
+uri = "file://generated-artifacts/reporting-snapshots/shop283-invoices-20261022-missing.requests.json"
+type = "unspecified"
+title = "Missing October 22 invoice — RO 127591"
+description = "The additional invoice payload sent to Azure and accepted with HTTP 200. Contains real customer data; no authentication credentials."
+logical_id = "18069db5-a924-4072-8835-79964d33d92e"
+content_hash = "sha256:f5c2e088be6e670dd2619e983ea371fb93ef8818b22ee0bd002354f6cc9c67a3"
+size = 20746
+mtime_ms = 1792773830184
+storage_uri = "gcs://replit-rams-assets-picard/rams/assets/repl:a5a4005c-4e3d-4ce9-896c-c46425944606/18069db5-a924-4072-8835-79964d33d92e/ddb140f8-2dcd-4bf2-baa4-d799548afe40"
+storage_version_token = "1792773850001845"
+content_type = "application/octet-stream"

@@ -123,3 +123,15 @@ caches; retained work-order or reporting evidence is a different dataset.
 **How to apply:** Keep bounded sample selection read-only and scoped to the approved
 entity. Do not silently substitute a work order, another shop, or a provider fetch
 for an approved stored-invoice test.
+
+Daily export coverage must reconcile retained invoice identities across stores;
+a normalized PostgreSQL date-range result is not a complete invoice inventory.
+
+**Why:** A one-day comparison found an additional invoice in the Mongo work-order
+cache that the PostgreSQL date-based selection did not return. All HTTP deliveries
+had succeeded, so delivery success concealed a source-selection gap.
+
+**How to apply:** Union and deduplicate verified invoice snapshots by provider ID,
+use the raw timestamp with explicit timezone semantics, and report source coverage
+separately from accepted-delivery counts. Do not label a day complete solely from
+one store's query or HTTP 200 responses.
