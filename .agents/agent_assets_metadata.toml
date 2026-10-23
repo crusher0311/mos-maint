@@ -164,3 +164,17 @@ mtime_ms = 1792773292796
 storage_uri = "gcs://replit-rams-assets-picard/rams/assets/repl:a5a4005c-4e3d-4ce9-896c-c46425944606/6c5ea506-a0c8-448c-a71b-4b100d4a3d56/49a278b4-62ee-4cfb-8b17-4539b8f2cde4"
 storage_version_token = "1792773299103772"
 content_type = "application/octet-stream"
+
+[[outputs]]
+id = "WnsHpZESsj5gtC8X0HrWT"
+uri = "file://generated-artifacts/reporting-snapshots/shop283-one-workorder-20261023.azure-request.json"
+type = "unspecified"
+title = "Exact work-order JSON sent to Azure"
+description = "The 12,488-byte request body for the single MOS 283 work-order test. Contains real customer data; excludes API keys and DVI/inspection fields."
+logical_id = "0cd21a10-e103-4f75-9c13-c1ab87cbdc87"
+content_hash = "sha256:9b413806fddd03c011e79ff0c1dcd6db5771f3f853ebff08faae9a82aab2025d"
+size = 12488
+mtime_ms = 1792773469008
+storage_uri = "gcs://replit-rams-assets-picard/rams/assets/repl:a5a4005c-4e3d-4ce9-896c-c46425944606/0cd21a10-e103-4f75-9c13-c1ab87cbdc87/20713dad-d7f9-4ec9-bace-d42f642cba48"
+storage_version_token = "1792773497824479"
+content_type = "application/octet-stream"
