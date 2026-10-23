@@ -88,8 +88,11 @@ Run the source-index, engine, transport, lifecycle, synthetic receiver and real
 Redis suites as well. `npm run test:export-worker-real-redis` combines disposable
 PostgreSQL and Redis with actual worker termination, commit-boundary gates and
 cron wake-ups after unmodified engine lease expiry (allow about 16 minutes).
-Local schema tests use PG16; the deployed PG17 target and grants still require
-read-only preflight and explicit installation approval.
+The schema, dedicated-connection and permission suites passed on disposable
+PostgreSQL 17.6 on 2026-10-23 (matching production's reported server version).
+The production target and grants still require installation-time preflight and
+explicit installation approval. This local run did not rerun the long Redis
+worker crash suite on PG17 or verify Supabase-specific authentication.
 
 The dedicated connection checks the actual login/current role in every
 transaction. Broad roles, memberships, schema/database CREATE, export-object
