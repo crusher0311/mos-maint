@@ -1,4 +1,5 @@
 import type { Db } from "mongodb";
+import { normalizationRetriesEnabled, retainNormalizationIntent, validateNormalizationPayload } from "./normalization-retries";
 import { callbackExecutionTarget } from "./callback-worker-policy";
 import { callbackPipelineWidth } from "./callback-pipeline";
 import * as callbackEvents from "@/lib/data/repositories/protractor-callback-events";
@@ -57,6 +58,19 @@ export async function processProtractorCallbackDrain(db?: Db, options: {
   }
   const invocationStartedAt = Date.now();
   const queueDb = db ?? await callbackEvents.getCallbackQueueDb();
+  if (normalizationRetriesEnabled()) {
+    const { processLocalNormalizationRetries } = await import("./normalization-retry-runtime");
+    // A separate durable queue: never re-run callback indexing/exports to
+    // recover normalization. Failure here must not prevent callback intake.
+    try {
+      await processLocalNormalizationRetries(queueDb, {
+        budgetMs: Math.min(10_000, options.budgetMs ?? CALLBACK_DRAIN_BUDGET_MS),
+        shouldStop: options.shouldStop,
+      });
+    } catch {
+      console.error("[NormalizationRetry] drain unavailable");
+    }
+  }
   // Eligibility is resolved once per queue invocation.  Keep only the
   // allowlisted enterprise identifier needed by normalized ingestion; this is
   // intentionally not a cross-request cache.
@@ -156,6 +170,9 @@ export async function processProtractorCallbackDrain(db?: Db, options: {
             ServiceItem: { ...(result.workOrder.ServiceItem || { ID: "" }), VIN: vin },
           }
         : result.workOrder;
+      if (normalizationRetriesEnabled()) {
+        validateNormalizationPayload(item.shopId, item.objectId, callbackWorkOrder);
+      }
       await timedStage(
         timing,
         "snapshot",
@@ -164,8 +181,18 @@ export async function processProtractorCallbackDrain(db?: Db, options: {
       const normalizationTiming = timing
         ? createNormalizationTimingRecorder()
         : undefined;
+      if (normalizationRetriesEnabled()) {
+        const { getPostgresClient } = await import("@/lib/db/postgres");
+        // Deliberately outside the best-effort catch. If intent persistence
+        // fails, this callback must not acknowledge successful normalization.
+        await retainNormalizationIntent(getPostgresClient(), item.shopId, item.objectId, callbackWorkOrder);
+      }
       let normalizationOutcome: CallbackTimingOutcome = "failed";
       try {
+        if (normalizationRetriesEnabled()) {
+          // Durable handoff is pending, not evidence of completed normalization.
+          normalizationOutcome = "skipped";
+        } else {
         const normalizationResult = await timedStage(
           timing,
           "normalization",
@@ -187,6 +214,7 @@ export async function processProtractorCallbackDrain(db?: Db, options: {
           normalizationCallbackOutcome,
         );
         normalizationOutcome = normalizationCallbackOutcome(normalizationResult);
+        }
       } catch {
         // Do not include object identifiers or provider error text in logs.
         console.error("[Queue] Callback normalization failed");
