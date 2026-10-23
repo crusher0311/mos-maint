@@ -91,3 +91,13 @@ observation-time tie policy. Do not remove claims or receipts independently of t
 records. Receiver tests with an in-memory adapter are not proof of real Cosmos
 permissions, driver behavior or latency; verify fictional records in an isolated
 container before approving customer data.
+
+The user's webhook testing setup is a local Node receiver behind ngrok, not a
+connected Cosmos database. Local JSON capture is the approved next testing path.
+
+**Why:** The uploaded generic receiver included optional Cosmos support, which was
+mistakenly treated as evidence that Azure was in use. The user clarified otherwise.
+
+**How to apply:** Do not require Azure infrastructure for webhook testing. Treat the
+Cosmos adapter as optional, and keep secure signing setup and real-data activation
+separate from local receiver preparation.
