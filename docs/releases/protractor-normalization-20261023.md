@@ -1,7 +1,13 @@
 # Coordinated normalization release candidates
 
-Prepared locally on 2026-10-23. **Not pushed, deployed, or enabled.**
+Prepared and pushed as three separate release branches on 2026-10-23.
+**Not deployed or enabled.**
 No invoice repair or export delivery is part of this release preparation.
+
+The approved non-force atomic push created all three remote branches. Remote
+commit IDs matched the candidates below; remote main remained `ad56fc49`.
+Before pushing, no Render service was configured to any candidate branch, and
+the candidates' GitHub workflow was manual-only (background had no workflows).
 
 ## Candidate inventory
 
