@@ -4,6 +4,70 @@ Status: **approved database preparation installed and verified on 2026-10-23**.
 Worker/service setup, secrets, enablement and customer delivery remain unapproved.
 Read alongside `protractor-organization-exports.md` for the receiver contract.
 
+## Dedicated service configuration and cost proposal — 2026-10-23
+
+**Proposal only: no service or secret has been created.**
+
+| Setting | Proposed value |
+|---|---|
+| Service name | `mos-protractor-export-worker` |
+| Type | Render background worker; no public HTTP endpoint |
+| Region | Oregon, matching the existing production web/callback services |
+| Instance count | One; no autoscaling |
+| Compute | 1 CPU / 2 GB RAM, advertised at **US$25/month** |
+| Runtime | Node 20; repository dependencies including `tsx` |
+| Repository | Existing `crusher0311/mos-maint` repository |
+| Release | Exact reviewed commit; auto-deploy disabled during pilot |
+| Build command | `npm ci --include=dev --legacy-peer-deps` |
+| Start command | `node --import tsx workers/export-only.ts` |
+| Shutdown grace | 60 seconds, exceeding the application's 25-second drain bound |
+| Persistent disk | None; checkpoints remain in Mongo and queue state in Redis |
+| Initial export flag | `PROTRACTOR_EXPORTS_ENABLED=0` |
+| Initial operating state | Suspended after staging; no continuous disabled restart loop |
+| Commissioned availability | Continuous, to process delivery retries and retention |
+
+Direct Node startup is equivalent to the package script but avoids an npm/shell
+wrapper between Render's signals and the worker process. Do not use the web build,
+`start-with-workers`, or the general backfill command.
+
+Price sources checked on 2026-10-23:
+
+- https://render.com/pricing — service compute 0.5 CPU / 512 MB at $7/month;
+  1 CPU / 2 GB at $25/month. Compute billed per service, prorated by the second.
+- https://render.com/docs/deploys — default shutdown delay 30 seconds; configurable
+  up to 300 seconds for services without a persistent disk.
+
+The $25 estimate is **incremental worker compute only**, not a total bill cap.
+It excludes any additional outbound bandwidth, build-pipeline charges, taxes,
+workspace-plan fees or required Redis/database capacity upgrades. No new Redis
+or database service is proposed. Existing queue persistence, available connections,
+capacity and credentials must be checked before commissioning.
+
+The cheaper 512 MB instance is not the recommended starting point: this worker
+loads the repository's database and authorization dependencies, and source payload
+processing may consume more memory than the capped outbound body. Actual RSS/CPU
+has not been benchmarked under live traffic. Reassess sizing after the bounded
+pilot rather than promise that either size is sufficient for fleet delivery.
+
+Creation/build may incur prorated compute/pipeline costs before suspension.
+Confirm the currently offered plan/rate in Render at creation; stop for renewed
+approval if it exceeds this proposal. Do not activate a paid service solely to
+verify disabled mode: the disabled command intentionally exits.
+
+### Configuration scope
+
+Use the existing production targets through secure configuration: Redis URL,
+Mongo credentials/target, applicable PG connection and canonical-mode flags.
+Provision one shared export encryption key on web and this service through the
+secure secret flow. Verify values only as presence/validity, never print them.
+Copy only required settings; do not attach a broad environment group that can
+enable unrelated queues, cron loops or exports. Do not change web configuration
+or deploy it under service-creation approval alone.
+
+Creation approval covers the new service/cost and disabled staging only.
+Worker enablement, web scheduler enablement and recipient resume remain separate
+gates. Do not resume or resize any existing worker. Do not restart reporting.
+
 ## Database installation receipt — 2026-10-23
 
 After explicit database-only approval, bounded Mongo checks confirmed a writable
