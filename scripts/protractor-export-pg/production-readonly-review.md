@@ -1,5 +1,8 @@
 # Production export preflight — 2026-10-23
 
+Historical pre-install review. The subsequently approved database-only
+installation is recorded in [production-installation.md](production-installation.md).
+
 Read-only catalog queries against the existing Supabase production connection.
 The transaction confirmed `transaction_read_only=on`, with five-second statement
 and one-second lock limits. Render configuration reads were GET-only. No DDL,

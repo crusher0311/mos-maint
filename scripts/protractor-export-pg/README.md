@@ -1,7 +1,9 @@
 # PostgreSQL export control storage — local release proposal
 
-**Not installed in production. No service creation, deployment, data migration,
-credential changes or delivery activation is authorized by this package.**
+**Production schema/roles installed and verified on 2026-10-23 under explicit
+database-only approval. Runtime remains NOLOGIN; exports remain disabled.
+No service creation, deployment, credential provisioning or delivery activation
+was performed. See [installation receipt](production-installation.md).**
 
 The user chose PostgreSQL for outbound export configuration, checkpoints, retry
 state, hashes, receipts and worker/dispatcher health. Raw Protractor source reads
