@@ -36,11 +36,11 @@ const flush = () => new Promise(resolve => setImmediate(resolve));
 test("configuration fails closed; disabled mode requires no credentials", () => {
   assert.equal(validateExportWorkerEnvironment({}), false);
   const env = { PROTRACTOR_EXPORTS_ENABLED: "1", REDIS_URL: "redis://synthetic",
-    MONGODB_URI: "mongodb://synthetic", PROTRACTOR_EXPORT_ENCRYPTION_KEY: "a".repeat(64) };
+    MONGODB_URI: "mongodb://synthetic", DATABASE_URL: "postgres://synthetic",
+    PROTRACTOR_EXPORT_ENCRYPTION_KEY: "a".repeat(64) };
   assert.equal(validateExportWorkerEnvironment(env), true);
-  for (const key of ["REDIS_URL", "MONGODB_URI", "PROTRACTOR_EXPORT_ENCRYPTION_KEY"])
+  for (const key of ["REDIS_URL", "MONGODB_URI", "PROTRACTOR_EXPORT_ENCRYPTION_KEY", "DATABASE_URL"])
     assert.throws(() => validateExportWorkerEnvironment({ ...env, [key]: "" }));
-  assert.throws(() => validateExportWorkerEnvironment({ ...env, IDENTITY_PG_CANONICAL: "1" }));
   assert.equal(validateExportWorkerEnvironment({ ...env, IDENTITY_PG_CANONICAL: "1",
     DATABASE_URL: "postgres://synthetic" }), true);
 });
@@ -119,5 +119,5 @@ test("disabled CLI exits without loading DB or backfill workers; invalid enabled
   const entry = readFileSync("workers/export-only.ts", "utf8");
   const imports = [...entry.matchAll(/(?:from\s+|import\()["']([^"']+)/g)].map(m => m[1]);
   assert.deepEqual(imports, ["./export-only-lifecycle", "bullmq", "ioredis",
-    "../lib/protractor-exports/store", "./processors/protractor-export", "../lib/db/drizzle"]);
+    "../lib/protractor-exports/store", "./processors/protractor-export"]);
 });

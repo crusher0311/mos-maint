@@ -22,15 +22,8 @@ export async function runExportOnlyWorker() {
   let shutdown: Promise<void> | undefined;
   const lifecycle = exportOnlyLifecycle({
     preflight: async () => {
+      // Checks PG control storage and Mongo raw-source indexes, without DDL.
       await prerequisites();
-      if (process.env.PROTRACTOR_CACHE_PG_CANONICAL === "1" ||
-          process.env.IDENTITY_PG_CANONICAL === "1") {
-        const { getClient } = await import("../lib/db/drizzle");
-        await getClient().begin(async tx => {
-          await tx.unsafe("SET LOCAL statement_timeout = '2500ms'");
-          await tx.unsafe("SELECT 1");
-        });
-      }
     },
     createConsumer(queue, concurrency) {
       redis = new Redis(process.env.REDIS_URL!, {

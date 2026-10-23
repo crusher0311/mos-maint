@@ -1,5 +1,13 @@
 # Protractor webhook export production setup package
 
+> **Superseded storage decision:** the user paused Render setup and chose
+> PostgreSQL for export control state. Follow
+> [the PG migration proposal](../../scripts/protractor-export-pg/README.md)
+> before service creation or activation. The Mongo installation evidence below
+> is historical; do not populate its empty export collections. Raw-source
+> Mongo indexes remain required. Nothing in this document authorizes a PG
+> production install or a new worker.
+
 Status: **approved database preparation installed and verified on 2026-10-23**.
 Worker/service setup, secrets, enablement and customer delivery remain unapproved.
 Read alongside `protractor-organization-exports.md` for the receiver contract.

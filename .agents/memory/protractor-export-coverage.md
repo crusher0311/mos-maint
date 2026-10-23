@@ -3,6 +3,27 @@ name: Protractor outbound export coverage
 description: Redistribution scope and latest-snapshot limitations for enterprise outbound exports.
 ---
 
+The user chose PostgreSQL for new export control state while retaining mixed-store
+raw-source reads.
+
+**Why:** They do not want additional Mongo dependencies for configuration,
+checkpoints, retries or receipts. Some raw snapshots still exist only in Mongo;
+migrating those is a separate effort and must not silently become a prerequisite.
+
+**How to apply:** No new Mongo export-state writes or fallback. Require a separately
+approved PG installation and coordinated release; leave existing empty Mongo
+collections untouched. Keep raw-data migration and service activation separate.
+
+For parameterized JSONB in the export adapter, bind JSON text through an explicit
+text cast before casting to JSONB.
+
+**Why:** postgres-js inferred native boolean parameters despite a JSONB cast, and
+pre-stringified values bound directly as JSONB became JSON strings instead of
+objects. Real PostgreSQL tests caught what in-memory fakes missed.
+
+**How to apply:** Preserve tests for objects, boolean predicates, numeric
+revisions and Date roundtrips when changing the adapter or driver.
+
 Keep the outbound feed opt-in and explicitly approved per destination and shop;
 enterprise membership alone never expands recipients or source shops.
 

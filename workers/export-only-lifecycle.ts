@@ -13,8 +13,7 @@ export function validateExportWorkerEnvironment(env: Record<string, string | und
     throw new Error("Export worker encryption key is missing or invalid");
   if (!env.MONGODB_URI && !(env.MONGODB_USERNAME && env.MONGODB_PASSWORD))
     throw new Error("Export worker Mongo configuration is missing");
-  if ((env.PROTRACTOR_CACHE_PG_CANONICAL === "1" || env.IDENTITY_PG_CANONICAL === "1") &&
-      !env.DATAONE_DATABASE_URL && !env.DATABASE_URL)
+  if (!env.DATAONE_DATABASE_URL && !env.DATABASE_URL)
     throw new Error("Export worker PostgreSQL configuration is missing");
   return true;
 }

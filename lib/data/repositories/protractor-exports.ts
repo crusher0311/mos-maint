@@ -4,6 +4,8 @@ import { type ExportConfig, type Entity } from "@/lib/protractor-exports/contrac
 import { isIdentityPgCanonical } from "@/lib/db/wave4-write-mode";
 import { findEnterpriseById as pgEnterprise } from "@/lib/data/repositories/pg/identity";
 import { findEnterpriseById as mongoEnterprise } from "@/lib/data/repositories/enterprise";
+import { getClient } from "@/lib/db/drizzle";
+import { pgExportCollection, checkPgExportSchema, expirePgExportHistory, type ExportSql } from "@/lib/protractor-exports/pg-store";
 
 export interface Pending {
   deliveryId: string; body: string; createdAt: string; acceptedAt?: string;
@@ -18,17 +20,22 @@ export interface ExportState {
   pending?: Pending; lastSuccess?: string; failure?: string;
   attempts: number; retryAt?: Date; lease?: string; leaseUntil?: Date;
 }
-export async function collections() {
-  const db = await getDb();
-  const durable = { writeConcern: { w: "majority" as const, wtimeoutMS: 5000 },
-    readConcern: { level: "majority" as const }, timeoutMS: 8000 };
+// Every statement gets a bounded transaction; no production DDL or Mongo fallback.
+export const exportSql: ExportSql = {
+  unsafe: (query, parameters = []) => getClient().begin(async tx => {
+    await tx.unsafe("SET LOCAL statement_timeout = '5000ms'");
+    await tx.unsafe("SET LOCAL lock_timeout = '1000ms'");
+    return tx.unsafe(query, parameters);
+  }) as Promise<any>,
+};
+export async function collections(sql: ExportSql = exportSql) {
   return {
-    configs: db.collection<ExportConfig>("protractor_export_configs", durable),
-    states: db.collection<ExportState>("protractor_export_states", durable),
-    hashes: db.collection<{ _id: string; hash: string; updatedAt: Date }>("protractor_export_hashes", durable),
-    history: db.collection<{ _id: string; enterpriseId: string; revision: number; shopId: number;
-      window: string; acceptedAt: Date; recordCount: number }>("protractor_export_history", durable),
-    health: db.collection<{ _id: string; seenAt: Date }>("protractor_export_health"),
+    configs: pgExportCollection<ExportConfig>(sql, "configs"),
+    states: pgExportCollection<ExportState>(sql, "states"),
+    hashes: pgExportCollection<{ _id: string; hash: string; updatedAt: Date }>(sql, "hashes"),
+    history: pgExportCollection<{ _id: string; enterpriseId: string; revision: number; shopId: number;
+      window: string; acceptedAt: Date; recordCount: number }>(sql, "history"),
+    health: pgExportCollection<{ _id: string; seenAt: Date; after?: string }>(sql, "health"),
   };
 }
 export const stateId = (c: ExportConfig, shopId: number) => `${c._id}_${c.revision}_${shopId}`;
@@ -40,14 +47,6 @@ export async function workerAvailable() {
   const row = await (await collections()).health.findOne({ _id: "worker" });
   return !!row && row.seenAt.getTime() > Date.now() - 90_000;
 }
-// Keep in sync with docs/runbooks/protractor-export-production-setup.md.
-const exportIndexes = [
-  { collection: "protractor_export_configs", name: "export_active", key: { paused: 1, revoked: 1, _id: 1 } },
-  { collection: "protractor_export_states", name: "export_status", key: { enterpriseId: 1, revision: 1, shopId: 1 } },
-  { collection: "protractor_export_states", name: "export_retention", key: { "pending.createdAt": 1 } },
-  { collection: "protractor_export_history", name: "export_history_ttl", key: { acceptedAt: 1 }, ttl: 7776000 },
-  { collection: "protractor_export_history", name: "export_history_enterprise_accepted", key: { enterpriseId: 1, acceptedAt: -1 } },
-] as const;
 const sourceIndexes = [
   { collection: "protractor_work_orders", key: { shopId: 1, workOrderId: 1 } },
   { collection: "protractor_invoices", key: { shopId: 1, invoiceId: 1 } },
@@ -67,9 +66,9 @@ function compatibleIndex(index: IndexDescriptionInfo, key: object, ttl?: number)
 
 /** Read-only preflight: never repair indexes from a worker. Mongo sources remain
  * required in PG canonical mode because the exporter reads both stores. */
-export async function prerequisites(database?: Pick<Db, "collection" | "listCollections">) {
+export async function sourcePrerequisites(database?: Pick<Db, "collection" | "listCollections">) {
   const db = database ?? await getDb();
-  for (const collection of new Set([...exportIndexes, ...sourceIndexes].map(spec => spec.collection))) {
+  for (const collection of new Set(sourceIndexes.map(spec => spec.collection))) {
     const fail = (requirement: string): never => {
       throw new Error(`Export indexes require operator setup: ${collection} ${requirement}`);
     };
@@ -81,11 +80,6 @@ export async function prerequisites(database?: Pick<Db, "collection" | "listColl
     if (!simpleCollation(metadata[0].options?.collation))
       fail("requires simple default collation");
     const indexes = await db.collection(collection).listIndexes().toArray();
-    for (const spec of exportIndexes.filter(spec => spec.collection === collection)) {
-      const index = indexes.find(index => index.name === spec.name);
-      if (!index || index.unique || !compatibleIndex(index, spec.key, "ttl" in spec ? spec.ttl : undefined))
-        fail(`${spec.name} missing or incompatible`);
-    }
     for (const spec of sourceIndexes.filter(spec => spec.collection === collection)) {
       // Existing source index names (and uniqueness) are operator-owned.
       if (!indexes.some(index => compatibleIndex(index, spec.key)))
@@ -94,10 +88,15 @@ export async function prerequisites(database?: Pick<Db, "collection" | "listColl
   }
 }
 
+export async function prerequisites() {
+  await checkPgExportSchema(exportSql);
+  await sourcePrerequisites();
+}
+
 /** Runs on the worker even for paused/revoked configurations. Retention expiry
  * blocks the checkpoint: it never masquerades as a delivered batch. */
-export async function maintainExportRetention() {
-  const c = await collections();
+export async function maintainExportRetention(sql: ExportSql = exportSql) {
+  const c = await collections(sql);
   const rows = await c.states.find({ "pending.createdAt": { $lt: new Date(Date.now() - 30 * 86400_000).toISOString() } },
     { projection: { enterpriseId: 1, revision: 1, "pending.acceptedAt": 1 } }).limit(100).toArray();
   for (const row of rows) {
@@ -108,4 +107,5 @@ export async function maintainExportRetention() {
         { $unset: { pending: "" }, $set: { failure: "payload_retention_expired", attempts: 8 } });
     }
   }
+  await expirePgExportHistory(sql);
 }

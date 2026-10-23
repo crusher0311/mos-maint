@@ -1,20 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Db } from "mongodb";
-import { prerequisites } from "../lib/data/repositories/protractor-exports";
+import { sourcePrerequisites as prerequisites } from "../lib/data/repositories/protractor-exports";
 import { exportOnlyLifecycle } from "../workers/export-only-lifecycle";
 
 function fixture() {
   const indexes: Record<string, any[]> = {
-    protractor_export_configs: [{ name: "export_active", key: { paused: 1, revoked: 1, _id: 1 } }],
-    protractor_export_states: [
-      { name: "export_status", key: { enterpriseId: 1, revision: 1, shopId: 1 } },
-      { name: "export_retention", key: { "pending.createdAt": 1 } },
-    ],
-    protractor_export_history: [
-      { name: "export_history_ttl", key: { acceptedAt: 1 }, expireAfterSeconds: 7776000 },
-      { name: "export_history_enterprise_accepted", key: { enterpriseId: 1, acceptedAt: -1 } },
-    ],
     protractor_work_orders: [{ name: "existing_operator_name", key: { shopId: 1, workOrderId: 1 }, unique: true }],
     protractor_invoices: [{ name: "protractor_invoice_shop_invoice", key: { shopId: 1, invoiceId: 1 } }],
     protractor_invoice_cache: [{ name: "protractor_invoice_cache_shop_invoice", key: { shopId: 1, invoiceId: 1 } }],
@@ -37,7 +28,7 @@ function fixture() {
 test("manifest passes read-only, including an existing unique work-order index under its own name", async () => {
   const f = fixture();
   await prerequisites(f.db);
-  assert.equal(f.reads.length, 12);
+  assert.equal(f.reads.length, 6);
 });
 
 test("every required index rejects a correct name with wrong keys, order, direction or extra fields", async () => {
@@ -61,11 +52,7 @@ test("every required index rejects a correct name with wrong keys, order, direct
   }
 });
 
-test("TTL must be exactly 90 days and absent from all non-TTL indexes", async () => {
-  for (const ttl of [undefined, 0, 7775999, "7776000"]) {
-    const f = fixture(); f.indexes.protractor_export_history[0].expireAfterSeconds = ttl;
-    await assert.rejects(prerequisites(f.db), /export_history_ttl/);
-  }
+test("raw source indexes must not expire source data", async () => {
   for (const [collection, indexes] of Object.entries(fixture().indexes)) {
     for (let i = 0; i < indexes.length; i++) {
       if (indexes[i].expireAfterSeconds !== undefined) continue;

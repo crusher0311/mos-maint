@@ -1,5 +1,15 @@
 # Daily Protractor organization exports
 
+## Current storage direction
+
+Export control state now targets PostgreSQL locally: configuration, pending
+deliveries/checkpoints, hashes, receipts and worker/dispatcher health. Raw-source
+reads remain in the existing Mongo/PG caches. See
+[the PG installation proposal](../../scripts/protractor-export-pg/README.md).
+Production PG installation and coordinated release remain unapproved. The Mongo
+control-state installation instructions below describe the previous release,
+not a fallback or an instruction to initialize new destinations there.
+
 ## Deployment is not activation
 Production installation and activation gates are collected in
 [the local setup package](protractor-export-production-setup.md).

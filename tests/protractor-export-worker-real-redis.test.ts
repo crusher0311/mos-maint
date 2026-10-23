@@ -93,6 +93,7 @@ test("export-only entry point: real Redis, real signals, durable synthetic deliv
         "--require", "./tests/helpers/export-worker-preload.cjs", "--import", "tsx"],
       env: { ...cleanEnv, PROTRACTOR_EXPORTS_ENABLED: "1", REDIS_URL: redisUrl,
         MONGODB_URI: "mongodb://127.0.0.1/synthetic-unused", PROTRACTOR_EXPORT_ENCRYPTION_KEY: "a".repeat(64),
+        DATABASE_URL: "postgres://synthetic-unused",
         EXPORT_FIXTURE_DIRECTORY: directory, EXPORT_FIXTURE_RECEIVER_PORT: String(receiverPort),
         EXPORT_FIXTURE_PREFLIGHT: preflight },
       stdio: ["ignore", "pipe", "pipe", "ipc"],
