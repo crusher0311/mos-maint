@@ -3,6 +3,16 @@ name: Offline release checks
 description: Interpreting elapsed-time failures and non-exiting smoke tests during release verification.
 ---
 
+Use absolute paths for offline NODE_OPTIONS preloads in release checkouts.
+
+**Why:** Route-entrypoint tests spawn Node in temporary fixture directories.
+Relative deny-network/server-only preload paths then fail before the authorization
+scanner runs, making the fixture falsely report a missing authorization guard.
+
+**How to apply:** Keep the network guard enabled, but anchor preload paths to the
+release checkout. Do not change application authorization or weaken the test to
+resolve this harness failure.
+
 Managed standalone artifact previews can fail after an otherwise successful
 root post-merge setup because their dependency graphs are independent. Verify
 each artifact's installation and build separately from the main application.
