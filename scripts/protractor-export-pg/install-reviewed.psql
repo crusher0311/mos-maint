@@ -1,0 +1,38 @@
+-- PROPOSAL ONLY. Requires explicit production approval and an operator connection.
+-- Run with psql -X -v ON_ERROR_STOP=1 -f install-reviewed.psql.
+-- This is a one-time install. Existing role names intentionally abort.
+\set ON_ERROR_STOP on
+BEGIN;
+CREATE ROLE mos_export_owner NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE
+  NOINHERIT NOREPLICATION NOBYPASSRLS;
+CREATE ROLE mos_export_runtime NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE
+  NOINHERIT NOREPLICATION NOBYPASSRLS;
+GRANT mos_export_owner TO CURRENT_USER WITH INHERIT FALSE, SET TRUE;
+DO $$
+BEGIN
+  EXECUTE format('GRANT CREATE ON DATABASE %I TO mos_export_owner', current_database());
+  EXECUTE format('GRANT CONNECT ON DATABASE %I TO mos_export_runtime', current_database());
+END $$;
+COMMIT;
+
+-- schema.sql owns its transaction; all objects belong to a NOLOGIN owner.
+SET ROLE mos_export_owner;
+\ir schema.sql
+BEGIN;
+GRANT USAGE ON SCHEMA protractor_export TO mos_export_runtime;
+GRANT SELECT ON protractor_export.schema_version TO mos_export_runtime;
+GRANT SELECT,INSERT,UPDATE,DELETE ON
+  protractor_export.configs,protractor_export.states,protractor_export.hashes,
+  protractor_export.history,protractor_export.health TO mos_export_runtime;
+COMMIT;
+RESET ROLE;
+
+BEGIN;
+DO $$
+BEGIN
+  EXECUTE format('REVOKE CREATE ON DATABASE %I FROM mos_export_owner', current_database());
+END $$;
+REVOKE mos_export_owner FROM CURRENT_USER;
+COMMIT;
+-- Runtime intentionally remains NOLOGIN with no password. Secure credential
+-- provisioning, deployment and activation are later, separately approved steps.

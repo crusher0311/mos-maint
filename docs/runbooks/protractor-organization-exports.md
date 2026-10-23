@@ -1,6 +1,19 @@
 # Daily Protractor organization exports
 
+## Current storage direction
+
+Export control state now targets PostgreSQL locally: configuration, pending
+deliveries/checkpoints, hashes, receipts and worker/dispatcher health. Raw-source
+reads remain in the existing Mongo/PG caches. See
+[the PG installation proposal](../../scripts/protractor-export-pg/README.md).
+Production PG installation and coordinated release remain unapproved. The Mongo
+control-state installation instructions below describe the previous release,
+not a fallback or an instruction to initialize new destinations there.
+
 ## Deployment is not activation
+Production installation and activation gates are collected in
+[the local setup package](protractor-export-production-setup.md).
+
 This feature is OFF unless `PROTRACTOR_EXPORTS_ENABLED=1`. Do not set it as part
 of deployment. No backfill, customer delivery, index creation or database cutover
 is authorized by this implementation. Development Mongo is production: tests must
@@ -111,3 +124,55 @@ maintenance entitlement before every send/retry. No DVI or upstream API polling.
 
 Offline check:
 `NODE_OPTIONS='--require ./tests/helpers/deny-network-egress.cjs --require ./scripts/_stubs/server-only-stub.cjs' node --import tsx --test tests/protractor-exports.test.ts`
+
+## Synthetic receiver rehearsal (no activation)
+
+See [the preparation report and one-shop handoff](protractor-export-pilot-readiness.md).
+Run from the repository root with the already-installed dependencies:
+
+```sh
+# Real sender logic and engine tests: all network access denied.
+NODE_OPTIONS='--require ./tests/helpers/deny-network-egress.cjs --require ./scripts/_stubs/server-only-stub.cjs' \
+  node --import tsx --test tests/protractor-exports.test.ts tests/protractor-export-transport.test.ts
+
+# Real local HTTP receiver: only this command explicitly allows loopback.
+PROTRACTOR_OFFLINE_ALLOW_LOOPBACK=true \
+NODE_OPTIONS='--require ./tests/helpers/deny-network-egress.cjs' \
+  node --import tsx --test tests/protractor-export-synthetic.test.ts
+```
+
+The second command is the operator-facing synthetic sender harness. It generates
+a random, in-memory secret, starts `scripts/protractor-export-synthetic/receiver.mjs`
+on an ephemeral port bound to **127.0.0.1 only**, and sends fictional invoice
+`SYNTHETIC-ONLY` for fictional shop `999999` / `synthetic-enterprise`. It accepts no
+destination, shop, input payload or credential arguments. No `.env` is loaded,
+no application starts, and no database or provider client is imported by the
+sender/receiver. The receiver child receives only its temporary directory and
+ephemeral secret over private IPC, not inherited application secrets.
+
+Expected: a PASS summary and zero failures. Nonzero exit means do not proceed.
+The sender verifies 202 acceptance, 200 duplicate acceptance, 401 bad signatures
+and past/future stale timestamps, changed exact bytes, mismatched body identity,
+409 changed-body reuse of a delivery ID, missing/mismatched acknowledgments,
+and connection loss **after** durable acceptance. It kills the receiver process,
+starts a new process with the same inbox, and retries the unchanged batch with
+a refreshed timestamp/signature. It asserts exactly two saved batches and reads
+the saved bytes back before cleanup. Temporary receipts are removed after the
+test; no customer records or persistent credentials are involved.
+
+Reference durability: write the entire body plus digest/ID to a private file,
+fsync it, atomically hard-link to the delivery-ID path without overwrite, then
+fsync the directory before acknowledgment. Duplicate IDs must match both digest
+and exact body. Storage failures return 503 without acknowledgment. This requires
+a local POSIX filesystem with hard-link/directory-fsync support; it is not a
+multi-host inbox or a public receiver deployment. A production recipient must
+implement equivalent transactional inbox/idempotency guarantees on its own
+durable storage, enforce its approved tenant/shop scope, and handle retention
+and downstream processing separately. Do not copy the controlled failure paths
+(`/missing`, `/mismatch`, `/lost`) into a public service.
+
+The loopback fixture does not call `deliver()` and does not weaken its public
+HTTPS rules. The separate transport test exercises the actual production sender
+with mocked HTTPS/DNS, including matching ACK, missing/wrong ACK, redirect refusal,
+429, stable retry body/ID, refreshed signature and pinned DNS address. This
+rehearsal does **not** certify a real destination's DNS, TLS, ownership or storage.
