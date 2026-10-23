@@ -12,3 +12,6 @@ pg_ctl -D "$tmp/data" -l "$tmp/server.log" -o "-p $port -h 127.0.0.1 -k $tmp -c 
 export PROTRACTOR_OFFLINE_ALLOW_LOOPBACK=true
 export NODE_OPTIONS="--require ./tests/helpers/deny-network-egress.cjs --require ./scripts/_stubs/server-only-stub.cjs"
 timeout 120 node --import tsx tests/protractor-normalization-retries.smoke.ts "$port"
+# Run ACL tests in a second disposable database, without touching runtime fixtures.
+createdb -h 127.0.0.1 -p "$port" normalization_acl
+timeout 120 node --import tsx tests/protractor-normalization-permissions.smoke.ts "$port"
