@@ -5,6 +5,17 @@ description: Prod runs on Render and builds from GitHub main; merging a fix to m
 
 # Prod runs on Render — merging to main is not deploying
 
+Service-level environment listings omit values inherited from linked Render
+environment groups.
+
+**Why:** The production web database URL appeared absent until its linked group
+was read. Treating absence at the service level as an absent runtime setting can
+misidentify the database or export feature gate.
+
+**How to apply:** Resolve linked group values as well as service overrides before
+making configuration claims. Compare sensitive values inside the operator process;
+report only matches or presence. Configuration still is not running-process proof.
+
 Render log pagination can hit the Render API's HTTP 429 limit independently of
 any Protractor rate limit.
 
