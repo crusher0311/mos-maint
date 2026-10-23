@@ -1,5 +1,11 @@
 -- REVIEW ONLY. Not installed by migrations, startup, or deployment.
-CREATE TABLE protractor_normalization_retries (
+-- Install as the reviewed backend owner (production: postgres with BYPASSRLS).
+-- All object creation and permission removal commit together.
+BEGIN;
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '30s';
+SET LOCAL search_path = pg_catalog, public;
+CREATE TABLE public.protractor_normalization_retries (
   id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   shop_id integer NOT NULL CHECK (shop_id > 0),
   provider_id uuid NOT NULL,
@@ -20,11 +26,30 @@ CREATE TABLE protractor_normalization_retries (
   CHECK (octet_length(payload::text) <= 8388608)
 );
 CREATE INDEX protractor_normalization_retries_ready
-  ON protractor_normalization_retries (available_at, id)
+  ON public.protractor_normalization_retries (available_at, id)
   WHERE state IN ('pending', 'running');
 -- Payload-free operational visibility; terminal rows never auto-reset.
-CREATE VIEW protractor_normalization_retry_health AS
+CREATE VIEW public.protractor_normalization_retry_health WITH (security_invoker = true) AS
   SELECT shop_id, state, failure_code, count(*) AS items,
     min(created_at) AS oldest_intent, max(updated_at) AS latest_update
-  FROM protractor_normalization_retries
+  FROM public.protractor_normalization_retries
   GROUP BY shop_id, state, failure_code;
+
+ALTER TABLE public.protractor_normalization_retries ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.protractor_normalization_retries FORCE ROW LEVEL SECURITY;
+-- No browser policies. Runtime requires the reviewed backend owner's BYPASSRLS.
+REVOKE ALL ON TABLE public.protractor_normalization_retries,
+  public.protractor_normalization_retry_health FROM PUBLIC;
+REVOKE ALL ON SEQUENCE public.protractor_normalization_retries_id_seq FROM PUBLIC;
+DO $permissions$
+DECLARE api_role text;
+BEGIN
+  FOREACH api_role IN ARRAY ARRAY['anon','authenticated','service_role'] LOOP
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = api_role) THEN
+      EXECUTE format('REVOKE ALL ON TABLE public.protractor_normalization_retries, public.protractor_normalization_retry_health FROM %I', api_role);
+      EXECUTE format('REVOKE ALL ON SEQUENCE public.protractor_normalization_retries_id_seq FROM %I', api_role);
+    END IF;
+  END LOOP;
+END
+$permissions$;
+COMMIT;
