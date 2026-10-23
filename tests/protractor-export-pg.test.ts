@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import postgres from "postgres";
 import { collections, maintainExportRetention } from "../lib/data/repositories/protractor-exports";
 import { checkPgExportSchema } from "../lib/protractor-exports/pg-store";
@@ -9,25 +8,11 @@ import type { ExportConfig } from "../lib/protractor-exports/contract";
 
 const socket = process.argv[2];
 assert.match(socket, /^\/tmp\/export-pg\./);
-const sql = postgres({ host: socket, database: "postgres", max: 4, onnotice: () => {},
+const sql = postgres({ host: socket, database: "postgres", username: "export_runtime", max: 4, onnotice: () => {},
   connect_timeout: 2, connection: { statement_timeout: 5000, lock_timeout: 1000 } });
-const schema = readFileSync("scripts/protractor-export-pg/schema.sql", "utf8");
-async function install() {
-  const connection = await sql.reserve();
-  try { await connection.unsafe(schema); } finally { connection.release(); }
-}
 async function main() {
-  await assert.rejects(checkPgExportSchema(sql));
-  await install();
-  await install();
   await checkPgExportSchema(sql);
-  await sql.unsafe("DROP INDEX protractor_export.export_active");
-  await sql.unsafe("CREATE INDEX export_active ON protractor_export.configs(id)");
-  await assert.rejects(checkPgExportSchema(sql), /operator setup/);
-  await sql.unsafe("DROP INDEX protractor_export.export_active");
-  await install();
-  await checkPgExportSchema(sql);
-  console.log("PASS PG schema: idempotent install, strict incompatible-index rejection");
+  console.log("PASS PG runtime schema preflight as non-owner");
 
   const c = await collections(sql);
   const config: ExportConfig = { _id: "synthetic-enterprise", revision: 1,

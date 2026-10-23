@@ -182,10 +182,14 @@ export function pgExportCollection<T extends Document>(sql: ExportSql, table: Ta
 
 export async function checkPgExportSchema(sql: ExportSql) {
   const fail = () => { throw new Error("PostgreSQL export schema requires operator setup"); };
+  const access = await sql.unsafe(`SELECT
+    has_schema_privilege('protractor_export','USAGE') AS usable`);
+  if (!access[0]?.usable) fail();
   const rows = await sql.unsafe(`SELECT c.relname AS name,a.attname AS column,
     format_type(a.atttypid,a.atttypmod) AS type,a.attnotnull AS required,
     coll.collname AS collation,c.relkind,
-    has_table_privilege(c.oid,'SELECT,INSERT,UPDATE,DELETE') AS writable
+    (has_table_privilege(c.oid,'SELECT') AND has_table_privilege(c.oid,'INSERT')
+      AND has_table_privilege(c.oid,'UPDATE') AND has_table_privilege(c.oid,'DELETE')) AS writable
     FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
     JOIN pg_attribute a ON a.attrelid=c.oid AND a.attnum>0 AND NOT a.attisdropped
     LEFT JOIN pg_collation coll ON coll.oid=a.attcollation

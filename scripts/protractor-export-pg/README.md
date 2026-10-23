@@ -46,7 +46,8 @@ deletes at most 1,000 receipts per heartbeat. Source records are never deleted.
    pending bodies. Do not add this private schema to Supabase exposed schemas.
 5. After explicit installation approval, apply schema.sql with the approved
    operator. If installer and runtime roles differ, approve narrow schema USAGE
-   and table SELECT/INSERT/UPDATE/DELETE grants separately. No role creation or
+   and the exact table grants in [permissions-review.md](permissions-review.md)
+   separately (the version marker needs SELECT only). No role creation or
    superuser grant is included.
 6. Verify strict schema/index preflight under the actual runtime role.
    Verify existing raw-source index prerequisites; the Mongo source indexes
@@ -62,7 +63,14 @@ deletes at most 1,000 receipts per heartbeat. Source records are never deleted.
 
 `npm run test:export-pg` creates disposable Unix-socket PG16, strips application
 credentials and denies nonlocal network access. It applies the schema only there.
-Tests cover repeat installation, incompatible indexes, config CAS, concurrent
+Tests bootstrap separate non-superuser installer/runtime logins and simulated
+`anon`, `authenticated`, and an unprivileged PUBLIC-only probe. The installer
+has database CREATE only; the runtime has 22 individually verified grants:
+schema USAGE, version-marker SELECT, and four DML privileges on each of five
+tables. Browser reads of synthetic config secrets and pending bodies are denied
+at both schema and table levels, including after broad default table grants.
+The full engine suite then runs as the non-owner runtime, not the cluster owner.
+Tests cover repeat installation, incompatible tables/indexes/version markers, config CAS, concurrent
 leases, stale fences, Date/JSON roundtrips, SQL projections, actual export engine
 retry across reconstructed repositories, receipt creation, window completion,
 manual retry, retention and revoke.
@@ -72,3 +80,10 @@ Redis suites as well. The real Redis suite still substitutes a durable file
 repository; it does not yet prove combined Redis + PostgreSQL process recovery.
 Local schema tests use PG16; the deployed PG17 target and grants still require
 read-only preflight and explicit installation approval.
+
+Installation now aborts transactionally on incompatible column types/nullability,
+ID collation, named indexes, or version-marker contents instead of relying on
+`IF NOT EXISTS`. It does not repair existing objects. This is not an exhaustive
+schema equivalence audit: existing constraints, triggers, RLS policies, column
+ACLs, role memberships and default privileges must also be reviewed before
+approving an existing production schema.

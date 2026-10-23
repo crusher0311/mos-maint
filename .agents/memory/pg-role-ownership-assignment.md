@@ -25,3 +25,11 @@ Create dependent triggers before removing the installer's EXECUTE access.
 later operational DML can fire the existing trigger without that privilege.
 **How to apply:** Create triggers, revoke PUBLIC execution as the function owner,
 then revoke temporary SET membership, all inside the installation transaction.
+
+For permission-denial fixtures, inspect table privileges by catalog OID rather
+than a schema-qualified text name when schema USAGE is intentionally denied.
+**Why:** PostgreSQL can reject name resolution before evaluating the table ACL,
+masking whether the table itself is protected.
+**How to apply:** Test both layers independently: inspect effective ACLs by OID,
+then temporarily allow schema USAGE in disposable tests and prove table reads
+still fail. Never relax production permissions for this test.
