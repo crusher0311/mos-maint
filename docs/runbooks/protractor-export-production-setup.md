@@ -3,6 +3,98 @@
 Status: prepared locally; **not installed or approved for activation**.
 Read alongside `protractor-organization-exports.md` for the receiver contract.
 
+## Ordered production execution proposal
+
+Prepared after the two export follow-ups merged. The locally tested candidate is
+`459f31b05de4cb6c38ce0fef0d2c41c94babbe57`. Record any successor commit and
+repeat affected checks before release; do not deploy a moving branch implicitly.
+Combined verification passed: prerequisite/lifecycle/engine/transport tests,
+synthetic receiver, real Redis lifecycle/recovery suite, and TypeScript.
+
+### Stage A — refresh prerequisites (read-only)
+
+1. Resolve current Render services by name. Confirm their live revisions,
+   suspended states, effective/inherited export settings, start commands and
+   selected database targets. Do not resume or restart any service.
+2. Read Mongo collection options and index definitions for the six collections
+   in the manifest. Check export configuration status using metadata only:
+   whether active/unpaused destinations exist, never secrets or pending bodies.
+3. Check current Mongo storage headroom, source collection sizes, active index
+   builds and health. Agree a monitored build window and quantitative stop
+   thresholds from those measurements. If capacity/health cannot be established,
+   **stop before installation**; PostgreSQL capacity is not a substitute.
+4. If PG source/identity canonical flags are effective, verify the appropriate
+   connection, source table/index metadata and bounded query plans read-only.
+   Any missing PG index or schema needs a separate reviewed change.
+
+### Stage B — index installation (requires explicit approval)
+
+1. Reuse all compatible definitions, including the existing work-order index.
+   Reject conflicting names/options and incompatible collection collation;
+   never silently replace, drop or rebuild them.
+2. Create only the three missing export collections, with simple default
+   collation, if still absent. Create the five export metadata indexes from the
+   manifest, one at a time.
+3. Build the invoice and invoice-cache compound indexes sequentially, monitoring
+   the approved health/capacity thresholds. Do not start the next build until the
+   previous build is complete and verified. If a build becomes unhealthy, stop
+   further admissions and report it; do not assume terminating the client cancels
+   a server-side Mongo index build.
+4. Run the strict read-only prerequisites check against actual definitions.
+   Record created/reused names, options, timestamps and health evidence.
+
+Scope: seven manifest indexes at most, three empty export collections at most.
+No operational invoice writes, source deletions, payload collection, TTL on source
+data, signing-secret creation, configuration enrollment, worker resume or sends.
+The 90-day TTL applies only to export delivery-history receipts.
+
+### Stage C — dedicated service and secrets (separate approval)
+
+1. Present the proposed Render background-service plan, region, ongoing cost,
+   availability and Redis connectivity for approval **before creating a paid
+   service**. Do not repurpose either suspended general worker.
+2. Prepare the exact tested revision with start command
+   `npm run worker:protractor-exports`. Use the established repository build and
+   dependency setup, ensuring `tsx` is present. No index/schema setup in build
+   hooks. Confirm termination grace exceeds the worker's 25-second drain bound.
+3. Install the approved Mongo/Redis and, where needed, PG configuration through
+   secure configuration. Provision one 32-byte hex encryption key shared by web
+   and the export service, without printing or storing it in this document.
+4. Explicitly keep `PROTRACTOR_EXPORTS_ENABLED=0` on web and the new service.
+   Keep the new service suspended. With this flag disabled, the command exits
+   cleanly without connecting: **a healthy persistent consumer or heartbeat is
+   not expected and cannot be certified in disabled mode**.
+5. Record the pinned release/configuration and keep all unrelated service
+   schedules, Protractor traffic guards and reporting flags unchanged.
+
+### Stage D — controlled worker commissioning (separate enable approval)
+
+Before enabling a consumer, inspect allowlisted config/queue metadata and ensure
+no unapproved active destination or queued delivery can execute. Do not delete or
+replay existing queue jobs as a readiness shortcut.
+
+With explicit approval, deploy the enabled setting to the isolated service while
+the web scheduler remains disabled. Verify Redis consumer readiness, exclusive
+export-queue registration, heartbeat age under 90 seconds, retention operation
+and platform restart behavior. This step may write heartbeat/retention metadata;
+it is not part of the read-only checks or disabled installation approval.
+
+Then approve and deploy web enablement only after the same destination/queue
+checks. Do not invoke the cron route manually as a probe. Verify normal scheduler
+operation without enrolling or resuming an unapproved recipient.
+
+### Stage E — one-shop recipient pilot (separate delivery approval)
+
+Collect the receiver URL/owner, exact shop/enterprise authority, schedule/timezone,
+retention agreement and initial-snapshot choice below. Certify fictional delivery
+against the real recipient. Save the real configuration paused, transfer the
+one-time receiver secret securely, and review its revision before explicit resume.
+Success requires durable acknowledgment and terminal window completion with
+coverage reviewed—not merely a queue completion or HTTP 200.
+
+At every stage, stop on failed checks and report rather than broadening scope.
+The reporting inventory process remains paused throughout this installation.
+
 ## Production evidence — 2026-10-23
 
 Read-only Render service/deployment checks and direct Mongo metadata checks:
