@@ -41,6 +41,15 @@ installation proposal, not an automatic migration or startup operation.
 Review installation privileges, sensitive payload retention policy and capacity
 before installing the SQL or enabling the flag. Retained payloads contain
 customer data; do not expose the table in browser APIs or logs.
+The installation is one explicit transaction with bounded DDL timeouts. It revokes
+all table, health-view and identity-sequence privileges from PUBLIC and any
+existing anon, authenticated or service_role roles, overriding Supabase's broad
+default grants without changing global defaults or unrelated objects. The table
+uses forced RLS with no browser policies; the health view is security-invoker.
+Install with the reviewed backend owner (currently postgres with BYPASSRLS).
+Do not switch to a different runtime role without a separate privilege review.
+These controls restrict API roles; they do not restrict the existing privileged
+backend connection. Installation remains a separately approved production action.
 `protractor_normalization_retry_health` exposes payload-free counts, ages,
 states and failure categories. Terminal failures are also logged without payloads.
 No automatic terminal reset or deletion is provided: preserve evidence for review.

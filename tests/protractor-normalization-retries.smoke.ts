@@ -31,7 +31,13 @@ async function main() {
   const pg = postgres({ host: "127.0.0.1", port, username: userInfo().username, database: "postgres", max: 6 });
   try {
     assert.equal((await pg`select current_setting('invoice_preview.disposable',true) marker`)[0].marker, "yes");
-    await pg.unsafe(readFileSync("docs/sql/protractor-normalization-retries.sql", "utf8"));
+    const installation = await pg.reserve();
+    try {
+      await installation.unsafe(readFileSync("docs/sql/protractor-normalization-retries.sql", "utf8"));
+    } catch (error) {
+      await installation.unsafe("ROLLBACK");
+      throw error;
+    } finally { installation.release(); }
     const columns = Object.values(getTableColumns(normalizedWorkOrders)).map(c =>
       `"${c.name}" ${/^(varchar|text|integer|boolean|jsonb|timestamp|numeric|decimal|double precision|real)/.test(c.getSQLType()) ? c.getSQLType() : "text"}${c.name === "id" ? " PRIMARY KEY" : ""}`);
     await pg.unsafe(`CREATE TABLE normalized_work_orders (${columns.join(",")}, UNIQUE(shop_id,work_order_number))`);
