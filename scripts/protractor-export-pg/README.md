@@ -1,9 +1,11 @@
 # PostgreSQL export control storage — local release proposal
 
-**Production schema/roles installed and verified on 2026-10-23 under explicit
-database-only approval. Runtime remains NOLOGIN; exports remain disabled.
-No service creation, deployment, credential provisioning or delivery activation
-was performed. See [installation receipt](production-installation.md).**
+**Production schema/roles installed and verified on 2026-10-23. Separately
+approved runtime login provisioning is complete and verified; its credential is
+staged in an unlinked Render environment group. Exports remain disabled.
+No service creation, deployment or delivery activation was performed.
+See [installation receipt](production-installation.md) and
+[login receipt](production-login.md).**
 
 The user chose PostgreSQL for outbound export configuration, checkpoints, retry
 state, hashes, receipts and worker/dispatcher health. Raw Protractor source reads

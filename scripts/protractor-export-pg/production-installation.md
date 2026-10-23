@@ -1,5 +1,8 @@
 # Production database-only installation
 
+This records the database-only step. Subsequent separately approved login
+provisioning is recorded in [production-login.md](production-login.md).
+
 Completed 2026-10-23, 12:38 UTC, under explicit approval to install tables and
 restricted roles while keeping login and exports disabled.
 
