@@ -6,6 +6,7 @@
  */
 
 import { MongoClient, Db, Collection, ObjectId } from 'mongodb';
+import { createHash } from 'node:crypto';
 import { databaseFence } from "@/lib/invoice-repair/guarded-drivers";
 import { assertSameProtractorWorkOrder, protractorMongoIdentityFilter, ProtractorIdentityConflict } from '../../protractor-work-order-identity';
 import {
@@ -85,6 +86,8 @@ export interface IngestionBatchResult {
 }
 
 export interface IngestionOptions {
+  /** Retained-payload recovery: one caller-owned PG transaction, no ancillary writes. */
+  localNormalizationWriter?: SupabaseDualWriter;
   syncRunId?: string;
   forceUpdate?: boolean;
   createAuditLog?: boolean;
@@ -212,6 +215,19 @@ export class NormalizedIngestionService {
       dualWriteToSupabase: true,
       ...options,
     };
+    if (options.localNormalizationWriter) {
+      if (sourceSystem !== 'protractor') throw new Error('Local normalization is Protractor-only');
+      this.options = {
+        ...this.options,
+        forceUpdate: true,
+        createAuditLog: false,
+        dualWriteToJobIndex: false,
+        dualWriteToRepairPatterns: false,
+        suppressAutomaticAuditReceipt: true,
+      };
+      this.supabaseDualWriter = options.localNormalizationWriter;
+      return;
+    }
 
     if (this.options.dualWriteToSupabase) {
       try {
@@ -306,7 +322,7 @@ export class NormalizedIngestionService {
             ),
           )
           : null) ??
-        (shouldShadowWriteMongo()
+        (this.shadowMongoEnabled()
           ? await this.timed(
             'vehicle_mongo_natural_key_read',
             () => collection.findOne(existingQuery),
@@ -365,7 +381,7 @@ export class NormalizedIngestionService {
         };
       }
       
-      const newId = generateEntityId();
+      const newId = this.localEntityId('vehicle', mapped.vin || sourceData.ID);
       const now = new Date();
       
       const newVehicle: NormalizedVehicle = {
@@ -444,7 +460,7 @@ export class NormalizedIngestionService {
             ),
           )
           : null) ??
-        (shouldShadowWriteMongo()
+        (this.shadowMongoEnabled()
           ? await this.timed(
             'customer_mongo_natural_key_read',
             () => collection.findOne(existingQuery),
@@ -594,6 +610,9 @@ export class NormalizedIngestionService {
         if (vehicleResult.success && vehicleResult.entityId) {
           vehicleId = vehicleResult.entityId;
         }
+        if (this.options.localNormalizationWriter && !vehicleResult.success) {
+          throw new Error('Local normalization vehicle failed');
+        }
       }
       
       const customerData = this.adapter.extractCustomerFromWorkOrder(sourceData);
@@ -605,6 +624,9 @@ export class NormalizedIngestionService {
         );
         if (customerResult.success && customerResult.entityId) {
           customerId = customerResult.entityId;
+        }
+        if (this.options.localNormalizationWriter && !customerResult.success) {
+          throw new Error('Local normalization customer failed');
         }
       }
       
@@ -646,7 +668,7 @@ export class NormalizedIngestionService {
             ),
           )
           : null) ??
-        (shouldShadowWriteMongo()
+        (this.shadowMongoEnabled()
           ? await this.timed(
             'work_order_mongo_natural_key_read',
             () => collection.findOne(existingQuery),
@@ -762,7 +784,7 @@ export class NormalizedIngestionService {
         };
       }
       
-      const newId = generateEntityId();
+      const newId = this.localEntityId('work_order', sourceData.ID);
       const now = new Date();
       
       const newWorkOrder: NormalizedWorkOrder = {
@@ -885,7 +907,7 @@ export class NormalizedIngestionService {
             ),
           )
           : null) ??
-        (shouldShadowWriteMongo()
+        (this.shadowMongoEnabled()
           ? await this.timed(
             'service_job_mongo_natural_key_read',
             () => collection.findOne(existingQuery),
@@ -1067,7 +1089,7 @@ export class NormalizedIngestionService {
             ),
           )
           : null) ??
-        (shouldShadowWriteMongo()
+        (this.shadowMongoEnabled()
           ? await this.timed(
             'line_item_mongo_natural_key_read',
             () => collection.findOne(existingQuery),
@@ -1205,7 +1227,7 @@ export class NormalizedIngestionService {
             ),
           )
           : null) ??
-        (shouldShadowWriteMongo()
+        (this.shadowMongoEnabled()
           ? await this.timed(
             'payment_mongo_natural_key_read',
             () => collection.findOne(existingQuery),
@@ -1554,7 +1576,7 @@ export class NormalizedIngestionService {
         );
         if (pgVehicle?._id) vehicleId = String(pgVehicle._id);
       }
-      if (!vehicleId && shouldShadowWriteMongo()) {
+      if (!vehicleId && this.shadowMongoEnabled()) {
         const vehicleQuery: any = { shopId: this.shopId };
         if (vehicleData?.vin) {
           vehicleQuery.vin = vehicleData.vin;
@@ -2325,6 +2347,11 @@ export class NormalizedIngestionService {
           // Live/webhook ingestion paths are unaffected.
           bumpPgWrites();
         } catch (err) {
+          if (this.options.localNormalizationWriter) {
+            // Drizzle errors can contain the full bound customer payload.
+            console.error('[NormalizationRetry] canonical entity write failed', { entityType });
+            throw err;
+          }
           const e = err as any;
           const cause = e?.cause as any;
           const pgCode = e?.code ?? cause?.code ?? null;
@@ -2365,7 +2392,7 @@ export class NormalizedIngestionService {
     entityType: string,
     fn: () => Promise<unknown>
   ): Promise<void> {
-    if (!shouldShadowWriteMongo()) return;
+    if (!this.shadowMongoEnabled()) return;
     await this.timed(
       this.writeTimingOperation(entityType, 'mirror'),
       async () => {
@@ -2410,7 +2437,21 @@ export class NormalizedIngestionService {
    * behavior. Failures are logged but never thrown — instrumentation must
    * never break the ingestion path.
    */
+  private shadowMongoEnabled(): boolean {
+    return !this.options.localNormalizationWriter && shouldShadowWriteMongo();
+  }
+
+  private localEntityId(kind: string, identity: unknown): string {
+    if (!this.options.localNormalizationWriter) return generateEntityId();
+    // Mongo-only inspection/recommendation associations must survive rollback
+    // of a newly inserted PG parent. Never create a new parent ID on retry.
+    return createHash('sha256').update(JSON.stringify([
+      'protractor-normalization', this.shopId, kind, String(identity).toLowerCase(),
+    ])).digest('hex').slice(0, 24);
+  }
+
   private async _stampIngestionVia(workOrderId: string): Promise<void> {
+    if (this.options.localNormalizationWriter) return;
     const via = this.options.ingestionVia;
     if (!via) return;
     await this.timed(
