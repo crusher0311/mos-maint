@@ -92,8 +92,8 @@ records. Receiver tests with an in-memory adapter are not proof of real Cosmos
 permissions, driver behavior or latency; verify fictional records in an isolated
 container before approving customer data.
 
-The user's webhook testing setup is a local Node receiver behind ngrok, not a
-connected Cosmos database. Local JSON capture is the approved next testing path.
+The initial webhook testing setup was a local Node receiver behind ngrok, not a
+connected Cosmos database. Local JSON capture proved delivery, not Cosmos storage.
 
 **Why:** The uploaded generic receiver included optional Cosmos support, which was
 mistakenly treated as evidence that Azure was in use. The user clarified otherwise.
@@ -101,6 +101,18 @@ mistakenly treated as evidence that Azure was in use. The user clarified otherwi
 **How to apply:** Do not require Azure infrastructure for webhook testing. Treat the
 Cosmos adapter as optional, and keep secure signing setup and real-data activation
 separate from local receiver preparation.
+
+The subsequent user-supplied Azure receiver uses separate workorders and invoices
+endpoints, x-api-key authentication and raw top-level fields. It requires workOrderId
+on both endpoints and invoiceId on invoices. The user specified retries for 5xx,
+not 4xx. Do not assume the earlier MOS HMAC/envelope/acknowledgment contract applies.
+
+**Why:** This is a different receiver contract from the local signed receiver.
+HTTP acceptance alone does not prove Cosmos persistence or deduplication.
+
+**How to apply:** Verify IDs against provider evidence, retain raw fields, keep
+credentials separate, and confirm destination storage before recurring activation.
+Timeouts are ambiguous outcomes, not permission to send another copy automatically.
 
 Check entity-specific export availability before instructing a receiver to accept
 real records. An empty invoice export cache does not establish absent shop history.
