@@ -138,3 +138,15 @@ deliveries had succeeded, concealing the source-selection gap.
 use the raw timestamp with explicit timezone semantics, and report source coverage
 separately from accepted-delivery counts. Do not label a day complete solely from
 one store's query or HTTP 200 responses.
+
+Provider snapshot freshness must be enforced atomically at the canonical write,
+not by comparing local cache timestamps before writing. Equal provider versions
+with different payloads must be treated as conflicts.
+
+**Why:** An invoiced callback was received and jobs were indexed while the PG row
+still carried an hour-older provider version written later locally. Callback
+completion is not proof of successful normalization.
+
+**How to apply:** Keep provider identity checks alongside the version guard.
+Recovery of normalization must use retained evidence and independent durable
+retry bookkeeping, not replay successful provider fetches or export deliveries.
