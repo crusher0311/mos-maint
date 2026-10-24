@@ -206,3 +206,31 @@ mtime_ms = 1792773830184
 storage_uri = "gcs://replit-rams-assets-picard/rams/assets/repl:a5a4005c-4e3d-4ce9-896c-c46425944606/18069db5-a924-4072-8835-79964d33d92e/ddb140f8-2dcd-4bf2-baa4-d799548afe40"
 storage_version_token = "1792773850001845"
 content_type = "application/octet-stream"
+
+[[outputs]]
+id = "8IIWjENNalTJchtSYXv6z"
+uri = "file://artifacts/detect-dog-workflow/docs/workflow-manager-review.html"
+type = "html"
+title = "Workflow Manager Review — Printable HTML"
+description = "Offline-readable guide with 14 numbered sections, a fictional walkthrough, notes and a feedback worksheet. Open in a browser to print or save as PDF."
+logical_id = "b28604fe-fe92-407a-a264-a28a659ed5ce"
+content_hash = "sha256:b785dd28651ca6dff1ca4f1a0eda321a58aa6670aed996b907a80643eec40406"
+size = 32269
+mtime_ms = 1792845547834
+storage_uri = "gcs://replit-rams-assets-picard/rams/assets/repl:a5a4005c-4e3d-4ce9-896c-c46425944606/b28604fe-fe92-407a-a264-a28a659ed5ce/1c5350d9-d133-44dc-8d93-ad0377e8c572"
+storage_version_token = "1792845574376903"
+content_type = "text/html"
+
+[[outputs]]
+id = "PWlOFqJ7JNistpqG5CY5A"
+uri = "file://artifacts/detect-dog-workflow/docs/workflow-manager-review.md"
+type = "text"
+title = "Workflow Manager Review — Editable Markdown"
+description = "Matching editable copy. Add feedback under the numbered stages without including customer data."
+logical_id = "385e91fb-f97e-4b71-84ab-c712712cfea7"
+content_hash = "sha256:ec9994f09ace8c6f170557519a6d617e23090682b7d84a360fd520cdf60273dc"
+size = 27177
+mtime_ms = 1792845510056
+storage_uri = "gcs://replit-rams-assets-picard/rams/assets/repl:a5a4005c-4e3d-4ce9-896c-c46425944606/385e91fb-f97e-4b71-84ab-c712712cfea7/ae259df3-fbd7-43bd-adc9-20c0e17648b9"
+storage_version_token = "1792845574917053"
+content_type = "text/markdown"

@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Workflow Manager Review Guide — Detect Dog</title>
+<style>
+:root { color-scheme: light; font-family: Arial, Helvetica, sans-serif; color: #182f28; background: #edf1ed; }
+* { box-sizing: border-box; }
+body { margin: 0; font-size: 16px; line-height: 1.6; }
+main { max-width: 900px; margin: 32px auto; padding: 48px 56px; background: white; }
+h1 { font-size: 2.3rem; line-height: 1.15; margin-top: 0; }
+h2 { font-size: 1.5rem; line-height: 1.3; border-top: 3px solid #285746; padding-top: 18px; margin-top: 40px; }
+h3 { margin-top: 28px; }
+a { color: #285746; text-decoration: underline; }
+nav { background: #f1f5f2; padding: 8px 24px 20px; margin: 26px 0; }
+nav h2 { border: none; margin-top: 8px; }
+nav ol { list-style: none; padding: 0; }
+li { margin: 8px 0; }
+pre { font-family: Consolas, monospace; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; border: 1px solid #b8c9bf; padding: 16px; }
+p { overflow-wrap: anywhere; }
+.notes { color: #41564d; margin: 24px 0; }
+@media(max-width: 600px) { main { margin: 0; padding: 24px; } h1 { font-size: 1.8rem; } }
+@page { size: auto; margin: 17mm; }
+@media print {
+  :root { background: white; color: #111; }
+  body { font-size: 10pt; line-height: 1.35; }
+  main { max-width: none; margin: 0; padding: 0; }
+  h1 { font-size: 25pt; }
+  h2 { break-before: page; font-size: 17pt; margin-top: 0; }
+  h2, h3 { break-after: avoid; }
+  nav h2 { break-before: auto; }
+  p, li { orphans: 3; widows: 3; }
+  pre { font-size: 8pt; break-inside: avoid; }
+  .notes { break-inside: avoid; margin: 16px 0; }
+  nav { background: white; padding: 0; }
+  nav li { margin: 3px 0; }
+  a { color: #111; text-decoration: none; }
+}
+</style></head><body><main>
+<h1>Workflow Manager Review Guide</h1>
+<p>Detect Dog Shop Workflow preview · Reviewed October 24, 2026</p>
+<nav aria-label="Contents"><h2>Contents</h2><ol><li><a href="#section-1">1. Read this first</a></li><li><a href="#section-2">2. The basic model and roles</a></li><li><a href="#section-3">3. Dispatch: see the whole shop</a></li><li><a href="#section-4">4. Vehicles and vehicle detail</a></li><li><a href="#section-5">5. Worked visit: arrival, planning and readiness</a></li><li><a href="#section-6">6. Worked visit: start, pause and resume</a></li><li><a href="#section-7">7. Worked visit: completion and downstream handoffs</a></li><li><a href="#section-8">8. My Work: the technician&#x27;s view</a></li><li><a href="#section-9">9. Blockers, equipment, breaks and time</a></li><li><a href="#section-10">10. Experience: evidence, not qualifications</a></li><li><a href="#section-11">11. Brand settings, appearance and resets</a></li><li><a href="#section-12">12. Boundaries and possible improvements</a></li><li><a href="#section-13">13. Feedback worksheet</a></li><li><a href="#section-14">14. Glossary and evidence</a></li></ol></nav>
+<h2 id="section-1">1. Read this first</h2>
+<p>This guide describes the existing interactive preview at the root URL (/), not a proposed replacement. Use its numbered sections when sending feedback. You can read this document offline without the app.</p>
+<p><strong>Three separate things:</strong> Detect Dog Shop Workflow is the root presentation preview covered here. The authenticated Shop Workflow implementation at /dashboard/shop-workflow is a separate application feature. Enterprise Tire DVI at /tire-dvi/ is a separate demo and is not covered.</p>
+<p><strong>Current preview:</strong> Six presentation technicians, ten fictional vehicles and 25 simulated jobs share one local workflow. No real sign-in, provider writes, customer messages or live shop connection are involved. Demo role controls change the perspective; they are not security.</p>
+<p>The default Burnett presentation uses staff labels and selected historical service evidence. Its vehicles, customers, repair orders, assignments and all timing are simulated. Location onboarding and staff identities/qualifications are not established by this preview. This guide reproduces no raw exports, real staff listings or personal customer data.</p>
+<p><strong>How to use the exports:</strong> Open the HTML in a browser. Choose Print → Save as PDF, using A4 or Letter paper, normal scale, and optionally disable browser headers/footers. No external fonts, images, scripts or network connection are needed. Notes spaces are for handwriting; edit the matching Markdown file to type and save comments. The HTML does not save typed feedback.</p>
+<p><strong>Review prompt:</strong> Is the distinction between a presentation and an operational shop system clear?</p>
+<p class="notes">Notes: ____________________________________________________________</p>
+<p class="notes">Notes: ____________________________________________________________</p>
+<h2 id="section-2">2. The basic model and roles</h2>
+<p>A <strong>vehicle visit</strong> groups the work for one vehicle: its concern, arrival time, promised-ready time and individual jobs. A vehicle is not one technician&#x27;s appointment block. Different technicians can own different jobs on the same vehicle.</p>
+<p>A <strong>job</strong> has an assigned technician, planned start, estimated duration, dependencies and work-session state. Jobs may be independent or must wait for earlier work. The alignment rack is shared equipment with one active job at a time, not an extra technician.</p>
+<p>Simple flow (arrows mean sequence, not measured time):</p>
+<pre>Arrival already recorded → Review jobs and plan → Ready to start?
+  Dependency unfinished → Wait for prerequisite completion → Recheck
+  Ready + technician/rack available → Person starts work
+  Working → Person pauses with reason → Person resumes → Working
+  Working → Person completes → Recheck downstream jobs
+  All jobs complete → Summary says “Ready for pickup”
+                      [No checkout or vehicle-release action]
+
+Example dependency chain: Diagnosis → Repair → Alignment → Road test
+Independent branch:       Oil service may run alongside that chain</pre>
+<p><strong>Dispatcher perspective:</strong> See the shop-wide plan, open any vehicle, operate any job, and edit unfinished inactive jobs. There is no skill-certification restriction on assignment.</p>
+<p><strong>Technician perspective:</strong> Vehicle-detail controls are limited to the selected demo technician&#x27;s jobs. My Work always operates as the selected technician, even if Demo role still says Dispatcher. My Work has no assignment editor; a dispatcher can edit through vehicle detail.</p>
+<p>Changing Demo role opens Dispatch or My Work and closes vehicle detail. Changing Demo technician changes whose work you try; it does not reassign jobs.</p>
+<p><strong>Review prompt:</strong> Does this job-by-job ownership reflect your shop? Who should be able to change ownership?</p>
+<p class="notes">Notes: ____________________________________________________________</p>
+<p class="notes">Notes: ____________________________________________________________</p>
+<h2 id="section-3">3. Dispatch: see the whole shop</h2>
+<p>Dispatch shows vehicle/job totals, active work, ready idle jobs and vehicles whose projected finish is past their promise. “Next to watch” highlights the Outback&#x27;s first unfinished job in its listed sequence; it is not an optimized next-job recommendation.</p>
+<p>Technician lanes show planned job blocks, break windows and remaining predicted workload. The alignment-rack lane repeats rack jobs already shown on their technician lanes. These are the same jobs, not duplicate work.</p>
+<p>Blocks show planned starts and illustrative predicted durations, not actual occupied-time records. Short blocks have a minimum visual width for readability. Planned overlaps are allowed and may overlap visually. The forecast can queue work without moving these planned blocks. There is no drag-and-drop scheduling.</p>
+<p>Click a job block, a vehicle journey row or <strong>Open the Outback</strong> to open vehicle detail. In Vehicle journeys, <strong>Search vehicles</strong> filters by vehicle, fictional owner or repair-order number. Clear search restores the list; it does not change work. This search is on Dispatch, not the separate Vehicles directory.</p>
+<p><strong>+15 min</strong> advances the simulated shop clock and all active/paused session counters. It does not move real time, start jobs, finish jobs, contact anyone or update a provider. The clock begins at 10:15 and cannot advance beyond 17:00.</p>
+<p><strong>Review prompt:</strong> What should a dispatcher notice first: a ready job, an overloaded technician, a resource conflict or a promise at risk? Are overlapping plans clear enough?</p>
+<p class="notes">Notes: ____________________________________________________________</p>
+<p class="notes">Notes: ____________________________________________________________</p>
+<h2 id="section-4">4. Vehicles and vehicle detail</h2>
+<p><strong>Vehicles</strong> lists each simulated visit with vehicle/RO, concern, recorded arrival, promise and job count. Click a row to inspect it. The preview does not create visits or edit arrival, concern or promise.</p>
+<p>Vehicle detail shows arrival, earliest planned work, promised-ready time, illustrative finish, buffer or lateness and completed-job count. Each job shows ownership, planned time, status and four different time values.</p>
+<ul>
+<li><strong>Start job:</strong> Requests an active session. Dependencies, the technician&#x27;s current break, rack use and another active job can stop it.</li>
+<li><strong>Pause:</strong> Requires a reason and confirmation. Reasons include Waiting for parts, Waiting for approval, Diagnostic research, Helping another technician and Taking a break. This records a local explanation, not a parts order or approval request.</li>
+<li><strong>Resume:</strong> Restarts a paused session after start checks. Recorded active and waiting time are retained.</li>
+<li><strong>Complete:</strong> Available only while active. It marks that job complete and immediately rechecks downstream prerequisites. There is no completion confirmation or undo; do not confuse this with completing the entire visit.</li>
+<li><strong>Assignment &amp; time:</strong> Dispatcher-only in vehicle detail. Edit ownership and the planned half-hour start for an idle or paused unfinished job, then choose Save changes. Pause an active job before editing. Completed jobs cannot be edited.</li>
+</ul>
+<p>Assignment times must be half-hour slots, at or after recorded arrival and no earlier than 08:00, with the full predicted duration fitting before 17:00. The form&#x27;s latest input time alone does not guarantee a valid fit. A saved plan does not start work or override dependencies. A future planned time does not itself prevent an otherwise eligible job from starting now.</p>
+<p>An error explains why the requested action failed. Cancel leaves the proposed change unapplied. Escape closes a dialog and returns focus; closing vehicle detail does not stop work.</p>
+<p><strong>Review prompt:</strong> Is Complete too easy to press accidentally? What should a dispatcher see before changing a paused job&#x27;s owner?</p>
+<p class="notes">Notes: ____________________________________________________________</p>
+<p class="notes">Notes: ____________________________________________________________</p>
+<h2 id="section-5">5. Worked visit: arrival, planning and readiness</h2>
+<p>For a reproducible fictional example, select <strong>Demo dataset → Original fictional demo</strong>, then confirm <strong>Switch &amp; reset schedule</strong>. This discards current workflow edits. It returns to Dispatch at 10:15 with Dispatcher and the first demo technician selected. Branding and appearance are separate.</p>
+<p>Open <strong>2018 Subaru Outback / #1042</strong>. All people and work in this example are fictional. Its arrival is already recorded as 08:00 and promise as 14:00; there is no arrival/check-in button to press.</p>
+<p>The visit has Diagnosis → Control arm repair → Wheel alignment → Road test. Oil &amp; filter service is independent. Initially Mara owns active Diagnosis; Eli owns Repair; Owen owns Alignment; Jules owns Road test; Tess owns Oil service. A single vehicle therefore crosses multiple technicians.</p>
+<p>As Dispatcher, find Oil &amp; filter service → <strong>Assignment &amp; time</strong>. Choose <strong>Eli Mercer</strong>, set <strong>10:30</strong>, then <strong>Save changes</strong>. Ownership and the plan change; diagnosis dependencies do not. The oil job remains ready but not started. This is planning, not technician acceptance or customer authorization.</p>
+<p>Repair is blocked until Diagnosis is complete; Alignment waits for Repair; Road test waits for Alignment. “Ready” means prerequisites are satisfied, not that parts, approval, qualifications, technician or rack availability have all been verified.</p>
+<p><strong>Review prompt:</strong> What information should confirm a vehicle has truly arrived? Should ready mean more than “earlier jobs complete”?</p>
+<p class="notes">Notes: ____________________________________________________________</p>
+<p class="notes">Notes: ____________________________________________________________</p>
+<h2 id="section-6">6. Worked visit: start, pause and resume</h2>
+<p>Diagnosis starts active in this scenario with 22 recorded active minutes. Click <strong>Pause</strong>, choose <strong>Waiting for parts</strong>, then <strong>Pause job</strong>. It becomes paused; dependent Repair remains blocked.</p>
+<p>Close the detail and press <strong>+15 min</strong> once. The clock becomes 10:30. Diagnosis still has 22 active minutes and now has 15 paused-waiting minutes. Other active jobs gain active minutes too. Nothing automatically resolves the parts wait.</p>
+<p>Reopen the Outback. Start the reassigned Oil &amp; filter service. Eli is initially free, so it can run independently while Diagnosis waits. A person must decide that this parallel work is physically safe; the preview does not model every bay, tool or vehicle-access conflict.</p>
+<p>Resume Diagnosis. Its timers are retained and the pause reason is cleared. Press <strong>Complete</strong> while Diagnosis is active. Repair becomes ready immediately, but it does not start itself. Alignment and Road test remain blocked. Completion does not require the predicted time to have elapsed.</p>
+<p>To try the technician view, choose <strong>Demo role → Technician</strong> and select Mara: My Work reflects the same changes. Select Eli to see the reassigned oil job and ready Repair. These are perspective switches, not separate user accounts.</p>
+<p><strong>Review prompt:</strong> Who should clear a parts or approval wait? Should resuming require evidence rather than only a button?</p>
+<p class="notes">Notes: ____________________________________________________________</p>
+<p class="notes">Notes: ____________________________________________________________</p>
+<h2 id="section-7">7. Worked visit: completion and downstream handoffs</h2>
+<p>While Eli&#x27;s Oil service is active, try starting his now-ready Repair. The preview asks <strong>Switch active work?</strong> Choose <strong>Pause current &amp; start</strong> only if intended. Oil service pauses with reason “Switched to another job,” retaining its time, and Repair starts. Cancel leaves Oil service active.</p>
+<p>Complete Repair while it is active. Alignment becomes ready. Switch back to Dispatcher to operate the remaining jobs in vehicle detail, or select each owning technician. Start and complete Alignment, then start and complete Road test. Owen must be outside his break and the shared rack must be free before Alignment can start.</p>
+<p>Also resume and complete Eli&#x27;s paused Oil service. The independent branch counts toward the visit total; completing Road test alone is not enough. If another job occupies a technician or the rack, resolve it explicitly as explained in section 9.</p>
+<p>The UI updates readiness automatically after completion; people still start every next job. There is no recipient acknowledgment, notification or automatic assignment at a handoff.</p>
+<p>When all five jobs are complete, the Dispatch summary can say <strong>Ready for pickup</strong>. This is a display label. There is no checkout, payment, key release, customer pickup confirmation, closing or removal of the vehicle in this preview. Completed jobs remain visible and cannot be reopened.</p>
+<p><strong>Review prompt:</strong> What must happen between “all jobs complete” and safe vehicle release? Who should accept each handoff?</p>
+<p class="notes">Notes: ____________________________________________________________</p>
+<p class="notes">Notes: ____________________________________________________________</p>
+<h2 id="section-8">8. My Work: the technician&#x27;s view</h2>
+<p>My Work shows the selected technician&#x27;s jobs, with active work first, unfinished work before completed work, and planned time ordering within those groups. The banner identifies active work and remaining predicted workload.</p>
+<p>Each card includes job/vehicle, planned start, vehicle promise, status, risk and book/predicted/active/waiting values. Use Start job, Pause, Resume and Complete under the same rules as vehicle detail. <strong>See vehicle workflow</strong> opens the wider visit and its dependencies.</p>
+<p>My Work does not edit assignments. Its controls always act for the selected demo technician. Vehicle detail uses the separate Demo role to decide whether all jobs or only that technician&#x27;s jobs are controllable.</p>
+<p>An empty queue suggests asking the dispatcher for work or selecting a different demo technician. It does not automatically assign the next job. The phone layout is an individual-job view, not a separate synchronized mobile service.</p>
+<p><strong>Review prompt:</strong> Can a technician easily identify the next eligible job and why another job is waiting? What context is missing on a phone?</p>
+<p class="notes">Notes: ____________________________________________________________</p>
+<p class="notes">Notes: ____________________________________________________________</p>
+<h2 id="section-9">9. Blockers, equipment, breaks and time</h2>
+<p><strong>Two separate ideas:</strong> Readiness asks whether prerequisites are complete. Session state says idle, active, paused or completed. Paused does not mean completed; a pause reason is not an independently managed blocker record.</p>
+<p><strong>One active job per technician:</strong> Starting another eligible job requires explicit pause-current consent. It preserves the old job&#x27;s counters. If another check fails first, such as a break or occupied rack, resolve that before switching.</p>
+<p><strong>One active alignment-rack job:</strong> A competing rack job cannot start until a person pauses or completes the current rack job. Changing technicians does not bypass this check. Pausing makes the rack available in the simulation; physical rack clearing is not modeled.</p>
+<p><strong>Breaks:</strong> A start or resume during that technician&#x27;s break is rejected. Advancing time into a break does not automatically pause existing work. Active minutes still accrue. Forecasts account for breaks, so forecast behavior is not identical to timer behavior.</p>
+<p><strong>Four time values:</strong> Book labor is a fictional billed allowance, not a stopwatch. Predicted tech time is illustrative; in the fictional demo it represents medians from 7–12 invented comparisons, not trained AI. Active session minutes count only active work. Paused waiting counts only paused sessions. Neither session counter includes time spent unstarted in a queue. All counters advance only with +15 min.</p>
+<p><strong>Finish and promise risk:</strong> The deterministic projection uses planned-order technician queues, dependencies, breaks, rack capacity and remaining predicted time, with a minimum five minutes for unfinished work. A paused job adds a fixed fictional 30-minute remaining hold, not a parts ETA or countdown. It does not learn speed from the historical export.</p>
+<ul>
+<li><strong>At risk:</strong> Projected finish is later than the promise.</li>
+<li><strong>Watch:</strong> There are zero through 30 minutes of buffer.</li>
+<li><strong>On track:</strong> More than 30 minutes of buffer.</li>
+</ul>
+<p>These are planning illustrations, not customer commitments or optimized schedules. Work can exceed prediction without completing automatically. Remaining-work figures omit paused holds and queue delays; a workload percentage is not a measured efficiency score.</p>
+<p><strong>Person vs automatic:</strong> People assign, choose planned times, start, pause, resume and complete. The preview validates requests, updates local counters when the clock advances, rechecks dependencies, and recalculates displayed risk. It never orders parts, asks for approval, dispatches staff or sends customer notifications.</p>
+<p><strong>Review prompt:</strong> Which waits need an owner or ETA? Should a paused rack job reserve the rack? What should happen when work crosses a break?</p>
+<p class="notes">Notes: ____________________________________________________________</p>
+<p class="notes">Notes: ____________________________________________________________</p>
+<h2 id="section-10">10. Experience: evidence, not qualifications</h2>
+<p>Experience always shows the separate Burnett historical evidence, even while the schedule uses the Original fictional demo. Search by technician label, category or approved package filters the displayed evidence. Clear search restores it.</p>
+<p>The page describes source coverage, possible aliases kept separate, hours-field agreement, recent observed activity and top observed categories/packages. It is alphabetical, not a technician ranking. The guide deliberately does not reproduce employee listings or source records.</p>
+<p>Counts are deduplicated ordinary-invoice service-package entries, not independent repair counts. Broad categories, free checks and bundled packages do not prove equivalent work. Exact-row deduplication is a presentation assumption, not verified job identity. Per-label invoice totals must not be summed as unique shop invoices.</p>
+<p>The exported Technician Hours mostly agree with billed hours; their meaning as actual clock time is unverified. Neither speed, attendance, current roster nor independent skill is established. Missing approved packages do not mean no experience. This page does not qualify technicians, restrict assignment or train the demo predictions.</p>
+<p><strong>Review prompt:</strong> What evidence and manager confirmation would you require before treating history as a qualification? Are the warnings understandable?</p>
+<p class="notes">Notes: ____________________________________________________________</p>
+<p class="notes">Notes: ____________________________________________________________</p>
+<h2 id="section-11">11. Brand settings, appearance and resets</h2>
+<p><strong>Brand settings:</strong> Choose Enterprise defaults or Location identity. Edit display names, primary/accent colors and a local PNG/JPEG/WebP logo up to 256 KB. URLs and SVGs are not accepted. The live draft preview is not an applied change.</p>
+<p>Location identity can <strong>Inherit enterprise colors and logo</strong>. Turn inheritance off to edit an isolated local style; enterprise changes then leave that override untouched. Turn inheritance on to use enterprise styling again. Typography (system sans/serif) and density (comfortable/compact) apply enterprise-wide. Warning/status colors keep their meaning.</p>
+<p>Choose <strong>Apply branding</strong> to apply and save in this browser; <strong>Discard draft</strong> restores the applied configuration. Navigating away from Brand settings loses unapplied drafts. Changing the topbar presentation location applies the saved location choice and can also replace the current draft. Use Apply or Discard deliberately before switching context.</p>
+<p>The two presentation locations share the same simulated schedule; they are not separate live tenants. A location selection inside the Brand settings form is a draft until applied. The proposed theme is not official Burnett branding.</p>
+<p><strong>Appearance:</strong> The topbar offers Light, Dark or System. System is the default and follows OS changes; an explicit choice does not. Appearance is separate from branding and workflow. Printing the preview uses a light palette. This exported guide has its own light print layout.</p>
+<p><strong>What survives?</strong></p>
+<ul>
+<li>Workflow Reset asks for confirmation, restores the current dataset&#x27;s original jobs/assignments/timers at 10:15, returns to Dispatch/Dispatcher and the first technician. It preserves saved branding and appearance.</li>
+<li>Switching Demo dataset asks for confirmation and resets the schedule and perspective. Saved branding and appearance remain.</li>
+<li>Browser refresh loses all workflow edits and returns to the default Burnett scenario. Saved branding, presentation location and appearance normally remain.</li>
+<li>Reset branding asks for confirmation and replaces enterprise/location styles, logos, typography, density and presentation location with defaults. Workflow and appearance remain unchanged.</li>
+<li>Branding cannot be saved/applied if browser storage is blocked or full; an error is shown and the draft remains. Appearance still works for the session if it cannot be saved; invalid/unavailable stored appearance falls back to System on reload.</li>
+</ul>
+<p>Saved settings are local to this browser, not shared accounts, devices or a server. Do not use this preview as the only record of real work.</p>
+<p><strong>Review prompt:</strong> Are draft versus saved changes obvious? Are the separate reset actions safe and predictable?</p>
+<p class="notes">Notes: ____________________________________________________________</p>
+<p class="notes">Notes: ____________________________________________________________</p>
+<h2 id="section-12">12. Boundaries and possible improvements</h2>
+<p><strong>Implemented preview behavior:</strong> Local job ownership, prerequisites, session transitions, single-active-work constraints, one rack, fixed breaks, editable half-hour plans, simulated timers/projections, history presentation and browser-local branding/appearance.</p>
+<p><strong>Separate production-side code/documentation only:</strong> The authenticated /dashboard/shop-workflow route checks session and shop entitlement. Its documentation describes persisted visits, permissions, source intake, concurrency handling, audit history and optional operational readiness/handoff/final-check controls. Those capabilities are not available through this root preview and must not be inferred from its role selector. Source code and documents do not establish deployment, activation, live data correctness or shop readiness. None was checked against live services for this guide.</p>
+<p><strong>Not implemented in this preview:</strong> Arrival/intake editing, creating/deleting visits or jobs, promise editing, changing dependencies, certifications, approval/parts workflows, real ETA input, customer messages, inventory, handoff acknowledgment, undo/reopening completion, split sessions, multi-day plans, concurrency/audit records, checkout or vehicle release.</p>
+<p><strong>Unknowns requiring review:</strong> Actual technician roster and qualifications; what historical hours truly measure; safe physical parallel work; validated duration estimates; operational permissions; accessibility with users&#x27; assistive devices; and whether the production counterpart is enabled anywhere.</p>
+<p><strong>Ideas to discuss, not features being promised:</strong> Stronger readiness checks; an owner and ETA for waits; handoff acceptance; completion confirmation/correction; rack reservations while paused; clearer planned-overlap warnings; and a distinct vehicle-release checklist. Record priorities below rather than assuming these exist.</p>
+<p><strong>Review prompt:</strong> Which missing capability prevents useful evaluation, and which can wait? What current behavior should remain unchanged?</p>
+<p class="notes">Notes: ____________________________________________________________</p>
+<p class="notes">Notes: ____________________________________________________________</p>
+<h2 id="section-13">13. Feedback worksheet</h2>
+<p>Use section numbers and exact on-screen labels. Describe observed behavior separately from the behavior you want. Do not include real customer records, credentials or raw exports.</p>
+<p>Priority suggestions: <strong>Must fix</strong> (blocks safe use or understanding), <strong>Should improve</strong> (meaningful friction), <strong>Nice to have</strong> (optional).</p>
+<h3>Feedback item A</h3>
+<p>Stage / guide section: ______________________________________________</p>
+<p>Action tried and what happened: _____________________________________</p>
+<p>Concern and who is affected: ________________________________________</p>
+<p>Proposed change: ___________________________________________________</p>
+<p>Priority and reason: ________________________________________________</p>
+<p>Keep unchanged: ___________________________________________________</p>
+<h3>Feedback item B</h3>
+<p>Stage / guide section: ______________________________________________</p>
+<p>Action tried and what happened: _____________________________________</p>
+<p>Concern and who is affected: ________________________________________</p>
+<p>Proposed change: ___________________________________________________</p>
+<p>Priority and reason: ________________________________________________</p>
+<p>Keep unchanged: ___________________________________________________</p>
+<h3>Feedback item C</h3>
+<p>Stage / guide section: ______________________________________________</p>
+<p>Action tried and what happened: _____________________________________</p>
+<p>Concern and who is affected: ________________________________________</p>
+<p>Proposed change: ___________________________________________________</p>
+<p>Priority and reason: ________________________________________________</p>
+<p>Keep unchanged: ___________________________________________________</p>
+<h2 id="section-14">14. Glossary and evidence</h2>
+<ul>
+<li><strong>RO:</strong> Repair order; the identifying number shown beside a vehicle.</li>
+<li><strong>Visit:</strong> A vehicle&#x27;s group of individual jobs and its arrival/promise context.</li>
+<li><strong>Dependency / prerequisite:</strong> Earlier work that must be complete before a job starts.</li>
+<li><strong>Ready:</strong> Prerequisites complete; other start constraints may still prevent work.</li>
+<li><strong>Session:</strong> Whether a job is idle, active, paused or completed.</li>
+<li><strong>Planned start:</strong> A chosen schedule position, not automatic start authorization.</li>
+<li><strong>Book labor:</strong> Illustrative billed allowance, distinct from elapsed work.</li>
+<li><strong>Predicted tech time:</strong> Invented duration estimate, not measured performance.</li>
+<li><strong>Promise buffer:</strong> Minutes between illustrative finish and promised-ready time.</li>
+<li><strong>Resource:</strong> Shared equipment; this preview models one alignment rack.</li>
+<li><strong>Inheritance:</strong> A location uses enterprise colors/logo instead of a local override.</li>
+<li><strong>Local browser storage:</strong> Settings kept in this browser rather than on a server.</li>
+</ul>
+<p>Evidence reviewed: the Detect Dog artifact README; ShopWorkflow, DispatchBoard, VehicleWorkflow, JobActions, MyWork, Experience and BrandSettings components; the workflow model and local state/settings hooks. Production scope was checked only against app/dashboard/shop-workflow/page.tsx, docs/shop-dispatch-pilot.md and docs/workflow-operations.md. No live database or provider records were accessed.</p>
+<p>This is a dated review snapshot, not a service manual or evidence of production activation. Future preview changes may make individual instructions outdated.</p>
+</main></body></html>
