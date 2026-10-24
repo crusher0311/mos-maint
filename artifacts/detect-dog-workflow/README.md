@@ -1,4 +1,34 @@
-# Detect Dog — shop workflow prototype
+# Archived: Detect Dog shop workflow prototype
+
+Retired October 24, 2026. The user chose hiding this simulated preview with
+source retained, now that an actual integrated Burnett shop is available.
+The root and all former `/preview/workflow/*` URLs show a neutral retirement
+notice. They neither redirect nor load the authenticated application.
+
+## Archive and intentional restoration
+
+Implementation, fixtures, tests, styles and guide sources remain in their original
+paths to preserve offline-test imports and shared tooling dependencies. Workflow
+components are excluded from generated preview discovery. The review guide in
+`docs/` is historical reference only, not current operating documentation.
+
+For intentional isolated restoration on a development branch, change `src/main.tsx`
+to import `ArchivedDemo` instead of `App`, and restore the `appearance-init.js`
+script in `index.html`. This restores the full standalone demo at the root.
+Only if individual component previews are needed, restore the former preview
+router from Git history and remove the workflow exclusion in `mockupPreviewPlugin.ts`.
+Never start the root production-connected server for this purpose.
+
+`npm test`, `npm run typecheck`, and `PORT=24087 BASE_PATH=/ npm run build`
+remain isolated checks. `npm run test:browser` now checks retirement; archived
+interaction suites remain runnable after deliberate restoration with
+`npm run test:browser:archive`. The fixed-loopback port-5000 preview forwarding
+remains in place; Enterprise Tire DVI keeps its separate `/tire-dvi/` preview.
+No production routes, data, settings, dependencies or canvas shapes are changed.
+Artifact-card titles/thumbnails are platform metadata and may retain the old
+name/image; opening the workflow card reaches the retirement notice.
+
+## Historical documentation (not current instructions)
 
 Frontend-only presentation. Root opens Burnett dispatch, without authentication.
 `/preview/workflow/ShopWorkflow` remains available for the canvas. The named entry is

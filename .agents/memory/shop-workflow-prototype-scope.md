@@ -3,6 +3,16 @@ name: Shop workflow prototype scope
 description: Product model and isolation boundary for Detect Dog scheduling exploration.
 ---
 
+The standalone simulated Workflow preview is retired by user choice; retain its
+source and review guide as archived references, not a production link.
+
+**Why:** The user now has an actual integrated Burnett shop and chose hiding the
+simulation rather than deleting it or replacing it with an automatic redirect.
+
+**How to apply:** Do not revive the simulation as the default preview. Keep
+authenticated Shop Workflow and Enterprise Tire DVI separate and unchanged.
+Restoration must be deliberate and isolated, without production-connected services.
+
 The scheduling concept is a vehicle visit containing individual jobs and multi-technician handoffs, not one appointment block per vehicle.
 
 Integrator scheduling is authorized for availability and temporary MOS holds, not appointment confirmation or Protractor write-back.

@@ -52,6 +52,8 @@ export function mockupPreviewPlugin(): Plugin {
   }
 
   function isPreviewTarget(relativeToMockups: string): boolean {
+    // Retained in place for offline test imports, but not active previews.
+    if (relativeToMockups.split(path.sep)[0] === 'workflow') return false;
     return relativeToMockups
       .split(path.sep)
       .every((segment) => !segment.startsWith('_'));
@@ -60,7 +62,7 @@ export function mockupPreviewPlugin(): Plugin {
   async function discoverComponents(): Promise<Array<DiscoveredComponent>> {
     const files = await glob(`${MOCKUPS_DIR}/**/*.tsx`, {
       cwd: root,
-      ignore: ['**/_*/**', '**/_*.tsx'],
+      ignore: ['**/_*/**', '**/_*.tsx', `${MOCKUPS_DIR}/workflow/**`],
     });
 
     return files.map((f) => ({

@@ -81,12 +81,13 @@ test('appearance surface separation preserves identity, overrides, inheritance a
   assert.deepEqual(brand, before);
 });
 
-test('blocking initializer precedes all application code and provider wraps the preview renderer', () => {
+test('retirement does not initialize appearance; archived entry retains its provider and styles', () => {
   const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-  assert.ok(html.indexOf('appearance-init.js') < html.indexOf('/src/main.tsx'));
-  assert.match(html, /<script src="%BASE_URL%appearance-init\.js"><\/script>/);
+  assert.doesNotMatch(html, /appearance-init\.js/);
   const main = readFileSync(new URL('../src/main.tsx', import.meta.url), 'utf8');
-  assert.match(main, /<AppearanceProvider><App \/><\/AppearanceProvider>/);
+  assert.doesNotMatch(main, /AppearanceProvider|ArchivedDemo/);
+  const archive = readFileSync(new URL('../src/ArchivedDemo.tsx', import.meta.url), 'utf8');
+  assert.match(archive, /<AppearanceProvider><ShopWorkflow \/><\/AppearanceProvider>/);
   const css = readFileSync(new URL('../src/index.css', import.meta.url), 'utf8');
   assert.match(css, /@media screen\s*\{\s*:root\[data-workflow-theme="dark"\]/);
 });

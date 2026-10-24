@@ -1,4 +1,6 @@
-# Workflow Manager Review Guide
+# Archived: Workflow Manager Review Guide
+
+**Retired October 24, 2026. Historical reference only, not current documentation.** The standalone workflow preview has been hidden; its former root and component links show a retirement notice. The instructions below describe the archived simulation, not the integrated Burnett shop. Source and fixtures are retained. For intentional isolated restoration, see the artifact README. The authenticated Shop Workflow and Enterprise Tire DVI are unchanged.
 
 Detect Dog Shop Workflow preview · Reviewed October 24, 2026
 

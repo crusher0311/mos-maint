@@ -69,7 +69,7 @@ body.insert(2, nav)
 target.write_text("""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Workflow Manager Review Guide — Detect Dog</title>
+<title>Archived: Workflow Manager Review Guide — Detect Dog</title>
 <style>
 :root { color-scheme: light; font-family: Arial, Helvetica, sans-serif; color: #182f28; background: #edf1ed; }
 * { box-sizing: border-box; }
