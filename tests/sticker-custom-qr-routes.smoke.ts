@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { NextRequest } from "next/server";
 import QRCode from "qrcode";
 import { writeFileSync } from "node:fs";
+import { createDefaultLayout } from "../lib/sticker-designer-types";
 
 // In-memory stores only; deny-network-egress is required when invoking this test.
 const Module = require("node:module");
@@ -51,6 +52,16 @@ async function main() {
   assert.equal((await upload.POST(req("/", "POST", body))).status, 403);
   assert.equal((await upload.DELETE(req("/", "DELETE"))).status, 403);
   session.role = "manager";
+  const decorated = createDefaultLayout();
+  decorated.elements.push({ ...decorated.elements[1], id: "custom", type: "text", content: "Thank you",
+    underline: true, backgroundColor: "#ffff00", borderColor: "#000000", borderWidth: 2 });
+  assert.equal((await settings.PUT(req("/", "PUT", { designerLayout: decorated }))).status, 200);
+  assert.deepEqual((await (await settings.GET(req("/"))).json()).config.designerLayout, decorated);
+  decorated.elements[1].color = "red";
+  assert.equal((await settings.PUT(req("/", "PUT", { designerLayout: decorated }))).status, 200);
+  assert.equal((await (await settings.GET(req("/"))).json()).config.designerLayout.elements[1].color, "red");
+  assert.equal((await settings.PUT(req("/", "PUT", { designerLayout: { ...decorated, elements: [{ ...decorated.elements[0], borderWidth: 50 }] } }))).status, 400);
+  assert.equal((await generate.POST(req("/", "POST", { designerLayout: { ...decorated, elements: [{ ...decorated.elements[0], content: "x".repeat(201) }] } }))).status, 400);
   assert.equal((await upload.POST(req("/", "POST", { ...body, base64Data: "not image" }))).status, 400);
   assert.equal((await upload.POST(req("/", "POST", body))).status, 200);
   const identity = { hovercodeQRId: "unchanged", qrTargetUrl: "unchanged", cachedQrCodeDataUri: `data:image/png;base64,${png.toString("base64")}` };

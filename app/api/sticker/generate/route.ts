@@ -6,7 +6,7 @@ import { validQrPreferences, type StickerQrPreferences } from "@/lib/sticker-qr-
 import { createStickerQrTarget } from "@/lib/sticker-qr-target";
 import { retainLegacyStickerHovercode } from "@/lib/sticker-legacy-hovercode";
 import { getStickerRedirectUrl } from "@/lib/sticker-utils";
-import { scaleLayoutToSize, getStickerSize } from "@/lib/sticker-designer-types";
+import { scaleLayoutToSize, getStickerSize, validStickerLayout } from "@/lib/sticker-designer-types";
 import { Storage } from "@google-cloud/storage";
 import { triggerAutoBookingFromSticker, StickerBookingData } from "@/lib/auto-booking/scheduler";
 import { renderStickerStandard, renderStickerDesigner } from "@/lib/canvas-renderer";
@@ -318,6 +318,9 @@ interface DesignerElement {
   textAlign: 'left' | 'center' | 'right';
   color: string;
   backgroundColor?: string;
+  underline?: boolean;
+  borderColor?: string;
+  borderWidth?: number;
   visible: boolean;
   showLabel?: boolean;
   imageFit?: 'contain' | 'cover';
@@ -356,6 +359,9 @@ export async function POST(req: NextRequest) {
 
   try {
     const body: StickerRequest = await req.json();
+    if (body.designerLayout !== undefined && !validStickerLayout(body.designerLayout)) {
+      return NextResponse.json({ error: "Invalid sticker layout" }, { status: 400 });
+    }
     if (body.previewConfig && !validQrPreferences(body.previewConfig)) return NextResponse.json({ error: "Invalid QR preferences" }, { status: 400 });
 
     // Coerce caller-supplied mileage to numbers (strings like "71,378"

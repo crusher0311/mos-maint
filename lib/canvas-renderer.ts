@@ -1,6 +1,7 @@
 import { createCanvas, loadImage, registerFont, type Canvas, type CanvasRenderingContext2D, type Image } from "canvas";
 import path from "path";
 import { resolveStickerElementContent } from "@/lib/sticker-designer-types";
+import { paintStickerText } from "@/lib/sticker-text-painter";
 
 let fontsRegistered = false;
 
@@ -270,6 +271,9 @@ export interface StickerDesignerElement {
   textAlign: string;
   color: string;
   backgroundColor?: string;
+  underline?: boolean;
+  borderColor?: string;
+  borderWidth?: number;
   visible: boolean;
   imageFit?: string;
   content?: string;
@@ -363,12 +367,14 @@ export async function renderStickerDesigner(
       continue;
     }
 
-    const content = getContent(el);
-    if (!content) continue;
-
-    ctx.font = buildFont(efs, el.fontWeight, el.fontStyle);
-    ctx.fillStyle = el.color || "#000000";
-    drawAlignedText(ctx, content, ex, ey, ew, eh, el.textAlign);
+    if (el.type === "logo" || el.type === "qrCode") continue;
+    ctx.save();
+    ctx.translate(ex, ey);
+    paintStickerText(ctx, getContent(el), {
+      ...el, width: ew, height: eh, fontSize: efs,
+      borderWidth: (el.borderWidth || 0) * Math.min(scaleX, scaleY),
+    });
+    ctx.restore();
   }
 
   return canvas.toBuffer("image/png");

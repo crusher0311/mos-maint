@@ -276,6 +276,9 @@ interface DesignerElement {
   textAlign: 'left' | 'center' | 'right';
   color: string;
   backgroundColor?: string;
+  underline?: boolean;
+  borderColor?: string;
+  borderWidth?: number;
   visible: boolean;
   showLabel?: boolean;
   imageFit?: 'contain' | 'cover';

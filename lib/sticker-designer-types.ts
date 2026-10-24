@@ -1,3 +1,5 @@
+import { validStickerColor } from "./sticker-colors";
+
 export type StickerElementType = 
   | 'logo'
   | 'qrCode'
@@ -23,6 +25,9 @@ export interface StickerElement {
   textAlign: 'left' | 'center' | 'right';
   color: string;
   backgroundColor?: string;
+  underline?: boolean;
+  borderColor?: string;
+  borderWidth?: number;
   visible: boolean;
   showLabel?: boolean;
   imageFit?: 'contain' | 'cover';
@@ -403,6 +408,7 @@ export function scaleLayoutToSize(layout: StickerLayout, newSizeValue: string): 
       width: Math.round(el.width * scaleX),
       height: Math.round(el.height * scaleY),
       fontSize: Math.round(el.fontSize * scale),
+      ...(el.borderWidth === undefined ? {} : { borderWidth: Math.min(MAX_STICKER_BORDER_WIDTH, el.borderWidth * scale) }),
     })),
   };
 }
@@ -413,6 +419,41 @@ export function scaleLayoutToSize(layout: StickerLayout, newSizeValue: string): 
 // Saved element content remains an explicit override, including the old default
 // wording: we cannot distinguish a seeded value from a shop's intentional choice.
 export const SERVICE_LABEL_FALLBACK = 'Next Oil Service';
+export const MAX_STICKER_ELEMENTS = 32;
+export const MAX_CUSTOM_TEXT_ELEMENTS = 12;
+export const MAX_STICKER_TEXT_LENGTH = 200;
+export const MAX_STICKER_BORDER_WIDTH = 4;
+
+// Validate without normalizing: legacy Service Label overrides must survive verbatim.
+export function validStickerLayout(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  const l = value as StickerLayout;
+  const number = (v: unknown, min: number, max: number) =>
+    typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max;
+  const color = validStickerColor;
+  const text = (v: unknown, max: number) => typeof v === 'string' && v.length <= max && !/[\r\n\u2028\u2029]/.test(v);
+  if (!number(l.canvasWidth, 1, 1000) || !number(l.canvasHeight, 1, 1000) ||
+      !number(l.gridSize, 1, 100) || typeof l.showGrid !== 'boolean' || !color(l.backgroundColor) ||
+      (l.version !== undefined && !number(l.version, 1, 100)) ||
+      !Array.isArray(l.elements) || l.elements.length > MAX_STICKER_ELEMENTS) return false;
+  const ids = new Set<string>();
+  let custom = 0;
+  return l.elements.every(e => {
+    if (!e || !text(e.id, 100) || !e.id || ids.has(e.id)) return false;
+    ids.add(e.id);
+    if (e.type === 'text' && ++custom > MAX_CUSTOM_TEXT_ELEMENTS) return false;
+    return ['logo','qrCode','phone','tagline','taglineLine2','serviceLabel','serviceDate','serviceMileage','text'].includes(e.type) &&
+      text(e.label, 200) && number(e.x, -1000, 1000) && number(e.y, -1000, 1000) &&
+      number(e.width, 1, 1000) && number(e.height, 1, 1000) && number(e.fontSize, 1, 200) &&
+      ['normal','bold'].includes(e.fontWeight) && ['normal','italic'].includes(e.fontStyle) &&
+      ['left','center','right'].includes(e.textAlign) && color(e.color) && typeof e.visible === 'boolean' &&
+      (e.content === undefined || text(e.content, MAX_STICKER_TEXT_LENGTH)) &&
+      (e.backgroundColor === undefined || color(e.backgroundColor)) &&
+      (e.underline === undefined || typeof e.underline === 'boolean') &&
+      (e.borderColor === undefined || color(e.borderColor)) &&
+      (e.borderWidth === undefined || number(e.borderWidth, 0, MAX_STICKER_BORDER_WIDTH));
+  });
+}
 
 export const STICKER_SAMPLE_DATA: Record<string, string> = {
   logo: '/api/sticker/logo/sample',

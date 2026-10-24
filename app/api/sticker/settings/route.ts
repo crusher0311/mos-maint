@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { validStickerLayout } from "@/lib/sticker-designer-types";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { validQrPreferences, type StickerQrPreferences } from "@/lib/sticker-qr-appearance";
@@ -64,6 +65,9 @@ interface DesignerElement {
   textAlign: 'left' | 'center' | 'right';
   color: string;
   backgroundColor?: string;
+  underline?: boolean;
+  borderColor?: string;
+  borderWidth?: number;
   visible: boolean;
   showLabel?: boolean;
   imageFit?: 'contain' | 'cover';
@@ -189,6 +193,9 @@ export async function PUT(req: NextRequest) {
 
   try {
     const body: Partial<StickerConfig> = await req.json();
+    if (body.designerLayout !== undefined && !validStickerLayout(body.designerLayout)) {
+      return NextResponse.json({ error: "Invalid sticker layout: check text, colors, borders and element limits" }, { status: 400 });
+    }
     if (!validQrPreferences(body)) return NextResponse.json({ error: "Invalid QR source or background mode" }, { status: 400 });
     if (body.scanDestination !== undefined && !["appointment", "website", "vhi"].includes(body.scanDestination)) {
       return NextResponse.json({ error: "Invalid scan destination" }, { status: 400 });

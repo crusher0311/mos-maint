@@ -5,6 +5,7 @@ import { StickerElement, StickerLayout, STICKER_SAMPLE_DATA, resolveStickerEleme
 import { Image as ImageIcon } from "lucide-react";
 import { qrSizingWarnings } from "@/lib/sticker-qr-sizing";
 import { useQrArtworkGeometry } from "./useQrArtworkGeometry";
+import { StickerTextPreview } from "./StickerTextPreview";
 
 interface StickerContentData {
   phone?: string;
@@ -210,23 +211,10 @@ export function StickerDesignerCanvas({
   };
 
   const renderElementContent = (element: StickerElement) => {
-    // Use display: block (not flex) so text-overflow: ellipsis works correctly
-    // This matches the API rendering behavior
-    const style: React.CSSProperties = {
-      fontSize: `${element.fontSize}px`,
-      fontWeight: element.fontWeight,
-      fontStyle: element.fontStyle,
-      textAlign: element.textAlign,
-      color: element.color,
-      width: "100%",
-      height: "100%",
-      display: "block",
-      overflow: "hidden",
-      whiteSpace: "nowrap",
-      textOverflow: "ellipsis",
-      lineHeight: `${element.height}px`,
-    };
-
+    if (element.type !== "logo" && element.type !== "qrCode") {
+      const values = { ...STICKER_SAMPLE_DATA, ...contentData };
+      return <StickerTextPreview element={element} text={resolveStickerElementContent(element, values)} />;
+    }
     switch (element.type) {
       case "logo":
         if (logoUrl) {
@@ -270,28 +258,6 @@ export function StickerDesignerCanvas({
           </div>
         );
 
-      case "serviceLabel":
-        // Resolve via the same shared rule the printer uses so the preview is
-        // WYSIWYG: per-element override -> global Service Label -> fallback.
-        return <span style={style}>{resolveStickerElementContent(element, { serviceLabel: contentData?.serviceLabel })}</span>;
-
-      case "phone":
-        return <span style={style}>{contentData?.phone || STICKER_SAMPLE_DATA.phone}</span>;
-
-      case "tagline":
-        return <span style={style}>{contentData?.tagline || STICKER_SAMPLE_DATA.tagline}</span>;
-
-      case "taglineLine2":
-        return <span style={style}>{contentData?.taglineLine2 || STICKER_SAMPLE_DATA.taglineLine2}</span>;
-
-      case "serviceDate":
-        return <span style={style}>{contentData?.serviceDate || STICKER_SAMPLE_DATA.serviceDate}</span>;
-
-      case "serviceMileage":
-        return <span style={style}>{contentData?.serviceMileage || STICKER_SAMPLE_DATA.serviceMileage}</span>;
-
-      default:
-        return <span style={style}>{element.label}</span>;
     }
   };
 

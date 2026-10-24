@@ -119,6 +119,9 @@ async function main() {
   assert.equal(writes.length, 0, "vehicle results never enter generic cache");
   shop.stickerConfig = { designerLayout: { canvasWidth: 591, canvasHeight: 739, backgroundColor: "#fff", elements: [
     { id: "qr", type: "qrCode", x: 20, y: 20, width: 200, height: 200, visible: true },
+    { id: "custom", type: "text", x: 250, y: 250, width: 200, height: 50, visible: true,
+      fontSize: 20, fontWeight: "bold", fontStyle: "italic", textAlign: "center", color: "#000000",
+      content: "Thank you", underline: true, borderColor: "#ff0000", borderWidth: 2, backgroundColor: "#ffff00" },
   ] } };
   const designerResult = await print({ vin: "1HGCM82633A004352" });
   assert.equal(rendered.at(-1), expected, "selected HoverCode reaches actual designer renderer");
@@ -126,6 +129,7 @@ async function main() {
   const designerCanvas = createCanvas(designerImage.width, designerImage.height);
   const designerContext = designerCanvas.getContext("2d");
   designerContext.drawImage(designerImage, 0, 0);
+  assert.deepEqual([...designerContext.getImageData(502, 502, 1, 1).data], [255, 0, 0, 255], "extension keeps the custom text border");
   assert.ok(designerContext.getImageData(40, 40, 400, 400).data.some((v, i) => i % 4 !== 3 && v < 50),
     "designer output actually contains the selected QR, not a blank image");
   shop.stickerConfig = { hovercodeQRId: "generic-code", qrTargetUrl: generic, cachedQrCodeDataUri: expected };

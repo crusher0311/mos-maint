@@ -1,13 +1,16 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { 
   StickerLayout, 
   StickerElement, 
   createDefaultLayout, 
   scaleLayoutToSize,
-  getStickerSize,
-  DEFAULT_STICKER_SIZE 
+  DEFAULT_STICKER_SIZE,
+  MAX_STICKER_ELEMENTS,
+  MAX_CUSTOM_TEXT_ELEMENTS,
+  MAX_STICKER_TEXT_LENGTH,
+  MAX_STICKER_BORDER_WIDTH,
 } from "@/lib/sticker-designer-types";
 import { StickerDesignerCanvas } from "./StickerDesignerCanvas";
 import { StickerElementPanel } from "./StickerElementPanel";
@@ -35,6 +38,7 @@ interface StickerDesignerProps {
 interface HistoryState {
   layout: StickerLayout;
   size: string;
+  selectedId: string | null;
 }
 
 export function StickerDesigner({
@@ -46,112 +50,136 @@ export function StickerDesigner({
   contentData,
   onChange,
 }: StickerDesignerProps) {
-  const [currentSize, setCurrentSize] = useState(initialSize);
-  const [layout, setLayout] = useState<StickerLayout>(() => {
-    if (initialLayout) {
-      return initialLayout;
-    }
-    return createDefaultLayout(initialSize);
+  const [editor, setEditor] = useState(() => {
+    const initial: HistoryState = {
+      layout: initialLayout || createDefaultLayout(initialSize),
+      size: initialSize,
+      selectedId: null,
+    };
+    return { current: initial, history: [initial], index: 0 };
   });
-  
-  const [history, setHistory] = useState<HistoryState[]>([{ layout, size: currentSize }]);
-  const [historyIndex, setHistoryIndex] = useState(0);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Event handlers read the latest snapshot even when React batches several edits.
+  // Notifications never run inside state updaters (which Strict Mode can replay).
+  const editorRef = useRef(editor);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  const { layout, size: currentSize, selectedId } = editor.current;
+  const canUndo = editor.index > 0;
+  const canRedo = editor.index < editor.history.length - 1;
 
-  const canUndo = historyIndex > 0;
-  const canRedo = historyIndex < history.length - 1;
-
-  const pushHistory = useCallback((newLayout: StickerLayout, newSize: string) => {
-    setHistory((prev) => {
-      const newHistory = prev.slice(0, historyIndex + 1);
-      newHistory.push({ layout: newLayout, size: newSize });
-      if (newHistory.length > 50) {
-        newHistory.shift();
-        return newHistory;
-      }
-      return newHistory;
-    });
-    setHistoryIndex((prev) => Math.min(prev + 1, 49));
-  }, [historyIndex]);
-
-  const handleUndo = useCallback(() => {
-    if (canUndo) {
-      const prevState = history[historyIndex - 1];
-      setHistoryIndex(historyIndex - 1);
-      setLayout(prevState.layout);
-      setCurrentSize(prevState.size);
-      onChange?.(prevState.layout, prevState.size);
+  const commit = useCallback((current: HistoryState, record = true, notify = true) => {
+    const previous = editorRef.current;
+    let history = previous.history.slice();
+    let index = previous.index;
+    if (record) {
+      history = [...history.slice(0, index + 1), current].slice(-50);
+      index = history.length - 1;
+    } else {
+      history[index] = current;
     }
-  }, [canUndo, history, historyIndex, onChange]);
+    const next = { current, history, index };
+    editorRef.current = next;
+    setEditor(next);
+    if (notify) onChangeRef.current?.(current.layout, current.size);
+  }, []);
 
-  const handleRedo = useCallback(() => {
-    if (canRedo) {
-      const nextState = history[historyIndex + 1];
-      setHistoryIndex(historyIndex + 1);
-      setLayout(nextState.layout);
-      setCurrentSize(nextState.size);
-      onChange?.(nextState.layout, nextState.size);
-    }
-  }, [canRedo, history, historyIndex, onChange]);
+  const navigateHistory = useCallback((direction: number) => {
+    const previous = editorRef.current;
+    const index = previous.index + direction;
+    if (index < 0 || index >= previous.history.length) return;
+    const current = previous.history[index];
+    const next = { ...previous, current, index };
+    editorRef.current = next;
+    setEditor(next);
+    onChangeRef.current?.(current.layout, current.size);
+  }, []);
+  const handleUndo = useCallback(() => navigateHistory(-1), [navigateHistory]);
+  const handleRedo = useCallback(() => navigateHistory(1), [navigateHistory]);
+  const handleSelectElement = useCallback((id: string | null) => {
+    const current = editorRef.current.current;
+    if (id !== null && !current.layout.elements.some((element) => element.id === id)) return;
+    commit({ ...current, selectedId: id }, false, false);
+  }, [commit]);
 
   const handleUpdateElement = useCallback((id: string, updates: Partial<StickerElement>) => {
-    setLayout((prev) => {
-      const newLayout = {
-        ...prev,
-        elements: prev.elements.map((el) =>
-          el.id === id ? { ...el, ...updates } : el
-        ),
-      };
-      pushHistory(newLayout, currentSize);
-      onChange?.(newLayout, currentSize);
-      return newLayout;
+    const current = editorRef.current.current;
+    const element = current.layout.elements.find((item) => item.id === id);
+    if (!element) return;
+    const safeUpdates = { ...updates };
+    if (typeof safeUpdates.content === "string") {
+      safeUpdates.content = safeUpdates.content.replace(/[\r\n\u2028\u2029]/g, " ").slice(0, MAX_STICKER_TEXT_LENGTH);
+    }
+    if (typeof safeUpdates.borderWidth === "number") {
+      if (!Number.isFinite(safeUpdates.borderWidth)) return;
+      safeUpdates.borderWidth = Math.min(MAX_STICKER_BORDER_WIDTH, Math.max(0.5, Math.round(safeUpdates.borderWidth * 2) / 2));
+    }
+    if (Object.entries(safeUpdates).every(([key, value]) => element[key as keyof StickerElement] === value)) return;
+    commit({
+      ...current,
+      layout: { ...current.layout, elements: current.layout.elements.map((item) => item.id === id ? { ...item, ...safeUpdates } : item) },
     });
-  }, [currentSize, pushHistory, onChange]);
+  }, [commit]);
+
+  const handleAddText = useCallback(() => {
+    const current = editorRef.current.current;
+    const { elements, canvasWidth, canvasHeight } = current.layout;
+    if (elements.length >= MAX_STICKER_ELEMENTS || elements.filter((element) => element.type === "text").length >= MAX_CUSTOM_TEXT_ELEMENTS) return;
+    const id = `custom-text-${crypto.randomUUID()}`;
+    const width = Math.min(120, canvasWidth);
+    const height = Math.min(20, canvasHeight);
+    const element: StickerElement = {
+      id, type: "text", label: "Custom Text", content: "Custom text",
+      x: Math.max(0, Math.round((canvasWidth - width) / 2)),
+      y: Math.max(0, Math.round((canvasHeight - height) / 2)),
+      width, height, fontSize: 12, fontWeight: "normal", fontStyle: "normal",
+      textAlign: "center", color: "#000000", visible: true,
+    };
+    commit({ ...current, selectedId: id, layout: { ...current.layout, elements: [...elements, element] } });
+  }, [commit]);
+
+  const handleRemoveText = useCallback((id: string) => {
+    const current = editorRef.current.current;
+    const element = current.layout.elements.find((item) => item.id === id);
+    if (element?.type !== "text") return;
+    commit({
+      ...current,
+      selectedId: current.selectedId === id ? null : current.selectedId,
+      layout: { ...current.layout, elements: current.layout.elements.filter((item) => item.id !== id) },
+    });
+  }, [commit]);
 
   const handleSizeChange = useCallback((newSize: string) => {
-    const scaledLayout = scaleLayoutToSize(layout, newSize);
-    setCurrentSize(newSize);
-    setLayout(scaledLayout);
-    pushHistory(scaledLayout, newSize);
-    onChange?.(scaledLayout, newSize);
-  }, [layout, pushHistory, onChange]);
+    const current = editorRef.current.current;
+    if (newSize === current.size) return;
+    commit({ ...current, size: newSize, layout: scaleLayoutToSize(current.layout, newSize) });
+  }, [commit]);
 
   const handleToggleGrid = useCallback(() => {
-    setLayout((prev) => {
-      const newLayout = { ...prev, showGrid: !prev.showGrid };
-      onChange?.(newLayout, currentSize);
-      return newLayout;
-    });
-  }, [currentSize, onChange]);
+    const current = editorRef.current.current;
+    commit({ ...current, layout: { ...current.layout, showGrid: !current.layout.showGrid } }, false);
+  }, [commit]);
 
   const handleGridSizeChange = useCallback((gridSize: number) => {
-    setLayout((prev) => {
-      const newLayout = { ...prev, gridSize };
-      onChange?.(newLayout, currentSize);
-      return newLayout;
-    });
-  }, [currentSize, onChange]);
+    const current = editorRef.current.current;
+    commit({ ...current, layout: { ...current.layout, gridSize } }, false);
+  }, [commit]);
 
   const handleBackgroundColorChange = useCallback((color: string) => {
-    setLayout((prev) => {
-      const newLayout = { ...prev, backgroundColor: color };
-      pushHistory(newLayout, currentSize);
-      onChange?.(newLayout, currentSize);
-      return newLayout;
-    });
-  }, [currentSize, pushHistory, onChange]);
+    const current = editorRef.current.current;
+    if (color === current.layout.backgroundColor) return;
+    commit({ ...current, layout: { ...current.layout, backgroundColor: color } });
+  }, [commit]);
 
   const handleReset = useCallback(() => {
-    const newLayout = createDefaultLayout(currentSize);
-    setLayout(newLayout);
-    setSelectedId(null);
-    pushHistory(newLayout, currentSize);
-    onChange?.(newLayout, currentSize);
-  }, [currentSize, pushHistory, onChange]);
+    const current = editorRef.current.current;
+    commit({ ...current, layout: createDefaultLayout(current.size), selectedId: null });
+  }, [commit]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "z") {
+      const target = e.target;
+      if (target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
         if (e.shiftKey) {
           e.preventDefault();
           handleRedo();
@@ -188,7 +216,7 @@ export function StickerDesigner({
             size={currentSize}
             layout={layout}
             selectedId={selectedId}
-            onSelectElement={setSelectedId}
+            onSelectElement={handleSelectElement}
             onUpdateElement={handleUpdateElement}
             logoUrl={logoUrl}
             qrUrl={qrUrl}
@@ -201,8 +229,10 @@ export function StickerDesigner({
           <StickerElementPanel
             elements={layout.elements}
             selectedId={selectedId}
-            onSelectElement={setSelectedId}
+            onSelectElement={handleSelectElement}
             onUpdateElement={handleUpdateElement}
+            onAddText={handleAddText}
+            onRemoveText={handleRemoveText}
           />
         </div>
       </div>
