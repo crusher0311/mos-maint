@@ -91,6 +91,14 @@ Chromium installation. A missing executable is not evidence that no browser is
 installed; existing Puppeteer-managed Chromium may be usable with an explicit
 executable path and its missing native-library directories.
 
+The shell's `ldd` can report no missing libraries while cached Chromium still
+fails on an X11 library. Include the narrow directories for the browser's
+direct X11 dependencies as well as libraries reported missing by `ldd`.
+
+**Why:** The shell loader resolved X11 through its own runtime paths, which did
+not carry through to the launched browser. Adding only `ldd`'s missing entries
+was insufficient; adding the specific X11 directories enabled offline tests.
+
 **Why:** Artifact Playwright and root Puppeteer have independent browser caches.
 **How to apply:** Inspect existing browser installations before downloading another
 copy, and preserve the narrow library-search-path rule below.

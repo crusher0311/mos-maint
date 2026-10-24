@@ -2,6 +2,7 @@ import { createCanvas, loadImage, registerFont, type Canvas, type CanvasRenderin
 import path from "path";
 import { resolveStickerElementContent } from "@/lib/sticker-designer-types";
 import { paintStickerText } from "@/lib/sticker-text-painter";
+import { isKeytagExtra, keytagFieldBinding, normalizeKeytagExtraValues, keytagExtraTextRuns, fitKeytagExtraFontSize } from "@/lib/keytag-extra-fields";
 
 let fontsRegistered = false;
 
@@ -381,6 +382,7 @@ export async function renderStickerDesigner(
 }
 
 export interface KeytagRenderData {
+  extraValues?: Record<string, string>;
   customerName: string;
   vehicleInfo: string;
   vin?: string;
@@ -486,6 +488,7 @@ export async function renderKeytagLegacy(
 }
 
 export interface KeytagDesignerElement {
+  id?: string;
   type: string;
   label: string;
   x: number;
@@ -551,7 +554,31 @@ export async function renderKeytagDesigner(
     const eh = el.height * scaleFactor;
     const baseFontSize = el.fontSize * scaleFactor;
 
-    const value = dataMap[el.type] || el.label;
+    const extra = isKeytagExtra(el);
+    const value = extra ? normalizeKeytagExtraValues(layout, data.extraValues)[keytagFieldBinding(el)] || "" : dataMap[el.type] || el.label;
+    if (extra && !value) continue;
+    if (extra) {
+      const fontSize = fitKeytagExtraFontSize(el, value, (text, size, weight, style) => {
+        ctx.font = buildFont(size * scaleFactor, weight, style, "Inter");
+        return ctx.measureText(text).width / scaleFactor;
+      }) * scaleFactor;
+      const runs = keytagExtraTextRuns(el, value);
+      const widths = runs.map(run => {
+        ctx.font = buildFont(fontSize, run.weight, run.style, "Inter");
+        return ctx.measureText(run.text).width;
+      });
+      const width = widths.reduce((sum, w) => sum + w, 0);
+      let x = ex + (el.textAlign === "center" ? (ew - width) / 2 : el.textAlign === "right" ? ew - width : 0);
+      ctx.fillStyle = textColor;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      runs.forEach((run, index) => {
+        ctx.font = buildFont(fontSize, run.weight, run.style, "Inter");
+        ctx.fillText(run.text, x, ey + eh / 2);
+        x += widths[index];
+      });
+      continue;
+    }
     const labelWeight = el.labelFontWeight || el.fontWeight || "normal";
     const labelStyle = el.labelFontStyle || el.fontStyle || "normal";
     const valueWeight = el.valueFontWeight || "normal";

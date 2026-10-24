@@ -6,6 +6,7 @@ import { DesignerLayout, DesignerElement, DYMO_30252 } from "@/lib/keytag-design
 import { resolvePaperSize } from "@/lib/keytag-paper-sizes";
 import { pngBufferToSizedPdfBuffer } from "@/lib/sticker-pdf";
 import { parseMileageInput, isAbsurdMileage, MAX_PLAUSIBLE_MILEAGE } from "@/lib/sticker-mileage";
+import { keytagExtraLayoutError, normalizeKeytagExtraValues } from "@/lib/keytag-extra-fields";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,6 +35,7 @@ interface KeytagConfig {
 }
 
 interface KeytagRequest {
+  extraValues?: Record<string, string>;
   customerName?: string;
   vehicleInfo?: string;
   vin?: string;
@@ -79,6 +81,8 @@ export async function POST(req: NextRequest) {
 
     const config: KeytagConfig = body.previewConfig || shop?.keytagConfig || {};
     const designerLayout = body.designerLayout || config.designerLayout;
+    const layoutError = keytagExtraLayoutError(designerLayout);
+    if (layoutError) return NextResponse.json({ error: layoutError }, { status: 400 });
 
     // Match rendering, including duplicate elements. Legacy layouts retain
     // their validations; visibility does not make optional fields required.
@@ -123,6 +127,7 @@ export async function POST(req: NextRequest) {
         },
         {
           customerName: body.customerName ?? "",
+          extraValues: normalizeKeytagExtraValues(designerLayout, body.extraValues),
           vehicleInfo: body.vehicleInfo ?? "",
           vin: body.vin,
           roNumber,

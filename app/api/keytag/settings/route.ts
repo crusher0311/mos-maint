@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
+import { keytagExtraLayoutError } from "@/lib/keytag-extra-fields";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -96,6 +97,11 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const config: KeytagConfig = body.config;
+    if (!config || typeof config !== "object" || Array.isArray(config)) {
+      return NextResponse.json({ error: "Invalid keytag configuration" }, { status: 400 });
+    }
+    const layoutError = keytagExtraLayoutError(config.designerLayout);
+    if (layoutError) return NextResponse.json({ error: layoutError }, { status: 400 });
 
     const db = await getDb();
     await db.collection("shops").updateOne(

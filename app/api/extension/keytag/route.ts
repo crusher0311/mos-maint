@@ -6,6 +6,7 @@ import { validateExtensionToken, getAuthErrorStatus , buildAuthErrorBody } from 
 import { renderKeytagLegacy, renderKeytagDesigner } from "@/lib/canvas-renderer";
 import { DesignerLayout } from "@/lib/keytag-designer-types";
 import { resolvePaperSize } from "@/lib/keytag-paper-sizes";
+import { normalizeKeytagExtraValues } from "@/lib/keytag-extra-fields";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,6 +41,7 @@ interface KeytagConfig {
 }
 
 interface KeytagRequest {
+  extraValues?: Record<string, string>;
   customerName: string;
   vehicleInfo: string;
   vin?: string;
@@ -182,6 +184,7 @@ async function _POST(req: NextRequest) {
         },
         {
           customerName: body.customerName,
+          extraValues: normalizeKeytagExtraValues(config.designerLayout, body.extraValues),
           vehicleInfo: body.vehicleInfo,
           vin: body.vin,
           roNumber: body.roNumber,

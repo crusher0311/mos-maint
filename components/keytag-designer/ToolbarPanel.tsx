@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { DesignerLayout, DesignerElement } from "@/lib/keytag-designer-types";
+import { ExtraFieldsPanel } from "./ExtraFieldsPanel";
 import {
   PAPER_SIZE_PRESETS,
   resolvePaperSize,
@@ -50,7 +51,6 @@ export function ToolbarPanel({
   useEffect(() => {
     setDraftWidth(String(committedCustom.width));
     setDraftHeight(String(committedCustom.height));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [committedCustom.width, committedCustom.height, currentId]);
 
   const onPresetChange = (newId: string) => {
@@ -185,8 +185,8 @@ export function ToolbarPanel({
 
           <div className="text-xs text-gray-500 pt-1">
             <p>
-              <span className="font-medium">{resolved.widthIn.toFixed(3)}"</span> ×{" "}
-              <span className="font-medium">{resolved.heightIn.toFixed(3)}"</span> · {resolved.dpi} DPI ·
+              <span className="font-medium">{resolved.widthIn.toFixed(3)}&quot;</span> ×{" "}
+              <span className="font-medium">{resolved.heightIn.toFixed(3)}&quot;</span> · {resolved.dpi} DPI ·
               output {resolved.renderWidth}×{resolved.renderHeight}px
             </p>
           </div>
@@ -232,6 +232,10 @@ export function ToolbarPanel({
             </div>
           ))}
         </div>
+        <ExtraFieldsPanel layout={layout} onAdd={(element) => {
+          onUpdateLayout({ elements: [...layout.elements, element] });
+          onSelectElement(element.id);
+        }} />
       </div>
 
       <div>

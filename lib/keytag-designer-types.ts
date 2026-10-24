@@ -1,6 +1,6 @@
 export interface DesignerElement {
   id: string;
-  type: 'customerName' | 'vehicleInfo' | 'vin' | 'roNumber' | 'mileage' | 'text';
+  type: 'customerName' | 'vehicleInfo' | 'vin' | 'roNumber' | 'mileage' | 'text' | 'vehicleColor' | 'licensePlate' | 'custom';
   label: string;
   x: number;
   y: number;

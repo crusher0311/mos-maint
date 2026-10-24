@@ -5,7 +5,6 @@ import {
   DesignerElement,
   DesignerLayout,
   DEFAULT_LAYOUT,
-  SAMPLE_DATA,
 } from "@/lib/keytag-designer-types";
 import {
   resolvePaperSize,
@@ -59,7 +58,6 @@ export function KeytagDesigner({ initialLayout, onSave, onDownload }: KeytagDesi
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
   const autoSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const initialLayoutRef = useRef(initialLayout);
   const hasInitializedRef = useRef(false);
 
   const layout = history.present;
@@ -283,6 +281,11 @@ export function KeytagDesigner({ initialLayout, onSave, onDownload }: KeytagDesi
               element={selectedElement}
               onUpdate={(updates) => updateElement(selectedElement.id, updates)}
               textColor={layout.textColor}
+              onBack={() => setSelectedId(null)}
+              onRemove={() => {
+                pushHistory({ ...layout, elements: layout.elements.filter(element => element.id !== selectedElement.id) });
+                setSelectedId(null);
+              }}
             />
           ) : (
             <ToolbarPanel
@@ -301,7 +304,7 @@ export function KeytagDesigner({ initialLayout, onSave, onDownload }: KeytagDesi
           const r = resolvePaperSize(layout.paperSize);
           return (
             <>
-              Canvas: {r.widthIn.toFixed(3)}" × {r.heightIn.toFixed(3)}" ({r.label}) |{" "}
+              Canvas: {r.widthIn.toFixed(3)}&quot; × {r.heightIn.toFixed(3)}&quot; ({r.label}) |{" "}
             </>
           );
         })()}

@@ -126,6 +126,7 @@ async function _POST(req: NextRequest) {
       const shop = await findShopByExactShopId<any>(shopId, { keytagConfig: 1 });
       const png = await renderKeytagBuffer(shop?.keytagConfig, {
         customerName: k.customerName,
+        extraValues: k.extraValues,
         vehicleInfo: k.vehicleInfo,
         vin: k.vin,
         roNumber: k.roNumber,

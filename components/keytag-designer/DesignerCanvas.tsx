@@ -2,6 +2,7 @@
 
 import { useRef, useState, useCallback } from "react";
 import { DesignerElement, DesignerLayout, SAMPLE_DATA } from "@/lib/keytag-designer-types";
+import { isKeytagExtra, keytagFieldBinding, keytagSampleExtras, keytagExtraTextRuns, fitKeytagExtraFontSize } from "@/lib/keytag-extra-fields";
 
 const MAX_CANVAS_PX = 720;
 const BASE_SCALE = 1.5;
@@ -42,6 +43,7 @@ export function DesignerCanvas({
   onUpdateElement,
 }: DesignerCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
+  const measureCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [alignmentGuides, setAlignmentGuides] = useState<AlignmentGuide[]>([]);
 
@@ -213,6 +215,7 @@ export function DesignerCanvas({
   }, [onSelectElement]);
 
   const scale = getDisplayScale(layout.canvasWidth, layout.canvasHeight);
+  const sampleExtras = keytagSampleExtras(layout);
   return (
     <div
       ref={canvasRef}
@@ -267,7 +270,16 @@ export function DesignerCanvas({
 
       {layout.elements.filter((el) => el.visible).map((element) => {
         const isSelected = element.id === selectedId;
-        const value = SAMPLE_DATA[element.type] || element.label;
+        const value = isKeytagExtra(element) ? sampleExtras[keytagFieldBinding(element)] || "" : SAMPLE_DATA[element.type] || element.label;
+        const isExtra = isKeytagExtra(element);
+        const fontSize = isExtra ? fitKeytagExtraFontSize(element, value, (text, size, weight, style) => {
+          if (typeof document === "undefined") return text.length * size * 0.6;
+          measureCanvasRef.current ??= document.createElement("canvas");
+          const context = measureCanvasRef.current.getContext("2d");
+          if (!context) return text.length * size * 0.6;
+          context.font = `${style} ${weight} ${size}px Inter, sans-serif`;
+          return context.measureText(text).width;
+        }) : element.fontSize;
         
         const labelWeight = element.labelFontWeight || element.fontWeight;
         const labelStyle = element.labelFontStyle || element.fontStyle;
@@ -285,7 +297,8 @@ export function DesignerCanvas({
               top: element.y * scale,
               width: element.width * scale,
               height: element.height * scale,
-              fontSize: element.fontSize * scale,
+              fontSize: fontSize * scale,
+              ...(isExtra ? { fontFamily: "Inter, sans-serif" } : {}),
               textAlign: element.textAlign,
               color: layout.textColor,
               display: "flex",
@@ -296,7 +309,7 @@ export function DesignerCanvas({
                   : element.textAlign === "right"
                   ? "flex-end"
                   : "flex-start",
-              padding: "0 4px",
+              padding: isExtra ? `0 ${2 * scale}px` : "0 4px",
               overflow: "hidden",
               whiteSpace: "nowrap",
               textOverflow: "ellipsis",
@@ -304,7 +317,11 @@ export function DesignerCanvas({
             }}
             onMouseDown={(e) => handleMouseDown(e, element.id, "move")}
           >
-            {element.showLabel ? (
+            {isExtra ? (
+              keytagExtraTextRuns(element, value).map((run, index) => (
+                <span key={index} style={{ fontWeight: run.weight, fontStyle: run.style, whiteSpace: "pre" }}>{run.text}</span>
+              ))
+            ) : element.showLabel ? (
               <>
                 <span style={{ fontWeight: labelWeight, fontStyle: labelStyle }}>{element.label}: </span>
                 {element.type === 'vin' && element.vinHighlightLast8 && value.length >= 8 ? (

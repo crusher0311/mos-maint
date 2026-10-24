@@ -10,6 +10,7 @@ import { NextResponse } from "next/server";
 import { DEFAULT_LAYOUT } from "../lib/keytag-designer-types";
 import * as paperSizes from "../lib/keytag-paper-sizes";
 import * as mileageHelpers from "../lib/sticker-mileage";
+import * as keytagExtras from "../lib/keytag-extra-fields";
 
 function load(source: string, imports: Record<string, unknown>, globals = {}) {
   const exports: any = {};
@@ -40,6 +41,8 @@ const renderer = load(readFileSync("lib/canvas-renderer.ts", "utf8"), {
   },
   path: { default: { join: (...parts: string[]) => parts.join("/") } },
   "@/lib/sticker-designer-types": {},
+  "@/lib/sticker-text-painter": {},
+  "@/lib/keytag-extra-fields": keytagExtras,
 }, { process: { cwd: () => "/offline" } });
 
 let session: any = { shopId: 42 };
@@ -68,6 +71,7 @@ const route = load(readFileSync("app/api/keytag/generate/route.ts", "utf8"), {
   ])),
   "@/lib/keytag-paper-sizes": paperSizes,
   "@/lib/sticker-mileage": mileageHelpers,
+  "@/lib/keytag-extra-fields": keytagExtras,
   "@/lib/sticker-pdf": { pngBufferToSizedPdfBuffer: async (...args: any[]) => {
     pdfCalls.push(args);
     return Buffer.from("%PDF-fixture");
@@ -201,6 +205,10 @@ async function main() {
       openMobilePlaceholderWindow: () => ({}),
       navigateWindowToPdfBlob: () => { printed = true; },
       setPrintingKeytag() {},
+      keytagPrintDetails: {
+        begin: () => ({ controller: new AbortController(), isCurrent: () => true, mobileWindow: null }),
+        collect: async () => ({}),
+      },
       alert(message: string) { assert.fail(message); },
       fetch: async (url: string, options: any) => {
         assert.equal(url, "/api/keytag/generate");

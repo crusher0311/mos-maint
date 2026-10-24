@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { StickerSupply } from "@/components/stickers/StickerSupply";
+import { useKeytagPrintDetails } from "@/components/keytag-designer/useKeytagPrintDetails";
 import { stickerPrintAction, completeStickerPrintAction } from "@/lib/sticker-print-action";
 import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive, ArrowUp, ArrowDown, LogOut, ClipboardCheck, FileText, ThumbsUp, CheckCircle2, PauseCircle, X, Wrench, ClipboardList, AlertTriangle, Printer, Loader2, Key, HeartPulse, Plus, MessageSquareText, FileSearch } from "lucide-react";
 import JobLookup from "@/components/JobLookup";
@@ -200,6 +201,10 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
   const userMenuRef = useRef<HTMLDivElement>(null);
   const [printingSticker, setPrintingSticker] = useState<string | null>(null);
   const [printingKeytag, setPrintingKeytag] = useState<string | null>(null);
+  const keytagPrintDetails = useKeytagPrintDetails(
+    `${initialData.shopId ?? initialData.user?.shopId ?? ""}:${data.shopId ?? data.user?.shopId ?? ""}`,
+    () => setPrintingKeytag(null),
+  );
   const [stickerContextMenu, setStickerContextMenu] = useState<{
     vin: string;
     mileage: number;
@@ -589,18 +594,24 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     vehicle: string,
     vin: string,
     roNumber: string,
-    mileage: number | null
+    mileage: number | null,
+    row?: any
   ) => {
     // iOS Safari/AirPrint ignores CSS `@page { size }`. Open a placeholder
     // tab synchronously off the user's tap (before any await), then
     // navigate it to a real-sized PDF once we have it. See lib/print-mobile.
     const useMobilePdfPath = isMobilePrintBrowser();
     const mobilePrintWindow = useMobilePdfPath ? openMobilePlaceholderWindow("key tag") : null;
+    const operation = keytagPrintDetails.begin(mobilePrintWindow);
 
     setPrintingKeytag(vin);
     try {
+      const extraValues = await keytagPrintDetails.collect(operation, row, vehicle);
+      if (extraValues === null || !operation.isCurrent()) return;
       const res = await fetch('/api/keytag/generate', {
         method: 'POST',
+        credentials: 'include',
+        signal: operation.controller.signal,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           customerName: customerName || 'Customer',
@@ -608,6 +619,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
           vin: vin || '',
           roNumber: roNumber || '',
           mileage: mileage ?? 0,
+          extraValues,
           format: useMobilePdfPath ? 'pdf' : 'png',
         }),
       });
@@ -618,14 +630,20 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       }
 
       const blob = await res.blob();
+      if (!operation.isCurrent()) return;
 
       if (useMobilePdfPath) {
         navigateWindowToPdfBlob(mobilePrintWindow, blob);
+        // The PDF tab now belongs to the user; a later operation must not close it.
+        operation.mobileWindow = null;
         return;
       }
 
+      const keytagWidth = /^\d+(\.\d+)?in$/.test(res.headers.get('X-Keytag-Width') || '') ? res.headers.get('X-Keytag-Width')! : '3.5in';
+      const keytagHeight = /^\d+(\.\d+)?in$/.test(res.headers.get('X-Keytag-Height') || '') ? res.headers.get('X-Keytag-Height')! : '1.125in';
       const reader = new FileReader();
       reader.onloadend = () => {
+        if (!operation.isCurrent()) return;
         const dataUrl = reader.result as string;
         const printFrame = document.createElement('iframe');
         printFrame.style.position = 'fixed';
@@ -642,9 +660,9 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
             <head>
               <title>Print Keytag</title>
               <style>
-                @page { size: 3.5in 1.125in; margin: 0; }
+                @page { size: ${keytagWidth} ${keytagHeight}; margin: 0; }
                 * { margin: 0; padding: 0; box-sizing: border-box; }
-                html, body { width: 3.5in; height: 1.125in; overflow: hidden; }
+                html, body { width: ${keytagWidth}; height: ${keytagHeight}; overflow: hidden; }
                 img { display: block; width: 100%; height: 100%; }
               </style>
             </head>
@@ -657,9 +675,9 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
 
           printFrame.onload = () => {
             setTimeout(() => {
-              printFrame.contentWindow?.print();
+              if (operation.isCurrent()) printFrame.contentWindow?.print();
               setTimeout(() => {
-                document.body.removeChild(printFrame);
+                printFrame.remove();
               }, 1000);
             }, 100);
           };
@@ -667,13 +685,14 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       };
       reader.readAsDataURL(blob);
     } catch (error) {
+      if (!operation.isCurrent()) return;
       console.error('Failed to print keytag:', error);
       if (mobilePrintWindow && !mobilePrintWindow.closed) {
         try { mobilePrintWindow.close(); } catch { /* ignore */ }
       }
       alert(error instanceof Error ? error.message : 'Failed to generate keytag.');
     } finally {
-      setPrintingKeytag(null);
+      if (operation.isCurrent()) setPrintingKeytag(null);
     }
   };
 
@@ -1160,6 +1179,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
+      {keytagPrintDetails.dialog}
       <StickerSupply />
       <header className="bg-white border-b border-gray-200 px-4 sm:px-6 py-3 sm:py-4">
         <div className="flex items-center justify-between gap-2">
@@ -1527,7 +1547,8 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
                                 r.displayVehicle || '',
                                 vin,
                                 r.displayRo || '',
-                                r.displayMiles
+                                r.displayMiles,
+                                r
                               )}
                               disabled={printingKeytag === vin}
                               className="p-1.5 rounded transition-colors text-gray-400 hover:text-amber-600 hover:bg-amber-50"

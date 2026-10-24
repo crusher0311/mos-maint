@@ -78,6 +78,7 @@ export interface KeytagConfigLike {
 }
 
 export interface KeytagRenderInput {
+  extraValues?: Record<string, string>;
   customerName: string;
   vehicleInfo: string;
   vin?: string;

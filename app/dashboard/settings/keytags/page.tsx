@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Tag, Loader2 } from "lucide-react";
 import { KeytagDesigner } from "@/components/keytag-designer";
-import { DesignerLayout, DEFAULT_LAYOUT, SAMPLE_DATA, DYMO_30252 } from "@/lib/keytag-designer-types";
+import { DesignerLayout, DEFAULT_LAYOUT, SAMPLE_DATA } from "@/lib/keytag-designer-types";
+import { keytagSampleExtras } from "@/lib/keytag-extra-fields";
 
 interface KeytagConfig {
   enabled: boolean;
@@ -20,6 +21,7 @@ export default function KeytagSettingsPage() {
   const [layout, setLayout] = useState<DesignerLayout | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const savedConfig = useRef<Partial<KeytagConfig>>({});
 
   useEffect(() => {
     async function loadSettings() {
@@ -27,6 +29,7 @@ export default function KeytagSettingsPage() {
         const res = await fetch("/api/keytag/settings");
         if (res.ok) {
           const data = await res.json();
+          savedConfig.current = data.config || {};
           if (data.config?.designerLayout) {
             setLayout(data.config.designerLayout);
           } else if (data.config?.colors) {
@@ -58,12 +61,13 @@ export default function KeytagSettingsPage() {
     try {
       const config: KeytagConfig = {
         enabled: true,
+        defaultSize: "dymo30252",
+        ...savedConfig.current,
         designerLayout: newLayout,
         colors: {
           text: newLayout.textColor,
           background: newLayout.backgroundColor,
         },
-        defaultSize: "dymo30252",
       };
       
       const res = await fetch("/api/keytag/settings", {
@@ -75,6 +79,7 @@ export default function KeytagSettingsPage() {
       if (!res.ok) {
         throw new Error("Failed to save settings");
       }
+      savedConfig.current = config;
     } catch (err) {
       setError("Failed to save settings");
       console.error(err);
@@ -90,9 +95,11 @@ export default function KeytagSettingsPage() {
         body: JSON.stringify({
           ...SAMPLE_DATA,
           designerLayout: currentLayout,
+          extraValues: keytagSampleExtras(currentLayout),
         }),
       });
 
+      if (!res.ok) throw new Error("Failed to download sample");
       if (res.ok) {
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
@@ -105,6 +112,7 @@ export default function KeytagSettingsPage() {
         URL.revokeObjectURL(url);
       }
     } catch (err) {
+      setError("Failed to download sample. Please try again.");
       console.error("Failed to download:", err);
     }
   }, []);

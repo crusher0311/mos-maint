@@ -53,6 +53,17 @@ async function _GET(request: NextRequest) {
     let vehicleYear: number | null = null;
     let vehicleMake: string | null = null;
     let vehicleModel: string | null = null;
+    let vehicleColor: string | null = null;
+    let licensePlate: string | null = null;
+    // Read only data already fetched for this exact shop/RO. Extras must never
+    // trigger a provider request or turn an otherwise complete cache into a miss.
+    const readExtraContext = (row: any) => {
+      const vehicle = row?.vehicle || row?.data?.vehicle;
+      const color = row?.vehicleColor ?? vehicle?.color;
+      const plate = row?.licensePlate ?? vehicle?.licensePlate;
+      if (typeof color === "string") vehicleColor = color.trim().slice(0, 64);
+      if (typeof plate === "string") licensePlate = plate.trim().slice(0, 64);
+    };
 
     if (resolvedProvider === "tekmetric") {
       const wo = await db.collection("tekmetric_work_orders").findOne({
@@ -61,6 +72,7 @@ async function _GET(request: NextRequest) {
       });
 
       if (wo) {
+        readExtraContext(wo);
         customerName = wo.customerName || null;
         repairOrderNumber = wo.repairOrderNumber
           ? String(wo.repairOrderNumber)
@@ -117,6 +129,7 @@ async function _GET(request: NextRequest) {
             ]);
 
             if (vehicleRes) {
+              readExtraContext({ vehicle: vehicleRes });
               if (!vin && (vehicleRes as any).vin) vin = String((vehicleRes as any).vin).toUpperCase();
               if (!vehicleYear && (vehicleRes as any).year) vehicleYear = (vehicleRes as any).year;
               if (!vehicleMake && (vehicleRes as any).make) vehicleMake = (vehicleRes as any).make;
@@ -166,6 +179,7 @@ async function _GET(request: NextRequest) {
       });
 
       if (swRo) {
+        readExtraContext(swRo);
         customerName = swRo.customerName || null;
         repairOrderNumber = swRo.number ? String(swRo.number) : null;
         vin = swRo.vin || null;
@@ -214,6 +228,7 @@ async function _GET(request: NextRequest) {
       });
 
       if (smRo) {
+        readExtraContext(smRo);
         customerName = smRo.customerName || null;
         repairOrderNumber = smRo.number ? String(smRo.number) : null;
         vin = smRo.vin || null;
@@ -300,6 +315,7 @@ async function _GET(request: NextRequest) {
         repairOrderNumber = wo.repairOrderNumber
           ? String(wo.repairOrderNumber)
           : (wo.roNumber ? String(wo.roNumber) : null);
+        readExtraContext(wo);
         vin = wo.vin || wo.vehicleVin || null;
         mileage = wo.odometer || wo.mileageIn || wo.mileage || null;
         vehicleYear = wo.vehicleYear || null;
@@ -407,6 +423,8 @@ async function _GET(request: NextRequest) {
             ? { year: vehicleYear, make: vehicleMake, model: vehicleModel }
             : null,
         vehicleDisplay,
+        vehicleColor,
+        licensePlate,
         provider: resolvedProvider,
         autoflowDvi,
       },

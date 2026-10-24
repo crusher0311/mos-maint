@@ -2,20 +2,24 @@
 
 import { useState } from "react";
 import { DesignerElement } from "@/lib/keytag-designer-types";
+import { isKeytagExtra, KEYTAG_LABEL_MAX } from "@/lib/keytag-extra-fields";
 import { Eye, EyeOff, Bold, Italic, AlignLeft, AlignCenter, AlignRight, Tag, ChevronDown, ChevronRight } from "lucide-react";
 
 interface ElementPanelProps {
   element: DesignerElement;
   onUpdate: (updates: Partial<DesignerElement>) => void;
   textColor: string;
+  onRemove: () => void;
+  onBack: () => void;
 }
 
-export function ElementPanel({ element, onUpdate, textColor }: ElementPanelProps) {
+export function ElementPanel({ element, onUpdate, textColor, onRemove, onBack }: ElementPanelProps) {
   const [showAdvancedStyles, setShowAdvancedStyles] = useState(false);
   const [showVinOptions, setShowVinOptions] = useState(false);
 
   return (
     <div className="p-4 space-y-4">
+      <button type="button" onClick={onBack} className="text-sm text-blue-600 hover:text-blue-800">Back to all elements</button>
       <div className="flex items-center gap-2 pb-3 border-b">
         <Tag className="w-5 h-5 text-blue-600" />
         <h3 className="font-semibold text-gray-900">{element.label}</h3>
@@ -27,6 +31,17 @@ export function ElementPanel({ element, onUpdate, textColor }: ElementPanelProps
           {element.visible ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
         </button>
       </div>
+
+      {isKeytagExtra(element) && (
+        <div className="space-y-2">
+          <label htmlFor="keytag-field-label" className="block text-sm font-medium text-gray-700">Field label</label>
+          <input id="keytag-field-label" value={element.label} maxLength={KEYTAG_LABEL_MAX}
+            onChange={event => onUpdate({ label: event.target.value.slice(0, KEYTAG_LABEL_MAX) })}
+            className="w-full rounded border px-2 py-1 text-sm" />
+          <p className="text-xs text-gray-500">Up to {KEYTAG_LABEL_MAX} characters. Renaming keeps this field&apos;s binding.</p>
+          <button type="button" onClick={onRemove} className="text-sm text-red-600 hover:text-red-800">Remove field</button>
+        </div>
+      )}
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">Position</label>
@@ -165,7 +180,7 @@ export function ElementPanel({ element, onUpdate, textColor }: ElementPanelProps
             onChange={(e) => onUpdate({ showLabel: e.target.checked })}
             className="rounded"
           />
-          <span className="text-gray-700">Show label (e.g., "VIN:")</span>
+          <span className="text-gray-700">Show label (e.g., &quot;VIN:&quot;)</span>
         </label>
       </div>
 
@@ -182,7 +197,7 @@ export function ElementPanel({ element, onUpdate, textColor }: ElementPanelProps
           {showAdvancedStyles && (
           <div className="p-3 space-y-3">
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Label Style (e.g., "VIN:")</label>
+            <label className="block text-xs text-gray-500 mb-1">Label Style (e.g., &quot;VIN:&quot;)</label>
             <div className="flex gap-1">
               <button
                 onClick={() => onUpdate({ 
@@ -212,7 +227,7 @@ export function ElementPanel({ element, onUpdate, textColor }: ElementPanelProps
           </div>
 
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Value Style (e.g., "4T1BF1FK...")</label>
+            <label className="block text-xs text-gray-500 mb-1">Value Style (e.g., &quot;4T1BF1FK...&quot;)</label>
             <div className="flex gap-1">
               <button
                 onClick={() => onUpdate({ 

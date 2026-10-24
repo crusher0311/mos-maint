@@ -1,6 +1,6 @@
 // MOS Tools Side Panel Application
 
-// ==================== SEARCH NORMALIZATION ====================
+// ---- SEARCH NORMALIZATION ----
 const SERVICE_SEARCH_MAPPINGS = [
   { patterns: [/engine oil/i, /oil and filter/i, /oil & filter/i, /motor oil/i, /oil change/i, /lube.*oil/i], normalized: 'oil change' },
   { patterns: [/cabin air filter/i, /cabin filter/i, /in.?cabin/i, /pollen filter/i], normalized: 'cabin filter' },
@@ -62,7 +62,7 @@ try {
   });
 } catch (_) { /* never throw from telemetry */ }
 
-// ==================== STATE ====================
+// ---- STATE ----
 let isAuthenticated = false;
 // Role-derived write permission (viewer roles / readOnly flag). Conservative
 // default; refined via GET_MOS_AUTH.
@@ -695,7 +695,7 @@ let concernReturnToCro = false;
 // customer/vehicle/job selections and the concern we just wrote back).
 let croPreserveStateOnInit = false;
 
-// ==================== DOM ELEMENTS ====================
+// ---- DOM ELEMENTS ----
 const elements = {
   // States
   loadingState: document.getElementById('loading-state'),
@@ -848,7 +848,7 @@ const elements = {
   croConcernAiBtn: document.getElementById('cro-concern-ai-btn')
 };
 
-// ==================== SHOP RESOLUTION ====================
+// ---- SHOP RESOLUTION ----
 function resolveAutoflowShop(autoflowSubdomain) {
   if (!mosShops.length || !autoflowSubdomain) return null;
 
@@ -958,7 +958,7 @@ function enrichContextWithMosShop(context) {
   return context;
 }
 
-// ==================== INITIALIZATION ====================
+// ---- INITIALIZATION ----
 async function init() {
   setupEventListeners();
   const authStatus = await sendMessage({ action: 'GET_MOS_AUTH' });
@@ -1324,7 +1324,7 @@ function formatMileageInput(value) {
   return parseInt(numericValue, 10).toLocaleString();
 }
 
-// ==================== STATE MANAGEMENT ====================
+// ---- STATE MANAGEMENT ----
 function showLoadingState() {
   clearVehicleHistory();
   if (vehicleHistoryTimer) clearInterval(vehicleHistoryTimer);
@@ -1771,6 +1771,7 @@ function updateContext(context) {
     laborRateContextKey(prevContext) !== laborRateContextKey(context);
   currentContext = context;
   syncTutorials();
+  if (keytagExtraContextKey(prevContext) !== keytagExtraContextKey(context)) resetKeytagExtras();
 
   if (estimateAuditContextChanged) {
     estimateAuditManualResultPins.clear();
@@ -2155,7 +2156,7 @@ function updateTabAccessibility() {
   }
 }
 
-// ==================== AUTHENTICATION ====================
+// ---- AUTHENTICATION ----
 async function handleRequestLoginCode() {
   const email = (elements.emailInput.value || '').trim();
   const apiUrl = elements.apiUrlInput.value || 'https://mos.tools';
@@ -2257,6 +2258,7 @@ async function handleLogout() {
   recommendationAddEvidence.clear();
   planCache.clear();
   invalidateTutorials();
+  resetKeytagExtras();
   clearVehicleHistory();
   if (vehicleHistoryTimer) clearInterval(vehicleHistoryTimer);
   vehicleHistoryTimer = null;
@@ -2278,7 +2280,7 @@ async function handleLogout() {
   showLoginState();
 }
 
-// ==================== PLAN ====================
+// ---- PLAN ----
 async function loadPlan(forceRefresh = false) {
   // Independent read: never return history from a locally cached plan.
   void fetchVehicleHistory();
@@ -2590,7 +2592,7 @@ function renderPlan(data, reqRoId, reqShopId, reqProvider, reqVin) {
   setupAddDropdowns();
 }
 
-// ==================== ADD ALL DECLINED WORK (Task #808) ====================
+// ---- ADD ALL DECLINED WORK (Task #808) ----
 // One-click "add every previously declined Tekmetric job to the current RO".
 // The server endpoint lists the declined jobs, resolves the open RO, and
 // dedupes against jobs already on it; the actual writes happen here via
@@ -2720,7 +2722,7 @@ async function handleAddAllDeclinedWork() {
 
 let autoDviInFlight = false;
 
-// ==================== SIDE-PANEL UNDO (Task #1094) ====================
+// ---- SIDE-PANEL UNDO (Task #1094) ----
 // Side-panel write actions (add job / canned job / declined add-all) capture
 // the created job / service-package identifiers into the same background
 // snapshot store the injected-button undo chip uses (Task #1086). The bar at
@@ -3075,7 +3077,7 @@ function formatLastDone(last, currentMileage) {
   return { text, logo };
 }
 
-// ==================== SERVICE ICONS (Task #865) ====================
+// ---- SERVICE ICONS (Task #865) ----
 // Ports lib/service-icons.ts so the sidepanel resolves the same pictogram
 // as the dashboard / customer-facing VHR. Artwork lives in icons/service/.
 const SERVICE_ICON_FILES = {
@@ -3386,7 +3388,7 @@ function createServiceItemHTML(item, type) {
   `;
 }
 
-// ==================== COMMON FAILURES ====================
+// ---- COMMON FAILURES ----
 async function loadCommonFailures() {
   // If no vehicle data but we have RO context, try to fetch from Plan API
   if (currentContext && currentContext.roId && !currentContext.vehicle) {
@@ -3587,7 +3589,7 @@ function setupFailureHandlers() {
   });
 }
 
-// ==================== JOB LOOKUP ====================
+// ---- JOB LOOKUP ----
 async function handleJobSearch() {
   const query = elements.jobSearch.value.trim();
   if (!query) return;
@@ -3961,7 +3963,7 @@ function setupJobItemHandlers() {
 // Store loaded canned jobs for filtering
 let allCannedJobs = [];
 
-// ==================== CANNED JOBS ====================
+// ---- CANNED JOBS ----
 async function loadCannedJobs() {
   if (!currentContext || !currentContext.roId) {
     elements.cannedLoading.classList.add('hidden');
@@ -4072,7 +4074,7 @@ function filterCannedJobs(searchTerm) {
   }
 }
 
-// ==================== JOB ACTIONS ====================
+// ---- JOB ACTIONS ----
 async function handleAddService(service) {
   // Check if we have full job details from matching canned job
   const hasFullDetails = service.laborItems && service.laborItems.length > 0;
@@ -4550,7 +4552,7 @@ async function handleAddCannedJob(job, recommendationOrigin) {
   }
 }
 
-// ==================== LABOR RATES ====================
+// ---- LABOR RATES ----
 let currentLaborRateRules = [];
 let currentLaborRateRulesRevision = 0;
 let currentLaborRateRulesSmsShopId = null;
@@ -5368,7 +5370,7 @@ async function handleApplyLaborRateNow() {
   }
 }
 
-// ==================== STICKER & KEYTAG ====================
+// ---- STICKER & KEYTAG ----
 let stickerConfig = null;
 let stickerConfigContextKey = null;
 let stickerConfigRequest = 0;
@@ -5589,6 +5591,83 @@ let keytagStatus = 'idle';
 let keytagInFlightKey = null; // shopId|roId of the currently-in-flight enrichment
 let keytagLastEnrichedKey = null; // shopId|roId we last successfully enriched
 
+// Values belong only to this local print context, never to storage or an SMS.
+let keytagExtrasKey = null;
+let keytagExtrasRequest = 0;
+let keytagExtrasFields = [];
+let keytagExtrasValues = {};
+let keytagExtrasEdited = new Set();
+function keytagExtraContextKey(ctx) {
+  if (!ctx?.shopId) return null;
+  return JSON.stringify([ctx.provider || '', ctx.shopId, ctx.roId || '', ctx.vin || '', ctx._tabId || '',
+    ctx.laborRateSessionDiscriminator || '']);
+}
+function resetKeytagExtras() {
+  keytagExtrasRequest++;
+  keytagExtrasKey = null;
+  keytagExtrasFields = [];
+  keytagExtrasValues = {};
+  keytagExtrasEdited = new Set();
+  document.getElementById('keytag-extra-fields')?.replaceChildren();
+}
+function prefillKeytagExtras() {
+  if (keytagExtrasKey !== keytagExtraContextKey(currentContext)) return;
+  for (const field of keytagExtrasFields) {
+    const key = field.type === 'custom' ? field.id : field.type;
+    if (keytagExtrasEdited.has(key) || field.type === 'custom') continue;
+    const value = currentContext?.[key];
+    if (typeof value === 'string') keytagExtrasValues[key] = value.trim().slice(0, 64);
+  }
+}
+function renderKeytagExtras() {
+  const container = document.getElementById('keytag-extra-fields');
+  if (!container) return;
+  container.replaceChildren();
+  for (const field of keytagExtrasFields) {
+    const key = field.type === 'custom' ? field.id : field.type;
+    const wrapper = document.createElement('div');
+    wrapper.className = 'form-group';
+    const label = document.createElement('label');
+    label.textContent = `${field.label || 'Extra detail'} (optional)`;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'input-modern';
+    input.maxLength = 64;
+    input.id = `keytag-extra-${key}`;
+    label.htmlFor = input.id;
+    input.value = keytagExtrasValues[key] || '';
+    input.addEventListener('input', () => {
+      keytagExtrasEdited.add(key);
+      keytagExtrasValues[key] = input.value;
+    });
+    wrapper.append(label, input);
+    container.append(wrapper);
+  }
+}
+async function loadKeytagExtras() {
+  const key = keytagExtraContextKey(currentContext);
+  if (!key) return;
+  const request = ++keytagExtrasRequest;
+  const snapshot = { ...currentContext };
+  const result = await sendMessage({
+    action: 'MOS_API_REQUEST',
+    endpoint: `/api/extension/keytag?shopId=${encodeURIComponent(snapshot.shopId)}&provider=${encodeURIComponent(snapshot.provider || '')}`,
+    context: snapshot,
+  });
+  if (request !== keytagExtrasRequest || key !== keytagExtraContextKey(currentContext)) return;
+  if (result.error || !result.config) throw new Error(result.error || 'Keytag settings are unavailable. Please try again.');
+  const fields = (result.config.designerLayout?.elements || [])
+    .filter(field => field.visible && ['vehicleColor', 'licensePlate', 'custom'].includes(field.type));
+  if (keytagExtrasKey !== key) {
+    keytagExtrasValues = {};
+    keytagExtrasEdited = new Set();
+  }
+  keytagExtrasKey = key;
+  keytagExtrasFields = fields;
+  prefillKeytagExtras();
+  renderKeytagExtras();
+}
+
 function makeRoKey(ctx) {
   if (!ctx?.shopId || !ctx?.roId) return null;
   return `${ctx.shopId}|${ctx.roId}`;
@@ -5615,8 +5694,15 @@ async function loadKeytagSection() {
   }
   
   elements.keytagSection.classList.remove('hidden');
+  void loadKeytagExtras().catch(error => {
+    if (elements.keytagError) {
+      elements.keytagError.textContent = error.message;
+      elements.keytagError.classList.remove('hidden');
+    }
+  });
 
   const roKey = makeRoKey(currentContext);
+  const extraContextKey = keytagExtraContextKey(currentContext);
 
   // If we've already successfully enriched THIS ro, just refresh the form.
   if (roKey && keytagLastEnrichedKey === roKey && keytagStatus === 'ready') {
@@ -5683,7 +5769,7 @@ async function loadKeytagSection() {
 
     // Stale-response guard: discard if the user navigated to a different RO
     // while this request was in flight.
-    if (makeRoKey(currentContext) !== roKey) {
+    if (makeRoKey(currentContext) !== roKey || keytagExtraContextKey(currentContext) !== extraContextKey) {
       return;
     }
 
@@ -5700,6 +5786,17 @@ async function loadKeytagSection() {
         currentContext.vehicleDisplay = newVehicleDisplay;
       }
       if (result.vin) currentContext.vin = result.vin.toUpperCase();
+      for (const key of ['vehicleColor', 'licensePlate']) {
+        if (typeof result[key] === 'string') currentContext[key] = result[key];
+      }
+      // Enrichment may have supplied a previously missing VIN.
+      if (keytagExtrasKey !== keytagExtraContextKey(currentContext)) {
+        resetKeytagExtras();
+        void loadKeytagExtras().catch(() => {});
+      } else {
+        prefillKeytagExtras();
+        renderKeytagExtras();
+      }
 
       updateKeytagFields();
 
@@ -5764,6 +5861,8 @@ function updateKeytagFields() {
 }
 
 async function handleKeytagPrint() {
+  const printContext = { ...currentContext };
+  const printContextKey = keytagExtraContextKey(currentContext);
   const customerName = elements.keytagCustomer?.value?.trim() || '';
   const vehicleInfo = elements.keytagVehicle?.value?.trim() || '';
   const roNumber = elements.keytagRo?.value?.trim() || '';
@@ -5782,12 +5881,21 @@ async function handleKeytagPrint() {
   if (elements.keytagPrintBtn) elements.keytagPrintBtn.disabled = true;
   
   try {
+    // Re-read definitions for this shop; a stale form must not print removed fields.
+    await loadKeytagExtras();
+    if (printContextKey !== keytagExtraContextKey(currentContext) || keytagExtrasKey !== printContextKey) {
+      throw new Error('Vehicle context changed. Please print again.');
+    }
     const body = {
       customerName,
       vehicleInfo,
       roNumber,
       mileage: parseInt(mileage, 10) || 0,
-      vin: currentContext?.vin || ''
+      vin: printContext.vin || '',
+      extraValues: Object.fromEntries(keytagExtrasFields.map(field => {
+        const key = field.type === 'custom' ? field.id : field.type;
+        return [key, keytagExtrasValues[key] || ''];
+      })),
     };
     
     // Add shop context
@@ -5799,6 +5907,7 @@ async function handleKeytagPrint() {
     const result = await sendMessage({
       action: 'MOS_API_REQUEST',
       endpoint: '/api/extension/keytag',
+      context: printContext,
       options: {
         method: 'POST',
         body: JSON.stringify(body)
@@ -5808,6 +5917,7 @@ async function handleKeytagPrint() {
     if (!result.success || !result.image) {
       throw new Error(result.error || 'Failed to generate keytag');
     }
+    if (printContextKey !== keytagExtraContextKey(currentContext)) return;
     
     // Print the keytag using same mechanism as sticker
     const keytagData = {
@@ -5816,6 +5926,10 @@ async function handleKeytagPrint() {
       heightInches: result.dimensions?.height || '1.11in'
     };
     printKeytagImage(keytagData);
+    keytagExtrasValues = {};
+    keytagExtrasEdited = new Set();
+    prefillKeytagExtras();
+    renderKeytagExtras();
     showNotification('Keytag generated!', 'success');
     
   } catch (err) {
@@ -6056,7 +6170,7 @@ function printStickerViaWindow(sticker) {
   }
 }
 
-// ==================== UTILITIES ====================
+// ---- UTILITIES ----
 // The background worker caps MOS API fetches at MOS_FETCH_TIMEOUT_MS (45s)
 // unless a request passes its own options.timeoutMs. The sidepanel-side wait
 // must ALWAYS exceed the background's cap, or slow-but-successful writes time
@@ -6229,7 +6343,7 @@ function showNotification(message, type = 'info') {
   }, 3000);
 }
 
-// ==================== VEHICLE SPECS ====================
+// ---- VEHICLE SPECS ----
 let specsCache = {};
 
 // Mirror of lib/unit-format.ts so the extension renders dual imperial/metric
@@ -6548,7 +6662,7 @@ function renderSpecsSection(title, items, iconType) {
   `;
 }
 
-// ==================== SUPPORT CHAT ====================
+// ---- SUPPORT CHAT ----
 let supportChatOpen = false;
 let supportMessages = [];
 let supportSessionId = null;
@@ -6909,7 +7023,7 @@ function showSupportAlert(message, type = 'info') {
   }, 4000);
 }
 
-// ==================== CONCERN ASSISTANT ====================
+// ---- CONCERN ASSISTANT ----
 async function handleConcernSubmit() {
   const concern = elements.concernInput?.value?.trim();
   if (!concern) {
@@ -7251,7 +7365,7 @@ function handleConcernNew() {
   hideConcernError();
 }
 
-// ==================== CREATE RO ↔ CONCERN ASSISTANT BRIDGE ====================
+// ---- CREATE RO ↔ CONCERN ASSISTANT BRIDGE ----
 // Launch the AI Concern Assistant from the Create RO "Details" step. Reuses the
 // exact same assistant the Concern tab (and dashboard) use; the only difference
 // is that the finished write-up flows back into the new repair order.
@@ -7307,7 +7421,7 @@ function hideConcernError() {
   }
 }
 
-// ==================== ESTIMATE ASSIST ====================
+// ---- ESTIMATE ASSIST ----
 let estimateLanguageMode = 'customer';
 
 const estimateAuditRecommendationStates = new Map();
@@ -7927,15 +8041,15 @@ async function runEstimateAudit() {
   }
 }
 
-// ==================== START ====================
+// ---- START ----
 init();
 initSupportChat();
 initEstimateAssist();
 
-// ==================== Detect Dog: Shop Migration Wizard ====================
+// ---- Detect Dog: Shop Migration Wizard ----
 // Platform-admin-only sidepanel UI that drives the server-side
 
-// ==================== CREATE RO (Protractor) — Task #348 ====================
+// ---- CREATE RO (Protractor) — Task #348 ----
 // Redesigned for full parity with the dashboard Create RO modal
 // (components/NewWorkOrderModal.tsx): concern-first flow with the AI assistant +
 // multi-concern, customer, vehicle (photo scan / VIN decode / plate lookup),
@@ -8252,7 +8366,7 @@ function getCroShopId() {
   return currentContext?.shopId || resolvedMosShopId || null;
 }
 
-// ==================== CRO: Concern (multi-concern) ====================
+// ---- CRO: Concern (multi-concern) ----
 function handleCroAddConcern() {
   const box = getCroEl('cro-concern');
   const text = (box?.value || '').trim();
@@ -8295,7 +8409,7 @@ function gatherCroConcerns() {
   return all;
 }
 
-// ==================== CRO: Customer ====================
+// ---- CRO: Customer ----
 async function handleCroCustomerSearch() {
   setCroError('cro-customer-error', '');
   const q = (getCroEl('cro-customer-search')?.value || '').trim();
@@ -8406,7 +8520,7 @@ function selectCroCustomer(customer) {
   loadCroVehicles(customer.id);
 }
 
-// ==================== CRO: Vehicle ====================
+// ---- CRO: Vehicle ----
 async function loadCroVehicles(ownerId) {
   setCroError('cro-vehicle-error', '');
   const loadingEl = getCroEl('cro-vehicle-loading');
@@ -8670,7 +8784,7 @@ function selectCroVehicle(vehicle) {
   setCroJobsTab('canned');
 }
 
-// ==================== CRO: Jobs (Canned / Deferred / History) ====================
+// ---- CRO: Jobs (Canned / Deferred / History) ----
 function setCroJobsTab(tab) {
   createRoState.activeJobsTab = tab;
   document.querySelectorAll('.cro-jobs-tab').forEach(btn => {
@@ -9070,7 +9184,7 @@ function renderCroHistory() {
   });
 }
 
-// ==================== CRO: Confirm + submit ====================
+// ---- CRO: Confirm + submit ----
 function renderCroConfirmSummary() {
   const host = getCroEl('cro-confirm-summary');
   if (!host) return;
