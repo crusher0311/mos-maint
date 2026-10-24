@@ -136,7 +136,7 @@ export async function POST(req: NextRequest) {
 
     const vin = req.nextUrl.searchParams.get("vin")?.toUpperCase();
     const mileageParam = req.nextUrl.searchParams.get("mileage");
-    const mileage = mileageParam ? parseInt(mileageParam, 10) : null;
+    let mileage = mileageParam ? parseInt(mileageParam, 10) : null;
     // Task #613: the extension VHI button is latency-sensitive. When the
     // caller asks for the "fast" build, we tighten every upstream budget and
     // prefer recent cached third-party data over blocking live fetches so the
@@ -170,12 +170,21 @@ export async function POST(req: NextRequest) {
         { shopId, vin, mileage },
         process.env.CRON_SECRET,
       );
-    const mileageMetadata = readPlanBuildMileageMetadata(
+    let mileageMetadata = readPlanBuildMileageMetadata(
       req.nextUrl.searchParams,
       trustedMileageMetadata,
     );
 
     const db = await getDb();
+    const shopDoc = await db.collection("shops").findOne({ shopId });
+    const distanceUnit = resolveShopDistanceUnit(shopDoc as ShopDistanceDoc | null);
+    const { readCustomerMileage } = await import("@/lib/customer-mileage-store");
+    const customerMileage = await readCustomerMileage(db, shopId, vin);
+    const customerAnchorWins = customerMileage?.distanceUnit === distanceUnit && customerMileage.mileage >= mileage;
+    if (customerAnchorWins) {
+      mileage = customerMileage!.mileage;
+      mileageMetadata = { mileageSource: "actual", mileageEstimateDetails: null };
+    }
 
     // Task #655 (manual edit): operator-defined CARFAX-description → service-key
     // overrides. Loaded once (cached in-process) and consulted live by both the
@@ -183,7 +192,11 @@ export async function POST(req: NextRequest) {
     const carfaxKeyOverrides = await getCarfaxOverridesMap(db);
 
     const existingCache = await getCachedPlan(db, vin, shopId, mileage);
-    if (existingCache && !carfaxDiagMode) {
+    const { canReusePlanForBuild } = await import("@/lib/plan-cache");
+    if (existingCache && canReusePlanForBuild(existingCache, {
+      trustedInternal: trustedInternalRequest,
+      forceRebuild: req.nextUrl.searchParams.get("forceRebuild") === "1",
+    }) && !carfaxDiagMode && (!customerAnchorWins || existingCache.plan.currentMiles === mileage)) {
       return NextResponse.json({
         ok: true,
         vin,
@@ -198,7 +211,6 @@ export async function POST(req: NextRequest) {
       `${fast ? "fast" : "full"} plan for ${vin} at ${mileage} miles`,
     );
 
-    const shopDoc = await db.collection("shops").findOne({ shopId });
     const soonMiles = shopDoc?.maintenance?.dueSoonMiles ?? shopDoc?.settings?.planPage?.soonMiles ?? DEFAULT_SOON_MILES;
     const soonDays = shopDoc?.maintenance?.dueSoonDays ?? shopDoc?.settings?.planPage?.soonDays ?? DEFAULT_SOON_DAYS;
     // Unify with the dashboard plan page + extension, which both read
@@ -218,7 +230,6 @@ export async function POST(req: NextRequest) {
     // Resolved through the central policy so a miles-only provider (Tekmetric /
     // Shop-Ware) can never build a plan in kilometers even if a stale/bad
     // preference is present — that would inflate the VHI score.
-    const distanceUnit = resolveShopDistanceUnit(shopDoc as ShopDistanceDoc | null);
     const rawIntervals: Record<string, ShopIntervalOverride> = shopDoc?.maintenance?.intervals ?? {};
     const intervalApplyMode: string = shopDoc?.maintenance?.intervalApplyMode || "always";
     const LEGACY_KEY_MAP: Record<string, string[]> = {
@@ -1185,6 +1196,7 @@ export async function POST(req: NextRequest) {
       soonDays,
       showInspectItems,
       ...mileageMetadata,
+      ...(customerAnchorWins ? { mileageInputSource: "customer_entered", customerMileageRecordedAt: customerMileage!.recordedAt } : {}),
       deferredWork: protractorDeferredWork.length > 0 ? protractorDeferredWork.map(dw => ({
         ID: dw.ID,
         ServiceItemID: dw.ServiceItemID,

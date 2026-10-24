@@ -1,20 +1,35 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
-import { triggerPlanBuild } from "@/lib/vhi-rebuild";
+import { authorizePublicReport, overlayPublicReport, refreshPublicReport } from "@/lib/public-report-service";
+import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
+import { resolveShopDistanceUnit, type ShopDistanceDoc } from "@/lib/shop-distance-unit";
+import { readCustomerMileage } from "@/lib/customer-mileage-store";
 import {
   buildReportUrl,
-  generateShareToken,
-  verifyShareToken,
 } from "@/lib/report-share";
 import { findLatestTekmetricWorkOrderByVinWithCustomerName } from "@/lib/data/repositories/tekmetric-work-orders";
 import { getFeatureEntitlements } from "@/lib/featureResolver";
 import { readInspectionResults } from "@/lib/data/repositories/auto-dvi";
 import { canAccessShopFeature } from "@/lib/shop-feature-access";
+import {
+  findLatestCachedPlanDoc,
+  getMaintenanceAnalysisDoc,
+  getReportApprovedItemsDoc,
+  findCachedWorkOrderCustomerName,
+} from "@/lib/data/repositories/plan-cache-store";
 
 const TOKEN_MAX_AGE_MS = 15 * 24 * 60 * 60 * 1000;
 
 export async function GET(
+  req: NextRequest,
+  context: { params: { vin: string } }
+) {
+  return withUpstreamTimeout(readReport(req, context), 10_000, "public report read",
+    NextResponse.json({ error: "Report temporarily unavailable. Please try again." }, { status: 503 }));
+}
+
+async function readReport(
   req: NextRequest,
   { params }: { params: { vin: string } }
 ) {
@@ -26,21 +41,9 @@ export async function GET(
       return NextResponse.json({ error: "Missing VIN" }, { status: 400 });
     }
 
-    let shopId: string | null = null;
-
-    if (token) {
-      const verified = verifyShareToken(token);
-      if (!verified || verified.vin !== vin) {
-        return NextResponse.json({ error: "Invalid or expired report link" }, { status: 403 });
-      }
-      shopId = verified.shopId;
-    } else {
-      return NextResponse.json({ error: "A valid share link is required to view this report" }, { status: 403 });
-    }
-    const entitlements = await getFeatureEntitlements(Number(shopId));
-    if (!entitlements.canUseFeature("maintenance")) {
-      return NextResponse.json({ error: "Feature not enabled" }, { status: 403 });
-    }
+    const scope = await authorizePublicReport(vin, token);
+    if (!scope) return NextResponse.json({ error: "Invalid or expired report link" }, { status: 403 });
+    const { shopId, entitlements } = scope;
 
     const db = await getDb();
 
@@ -51,15 +54,7 @@ export async function GET(
       return NextResponse.json({ error: "Shop not found" }, { status: 404 });
     }
 
-    // Task #998: flag-dispatched PG/Mongo facade reads.
-    const {
-      findLatestCachedPlanDoc,
-      getMaintenanceAnalysisDoc,
-      getReportApprovedItemsDoc,
-      findCachedWorkOrderCustomerName,
-    } = await import("@/lib/data/repositories/plan-cache-store");
-
-    let cachedPlan = await findLatestCachedPlanDoc(Number(shopId), vin, db);
+    const cachedPlan = await findLatestCachedPlanDoc(Number(shopId), vin, db);
 
     if (!cachedPlan?.plan) {
       let mileage: number | null = null;
@@ -68,6 +63,10 @@ export async function GET(
         { projection: { currentMileage: 1, lastMileage: 1 } }
       );
       mileage = vehicleDoc?.currentMileage ?? vehicleDoc?.lastMileage ?? null;
+      const customerAnchor = await readCustomerMileage(db, shopId, vin);
+      if (customerAnchor?.distanceUnit === resolveShopDistanceUnit(shop as ShopDistanceDoc)) {
+        mileage = Math.max(mileage || 0, customerAnchor.mileage);
+      }
 
       if (!mileage) {
         const analysisDoc = await getMaintenanceAnalysisDoc(Number(shopId), vin, db);
@@ -75,12 +74,10 @@ export async function GET(
       }
 
       if (mileage) {
-        console.log(`[Report API] No cached plan for ${vin}, triggering rebuild with mileage ${mileage}...`);
-        const built = await triggerPlanBuild(Number(shopId), vin, mileage);
-        if (built.ok) {
-          await new Promise((resolve) => setTimeout(resolve, 500));
-          cachedPlan = await findLatestCachedPlanDoc(Number(shopId), vin, db);
-        }
+        void refreshPublicReport(db, shopId, vin, null, { currentMiles: mileage }, true)
+          .catch(() => console.warn("[Public report] Initial refresh unavailable"));
+        return NextResponse.json({ pending: true, message: "Preparing your vehicle report" },
+          { status: 202, headers: { "Retry-After": "3", "Cache-Control": "no-store" } });
       }
 
       if (!cachedPlan?.plan) {
@@ -88,13 +85,10 @@ export async function GET(
       }
     }
 
-    const plan = cachedPlan.plan as {
-      buckets?: { overdue?: unknown[]; dueSoon?: unknown[]; upcoming?: unknown[] };
-      customerName?: string | null;
-      vehicle?: unknown;
-      currentMiles?: number | null;
-      dataQuality?: unknown;
-    };
+    const unit = resolveShopDistanceUnit(shop as ShopDistanceDoc);
+    const plan = await overlayPublicReport(db, shopId, vin, cachedPlan, unit);
+    void refreshPublicReport(db, shopId, vin, cachedPlan, plan)
+      .catch(() => console.warn("[Public report] Background refresh unavailable"));
     const buckets = plan.buckets || {};
 
     const approvedDoc = await getReportApprovedItemsDoc(Number(shopId), vin, db) as {
@@ -141,8 +135,7 @@ export async function GET(
     // time already converted OEM miles → shop unit (Task #333), so the
     // numbers stored in `buckets` are in `distanceUnit` already; we just
     // need to label them correctly here.
-    const distanceUnit: "miles" | "kilometers" =
-      shop?.preferences?.distanceUnit === "kilometers" ? "kilometers" : "miles";
+    const distanceUnit = unit;
 
     // Task #991 — customer-facing DVI tab: when the shop has Auto DVI and
     // technicians recorded findings for this vehicle, include them so the
@@ -182,6 +175,8 @@ export async function GET(
         vehicle: plan.vehicle || {},
         vin,
         currentMiles: plan.currentMiles || cachedPlan.mileage || 0,
+        mileageEstimated: !!plan.mileageEstimated,
+        mileageInputSource: plan.mileageInputSource,
         customerName: customerName || "Vehicle Owner",
         distanceUnit,
         buckets: {
@@ -198,7 +193,7 @@ export async function GET(
       },
       shopName: shop.name || shop.shopName || "",
       shopPhone: shop.phone || shop.contact?.phone || "",
-    });
+    }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (err: any) {
     console.error("[Report API] Error:", err.message);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

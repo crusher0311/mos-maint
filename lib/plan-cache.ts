@@ -16,6 +16,16 @@ const CACHE_TTL_MS = 1000 * 60 * 60 * 4; // 4 hours
 const OEM_MISSING_TTL_MS = 1000 * 60 * 10; // 10 minutes
 const MILEAGE_TOLERANCE = 500; // Plans are still valid within 500 miles
 
+/** Queued public mileage changes require a real rebuild even within tolerance.
+ * Only authenticated internal callers may bypass shared-cache reuse this way.
+ */
+export function canReusePlanForBuild(
+  cached: unknown,
+  options: { trustedInternal: boolean; forceRebuild: boolean },
+): boolean {
+  return !!cached && !(options.trustedInternal && options.forceRebuild);
+}
+
 /**
  * Bump this whenever the cached plan shape changes incompatibly so old
  * cache entries are skipped on read instead of being served with missing
@@ -259,6 +269,8 @@ export interface CachedPlanData {
    * `"actual"` / `null` and treat `mileageEstimated` as derived.
    */
   mileageSource?: "actual" | "estimated_carfax" | "estimated_annual";
+  mileageInputSource?: "customer_entered";
+  customerMileageRecordedAt?: Date | string;
   mileageEstimateDetails?: Record<string, unknown> | null;
   /**
    * Task #391: Mileage rollback warning. Populated when the current

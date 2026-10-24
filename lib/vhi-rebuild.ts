@@ -135,6 +135,8 @@ export async function triggerPlanBuild(
   // Fast partner builds are response-only: they must not replace the shared
   // full-quality cache consumed by normal/default requests.
   persist: boolean = true,
+  timeoutMs?: number,
+  forceRebuild: boolean = false,
 ): Promise<PlanBuildTriggerResult> {
   try {
     const baseUrl = process.env.REPLIT_DEV_DOMAIN
@@ -149,6 +151,7 @@ export async function triggerPlanBuild(
     });
     if (fast) params.set("fast", "1");
     if (skipCarfax) params.set("skipCarfax", "1");
+    if (forceRebuild) params.set("forceRebuild", "1");
     if (!persist) params.set("persist", "0");
     appendPlanBuildMileageMetadata(params, mileageMetadata);
     let mileageMetadataSignature: string | undefined;
@@ -172,6 +175,7 @@ export async function triggerPlanBuild(
       `${baseUrl}/api/plan-build?${params.toString()}`,
       {
         method: "POST",
+        ...(timeoutMs ? { signal: AbortSignal.timeout(timeoutMs) } : {}),
         headers: {
           "Content-Type": "application/json",
           "x-internal-secret": getInternalSecret(),

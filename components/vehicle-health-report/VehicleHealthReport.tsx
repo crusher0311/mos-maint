@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import HealthGauge from "./HealthGauge";
 import ServiceIcon from "./ServiceIcon";
 import ScoreSimulator from "./ScoreSimulator";
+import MileageUpdateForm from "./MileageUpdateForm";
 import { getOELogoUrl } from "@/lib/oe-logos";
 
 type ReportTab = "recommendations" | "plan" | "improve" | "dvi";
@@ -90,6 +91,8 @@ interface VHIData {
    * API boundary so the legacy report path keeps rendering "miles".
    */
   distanceUnit?: "miles" | "kilometers";
+  mileageEstimated?: boolean;
+  mileageInputSource?: string | null;
   /**
    * Task #439: when present and `sufficient: false`, the report renders
    * a gray "Insufficient Service History" badge instead of the colored
@@ -127,6 +130,7 @@ interface VehicleHealthReportProps {
   shopPhone?: string;
   onScheduleService?: () => void;
   onViewDetails?: () => void;
+  onUpdateMileage?: (mileage: number) => Promise<void>;
 }
 
 const COMPLIMENTARY_KEYS = new Set([
@@ -343,6 +347,7 @@ export default function VehicleHealthReport({
   shopPhone,
   onScheduleService,
   onViewDetails,
+  onUpdateMileage,
 }: VehicleHealthReportProps) {
   const [activeTab, setActiveTab] = useState<ReportTab>("recommendations");
   const score = scoreProp ?? computeScore(data);
@@ -442,10 +447,16 @@ export default function VehicleHealthReport({
               <p className="text-xs sm:text-sm text-gray-500">
                 {customerName && <><span className="font-medium text-gray-700">{customerName}</span> &bull; </>}
                 VIN <code className="text-xs">{data.vin}</code>
-                {currentMiles > 0 && <> &bull; Current: <span className="font-medium">{currentMiles.toLocaleString()} {dAbbrev}</span></>}
+                {currentMiles > 0 && <> &bull; {data.mileageEstimated ? "Estimated mileage" : "Current"}: <span className="font-medium">{currentMiles.toLocaleString()} {dAbbrev}</span></>}
               </p>
+              {data.mileageInputSource === "customer_entered" && (
+                <p className="text-xs text-gray-500 mt-1">Mileage provided by customer.</p>
+              )}
             </div>
           </div>
+          {onUpdateMileage && (
+            <MileageUpdateForm distanceUnit={distanceUnit} onUpdateMileage={onUpdateMileage} />
+          )}
         </div>
 
         {/* Health Score Gauge */}
