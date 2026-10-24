@@ -437,6 +437,25 @@ return NextResponse.json({ ok: true });`;
   assert('public VHI unchecked scope does not authorize', !guardMatches('const scope = await authorizePublicReport(vin, token); return NextResponse.json({ ok: true });'));
   assert('public VHI checking a different scope does not authorize', !guardMatches(guarded.replace('if (!scope)', 'if (!other)')));
 }
+{
+  assert('tutorial web delegated response is guarded', guardMatches('export const GET = (request) => handleTutorialRequest(request, false);'));
+  assert('tutorial extension delegated response is guarded', guardMatches('export const PUT = withExtensionErrorMarker((request) => handleTutorialRequest(request, true));'));
+  assert('tutorial explicit returned response is guarded', guardMatches('return handleTutorialRequest(request, false);'));
+  assert('tutorial import alone is not guarded', !guardMatches('import { handleTutorialRequest } from "@/lib/tutorial-route-handler";'));
+  assert('tutorial discarded response is not guarded', !guardMatches('handleTutorialRequest(request, false); return NextResponse.json({ data: 1 });'));
+  assert('tutorial comment is not guarded', !guardMatches('// return handleTutorialRequest(request, false);'));
+}
+{
+  const { hasTutorialAuthentication } = require("./check-extension-gates.cjs");
+  const prefix = 'import { handleTutorialRequest, tutorialCors } from "@/lib/tutorial-route-handler";\n';
+  const delegated = 'export const PUT = withExtensionErrorMarker((request) => handleTutorialRequest(request, true));';
+  assert('extension tutorial returned authenticated handler recognized', hasTutorialAuthentication(prefix + delegated));
+  assert('extension tutorial web mode is not extension auth', !hasTutorialAuthentication(prefix + delegated.replace('true', 'false')));
+  assert('extension tutorial import only is not auth', !hasTutorialAuthentication(prefix));
+  assert('extension tutorial discarded response is not auth', !hasTutorialAuthentication(prefix + 'handleTutorialRequest(request, true);'));
+  assert('extension tutorial comment is not auth', !hasTutorialAuthentication(prefix + '// ' + delegated));
+  assert('extension tutorial unknown helper origin is not auth', !hasTutorialAuthentication(prefix.replace('tutorial-route-handler', 'other-handler') + delegated));
+}
 const total = passed + failed;
 console.log(`\nauth-lint fixture tests: ${passed}/${total} passed`);
 if (failed > 0) {

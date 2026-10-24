@@ -63,6 +63,16 @@ const GUARD_CALL = /\b(guardExtensionShopRequest|checkShopFeatureGate)\s*\(/;
 // Auth-coverage markers — any of these in the file counts as "authenticated"
 const AUTH_CALL = /\b(validateExtensionToken|guardExtensionShopRequest|requireMigAdmin|checkShopFeatureGate)\s*\(/;
 
+// This shared handler validates extension credentials and personal write
+// capability. Require extension mode and return its response, never a web-mode
+// call, bare import, comment, or discarded authentication response.
+function hasTutorialAuthentication(source) {
+  const uncommented = source.replace(/\/\/[^\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
+  if (!/import\s*\{[^}]*\bhandleTutorialRequest\b[^}]*\}\s*from\s*["']@\/lib\/tutorial-route-handler["']/.test(uncommented)) return false;
+  const code = uncommented.replace(/^\s*import\s[\s\S]*?;\s*$/gm, "");
+  return /(?:\breturn|=>)\s*handleTutorialRequest\s*\(\s*[A-Za-z_$][\w$]*\s*,\s*true\s*\)/.test(code);
+}
+
 // HTTP method export pattern (covers both `export async function GET` and
 // `export const GET = ...` forms)
 const HTTP_METHOD_RE = /\bexport\s+(?:async\s+function|const)\s+(GET|POST|PUT|PATCH|DELETE|OPTIONS)\b/g;
@@ -85,7 +95,7 @@ function classify(file) {
   const importsShopLookup = src.includes(SHOP_LOOKUP_IMPORT);
   const importsGuard = src.includes(GUARD_IMPORT);
   const callsGuard = GUARD_CALL.test(src);
-  const callsAuth = AUTH_CALL.test(src);
+  const callsAuth = AUTH_CALL.test(src) || hasTutorialAuthentication(src);
   const headerLines = src.split("\n").slice(0, EXEMPT_HEADER_LINES);
   const exempt = headerLines.some((line) => EXEMPT_MARKER.test(line));
 
@@ -250,4 +260,5 @@ function main() {
   process.exit(1);
 }
 
-main();
+if (require.main === module) main();
+module.exports = { hasTutorialAuthentication };

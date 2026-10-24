@@ -87,6 +87,10 @@ function sanitizeForAuthCheck(text) {
 // that proves both the positive (guarded) and negative (unguarded) cases.
 // ---------------------------------------------------------------------------
 const AUTH_PATTERNS = [
+  // Delegated tutorial handlers authenticate web sessions or extension tokens,
+  // enforce personal write authority and reject stale expected-person identities.
+  // Only a returned handler response counts, not a discarded call or import.
+  /(?:\breturn|=>)\s*handleTutorialRequest\s*\(/,
   // Customer inspection reader verifies HMAC link scope, stored token hash,
   // expiration/revocation and shop entitlement before returning data or media.
   /\bpublicReport\s*\(/,
