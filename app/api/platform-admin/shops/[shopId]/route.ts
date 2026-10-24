@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { findShopByShopId } from "@/lib/data/repositories/shops";
+import { writeShopBillingState } from "@/lib/shop-billing-store";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import {
   updateShopFeatures,
+  getFeatureEntitlements,
   updateShopBilling,
   pickValidFeatures,
   isFounderPlan,
@@ -29,7 +32,7 @@ export async function GET(
 
     const shopId = isNaN(Number(params.shopId)) ? params.shopId : Number(params.shopId);
     const db = await getDb();
-    const shop = await db.collection("shops").findOne({ shopId });
+    const shop = await findShopByShopId<any>(shopId);
     
     if (!shop) {
       return NextResponse.json({ error: "Shop not found" }, { status: 404 });
@@ -48,6 +51,7 @@ export async function GET(
       ? Math.max(0, Math.ceil((trialEndsAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000)))
       : null;
 
+    const entitlements = await getFeatureEntitlements(Number(shopId), { throwIfMissing: true });
     return NextResponse.json({
       ok: true,
       shop: {
@@ -69,6 +73,8 @@ export async function GET(
           daysLeft: trialDaysLeft,
         } : null,
         enabledFeatures: shop.enabledFeatures || {},
+        usableFeatures: entitlements.effectiveFeatures,
+        eligibility: entitlements.eligibility,
         createdAt: shop.createdAt,
         isLocked: shop.isLocked || false,
       },
@@ -94,7 +100,7 @@ export async function PATCH(
     const { action, billing, features, trial } = body;
 
     const db = await getDb();
-    const shop = await db.collection("shops").findOne({ shopId });
+    const shop = await findShopByShopId<any>(shopId);
 
     if (!shop) {
       return NextResponse.json({ error: "Shop not found" }, { status: 404 });
@@ -151,7 +157,7 @@ export async function PATCH(
             trialConvertedAt: "",
           },
         };
-        await db.collection("shops").updateOne({ shopId }, updateOps);
+        await writeShopBillingState(db, shopId, updateOps);
         await db.collection("audit_logs").insertOne({
           type: "shop_trial_reset",
           shopId,
@@ -227,7 +233,7 @@ export async function PATCH(
       if (Object.keys(unsetFields).length > 0) {
         updateOps.$unset = unsetFields;
       }
-      await db.collection("shops").updateOne({ shopId }, updateOps);
+      await writeShopBillingState(db, shopId, updateOps);
 
       await db.collection("audit_logs").insertOne({
         type: "shop_trial_extended",
@@ -414,8 +420,8 @@ export async function PATCH(
       // (trialEndsAt / trial.endsAt linger, trialConvertedAt is unset).
       if (billing.status === "active" && shop.billing?.status !== "active") {
         const convertedAt = new Date();
-        await db.collection("shops").updateOne(
-          { shopId },
+        await writeShopBillingState(
+          db, shopId,
           {
             $set: { trialConvertedAt: convertedAt, updatedAt: convertedAt },
             $unset: { trialEndsAt: "", "trial.endsAt": "", trialSuspendedAt: "" },
@@ -476,7 +482,7 @@ export async function PATCH(
     }
 
     if (billing || features) {
-      const updatedShop = await db.collection("shops").findOne({ shopId });
+      const updatedShop = await findShopByShopId<any>(shopId);
       return NextResponse.json({
         ok: true,
         shop: {

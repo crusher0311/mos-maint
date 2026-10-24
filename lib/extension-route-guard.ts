@@ -107,7 +107,8 @@ export async function guardExtensionShopRequest(
   }
 
   const isPlatformAdmin =
-    auth.user.role === "platform_admin" || auth.user.isPlatformAdmin === true;
+    (auth.user.role === "platform_admin" || auth.user.isPlatformAdmin === true) &&
+    auth.user.isImpersonation !== true;
   const userShopIds = getUserShopIds(auth.user);
   const principal = auth.principal ?? auth.user.extensionPrincipal;
   const providerResolution = resolveGuardProvider(
@@ -266,11 +267,12 @@ export async function checkShopFeatureGate(
   requiredFeatures: FeatureKey[],
   options: {
     isPlatformAdmin?: boolean;
+    isImpersonation?: boolean;
     featureLabel?: string;
     corsHeaders?: Record<string, string>;
   } = {},
 ): Promise<NextResponse | null> {
-  if (options.isPlatformAdmin) return null;
+  if (options.isPlatformAdmin && !options.isImpersonation) return null;
   if (!requiredFeatures || requiredFeatures.length === 0) return null;
 
   const corsHeaders = options.corsHeaders ?? DEFAULT_CORS_HEADERS;

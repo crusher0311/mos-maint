@@ -165,6 +165,7 @@ async function main() {
   {
     shops.set(1, {
       shopId: 1,
+      trialEndsAt: "2099-01-01T00:00:00Z",
       billing: { plan: "trial", status: "trial" },
       // trial fallback plan does NOT include keytags → baseline off
       enabledFeatures: {},
@@ -180,6 +181,7 @@ async function main() {
   {
     shops.set(2, {
       shopId: 2,
+      trialEndsAt: "2099-01-01T00:00:00Z",
       billing: { plan: "trial", status: "trial" },
       enabledFeatures: {},
     });
@@ -197,6 +199,7 @@ async function main() {
   {
     shops.set(3, {
       shopId: 3,
+      trialEndsAt: "2099-01-01T00:00:00Z",
       billing: { plan: "trial", status: "trial" },
       enabledFeatures: {},
     });
@@ -227,6 +230,7 @@ async function main() {
   {
     shops.set(4, {
       shopId: 4,
+      trialEndsAt: "2099-01-01T00:00:00Z",
       billing: { plan: "trial", status: "trial" },
       // Very old shops stored a plain array of enabled ids.
       enabledFeatures: ["keytags", "oil_sticker"],

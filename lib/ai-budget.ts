@@ -28,6 +28,7 @@ const RATE_LIMIT_PER_WINDOW = 60;
 const CACHE_TTL_MS = 30_000;
 
 export const DAILY_TOKEN_BUDGETS: Record<BillingPlan, number | null> = {
+  pro: null, // Legacy MOS Pro previously had no entry/limit; preserve its policy.
   trial: 50_000,
   starter: 250_000,
   plus: 1_000_000,

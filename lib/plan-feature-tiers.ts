@@ -40,6 +40,7 @@ export type FeatureKey = typeof FEATURE_KEYS[number];
 export type FeatureSettings = Record<FeatureKey, boolean>;
 
 export type BillingPlan =
+  | "pro"
   | "trial"
   | "starter"
   | "plus"
@@ -78,6 +79,8 @@ export function buildFeatures(
 }
 
 export const PLAN_FALLBACK_KEYS: Record<BillingPlan, readonly FeatureKey[]> = {
+  // Existing MOS Pro checkout contract, not a renamed Detect Dog tier.
+  pro: ["maintenance", "job_lookup", "common_failures", "oil_sticker", "keytags", "auto_booking", "part_xref"],
   trial:              ["maintenance"],
   starter:            ["maintenance", "oil_sticker"],
   plus:               ["maintenance", "job_lookup", "common_failures", "oil_sticker", "concern_assistant", "estimate_assist", "dvi_prefill", "enhance_notes"],

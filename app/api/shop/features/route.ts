@@ -33,7 +33,12 @@ export async function GET() {
   }
 
   const shopId = Number(session.shopId);
-  const entitlements = await getFeatureEntitlements(shopId);
+  let entitlements;
+  try {
+    entitlements = await getFeatureEntitlements(shopId, { throwIfMissing: true });
+  } catch {
+    return NextResponse.json({ error: "Unable to verify feature entitlement" }, { status: 503 });
+  }
   const shopDoc = await findShopByShopId<FeatureShopDoc>(shopId, {
     trial: 1,
     trialEndsAt: 1,
@@ -55,11 +60,11 @@ export async function GET() {
     ? Math.max(0, Math.ceil((trialEndsAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000)))
     : null;
   const trialActive =
-    !!trialEndsAt && isTrialBillingStatus(entitlements.billing.status);
+    entitlements.isBillingActive() && isTrialBillingStatus(entitlements.billing.status);
 
   const enabledFeatureIds: string[] = [];
   for (const key of FEATURE_KEYS) {
-    if (entitlements.effectiveFeatures[key]) {
+    if (entitlements.canUseFeature(key)) {
       enabledFeatureIds.push(key);
     }
   }
@@ -76,6 +81,9 @@ export async function GET() {
 
   return NextResponse.json({
     ok: true,
+    eligibility: entitlements.eligibility,
+    postExpiryFeatures: entitlements.postExpiryFeatures,
+    configuredFeatures: entitlements.configuredFeatures,
     enabledFeatures,
     enabledFeatureIds,
     billing: {
@@ -86,8 +94,8 @@ export async function GET() {
     },
     trial: {
       active: trialActive,
-      startedAt: trialStartedAt ? trialStartedAt.toISOString() : null,
-      endsAt: trialEndsAt ? trialEndsAt.toISOString() : null,
+      startedAt: trialStartedAt && Number.isFinite(trialStartedAt.getTime()) ? trialStartedAt.toISOString() : null,
+      endsAt: entitlements.eligibility?.eligibleUntil ?? null,
       days: trialDays,
       daysLeft: trialDaysLeft,
       cardOnFile,

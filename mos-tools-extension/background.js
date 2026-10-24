@@ -866,6 +866,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         respond({
           success: true,
           features: data.features || {},
+          eligibility: data.eligibility,
+          postExpiryFeatures: data.postExpiryFeatures,
           writeProvider: data.writeProvider || null,
           integrations: data.integrations || [],
           shopId: data.shopId || null,

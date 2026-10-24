@@ -45,7 +45,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
   useEffect(() => {
+    let disposed = false;
+    let expiryTimer: ReturnType<typeof setTimeout>;
+    let sequence = 0;
     async function fetchUserInfo() {
+      const request = ++sequence;
       try {
         const [authRes, featuresRes] = await Promise.all([
           fetch("/api/auth/me"),
@@ -60,14 +64,30 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               return;
             }
 
-            let enabledFeatures = ["maintenance"];
+            let enabledFeatures: string[] = [];
             
             let billingStatus: BillingStatus | undefined;
             let gracePeriodEndsAt: string | null = null;
             let trial: TrialState | null = null;
             
+            if (!featuresRes.ok) return; // A lookup failure is not a new denial.
             if (featuresRes.ok) {
               const featuresData = await featuresRes.json();
+              if (disposed || request !== sequence) return;
+              clearTimeout(expiryTimer);
+              const deadline = Date.parse(featuresData.eligibility?.eligibleUntil);
+              if (Number.isFinite(deadline) && deadline > Date.now()) {
+                const delay = deadline - Date.now();
+                expiryTimer = setTimeout(() => {
+                  if (delay <= 2147483647) {
+                    const remaining = Object.entries(featuresData.postExpiryFeatures || {})
+                      .filter(([, allowed]) => allowed === true).map(([key]) => key);
+                    setUserInfo(previous => previous ? { ...previous, enabledFeatures: remaining } : previous);
+                    setQuickStickerOpen(false);
+                  }
+                  void fetchUserInfo();
+                }, Math.min(delay, 2147483647));
+              }
               if (featuresData.enabledFeatureIds) {
                 enabledFeatures = featuresData.enabledFeatureIds;
               }
@@ -88,6 +108,14 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       }
     }
     fetchUserInfo();
+    const interval = setInterval(fetchUserInfo, 60000);
+    window.addEventListener("focus", fetchUserInfo);
+    return () => {
+      disposed = true;
+      clearTimeout(expiryTimer);
+      clearInterval(interval);
+      window.removeEventListener("focus", fetchUserInfo);
+    };
   }, [pathname, router]);
 
   useEffect(() => {

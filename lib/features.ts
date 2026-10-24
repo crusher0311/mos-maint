@@ -150,20 +150,14 @@ export async function getShopFeatures(shopId: number): Promise<ShopFeatures | nu
  * the /platform-admin editor never wrote, so admin toggles didn't apply.
  */
 export async function isFeatureEnabled(shopId: number, featureId: FeatureId): Promise<boolean> {
-  if (isDevEnvironment()) {
-    return true;
-  }
   const entitlements = await getFeatureEntitlements(shopId);
-  return entitlements.effectiveFeatures[featureId as FeatureKey] === true;
+  return entitlements.canUseFeature(featureId as FeatureKey);
 }
 
 export async function getEnabledFeatures(shopId: number): Promise<FeatureId[]> {
-  if (isDevEnvironment()) {
-    return getAllFeatureIds();
-  }
   const entitlements = await getFeatureEntitlements(shopId);
   return getAllFeatureIds().filter(
-    id => entitlements.effectiveFeatures[id as FeatureKey] === true,
+    id => entitlements.canUseFeature(id as FeatureKey),
   );
 }
 

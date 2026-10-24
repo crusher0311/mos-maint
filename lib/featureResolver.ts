@@ -13,6 +13,7 @@ import {
   updateEnterpriseFeatureSettings as pgUpdateEnterpriseFeatures,
   type MongoShapedShop,
   type MongoShapedEnterprise,
+  findShopFeaturesByShopId,
 } from "./data/repositories/pg/identity";
 
 /**
@@ -28,7 +29,7 @@ import {
  * still used by the shop / enterprise lookups in this file (those
  * collections move in Wave 4).
  */
-export const __deps = { getDb, getPgDb };
+export const __deps = { getDb, getPgDb, pgFindShop, pgFindEnterprise, findShopFeaturesByShopId };
 
 // Feature keys, plan-tier definitions and the small pure helpers around
 // them now live in a dependency-free module (`lib/plan-feature-tiers.ts`)
@@ -49,8 +50,7 @@ import {
   type BillingPlan,
 } from "./plan-feature-tiers";
 import {
-  isBillingStatusActive,
-  resolveEffectiveBillingStatus,
+  evaluateBillingEligibility,
   type EffectiveBillingStatus,
 } from "./billing-helpers";
 
@@ -83,6 +83,9 @@ export function isTrialBillingStatus(status: BillingStatus): boolean {
 }
 
 export interface FeatureEntitlements {
+  postExpiryFeatures?: FeatureSettings;
+  configuredFeatures?: FeatureSettings;
+  eligibility?: ReturnType<typeof evaluateBillingEligibility>;
   features: FeatureSettings;
   billing: ShopBilling;
   effectiveFeatures: FeatureSettings;
@@ -188,7 +191,7 @@ export async function getPlanFeaturesFromDatabase(plan: BillingPlan): Promise<Fe
       .from(platformFeatures);
 
     if (!rows || rows.length === 0) {
-      return FALLBACK_PLAN_FEATURES[plan] || FALLBACK_PLAN_FEATURES.trial;
+      return FALLBACK_PLAN_FEATURES[plan] || buildFeatures([]);
     }
 
     // `professional` is the legacy name for elite; `demo` shops get the
@@ -205,7 +208,12 @@ export async function getPlanFeaturesFromDatabase(plan: BillingPlan): Promise<Fe
       seenKeys.add(featureKey);
       if (pf.status !== "active") continue;
       const includedInTiers = (pf.includedInTiers as string[] | null) || [];
-      if (includedInTiers.includes(tierSlug)) {
+      // Legacy packages predate the editable Detect Dog tier catalog. Their
+      // contracts are explicit key sets, not absent legacy tier tags.
+      // A present inactive row still wins above (intentional global disable).
+      if (plan === "pro" || plan === "oil_sticker_legacy"
+        ? PLAN_FALLBACK_KEYS[plan].includes(featureKey)
+        : includedInTiers.includes(tierSlug)) {
         enabled.add(featureKey);
       }
     }
@@ -213,7 +221,7 @@ export async function getPlanFeaturesFromDatabase(plan: BillingPlan): Promise<Fe
     // Features that exist in code but have no platform_features row yet
     // (e.g. a feature shipped before an admin seeds it) fall back to the
     // static plan map instead of silently resolving to "off" everywhere.
-    const fallbackKeys = new Set(PLAN_FALLBACK_KEYS[plan] ?? PLAN_FALLBACK_KEYS.trial);
+    const fallbackKeys = new Set(PLAN_FALLBACK_KEYS[plan] ?? []);
     for (const key of FEATURE_KEYS) {
       if (!seenKeys.has(key) && fallbackKeys.has(key)) {
         enabled.add(key);
@@ -223,7 +231,7 @@ export async function getPlanFeaturesFromDatabase(plan: BillingPlan): Promise<Fe
     return buildFeatures(enabled);
   } catch (error) {
     console.error("Error fetching plan features from database:", error);
-    return FALLBACK_PLAN_FEATURES[plan] || FALLBACK_PLAN_FEATURES.trial;
+    return FALLBACK_PLAN_FEATURES[plan] || buildFeatures([]);
   }
 }
 
@@ -250,13 +258,13 @@ export async function getFeatureEntitlements(
   let shop: MongoShapedShop | null;
   let enterpriseFeatures: Partial<FeatureSettings> = {};
   if (isIdentityPgCanonical()) {
-    shop = await pgFindShop(shopId);
+    shop = await __deps.pgFindShop(shopId);
     if (!shop) {
       if (opts.throwIfMissing) throw new ShopEntitlementsUnavailableError(shopId);
       return createDefaultEntitlements();
     }
     if (shop.enterpriseId) {
-      const enterprise: MongoShapedEnterprise | null = await pgFindEnterprise(
+      const enterprise: MongoShapedEnterprise | null = await __deps.pgFindEnterprise(
         String(shop.enterpriseId),
       );
       if (enterprise?.featureSettings) {
@@ -289,7 +297,8 @@ export async function getFeatureEntitlements(
   }
 
   const plan: BillingPlan = (shop.billing?.plan as BillingPlan) || "trial";
-  const status: BillingStatus = resolveEffectiveBillingStatus(shop.billing, "trial");
+  const eligibility = evaluateBillingEligibility(shop);
+  const status: BillingStatus = eligibility.status;
 
   const shopFeatures: Partial<FeatureSettings> = normalizeShopFeatureOverrides(
     shop.enabledFeatures,
@@ -300,10 +309,10 @@ export async function getFeatureEntitlements(
   // FEATURE_KEYS at call time so newly added entries take effect on the
   // very next request without touching this file or PLAN_FALLBACK_KEYS.
   let effectiveFeatures: FeatureSettings;
+  const planFeatures = await getPlanFeaturesFromDatabase(plan);
   if (isFounderPlan(plan)) {
     effectiveFeatures = buildAllFeaturesEnabled();
   } else {
-    const planFeatures = await getPlanFeaturesFromDatabase(plan);
     effectiveFeatures = {} as FeatureSettings;
     for (const key of FEATURE_KEYS) {
       effectiveFeatures[key] =
@@ -314,6 +323,28 @@ export async function getFeatureEntitlements(
   // Operator-controlled location pilot: never inherit enterprise, tier or
   // founder wildcard grants. Only this shop's explicit boolean opt-in counts.
   effectiveFeatures.shop_workflow = shopFeatures.shop_workflow === true;
+  const configuredFeatures = { ...effectiveFeatures };
+  // Configured flags are preferences, not purchased grants. Explicit invoice,
+  // enterprise and demo contracts retain their deliberate commercial overrides.
+  const commercialOverride = shop.billing?.paymentType === "invoice" ||
+    status === "enterprise" || status === "demo" || plan === "demo" || isFounderPlan(plan);
+  // Standalone paid subscriptions are distinct from setup flags. Trials in this
+  // metadata store never qualify as paid add-ons.
+  const metadata = isIdentityPgCanonical()
+    ? await __deps.findShopFeaturesByShopId(shopId)
+    : await (await __deps.getDb()).collection("shop_features").findOne({ shopId });
+  const paidAddons = new Set<FeatureKey>();
+  for (const sub of (metadata?.subscriptions ?? []) as any[]) {
+    if (sub.status === "active" && typeof sub.stripeSubscriptionId === "string" &&
+        sub.stripeSubscriptionId && FEATURE_KEYS.includes(sub.featureId) &&
+        sub.featureId !== "shop_workflow") paidAddons.add(sub.featureId);
+  }
+  for (const key of FEATURE_KEYS) {
+    effectiveFeatures[key] = (paidAddons.has(key) && shopFeatures[key] !== false) ||
+      (eligibility.allowed && configuredFeatures[key] &&
+      (eligibility.isTrial || commercialOverride || key === "shop_workflow" ||
+        (plan !== "trial" && planFeatures[key])));
+  }
 
   const billing: ShopBilling = {
     plan,
@@ -321,17 +352,20 @@ export async function getFeatureEntitlements(
     vinViewCount: 0,
   };
 
-  const isBillingActive = () => isBillingStatusActive(status);
+  const isBillingActive = () => evaluateBillingEligibility(shop).allowed;
 
   const isFeatureEnabled = (feature: FeatureKey) => {
-    return effectiveFeatures[feature] === true;
+    return (isBillingActive() || paidAddons.has(feature)) && effectiveFeatures[feature] === true;
   };
 
   const canUseFeature = (feature: FeatureKey) => {
-    return isBillingActive() && isFeatureEnabled(feature);
+    return isFeatureEnabled(feature);
   };
 
   return {
+    postExpiryFeatures: buildFeatures([...paidAddons].filter(key => shopFeatures[key] !== false)),
+    configuredFeatures,
+    eligibility,
     features: shopFeatures as FeatureSettings,
     billing,
     effectiveFeatures,
@@ -350,9 +384,9 @@ function createDefaultEntitlements(): FeatureEntitlements {
   return {
     features: DEFAULT_FEATURES,
     billing,
-    effectiveFeatures: DEFAULT_FEATURES,
+    effectiveFeatures: buildFeatures([]),
     canUseFeature: () => false,
-    isFeatureEnabled: (feature: FeatureKey) => DEFAULT_FEATURES[feature],
+    isFeatureEnabled: () => false,
     isBillingActive: () => false,
   };
 }
@@ -410,6 +444,7 @@ export async function updateShopBilling(
   const updateFields: any = { updatedAt: new Date() };
   if (billing.plan !== undefined) updateFields["billing.plan"] = billing.plan;
   if (billing.status !== undefined) updateFields["billing.status"] = billing.status;
+  if (billing.status === "active") updateFields["billing.subscriptionAccessConfirmed"] = true;
 
   if (isIdentityPgCanonical()) {
     await pgUpdateShopFields(shopId, updateFields);

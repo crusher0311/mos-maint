@@ -1991,6 +1991,9 @@ function escapeAfHtml(str) {
 
 // ---------- Feature flags ----------
 let cachedAfFeatures = null;
+let afFeatureDeadline = Infinity;
+let afFeatureRefreshAt = 0;
+let afPostExpiryFeatures = {};
 let afFeaturesFetchInFlight = false;
 // Task #1086: per-user injected-button visibility (resolved server-side
 // against shop entitlements). null = unknown → fail open (visible).
@@ -2001,7 +2004,11 @@ function isAfButtonVisible(key) {
 }
 
 function fetchAutoflowFeatures(cb) {
-  if (cachedAfFeatures) { cb(cachedAfFeatures); return; }
+  if (Date.now() >= afFeatureDeadline) cachedAfFeatures = afPostExpiryFeatures;
+  if (cachedAfFeatures) {
+    cb(cachedAfFeatures);
+    if (Date.now() < afFeatureRefreshAt) return;
+  }
   if (afFeaturesFetchInFlight) return;
   const ctx = lastContext || detectContext();
   if (!ctx.shopId) { cb({}); return; }
@@ -2010,8 +2017,11 @@ function fetchAutoflowFeatures(cb) {
     { action: 'GET_SHOP_FEATURES', shopId: ctx.shopId, provider: 'autoflow' },
     (resp) => {
       afFeaturesFetchInFlight = false;
-      if (chrome.runtime.lastError) { cb({}); return; }
-      cachedAfFeatures = (resp && resp.success) ? (resp.features || {}) : {};
+      if (chrome.runtime.lastError || !resp?.success) { cb(cachedAfFeatures || {}); return; }
+      cachedAfFeatures = resp.features || {};
+      afFeatureRefreshAt = Date.now() + 60000;
+      afFeatureDeadline = Date.parse(resp.eligibility?.eligibleUntil) || Infinity;
+      afPostExpiryFeatures = resp.postExpiryFeatures || {};
       if (resp && resp.success) {
         cachedAfButtonVis = (resp.buttonVisibility && resp.buttonVisibility.autoflow) || null;
       }

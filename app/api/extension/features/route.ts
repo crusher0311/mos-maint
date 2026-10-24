@@ -163,6 +163,8 @@ async function _GET(request: NextRequest) {
 
     return NextResponse.json({ 
       features: entitlements.effectiveFeatures,
+      eligibility: entitlements.eligibility,
+      postExpiryFeatures: entitlements.postExpiryFeatures,
       shopId: mosShopId,
       integrations,
       writeProvider,

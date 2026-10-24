@@ -29,7 +29,7 @@ async function getEffectiveEnabledIds(shopId: number): Promise<FeatureId[]> {
   const entitlements = await getFeatureEntitlements(shopId);
   return FEATURES
     .map(f => f.id)
-    .filter(id => entitlements.effectiveFeatures[id as FeatureKey] === true);
+    .filter(id => entitlements.configuredFeatures?.[id as FeatureKey] === true);
 }
 
 export const dynamic = "force-dynamic";

@@ -136,6 +136,8 @@ interface Shop {
   isLocked?: boolean;
   integrationDetails?: IntegrationDetails;
   enabledFeatures?: ShopFeatures | string[];
+  usableFeatures?: ShopFeatures;
+  eligibility?: { reason?: string | null };
   backfill?: BackfillStatus | null;
   stickerCount?: number;
   stickerCountThisMonth?: number;
@@ -673,6 +675,12 @@ export default function PlatformShopsPage() {
 
   const openFeatureModal = (shop: Shop) => {
     setSelectedShop(shop);
+    fetch(`/api/platform-admin/shops/${shop.shopId}`)
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data?.shop) setSelectedShop(current => current?.shopId === shop.shopId
+          ? { ...current, usableFeatures: data.shop.usableFeatures, eligibility: data.shop.eligibility } : current);
+      }).catch(() => {});
     let features: ShopFeatures = {};
     if (Array.isArray(shop.enabledFeatures)) {
       shop.enabledFeatures.forEach((f: string) => {
@@ -1359,6 +1367,8 @@ export default function PlatformShopsPage() {
                         />
                         <div>
                           <div className="font-medium text-gray-900 text-sm">{feature.label}</div>
+                          {checked && selectedShop.usableFeatures?.[feature.key as keyof ShopFeatures] === false &&
+                            <div className="text-xs text-amber-700">Configured, but blocked by subscription or trial eligibility.</div>}
                           <div className="text-xs text-gray-500">{feature.desc}</div>
                           {isFounder && (
                             <div className="text-[11px] text-amber-700 mt-1">

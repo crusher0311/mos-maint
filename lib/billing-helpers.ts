@@ -75,3 +75,30 @@ export function isBillingStatusActive(status: EffectiveBillingStatus): boolean {
     status === "past_due"
   );
 }
+
+/** Nested deadline is authoritative when present, including malformed/null values.
+ * Never fall back from a broken current deadline to a stale legacy grant.
+ * Subscription IDs and cards on file are not evidence of payment.
+ */
+export function evaluateBillingEligibility(
+  shop: { billing?: BillingLike; trial?: { endsAt?: unknown } | null; trialEndsAt?: unknown },
+  now = Date.now(),
+) {
+  const status = resolveEffectiveBillingStatus(shop.billing);
+  const isTrial = status === "trial" || status === "trialing";
+  const raw = shop.trial && Object.prototype.hasOwnProperty.call(shop.trial, "endsAt")
+    ? shop.trial.endsAt : shop.trialEndsAt;
+  const deadline = raw instanceof Date ? raw.getTime()
+    : typeof raw === "number" && Number.isFinite(raw) ? raw
+    : typeof raw === "string" && raw.trim() ? Date.parse(raw) : NaN;
+  const valid = Number.isFinite(deadline);
+  const allowed = isTrial ? valid && now < deadline :
+    isBillingStatusActive(status) && (isInvoiceBilled(shop.billing) || shop.billing?.subscriptionAccessConfirmed !== false);
+  return {
+    status, isTrial, allowed,
+    eligibleUntil: isTrial && valid ? new Date(deadline).toISOString() : null,
+    reason: allowed ? null : isTrial
+      ? (valid ? "trial_expired" : "trial_eligibility_missing")
+      : "subscription_blocked",
+  };
+}

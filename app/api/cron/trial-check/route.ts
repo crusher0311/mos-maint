@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
+import { listAllShops, findShopByShopId } from "@/lib/data/repositories/shops";
+import { writeShopBillingState } from "@/lib/shop-billing-store";
+import { evaluateBillingEligibility } from "@/lib/billing-helpers";
 import { stripe, getBillingSettings } from "@/lib/stripe";
 import {
   sendEmail,
@@ -56,9 +59,8 @@ async function processOne(
   platformAdminEmails: string[],
 ) {
   const shopId: number = shop.shopId;
-  const trialEndsAt: Date | null = shop.trial?.endsAt
-    ? new Date(shop.trial.endsAt)
-    : (shop.trialEndsAt ? new Date(shop.trialEndsAt) : null);
+  const eligibility = evaluateBillingEligibility(shop);
+  const trialEndsAt = eligibility.eligibleUntil ? new Date(eligibility.eligibleUntil) : null;
   if (!trialEndsAt) return { shopId, skipped: "no_trial" };
   // Defensive: never act on a shop that already has an active subscription
   // or whose billing has moved past trial state.
@@ -114,8 +116,8 @@ async function processOne(
             );
             return { shopId, action: "reminder_suppressed", reminderDay, reason: result.reason };
           }
-          await db.collection("shops").updateOne(
-            { shopId },
+          await writeShopBillingState(
+            db, shopId,
             { $set: { [`trial.reminderSent.${reminderDay}`]: now } },
           );
           await db.collection("audit_logs").insertOne({
@@ -152,22 +154,28 @@ async function processOne(
             convertedFromTrial: "true",
             originalTrialEndedAt: trialEndsAt.toISOString(),
           },
-        });
+        }, { idempotencyKey: `trial-conversion-${shopId}-${trialEndsAt.getTime()}` });
 
-        await db.collection("shops").updateOne(
-          { shopId },
+        const purchasedPlan = priceId === settings.starterPriceId ? "starter"
+          : priceId === settings.plusPriceId ? "plus" : "elite";
+        await writeShopBillingState(
+          db, shopId,
           {
             $set: {
-              "billing.plan": planSlug === "trial" ? "starter" : planSlug,
-              "billing.status": "active",
+              "billing.plan": purchasedPlan,
+              "billing.status": subscription.status,
+              "billing.subscriptionAccessConfirmed": subscription.status === "active",
               "billing.stripeSubscriptionId": subscription.id,
               "billing.stripeCustomerId": stripeCustomerId,
               "billing.updatedAt": now,
-              trialConvertedAt: now,
+              ...(subscription.status === "active" ? { trialConvertedAt: now } : {}),
               updatedAt: now,
             },
           },
         );
+        if (subscription.status !== "active") {
+          return { shopId, action: "payment_pending", status: subscription.status };
+        }
         await db.collection("audit_logs").insertOne({
           type: "shop_trial_converted",
           shopId,
@@ -192,8 +200,8 @@ async function processOne(
     }
   }
 
-  await db.collection("shops").updateOne(
-    { shopId },
+  await writeShopBillingState(
+    db, shopId,
     {
       $set: {
         isLocked: true,
@@ -256,28 +264,19 @@ async function runChecks(req: NextRequest) {
     : 7;
   const horizonDays = Math.max(maxReminderDay + 1, 8);
   const horizon = new Date(Date.now() + horizonDays * 24 * 60 * 60 * 1000);
-  const candidates = await db
-    .collection("shops")
-    .find({
-      $and: [
-        { $or: [{ "trial.endsAt": { $exists: true, $ne: null } }, { trialEndsAt: { $exists: true, $ne: null } }] },
-        { $or: [{ "trial.endsAt": { $lte: horizon } }, { trialEndsAt: { $lte: horizon } }] },
-        { trialConvertedAt: { $exists: false } },
-        { trialSuspendedAt: { $exists: false } },
-        // Only consider shops still in a trial billing state — never reprocess paid/active shops.
-        { $or: [
-          { "billing.status": { $in: ["trial", "trialing"] } },
-          { "billing.status": { $exists: false } },
-        ] },
-        { "billing.stripeSubscriptionId": { $in: [null, undefined, ""] } },
-      ],
-    })
-    .toArray();
+  const candidates = (await listAllShops()).filter(shop => {
+    const eligibility = evaluateBillingEligibility(shop as any);
+    return eligibility.isTrial && eligibility.eligibleUntil &&
+      new Date(eligibility.eligibleUntil) <= horizon &&
+      !shop.trialConvertedAt && !shop.trialSuspendedAt;
+  });
 
   const results: any[] = [];
   for (const shop of candidates) {
     try {
-      const r = await processOne(db, shop, baseUrl, settings, platformAdminEmails);
+      const current = await findShopByShopId(shop.shopId);
+      if (!current) continue;
+      const r = await processOne(db, current, baseUrl, settings, platformAdminEmails);
       results.push(r);
     } catch (err: any) {
       console.error(`[trial-check] processOne failed for ${shop.shopId}:`, err?.message);

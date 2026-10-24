@@ -279,6 +279,11 @@ export async function listAllShops() {
   return rows.map((r) => shopRowToDoc(r)!);
 }
 
+export async function findShopByStripeCustomerId(customerId: string) {
+  const rows = await getDb().select().from(shops).where(eq(shops.stripeCustomerId, customerId)).limit(1);
+  return rows[0] ? shopRowToDoc(rows[0]) : null;
+}
+
 /**
  * Apply a flat `$set` map (possibly using Mongo dot-path keys like
  * `'billing.plan'` or `'autoflow.apiKey'`) to a single shop. Top-level

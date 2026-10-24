@@ -1574,6 +1574,25 @@ function fetchShopFeatures(shopId, callback) {
       cachedButtonVis = (resp.buttonVisibility && resp.buttonVisibility.tekmetric) || null;
       cachedFloatingEnabled = resp.floatingButtonEnabled === true;
       featuresFreshUntil = Date.now() + 60000;
+      clearTimeout(trialFeatureExpiryTimer);
+      const deadline = Date.parse(resp.eligibility?.eligibleUntil);
+      if (Number.isFinite(deadline)) {
+        const expire = () => {
+          if (generation !== featuresGeneration) return;
+          cachedFeatures = resp.postExpiryFeatures || {};
+          cachedButtonVis = Object.fromEntries(Object.keys(cachedButtonVis || {}).map(key => [key, false]));
+          cachedFloatingEnabled = false;
+          featuresFreshUntil = 0;
+          for (const id of RO_BUTTON_IDS) removeInjectedButton(id);
+          applyFloatingToFab();
+          callback(cachedFeatures);
+        };
+        if (deadline <= Date.now()) expire();
+        else trialFeatureExpiryTimer = setTimeout(() => {
+          if (Date.now() >= deadline) expire();
+          else featuresFreshUntil = 0;
+        }, Math.min(deadline - Date.now(), 2147483647));
+      }
       featuresFailures = 0;
       callback(cachedFeatures);
       applyFloatingToFab();
@@ -1595,6 +1614,8 @@ function fetchShopFeatures(shopId, callback) {
     pending?.catch?.(() => finish(null, 'settings_transport'));
   } catch (_) { finish(null, 'context_invalidated'); }
 }
+
+let trialFeatureExpiryTimer;
 
 // Locate the RO page's print/action-bar container. Extracted from
 // injectPrefillButton (Task #1086) so Enhance Notes / Build-RO / the undo

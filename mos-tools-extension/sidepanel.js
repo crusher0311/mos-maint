@@ -1817,7 +1817,22 @@ const FEATURES_RETRY_DELAYS_MS = [800, 2000, 4000, 8000];
 let featuresFetchSeq = 0;
 
 function applyShopFeatures(result) {
+  clearTimeout(featureExpiryTimer);
   shopFeatures = result.features;
+  const deadline = Date.parse(result.eligibility?.eligibleUntil);
+  if (Number.isFinite(deadline)) {
+    const expire = () => {
+      shopFeatures = result.postExpiryFeatures || Object.fromEntries(Object.keys(shopFeatures).map(key => [key, false]));
+      updateTabAccessibility();
+      fetchShopFeatures();
+    };
+    const delay = deadline - Date.now();
+    if (delay <= 0) {
+      shopFeatures = result.postExpiryFeatures || Object.fromEntries(Object.keys(shopFeatures).map(key => [key, false]));
+    } else {
+      featureExpiryTimer = setTimeout(delay > 2147483647 ? fetchShopFeatures : expire, Math.min(delay, 2147483647));
+    }
+  }
   renderSessionTierBanner();
   // Task #340: pick up shop distance preference early so the mileage
   // chip and any tooltips that fire before the plan response use the
@@ -1849,6 +1864,11 @@ function applyShopFeatures(result) {
       : null;
   renderFloatingButtonSetting();
 }
+
+let featureExpiryTimer;
+// Open panels refresh subscription changes without requiring another login.
+setInterval(() => { if (currentContext?.shopId) fetchShopFeatures(); }, 60000);
+window.addEventListener('focus', () => fetchShopFeatures());
 
 async function fetchShopFeatures() {
   if (!currentContext || !currentContext.shopId) return;

@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { listAllShops } from "@/lib/data/repositories/shops";
+import { dualWritePgIdentity } from "@/lib/db/wave4-write-mode";
+import { insertShop, insertUser } from "@/lib/data/repositories/pg/identity";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { assertNoLegacyPasswordField } from "@/lib/user-write-guard";
@@ -27,7 +30,7 @@ export async function GET() {
     const db = await getDb();
     
     const [shops, billingSettings, enterprises] = await Promise.all([
-      db.collection("shops").find().toArray(),
+      listAllShops() as Promise<any[]>,
       getBillingSettings(),
       db.collection("enterprise_accounts").find().toArray(),
     ]);
@@ -519,7 +522,7 @@ export async function POST(req: NextRequest) {
 
     const now = new Date();
     const normalizedOwnerEmail = ownerEmail.toLowerCase().trim();
-    const useDayBasedTrial = (status || "trial") === "trial" && trialDaysParsed && trialDaysParsed > 0;
+    const useDayBasedTrial = ["trial", "trialing"].includes(status || "trial") && trialDaysParsed && trialDaysParsed > 0;
     const trialEndsAt = useDayBasedTrial
       ? new Date(now.getTime() + trialDaysParsed * 24 * 60 * 60 * 1000)
       : null;
@@ -595,6 +598,7 @@ export async function POST(req: NextRequest) {
     }
 
     await db.collection("shops").insertOne(shopDoc);
+    await dualWritePgIdentity("admin trial creation", () => insertShop(shopDoc));
 
     const hashedPassword = await bcrypt.hash(ownerPassword, 12);
     const normalizedEmail = ownerEmail.toLowerCase().trim();
@@ -611,7 +615,8 @@ export async function POST(req: NextRequest) {
     };
 
     assertNoLegacyPasswordField(userDoc);
-    await db.collection("users").insertOne(userDoc);
+    const insertedUser = await db.collection("users").insertOne(userDoc);
+    await dualWritePgIdentity("admin trial owner", () => insertUser({ ...userDoc, id: String(insertedUser.insertedId) }));
 
     await seedDefaultAdmins(db, newShopId);
 

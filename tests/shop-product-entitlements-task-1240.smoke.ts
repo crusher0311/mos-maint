@@ -235,7 +235,8 @@ ok("recommendation surfaces require Maintenance and Estimate Assist cannot leak 
   }
   const audit = source("app/api/estimate-assist/audit/route-handler.ts");
   assert.match(audit, /const canUseMaintenance = canAccessShopFeature\(/);
-  assert.match(audit, /if \(vehicleVin && canUseMaintenance\)/);
+  assert.match(audit, /vehicleVin,\s*canUseMaintenance,/);
+  assert.match(source("lib/estimate-assist/audit-evaluator.ts"), /if \(vehicleVin && input.canUseMaintenance\)/);
   const legacyAnalyze = source("app/api/analyze/route.ts");
   assert.match(
     legacyAnalyze,

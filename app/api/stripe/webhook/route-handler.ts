@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripe, getBillingSettings } from "@/lib/stripe";
 import { getDb } from "@/lib/mongo";
+import { findShopByShopId } from "@/lib/data/repositories/shops";
+import { writeShopBillingState } from "@/lib/shop-billing-store";
+import { planForSubscription, planForSubscriptionUpdate } from "@/lib/subscription-plan";
 import { assertNoLegacyPasswordField } from "@/lib/user-write-guard";
 import { seedDefaultAdmins } from "@/lib/seed-default-admins";
 import {
@@ -19,11 +22,12 @@ import {
 import { getPlatformAdminEmails } from "@/lib/super-admins";
 import { createHovercodeQR } from "@/lib/hovercode";
 import { getNextShopId } from "@/lib/ids";
-import { dualWritePgIdentity } from "@/lib/db/wave4-write-mode";
+import { dualWritePgIdentity, isIdentityPgCanonical } from "@/lib/db/wave4-write-mode";
 import {
   insertShop,
   insertUser,
   updateShopFields,
+  findShopByStripeCustomerId,
 } from "@/lib/data/repositories/pg/identity";
 import { computeAutoFlagReasons } from "@/lib/shop-review";
 import Stripe from "stripe";
@@ -48,12 +52,12 @@ async function resolveShopId(
 ): Promise<{ shopId: number; shop: any } | null> {
   const metaShopId = Number(metadata?.shopId);
   if (metaShopId) {
-    const shop = await db.collection("shops").findOne({ shopId: metaShopId });
+    const shop = await findShopByShopId(metaShopId);
     if (shop) return { shopId: metaShopId, shop };
   }
 
   if (customerId) {
-    const shop = await db.collection("shops").findOne({
+    const shop = isIdentityPgCanonical() ? await findShopByStripeCustomerId(customerId) : await db.collection("shops").findOne({
       $or: [
         { "billing.stripeCustomerId": customerId },
         { stripeCustomerId: customerId },
@@ -206,8 +210,8 @@ export async function POST(req: NextRequest) {
                 "trial.cardOnFile": true,
                 updatedAt: now,
               };
-              await db.collection("shops").updateOne(
-                { shopId: setupShopId },
+               await writeShopBillingState(
+                 db, setupShopId,
                 { $set: cardCaptureSet }
               );
               await dualWritePgIdentity(`shops.update(card-capture ${setupShopId})`, () =>
@@ -231,6 +235,17 @@ export async function POST(req: NextRequest) {
           }
         }
 
+        // Checkout completion is not payment confirmation (async payments and
+        // incomplete subscriptions are possible). Read the actual subscription.
+        const subscriptionId = typeof session.subscription === "string"
+          ? session.subscription : session.subscription?.id;
+        const purchasedSubscription = subscriptionId
+          ? await stripe.subscriptions.retrieve(subscriptionId) : null;
+        const purchasedStatus = purchasedSubscription?.status ?? "incomplete";
+        const purchasedPlan = purchasedSubscription
+          ? planForSubscription(purchasedSubscription, await getBillingSettings()) : null;
+        const purchasedTrialEndsAt = purchasedSubscription?.status === "trialing" &&
+          purchasedSubscription.trial_end ? new Date(purchasedSubscription.trial_end * 1000) : null;
         const isSignupFlow = session.metadata?.signupFlow === "true";
         const pendingId = session.metadata?.pendingId;
         
@@ -253,14 +268,16 @@ export async function POST(req: NextRequest) {
 
           // Task #271: VIN-based billing removed. No vinLimit/skippedTrialBonus.
           const billingForReview = {
-            plan: "pro",
-            status: "active",
+            plan: purchasedPlan || "unrecognized",
+            status: purchasedStatus,
+            subscriptionAccessConfirmed: purchasedStatus === "active",
             stripeSubscriptionId: session.subscription as string | undefined,
             stripeCustomerId: session.customer as string | undefined,
             updatedAt: now,
           };
           const initialAutoFlagReasons = computeAutoFlagReasons({
             billing: billingForReview,
+            ...(purchasedTrialEndsAt ? { trial: { endsAt: purchasedTrialEndsAt }, trialEndsAt: purchasedTrialEndsAt } : {}),
             cardOnFile: true,
             stripeCustomerId: session.customer as string | undefined,
           });
@@ -356,17 +373,19 @@ export async function POST(req: NextRequest) {
         }
         
         const shopId = Number(session.metadata?.shopId);
-        const plan = session.metadata?.plan || "pro";
+        const plan = purchasedPlan || "unrecognized";
         const skippedTrial = session.metadata?.skippedTrial === "true";
 
         if (shopId) {
           const updateData: Record<string, any> = {
             "billing.plan": plan,
-            "billing.status": "active",
+            "billing.status": purchasedStatus,
+            "billing.subscriptionAccessConfirmed": purchasedStatus === "active",
             "billing.stripeSubscriptionId": session.subscription,
             "billing.stripeCustomerId": session.customer,
             "billing.updatedAt": new Date(),
             "billing.pendingCheckoutSessionId": null,
+            ...(purchasedTrialEndsAt ? { "trial.endsAt": purchasedTrialEndsAt, trialEndsAt: purchasedTrialEndsAt } : {}),
           };
 
           // Task #271: skipTrial no longer grants bonus VINs (VINs are not a
@@ -381,8 +400,8 @@ export async function POST(req: NextRequest) {
           updateData["enabledFeatures.part_xref"] = true;
           console.log(`[Stripe] Shop ${shopId} - enabling all features for paid plan`);
           
-          await db.collection("shops").updateOne(
-            { shopId },
+          await writeShopBillingState(
+            db, shopId,
             { $set: updateData }
           );
           await dualWritePgIdentity(`shops.update(checkout-upgrade ${shopId})`, () =>
@@ -458,8 +477,9 @@ export async function POST(req: NextRequest) {
             const shopNameFromMeta = rawShopName.slice(0, 200).trim();
 
             const billingForReview = {
-              plan: validatedPlan,
-              status: "active",
+              plan: purchasedPlan || "unrecognized",
+              status: purchasedStatus,
+              subscriptionAccessConfirmed: purchasedStatus === "active",
               isPaid: true,
               stripeCustomerId: session.customer as string | undefined,
               stripeSubscriptionId: session.subscription as string | undefined,
@@ -467,6 +487,7 @@ export async function POST(req: NextRequest) {
             };
             const initialAutoFlagReasons = computeAutoFlagReasons({
               billing: billingForReview,
+              ...(purchasedTrialEndsAt ? { trial: { endsAt: purchasedTrialEndsAt }, trialEndsAt: purchasedTrialEndsAt } : {}),
               cardOnFile: true,
               stripeCustomerId: session.customer as string | undefined,
             });
@@ -610,6 +631,7 @@ export async function POST(req: NextRequest) {
 
           if (status === "active") {
             updateData["billing.isPaid"] = true;
+            updateData["billing.subscriptionAccessConfirmed"] = true;
           } else if (status === "canceled" || status === "unpaid") {
             updateData["billing.isPaid"] = false;
           }
@@ -617,6 +639,14 @@ export async function POST(req: NextRequest) {
           const fullSub = await stripe.subscriptions.retrieve(subscription.id, {
             expand: ["items.data.price.product"],
           });
+          const purchasedPlan = planForSubscriptionUpdate(fullSub, await getBillingSettings(), shop?.billing);
+          // Legacy custom contracts are not reclassified for unknown products.
+          // Known catalog subscriptions always update the plan on downgrade.
+          updateData["billing.plan"] = purchasedPlan;
+          if (fullSub.status === "trialing" && fullSub.trial_end) {
+            updateData["trial.endsAt"] = new Date(fullSub.trial_end * 1000);
+            updateData.trialEndsAt = new Date(fullSub.trial_end * 1000);
+          }
           const firstItem = fullSub.items?.data?.[0];
           if (firstItem?.price) {
             const amount = firstItem.price.unit_amount || 0;
@@ -629,8 +659,8 @@ export async function POST(req: NextRequest) {
             }
           }
           
-          await db.collection("shops").updateOne(
-            { shopId },
+          await writeShopBillingState(
+            db, shopId,
             { $set: updateData }
           );
           await dualWritePgIdentity(`shops.update(sub-updated ${shopId})`, () =>
@@ -658,8 +688,8 @@ export async function POST(req: NextRequest) {
             "billing.stripeSubscriptionId": null,
             "billing.updatedAt": new Date(),
           };
-          await db.collection("shops").updateOne(
-            { shopId: resolved.shopId },
+          await writeShopBillingState(
+            db, resolved.shopId,
             { $set: subDeletedSet }
           );
           await dualWritePgIdentity(`shops.update(sub-deleted ${resolved.shopId})`, () =>
@@ -774,8 +804,8 @@ export async function POST(req: NextRequest) {
               console.log(`[Stripe] Shop ${shopId} payment recovered from past_due - clearing grace period`);
             }
             
-            await db.collection("shops").updateOne(
-              { shopId },
+            await writeShopBillingState(
+              db, shopId,
               { $set: updateData }
             );
             await dualWritePgIdentity(`shops.update(payment-succeeded ${shopId})`, () =>
@@ -901,7 +931,7 @@ export async function POST(req: NextRequest) {
                 }
               }
 
-              await db.collection("shops").updateOne({ shopId }, { $set: updateData });
+              await writeShopBillingState(db, shopId, { $set: updateData });
               await dualWritePgIdentity(`shops.update(trial-conversion ${shopId})`, () =>
                 updateShopFields(shopId, updateData)
               );
@@ -933,8 +963,8 @@ export async function POST(req: NextRequest) {
               console.log(`[Stripe] Shop ${shopId} payment failed again - grace period already active`);
             }
             
-            await db.collection("shops").updateOne(
-              { shopId },
+            await writeShopBillingState(
+              db, shopId,
               { $set: updateData }
             );
             await dualWritePgIdentity(`shops.update(payment-failed ${shopId})`, () =>

@@ -30,6 +30,7 @@ type ShopFeature = {
   shopId: number;
   shopName: string;
   enabledFeatures: string[];
+  usableFeatures?: string[];
   featureSettings: Record<string, any>;
   subscriptions: any[];
   createdAt: string;
@@ -269,6 +270,8 @@ export default function FeaturesClient() {
                                     isEnabled ? "text-blue-900" : "text-gray-600"
                                   }`}>
                                     {feature.name}
+                                    {isEnabled && shopFeatures.find(sf => sf.shopId === shop.shopId)?.usableFeatures?.includes(feature.id) === false &&
+                                      <span className="block text-xs text-amber-700">Configured; blocked by subscription or expired trial</span>}
                                   </span>
                                 </div>
                                 <button

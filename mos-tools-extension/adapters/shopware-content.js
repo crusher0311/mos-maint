@@ -949,8 +949,17 @@ function applyFloatingToFab() {
   }
 }
 
+let swFeatureRefreshAt = 0;
+let swFeatureDeadline = Infinity;
 function refreshFloatingSetting() {
-  if (cachedFloatingEnabled !== null) { applyFloatingToFab(); return; }
+  if (Date.now() >= swFeatureDeadline) {
+    cachedFloatingEnabled = false;
+    cachedSwButtonVis = { oil_sticker: false };
+  }
+  if (cachedFloatingEnabled !== null) {
+    applyFloatingToFab();
+    if (Date.now() < swFeatureRefreshAt) return;
+  }
   if (floatingFetchInFlight) return;
   const context = detectContext();
   const shopId = context.shopId;
@@ -963,6 +972,8 @@ function refreshFloatingSetting() {
         floatingFetchInFlight = false;
         if (chrome.runtime.lastError) return;
         if (resp && resp.success) {
+          swFeatureRefreshAt = Date.now() + 60000;
+          swFeatureDeadline = Date.parse(resp.eligibility?.eligibleUntil) || Infinity;
           cachedFloatingEnabled = resp.floatingButtonEnabled !== false;
           // Task #1086: per-user injected-button visibility rides along.
           cachedSwButtonVis = (resp.buttonVisibility && resp.buttonVisibility.shopware) || null;
