@@ -5,6 +5,7 @@ import type { PlanItem, VHIData } from "./VehicleHealthReport";
 import { computeScore, isComplimentaryItem } from "./VehicleHealthReport";
 import { getScoreInfo } from "./HealthGauge";
 import ServiceIcon from "./ServiceIcon";
+import { isReportScoreAvailable } from "./score-availability";
 
 function isApprovedItem(item: PlanItem, approvedKeys?: string[]): boolean {
   if (!approvedKeys || approvedKeys.length === 0) return false;
@@ -18,6 +19,23 @@ interface ScoreSimulatorProps {
 }
 
 export default function ScoreSimulator({ data, currentScore }: ScoreSimulatorProps) {
+  // Keep the guard outside the stateful simulator: changing eligibility removes
+  // both the projection and its selections immediately, including direct callers.
+  if (!isReportScoreAvailable(data.dataQuality)) {
+    return (
+      <div className="px-4 py-5 border-b border-gray-100">
+        <h3 className="text-base sm:text-lg font-bold text-gray-800">Score projection unavailable</h3>
+        <p className="text-sm text-gray-500 mt-2">
+          A reliable score and repair projection are unavailable until sufficient service history is available.
+          You can still review recommended services in the Recommendations tab.
+        </p>
+      </div>
+    );
+  }
+  return <AvailableScoreSimulator data={data} currentScore={currentScore} />;
+}
+
+function AvailableScoreSimulator({ data, currentScore }: ScoreSimulatorProps) {
   const actionableItems = useMemo(() => {
     const approved = data.approvedServiceKeys;
     return [

@@ -5,6 +5,7 @@ import HealthGauge from "./HealthGauge";
 import ServiceIcon from "./ServiceIcon";
 import ScoreSimulator from "./ScoreSimulator";
 import MileageUpdateForm from "./MileageUpdateForm";
+import { isReportScoreAvailable } from "./score-availability";
 import { getOELogoUrl } from "@/lib/oe-logos";
 
 type ReportTab = "recommendations" | "plan" | "improve" | "dvi";
@@ -103,7 +104,7 @@ interface VHIData {
     carfaxStatus?: string;
     anchorCount?: number;
     reasons?: string[];
-  };
+  } | null;
   /**
    * Task #991 — customer-facing DVI: technician inspection findings for
    * this vehicle. When present (shop has Auto DVI + recorded findings),
@@ -461,7 +462,7 @@ export default function VehicleHealthReport({
 
         {/* Health Score Gauge */}
         <div className="py-6 px-4 flex flex-col items-center">
-          <HealthGauge score={score} insufficient={data.dataQuality?.sufficient === false} />
+          <HealthGauge score={score} insufficient={!isReportScoreAvailable(data.dataQuality)} />
 
           <div className="flex flex-col sm:flex-row gap-3 mt-5 w-full sm:w-auto px-4">
             {onScheduleService && (
