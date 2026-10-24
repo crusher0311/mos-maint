@@ -1,5 +1,4 @@
-- [Sticker label inheritance](sticker-label-inheritance.md) — preserve saved legacy wording; seeded text cannot be distinguished from an intentional override.
-- [Keytag hidden-field policy](keytag-hidden-field-policy.md) — user-approved visibility-based validation, without making optional fields required or widening other API contracts.
+- [Printed label compatibility](printed-label-compatibility.md) — saved sticker wording, keytag visibility-based validation, and preserving already-printed QR targets.
 - [Tekmetric DVI webhook evidence](tekmetric-dvi-webhook-evidence.md) — live messages distinguish inspection views from estimate views; customer prefix is a name; receipt time is not event time.
 - [MyOilSticker legacy data](myoilsticker-legacy-db.md) — legacy platform's data is db `test` on the SAME cluster; user migration tooling is operator-gated, collisions link-only, scraped SMS creds never copied.
 - [Plan-pregen storm](plan-pregen-storm.md) — speeding up a slow cron unleashes its completion-triggered fan-out (web event-loop starvation); clean Mongo + uniform slowness = web CPU, not DB.
@@ -144,7 +143,6 @@
 - [Pilot scope boundaries](pilot-scope-index.md) — tire demo, workflow DVI, durable enrollment, Protractor exports and degraded-readiness authorization.
 - [Workflow shared branding](workflow-shared-branding.md) — inherited display logos stay separate from stricter manual-upload drafts; keep deliberate overrides intact.
 - [Enterprise history sharing boundary](enterprise-history-sharing.md) — shared reads never widen current-shop writes; signed/partner redistribution needs its own grant.
-- [Sticker QR compatibility](sticker-qr-compatibility.md) — preserve printed HoverCode targets; publish cached images and target metadata together.
 - [Cron network fault injection](cron-fault-injection.md) — PostgreSQL parameter descriptions must reach the driver before execution acknowledgments can be lost.
 - [Workflow ticket intake safety](workflow-ticket-intake-safety.md) — explicit ticket writes are approved; appointment writes remain excluded, and timed-out admissions require exact-ID recovery.
 - [Chromium lost-response fixtures](chromium-lost-response-fixtures.md) — drop responses after headers to avoid transparent connection retries obscuring application behavior.

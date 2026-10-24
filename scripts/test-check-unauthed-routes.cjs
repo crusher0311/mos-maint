@@ -426,6 +426,17 @@ export async function POST(request: NextRequest) {
 // ---------------------------------------------------------------------------
 // Summary
 // ---------------------------------------------------------------------------
+{
+  const guarded = `
+const scope = await authorizePublicReport(vin, token);
+if (!scope) return NextResponse.json({ error: "Invalid link" }, { status: 403 });
+return NextResponse.json({ ok: true });`;
+  assert('public VHI signed scope plus rejection is recognized', guardMatches(guarded));
+  assert('public VHI import alone does not authorize', !guardMatches('import { authorizePublicReport } from "@/lib/public-report-service";'));
+  assert('public VHI discarded scope does not authorize', !guardMatches('await authorizePublicReport(vin, token); return NextResponse.json({ ok: true });'));
+  assert('public VHI unchecked scope does not authorize', !guardMatches('const scope = await authorizePublicReport(vin, token); return NextResponse.json({ ok: true });'));
+  assert('public VHI checking a different scope does not authorize', !guardMatches(guarded.replace('if (!scope)', 'if (!other)')));
+}
 const total = passed + failed;
 console.log(`\nauth-lint fixture tests: ${passed}/${total} passed`);
 if (failed > 0) {

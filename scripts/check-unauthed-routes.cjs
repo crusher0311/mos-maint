@@ -197,6 +197,10 @@ const AUTH_PATTERNS = [
   // and the route 403s without it, so the call is proof of protection.
   /\bverifyShareToken\s*\(/,
 
+  // Public VHI guard verifies signed VIN/shop scope and maintenance entitlement.
+  // Require the returned scope to be checked and rejected, not just called.
+  /\bconst\s+(\w+)\s*=\s*await\s+authorizePublicReport\s*\([^;]*\);\s*if\s*\(\s*!\s*\1\s*\)\s*(?:\{\s*)?return\b[^;]{0,400}\b403\b/,
+
   // One-time extension provider-action grant consumption — call syntax
   // required. consumeExtensionActionGrant() atomically validates + burns a
   // server-issued single-use grant (replay-safe); the route 403s unless the

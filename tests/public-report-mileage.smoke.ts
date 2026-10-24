@@ -161,6 +161,8 @@ async function main() {
   // First visit: a 202 keeps the page polling, then the real report appears.
   cached = null;
   assert.equal((await read()).status, 202);
+  // Refresh is detached from the response; allow repository awaits to settle.
+  await new Promise(resolve => setImmediate(resolve));
   assert.equal(builds.length, 2);
   cached = { plan: structuredClone(base), createdAt: new Date() };
   pendingBuild!();
@@ -175,6 +177,7 @@ async function main() {
   state = null;
   cached.createdAt = new Date(Date.now() - 2 * 86400000);
   await read();
+  await new Promise(resolve => setImmediate(resolve));
   assert.equal(builds.length, 3);
   rateAllowed = true;
   assert.equal((await write(70000)).status, 200);

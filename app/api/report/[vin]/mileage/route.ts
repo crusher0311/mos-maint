@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/mongo";
-import { findLatestCachedPlanDoc } from "@/lib/data/repositories/plan-cache-store";
+import { loadPublicMileageContext } from "@/lib/data/repositories/public-report-state";
 import { authorizePublicReport, allowPublicMileage, overlayPublicReport, saveCustomerMileage, refreshPublicReport } from "@/lib/public-report-service";
 import { validCustomerMileage } from "@/lib/public-report-mileage";
-import { resolveOpenRoMileage } from "@/lib/plan-build/open-ro-mileage";
 import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
 import { resolveShopDistanceUnit, type ShopDistanceDoc } from "@/lib/shop-distance-unit";
 
@@ -44,24 +42,18 @@ async function submit(req: NextRequest, vin: string) {
     try { body = JSON.parse(text); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
     const mileage = body?.mileage;
     if (!validCustomerMileage(mileage)) return NextResponse.json({ error: "Enter a whole number between 101 and 999,999." }, { status: 400 });
-    const db = await getDb();
-    const [shop, cached, vehicle] = await Promise.all([
-      db.collection("shops").findOne({ $or: [{ shopId }, { shopId: String(shopId) }] }),
-      findLatestCachedPlanDoc(shopId, vin, db),
-      db.collection("vehicles").findOne({ vin, shopId: { $in: [shopId, String(shopId)] } }, { maxTimeMS: 1500 }),
-    ]);
+    const { shop, cached, vehicle, ro } = await loadPublicMileageContext(shopId, vin);
     if (!shop || !cached?.plan) return NextResponse.json({ error: "Report not available yet" }, { status: 404 });
     const distanceUnit = resolveShopDistanceUnit(shop as ShopDistanceDoc);
-    const projected = await overlayPublicReport(db, shopId, vin, cached, distanceUnit);
-    const ro = await resolveOpenRoMileage({ db, shopIdVariants: [shopId, String(shopId)], vin, provider: shop.integrationProvider });
+    const projected = await overlayPublicReport(undefined, shopId, vin, cached, distanceUnit);
     const known = Math.max(projected.currentMiles || 0, vehicle?.currentMileage || 0, vehicle?.lastMileage || 0, ro?.miles || 0);
     if (mileage < known) return NextResponse.json({ error: `Mileage must be at least ${known.toLocaleString()} ${distanceUnit}.` }, { status: 409 });
     if (Date.now() >= deadline) return NextResponse.json({ error: "Please try again." }, { status: 503 });
-    const saved = await saveCustomerMileage(db, shopId, vin, {
+    const saved = await saveCustomerMileage(undefined, shopId, vin, {
       mileage, recordedAt: new Date(), source: "customer_entered", distanceUnit,
     });
     if (!saved) return NextResponse.json({ error: "A newer mileage reading was received. Refresh and try again." }, { status: 409 });
-    void refreshPublicReport(db, shopId, vin, cached, { currentMiles: mileage, mileageEstimated: false }, true)
+    void refreshPublicReport(undefined, shopId, vin, cached, { currentMiles: mileage, mileageEstimated: false }, true)
       .catch(() => console.warn("[Public report] Mileage refresh unavailable"));
     return NextResponse.json({ ok: true, mileage }, { headers: { "Cache-Control": "no-store" } });
   } catch {
