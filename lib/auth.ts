@@ -19,6 +19,7 @@ import { lookupExtensionSession } from "@/lib/extension-session";
 export const SESSION_COOKIE = "session_token";
 
 export type SessionInfo = {
+  userId?: string;
   token: string;
   shopId: number;
   email: string;
@@ -285,6 +286,7 @@ export async function getSession(): Promise<SessionInfo | null> {
     Boolean(sess.mustChangePassword) || Boolean(user.mustChangePassword);
 
   const session: SessionInfo = {
+    userId: String(sess.userId),
     token,
     shopId: Number(sess.shopId),
     email: String(user.email),

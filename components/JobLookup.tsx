@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { Search, Plus, ChevronDown, ChevronUp, Wrench, Package, Clock, DollarSign, Check } from "lucide-react";
 import { getMatchConfidenceBadge, type AcesTier } from "@/lib/aces-tier-badge";
+import { TutorialLink } from "@/components/tutorials/TutorialHost";
 
 type JobResult = {
   _id: string;
@@ -227,7 +228,8 @@ export default function JobLookup({ currentVehicle, workOrderGuid, onJobAdded }:
   };
 
   return (
-    <div className="space-y-3 sm:space-y-4">
+    <div className="space-y-3 sm:space-y-4" data-tutorial="jobs">
+      <TutorialLink />
       <div className="flex gap-2">
         <div className="flex-1 relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />

@@ -41,6 +41,7 @@ export async function GET() {
   return NextResponse.json({
     ok: true,
     authenticated: true,
+    userId: sess.userId || null,
     email: sess.email,
     role: sess.role,
     shopId: sess.shopId,

@@ -549,6 +549,24 @@ export async function findUserById(id: string) {
   return userRowToDoc(rows[0] ?? null);
 }
 
+/** Atomic additive personal tutorial keys; never replace unrelated profile fields. */
+export async function readTutorialPreferences(id: string): Promise<unknown> {
+  const user = await findUserById(id);
+  if (!user) throw new Error("Tutorial identity no longer exists");
+  return user.profile?.tutorialPreferences;
+}
+
+export async function writeTutorialPreference(id: string, key: string): Promise<boolean> {
+  if (!/^(noticeSeen|(dismiss|complete)_(vhi|jobs|printing))$/.test(key)) throw new Error("Invalid tutorial key");
+  const rows = await getDb().update(users).set({
+    profile: sql`jsonb_set(COALESCE(${users.profile}, '{}'::jsonb), '{tutorialPreferences}',
+      COALESCE(${users.profile}->'tutorialPreferences', '{}'::jsonb) || ${JSON.stringify({ [key]: true })}::jsonb, true)`,
+  }).where(sql`${users.id} = ${id} AND (${key} <> 'noticeSeen' OR
+    (${users.profile}->'tutorialPreferences'->>'noticeSeen') IS DISTINCT FROM 'true')`)
+    .returning({ id: users.id });
+  return key === "noticeSeen" && rows.length === 1;
+}
+
 export async function findUserByEmailLower(emailLower: string) {
   const db = getDb();
   const rows = await db

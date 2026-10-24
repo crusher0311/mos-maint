@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Detect Dog by MOS Tools</title>
   <link rel="stylesheet" href="sidepanel.css">
+  <link rel="stylesheet" href="tutorials.css">
 </head>
 <body>
   <div id="app">
@@ -64,6 +65,10 @@
 
     <!-- Main app state -->
     <div id="main-state" class="hidden">
+      <header style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:8px 16px;border-bottom:1px solid #d9e4ec;">
+        <button id="tutorial-context-btn" type="button" class="mos-help-link">How this works</button>
+        <button id="tutorial-help-btn" type="button" class="mos-help-link">Help &amp; tutorials</button>
+      </header>
       <!-- Session-tier banner explains Basic safe tools and verified-only actions. -->
       <div id="session-tier-banner" class="session-tier-banner hidden" role="status" aria-live="polite">
         <span id="session-tier-icon" class="session-tier-icon" aria-hidden="true"></span>
@@ -1095,5 +1100,6 @@
   <script src="dvi-request-core.js"></script>
   <script src="sticker-print-core.js"></script>
   <script src="sidepanel.js"></script>
+  <script type="module" src="tutorial-entry.js"></script>
 </body>
 </html>

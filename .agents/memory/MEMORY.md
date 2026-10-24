@@ -150,3 +150,4 @@
 - [CARFAX setup policy](carfax-settings-policy.md) — save without Maintenance with a warning; testing means save/reload, not paid upstream validation.
 - [Admin refresh scroll](admin-refresh-scroll.md) — retained rows alone do not preserve scroll when feedback shifts document layout.
 - [Sticker activity estimates](sticker-activity-estimates.md) — varying roll sizes, explicit opt-in estimates, and outreach flags must not imply physical-print proof.
+- [Optional tutorial safety](optional-tutorial-safety.md) — production help stays opt-in; no automatic business-control activation or account-age inference.

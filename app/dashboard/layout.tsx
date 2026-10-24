@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { Sidebar } from "@/components/ui/Sidebar";
 import QuickStickerModal from "@/components/stickers/QuickStickerModal";
@@ -10,6 +10,8 @@ import { GhostModeBanner } from "@/components/ui/GhostModeBanner";
 import { AnnouncementBanner } from "@/components/ui/AnnouncementBanner";
 import { BillingStatusBanner, BillingStatus } from "@/components/ui/BillingStatusBanner";
 import { Menu } from "lucide-react";
+import TutorialHost from "@/components/tutorials/TutorialHost";
+import "@/mos-tools-extension/tutorials.css";
 
 interface TrialState {
   active: boolean;
@@ -21,6 +23,7 @@ interface TrialState {
 }
 
 interface UserInfo {
+  userId?: string;
   email: string;
   role: string;
   shopId: number;
@@ -43,6 +46,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
+  const authScope = useRef("");
 
   useEffect(() => {
     let disposed = false;
@@ -58,6 +62,19 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         
         if (authRes.ok) {
           const authData = await authRes.json();
+          if (disposed || request !== sequence) return;
+          if (!authData.authenticated) {
+            setUserInfo(null);
+            setQuickStickerOpen(false);
+            window.dispatchEvent(new Event("mos:tutorial-scope-changing"));
+            return;
+          }
+          const nextAuthScope = JSON.stringify([authData.userId, authData.email, authData.shopId, authData.role]);
+          if (authScope.current && authScope.current !== nextAuthScope) {
+            window.dispatchEvent(new Event("mos:tutorial-scope-changing"));
+            setUserInfo(null);
+          }
+          authScope.current = nextAuthScope;
           if (authData.authenticated) {
             if (authData.needsSetup && pathname !== "/dashboard/setup-shop") {
               router.replace("/dashboard/setup-shop");
@@ -102,6 +119,10 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             
             setUserInfo({ ...authData, enabledFeatures, billingStatus, gracePeriodEndsAt, trial });
           }
+        } else if (authRes.status === 401 || authRes.status === 403) {
+          if (disposed || request !== sequence) return;
+          setUserInfo(null);
+          window.dispatchEvent(new Event("mos:tutorial-scope-changing"));
         }
       } catch (err) {
         console.error("Failed to fetch user info:", err);
@@ -225,6 +246,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               />
             )}
           </div>
+          <TutorialHost
+            authenticated={userInfo?.authenticated === true}
+            identity={`${userInfo?.userId || userInfo?.email || ""}|${userInfo?.shopId || ""}|${userInfo?.role || ""}`}
+            enabledFeatures={userInfo?.enabledFeatures || []}
+          />
           {children}
         </div>
       </div>

@@ -3,6 +3,7 @@ import EnterpriseVehicleHistory from "@/components/enterprise-vehicle-history";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import OilDutyToggle from "@/components/plan/OilDutyToggle";
+import { TutorialLink } from "@/components/tutorials/TutorialHost";
 import { getDb } from "@/lib/mongo";
 import { findLatestEventByVin as findLatestAutoflowEventByVin } from "@/lib/data/repositories/autoflow-cache";
 import { getLatestRepairOrderMilesRecordForVin } from "@/lib/miles";
@@ -2791,7 +2792,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
       {/* Sticky summary header - no nested overflow wrapper, uses dashboard layout's scroll.
           Hidden in print so the dedicated print-only header below is the single
           vehicle header that reaches the PDF. */}
-      <div className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b shadow-sm print:hidden">
+      <div data-tutorial="vhi" className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b shadow-sm print:hidden">
         <div className="mx-auto max-w-5xl px-4 sm:px-6 py-3">
           {/* Top navigation menu */}
           <nav className="flex items-center gap-4 text-sm text-blue-600 mb-2">
@@ -2799,6 +2800,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
             <Link href={`/dashboard/vehicles/${vin}?tab=oe`} className="hover:underline">OE</Link>
             <Link href={`/dashboard/vehicles/${vin}?tab=dvi`} className="hover:underline">DVI</Link>
             <Link href={`/dashboard/vehicles/${vin}?tab=carfax`} className="hover:underline">CARFAX</Link>
+            <TutorialLink />
           </nav>
 
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -3107,7 +3109,7 @@ async function PlanContent({ params, searchParams }: PageProps) {
             return (
               <>
         {/* Overdue (non-deferred) */}
-        <section id={`overdue${idSuffix}`} className="space-y-3">
+        <section id={`overdue${idSuffix}`} data-tutorial="vhi-priorities" className="space-y-3">
           <h2 className="text-lg font-semibold text-red-700 flex items-center gap-2">
             <span className="inline-block h-2.5 w-2.5 rounded-full bg-red-600" /> Needs attention
             <span className="text-xs font-semibold rounded-full bg-red-100 text-red-700 px-2 py-0.5">{counts.overdue}</span>

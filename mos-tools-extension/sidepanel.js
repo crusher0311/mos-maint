@@ -79,6 +79,38 @@ let currentUserCanWrite = false;
 let currentContext = null;
 let currentTab = 'plan';
 
+// Help consumes, but never owns, authentication, entitlements or provider state.
+// The worker supplies tutorial identity; this scope only invalidates stale UI.
+let tutorialScopeGeneration = 0;
+let tutorialFeaturesScope = null;
+function tutorialFeatureScope() {
+  return JSON.stringify([currentContext?.provider, currentContext?.shopId]);
+}
+function syncTutorials() {
+  const link = document.getElementById('tutorial-context-btn');
+  if (link) link.hidden = !['plan','jobs','sticker'].includes(currentTab);
+  globalThis.mosTutorialController?.sync();
+}
+function invalidateTutorials() {
+  tutorialScopeGeneration++;
+  globalThis.mosTutorialController?.reset();
+}
+globalThis.mosTutorialContext = () => ({
+  authenticated: isAuthenticated && !document.getElementById('main-state')?.classList.contains('hidden'),
+  features: tutorialFeaturesScope === tutorialFeatureScope()
+    ? Object.keys(shopFeatures).filter(key => shopFeatures[key] === true).sort() : [],
+  current: ({plan:'vhi',jobs:'jobs',sticker:'printing'})[currentTab] || null,
+  scope: JSON.stringify([tutorialScopeGeneration, laborRateSessionKey, laborRateSessionDiscriminator,
+    currentUserCanWrite, currentTab, currentContext?.provider, currentContext?.writeProvider,
+    currentContext?.shopId, currentContext?.mosShopId, currentContext?.roId, currentContext?.vin,
+    currentContext?.tabId ?? currentContext?._tabId]),
+});
+globalThis.mosTutorialRequest = (method, body) => sendMessage({
+  action:'MOS_API_REQUEST', endpoint:'/api/extension/tutorials',
+  context: currentContext ? {...currentContext} : undefined,
+  options:{ method, cache:'no-store', ...(body ? {body:JSON.stringify(body), headers:{'Content-Type':'application/json'}} : {}) },
+}, 20000);
+
 // Vehicle evidence is deliberately not part of planCache or chrome.storage.
 let vehicleHistorySequence = 0;
 let vehicleHistoryTimer = null;
@@ -1303,12 +1335,14 @@ function showLoadingState() {
 }
 
 function showLoginState() {
+  invalidateTutorials();
   clearVehicleHistory();
   if (vehicleHistoryTimer) clearInterval(vehicleHistoryTimer);
   vehicleHistoryTimer = null;
   elements.loadingState.classList.add('hidden');
   elements.loginState.classList.remove('hidden');
   elements.mainState.classList.add('hidden');
+  syncTutorials();
   setPasswordVisibility(false);
   // Reset passwordless-code UI to its default (hidden) state.
   if (elements.loginCodeGroup) {
@@ -1333,6 +1367,7 @@ function showMainState() {
   elements.loadingState.classList.add('hidden');
   elements.loginState.classList.add('hidden');
   elements.mainState.classList.remove('hidden');
+  syncTutorials();
   showBootstrapOutcome(null);
   showSupportFab();
   applyPlatformAdminVisibility();
@@ -1389,6 +1424,7 @@ function refreshEffectivePermissions() {
     ? core.effectiveMutationPermission(roleCanWrite, sessionCanMutate)
     : roleCanWrite === true && sessionCanMutate === true;
   applyMutationControlLock();
+  syncTutorials();
 }
 
 // Tell the advisor why a write was blocked. When it's specifically the session
@@ -1575,6 +1611,7 @@ function switchTab(tab) {
   }
 
   currentTab = tab;
+  syncTutorials();
   syncVehicleHistoryRefresh();
   
   elements.tabBtns.forEach(btn => {
@@ -1733,6 +1770,7 @@ function updateContext(context) {
   const laborRateContextChanged =
     laborRateContextKey(prevContext) !== laborRateContextKey(context);
   currentContext = context;
+  syncTutorials();
 
   if (estimateAuditContextChanged) {
     estimateAuditManualResultPins.clear();
@@ -1869,6 +1907,7 @@ const FEATURES_RETRY_DELAYS_MS = [800, 2000, 4000, 8000];
 let featuresFetchSeq = 0;
 
 function applyShopFeatures(result) {
+  tutorialFeaturesScope = tutorialFeatureScope();
   clearTimeout(featureExpiryTimer);
   shopFeatures = result.features;
   const deadline = Date.parse(result.eligibility?.eligibleUntil);
@@ -1915,6 +1954,7 @@ function applyShopFeatures(result) {
       ? result.floatingButtonUserPreference
       : null;
   renderFloatingButtonSetting();
+  syncTutorials();
 }
 
 let featureExpiryTimer;
@@ -2033,6 +2073,7 @@ async function handleFloatingButtonToggle() {
 }
 
 function updateTabAccessibility() {
+  syncTutorials();
   const featureMap = {
     'plan': 'maintenance',
     'failures': 'common_failures',
@@ -2215,6 +2256,7 @@ async function handleLogout() {
   recommendationSearchOrigin = null;
   recommendationAddEvidence.clear();
   planCache.clear();
+  invalidateTutorials();
   clearVehicleHistory();
   if (vehicleHistoryTimer) clearInterval(vehicleHistoryTimer);
   vehicleHistoryTimer = null;
@@ -4653,6 +4695,8 @@ function updateLaborRateSession(authStatus) {
   laborRateSessionDiscriminator = nextDiscriminator;
   synchronizeLaborRateContextSession();
   if (!sessionChanged && !discriminatorChanged) return;
+  invalidateTutorials();
+  syncTutorials();
   invalidateLaborRateState('session changed');
   // A session refresh can arrive without another SMS_CONTEXT_CHANGED
   // broadcast. Re-fetch only when Rates is already the visible panel.

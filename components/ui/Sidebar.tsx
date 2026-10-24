@@ -35,6 +35,7 @@ import {
 } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
 import { filterNavItemsByFeatures } from "@/lib/sidebar-nav";
+import { openTutorials } from "@/components/tutorials/TutorialHost";
 // import { PlanLauncher } from "./PlanLauncher"; // Hidden - replaced by standalone VIN lookup
 
 interface NavChild {
@@ -118,6 +119,7 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
   const shopSearchRef = useRef<HTMLInputElement>(null);
 
   async function handleLogout() {
+    window.dispatchEvent(new Event("mos:tutorial-scope-changing"));
     setLoggingOut(true);
     try {
       const res = await fetch("/api/auth/logout", { method: "POST" });
@@ -230,6 +232,7 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
       return;
     }
     setSwitching(true);
+    window.dispatchEvent(new Event("mos:tutorial-scope-changing"));
     try {
       const res = await fetch("/api/user/switch-shop", {
         method: "POST",
@@ -615,6 +618,14 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
       </nav>
 
       <div className="px-3 pb-2 space-y-1">
+        <button
+          type="button"
+          onClick={() => { onClose?.(); openTutorials(); }}
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-white/80 hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+        >
+          <HelpCircle className="w-5 h-5" />
+          <span>Help &amp; tutorials</span>
+        </button>
         <Link
           href="/dashboard/support"
           className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors ${

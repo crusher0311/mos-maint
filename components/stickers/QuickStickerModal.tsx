@@ -12,6 +12,10 @@ import { buildStickerPrintHtml } from "@/lib/print-sticker";
 import { StickerSupply } from "@/components/stickers/StickerSupply";
 import { stickerPrintAction, completeStickerPrintAction } from "@/lib/sticker-print-action";
 
+import { TutorialLink } from "@/components/tutorials/TutorialHost";
+
+"use client";
+
 type UnitType = "mi" | "km" | "hrs";
 
 const UNIT_OPTIONS: { value: UnitType; label: string }[] = [
@@ -380,7 +384,7 @@ export default function QuickStickerModal({ isOpen, onClose, vin }: QuickSticker
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md mx-4 overflow-hidden">
+      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md mx-4 overflow-hidden" data-tutorial="printing">
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <h2 className="text-lg font-semibold text-gray-900">Quick Sticker</h2>
           <button
@@ -393,6 +397,7 @@ export default function QuickStickerModal({ isOpen, onClose, vin }: QuickSticker
 
         <div className="p-6 space-y-5">
           <StickerSupply />
+          <TutorialLink />
           {loading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
