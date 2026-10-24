@@ -282,12 +282,20 @@ const reportRouteSource = fs.readFileSync(
 );
 assert.match(
   reportRouteSource,
-  /verifyShareToken\(token\)/,
-  "the customer report route must verify generated share tokens",
+  /await authorizePublicReport\(vin,\s*token\)/,
+  "the customer report route must authorize the token before serving data",
+);
+const reportAuthorizationSource = fs.readFileSync(
+  path.join(process.cwd(), "lib/public-report-service.ts"), "utf8",
 );
 assert.match(
-  reportRouteSource,
-  /verified\.vin\s*!==\s*vin/,
+  reportAuthorizationSource,
+  /verifyShareToken\(token\)/,
+  "the shared report authorization must verify generated share tokens",
+);
+assert.match(
+  reportAuthorizationSource,
+  /scope\.vin\s*!==\s*vin/,
   "the customer report route must bind the token to the requested VIN",
 );
 assert.match(

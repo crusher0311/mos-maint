@@ -11,7 +11,7 @@ export const runtime = "nodejs";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getSession();
@@ -21,7 +21,7 @@ export async function GET(
 
     await ensureCommunicationsTables();
 
-    const conversation = await getCommConversation(params.id);
+    const conversation = await getCommConversation((await params).id);
     if (!conversation) {
       return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
     }
@@ -31,7 +31,7 @@ export async function GET(
     }
 
     const limit = parseInt(req.nextUrl.searchParams.get("messageLimit") || "100", 10);
-    const messages = await getCommMessages(params.id, limit);
+    const messages = await getCommMessages((await params).id, limit);
 
     return NextResponse.json({ conversation, messages });
   } catch (error: any) {
@@ -45,7 +45,7 @@ export async function GET(
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getSession();
@@ -55,7 +55,7 @@ export async function PATCH(
 
     await ensureCommunicationsTables();
 
-    const existing = await getCommConversation(params.id);
+    const existing = await getCommConversation((await params).id);
     if (!existing) {
       return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
     }
@@ -66,7 +66,7 @@ export async function PATCH(
 
     const body = await req.json();
 
-    const conversation = await updateCommConversation(params.id, {
+    const conversation = await updateCommConversation((await params).id, {
       status: body.status,
       customer_name: body.customer_name,
       customer_id: body.customer_id,

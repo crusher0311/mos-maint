@@ -388,7 +388,21 @@ export class ShopmonkeyAdapter implements INormalizedAdapter {
     if (Array.isArray(items) && items.length > 0) {
       return [this.synthServiceJobFromOrder(sourceData)];
     }
+    // Has-money fallback (mirrors transform.ts): line items could not be
+    // fetched, but the order carries real dollars — synthesize the single job
+    // from order-level totals so terminal orders still yield history.
+    if (this.orderHasMoney(sourceData)) {
+      return [this.synthServiceJobFromOrder(sourceData)];
+    }
     return [];
+  }
+
+  private orderHasMoney(sourceData: any): boolean {
+    return (
+      (parseNumber(sourceData?.totalCostCents) ?? 0) !== 0 ||
+      (parseNumber(sourceData?.laborCents) ?? 0) !== 0 ||
+      (parseNumber(sourceData?.partsCents) ?? 0) !== 0
+    );
   }
 
   extractRawServiceJobsFromWorkOrder(sourceData: any): any[] {
@@ -399,7 +413,7 @@ export class ShopmonkeyAdapter implements INormalizedAdapter {
     // into a single synthetic raw job so `mapServiceJob` /
     // `extractLineItemsFromServiceJob` can consume them like the embedded shape.
     const items = sourceData.serviceItems || [];
-    if (Array.isArray(items) && items.length > 0) {
+    if ((Array.isArray(items) && items.length > 0) || this.orderHasMoney(sourceData)) {
       return [
         {
           id: sourceData.id,

@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const session = await getSession();
   if (!session) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
@@ -18,7 +18,7 @@ export async function GET(
   try {
     const db = getDb();
     const rows: any[] = await db.execute(sql`
-      SELECT audio, audio_mime FROM sales_coach_sessions WHERE id = ${params.id}
+      SELECT audio, audio_mime FROM sales_coach_sessions WHERE id = ${(await params).id}
     `);
     const row = rows[0];
     if (!row || !row.audio) {

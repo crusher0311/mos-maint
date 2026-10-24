@@ -410,6 +410,10 @@ const ALLOWLIST = new Set([
   // backfill/sync, operational rate-limiter, gated webhook-subscribe), mirroring
   // the allowlisted tekmetric integration files above.
   "lib/integrations/shopmonkey/adapter.ts",
+  // Shared Shopmonkey persistence layer (cache upsert + normalized ingest +
+  // job_index dual-write) used by backfill/sync/webhook/renormalize — writes
+  // the same shopmonkey_work_orders cache the allowlisted webhook route does.
+  "lib/integrations/shopmonkey/ingest.ts",
   "lib/integrations/shopmonkey/auth.ts",
   "lib/integrations/shopmonkey/full-page-backfill.ts",
   "lib/integrations/shopmonkey/incremental-sync.ts",

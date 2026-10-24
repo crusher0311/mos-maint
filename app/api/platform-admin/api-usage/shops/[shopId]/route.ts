@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { shopId: string } }
+  { params }: { params: Promise<{ shopId: string }> }
 ) {
   const session = await getSession();
   if (!session) {
@@ -18,7 +18,7 @@ export async function GET(
   }
 
   try {
-    const shopId = params.shopId === "null" ? null : parseInt(params.shopId);
+    const shopId = (await params).shopId === "null" ? null : parseInt((await params).shopId);
     if (shopId !== null && isNaN(shopId)) {
       return NextResponse.json({ error: "Invalid shop ID" }, { status: 400 });
     }

@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getSession();
@@ -17,7 +17,7 @@ export async function GET(
 
     await ensureCommunicationsTables();
 
-    const voicemail = await getCommVoicemail(params.id);
+    const voicemail = await getCommVoicemail((await params).id);
     if (!voicemail) {
       return NextResponse.json({ error: "Voicemail not found" }, { status: 404 });
     }
@@ -38,7 +38,7 @@ export async function GET(
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getSession();
@@ -48,7 +48,7 @@ export async function PATCH(
 
     await ensureCommunicationsTables();
 
-    const existing = await getCommVoicemail(params.id);
+    const existing = await getCommVoicemail((await params).id);
     if (!existing) {
       return NextResponse.json({ error: "Voicemail not found" }, { status: 404 });
     }
@@ -66,7 +66,7 @@ export async function PATCH(
       );
     }
 
-    const voicemail = await updateCommVoicemailStatus(params.id, body.status);
+    const voicemail = await updateCommVoicemailStatus((await params).id, body.status);
 
     return NextResponse.json({ voicemail });
   } catch (error: any) {

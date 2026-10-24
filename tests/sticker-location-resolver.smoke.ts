@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import vm from "node:vm";
 import ts from "typescript";
+import { validatePrintIntent } from "../lib/sticker-activity";
+import { AppFueledQrUnavailable } from "../lib/appfueled-qr-destination";
 
 // Execute the actual shared GET/POST resolver without loading native canvas or
 // any side-effecting renderer dependencies.
@@ -47,6 +49,7 @@ async function main() {
   // Execute BOTH actual handler bodies through the early rejection, not just
   // their shared resolver. Native rendering/storage must never be reached.
   Object.assign(sandbox, {
+    validatePrintIntent, AppFueledQrUnavailable,
     console: { log() {}, warn() {}, error() {} },
     validateExtensionToken: async () => ({
       authorized: true, principal: { provider: "shopware" },

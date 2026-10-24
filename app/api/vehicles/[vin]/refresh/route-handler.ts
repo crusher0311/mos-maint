@@ -45,14 +45,14 @@ async function readInputs(req: NextRequest, vinParam: string) {
   return { error: "Method not allowed." };
 }
 
-export async function POST(req: NextRequest, ctx: { params: { vin: string } }) {
+export async function POST(req: NextRequest, ctx: { params: Promise<{ vin: string }> }) {
   return handle(req, ctx);
 }
-export async function GET(req: NextRequest, ctx: { params: { vin: string } }) {
+export async function GET(req: NextRequest, ctx: { params: Promise<{ vin: string }> }) {
   return handle(req, ctx);
 }
 
-async function handle(req: NextRequest, ctx: { params: { vin: string } }) {
+async function handle(req: NextRequest, ctx: { params: Promise<{ vin: string }> }) {
   const session = await __deps.getSession();
   if (!session?.shopId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -61,7 +61,7 @@ async function handle(req: NextRequest, ctx: { params: { vin: string } }) {
   const shopId = Number(session.shopId);
 
   try {
-    const vinParam = ctx.params.vin;
+    const vinParam = (await ctx.params).vin;
     const parsed = await readInputs(req, vinParam);
     if ("error" in parsed) {
       return NextResponse.json({ error: parsed.error }, { status: 400 });

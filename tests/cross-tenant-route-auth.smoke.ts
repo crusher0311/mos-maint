@@ -124,7 +124,7 @@ async function testCustomerRoute() {
     email: "b@b.com",
     phone: "5550002",
   };
-  const ctx = { params: { customerId: CUSTOMER_B_ID.toString() } };
+  const ctx = { params: Promise.resolve({ customerId: CUSTOMER_B_ID.toString() }) };
 
   // 1a. No session → 401
   {
@@ -185,7 +185,7 @@ async function testInspectRoute() {
     email: "b@b.com",
     phone: "5550002",
   };
-  const ctx = { params: { customerId: CUSTOMER_B_ID.toString() } };
+  const ctx = { params: Promise.resolve({ customerId: CUSTOMER_B_ID.toString() }) };
 
   // 2a. No session → 401
   {
@@ -330,8 +330,8 @@ async function testVehicleRefreshRoute() {
     } as any;
   }
 
-  const ctxA = { params: { vin: VIN_A } };
-  const ctxB = { params: { vin: VIN_B } };
+  const ctxA = { params: Promise.resolve({ vin: VIN_A }) };
+  const ctxB = { params: Promise.resolve({ vin: VIN_B }) };
 
   // 4a. No session → 401
   {
@@ -350,7 +350,7 @@ async function testVehicleRefreshRoute() {
     refreshDeps.getDb = async () => makeRefreshDb(SHOP_B, VIN_B);
     const res = await refreshGET(
       new NextRequest(`http://localhost/api/vehicles/${VIN_B}/refresh`),
-      { params: { vin: VIN_B } },
+      { params: Promise.resolve({ vin: VIN_B }) },
     );
     ok("cross-tenant VIN → 404", res.status === 404, `got ${res.status}`);
   }
@@ -375,7 +375,7 @@ async function testVehicleRefreshRoute() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ shopId: SHOP_B, customerId: "cust123" }),
       }),
-      { params: { vin: VIN_B } },
+      { params: Promise.resolve({ vin: VIN_B }) },
     );
     ok(
       "forged body shopId for foreign VIN → 404 (session shop wins)",

@@ -123,12 +123,12 @@ const EVENT_COLORS: Record<string, string> = {
 export default async function ExtensionTelemetryPage({
   searchParams,
 }: {
-  searchParams?: { days?: string };
+  searchParams?: Promise<{ days?: string }>;
 }) {
   const session = await requireSession();
   if (session.role !== "platform_admin") redirect("/admin");
 
-  const daysParam = parseInt(searchParams?.days || "", 10);
+  const daysParam = parseInt((await searchParams)?.days || "", 10);
   const days = Number.isFinite(daysParam) && daysParam > 0 && daysParam <= 30 ? daysParam : DEFAULT_DAYS;
 
   const { rows, totalEvents, totalErrorEvents, uniqueShops, generatedAt } = await loadTelemetry(days);

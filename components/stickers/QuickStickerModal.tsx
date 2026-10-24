@@ -15,8 +15,6 @@ import { stickerPrintAction, completeStickerPrintAction } from "@/lib/sticker-pr
 
 import { TutorialLink } from "@/components/tutorials/TutorialHost";
 
-"use client";
-
 type UnitType = "mi" | "km" | "hrs";
 
 const UNIT_OPTIONS: { value: UnitType; label: string }[] = [

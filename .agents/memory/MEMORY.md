@@ -1,3 +1,6 @@
+- [Next router roots](next-router-root-compatibility.md) — keep app/pages entrypoints at the same root; validate generated types after builds, without a concurrent dev server.
+- [Shopmonkey extension placement](shopmonkey-extension-placement.md) — user chose a separate row below the native Print toolbar, not beside Print or Add Tag.
+- [Shopmonkey history ingest](shopmonkey-history-ingest.md) — batch line reads; VIN-less units must normalize; repair runs must bypass unchanged-content skips.
 - [Printed label compatibility](printed-label-compatibility.md) — saved sticker wording, keytag validation, printed QR targets, and advisory physical QR sizing.
 - [Sticker viscosity policy](sticker-viscosity-policy.md) — print-only current-RO evidence; no specification/history inference or persistent defaults.
 - [Optional keytag details](keytag-optional-details.md) — print-only identification values; no vehicle-profile persistence, new provider lookups, or prototype changes.

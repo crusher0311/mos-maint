@@ -13,10 +13,10 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function authorized(): boolean {
+async function authorized(): Promise<boolean> {
   const secret = process.env.CRON_SECRET;
   if (!secret) return false;
-  const h = headers();
+  const h = await headers();
   const auth = h.get("authorization") || "";
   const expected = `Bearer ${secret}`;
   const a = Buffer.from(auth);
@@ -38,7 +38,7 @@ function describeHash(val: unknown): string {
 }
 
 export async function GET(req: NextRequest) {
-  if (!authorized()) {
+  if (!(await authorized())) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
   const url = new URL(req.url);
@@ -75,7 +75,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  if (!authorized()) {
+  if (!(await authorized())) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
   let body: any;
@@ -127,7 +127,7 @@ export async function POST(req: NextRequest) {
   await dualWritePgIdentity("sessions.delete(emergency-reset)", () =>
     pgDeleteSessionsByUserId(String(user._id)),
   );
-  const h = headers();
+  const h = await headers();
   await logAdminAction({
     action: "user_password_reset",
     adminEmail: `emergency-reset:${email}`,

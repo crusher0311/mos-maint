@@ -13,13 +13,13 @@ export const dynamic = "force-dynamic";
  * Creates a one-time setup token and returns an invite URL:
  *   https://<app>/setup?shopId=7&token=abcdef...
  */
-export async function POST(req: NextRequest, ctx: { params: { shopId: string } }) {
+export async function POST(req: NextRequest, ctx: { params: Promise<{ shopId: string }> }) {
   const admin = req.headers.get("x-admin-token");
   if (!admin) {
     return NextResponse.json({ error: "Missing X-Admin-Token" }, { status: 401 });
   }
 
-  const shopIdNum = Number(ctx.params.shopId);
+  const shopIdNum = Number((await ctx.params).shopId);
   if (!Number.isFinite(shopIdNum)) {
     return NextResponse.json({ error: "Invalid shopId" }, { status: 400 });
   }

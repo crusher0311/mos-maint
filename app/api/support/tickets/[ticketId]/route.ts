@@ -14,7 +14,7 @@ import {
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { ticketId: string } }
+  { params }: { params: Promise<{ ticketId: string }> }
 ) {
   try {
     const session = await getSession();
@@ -22,7 +22,7 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { ticketId } = params;
+    const { ticketId } = await params;
 
     if (!ticketId || !ObjectId.isValid(ticketId)) {
       return NextResponse.json({ error: "Invalid ticket ID" }, { status: 400 });
@@ -46,7 +46,7 @@ export async function GET(
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { ticketId: string } }
+  { params }: { params: Promise<{ ticketId: string }> }
 ) {
   try {
     const session = await getSession();
@@ -54,7 +54,7 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { ticketId } = params;
+    const { ticketId } = await params;
     const body = await request.json();
     const { message } = body;
 

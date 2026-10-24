@@ -168,6 +168,14 @@ async function checkCustomizedPrintFlow() {
   vm.runInContext(`function onMessage(message, sender, sendResponse) { ${messageBranch} }`, worker);
   const element = (value = "") => ({ value, disabled: false, textContent: "", classList: { add() {}, remove() {} } });
   const panel: any = {
+    updateStickerSupply() {}, syncStickerDraft() {},
+    stickerDraftEdited: false, pendingStickerPrint: null,
+    stickerDraftContext: null, viscosityDraft: null,
+    MosStickerPersonalization: {
+      contextKey: (context: any) => JSON.stringify(context),
+      apply: (_context: any, config: any) => config,
+    },
+    crypto: { randomUUID: () => "test-print-action" },
     console, currentContext: null, stickerConfig: null, stickerConfigRequest: 0,
     stickerConfigContextKey: null, stickerEnabled: null,
     elements: Object.fromEntries(["stickerError", "stickerSection", "stickerLoading", "stickerPrintBtn",

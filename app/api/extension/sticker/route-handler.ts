@@ -461,7 +461,7 @@ async function resolveMosShopId(
   if (principalProvider && requestedProvider &&
       String(requestedProvider).toLowerCase().replace(/^shop[-_]ware$/, "shopware") !== principalProvider) {
     return { mosShopId: null, shop: null, resolvedProvider: null, lookupFailure: {
-      status: 403, error: "The sticker's provider does not match this session. Please use the current location's session.",
+      status: 403, error: "The sticker's provider does not match this session. Keep this shop's page open, log out of the extension, then log back in here to use the current location's session.",
     } };
   }
   // A first-class session's provider is server-issued and authoritative. For

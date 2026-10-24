@@ -28,14 +28,14 @@ function jsonError(status: number, message: string): Response {
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { shopId: string } }
+  { params }: { params: Promise<{ shopId: string }> }
 ) {
   const session = await getSession();
   if (!session?.isPlatformAdmin) {
     return jsonError(401, "Unauthorized");
   }
 
-  const shopId = Number(params.shopId);
+  const shopId = Number((await params).shopId);
   if (isNaN(shopId)) {
     return jsonError(400, "Invalid shop ID");
   }

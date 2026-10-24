@@ -14,14 +14,14 @@ export const maxDuration = 300;
 
 export async function POST(
   _req: NextRequest,
-  { params }: { params: { shopId: string } },
+  { params }: { params: Promise<{ shopId: string }> },
 ) {
   const session = await getSession();
   if (!session?.isPlatformAdmin) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const shopId = Number(params.shopId);
+  const shopId = Number((await params).shopId);
   if (Number.isNaN(shopId)) {
     return NextResponse.json({ error: "Invalid shop ID" }, { status: 400 });
   }

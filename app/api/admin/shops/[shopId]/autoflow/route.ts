@@ -6,9 +6,9 @@ import { getDb } from "@/lib/mongo";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(_req: NextRequest, ctx: { params: { shopId: string } }) {
+export async function GET(_req: NextRequest, ctx: { params: Promise<{ shopId: string }> }) {
   const sess = await requireSession();
-  const shopId = Number(ctx.params.shopId);
+  const shopId = Number((await ctx.params).shopId);
   if (!shopId || shopId !== Number(sess.shopId)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -28,9 +28,9 @@ export async function GET(_req: NextRequest, ctx: { params: { shopId: string } }
   return NextResponse.json({ ok: true, autoflow });
 }
 
-export async function PUT(req: NextRequest, ctx: { params: { shopId: string } }) {
+export async function PUT(req: NextRequest, ctx: { params: Promise<{ shopId: string }> }) {
   const sess = await requireSession();
-  const shopId = Number(ctx.params.shopId);
+  const shopId = Number((await ctx.params).shopId);
   if (!shopId || shopId !== Number(sess.shopId)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

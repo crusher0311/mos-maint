@@ -38,7 +38,7 @@ async function findShopByCode(code: string) {
 /** Public: resolve a join code to shop display info. */
 export async function GET(
   req: NextRequest,
-  { params }: { params: { code: string } },
+  { params }: { params: Promise<{ code: string }> },
 ) {
   const rate = await rateLimit({
     id: `join-info:${clientIp(req)}`,
@@ -49,7 +49,7 @@ export async function GET(
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 
-  const found = await findShopByCode(String(params.code || ""));
+  const found = await findShopByCode(String((await params).code || ""));
   if (!found) {
     return NextResponse.json(
       { error: "This enrollment link is invalid or no longer active." },
@@ -68,7 +68,7 @@ export async function GET(
 /** Public: create an account attached to the shop behind the code. */
 export async function POST(
   req: NextRequest,
-  { params }: { params: { code: string } },
+  { params }: { params: Promise<{ code: string }> },
 ) {
   try {
     const ip = clientIp(req);
@@ -84,7 +84,7 @@ export async function POST(
       );
     }
 
-    const found = await findShopByCode(String(params.code || ""));
+    const found = await findShopByCode(String((await params).code || ""));
     if (!found) {
       return NextResponse.json(
         { error: "This enrollment link is invalid or no longer active." },

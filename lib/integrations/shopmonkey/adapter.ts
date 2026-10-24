@@ -29,6 +29,7 @@ import {
 import { transformVehicle, transformOrder, transformCannedService } from "./transform";
 import type { ShopmonkeyOrder, ShopmonkeyServiceItem } from "./types";
 import { resolveShopDistanceUnit } from "@/lib/shop-distance-unit";
+import { attachServiceItemsBatched, upsertShopmonkeyWorkOrderCache } from "./ingest";
 import { PROGRESS_COLLECTION } from "./inflight-lock";
 import { NormalizedIngestionService } from "@/lib/integrations/core/normalized-ingestion";
 import { auditAutomationEnabled } from "@/lib/estimate-assist/audit-automation";
@@ -387,7 +388,7 @@ async function ingestShopmonkeyOrders(
     "shopmonkey",
     shopId,
     shopDoc?.enterpriseId as string | undefined,
-    { dualWriteToJobIndex: false, dualWriteToRepairPatterns: true, ingestionVia: via },
+    { dualWriteToJobIndex: true, dualWriteToRepairPatterns: true, ingestionVia: via },
   );
 
   let jobsIndexed = 0;
@@ -396,7 +397,9 @@ async function ingestShopmonkeyOrders(
   for (let i = 0; i < orders.length; i += BATCH) {
     const batch = orders.slice(i, i + BATCH);
     try {
+      for (const order of batch) await upsertShopmonkeyWorkOrderCache(db, shopId, order);
       const r = await ingestionService.ingestWorkOrderBatchWithAllEntities(batch);
+      hardFailures += r.workOrders.errors + r.serviceJobs.errors + r.lineItems.errors;
       jobsIndexed += (r.serviceJobs?.created || 0) + (r.serviceJobs?.updated || 0);
     } catch (err: any) {
       // Keep processing the remaining batches (ingestion is upsert-based so
@@ -419,25 +422,8 @@ async function ingestShopmonkeyOrders(
  * so one bad order can't abort the whole batch.
  */
 async function attachServiceItems(shopId: number, orders: ShopmonkeyOrder[]): Promise<void> {
-  // Bounded concurrency: the previous unbounded Promise.all fanned out one
-  // /service_item fetch per order for EVERY order at once, monopolizing the
-  // web instance during backfill runs.
-  const concurrency = Math.min(
-    10,
-    Math.max(1, Number(process.env.SHOPMONKEY_BACKFILL_ITEM_CONCURRENCY) || 3),
-  );
-  let next = 0;
-  const workers = Array.from({ length: Math.min(concurrency, orders.length) }, async () => {
-    while (next < orders.length) {
-      const o = orders[next++];
-      try {
-        o.serviceItems = await getOrderServiceItems(shopId, o);
-      } catch {
-        o.serviceItems = o.serviceItems ?? [];
-      }
-    }
-  });
-  await Promise.all(workers);
+  const stats = await attachServiceItemsBatched(shopId, orders);
+  if (stats.groupsFailed) throw new Error("Shopmonkey line attachment failed; retry this batch");
 }
 
 export const shopmonkeyAdapter = new ShopmonkeyAdapter();

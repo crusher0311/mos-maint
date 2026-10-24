@@ -1,10 +1,13 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
 import VehicleHealthReport, { computeScore } from "@/components/vehicle-health-report/VehicleHealthReport";
 import type { VHIData } from "@/components/vehicle-health-report/VehicleHealthReport";
 
-export default function ReportPage({ params }: { params: { vin: string } }) {
+export default function ReportPage() {
+  const params = useParams<{ vin: string }>();
+  const vin = params?.vin;
   const [data, setData] = useState<VHIData | null>(null);
   const [shopName, setShopName] = useState<string>("");
   const [shopPhone, setShopPhone] = useState<string>("");
@@ -14,6 +17,7 @@ export default function ReportPage({ params }: { params: { vin: string } }) {
   const [loadAttempt, setLoadAttempt] = useState(0);
 
   useEffect(() => {
+    if (!vin) return;
     const searchParams = new URLSearchParams(window.location.search);
     const token = searchParams.get("token");
 
@@ -28,7 +32,7 @@ export default function ReportPage({ params }: { params: { vin: string } }) {
     let attempts = 0;
     setLoading(true);
     setError(null);
-    const load = () => fetch(`/api/report/${encodeURIComponent(params.vin)}?token=${encodeURIComponent(token)}`, {
+    const load = () => fetch(`/api/report/${encodeURIComponent(vin)}?token=${encodeURIComponent(token)}`, {
       signal: AbortSignal.timeout(15000),
       cache: "no-store",
     })
@@ -61,7 +65,7 @@ export default function ReportPage({ params }: { params: { vin: string } }) {
       });
     void load();
     return () => { cancelled = true; if (timer) clearTimeout(timer); };
-  }, [params.vin, loadAttempt]);
+  }, [vin, loadAttempt]);
 
   async function updateMileage(mileage: number): Promise<void> {
     if (!Number.isInteger(mileage) || mileage < 101 || mileage > 999999) {
@@ -71,7 +75,8 @@ export default function ReportPage({ params }: { params: { vin: string } }) {
     if (!token) {
       throw new Error("Invalid report link. Please request a new link from your service advisor.");
     }
-    const reportUrl = `/api/report/${encodeURIComponent(params.vin)}`;
+    if (!vin) throw new Error("The vehicle is not loaded yet. Please try again.");
+    const reportUrl = `/api/report/${encodeURIComponent(vin)}`;
     let response: Response;
     try {
       response = await fetch(`${reportUrl}/mileage?token=${encodeURIComponent(token)}`, {

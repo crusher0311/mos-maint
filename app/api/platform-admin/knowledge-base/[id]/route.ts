@@ -8,11 +8,11 @@ import {
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   await requirePlatformAdmin();
 
-  const article = await getArticleById(params.id);
+  const article = await getArticleById((await params).id);
   if (!article) {
     return NextResponse.json({ ok: false, error: "Article not found" }, { status: 404 });
   }
@@ -22,7 +22,7 @@ export async function GET(
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   await requirePlatformAdmin();
 
@@ -36,7 +36,7 @@ export async function PATCH(
   if (category) updates.category = category;
   if (tags) updates.tags = tags;
 
-  const success = await updateArticle(params.id, updates);
+  const success = await updateArticle((await params).id, updates);
   if (!success) {
     return NextResponse.json({ ok: false, error: "Failed to update article" }, { status: 400 });
   }
@@ -46,11 +46,11 @@ export async function PATCH(
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   await requirePlatformAdmin();
 
-  const success = await deleteArticle(params.id);
+  const success = await deleteArticle((await params).id);
   if (!success) {
     return NextResponse.json({ ok: false, error: "Failed to delete article" }, { status: 400 });
   }

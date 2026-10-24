@@ -30,12 +30,12 @@ function downloadFilename(
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { importId: string } },
+  { params }: { params: Promise<{ importId: string }> },
 ) {
   try {
     await requirePlatformAdmin();
     const db = await getDb();
-    const doc = await getEngineRiskOverrideImport(db, params.importId);
+    const doc = await getEngineRiskOverrideImport(db, (await params).importId);
     if (!doc) {
       return NextResponse.json(
         { ok: false, error: "Import not found" },
@@ -45,7 +45,7 @@ export async function GET(
     const filename = downloadFilename(
       doc.fileName ?? null,
       doc.createdAt instanceof Date ? doc.createdAt : undefined,
-      params.importId,
+      (await params).importId,
     );
     return new NextResponse(doc.csv ?? "", {
       status: 200,

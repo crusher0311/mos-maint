@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export default async function RecommendedPage({
   searchParams,
 }: {
-  searchParams: { vin?: string; model?: string };
+  searchParams: Promise<{ vin?: string; model?: string }>;
 }) {
   const session = await requireSession();
   if (!session) {
@@ -24,8 +24,9 @@ export default async function RecommendedPage({
     redirect("/dashboard");
   }
 
-  const vin = searchParams.vin || "";
-  const selectedModel = searchParams.model || "gpt-4o";
+  const query = await searchParams;
+  const vin = query.vin || "";
+  const selectedModel = query.model || "gpt-4o";
 
   return (
     <RecommendedClient 

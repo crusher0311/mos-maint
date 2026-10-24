@@ -40,7 +40,7 @@ function validatePasswordStrength(password: string): string | null {
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { userId: string } }
+  { params }: { params: Promise<{ userId: string }> }
 ) {
   const session = await getSession();
   if (!session) {
@@ -75,7 +75,7 @@ export async function POST(
 
   let objectId: ObjectId;
   try {
-    objectId = new ObjectId(params.userId);
+    objectId = new ObjectId((await params).userId);
   } catch {
     return NextResponse.json({ error: "Invalid user ID" }, { status: 400 });
   }

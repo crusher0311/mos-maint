@@ -12,9 +12,9 @@ const ALLOWED_FILES: Record<string, string> = {
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { filename: string } }
+  { params }: { params: Promise<{ filename: string }> }
 ) {
-  const { filename } = params;
+  const { filename } = await params;
 
   const contentType = ALLOWED_FILES[filename];
   if (!contentType) {

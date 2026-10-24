@@ -19,14 +19,14 @@ export const dynamic = "force-dynamic";
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { shopId: string } },
+  { params }: { params: Promise<{ shopId: string }> },
 ) {
   const session = await getSession();
   if (!session?.isPlatformAdmin) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const shopId = Number(params.shopId);
+  const shopId = Number((await params).shopId);
   if (!Number.isFinite(shopId) || shopId <= 0) {
     return NextResponse.json({ error: "Invalid shop ID" }, { status: 400 });
   }

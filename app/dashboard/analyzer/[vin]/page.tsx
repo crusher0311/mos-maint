@@ -11,7 +11,7 @@ import { canAccessShopFeature } from "@/lib/shop-feature-access";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type Props = { params: { vin: string } };
+type Props = { params: Promise<{ vin: string }> };
 
 export default async function AnalyzerPage({ params }: Props) {
   const session = await requireSession();
@@ -21,7 +21,7 @@ export default async function AnalyzerPage({ params }: Props) {
   } catch {
     redirect("/dashboard");
   }
-  const vin = params.vin.toUpperCase();
+  const vin = (await params).vin.toUpperCase();
 
   // 1) Gather grounding (DVI + CARFAX + OE) from Mongo
   const evidence = await buildEvidenceForVIN(vin);

@@ -5,8 +5,8 @@ import { validCustomerMileage } from "@/lib/public-report-mileage";
 import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
 import { resolveShopDistanceUnit, type ShopDistanceDoc } from "@/lib/shop-distance-unit";
 
-export async function POST(req: NextRequest, { params }: { params: { vin: string } }) {
-  return withUpstreamTimeout(submit(req, params.vin.toUpperCase()), 10_000, "public mileage submission",
+export async function POST(req: NextRequest, { params }: { params: Promise<{ vin: string }> }) {
+  return withUpstreamTimeout(submit(req, (await params).vin.toUpperCase()), 10_000, "public mileage submission",
     NextResponse.json({ error: "Mileage update could not be confirmed. Refresh the report before retrying." }, { status: 503 }));
 }
 

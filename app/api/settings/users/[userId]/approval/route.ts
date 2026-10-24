@@ -21,8 +21,9 @@ export const dynamic = "force-dynamic";
  */
 export async function POST(
   req: NextRequest,
-  { params }: { params: { userId: string } },
+  { params }: { params: Promise<{ userId: string }> },
 ) {
+  const { userId } = await params;
   const sess = await getSession();
   if (!sess) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (sess.role !== "owner" && sess.role !== "admin") {
@@ -37,7 +38,7 @@ export async function POST(
 
   let objectId: ObjectId;
   try {
-    objectId = new ObjectId(params.userId);
+    objectId = new ObjectId(userId);
   } catch {
     return NextResponse.json({ error: "Invalid user ID" }, { status: 400 });
   }
@@ -54,8 +55,8 @@ export async function POST(
 
   if (action === "reject") {
     await deleteUserByObjectId(objectId);
-    await dualWritePgIdentity(`users.delete(reject:${params.userId})`, () =>
-      deleteUserById(params.userId),
+    await dualWritePgIdentity(`users.delete(reject:${userId})`, () =>
+      deleteUserById(userId),
     );
     console.log(`[Enrollment] ${sess.email} rejected pending user ${user.email} (shop ${sess.shopId})`);
     return NextResponse.json({ ok: true, action: "rejected" });
@@ -66,8 +67,8 @@ export async function POST(
   await approvePendingUser(objectId, sess.email);
   // PG mirror: status lives in the profile jsonb (see join route insert);
   // rewrite the whole profile blob with pending markers removed.
-  await dualWritePgIdentity(`users.approve(${params.userId})`, () =>
-    updateUserFields(params.userId, {
+  await dualWritePgIdentity(`users.approve(${userId})`, () =>
+    updateUserFields(userId, {
       profile: {
         ...(user.name ? { name: user.name } : {}),
         ...(user.enrolledVia ? { enrolledVia: user.enrolledVia } : {}),

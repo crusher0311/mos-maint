@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { userId: string } }
+  { params }: { params: Promise<{ userId: string }> }
 ) {
   const session = await getSession();
   if (!session) {
@@ -20,7 +20,7 @@ export async function GET(
 
   try {
     const db = await getDb();
-    const userId = params.userId;
+    const userId = (await params).userId;
     
     let user;
     try {
@@ -107,7 +107,7 @@ export async function GET(
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { userId: string } }
+  { params }: { params: Promise<{ userId: string }> }
 ) {
   const session = await getSession();
   if (!session) {
@@ -119,7 +119,7 @@ export async function PATCH(
 
   try {
     const db = await getDb();
-    const userId = params.userId;
+    const userId = (await params).userId;
     const body = await request.json();
     
     let objectId;
@@ -192,7 +192,7 @@ export async function PATCH(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { userId: string } }
+  { params }: { params: Promise<{ userId: string }> }
 ) {
   const session = await getSession();
   if (!session) {
@@ -204,7 +204,7 @@ export async function DELETE(
 
   try {
     const db = await getDb();
-    const userId = params.userId;
+    const userId = (await params).userId;
     
     let objectId;
     try {

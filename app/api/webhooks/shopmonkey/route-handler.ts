@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { enrichShopmonkeyOrder } from "@/lib/integrations/shopmonkey/ingest";
 import { getDb } from "@/lib/mongo";
 import type { Db } from "mongodb";
 import { getOrder, getVehicle, getCustomer } from "@/lib/integrations/shopmonkey/client";
@@ -161,8 +162,7 @@ async function runWebhookNormalizedIngestion(
       try { vehicle = await getVehicle(internalShopId, String(order.vehicleId)); } catch {}
     }
     if (!vehicle?.vin) {
-      console.log(`[Shopmonkey Webhook NIS] No VIN available for order ${order.id}; skipping NIS (poll will reconcile)`);
-      return;
+      console.log(`[Shopmonkey Webhook NIS] No VIN available for order ${order.id}; normalizing without VIN`);
     }
 
     let customer: any = order.customer || null;
@@ -170,7 +170,7 @@ async function runWebhookNormalizedIngestion(
       try { customer = await getCustomer(internalShopId, String(order.customerId)); } catch {}
     }
 
-    const enriched = { ...order, vehicle, customer };
+    const enriched = await enrichShopmonkeyOrder(internalShopId, { ...order, vehicle, customer });
 
     const ingestionService = new NormalizedIngestionService(
       db,
@@ -178,7 +178,7 @@ async function runWebhookNormalizedIngestion(
       internalShopId,
       enterpriseId,
       {
-        dualWriteToJobIndex: false,
+        dualWriteToJobIndex: true,
         dualWriteToRepairPatterns: true,
         ingestionVia: "webhook",
         suppressAutomaticAuditReceipt: true,

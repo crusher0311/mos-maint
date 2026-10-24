@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { inviteId: string } }
+  { params }: { params: Promise<{ inviteId: string }> }
 ) {
   const sess = await getSession();
   if (!sess) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -17,7 +17,7 @@ export async function DELETE(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const { inviteId } = params;
+  const { inviteId } = await params;
 
   const db = await getDb();
   const invites = db.collection("setup_tokens");

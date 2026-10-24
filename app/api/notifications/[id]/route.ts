@@ -5,14 +5,14 @@ import { markAsRead, deleteNotification } from "@/lib/notifications";
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
-  const { id } = params;
+  const { id } = await params;
   
   if (!ObjectId.isValid(id)) {
     return NextResponse.json({ ok: false, error: "Invalid notification ID" }, { status: 400 });
@@ -31,14 +31,14 @@ export async function PATCH(
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
-  const { id } = params;
+  const { id } = await params;
   
   if (!ObjectId.isValid(id)) {
     return NextResponse.json({ ok: false, error: "Invalid notification ID" }, { status: 400 });

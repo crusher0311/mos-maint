@@ -1923,7 +1923,21 @@ export class NormalizedIngestionService {
    */
   async writeToJobIndex(sourceData: any, serviceJobs: Partial<NormalizedServiceJob>[]): Promise<void> {
     const jobIndexCollection = this.db.collection('job_index');
-    
+
+    // Shopmonkey: job_index is PERFORMED-service history for plan-build /
+    // last-performed. Estimates and in-progress orders must never become
+    // anchors, so only terminal (invoiced/completed/posted/archived) orders —
+    // or ones carrying a completion date — are indexed. (Tekmetric/Protractor
+    // enforce this in their dedicated indexers; Shopmonkey uses this generic
+    // path.)
+    if (this.adapter.sourceSystem === 'shopmonkey') {
+      const s = String(sourceData?.status ?? '').toLowerCase();
+      const terminal = ['invoice', 'posted', 'complete', 'archived'].some((t) => s.includes(t));
+      const closed =
+        sourceData?.invoicedDate ?? sourceData?.completedDate ?? sourceData?.postedDate ?? sourceData?.closedDate;
+      if (!terminal && !closed) return;
+    }
+
     const vehicle = this.adapter.extractVehicleFromWorkOrder(sourceData);
     const sourceIds = this.adapter.getSourceIds(sourceData);
     const workOrderId = sourceIds.find(s => s.isPrimary)?.idValue || sourceData.ID || sourceData.id;
@@ -1953,7 +1967,24 @@ export class NormalizedIngestionService {
         ? this.buildTekmetricLinesByJob(sourceData)
         : this.adapter.sourceSystem === 'shopware'
           ? this.buildShopWareLinesByJob(sourceData)
-          : new Map<string, any[]>();
+          : this.adapter.sourceSystem === 'shopmonkey'
+            ? this.buildShopmonkeyLinesByJob(sourceData)
+            : new Map<string, any[]>();
+
+    // Work-order-level completion date + odometer, written onto every job row
+    // so job_index consumers (last-performed sorts on `performedAt`; VHI needs
+    // `mileage`) see Shopmonkey rows exactly like Tekmetric/Protractor ones.
+    // `invoicedDate` is Shopmonkey's "closed" (live v3); the other fields are
+    // the pre-existing provider chains.
+    const closedDateRaw =
+      sourceData.ClosedDate || sourceData.InvoiceDate || sourceData.invoicedDate ||
+      sourceData.postedDate || sourceData.completedDate || sourceData.closedDate;
+    const performedAt = closedDateRaw ? new Date(closedDateRaw) : null;
+    const rawMileage = Number(
+      sourceData.mileageOut ?? sourceData.MileageOut ?? sourceData.mileageIn ??
+      sourceData.MileageIn ?? sourceData.mileage ?? NaN,
+    );
+    const mileage = Number.isFinite(rawMileage) && rawMileage > 0 ? rawMileage : null;
 
     for (const job of serviceJobs) {
       if (!job.title) continue;
@@ -1992,7 +2023,9 @@ export class NormalizedIngestionService {
         enterpriseId: this.enterpriseId,
         sourceSystem: this.adapter.sourceSystem,
         workOrderId: String(workOrderId),
-        workOrderNumber: sourceData.InvoiceNumber || sourceData.repairOrderNumber,
+        workOrderNumber:
+          sourceData.InvoiceNumber || sourceData.repairOrderNumber ||
+          sourceData.number || sourceData.invoiceNumber,
         title: job.title,
         description: job.description,
         hours: job.laborHoursBilled ?? job.laborHoursActual ?? null,
@@ -2027,7 +2060,9 @@ export class NormalizedIngestionService {
         // (Tek + SW). Empty array when nothing present so consumers always
         // see a uniform shape.
         lines: jobLines,
-        closedDate: sourceData.ClosedDate || sourceData.InvoiceDate || sourceData.postedDate || sourceData.completedDate,
+        closedDate: closedDateRaw,
+        ...(performedAt && !isNaN(performedAt.getTime()) ? { performedAt } : {}),
+        ...(mileage != null ? { mileage } : {}),
         contentHash,
         logicVersion: 3,
         indexedAt: new Date(),
@@ -2105,6 +2140,58 @@ export class NormalizedIngestionService {
       const key = String(job.id);
       out.set(key, lines);
       if (job.name) out.set(job.name, lines);
+    }
+    return out;
+  }
+
+  /**
+   * Shopmonkey line map for writeToJobIndex — built from the adapter's own
+   * raw-job + line-item extraction (which already handles both the embedded
+   * `services[]` shape and the live-v3 flat `serviceItems` synthetic job, and
+   * converts CENTS → dollars). Keyed by raw job id AND job title so the
+   * per-job lookup in writeToJobIndex resolves either way.
+   */
+  buildShopmonkeyLinesByJob(sourceData: any): Map<string, any[]> {
+    const out = new Map<string, any[]>();
+    let rawJobs: any[] = [];
+    try {
+      rawJobs = this.adapter.extractRawServiceJobsFromWorkOrder(sourceData) ?? [];
+    } catch {
+      return out;
+    }
+    for (const rawJob of rawJobs) {
+      let rawLines: any[] = [];
+      try {
+        rawLines = this.adapter.extractLineItemsFromServiceJob(rawJob) ?? [];
+      } catch {
+        rawLines = [];
+      }
+      const lines = rawLines.map((li: any) => {
+        const type = String(li?.type ?? '').toLowerCase();
+        const isLabor = type === 'labor';
+        const lineType = isLabor
+          ? 'labor'
+          : type === 'part' || type === 'tire'
+            ? 'part'
+            : type === 'subcontract' || type === 'sublet'
+              ? 'sublet'
+              : type === 'fee'
+                ? 'fee'
+                : 'other';
+        return {
+          lineType,
+          description: li.description || li.name || '',
+          ...(li.partNumber ? { partNumber: li.partNumber } : {}),
+          ...(li.manufacturer || li.brand ? { manufacturer: li.manufacturer || li.brand } : {}),
+          quantity: li.quantity ?? 1,
+          unitPrice: li.price ?? 0,
+          extendedPrice: li.total ?? 0,
+          ...(isLabor ? { hours: li.hours ?? 0 } : {}),
+        };
+      });
+      if (rawJob?.id != null) out.set(String(rawJob.id), lines);
+      const name = rawJob?.name || rawJob?.title;
+      if (name) out.set(String(name), lines);
     }
     return out;
   }

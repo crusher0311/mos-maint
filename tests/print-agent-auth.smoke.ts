@@ -90,6 +90,9 @@ const calls = {
     }
     if (name === printRepo.__collections.JOBS_COLLECTION) {
       return {
+        async findOne(filter: any) {
+          return { ...filter, status: "done", kind: "keytag" };
+        },
         async findOneAndUpdate(filter: any) {
           calls.claimShopIds.push(filter.shopId);
           return { value: null };

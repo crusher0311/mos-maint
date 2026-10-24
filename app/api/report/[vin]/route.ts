@@ -23,7 +23,7 @@ const TOKEN_MAX_AGE_MS = 15 * 24 * 60 * 60 * 1000;
 
 export async function GET(
   req: NextRequest,
-  context: { params: { vin: string } }
+  context: { params: Promise<{ vin: string }> }
 ) {
   return withUpstreamTimeout(readReport(req, context), 10_000, "public report read",
     NextResponse.json({ error: "Report temporarily unavailable. Please try again." }, { status: 503 }));
@@ -31,10 +31,10 @@ export async function GET(
 
 async function readReport(
   req: NextRequest,
-  { params }: { params: { vin: string } }
+  { params }: { params: Promise<{ vin: string }> }
 ) {
   try {
-    const vin = params.vin?.toUpperCase();
+    const vin = (await params).vin?.toUpperCase();
     const token = req.nextUrl.searchParams.get("token");
 
     if (!vin) {
@@ -202,7 +202,7 @@ async function readReport(
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { vin: string } }
+  { params }: { params: Promise<{ vin: string }> }
 ) {
   try {
     const session = await getSession();
@@ -210,7 +210,7 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const vin = params.vin?.toUpperCase();
+    const vin = (await params).vin?.toUpperCase();
     const shopId = session.shopId;
 
     if (!vin || !shopId) {

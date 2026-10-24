@@ -1,3 +1,24 @@
+# 1.35.11
+
+- Place Shopmonkey Detect Dog controls on a dedicated row below the native
+  Print toolbar, rather than beside Add Tag or beside the native buttons.
+- Preserve native controls and restore layout when MOS controls are removed.
+
+# 1.35.10
+
+- Add Detect Dog and Print-tab launchers beside Shopmonkey's order Add Tag
+  control, scoped to the current order and existing shop/user settings.
+- Restore controls after SPA rerenders; stale settings cannot add controls
+  to another order. Print opens the panel, never prints automatically.
+
+# 1.35.9
+
+- Shopmonkey estimate pages recognize the displayed estimate number and
+  the odometer immediately following the VIN in the vehicle header.
+- VIN prefixes no longer become a false one-mile odometer reading.
+- Cached Shopmonkey order context is scoped to the location as well as
+  the order, preventing reuse across shop switches.
+
 # 1.35.6
 
 - Fixed successful shop-settings requests being rejected by an undefined

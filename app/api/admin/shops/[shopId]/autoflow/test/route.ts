@@ -6,9 +6,9 @@ import { resolveAutoflowConfig, fetchDviByInvoice } from "@/lib/integrations/aut
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function POST(req: NextRequest, ctx: { params: { shopId: string } }) {
+export async function POST(req: NextRequest, ctx: { params: Promise<{ shopId: string }> }) {
   const sess = await requireSession();
-  const shopId = Number(ctx.params.shopId);
+  const shopId = Number((await ctx.params).shopId);
   if (!shopId || shopId !== Number(sess.shopId)) {
     return NextResponse.json({ ok: false, error: "Forbidden" }, { status: 403 });
   }

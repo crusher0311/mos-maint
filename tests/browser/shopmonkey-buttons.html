@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Shopmonkey buttons — offline fixture</title>
+<style>
+body{font:14px system-ui;background:#f5f4fb;margin:32px;color:#272c40}
+main{background:white;max-width:850px;padding:24px;border:1px solid #e1e4ee;border-radius:8px}
+h4{margin:0 0 20px}button{cursor:pointer}
+.tag-row{display:flex;align-items:center;flex-wrap:wrap;gap:4px}
+.native{border:0;background:#f3f4f6;color:#2563eb;border-radius:4px;padding:3px 8px}
+.header{display:flex;justify-content:space-between;gap:12px}
+.actions{display:flex;align-items:center;align-content:start;gap:12px;width:360px}
+.toolbar{display:flex;gap:8px;flex-grow:1}.split{display:flex;isolation:isolate}
+.toolbar button{height:36px;padding:8px 12px}
+.notice{color:#667085;margin-top:32px}
+</style>
+<main>
+<h4 data-testid="selectedVehicle">2011 Ford F-350 Super Duty Lariat</h4>
+<div class="header"><div>
+<h3>#1000: Demo estimate</h3>
+<div class="tag-row">
+<span data-testid="addLabelBtnOrder-04c4dad9-c97c-41b2-9ac9-85db074de4b8"><button aria-label="Add Tag" class="native" type="button">+ Add</button></span>
+</div>
+</div><div class="actions"><div class="toolbar">
+<div class="split"><button title="Print" class="native" type="button">Print</button><button class="native" aria-label="More Options">⌄</button></div>
+<button class="native" type="button">Send</button><button class="native" type="button">Message</button><button class="native" type="button">Close</button>
+</div></div></div>
+<p class="notice">Offline layout fixture using the supplied Print toolbar hierarchy. No shop data or API connections.</p>
+<p id="action" role="status"></p>
+</main>
+<script src="/shopmonkey-buttons.js"></script>
+<script>
+const ctx = {provider:'shopmonkey',shopId:'demo',roId:'04c4dad9-c97c-41b2-9ac9-85db074de4b8'};
+const controller = MosShopmonkeyButtons.create({
+  document, getContext: () => ctx,
+  send(message, done) {
+    if (message.action === 'GET_SHOP_FEATURES') {
+      done({success:true,floatingButtonEnabled:true,features:{oil_sticker:true}});
+    } else {
+      document.getElementById('action').textContent = message.action === 'OPEN_STICKER_PANEL'
+        ? 'Print tab requested — nothing was printed.' : 'Detect Dog side panel requested.';
+      done({success:true});
+    }
+  }
+});
+controller.update();
+</script>
+</html>

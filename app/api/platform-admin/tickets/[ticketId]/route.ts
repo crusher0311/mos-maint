@@ -8,12 +8,12 @@ import {
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { ticketId: string } }
+  { params }: { params: Promise<{ ticketId: string }> }
 ) {
   try {
     await requirePlatformAdmin();
 
-    const { ticketId } = params;
+    const { ticketId } = await params;
 
     if (!ticketId || !ObjectId.isValid(ticketId)) {
       return NextResponse.json({ error: "Invalid ticket ID" }, { status: 400 });
@@ -40,12 +40,12 @@ export async function GET(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { ticketId: string } }
+  { params }: { params: Promise<{ ticketId: string }> }
 ) {
   try {
     await requirePlatformAdmin();
 
-    const { ticketId } = params;
+    const { ticketId } = await params;
 
     if (!ticketId || !ObjectId.isValid(ticketId)) {
       return NextResponse.json({ error: "Invalid ticket ID" }, { status: 400 });

@@ -42,6 +42,7 @@ try {
 
 let lastContext = null;
 let contextCheckInterval = null;
+let orderButtons = null;
 
 // ==================== CONTEXT DETECTION ====================
 // Shopmonkey hides some fields (VIN, mileage) once the user navigates between
@@ -49,9 +50,14 @@ let contextCheckInterval = null;
 // rehydrate, exactly like the Tekmetric adapter.
 const orderContextCache = new Map();
 
+function orderCacheKey(ctx) {
+  return ctx?.shopId && ctx?.roId ? `${ctx.shopId}:${ctx.roId}` : null;
+}
+
 function rememberOrderContext(ctx) {
-  if (!ctx?.roId) return;
-  const prior = orderContextCache.get(ctx.roId) || {};
+  const key = orderCacheKey(ctx);
+  if (!key) return;
+  const prior = orderContextCache.get(key) || {};
   const merged = {
     vin: ctx.vin || prior.vin || null,
     mileage: ctx.mileage || prior.mileage || null,
@@ -65,13 +71,14 @@ function rememberOrderContext(ctx) {
     customerPhone: ctx.customerPhone || prior.customerPhone || null,
     customerEmail: ctx.customerEmail || prior.customerEmail || null,
   };
-  orderContextCache.set(ctx.roId, merged);
+  orderContextCache.set(key, merged);
   return merged;
 }
 
 function hydrateContextFromCache(ctx) {
-  if (!ctx?.roId) return ctx;
-  const cached = orderContextCache.get(ctx.roId);
+  const key = orderCacheKey(ctx);
+  if (!key) return ctx;
+  const cached = orderContextCache.get(key);
   if (!cached) return ctx;
   if (!ctx.vin && cached.vin) ctx.vin = cached.vin;
   if (!ctx.mileage && cached.mileage) ctx.mileage = cached.mileage;
@@ -213,7 +220,7 @@ function _detectContextRaw() {
   try {
     const pageText = document.body?.innerText || '';
     // Shopmonkey shows the human order number as "Order #1234" / "RO #1234".
-    let m = pageText.match(/(?:Order|RO)\s*#\s*(\d{1,7})/i);
+    let m = pageText.match(/\b(?:Order|RO|Estimate|Invoice)\s*#\s*(\d{1,7})\b/i);
     if (m && m[1]) {
       context.roNumber = m[1];
     } else {
@@ -252,10 +259,22 @@ function _detectContextRaw() {
     if (vinMatch) context.vin = vinMatch[1].toUpperCase();
 
     // Mileage — "Odometer", "Miles", "In:" labels followed by a number.
-    const mileMatch = pageText.match(/(?:Odometer|Mileage|Miles|In)\s*:?\s*([\d,]{1,8})/i);
+    // Word boundaries are essential: "VIN: 1FT..." must not match "In: 1".
+    const mileMatch = pageText.match(/\b(?:Odometer|Mileage|Miles|In)\b\s*:?\s*(\d[\d,]{0,7})(?![\w,])/i);
     if (mileMatch) {
       const miles = parseInt(mileMatch[1].replace(/,/g, ''));
       if (!isNaN(miles) && miles > 0 && miles < 2000000) context.mileage = miles;
+    }
+    // Order-header layout: VIN/plate followed by an unlabeled odometer on
+    // its own line. Limit the search to that header, never maintenance
+    // suggestions ("120,000 mi") or assignments elsewhere on the page.
+    if (!context.mileage && vinMatch) {
+      const afterVin = pageText.slice(vinMatch.index + vinMatch[0].length);
+      const headerMileage = afterVin.match(/^[ \t]*\r?\n[ \t]*(\d{1,3}(?:,\d{3})+|\d{2,7})[ \t]*(?:mi|miles|km)?[ \t]*(?:\/[ \t]*[-–—]?)?[ \t]*(?:\r?\n|$)/i);
+      if (headerMileage) {
+        const miles = Number(headerMileage[1].replace(/,/g, ''));
+        if (miles > 0 && miles < 2000000) context.mileage = miles;
+      }
     }
   } catch (e) {}
 
@@ -289,11 +308,33 @@ function updateContext() {
       reportActionDropped("set_sms_context", "no_shop_identifier", { hasOrder: !!context.roId });
     }
   }
+  orderButtons?.update();
 }
 
 // ==================== INIT ====================
 function init() {
+  orderButtons = globalThis.MosShopmonkeyButtons?.create({
+    document,
+    send: safeSendMessage,
+    getContext: detectContext,
+  });
   updateContext();
+  // Shopmonkey can replace the tag row without changing the order URL.
+  let refreshTimer = null;
+  const observer = new MutationObserver(() => {
+    if (refreshTimer) return;
+    refreshTimer = setTimeout(() => {
+      refreshTimer = null;
+      orderButtons?.update();
+    }, 100);
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+  chrome.storage?.onChanged?.addListener((changes, area) => {
+    if ((area === 'local' && (changes.mosApiToken || changes.mosUser)) ||
+        (area === 'session' && changes.mosBootstrapAuth)) {
+      orderButtons?.invalidate();
+    }
+  });
 
   let lastUrl = window.location.href;
   contextCheckInterval = setInterval(() => {

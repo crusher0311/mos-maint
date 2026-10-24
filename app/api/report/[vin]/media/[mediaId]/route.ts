@@ -13,9 +13,9 @@ export const dynamic = "force-dynamic";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { vin: string; mediaId: string } },
+  { params }: { params: Promise<{ vin: string; mediaId: string }> },
 ) {
-  const vin = (params.vin || "").toUpperCase();
+  const vin = ((await params).vin || "").toUpperCase();
   const token = req.nextUrl.searchParams.get("token") || "";
   const verified = token ? verifyShareToken(token) : null;
   if (!verified || verified.vin !== vin) {
@@ -25,7 +25,7 @@ export async function GET(
   if (!entitlements.canUseFeature("maintenance")) {
     return NextResponse.json({ error: "Feature not enabled" }, { status: 403 });
   }
-  const media = await readInspectionMedia(Number(verified.shopId), params.mediaId);
+  const media = await readInspectionMedia(Number(verified.shopId), (await params).mediaId);
   if (!media) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return new NextResponse(media.buffer as any, {
     headers: {

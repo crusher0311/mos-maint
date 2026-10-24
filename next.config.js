@@ -48,12 +48,10 @@ const nextConfig = {
     serverActions: {
       allowedOrigins: ['*'],
     },
-    instrumentationHook: true,
     // `unzipper` is externalized because its Open API has an optional S3
     // code path that requires `@aws-sdk/client-s3`; webpack tries to resolve
     // it at build time and fails, while Node's runtime resolver never hits
     // that branch (we only use Open.buffer for .docx extraction).
-    serverComponentsExternalPackages: ['mongodb', 'node-cron', 'unzipper'],
     // The cron scheduler is loaded at runtime via eval("require") from
     // src/instrumentation.ts so that webpack doesn't statically analyze it
     // (which would emit noisy "Critical dependency" warnings on every Fast
@@ -61,9 +59,10 @@ const nextConfig = {
     // these files and would otherwise prune them from the deployed build,
     // causing prod to log "Cannot find module '.../lib/cron/scheduler.cjs'"
     // and the in-process scheduler never starts. Force-include them here.
-    outputFileTracingIncludes: {
-      '/': ['./lib/cron/*.cjs'],
-    },
+  },
+  serverExternalPackages: ['mongodb', 'node-cron', 'unzipper'],
+  outputFileTracingIncludes: {
+    '/': ['./lib/cron/*.cjs'],
   },
   webpack: (config, { isServer, dev }) => {
     // Next 14's instrumentation hook is bundled separately and does NOT

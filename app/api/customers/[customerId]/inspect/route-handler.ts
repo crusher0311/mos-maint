@@ -9,13 +9,13 @@ export const dynamic = "force-dynamic";
 /** Test seam — swap these in unit tests to avoid real DB / auth calls. */
 export const __deps = { getSession, getDb };
 
-export async function GET(_: Request, ctx: { params: { customerId: string } }) {
+export async function GET(_: Request, ctx: { params: Promise<{ customerId: string }> }) {
   const session = await __deps.getSession();
   if (!session?.shopId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   try {
-    const id = ctx.params?.customerId;
+    const id = (await ctx.params)?.customerId;
     if (!id || !ObjectId.isValid(id)) {
       return NextResponse.json({ error: "Invalid customerId" }, { status: 400 });
     }

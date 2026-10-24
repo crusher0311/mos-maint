@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { vin: string } }
+  { params }: { params: Promise<{ vin: string }> }
 ) {
   const session = await getSession();
   if (!session) {
@@ -21,7 +21,7 @@ export async function GET(
   if (!canAccessShopFeature(session, entitlements, "maintenance")) {
     return NextResponse.json({ error: "Feature not enabled" }, { status: 403 });
   }
-  const vin = params.vin?.toUpperCase();
+  const vin = (await params).vin?.toUpperCase();
 
   if (!vin) {
     return NextResponse.json({ error: "VIN required" }, { status: 400 });

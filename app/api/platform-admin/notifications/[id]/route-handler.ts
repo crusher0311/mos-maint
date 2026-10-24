@@ -11,12 +11,12 @@ export const __deps = {
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await __deps.requirePlatformAdmin();
     
-    const { id } = params;
+    const { id } = await params;
     
     if (!ObjectId.isValid(id)) {
       return NextResponse.json({ ok: false, error: "Invalid notification ID" }, { status: 400 });
@@ -46,12 +46,12 @@ export async function PATCH(
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await __deps.requirePlatformAdmin();
     
-    const { id } = params;
+    const { id } = await params;
     
     if (!ObjectId.isValid(id)) {
       return NextResponse.json({ ok: false, error: "Invalid notification ID" }, { status: 400 });

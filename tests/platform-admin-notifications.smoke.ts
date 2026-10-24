@@ -296,7 +296,7 @@ async function testRoutes() {
     }) as any;
     response = await patchNotification(
       new Request("http://localhost", { method: "PATCH", body: JSON.stringify({ read: true }) }) as any,
-      { params: { id: String(new ObjectId()) } },
+      { params: Promise.resolve({ id: String(new ObjectId()) }) },
     );
     assert.equal(response.status, 401, "non-admin item mutation is rejected");
 
@@ -304,18 +304,18 @@ async function testRoutes() {
     itemDeps.markPlatformAdminNotificationRead = (async () => false) as any;
     response = await patchNotification(
       new Request("http://localhost", { method: "PATCH", body: JSON.stringify({ read: true }) }) as any,
-      { params: { id: String(new ObjectId()) } },
+      { params: Promise.resolve({ id: String(new ObjectId()) }) },
     );
     assert.deepEqual(await response.json(), { ok: true, changed: false }, "mark-one is idempotent");
     response = await patchNotification(
       new Request("http://localhost", { method: "PATCH", body: "{not-json" }) as any,
-      { params: { id: String(new ObjectId()) } },
+      { params: Promise.resolve({ id: String(new ObjectId()) }) },
     );
     assert.equal(response.status, 400, "malformed mark-one JSON is rejected");
 
     itemDeps.deletePlatformAdminNotification = (async () => false) as any;
     response = await deleteNotification(new Request("http://localhost") as any, {
-      params: { id: String(new ObjectId()) },
+      params: Promise.resolve({ id: String(new ObjectId()) }),
     });
     assert.deepEqual(await response.json(), { ok: true, deleted: false }, "delete is idempotent");
   } finally {

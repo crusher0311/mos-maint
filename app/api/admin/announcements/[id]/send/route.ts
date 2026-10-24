@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getSession();
@@ -15,7 +15,7 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const result = await sendAnnouncement(params.id);
+    const result = await sendAnnouncement((await params).id);
 
     if (!result.success) {
       return NextResponse.json({ error: result.error }, { status: 400 });

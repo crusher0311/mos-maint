@@ -332,6 +332,7 @@ export async function GET(req: NextRequest) {
       if (shop.carfax?.locationId || shop.carfax?.serviceId || shop.carfaxLocationId) integrations.push("CARFAX");
       if (shop.autovitals?.apiKey || shop.autovitals?.configured || shop.autovitalsApiKey) integrations.push("AutoVitals");
       if (shop.shopware?.tenantId) integrations.push("Shop-Ware");
+      if (shop.shopmonkey?.apiKey) integrations.push("Shopmonkey");
       
       const isPaid = shop.billing?.plan === "professional" || shop.billing?.plan === "enterprise" || shop.billing?.plan === "pro" || shop.billing?.plan === "demo" || shop.billing?.plan === "detect_dog_founder";
       const vinViewCount = vinViewCountMap.get(String(shop.shopId)) || 0;

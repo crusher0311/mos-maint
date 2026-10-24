@@ -9,10 +9,10 @@ import { readInspectionMedia, deleteInspectionMedia } from "@/lib/data/repositor
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(_req: NextRequest, { params }: { params: { mediaId: string } }) {
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ mediaId: string }> }) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const media = await readInspectionMedia(Number(session.shopId), params.mediaId);
+  const media = await readInspectionMedia(Number(session.shopId), (await params).mediaId);
   if (!media) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return new NextResponse(media.buffer as any, {
     headers: {
@@ -24,7 +24,7 @@ export async function GET(_req: NextRequest, { params }: { params: { mediaId: st
   });
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { mediaId: string } }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ mediaId: string }> }) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const shopId = Number(session.shopId);
@@ -35,7 +35,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { mediaId: 
   if (denied) return denied;
   const vin = (req.nextUrl.searchParams.get("vin") || "").toUpperCase().trim();
   if (!vin) return NextResponse.json({ error: "vin is required" }, { status: 400 });
-  const ok = await deleteInspectionMedia(shopId, vin, params.mediaId);
+  const ok = await deleteInspectionMedia(shopId, vin, (await params).mediaId);
   if (!ok) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json({ ok: true });
 }

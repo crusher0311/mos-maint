@@ -2249,6 +2249,7 @@ function ShopRow(props: ShopRowProps) {
                     "CARFAX": "/icons/carfax.png",
                     "AutoFlow": "/icons/autoflow.png",
                     "Shop-Ware": "/logos/shopware.png",
+                    "Shopmonkey": "/logos/shopmonkey.png",
                   };
                   const icon = iconMap[int];
                   return icon ? (

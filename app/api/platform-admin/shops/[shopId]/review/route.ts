@@ -15,14 +15,14 @@ type ReviewDecision = "approve" | "flag" | "reset";
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { shopId: string } },
+  { params }: { params: Promise<{ shopId: string }> },
 ) {
   const session = await getSession();
   if (!session?.isPlatformAdmin) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const shopIdRaw = params.shopId;
+  const shopIdRaw = (await params).shopId;
   const shopId = isNaN(Number(shopIdRaw)) ? shopIdRaw : Number(shopIdRaw);
 
   let body: any;

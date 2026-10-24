@@ -94,12 +94,12 @@ function notFound() {
 }
 
 /** PUT /api/shops/[shopId]/credentials  Body: { apiKey, apiPassword, apiBase? } */
-export async function PUT(req: NextRequest, ctx: { params: { shopId: string } }) {
+export async function PUT(req: NextRequest, ctx: { params: Promise<{ shopId: string }> }) {
   try {
     const sess = await getSession();
     if (!sess) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const raw = ctx.params?.shopId?.trim();
+    const raw = (await ctx.params)?.shopId?.trim();
     if (!raw) return NextResponse.json({ error: "Missing shopId in path" }, { status: 400 });
 
     const db = await getDb();
@@ -150,12 +150,12 @@ export async function PUT(req: NextRequest, ctx: { params: { shopId: string } })
 }
 
 /** GET /api/shops/[shopId]/credentials — masked status */
-export async function GET(_req: NextRequest, ctx: { params: { shopId: string } }) {
+export async function GET(_req: NextRequest, ctx: { params: Promise<{ shopId: string }> }) {
   try {
     const sess = await getSession();
     if (!sess) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const raw = ctx.params?.shopId?.trim();
+    const raw = (await ctx.params)?.shopId?.trim();
     if (!raw) return NextResponse.json({ error: "Missing shopId in path" }, { status: 400 });
 
     const db = await getDb();

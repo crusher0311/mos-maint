@@ -30,6 +30,7 @@ const PROVIDER_LOGOS: Record<string, string> = {
   autoflow: "/logos/autoflow.png",
   hovercode: "/logos/hovercode.png",
   shopware: "/logos/shopware.png",
+  shopmonkey: "/logos/shopmonkey.png",
 };
 
 const CARD_ORDER_STORAGE_KEY = "api-usage-card-order";

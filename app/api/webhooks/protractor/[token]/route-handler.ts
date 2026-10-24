@@ -78,8 +78,8 @@ function resolveVin(payload: any): string | null {
   return vin ? String(vin).trim().toUpperCase() : null;
 }
 
-export async function GET(req: NextRequest, ctx: { params: { token: string } }) {
-  const token = ctx.params?.token || "";
+export async function GET(req: NextRequest, ctx: { params: Promise<{ token: string }> }) {
+  const token = (await ctx.params)?.token || "";
   if (!token) return NextResponse.json({ error: "missing token" }, { status: 400 });
 
   const isPing = req.nextUrl.searchParams.has("ping");
@@ -95,8 +95,8 @@ export async function GET(req: NextRequest, ctx: { params: { token: string } }) 
   return NextResponse.json({ ok: true, shopId: shop.shopId });
 }
 
-export async function POST(req: NextRequest, ctx: { params: { token: string } }) {
-  const token = ctx.params?.token || "";
+export async function POST(req: NextRequest, ctx: { params: Promise<{ token: string }> }) {
+  const token = (await ctx.params)?.token || "";
   if (!token) return NextResponse.json({ error: "missing token" }, { status: 400 });
 
   const shop = await findShopByToken(token);

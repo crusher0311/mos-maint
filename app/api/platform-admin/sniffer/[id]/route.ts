@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getSession();
   if (!session) {
@@ -19,7 +19,7 @@ export async function GET(
     );
   }
 
-  const id = parseInt(params.id);
+  const id = parseInt((await params).id);
   if (isNaN(id)) {
     return NextResponse.json({ error: "Invalid session ID" }, { status: 400 });
   }
@@ -63,7 +63,7 @@ export async function GET(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getSession();
   if (!session) {
@@ -76,7 +76,7 @@ export async function DELETE(
     );
   }
 
-  const id = parseInt(params.id);
+  const id = parseInt((await params).id);
   if (isNaN(id)) {
     return NextResponse.json({ error: "Invalid session ID" }, { status: 400 });
   }

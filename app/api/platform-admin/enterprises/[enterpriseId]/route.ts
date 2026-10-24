@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { enterpriseId: string } }
+  { params }: { params: Promise<{ enterpriseId: string }> }
 ) {
   const session = await getSession();
   if (!session?.isPlatformAdmin) {
@@ -20,7 +20,7 @@ export async function GET(
   }
 
   try {
-    const enterpriseId = params.enterpriseId;
+    const enterpriseId = (await params).enterpriseId;
     const db = await getDb();
     
     let enterprise;
@@ -60,7 +60,7 @@ export async function GET(
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { enterpriseId: string } }
+  { params }: { params: Promise<{ enterpriseId: string }> }
 ) {
   const session = await getSession();
   if (!session?.isPlatformAdmin) {
@@ -70,7 +70,7 @@ export async function PATCH(
   try {
     const body = await req.json();
     const { action, shopId, features } = body;
-    const enterpriseId = params.enterpriseId;
+    const enterpriseId = (await params).enterpriseId;
 
     const db = await getDb();
     const enterprise = await db.collection("enterprise_accounts").findOne({ 
@@ -176,7 +176,7 @@ export async function PATCH(
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { enterpriseId: string } }
+  { params }: { params: Promise<{ enterpriseId: string }> }
 ) {
   const session = await getSession();
   if (!session?.isPlatformAdmin) {
@@ -184,7 +184,7 @@ export async function DELETE(
   }
 
   try {
-    const enterpriseId = params.enterpriseId;
+    const enterpriseId = (await params).enterpriseId;
     const db = await getDb();
 
     const enterprise = await db.collection("enterprise_accounts").findOne({

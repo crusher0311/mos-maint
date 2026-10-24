@@ -12,14 +12,14 @@ export const __deps = { getSession, getDb };
 
 export async function GET(
   _req: NextRequest,
-  ctx: { params: { customerId?: string } }
+  ctx: { params: Promise<{ customerId?: string }> }
 ) {
   const session = await __deps.getSession();
   if (!session?.shopId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const id = ctx.params?.customerId;
+  const id = (await ctx.params)?.customerId;
   if (!id) {
     return NextResponse.json({ error: "missing customerId" }, { status: 400 });
   }

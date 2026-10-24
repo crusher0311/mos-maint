@@ -256,7 +256,7 @@ async function run() {
     try {
       const whRes = await webhookRoute.POST(
         webhookReq({ type: "WorkOrder", id: "WO1001", operation: "Create" }, {}),
-        { params: { token: TOKEN } },
+        { params: Promise.resolve({ token: TOKEN }) },
       );
       ok("webhook returns 200", whRes.status === 200);
       ok("webhook normalized inline (ingest called exactly once)", ingestCalls.count === 1, `count=${ingestCalls.count}`);
@@ -291,7 +291,7 @@ async function run() {
     try {
       await webhookRoute.POST(
         webhookReq({ type: "WorkOrder", id: "WO2002", operation: "Create" }, {}),
-        { params: { token: TOKEN } },
+        { params: Promise.resolve({ token: TOKEN }) },
       );
 
       // Default: zero-mileage RO is included.

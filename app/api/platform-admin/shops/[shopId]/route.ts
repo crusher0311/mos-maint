@@ -22,7 +22,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { shopId: string } }
+  { params }: { params: Promise<{ shopId: string }> }
 ) {
   try {
     const session = await getSession();
@@ -30,7 +30,7 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const shopId = isNaN(Number(params.shopId)) ? params.shopId : Number(params.shopId);
+    const shopId = isNaN(Number((await params).shopId)) ? (await params).shopId : Number((await params).shopId);
     const db = await getDb();
     const shop = await findShopByShopId<any>(shopId);
     
@@ -87,7 +87,7 @@ export async function GET(
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { shopId: string } }
+  { params }: { params: Promise<{ shopId: string }> }
 ) {
   try {
     const session = await getSession();
@@ -95,7 +95,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const shopId = isNaN(Number(params.shopId)) ? params.shopId : Number(params.shopId);
+    const shopId = isNaN(Number((await params).shopId)) ? (await params).shopId : Number((await params).shopId);
     const body = await req.json();
     const { action, billing, features, trial } = body;
 
@@ -513,7 +513,7 @@ export async function PATCH(
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { shopId: string } }
+  { params }: { params: Promise<{ shopId: string }> }
 ) {
   try {
     const session = await getSession();
@@ -521,7 +521,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const shopId = isNaN(Number(params.shopId)) ? params.shopId : Number(params.shopId);
+    const shopId = isNaN(Number((await params).shopId)) ? (await params).shopId : Number((await params).shopId);
 
     const db = await getDb();
     const shop = await db.collection("shops").findOne({ shopId });

@@ -122,7 +122,7 @@ const ghostStatusSource = readFileSync(
 );
 ok(
   "feature entitlements use shared effective billing resolution",
-  featureResolverSource.includes("resolveEffectiveBillingStatus(shop.billing"),
+  featureResolverSource.includes("evaluateBillingEligibility("),
 );
 ok(
   "billing settings use shared effective billing resolution",
@@ -131,7 +131,7 @@ ok(
 ok(
   "features endpoint resolves the currently viewed session shop",
   shopFeaturesSource.includes("Number(session.shopId)") &&
-    shopFeaturesSource.includes("getFeatureEntitlements(shopId)"),
+    shopFeaturesSource.includes("getFeatureEntitlements(shopId, { throwIfMissing: true })"),
 );
 ok(
   "billing settings resolves the currently viewed session shop",
