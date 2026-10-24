@@ -486,6 +486,7 @@ chrome.tabs.onActivated.addListener(({ tabId }) => {
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
+  pendingStickerNavigation.delete(tabId);
   smsContextsByTab.delete(tabId);
   tekmetricProofsByTab.delete(tabId);
   laborRateProviderSessionGenerationByTab.delete(tabId);
@@ -498,6 +499,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (!changeInfo.url) return;
+  pendingStickerNavigation.delete(tabId);
   stickerTabRevisions.set(tabId, (stickerTabRevisions.get(tabId) || 0) + 1);
   let supportedProviderPage = false;
   let nextOrigin = null;
@@ -1429,7 +1431,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.action === "GET_SMS_CONTEXT") {
     (async () => {
-      const tabs = await chrome.tabs.query({ active: true, currentWindow: true }).catch(() => []);
+      const tabs = await chrome.tabs.query({
+        active: true,
+        ...(Number.isInteger(message.windowId) && !sender.tab
+          ? { windowId: message.windowId } : { currentWindow: true }),
+      }).catch(() => []);
       const activeTabId = tabs[0]?.id;
       const rawContext = smsContextsByTab.get(activeTabId) ||
         (currentSmsContext?._tabId === activeTabId ? currentSmsContext : null);
@@ -1480,7 +1486,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           });
           sendResponse(await scoped.request(`/api/extension/sticker?shopId=${encodeURIComponent(message.shopId)}&provider=tekmetric`));
         } else {
-          sendResponse(await getStickerConfigCached(message.shopId, message.provider));
+          sendResponse(await getStickerConfigCached(message.shopId, message.provider, {
+            context: message.context, forceRefresh: message.forceRefresh === true,
+          }));
         }
       } catch (err) {
         sendResponse({ success: false, error: err.message, results: [] });
@@ -1958,7 +1966,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               console.log('[Concern] Re-injecting content script and retrying...');
               await chrome.scripting.executeScript({
                 target: { tabId: targetTabId },
-                files: ['sticker-print-core.js', 'adapters/shopware-content.js']
+                files: ['sticker-print-core.js', 'sticker-button-preference.js', 'adapters/shopware-content.js']
               });
               await new Promise(r => setTimeout(r, 500));
               res = await trySend(targetTabId);
@@ -2061,21 +2069,51 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === "OPEN_STICKER_PANEL") {
-    // Open side panel and notify it to switch to sticker tab
-    if (sender.tab?.id) {
-      const panelContext = { ...message.context, _tabId: sender.tab.id };
-      chrome.sidePanel.open({ tabId: sender.tab.id }).then(() => {
-        // Give panel time to load, then tell it to switch to sticker tab
-        setTimeout(() => {
-          chrome.runtime.sendMessage({ 
-            action: 'SWITCH_TO_STICKER_TAB',
-            context: panelContext
-          }).catch(() => {});
-        }, 500);
-      }).catch(err => console.error('[MOS] Failed to open side panel:', err));
+    if (!sender.tab?.id) {
+      sendResponse({ success: false, error: 'Open Print from a work-order tab.' });
+      return false;
     }
-    sendResponse({ success: true });
-    return false;
+    const navigation = {
+      action: 'SWITCH_TO_STICKER_TAB', navigationId: crypto.randomUUID(),
+      windowId: sender.tab.windowId,
+      context: { ...message.context, _tabId: sender.tab.id },
+    };
+    pendingStickerNavigation.set(sender.tab.id, navigation);
+    // Must be invoked synchronously in this user-gesture message handler.
+    chrome.sidePanel.open({ tabId: sender.tab.id }).then(() => {
+      chrome.runtime.sendMessage(navigation).catch(() => {});
+      sendResponse({ success: true });
+    }).catch(err => {
+      if (pendingStickerNavigation.get(sender.tab.id) === navigation) pendingStickerNavigation.delete(sender.tab.id);
+      sendResponse({ success: false, error: err.message });
+    });
+    return true;
+  }
+  if (message.action === "GET_STICKER_NAVIGATION") {
+    if (sender.tab || !Number.isInteger(message.tabId) || !Number.isInteger(message.windowId)) {
+      sendResponse(null);
+      return false;
+    }
+    chrome.tabs.get(message.tabId).then(tab => {
+      const navigation = pendingStickerNavigation.get(message.tabId);
+      sendResponse(tab.active && tab.windowId === message.windowId && navigation?.windowId === message.windowId
+        ? navigation : null);
+    }).catch(() => sendResponse(null));
+    return true;
+  }
+  if (message.action === "ACK_STICKER_NAVIGATION") {
+    if (sender.tab || !Number.isInteger(message.tabId) || !Number.isInteger(message.windowId)) {
+      sendResponse({ success: false });
+      return false;
+    }
+    chrome.tabs.get(message.tabId).then(tab => {
+      const navigation = pendingStickerNavigation.get(message.tabId);
+      const matches = tab.active && tab.windowId === message.windowId &&
+        navigation?.windowId === message.windowId && navigation?.navigationId === message.navigationId;
+      if (matches) pendingStickerNavigation.delete(message.tabId);
+      sendResponse({ success: !!matches });
+    }).catch(() => sendResponse({ success: false }));
+    return true;
   }
 
   // Forward print request from sidepanel to content script
@@ -4203,6 +4241,7 @@ async function createTekmetricJob(shopId, roId, jobData, auditSelection, vehicle
 }
 
 // ------ STICKER PRINTING ------
+const pendingStickerNavigation = new Map();
 async function stickerLocationRequest(context) {
   await _stateReady;
   if (!context?._tabId || !context.shopId || context.provider !== 'tekmetric') {
@@ -4382,6 +4421,7 @@ async function handleImmediateStickerPrint(context, tabId, overrideInterval = nu
   }
 
   const requestBody = {
+    workOrderId: context.roId,
     currentMileage: mileage,
     unit,
     smsShopId: context.shopId,
@@ -4402,7 +4442,9 @@ async function handleImmediateStickerPrint(context, tabId, overrideInterval = nu
   }
 
   // Add customer/vehicle data for auto booking
-  if (context.customerName) requestBody.customerName = context.customerName;
+  const stickerCustomerName = Object.hasOwn(context, 'stickerCustomerName')
+    ? context.stickerCustomerName : context.customerName;
+  if (stickerCustomerName) requestBody.customerName = stickerCustomerName;
   if (context.customerId) requestBody.customerId = context.customerId;
   if (context.customerPhone) requestBody.customerPhone = context.customerPhone;
   if (context.customerEmail) requestBody.customerEmail = context.customerEmail;
@@ -4467,7 +4509,7 @@ async function handleImmediateStickerPrint(context, tabId, overrideInterval = nu
   
   return {
     success: true,
-    sticker: data.sticker,
+    sticker: { ...data.sticker, mosPrintContext: context },
     oilType: overrideInterval ? 'custom' : requestBody.intervalType
   };
 }

@@ -19,6 +19,7 @@ import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
 import { parseMileageInput, parseMonthsInput, isAbsurdMileage, MAX_PLAUSIBLE_MILEAGE, logStickerMileageReject } from "@/lib/sticker-mileage";
 import { shouldRunStickerSideEffects } from "@/lib/extension-basic-tools";
 import { getStickerSizeInches } from "@/lib/sticker-print-dimensions";
+import { stickerPersonalization } from "@/lib/sticker-personalization";
 
 // Hard deadlines for external lookups during sticker generation. Each of
 // these is decorative/optional (predictive date, logo, Hovercode QR) — a
@@ -216,6 +217,8 @@ interface FontStyle {
 }
 
 interface StickerConfig extends StickerQrPreferences {
+  personalizeThankYou?: boolean;
+  openPrintTabFirst?: boolean;
   scanDestination?: string;
   logo?: string;
   logoObjectPath?: string;
@@ -612,6 +615,9 @@ async function _GET(request: NextRequest) {
       enabled: hasOilStickerFeature,
       supply: hasOilStickerFeature ? await readStickerSupply(db, mosShopId!).catch(() => null) : null,
       config: {
+        personalizeThankYou: stickerConfig.personalizeThankYou === true,
+        openPrintTabFirst: stickerConfig.openPrintTabFirst === true,
+        tagline: stickerConfig.tagline || "",
         defaultSize: stickerConfig.defaultSize || "2x2.5",
         useKilometers: resolvedUseKilometers,
         roundMileage: stickerConfig.roundMileage ?? true,
@@ -857,7 +863,10 @@ async function _POST(request: NextRequest) {
     const configWithLogo = { 
       ...stickerConfig, 
       logo: logoDataUrl || undefined,
-      ...(tagline ? { tagline } : {}),
+      tagline: stickerPersonalization.tagline(stickerConfig, {
+        roId: body.workOrderId,
+        customerName,
+      }, tagline),
     };
 
     let qrDataUrl: string | null = null;

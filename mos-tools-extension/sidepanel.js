@@ -959,10 +959,40 @@ function enrichContextWithMosShop(context) {
 }
 
 // ---- INITIALIZATION ----
+let stickerNavigationReady = false;
+let queuedStickerNavigation = null;
+let lastStickerNavigationId = null;
+async function stickerPanelTarget() {
+  // Query from this panel document, never the worker's last-focused window.
+  const window = await chrome.windows.getCurrent();
+  const [tab] = await chrome.tabs.query({ active: true, windowId: window.id });
+  return { windowId: window.id, tabId: tab?.id };
+}
+async function getPanelSmsContext() {
+  const target = await stickerPanelTarget();
+  return sendMessage({ action: 'GET_SMS_CONTEXT', ...target });
+}
+async function applyStickerNavigation(message) {
+  if (!message || (message.navigationId && message.navigationId === lastStickerNavigationId)) return;
+  if (!stickerNavigationReady) { queuedStickerNavigation = message; return; }
+  const target = await stickerPanelTarget();
+  if (target.windowId !== message.windowId || target.tabId !== message.context?._tabId) return;
+  // A live broadcast and the cold-start read can resolve together.
+  if (message.navigationId && message.navigationId === lastStickerNavigationId) return;
+  lastStickerNavigationId = message.navigationId;
+  if (message.context) updateContext(message.context);
+  switchTab('sticker');
+  if (message.navigationId) void sendMessage({
+    action: 'ACK_STICKER_NAVIGATION', tabId: message.context?._tabId,
+    windowId: target.windowId,
+    navigationId: message.navigationId,
+  });
+}
+
 async function init() {
   setupEventListeners();
   const authStatus = await sendMessage({ action: 'GET_MOS_AUTH' });
-  const contextStatus = await sendMessage({ action: 'GET_SMS_CONTEXT' });
+  const contextStatus = await getPanelSmsContext();
   
   if (authStatus.isAuthenticated) {
     applyAuthenticatedState(authStatus);
@@ -994,6 +1024,11 @@ async function init() {
       }
     }
   }
+  stickerNavigationReady = true;
+  const target = await stickerPanelTarget();
+  const navigation = await sendMessage({ action: 'GET_STICKER_NAVIGATION', ...target });
+  await applyStickerNavigation(navigation);
+  queuedStickerNavigation = null;
 }
 
 function applyAuthenticatedState(authStatus) {
@@ -1221,6 +1256,8 @@ function setupEventListeners() {
   // Listen for context changes from background
   chrome.runtime.onMessage.addListener((message) => {
     if (message.action === 'SMS_CONTEXT_CHANGED') {
+      void stickerPanelTarget().then(target => {
+      if (target.tabId !== (message.tabId ?? message.context?._tabId)) return;
       // Invalidate first and wait for GET_MOS_AUTH to provide the current
       // discriminator. Never trust a delayed context broadcast to advance (or
       // roll back) the session identity used by LABOR_RATE_APPLIED.
@@ -1234,6 +1271,7 @@ function setupEventListeners() {
           if (auth?.isAuthenticated) updateLaborRateSession(auth);
         })
         .catch(() => {});
+      }).catch(() => {});
     }
     if (message.action === 'MOS_BOOTSTRAP_RESOLVED') {
       if (message.outcome === 'basic' || message.outcome === 'matched_user') {
@@ -1265,10 +1303,7 @@ function setupEventListeners() {
       }
     }
     if (message.action === 'SWITCH_TO_STICKER_TAB') {
-      if (message.context) {
-        updateContext(message.context);
-      }
-      switchTab('sticker');
+      void applyStickerNavigation(message).catch(() => {});
     }
     if (message.action === 'SWITCH_TO_CREATE_RO') {
       if (message.context) {
@@ -1745,6 +1780,7 @@ function switchTab(tab) {
 }
 
 function updateContext(context) {
+  syncStickerDraft(context);
   if (context && context.provider === 'autoflow') {
     context = enrichContextWithMosShop(context);
   }
@@ -2237,7 +2273,7 @@ async function handleLogin(e) {
 
       showMainState();
       
-      const contextStatus = await sendMessage({ action: 'GET_SMS_CONTEXT' });
+      const contextStatus = await getPanelSmsContext();
       if (contextStatus.context) {
         updateContext(contextStatus.context);
       }
@@ -5374,6 +5410,31 @@ async function handleApplyLaborRateNow() {
 let stickerConfig = null;
 let stickerConfigContextKey = null;
 let stickerConfigRequest = 0;
+let stickerDraftContext = null;
+let stickerDraftKey = null;
+let stickerDraftEdited = false;
+let stickerDraftValue = '';
+function syncStickerDraft(context = stickerDraftContext) {
+  const key = MosStickerPersonalization.contextKey(context);
+  if (key !== stickerDraftKey) {
+    stickerDraftKey = key;
+    stickerDraftEdited = false;
+    stickerDraftValue = '';
+  }
+  // Only provider-supplied current-order identity. Plan/VIN enrichment must
+  // not quietly select another work order's customer for a sticker.
+  stickerDraftContext = context ? { ...context } : null;
+  if (!elements.stickerTagline) return;
+  if (!stickerDraftEdited) {
+    const config = stickerConfigContextKey === stickerContextKey(context) ? stickerConfig : null;
+    stickerDraftValue = MosStickerPersonalization.tagline(config, stickerDraftContext);
+  }
+  elements.stickerTagline.value = stickerDraftValue;
+}
+document.getElementById('sticker-tagline')?.addEventListener('input', event => {
+  stickerDraftEdited = true;
+  stickerDraftValue = event.target.value;
+});
 const stickerContextKey = (ctx) => `${ctx?._tabId}:${ctx?.provider}:${ctx?.shopId}` +
   (ctx?.provider === 'shopware' ? `:${ctx?.swShopId}:${ctx?.roId}` : '');
 let keytagEnabled = false;
@@ -5538,6 +5599,7 @@ async function loadStickerConfig() {
     stickerConfig = result.config;
     updateStickerSupply(result.supply);
     stickerConfigContextKey = key;
+    syncStickerDraft();
     if (elements.stickerPrintBtn) elements.stickerPrintBtn.disabled = result.enabled !== true;
     stickerEnabled = result.enabled === true;
     
@@ -6006,6 +6068,7 @@ function printKeytagViaWindow(keytag) {
 
 let pendingStickerPrint = null;
 async function handleStickerPrint() {
+  const printContextKey = MosStickerPersonalization.contextKey(currentContext);
   if (currentContext?.provider === 'tekmetric' &&
       (!stickerConfig || stickerConfigContextKey !== stickerContextKey(currentContext))) {
     showNotification('Load sticker settings for this Tekmetric location before printing.', 'error');
@@ -6032,6 +6095,7 @@ async function handleStickerPrint() {
     const body = {
       printActionId: crypto.randomUUID(),
       printIntent: 'print',
+      workOrderId: stickerDraftContext?.roId,
       currentMileage,
       intervalType,
       unit
@@ -6049,7 +6113,9 @@ async function handleStickerPrint() {
     
     // Add customer/vehicle data for auto booking
     if (currentContext) {
-      if (currentContext.customerName) body.customerName = currentContext.customerName;
+      const name = stickerDraftContext && Object.hasOwn(stickerDraftContext, 'stickerCustomerName')
+        ? stickerDraftContext.stickerCustomerName : stickerDraftContext?.customerName;
+      if (name) body.customerName = name;
       if (currentContext.customerId) body.customerId = currentContext.customerId;
       if (currentContext.customerPhone) body.customerPhone = currentContext.customerPhone;
       if (currentContext.customerEmail) body.customerEmail = currentContext.customerEmail;
@@ -6091,6 +6157,9 @@ async function handleStickerPrint() {
         body: JSON.stringify(body)
       }
     });
+    if (printContextKey !== MosStickerPersonalization.contextKey(currentContext)) {
+      throw new Error('The work order changed. Review the current Print tab before printing.');
+    }
     
     if (result.error) {
       throw new Error(result.error);
@@ -6103,7 +6172,9 @@ async function handleStickerPrint() {
     
     // Print the sticker using an iframe
     updateStickerSupply(result.supply);
-    printStickerImage(result.sticker);
+    printStickerImage({ ...result.sticker, mosPrintContext: currentContext ? { ...currentContext } : undefined });
+    stickerDraftEdited = false;
+    syncStickerDraft();
     
     showNotification('Sticker generated!', 'success');
   } catch (err) {
@@ -6446,7 +6517,7 @@ async function loadVehicleSpecs() {
   }
   if (!vin) {
     try {
-      const freshContext = await sendMessage({ action: 'GET_SMS_CONTEXT' });
+      const freshContext = await getPanelSmsContext();
       if (freshContext?.context?.vin) {
         vin = freshContext.context.vin.toUpperCase();
         currentContext.vin = vin;

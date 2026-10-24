@@ -86,6 +86,8 @@ interface DesignerLayout {
 }
 
 interface StickerConfig extends StickerQrPreferences {
+  personalizeThankYou?: boolean;
+  openPrintTabFirst?: boolean;
   enabled?: boolean;
   logo?: string;
   phone?: string;
@@ -164,7 +166,7 @@ export async function GET(req: NextRequest) {
     };
 
     return NextResponse.json({
-      config,
+      config: { ...config, personalizeThankYou: config.personalizeThankYou === true, openPrintTabFirst: config.openPrintTabFirst === true },
       appfueledVhiQrAvailable: (await getFeatureEntitlements(shopId)).canUseFeature("appfueled_vhi_qr"),
       customQrAvailable: !!await db.collection("shop_media").findOne({ _id: `sticker-custom-qr:${shopId}` as any, shopId, type: "sticker_custom_qr" }, { projection: { _id: 1 } }),
       shopName: shop.name,
@@ -195,6 +197,11 @@ export async function PUT(req: NextRequest) {
 
   try {
     const body: Partial<StickerConfig> = await req.json();
+    for (const field of ["personalizeThankYou", "openPrintTabFirst"] as const) {
+      if (body[field] !== undefined && typeof body[field] !== "boolean") {
+        return NextResponse.json({ error: `Invalid ${field}: expected boolean` }, { status: 400 });
+      }
+    }
     if (body.designerLayout !== undefined && !validStickerLayout(body.designerLayout)) {
       return NextResponse.json({ error: "Invalid sticker layout: check text, colors, borders and element limits" }, { status: 400 });
     }
@@ -204,6 +211,8 @@ export async function PUT(req: NextRequest) {
     }
 
     const allowedFields = [
+      "personalizeThankYou",
+      "openPrintTabFirst",
       "qrSource",
       "qrBackgroundMode",
       "enabled",

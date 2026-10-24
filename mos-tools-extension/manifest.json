@@ -54,6 +54,7 @@
         "undo-core.js",
         "telemetry-core.js",
         "sticker-print-core.js",
+        "sticker-button-preference.js",
         "adapters/tekmetric-content.js",
         "realtime-subscriber.js",
         "vhi-coach.js"
@@ -69,6 +70,7 @@
         "telemetry-core.js",
         "provider-action-grant-core.js",
         "sticker-print-core.js",
+        "sticker-button-preference.js",
         "adapters/shopware-content.js"
       ],
       "run_at": "document_idle"
@@ -107,6 +109,7 @@
         "telemetry-core.js",
         "provider-action-grant-core.js",
         "sticker-print-core.js",
+        "sticker-button-preference.js",
         "adapters/autoflow-content.js",
         "realtime-subscriber.js",
         "vhi-coach.js"

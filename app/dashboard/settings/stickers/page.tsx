@@ -26,6 +26,8 @@ interface IntervalsConfig {
 }
 
 interface StickerDataConfig extends StickerQrPreferences {
+  personalizeThankYou: boolean;
+  openPrintTabFirst: boolean;
   enabled: boolean;
   logo: string;
   phone: string;
@@ -67,6 +69,8 @@ const OIL_TYPES: { key: keyof IntervalsConfig; label: string; description: strin
 ];
 
 const DEFAULT_CONFIG: StickerDataConfig = {
+  personalizeThankYou: false,
+  openPrintTabFirst: false,
   ...DEFAULT_QR_PREFERENCES,
   enabled: true,
   logo: "",
@@ -166,6 +170,8 @@ export default function StickerSettingsPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             enabled: config.enabled,
+            personalizeThankYou: config.personalizeThankYou,
+            openPrintTabFirst: config.openPrintTabFirst,
             logo: config.logo,
             phone: config.phone,
             tagline: config.tagline,
@@ -216,6 +222,8 @@ export default function StickerSettingsPage() {
           const fetchedConfig = {
             ...normalizeStickerQrPreferences(data.config),
             enabled: data.config.enabled ?? DEFAULT_CONFIG.enabled,
+            personalizeThankYou: data.config.personalizeThankYou === true,
+            openPrintTabFirst: data.config.openPrintTabFirst === true,
             logo: data.config.logo ? `${data.config.logo.split('?')[0]}?t=${Date.now()}` : DEFAULT_CONFIG.logo,
             phone: data.config.phone ?? DEFAULT_CONFIG.phone,
             tagline: data.config.tagline ?? DEFAULT_CONFIG.tagline,
@@ -345,6 +353,8 @@ export default function StickerSettingsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           enabled: config.enabled,
+          personalizeThankYou: config.personalizeThankYou,
+          openPrintTabFirst: config.openPrintTabFirst,
           logo: config.logo,
           phone: config.phone,
           tagline: config.tagline,
@@ -721,6 +731,16 @@ export default function StickerSettingsPage() {
           
           {expandedSections.options && (
             <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3 p-3 bg-gray-50 rounded-lg">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={config.personalizeThankYou}
+                  onChange={e => setConfig({ ...config, personalizeThankYou: e.target.checked })} />
+                <span className="text-sm text-gray-700">Thank customer by name (extension only)</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={config.openPrintTabFirst}
+                  onChange={e => setConfig({ ...config, openPrintTabFirst: e.target.checked })} />
+                <span className="text-sm text-gray-700">Orange button opens Print tab first</span>
+              </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"

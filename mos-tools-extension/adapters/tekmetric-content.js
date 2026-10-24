@@ -37,6 +37,7 @@ try {
 
 let lastContext = null;
 let contextCheckInterval = null;
+globalThis.MosStickerButtonPreference?.start(() => lastContext || detectContext());
 
 // Match a whole odometer token, never a numeric substring of a sign, ID,
 // decimal or malformed thousands grouping. Keep the server's inclusive cap.
@@ -918,6 +919,7 @@ function handleImmediatePrint() {
     return;
   }
   
+  if (globalThis.MosStickerButtonPreference?.route(context, showToast)) return;
   showToast('Generating sticker...', 'info');
   
   // Send message to background to generate and print sticker

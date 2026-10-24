@@ -34,6 +34,7 @@ try {
 
 let lastContext = null;
 let contextCheckInterval = null;
+globalThis.MosStickerButtonPreference?.start(() => lastContext || detectContext());
 
 // Accept only complete odometer tokens within the server's inclusive cap.
 function parseDetectedMileage(text) {
@@ -651,6 +652,7 @@ function createPrintButton() {
     e.stopPropagation();
     const ctx = detectContext();
     if (!ctx.roId || !ctx.shopId) { showToast('No work order detected', 'error'); return; }
+    if (globalThis.MosStickerButtonPreference?.route(ctx, showToast)) return;
     showToast('Generating sticker...', 'info');
     chrome.runtime.sendMessage({ action: 'PRINT_STICKER_IMMEDIATE', context: ctx }, (response) => {
       if (response?.success) {
@@ -972,6 +974,10 @@ function injectPrintButton() {
 }
 
 function printStickerFromContentScript(sticker) {
+  if (globalThis.MosStickerButtonPreference?.isCurrent(sticker, detectContext()) === false) {
+    showToast('Work order changed. Please print again from the current order.', 'error');
+    return;
+  }
   let html;
   try { html = MosStickerPrintCore.buildHtml(sticker); }
   catch (error) { showToast(error.message, 'error'); return; }

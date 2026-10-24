@@ -32,6 +32,7 @@ try {
 
 let lastContext = null;
 let contextCheckInterval = null;
+globalThis.MosStickerButtonPreference?.start(() => lastContext || detectContext());
 
 // Mileage sanity ceiling. Real fleet/high-mile vehicles legitimately exceed
 // 1,000,000 (seen live on AutoFlow v4: 1,234,556), so the cap is 2,000,000 —
@@ -198,7 +199,11 @@ function applyLastKnownGoodGuard(ctx) {
 
 function detectContext() {
   const ctx = _detectContextRaw();
+  // Sticker personalization uses only this visit's supplied display name,
+  // never the legacy VIN-only / last-good-context fallback used by other tools.
+  const stickerCustomerName = ctx.roId ? ctx.customerName : null;
   const guarded = applyLastKnownGoodGuard(ctx);
+  guarded.stickerCustomerName = stickerCustomerName;
   // Mirror the Tekmetric adapter: preserve the on-screen odometer under a
   // dedicated field. The side panel forwards `scrapedOdometer` to the plan
   // API's `odometer` param so the VHI anchors on the mileage the advisor
@@ -932,6 +937,7 @@ function createPrintButton() {
       showToast('No work order detected on this page', 'error');
       return;
     }
+    if (globalThis.MosStickerButtonPreference?.route(ctx, showToast)) return;
     showToast('Generating sticker...', 'info');
     chrome.runtime.sendMessage(
       { action: 'PRINT_STICKER_IMMEDIATE', context: ctx },
@@ -1766,6 +1772,10 @@ function checkAndInjectCreateRoButton() {
 }
 
 function printStickerFromContentScript(sticker) {
+  if (globalThis.MosStickerButtonPreference?.isCurrent(sticker, detectContext()) === false) {
+    showToast('Work order changed. Please print again from the current order.', 'error');
+    return;
+  }
   let html;
   try { html = MosStickerPrintCore.buildHtml(sticker); }
   catch (error) { showToast(error.message, 'error'); return; }

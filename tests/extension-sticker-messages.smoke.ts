@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import vm from "node:vm";
+import { webcrypto } from "node:crypto";
 import { createStickerLocationRequest } from "../mos-tools-extension/lib/sticker-location-session.js";
 import { NextRequest } from "next/server";
 import { switchLocation, __deps as locationDeps } from "../lib/extension-location-session";
@@ -26,6 +27,7 @@ async function main() {
     let restore: () => void;
     const sandbox: any = {
       console, URL, AbortSignal, AbortController,
+      crypto: webcrypto,
       setTimeout: (fn: () => void, ms: number) => ms === 500 ? (fn(), 0) : setTimeout(fn, ms),
       clearTimeout,
       createStickerLocationRequest,
@@ -70,7 +72,8 @@ async function main() {
         },
         sidePanel: { open: async () => {} },
         tabs: {
-          get: async (id: number) => ({ url: `https://shop.tekmetric.com/shop/${shops.get(id)}/repair-orders/88` }),
+          query: async () => [{ id: 1 }],
+          get: async (id: number) => ({ active: true, windowId: id * 10, url: `https://shop.tekmetric.com/shop/${shops.get(id)}/repair-orders/88` }),
           sendMessage: (id: number, message: any, callback: any) => { forwarded.push({ id, message }); callback({ success: true }); },
         },
       },
@@ -80,7 +83,7 @@ async function main() {
     vm.runInContext(source.slice(source.indexOf("async function handleMosApiRequest("), source.indexOf("async function _handleMosApiRequestTimed(")), sandbox);
     vm.runInContext(source.slice(source.indexOf("chrome.runtime.onMessage.addListener("), source.indexOf("// ------ API SNIFFER HELPERS ------")), sandbox);
     return {
-      send: (message: any, tab?: number) => new Promise<any>(resolve => listener(message, tab == null ? {} : { tab: { id: tab } }, resolve)),
+      send: (message: any, tab?: number) => new Promise<any>(resolve => listener(message, tab == null ? {} : { tab: { id: tab, windowId: tab * 10 } }, resolve)),
       restore: () => {
         sandbox.mosApiToken = "root";
         sandbox.mosApiUrl = "https://mos.test";
@@ -131,6 +134,14 @@ async function main() {
   elements.stickerUnit.value = "mi";
   const panel: any = {
     console, elements, currentContext: null, stickerConfig: null,
+    crypto: webcrypto, pendingStickerPrint: null,
+    stickerDraftContext: null, stickerDraftEdited: false,
+    syncStickerDraft() {}, updateStickerSupply() {},
+    MosStickerPersonalization: { contextKey: (c: any) => JSON.stringify(c) },
+    applyStickerNavigation: async (message: any) => {
+      panel.updateContext(message.context);
+      panel.switchTab();
+    },
     stickerConfigContextKey: null, stickerConfigRequest: 0,
     stickerEnabled: null,
     stickerContextKey: (c: any) => `${c?._tabId}:${c?.provider}:${c?.shopId}`,
@@ -198,5 +209,22 @@ async function main() {
   assert.match(elements.stickerError.textContent, /location changed/);
   assert.equal(elements.stickerError.classList.contains("hidden"), false);
   console.log("✓ Customize → OPEN → SWITCH → settings → POST → originating-tab print; visible recovery errors and navigation race");
+  panelMessage = async () => {}; // Cold panel missed the broadcast entirely.
+  const beforeCold = prints.length;
+  await w.send({ action: "OPEN_STICKER_PANEL", context: ctx(1) }, 1);
+  const navigation = await w.send({ action: "GET_STICKER_NAVIGATION", tabId: 1, windowId: 10 });
+  assert.equal(navigation.context._tabId, 1);
+  assert.equal(navigation.context.shopId, ctx(1).shopId);
+  assert.equal(prints.length, beforeCold);
+  assert.equal(await w.send({ action: "GET_STICKER_NAVIGATION", tabId: 1, windowId: 20 }), null);
+  assert.equal((await w.send({ action: "ACK_STICKER_NAVIGATION", tabId: 1, windowId: 20, navigationId: navigation.navigationId })).success, false);
+  await w.send({ action: "OPEN_STICKER_PANEL", context: ctx(2) }, 2);
+  const second = await w.send({ action: "GET_STICKER_NAVIGATION", tabId: 2, windowId: 20 });
+  assert.equal(second.context._tabId, 2);
+  assert.equal((await w.send({ action: "GET_STICKER_NAVIGATION", tabId: 1, windowId: 10 })).navigationId, navigation.navigationId);
+  await w.send({ action: "ACK_STICKER_NAVIGATION", tabId: 1, windowId: 10, navigationId: navigation.navigationId });
+  assert.equal(await w.send({ action: "GET_STICKER_NAVIGATION", tabId: 1, windowId: 10 }), null);
+  assert.equal((await w.send({ action: "GET_STICKER_NAVIGATION", tabId: 2, windowId: 20 })).navigationId, second.navigationId);
+  console.log("✓ cold sidebar handshake survives missed broadcast, acknowledges once, never prints");
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });
