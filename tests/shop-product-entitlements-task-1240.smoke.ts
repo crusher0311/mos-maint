@@ -299,7 +299,9 @@ ok("Maintenance analytics, lifecycle writes, and schedule settings require Maint
   assert.match(dashboardData, /if \(maintenanceEnabled\) await batchEstimateMileage/);
   assert.ok((dashboardDataV2.match(/if \(maintenanceEnabled\) await batchEstimateMileage/g) ?? []).length >= 2);
   const carfaxSettings = source("app/api/settings/carfax/route.ts");
-  assert.ok((carfaxSettings.match(/requireMaintenanceSession\(\)/g) ?? []).length >= 3);
+  // CARFAX configuration is allowed without Maintenance; usage remains gated.
+  assert.ok((carfaxSettings.match(/requireSettingsSession\(\)/g) ?? []).length >= 3);
+  assert.match(carfaxSettings, /maintenanceEnabled: canAccessShopFeature/);
 });
 
 console.log(`\nAll ${passed} shop product entitlement smoke tests passed.`);

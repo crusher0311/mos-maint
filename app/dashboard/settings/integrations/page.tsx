@@ -22,12 +22,13 @@ import {
   RefreshCw,
 } from "lucide-react";
 import DataStatusPanel from "@/components/DataStatusPanel";
+import { carfaxSettingsRequest, loadCarfaxSettings, MAINTENANCE_WARNING, type CarfaxSettingsStatus } from "@/lib/carfax-settings-client";
 
 type ShopManagementChoice = "protractor" | "tekmetric" | "shopware" | "shopmonkey" | "standalone" | null;
 type DviChoice = "autoflow" | "tekmetric" | null;
 
 interface IntegrationStatus {
-  carfax: { configured: boolean; locationId?: string };
+  carfax: CarfaxSettingsStatus;
   autoflow: { configured: boolean };
   protractor: {
     configured: boolean;
@@ -70,7 +71,7 @@ interface IntegrationStatus {
 export default function IntegrationsPage() {
   const [loading, setLoading] = useState(true);
   const [statuses, setStatuses] = useState<IntegrationStatus>({
-    carfax: { configured: false },
+    carfax: { configured: false, state: "loading" },
     autoflow: { configured: false },
     protractor: { configured: false },
     tekmetric: { configured: false },
@@ -85,9 +86,13 @@ export default function IntegrationsPage() {
   }, []);
 
   async function fetchAllStatuses() {
+    const carfaxLoad = loadCarfaxSettings().then(carfax => {
+      setStatuses(previous => ({ ...previous, carfax }));
+      return carfax;
+    });
     try {
       const [carfaxRes, autoflowRes, protractorRes, tekmetricRes, shopwareRes, shopmonkeyRes] = await Promise.all([
-        fetch("/api/settings/carfax").catch(() => null),
+        carfaxLoad,
         fetch("/api/settings/autoflow").catch(() => null),
         fetch("/api/settings/protractor").catch(() => null),
         fetch("/api/settings/tekmetric").catch(() => null),
@@ -95,7 +100,6 @@ export default function IntegrationsPage() {
         fetch("/api/settings/shopmonkey").catch(() => null),
       ]);
 
-      const carfaxData = carfaxRes?.ok ? await carfaxRes.json() : {};
       const autoflowData = autoflowRes?.ok ? await autoflowRes.json() : {};
       const protractorData = protractorRes?.ok ? await protractorRes.json() : {};
       const tekmetricData = tekmetricRes?.ok ? await tekmetricRes.json() : {};
@@ -103,10 +107,7 @@ export default function IntegrationsPage() {
       const shopmonkeyData = shopmonkeyRes?.ok ? await shopmonkeyRes.json() : {};
 
       const newStatuses = {
-        carfax: { 
-          configured: Boolean(carfaxData.locationId), 
-          locationId: carfaxData.locationId 
-        },
+        carfax: carfaxRes,
         autoflow: { 
           configured: Boolean(autoflowData.configured || autoflowData.autoflowApiKey) 
         },
@@ -178,6 +179,7 @@ export default function IntegrationsPage() {
     } finally {
       setLoading(false);
     }
+    return await carfaxLoad;
   }
 
   async function handleShopManagementChange(provider: ShopManagementChoice) {
@@ -216,7 +218,7 @@ export default function IntegrationsPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Column 1: CARFAX */}
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div id="carfax" className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <div className="p-4 border-b border-gray-100 bg-gray-50">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-red-100 rounded-lg">
@@ -755,36 +757,38 @@ function DevToolsSection() {
   );
 }
 
-function CarfaxSection({ status, onUpdate }: { status: { configured: boolean; locationId?: string }; onUpdate: () => void }) {
+function CarfaxSection({ status, onUpdate }: { status: CarfaxSettingsStatus; onUpdate: () => Promise<CarfaxSettingsStatus> }) {
   const [locationId, setLocationId] = useState(status.locationId || "");
   const [saving, setSaving] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [dirty, setDirty] = useState(false);
 
   useEffect(() => {
-    setLocationId(status.locationId || "");
-  }, [status.locationId]);
+    if (!dirty && status.state === "ready") setLocationId(status.locationId || "");
+  }, [status.locationId, status.state, dirty]);
+
+  async function handleReload() {
+    const refreshed = await onUpdate();
+    // Only an explicit, successful reload replaces a draft with persisted state.
+    // Background refreshes and failed reloads must retain the entered value.
+    if (refreshed.state === "ready") {
+      setLocationId(refreshed.locationId || "");
+      setDirty(false);
+      setMessage(null);
+    }
+  }
 
   async function handleSave() {
     setSaving(true);
     setMessage(null);
 
     try {
-      const res = await fetch("/api/settings/carfax", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ locationId }),
-      });
-
-      if (res.ok) {
-        setMessage({ type: "success", text: "CARFAX connected" });
-        onUpdate();
-      } else {
-        const data = await res.json();
-        setMessage({ type: "error", text: data.error || "Failed to save" });
-      }
-    } catch (err) {
-      setMessage({ type: "error", text: "Failed to save settings" });
+      const data = await carfaxSettingsRequest("POST", locationId);
+      setMessage({ type: "success", text: `Location ID saved. It has not been validated with CARFAX.${data.maintenanceEnabled === false ? ` ${MAINTENANCE_WARNING}` : ""}` });
+      onUpdate();
+    } catch (err: any) {
+      setMessage({ type: "error", text: err.message });
     } finally {
       setSaving(false);
     }
@@ -797,16 +801,13 @@ function CarfaxSection({ status, onUpdate }: { status: { configured: boolean; lo
     setMessage(null);
 
     try {
-      const res = await fetch("/api/settings/carfax", { method: "DELETE" });
-      if (res.ok) {
+      await carfaxSettingsRequest("DELETE");
         setMessage({ type: "success", text: "Disconnected" });
+        setDirty(false);
         setLocationId("");
         onUpdate();
-      } else {
-        setMessage({ type: "error", text: "Failed to disconnect" });
-      }
-    } catch (err) {
-      setMessage({ type: "error", text: "Failed to disconnect" });
+    } catch (err: any) {
+      setMessage({ type: "error", text: err.message });
     } finally {
       setDisconnecting(false);
     }
@@ -816,10 +817,12 @@ function CarfaxSection({ status, onUpdate }: { status: { configured: boolean; lo
     <div className="p-4 space-y-4">
       <div className={`rounded-lg p-3 ${status.configured ? 'bg-green-50 border border-green-200' : 'bg-gray-50 border border-gray-200'}`}>
         <div className="flex items-center gap-2 text-sm">
-          {status.configured ? (
+          {status.state !== "ready" ? (
+            <span>{status.state === "loading" ? "Loading CARFAX settings…" : status.state === "denied" ? "Access denied" : "Settings unavailable"}</span>
+          ) : status.configured ? (
             <>
               <CheckCircle className="w-4 h-4 text-green-600" />
-              <span className="text-green-800">Connected</span>
+              <span className="text-green-800">Location ID saved</span>
             </>
           ) : (
             <>
@@ -829,22 +832,29 @@ function CarfaxSection({ status, onUpdate }: { status: { configured: boolean; lo
           )}
         </div>
       </div>
+      {status.error && <p role="alert" className="text-sm text-red-700">{status.error}</p>}
+      {status.maintenanceEnabled === false && <p role="status" className="text-sm text-amber-800">{MAINTENANCE_WARNING}</p>}
+      {status.state !== "loading" && (status.state !== "ready" || message?.type === "error") && (
+        <button onClick={handleReload} disabled={saving || disconnecting} className="text-sm text-blue-700">Reload CARFAX settings</button>
+      )}
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
+        <label htmlFor="carfax-location-id" className="block text-sm font-medium text-gray-700 mb-1">
           Location ID
         </label>
         <input
           type="text"
+          id="carfax-location-id"
+          disabled={saving || disconnecting || status.state !== "ready"}
           value={locationId}
-          onChange={(e) => setLocationId(e.target.value)}
+          onChange={(e) => { setDirty(true); setLocationId(e.target.value); }}
           className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           placeholder="Your CARFAX Location ID"
         />
       </div>
 
       {message && (
-        <div className={`flex items-center gap-2 p-2 rounded-lg text-sm ${
+        <div role="status" className={`flex items-center gap-2 p-2 rounded-lg text-sm ${
           message.type === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"
         }`}>
           {message.type === "success" ? <CheckCircle className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
@@ -855,16 +865,17 @@ function CarfaxSection({ status, onUpdate }: { status: { configured: boolean; lo
       <div className="flex gap-2">
         <button
           onClick={handleSave}
-          disabled={saving || !locationId}
+          disabled={saving || disconnecting || !locationId.trim() || status.state !== "ready"}
           className="flex-1 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
           {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-          Connect
+          Save Location ID
         </button>
         {status.configured && (
           <button
             onClick={handleDisconnect}
-            disabled={disconnecting}
+            disabled={disconnecting || saving || status.state !== "ready"}
+            aria-label="Disconnect CARFAX"
             className="px-4 py-2 bg-red-100 text-red-700 text-sm rounded-lg hover:bg-red-200 disabled:opacity-50"
           >
             {disconnecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}

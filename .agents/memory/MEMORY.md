@@ -147,3 +147,4 @@
 - [Outbound export boundaries](protractor-export-coverage.md) — separate activation approval, restricted PG state, real DNS tests, and completed-receipt consumption for Cosmos.
 - [Local normalization recovery](protractor-local-normalization.md) — independent retries, mixed-store association safety, and real PG transaction adapter verification.
 - [Appearance scope](appearance-boundaries.md) — local screen preferences never replace shop branding or physical-output palettes.
+- [CARFAX setup policy](carfax-settings-policy.md) — save without Maintenance with a warning; testing means save/reload, not paid upstream validation.
