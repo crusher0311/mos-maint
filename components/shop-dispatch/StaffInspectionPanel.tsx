@@ -5,6 +5,11 @@ import { useStaffInspection } from "./use-staff-inspection";
 import { ReleasePanel } from "./ReleasePanel";
 import { PilotInspectionPanel } from "./PilotInspectionPanel";
 import { ArrivalPhotoDocumentation } from "./ArrivalPhotoDocumentation";
+import { StaffAssistance } from "./StaffAssistance";
+import { StaffProposedWork } from "./StaffProposedWork";
+import { StaffCaptureEditor, captureKind } from "./StaffCaptureEditor";
+import { StaffAdvisorView } from "./StaffAdvisorView";
+import { StaffInspectionHistory } from "./StaffInspectionHistory";
 import styles from "./pilot.module.css";
 import ui from "./StaffInspectionPanel.module.css";
 
@@ -35,11 +40,13 @@ function InspectionEditor({ visitId, shopId, closed, onLockChange, startRequeste
     void commandRef.current({ type: "initialize", boardRevision: data.boardRevision });
   }, [startRequested, api.data, api.loading, api.pending, api.conflict, closed]);
   const [drafts, setDrafts] = useState<Drafts>({});
+  const [proposalDirty, setProposalDirty] = useState(false);
+  const [view, setView] = useState<"editor" | "advisor">("editor");
   const [sheetChoice, setSheetChoice] = useState("");
   const [keepActive, setKeepActive] = useState(false);
   const [retryFile, setRetryFile] = useState<File | undefined>();
   const dirty = Object.keys(drafts).length > 0;
-  const shouldWarnBeforeLeave = dirty || !!api.pending || api.busy;
+  const shouldWarnBeforeLeave = dirty || proposalDirty || !!api.pending || api.busy;
   const lockCallback = useRef(onLockChange);
   lockCallback.current = onLockChange;
   useEffect(() => {
@@ -73,16 +80,16 @@ function InspectionEditor({ visitId, shopId, closed, onLockChange, startRequeste
   }
   const { data } = api;
   if (api.loading) return <div className={styles.skeleton} role="status" aria-label="Loading internal staff inspection" />;
-  if (data && !data.enabled && !data.record) return null;
   if (!data) return <section className={styles.panel}><h2>Staff inspection</h2><p className={styles.error} role="alert">{api.error || "Inspection is unavailable."}</p><button onClick={() => void api.reload()}>Retry loading inspection</button></section>;
   const inspection = data.inspection;
   const readOnly = closed || !!data.record?.closed || !data.enabled || !data.canEdit;
   const recoveryAllowed = !closed && !data.record?.closed && data.enabled && !!data.bindingRequest;
   const locked = readOnly || api.busy || !!api.pending || api.conflict;
   const missing = inspection ? missingRequirements(inspection) : [];
-  const reviewAllowed = !closed && !data.record?.closed && data.enabled && data.canReview && !api.busy && !api.pending && !api.conflict && !dirty;
+  const reviewAllowed = !closed && !data.record?.closed && data.enabled && data.canReview && !api.busy && !api.pending && !api.conflict && !dirty && !proposalDirty;
   return <section className={`${styles.panel} ${ui.panel}`} data-testid="staff-inspection-panel" aria-label="Internal staff inspection">
     <div className={ui.heading}><div><div className={styles.eyebrow}>Staff workspace · Internal only</div><h2>Vehicle inspection</h2><p>Document findings in their original measured units. This does not release a vehicle, authorize work, or change dispatch capacity.</p></div><span className={styles.chip}>{inspection ? `Revision ${inspection.revision} · Evidence ${inspection.evidenceRevision}` : "Not initialized"}</span></div>
+    <StaffInspectionHistory visitId={visitId} />
     <ArrivalPhotoDocumentation visitId={visitId} disabled={locked || dirty}
       targets={inspection?.sheets.filter(s => s.active).flatMap(s => s.sheet.items.filter(i => s.results[i.id]?.rating).map(i => ({
         key: JSON.stringify([s.key, i.id]), label: `${s.sheet.name} · ${i.name}`,
@@ -111,6 +118,15 @@ function InspectionEditor({ visitId, shopId, closed, onLockChange, startRequeste
     {api.latest && <details open><summary>Server comparison · no local entries replaced</summary><div className={ui.compare}><div><h3>Your entries / loaded evidence</h3><pre>{JSON.stringify({ inspection, unsavedEntries: drafts }, null, 2)}</pre></div><div><h3>Latest server evidence</h3><pre>{JSON.stringify(api.latest.inspection, null, 2)}</pre></div></div></details>}
     {!inspection ? <div className={styles.empty}><h3>Start a digital vehicle inspection</h3><p>Create a saved DVI with the shop’s approved inspection sheet. Inspection work is recorded when you save your first finding. This never creates a provider ticket or sends findings.</p><button className={styles.primary} disabled={locked || !data.catalog.length} onClick={() => void api.command({ type: "initialize", boardRevision: data.boardRevision })}>Start DVI</button>{!data.catalog.length && <p>No approved sheets are available. Ask a manager to provision a sheet.</p>}</div> : <>
       <div className={ui.status}><span><small>Work</small><br />{inspection.startedAt ? `Started ${new Date(inspection.startedAt).toLocaleString()}` : "Not started"}</span><span><small>Readiness</small><br />{stamp(inspection.ready, inspection.evidenceRevision)}</span><span><small>Advisor review</small><br />{stamp(inspection.reviewed, inspection.evidenceRevision)}</span></div>
+      <div className={ui.views} role="group" aria-label="Inspection view">
+        <button type="button" aria-pressed={view === "editor"} disabled={shouldWarnBeforeLeave || api.conflict} onClick={() => { if (!shouldWarnBeforeLeave && !api.conflict) setView("editor"); }}>Inspection editor</button>
+        <button type="button" aria-pressed={view === "advisor"} disabled={shouldWarnBeforeLeave || api.conflict} onClick={() => { if (!shouldWarnBeforeLeave && !api.conflict) setView("advisor"); }}>Advisor overview · read only</button>
+        {shouldWarnBeforeLeave || api.conflict ? <small>Save or explicitly discard drafts and resolve pending requests or conflicts before switching views.</small> : <small>The advisor overview shows saved evidence, never unsaved entries.</small>}
+      </div>
+      {view === "advisor" ? <StaffAdvisorView inspection={inspection} visitId={visitId} /> : <>
+      <StaffAssistance visitId={visitId} inspection={inspection} disabled={locked || dirty}
+        command={api.command} upload={api.upload}
+        onDraft={(sheet, item, value) => update(draftKey(sheet, item), value)} />
       <details><summary>Manage approved sheets · multiple sheets may be active</summary><div className={styles.form}>
         <label>Approved sheet version<select value={sheetChoice} disabled={locked} onChange={event => setSheetChoice(event.target.value)}><option value="">Choose a sheet</option>{data.catalog.map(sheet => <option key={instanceKey(sheet)} value={instanceKey(sheet)}>{sheet.name} · v{sheet.version}</option>)}</select></label>
         <label className={styles.check}><input type="checkbox" checked={keepActive} disabled={locked} onChange={event => setKeepActive(event.target.checked)} />Keep existing sheets active</label>
@@ -123,13 +139,16 @@ function InspectionEditor({ visitId, shopId, closed, onLockChange, startRequeste
           if (await api.command({ type: "save", sheet: sheet.key, item: item.id, finding: value })) acknowledge(sheet.key, item.id);
         }} onPhoto={(file, provenance) => { void api.upload(sheet.key, item.id, file, provenance); }} />)}
       </section>)}
+      </>}
       <details><summary>Saved evidence completeness · {missing.length} missing requirement(s)</summary>{missing.length ? <ul>{missing.map((entry, index) => <li key={`${entry.sheet}/${entry.item}/${index}`}>{inspection.sheets.find(sheet => sheet.key === entry.sheet)?.sheet.name} · {entry.name}: {entry.message}</li>)}</ul> : <p>All active-sheet requirements are documented in saved evidence.</p>}</details>
       <div className={styles.actions} style={{ marginTop: 16 }}>
         <button className={styles.primary} disabled={locked || dirty || !inspection.startedAt || !!missing.length} onClick={() => void api.command({ type: "ready" })}>Mark internal inspection ready</button>
         <button disabled={!reviewAllowed || !inspection.startedAt || !!missing.length} onClick={() => void api.command({ type: "review" })}>Record advisor review</button>
       </div><small>Readiness and review reference saved evidence only. Any evidence change makes earlier markers stale. These markers do not authorize customer release.</small>
+      <StaffProposedWork visitId={visitId} inspection={inspection} disabled={locked || dirty || !data.canReview} command={api.command} onLockChange={setProposalDirty} />
       <ReleasePanel visitId={visitId} shopId={shopId} inspection={inspection} />
-      <PilotInspectionPanel visitId={visitId} shopId={shopId} evidenceRevision={inspection.evidenceRevision} blocked={dirty || locked} />
+      <p><small>Provider export is available only through separately approved visit-scoped integrations. Unsupported destinations and priced-work export are unavailable; there is no fallback to legacy VIN findings.</small></p>
+      <PilotInspectionPanel visitId={visitId} shopId={shopId} evidenceRevision={inspection.evidenceRevision} blocked={dirty || proposalDirty || locked} />
     </>}
   </section>;
 }
@@ -147,9 +166,9 @@ function InspectionItem({ item, sheet, visitId, value, dirty, disabled, onChange
       <fieldset disabled={disabled}><legend>Evaluation · document green findings too</legend>
         <div className={ui.ratings}>{([["green", "Green · satisfactory"], ["yellow", "Yellow · attention"], ["red", "Red · urgent"], ["na", "N/A"]] as const).map(([rating, label]) => <label key={rating}><input type="radio" name={`${id}-rating`} checked={value.rating === rating} onChange={() => field({ rating })} />{label}</label>)}<label><input type="radio" name={`${id}-rating`} checked={value.rating === null} onChange={() => field({ rating: null })} />Not evaluated</label></div>
         {value.rating === "na" && <label style={{ marginTop: 12 }}>N/A reason · required (inaccessible is not N/A)<textarea required maxLength={2000} rows={2} value={value.naReason} onChange={event => field({ naReason: event.target.value })} /></label>}
-        <div className={ui.documentation}>{item.fields.map(measurement => <label key={measurement.id} htmlFor={`${id}-${measurement.id}`}>{measurement.label}{measurement.unit ? ` (${measurement.unit})` : ""}{item.requiredFields.includes(measurement.id) ? " · required for completeness" : ""}
+        {captureKind(item) ? <StaffCaptureEditor item={item} id={id} value={value} onChange={onChange} /> : <div className={ui.documentation}>{item.fields.map(measurement => <label key={measurement.id} htmlFor={`${id}-${measurement.id}`}>{measurement.label}{measurement.unit ? ` (${measurement.unit})` : ""}{item.requiredFields.includes(measurement.id) ? " · required for completeness" : ""}
           {measurement.type === "select" ? <select id={`${id}-${measurement.id}`} value={String(value.values[measurement.id] ?? "")} onChange={event => field({ values: { ...value.values, [measurement.id]: event.target.value } })}><option value="">Not entered</option>{measurement.options?.map(option => <option key={option} value={option}>{option}</option>)}</select> : <input id={`${id}-${measurement.id}`} type={measurement.type === "number" ? "number" : "text"} min={measurement.type === "number" ? 0 : undefined} max={measurement.type === "number" ? 100000 : undefined} step={measurement.type === "number" ? "any" : undefined} maxLength={150} value={String(value.values[measurement.id] ?? "")} onChange={event => field({ values: { ...value.values, [measurement.id]: event.target.value === "" ? "" : measurement.type === "number" ? Number(event.target.value) : event.target.value } })} />}
-        </label>)}</div>
+        </label>)}</div>}
         <div className={ui.documentation}><label>Evaluation notes {item.notesRequired ? "· required for completeness" : "· optional"}<textarea rows={3} maxLength={2000} value={value.notes} onChange={event => field({ notes: event.target.value })} /></label><label>Recommendation / next step {item.recommendationRequired ? "· required for completeness" : "· optional"}<textarea rows={3} maxLength={2000} value={value.recommendation} onChange={event => field({ recommendation: event.target.value })} /></label></div>
         <div className={styles.actions} style={{ marginTop: 12 }}><button type="submit" disabled={!dirty}>Save item evidence</button><small>Measurements start empty. Enter what was measured; no unit conversion is applied.</small></div>
       </fieldset>

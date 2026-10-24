@@ -9,10 +9,13 @@ import {releaseCommand, releaseSnapshot, publicReport, type ReleaseDependencies}
 import {MongoReleaseStorage} from "../../lib/auto-dvi/release/store";
 import {ROArrivalPhotos} from "../../lib/data/repositories/ro-arrival-photos";
 import {randomUUID} from "node:crypto";
+import {TIRE_BATTERY_SHEET} from "../../lib/auto-dvi/staff/tire-battery-sheet";
+import {inspectionHistory} from "../../lib/auto-dvi/staff/history";
 
-export async function createStaffBrowserFixture(releases = false, arrivals = false) {
+export async function createStaffBrowserFixture(releases = false, arrivals = false, tire = false) {
   const isolated = await isolatedStaffDatabase(27817);
   const fixture = await staffFixture(isolated.client);
+  if (tire) fixture.setAccess({config: {...fixture.access.config!, sheets: [TIRE_BATTERY_SHEET], defaultSheet: "tire-battery@1"}});
   const arrivalPhotos = new ROArrivalPhotos(async () => fixture.db);
   if (arrivals) {
     const board = await fixture.deps.board.read(1), workOrderId = randomUUID();
@@ -66,6 +69,15 @@ export async function createStaffBrowserFixture(releases = false, arrivals = fal
           if ("bytes" in result) {res.setHeader("Content-Type", result.mime); res.end(result.bytes);}
           else reply(result);
         }
+      } else if (url.pathname === "/api/shop-dispatch/inspection/history") {
+        if (req.method !== "GET") {reply({error: "History is read only"}, 405); return;}
+        reply(await inspectionHistory(url.searchParams.get("visitId")!, {
+          staff: deps, vehicle: async () => "1HGCM82633A004352",
+          legacy: async () => ({shopId: 1, vin: "1HGCM82633A004352", status: "in_progress",
+            updatedBy: null, updatedAt: new Date("2026-01-01"), items: [{itemId: "legacy", name: "Retained legacy tire",
+              rating: "green", notes: "Historical reference only", recommendation: null, media: []}]}),
+          intermediate: async () => ({revision: 0, visits: []}),
+        }));
       } else if (url.pathname === "/api/shop-dispatch/inspection") {
         if (req.method === "GET") reply(await snapshot(url.searchParams.get("visitId")!, deps));
         else if (req.method === "POST") {
@@ -96,7 +108,7 @@ export async function createStaffBrowserFixture(releases = false, arrivals = fal
   }};
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  void createStaffBrowserFixture(false, true).then(fixture => {
+  void createStaffBrowserFixture(false, true, true).then(fixture => {
     void fixture.fixture.initialize().then(() => fixture.server.listen(8099, "0.0.0.0", () => console.log("Isolated staff inspection fixture ready on 8099")));
     process.once("SIGTERM", () => {void fixture.close().then(() => process.exit(0));});
   });

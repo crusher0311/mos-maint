@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { StaffInspection } from "../staff/model";
 import { missingRequirements } from "../staff/model";
 import { requireThat } from "../../shop-dispatch/model";
+import { inspectionMeasurements } from "../staff/measurements";
 
 const text = z.string().trim().max(2000);
 export const selectedFindingSchema = z.object({
@@ -82,8 +83,7 @@ export function projectReport(
       key: findingKey(sheet.key, item.id), title: item.name, procedure: item.procedure,
       position: item.position ?? null, rating: finding.rating as CustomerFinding["rating"],
       customerText: selected.customerText, nextStep: selected.nextStep,
-      measurements: item.fields.filter(f => finding.values[f.id] !== undefined && finding.values[f.id] !== "")
-        .map(f => ({label: f.label, value: finding.values[f.id], unit: f.unit ?? null})),
+      measurements: inspectionMeasurements(item, finding),
       photoIds: [...selected.photoIds], concernIds: [...selected.concernIds],
     };
   });

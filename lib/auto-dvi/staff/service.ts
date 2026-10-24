@@ -113,7 +113,7 @@ export async function mutateStaff(raw: unknown, deps: StaffDependencies) {
     authorize: async () => {
       const latest = await writeContext(req.visitId, deps, {...access, identity: context.record.identity});
       requireThat(digest(latest.access.config) === digest(context.access.config), "Inspection policy changed; reload", 409);
-      if (req.command.type === "review") requireThat(latest.access.canReview, "Advisor review permission required", 403);
+      if (req.command.type === "review" || req.command.type === "proposal") requireThat(latest.access.canReview, "Advisor review permission required", 403);
     },
   });
   return snapshot(req.visitId, deps);

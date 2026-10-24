@@ -392,7 +392,8 @@ export async function readInspectionMedia(
   const db = await getDb();
   const id = new ObjectId(mediaId);
   const fileDoc = await db.collection(`${MEDIA_BUCKET}.files`).findOne({ _id: id });
-  if (!fileDoc || Number(fileDoc.metadata?.shopId) !== shopId) return null;
+  if (!fileDoc || Number(fileDoc.metadata?.shopId) !== shopId ||
+    !Number.isSafeInteger(fileDoc.length) || fileDoc.length < 0 || fileDoc.length > 40 * 1024 * 1024) return null;
   const bucket = new GridFSBucket(db as any, { bucketName: MEDIA_BUCKET });
   const chunks: Buffer[] = [];
   await new Promise<void>((resolve, reject) => {

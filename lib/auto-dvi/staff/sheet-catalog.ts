@@ -4,6 +4,7 @@ import {requireThat} from "@/lib/shop-dispatch/model";
 import {canonical} from "../durable/model";
 import {configurationSchema, type StaffConfiguration} from "./configuration";
 import {sheetSchema, itemSchema, instanceKey, STAFF_SHEET_TEMPLATES, type StaffItem} from "./model";
+import {TIRE_BATTERY_SHEET} from "./tire-battery-sheet";
 
 const editableSheet = z.object({
   id: z.string().regex(/^[a-zA-Z0-9_-]{1,60}$/),
@@ -32,13 +33,13 @@ export function catalogSnapshot(access: CatalogAccess, config: StaffConfiguratio
   return {scope: access.scope, scopeLabel: access.scopeLabel, canManage: access.canManage,
     revision: config?.catalogRevision ?? 0, sheets: config?.sheets ?? [],
     archivedSheetIds: config?.archivedSheetIds ?? [], defaultSheet: config?.defaultSheet ?? "",
-    templates: STAFF_SHEET_TEMPLATES, inspectionEnabled: !!config?.enabledShopIds.includes(access.shopId)};
+    templates: [...STAFF_SHEET_TEMPLATES, TIRE_BATTERY_SHEET], inspectionEnabled: !!config?.enabledShopIds.includes(access.shopId)};
 }
 const hash = (value: unknown) => createHash("sha256").update(canonical(value)).digest("hex");
 // This is the same semantic identity used to reuse findings across sheets.
 function identity(item: StaffItem) {return `${item.procedure}|${item.position ?? ""}`;}
 function measurements(item: StaffItem) {
-  return hash(item.fields.map(f => ({id: f.id, type: f.type, unit: f.unit ?? "", options: f.options ?? []})).sort((a,b) => a.id.localeCompare(b.id)));
+  return hash({capture: item.capture ?? null, fields: item.fields.map(f => ({id: f.id, type: f.type, unit: f.unit ?? "", options: f.options ?? []})).sort((a,b) => a.id.localeCompare(b.id))});
 }
 export async function readCatalog(deps: CatalogDependencies) {
   const access = await deps.access();

@@ -9,6 +9,8 @@ import { getSession } from "@/lib/auth";
 import { checkShopFeatureGate } from "@/lib/extension-route-guard";
 import { getOpenAI, trackOpenAiCall } from "@/lib/ai";
 import { parseChecklistParam, normalizeVoiceName } from "@/lib/auto-dvi/voice-parse";
+import { visitAssistanceContext } from "@/lib/auto-dvi/staff/assistance-context";
+import { dispatchFailure } from "@/lib/shop-dispatch/http";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,19 +24,23 @@ const TIMEOUT_MS = 30_000;
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const denied = await checkShopFeatureGate(Number(session.shopId), ["maintenance", "auto_dvi"], {
-    isPlatformAdmin: session.role === "platform_admin" && !session.isImpersonation,
-    featureLabel: "Auto DVI",
-  });
-  if (denied) return denied;
-
   let form: FormData;
   try {
     form = await req.formData();
   } catch {
     return NextResponse.json({ error: "Expected multipart form data" }, { status: 400 });
   }
-  const checklist = parseChecklistParam(form.get("items"));
+  let context: Awaited<ReturnType<typeof visitAssistanceContext>> | undefined;
+  if (form.has("visitId")) {
+    try { context = await visitAssistanceContext(form.get("visitId"), form.get("revision")); }
+    catch (cause) { return dispatchFailure(cause); }
+  } else {
+    const denied = await checkShopFeatureGate(Number(session.shopId), ["maintenance", "auto_dvi"], {
+      isPlatformAdmin: session.role === "platform_admin" && !session.isImpersonation, featureLabel: "Auto DVI",
+    });
+    if (denied) return denied;
+  }
+  const checklist = context?.targets ?? parseChecklistParam(form.get("items"));
   if (checklist.length === 0) {
     return NextResponse.json({ error: "items (checklist) is required" }, { status: 400 });
   }
@@ -92,7 +98,9 @@ export async function POST(req: NextRequest) {
     } catch {
       parsed = {};
     }
-    const byName = new Map(checklist.map((c) => [normalizeVoiceName(c.name), c]));
+    // Ambiguous names across procedures/positions never auto-assign a photo.
+    const byName = new Map(checklist.filter(c => checklist.filter(other =>
+      normalizeVoiceName(other.name) === normalizeVoiceName(c.name)).length === 1).map((c) => [normalizeVoiceName(c.name), c]));
     const raw: any[] = Array.isArray(parsed.assignments) ? parsed.assignments : [];
     const assignments = photos.map((_, i) => {
       const a = raw.find((x) => Number(x?.index) === i);
@@ -104,7 +112,9 @@ export async function POST(req: NextRequest) {
         label: a && typeof a.label === "string" ? a.label.slice(0, 120) : null,
       };
     });
-    return NextResponse.json({ ok: true, assignments });
+    if (context) await context.revalidate();
+    return NextResponse.json({ ok: true, assignments,
+      ...(context ? {visitId: context.visitId, revision: context.revision, targets: context.targets} : {}) });
   } catch (err: any) {
     return NextResponse.json(
       { ok: false, error: `Photo classification failed: ${err?.message || String(err)}` },

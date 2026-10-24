@@ -40,7 +40,14 @@ test("read-back rejects duplicate submitted identities and dirty tombstones", ()
     assert.equal(compareInspectionReadBack(scope, tombstone, [], evidence(dirty)).readBackStatus, "mismatched", field);
   }
 });
+let boundNonPilot = false;
 loader._load = function(id, ...args) {
+  if (id === "@/lib/data/repositories/workflow-inspections") return {MongoStaffPersistence: class {
+    async read() {return {version:1, revision:1, aliases:[], photos:[], records:boundNonPilot ? [{
+      identity:{shopId:1,provider:"protractor",providerWorkOrderId:guid,workflowVisitId:"retained-visit"},
+      results:{staff:{}}, closed:true,
+    }] : []};}
+  }};
   if (id === "next/server") return { NextResponse: class extends Response {
     static json(v: any, i?: ResponseInit) { return Response.json(v, i); }
   }};
@@ -55,7 +62,9 @@ loader._load = function(id, ...args) {
     isProtractorShop: async () => true,
     recordAutoDviApplication: async () => { if (receiptFails) throw new Error("fixture receipt lost"); },
   };
-  if (id === "@/lib/auto-dvi/recommended-work") return { buildRecommendedWorkPackages: async () => ({packages: []}) };
+  if (id === "@/lib/auto-dvi/recommended-work") return { buildRecommendedWorkPackages: async () => ({
+    packages: boundNonPilot ? [{title:"Legacy proposed labor",hours:1,rate:100}] : [],
+  }) };
   if (id === "@/lib/extension-analytics") return { trackPushToRO: async () => {} };
   if (id === "@/lib/integrations/protractor/interactive-context") return { runWithProtractorInteractiveTransport: (_: any, f: any) => f() };
   if (id === "@/lib/integrations/protractor") return {
@@ -81,6 +90,28 @@ const dashboard = require("../app/api/auto-dvi/push/route");
 const extension = require("../app/api/extension/auto-dvi/push/route");
 const opts = {shopId: 1, workOrderGuid: guid, packageTitle: "Inspection", lineTitles: ["Inspected: Battery"],
   inspectionItems: [{name: "Battery", rating: "red"}]};
+test("both legacy routes preserve a non-pilot bound order but refuse visit-stamped VIN evidence", async () => {
+  boundNonPilot = true; packageMode = resultsMode = "ok"; receiptFails = false;
+  try {
+    for (const route of [dashboard, extension]) {
+      packageWrites = resultsWrites = 0;
+      const body = {...opts, items: opts.inspectionItems, provider:"protractor",
+        recommendedItems:[{name:"Legacy proposed labor",serviceKey:null}]};
+      const legacy = await route.POST(new Request("https://offline.invalid/api/auto-dvi/push", {
+        method:"POST",body:JSON.stringify(body),
+      }));
+      const data = await legacy.json();
+      assert.equal(legacy.status,200); assert.equal(data.ok,true); assert.equal(data.recommendedCount,1);
+      assert.ok(packageWrites > 0); assert.ok(resultsWrites > 0);
+      const writesBefore = [packageWrites,resultsWrites];
+      const stamped = await route.POST(new Request("https://offline.invalid/api/auto-dvi/push", {
+        method:"POST",body:JSON.stringify({...body,visitId:"retained-visit",evidenceRevision:1}),
+      }));
+      assert.equal(stamped.status,409);
+      assert.deepEqual([packageWrites,resultsWrites],writesBefore);
+    }
+  } finally {boundNonPilot=false;}
+});
 
 test("acknowledged native writes compare exact IDs and sanitized content without repair", async () => {
   const cases = ["match", "notes", "title", "type", "result", "labels", "unknownLabels",

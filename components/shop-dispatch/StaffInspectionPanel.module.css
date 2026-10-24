@@ -1,4 +1,30 @@
 .panel { margin-top: 18px; }
+.views { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-block: 16px; }
+.views button { min-height: 44px; }
+.views button[aria-pressed="true"] { background: var(--primary); color: var(--paper); border-color: var(--primary); }
+.views small { flex-basis: 100%; }
+.capture { margin-top: 16px; padding: 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+.capture h5 { font-size: 14px; margin: 0 0 6px; }
+.capture p { font-size: 12px; line-height: 1.6; margin: 6px 0; }
+.capture label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+.capture input, .capture select, .capture textarea { min-height: 44px; width: 100%; min-width: 0; box-sizing: border-box; }
+.tread { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+.advisor { margin-block: 18px; }
+.advisor h3 { margin-bottom: 6px; }
+.advisorIntro { padding: 14px; border-left: 3px solid var(--primary); background: var(--paper); }
+.findingHeading { display: flex; justify-content: space-between; flex-wrap: wrap; align-items: baseline; gap: 10px; }
+.ratingBadge { display: inline-block; border: 1px solid var(--line); border-radius: 5px; padding: 5px 8px; font-size: 12px; font-weight: 700; }
+.ratingBadge[data-rating="green"] { border-color: #438160; }
+.ratingBadge[data-rating="yellow"] { border-color: #b78a29; }
+.ratingBadge[data-rating="red"] { border-color: #bb594a; }
+.measurements { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 20px; margin: 12px 0; }
+.measurements div { padding-block: 9px; border-bottom: 1px solid var(--line); min-width: 0; }
+.measurements dt { font-size: 12px; }
+.measurements dd { margin: 4px 0 0; font-weight: 600; overflow-wrap: anywhere; }
+.savedText { white-space: pre-wrap; overflow-wrap: anywhere; }
+.proposed { margin-top: 22px; padding: 16px; border: 1px dashed var(--line); border-radius: 8px; background: var(--panel); }
+.proposed article + article { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 12px; }
+@media (max-width: 767px) { .tread, .measurements { grid-template-columns: 1fr; } .capture { padding: 12px; } }
 .heading { display: flex; align-items: start; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
 .heading p { margin: 6px 0 12px; }
 .sheet { margin-top: 18px; border-top: 2px solid var(--line); padding-top: 18px; }

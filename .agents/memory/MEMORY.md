@@ -154,3 +154,4 @@
 - [Sticker activity estimates](sticker-activity-estimates.md) — varying roll sizes, explicit opt-in estimates, and outreach flags must not imply physical-print proof.
 - [Optional tutorial safety](optional-tutorial-safety.md) — production help stays opt-in; no automatic business-control activation or account-age inference.
 - [Tekmetric maintenance color](tekmetric-maintenance-color-policy.md) — yellow is explicit per-shop opt-in; maintenance timing and inspection condition remain separate.
+- [DVI consolidation boundary](dvi-consolidation-boundary.md) — workflow visit authority; parity before retirement; no live activation or artifact changes.

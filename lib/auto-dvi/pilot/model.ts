@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { inspectionMeasurements } from "../staff/measurements";
 import { createHash, randomUUID } from "node:crypto";
 import { canonical } from "../durable/model";
 import { requireThat } from "../../shop-dispatch/model";
@@ -49,8 +50,8 @@ export function project(inspection: StaffInspection, selected: {sheet: string; i
     const instance = inspection.sheets.find(s => s.key === sheet);
     const definition = instance?.sheet.items.find(i => i.id === item), finding = instance?.results[item];
     requireThat(instance?.active && definition && finding?.rating && finding.rating !== "na", "Select an evaluated finding from an active sheet", 409);
-    const measurements = definition.fields.filter(f => finding.values[f.id] !== undefined)
-      .map(f => `${f.label}: ${finding.values[f.id]}${f.unit ? ` ${f.unit}` : ""}`);
+    const measurements = inspectionMeasurements(definition, finding)
+      .map(f => `${f.label}: ${f.value}${f.unit ? ` ${f.unit}` : ""}`);
     return {key, title: `${instance.sheet.name} — ${definition.name}`,
       result: labels[finding.rating], notes: [finding.notes, ...measurements,
         finding.recommendation ? `Next step (not repair authorization): ${finding.recommendation}` : ""].filter(Boolean).join("\n")};

@@ -11,6 +11,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import VisitInspectionPanel from "@/components/auto-dvi/VisitInspectionPanel";
+import { WorkflowDviEntry } from "@/components/auto-dvi/WorkflowDviEntry";
 import { VISIT_DVI_RELEASE_ENABLED } from "@/lib/auto-dvi/visit-release";
 import { DVI_PUSH_UNCERTAIN_MESSAGE } from "@/lib/auto-dvi/push-outcome";
 import DviPushNotice from "@/components/auto-dvi/DviPushNotice";
@@ -70,7 +71,13 @@ const RATING_STYLES: Record<Rating, { on: string; off: string; label: string }> 
 };
 
 export default function AutoDviPanel(props:{vin:string;mileage:number|null;isProtractor:boolean}){
-  if(!VISIT_DVI_RELEASE_ENABLED)return <ExistingAutoDviPanel {...props}/>;
+  if(!VISIT_DVI_RELEASE_ENABLED)return <div className="space-y-4">
+    <WorkflowDviEntry key={props.vin} vin={props.vin} />
+    <details className="rounded-lg border p-3"><summary>Legacy Auto DVI · VIN-based tools and records</summary>
+      <p className="my-2 text-sm">These older findings are not evidence for a selected workflow visit. Existing integrations and recovery remain here until visit-bound parity is verified. Do not send them as a new visit’s inspection.</p>
+      <ExistingAutoDviPanel {...props}/>
+    </details>
+  </div>;
   return <div className="space-y-4">
     <VisitInspectionPanel vin={props.vin} mileage={props.mileage} />
     <div className="rounded-lg border border-slate-200 p-3">

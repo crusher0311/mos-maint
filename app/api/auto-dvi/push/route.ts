@@ -17,6 +17,7 @@ import { runWithProtractorInteractiveTransport } from "@/lib/integrations/protra
 import { buildRecommendedWorkPackages } from "@/lib/auto-dvi/recommended-work";
 import { trackPushToRO } from "@/lib/extension-analytics";
 import { tryDurablePush } from "@/lib/auto-dvi/durable/runtime";
+import {hasVisitExportIdentity, VISIT_EXPORT_REQUIRED} from "@/lib/auto-dvi/staff/export-boundary";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -65,6 +66,7 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
+  if (hasVisitExportIdentity(body)) return NextResponse.json({error: VISIT_EXPORT_REQUIRED}, {status: 409});
   const isProtractor = await isProtractorShop(shopId);
   if (isProtractor) {
     const durable = await tryDurablePush({shopId, actor: session.email}, body, "dashboard");

@@ -4,7 +4,7 @@ import { applyBindingAdmission } from "../workflow-binding-state";
 import { digest } from "../../shop-dispatch/service";
 import { requireThat } from "../../shop-dispatch/model";
 import { pilotOperationSchema, type PilotOperation } from "../pilot/model";
-import { arrivalAssociationSchema, type ArrivalAssociation, applyStaffCommand, initialInspection, instanceKey, photoSchema, sheetSchema, findingSchema,
+import { proposalSchema, arrivalAssociationSchema, type ArrivalAssociation, applyStaffCommand, initialInspection, instanceKey, photoSchema, sheetSchema, findingSchema,
   type Photo, type StaffCommand, type StaffInspection, type StaffSheet } from "./model";
 
 const identitySchema = z.object({version: z.literal(1), shopId: z.number().int().positive(), workflowVisitId: z.string().min(1),
@@ -17,6 +17,7 @@ const revision = z.number().int().nonnegative();
 const marker = z.object({revision, actor: z.string(), at: z.string().datetime()}).strict().nullable();
 export const staffStateSchema = z.object({
   version: z.literal(1), revision, evidenceRevision: revision, startedAt: z.string().datetime().nullable(), ready: marker, reviewed: marker,
+  proposals: z.array(proposalSchema).max(60).optional(),
   sheets: z.array(z.object({key: z.string(), sheet: sheetSchema, active: z.boolean(), selection: z.enum(["default", "manual"]),
     results: z.record(z.string(), findingSchema.extend({photos: z.array(photoSchema).max(6),
       arrivalPhotos: z.array(arrivalAssociationSchema).max(12).optional(), actor: z.string(), at: z.string().datetime()})),

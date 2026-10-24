@@ -28,6 +28,7 @@ import { publicDviPushOutcome } from "@/lib/auto-dvi/push-outcome";
 import { runWithProtractorInteractiveTransport } from "@/lib/integrations/protractor/interactive-context";
 import { trackPushToRO } from "@/lib/extension-analytics";
 import { tryDurablePush } from "@/lib/auto-dvi/durable/runtime";
+import {hasVisitExportIdentity, VISIT_EXPORT_REQUIRED} from "@/lib/auto-dvi/staff/export-boundary";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -87,6 +88,7 @@ async function _POST(req: NextRequest) {
     };
     try {
       body = await req.json();
+      if (hasVisitExportIdentity(body)) return NextResponse.json({error: VISIT_EXPORT_REQUIRED}, {status: 409});
     } catch {
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400, headers: corsHeaders });
     }

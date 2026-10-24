@@ -90,6 +90,11 @@ test("selected changes reject stale previews; unrelated drafts do not join or bl
   const f = await setup(), p = await f.preview();
   await f.save("selected changed");
   await assert.rejects(releaseCommand(f.publishRequest(p), f.deps), /Selected content/);
+  // Different sheet names alone do not make evidence unrelated: matching
+  // procedure/position/measurement definitions now intentionally share work.
+  const config = structuredClone(f.access.config!);
+  config.sheets.find(s => s.id === "other")!.items[0].procedure = "independent-tire-procedure";
+  f.setAccess({config});
   const r = await f.repository.read(1, "visit-one");
   await mutateStaff({visitId: "visit-one", requestId: randomUUID(), revision: (r!.results.staff as any).revision,
     command: {type: "select", sheet: "other@1", keepActive: true}}, f.deps.staff);
