@@ -11,3 +11,12 @@
 .skeleton { height: 2.5rem; width: 8rem; margin: 1rem 0; border-radius: .25rem; background: #e2edf5; animation: breathe 1.6s ease-in-out infinite; }
 @keyframes breathe { 50% { opacity: .45; } }
 @media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
+@media screen {
+  :global(html[data-theme="dark"]) .dashboard { --hours-blue: var(--mos-info-ink); --hours-ink: var(--mos-info-ink); }
+  :global(html[data-theme="dark"]) .card { background: var(--mos-info-bg); border-color: var(--mos-info-line); border-top-color: #5e9ed8; }
+  :global(html[data-theme="dark"]) .cardSold { background: var(--mos-success-bg); border-color: var(--mos-success-line); border-top-color: #72b59b; }
+  :global(html[data-theme="dark"]) .table th { background: var(--mos-surface-raised); color: var(--mos-ink-secondary); }
+  :global(html[data-theme="dark"]) .table td { border-color: var(--mos-line); }
+  :global(html[data-theme="dark"]) .table tbody tr:hover { background: var(--mos-surface-hover); }
+  :global(html[data-theme="dark"]) .skeleton { background: var(--mos-surface-hover); }
+}

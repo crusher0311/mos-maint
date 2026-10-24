@@ -30,7 +30,7 @@ export function PlatformAdminLayoutClient({
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
       {/* Mobile Header */}
-      <div className="fixed top-0 left-0 right-0 h-14 bg-slate-900 border-b border-slate-700 flex items-center px-4 z-40 md:hidden">
+      <div className="absolute top-10 left-0 right-0 h-14 bg-slate-900 border-b border-slate-700 flex items-center px-4 z-40 md:hidden">
         <button
           onClick={() => setIsMobileMenuOpen(true)}
           className="p-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"

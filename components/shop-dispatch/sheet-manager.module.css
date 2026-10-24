@@ -34,6 +34,21 @@
 .notice, .error { padding: 16px 18px; border-radius: 8px; margin-bottom: 16px; line-height: 1.6; overflow-wrap: anywhere; }
 .notice { background: #fff0df; border: 1px solid #d1a17b; color: #674020; }
 .error { background: #fff0f0; border: 1px solid #b42332; color: #971b2b; }
+@media screen {
+  :global(html[data-theme="dark"]) .workspace {
+    --sheet-ink: var(--mos-ink);
+    --sheet-muted: var(--mos-ink-muted);
+    --sheet-paper: var(--mos-surface-muted);
+    --sheet-panel: var(--mos-surface);
+    --sheet-line: var(--mos-line);
+  }
+  :global(html[data-theme="dark"]) .hero,
+  :global(html[data-theme="dark"]) .workspace .entry[aria-pressed=true] { background: var(--mos-success-bg); }
+  :global(html[data-theme="dark"]) .badge { background: var(--mos-success-bg); color: var(--mos-success-ink); }
+  :global(html[data-theme="dark"]) .notice { background: var(--mos-warning-bg); color: var(--mos-warning-ink); border-color: var(--mos-warning-line); }
+  :global(html[data-theme="dark"]) .error { background: var(--mos-danger-bg); color: var(--mos-danger-ink); border-color: var(--mos-danger-line); }
+  :global(html[data-theme="dark"]) .workspace :is(button, input, select, textarea):focus-visible { outline-color: var(--mos-focus); }
+}
 .empty { text-align: center; border: 1px dashed var(--sheet-line); border-radius: 9px; padding: 38px 20px; }
 .form { display: grid; gap: 18px; }
 .fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }

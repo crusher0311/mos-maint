@@ -84,30 +84,30 @@ export default function ServiceKeysPage() {
   return (
     <div style={{ padding: "24px", maxWidth: "1200px", margin: "0 auto", fontFamily: "system-ui, sans-serif" }}>
       <h1 style={{ fontSize: "24px", fontWeight: 700, marginBottom: "8px" }}>Service Key Explorer</h1>
-      <p style={{ color: "#666", marginBottom: "24px" }}>
+      <p style={{ color: "var(--mos-ink-muted, #666)", marginBottom: "24px" }}>
         Browse all service keys used in cached maintenance plans. See how OEM items map to internal keys, find unmapped items, and identify opportunities for better mapping.
       </p>
 
       <div style={{ display: "flex", gap: "12px", marginBottom: "20px", flexWrap: "wrap", alignItems: "flex-end" }}>
         <div>
-          <label style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "4px", color: "#555" }}>Shop ID (optional)</label>
+          <label style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "4px", color: "var(--mos-ink-secondary, #555)" }}>Shop ID (optional)</label>
           <input
             type="text"
             placeholder="All shops"
             value={shopId}
             onChange={(e) => setShopId(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && fetchData()}
-            style={{ padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", width: "140px" }}
+            style={{ padding: "8px 12px", border: "1px solid var(--mos-line-strong, #ddd)", borderRadius: "6px", width: "140px" }}
           />
         </div>
         <div>
-          <label style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "4px", color: "#555" }}>Search</label>
+          <label style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "4px", color: "var(--mos-ink-secondary, #555)" }}>Search</label>
           <input
             type="text"
             placeholder="Search keys or item names..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            style={{ padding: "8px 12px", border: "1px solid #ddd", borderRadius: "6px", width: "260px" }}
+            style={{ padding: "8px 12px", border: "1px solid var(--mos-line-strong, #ddd)", borderRadius: "6px", width: "260px" }}
           />
         </div>
         <button
@@ -119,40 +119,40 @@ export default function ServiceKeysPage() {
       </div>
 
       {loading && <p>Loading service keys...</p>}
-      {error && <p style={{ color: "red" }}>{error}</p>}
+      {error && <p style={{ color: "var(--mos-danger-ink, red)" }}>{error}</p>}
 
       {data && !loading && (
         <>
           <div style={{ display: "flex", gap: "12px", marginBottom: "20px", flexWrap: "wrap" }}>
-            <div style={{ background: "#f0f9ff", border: "1px solid #bae6fd", borderRadius: "8px", padding: "12px 16px", minWidth: "120px" }}>
-              <div style={{ fontSize: "24px", fontWeight: 700, color: "#0369a1" }}>{data.totalPlansScanned}</div>
-              <div style={{ fontSize: "12px", color: "#555" }}>Plans Scanned</div>
+            <div style={{ background: "var(--mos-info-bg, #f0f9ff)", border: "1px solid var(--mos-info-line, #bae6fd)", borderRadius: "8px", padding: "12px 16px", minWidth: "120px" }}>
+              <div style={{ fontSize: "24px", fontWeight: 700, color: "var(--mos-info-ink, #0369a1)" }}>{data.totalPlansScanned}</div>
+              <div style={{ fontSize: "12px", color: "var(--mos-ink-secondary, #555)" }}>Plans Scanned</div>
             </div>
-            <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "8px", padding: "12px 16px", minWidth: "120px" }}>
-              <div style={{ fontSize: "24px", fontWeight: 700, color: "#15803d" }}>{stats?.standard}</div>
-              <div style={{ fontSize: "12px", color: "#555" }}>Standard Keys</div>
+            <div style={{ background: "var(--mos-success-bg, #f0fdf4)", border: "1px solid var(--mos-success-line, #bbf7d0)", borderRadius: "8px", padding: "12px 16px", minWidth: "120px" }}>
+              <div style={{ fontSize: "24px", fontWeight: 700, color: "var(--mos-success-ink, #15803d)" }}>{stats?.standard}</div>
+              <div style={{ fontSize: "12px", color: "var(--mos-ink-secondary, #555)" }}>Standard Keys</div>
             </div>
-            <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: "8px", padding: "12px 16px", minWidth: "120px" }}>
-              <div style={{ fontSize: "24px", fontWeight: 700, color: "#a16207" }}>{stats?.misc}</div>
-              <div style={{ fontSize: "12px", color: "#555" }}>Misc Keys</div>
+            <div style={{ background: "var(--mos-warning-bg, #fffbeb)", border: "1px solid var(--mos-warning-line, #fde68a)", borderRadius: "8px", padding: "12px 16px", minWidth: "120px" }}>
+              <div style={{ fontSize: "24px", fontWeight: 700, color: "var(--mos-warning-ink, #a16207)" }}>{stats?.misc}</div>
+              <div style={{ fontSize: "12px", color: "var(--mos-ink-secondary, #555)" }}>Misc Keys</div>
             </div>
-            <div style={{ background: "#fdf4ff", border: "1px solid #e9d5ff", borderRadius: "8px", padding: "12px 16px", minWidth: "120px" }}>
-              <div style={{ fontSize: "24px", fontWeight: 700, color: "#7e22ce" }}>{stats?.protractor}</div>
-              <div style={{ fontSize: "12px", color: "#555" }}>Protractor Keys</div>
+            <div style={{ background: "var(--mos-violet-bg, #fdf4ff)", border: "1px solid var(--mos-violet-line, #e9d5ff)", borderRadius: "8px", padding: "12px 16px", minWidth: "120px" }}>
+              <div style={{ fontSize: "24px", fontWeight: 700, color: "var(--mos-violet-ink, #7e22ce)" }}>{stats?.protractor}</div>
+              <div style={{ fontSize: "12px", color: "var(--mos-ink-secondary, #555)" }}>Protractor Keys</div>
             </div>
-            <div style={{ background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: "8px", padding: "12px 16px", minWidth: "120px" }}>
-              <div style={{ fontSize: "24px", fontWeight: 700, color: "#c2410c" }}>{data.unmapped.length}</div>
-              <div style={{ fontSize: "12px", color: "#555" }}>Unmapped Items</div>
+            <div style={{ background: "var(--mos-warning-bg, #fff7ed)", border: "1px solid var(--mos-warning-line, #fed7aa)", borderRadius: "8px", padding: "12px 16px", minWidth: "120px" }}>
+              <div style={{ fontSize: "24px", fontWeight: 700, color: "var(--mos-warning-ink, #c2410c)" }}>{data.unmapped.length}</div>
+              <div style={{ fontSize: "12px", color: "var(--mos-ink-secondary, #555)" }}>Unmapped Items</div>
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: "2px", marginBottom: "16px", background: "#f1f5f9", borderRadius: "8px", padding: "2px" }}>
+          <div style={{ display: "flex", gap: "2px", marginBottom: "16px", background: "var(--mos-surface-raised, #f1f5f9)", borderRadius: "8px", padding: "2px" }}>
             <button
               onClick={() => setTab("mapped")}
               style={{
                 padding: "8px 20px", border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: 600,
-                background: tab === "mapped" ? "white" : "transparent",
-                color: tab === "mapped" ? "#1e293b" : "#64748b",
+                background: tab === "mapped" ? "var(--mos-surface, white)" : "transparent",
+                color: tab === "mapped" ? "var(--mos-ink, #1e293b)" : "var(--mos-ink-muted, #64748b)",
                 boxShadow: tab === "mapped" ? "0 1px 3px rgba(0,0,0,0.1)" : "none"
               }}
             >
@@ -162,8 +162,8 @@ export default function ServiceKeysPage() {
               onClick={() => setTab("unmapped")}
               style={{
                 padding: "8px 20px", border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: 600,
-                background: tab === "unmapped" ? "white" : "transparent",
-                color: tab === "unmapped" ? "#1e293b" : "#64748b",
+                background: tab === "unmapped" ? "var(--mos-surface, white)" : "transparent",
+                color: tab === "unmapped" ? "var(--mos-ink, #1e293b)" : "var(--mos-ink-muted, #64748b)",
                 boxShadow: tab === "unmapped" ? "0 1px 3px rgba(0,0,0,0.1)" : "none"
               }}
             >
@@ -181,8 +181,8 @@ export default function ServiceKeysPage() {
                     style={{
                       padding: "4px 14px", border: "1px solid #e2e8f0", borderRadius: "20px", cursor: "pointer",
                       fontSize: "13px", fontWeight: 500,
-                      background: filter === f ? "#2563eb" : "white",
-                      color: filter === f ? "white" : "#475569",
+                      background: filter === f ? "#2563eb" : "var(--mos-surface, white)",
+                      color: filter === f ? "white" : "var(--mos-ink-secondary, #475569)",
                     }}
                   >
                     {f.charAt(0).toUpperCase() + f.slice(1)}
@@ -196,7 +196,7 @@ export default function ServiceKeysPage() {
                     key={k.key}
                     style={{
                       border: "1px solid #e2e8f0", borderRadius: "8px", overflow: "hidden",
-                      background: expandedKey === k.key ? "#f8fafc" : "white"
+                      background: expandedKey === k.key ? "var(--mos-surface-muted, #f8fafc)" : "var(--mos-surface, white)"
                     }}
                   >
                     <div
@@ -208,13 +208,13 @@ export default function ServiceKeysPage() {
                     >
                       <div style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1 }}>
                         <code style={{
-                          background: k.isMisc ? "#fef3c7" : k.isProtractor ? "#f3e8ff" : k.isComplimentary ? "#fef3c7" : "#ecfdf5",
-                          color: k.isMisc ? "#92400e" : k.isProtractor ? "#6b21a8" : k.isComplimentary ? "#92400e" : "#065f46",
+                          background: k.isMisc ? "var(--mos-warning-bg, #fef3c7)" : k.isProtractor ? "var(--mos-violet-bg, #f3e8ff)" : k.isComplimentary ? "var(--mos-warning-bg, #fef3c7)" : "var(--mos-success-bg, #ecfdf5)",
+                          color: k.isMisc ? "var(--mos-warning-ink, #92400e)" : k.isProtractor ? "var(--mos-violet-ink, #6b21a8)" : k.isComplimentary ? "var(--mos-warning-ink, #92400e)" : "var(--mos-success-ink, #065f46)",
                           padding: "2px 8px", borderRadius: "4px", fontSize: "13px", fontWeight: 600
                         }}>
                           {k.key}
                         </code>
-                        <span style={{ color: "#94a3b8", fontSize: "13px" }}>
+                        <span style={{ color: "var(--mos-ink-subtle, #94a3b8)", fontSize: "13px" }}>
                           {k.samples.slice(0, 2).join(", ")}
                           {k.samples.length > 2 && ` +${k.samples.length - 2} more`}
                         </span>
@@ -223,27 +223,27 @@ export default function ServiceKeysPage() {
                         {Object.entries(k.buckets).map(([bucket, count]) => (
                           <span key={bucket} style={{
                             fontSize: "11px", padding: "2px 8px", borderRadius: "10px", fontWeight: 600,
-                            background: bucket === "overdue" ? "#fef2f2" : bucket === "dueSoon" ? "#fffbeb" : "#f0f9ff",
-                            color: bucket === "overdue" ? "#dc2626" : bucket === "dueSoon" ? "#d97706" : "#2563eb",
+                            background: bucket === "overdue" ? "var(--mos-danger-bg, #fef2f2)" : bucket === "dueSoon" ? "var(--mos-warning-bg, #fffbeb)" : "var(--mos-info-bg, #f0f9ff)",
+                            color: bucket === "overdue" ? "var(--mos-danger-ink, #dc2626)" : bucket === "dueSoon" ? "var(--mos-warning-ink, #d97706)" : "var(--mos-info-ink, #2563eb)",
                           }}>
                             {bucket}: {count}
                           </span>
                         ))}
-                        <span style={{ fontSize: "14px", fontWeight: 700, color: "#334155", minWidth: "50px", textAlign: "right" }}>
+                        <span style={{ fontSize: "14px", fontWeight: 700, color: "var(--mos-ink-secondary, #334155)", minWidth: "50px", textAlign: "right" }}>
                           {k.count}
                         </span>
                       </div>
                     </div>
                     {expandedKey === k.key && (
                       <div style={{ padding: "0 16px 12px", borderTop: "1px solid #e2e8f0" }}>
-                        <div style={{ fontSize: "12px", fontWeight: 600, color: "#64748b", margin: "12px 0 6px" }}>
+                        <div style={{ fontSize: "12px", fontWeight: 600, color: "var(--mos-ink-muted, #64748b)", margin: "12px 0 6px" }}>
                           Sample Item Names ({k.samples.length})
                         </div>
                         <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
                           {k.samples.map((s, i) => (
                             <span key={i} style={{
-                              background: "#f1f5f9", padding: "4px 10px", borderRadius: "4px",
-                              fontSize: "13px", color: "#334155"
+                              background: "var(--mos-surface-raised, #f1f5f9)", padding: "4px 10px", borderRadius: "4px",
+                              fontSize: "13px", color: "var(--mos-ink-secondary, #334155)"
                             }}>
                               {s}
                             </span>
@@ -254,7 +254,7 @@ export default function ServiceKeysPage() {
                   </div>
                 ))}
                 {filteredKeys.length === 0 && (
-                  <p style={{ color: "#94a3b8", textAlign: "center", padding: "20px" }}>No keys match your filters.</p>
+                  <p style={{ color: "var(--mos-ink-subtle, #94a3b8)", textAlign: "center", padding: "20px" }}>No keys match your filters.</p>
                 )}
               </div>
             </>
@@ -264,35 +264,35 @@ export default function ServiceKeysPage() {
             <div style={{ border: "1px solid #e2e8f0", borderRadius: "8px", overflow: "hidden" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
                 <thead>
-                  <tr style={{ background: "#f8fafc" }}>
-                    <th style={{ padding: "10px 16px", textAlign: "left", fontWeight: 600, color: "#475569", borderBottom: "1px solid #e2e8f0" }}>Item Name</th>
-                    <th style={{ padding: "10px 16px", textAlign: "center", fontWeight: 600, color: "#475569", borderBottom: "1px solid #e2e8f0", width: "80px" }}>Count</th>
-                    <th style={{ padding: "10px 16px", textAlign: "center", fontWeight: 600, color: "#475569", borderBottom: "1px solid #e2e8f0", width: "100px" }}>Bucket</th>
-                    <th style={{ padding: "10px 16px", textAlign: "left", fontWeight: 600, color: "#475569", borderBottom: "1px solid #e2e8f0" }}>Example VINs</th>
+                  <tr style={{ background: "var(--mos-surface-muted, #f8fafc)" }}>
+                    <th style={{ padding: "10px 16px", textAlign: "left", fontWeight: 600, color: "var(--mos-ink-secondary, #475569)", borderBottom: "1px solid var(--mos-line, #e2e8f0)" }}>Item Name</th>
+                    <th style={{ padding: "10px 16px", textAlign: "center", fontWeight: 600, color: "var(--mos-ink-secondary, #475569)", borderBottom: "1px solid var(--mos-line, #e2e8f0)", width: "80px" }}>Count</th>
+                    <th style={{ padding: "10px 16px", textAlign: "center", fontWeight: 600, color: "var(--mos-ink-secondary, #475569)", borderBottom: "1px solid var(--mos-line, #e2e8f0)", width: "100px" }}>Bucket</th>
+                    <th style={{ padding: "10px 16px", textAlign: "left", fontWeight: 600, color: "var(--mos-ink-secondary, #475569)", borderBottom: "1px solid var(--mos-line, #e2e8f0)" }}>Example VINs</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredUnmapped.map((u, i) => (
                     <tr key={i} style={{ borderBottom: "1px solid #f1f5f9" }}>
-                      <td style={{ padding: "8px 16px", color: "#1e293b" }}>{u.name}</td>
+                      <td style={{ padding: "8px 16px", color: "var(--mos-ink, #1e293b)" }}>{u.name}</td>
                       <td style={{ padding: "8px 16px", textAlign: "center", fontWeight: 600 }}>{u.count}</td>
                       <td style={{ padding: "8px 16px", textAlign: "center" }}>
                         <span style={{
                           fontSize: "11px", padding: "2px 8px", borderRadius: "10px", fontWeight: 600,
-                          background: u.bucket === "overdue" ? "#fef2f2" : u.bucket === "dueSoon" ? "#fffbeb" : "#f0f9ff",
-                          color: u.bucket === "overdue" ? "#dc2626" : u.bucket === "dueSoon" ? "#d97706" : "#2563eb",
+                          background: u.bucket === "overdue" ? "var(--mos-danger-bg, #fef2f2)" : u.bucket === "dueSoon" ? "var(--mos-warning-bg, #fffbeb)" : "var(--mos-info-bg, #f0f9ff)",
+                          color: u.bucket === "overdue" ? "var(--mos-danger-ink, #dc2626)" : u.bucket === "dueSoon" ? "var(--mos-warning-ink, #d97706)" : "var(--mos-info-ink, #2563eb)",
                         }}>
                           {u.bucket}
                         </span>
                       </td>
                       <td style={{ padding: "8px 16px" }}>
-                        <code style={{ fontSize: "11px", color: "#64748b" }}>{u.vins.join(", ")}</code>
+                        <code style={{ fontSize: "11px", color: "var(--mos-ink-muted, #64748b)" }}>{u.vins.join(", ")}</code>
                       </td>
                     </tr>
                   ))}
                   {filteredUnmapped.length === 0 && (
                     <tr>
-                      <td colSpan={4} style={{ padding: "20px", textAlign: "center", color: "#94a3b8" }}>
+                      <td colSpan={4} style={{ padding: "20px", textAlign: "center", color: "var(--mos-ink-subtle, #94a3b8)" }}>
                         No unmapped items found.
                       </td>
                     </tr>

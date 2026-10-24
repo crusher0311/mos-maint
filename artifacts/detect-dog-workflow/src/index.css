@@ -1,7 +1,7 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
-:root, .dark {
+:root {
   --background: 60 16% 94%;
   --foreground: 160 28% 15%;
   --card: 60 20% 98%;
@@ -23,6 +23,32 @@
   --ring: 163 34% 23%;
   --radius: 0.5rem;
 }
+@media screen {
+  :root[data-workflow-theme="dark"] {
+    --background: 156 21% 11%;
+    --foreground: 135 18% 90%;
+    --card: 155 18% 15%;
+    --card-foreground: 135 18% 90%;
+    --popover: 155 18% 15%;
+    --popover-foreground: 135 18% 90%;
+    --primary: 151 28% 69%;
+    --primary-foreground: 156 21% 11%;
+    --secondary: 155 17% 20%;
+    --secondary-foreground: 135 18% 90%;
+    --muted: 155 17% 20%;
+    --muted-foreground: 142 14% 72%;
+    --accent: 22 76% 65%;
+    --accent-foreground: 156 21% 11%;
+    --destructive: 10 72% 73%;
+    --destructive-foreground: 156 21% 11%;
+    --border: 150 13% 34%;
+    --input: 150 13% 34%;
+    --ring: 22 76% 65%;
+  }
+}
 html, body, #root { margin: 0; min-height: 100%; }
-body { background: hsl(var(--background)); }
+body { background: hsl(var(--background)); color:hsl(var(--foreground)); }
 * { box-sizing: border-box; }
+@media print {
+  html { color-scheme:light !important; background:#f1f2e9 !important; }
+}

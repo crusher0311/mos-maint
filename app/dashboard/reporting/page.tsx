@@ -67,7 +67,7 @@ export default function ReportingPage() {
     ...(scope === "enterprise" ? { enterpriseId: requestedEnterpriseId ?? me?.enterpriseId ?? undefined } : {}),
   };
 
-  return <main className="min-h-[100dvh] bg-[#f4f7fa] p-4 text-slate-900 sm:p-6 lg:p-8">
+  return <main className="mos-reporting min-h-[100dvh] bg-[#f4f7fa] p-4 text-slate-900 sm:p-6 lg:p-8">
     <div className="mx-auto max-w-[1400px] space-y-5">
       <header className="border-b border-slate-200 pb-5">
         <div className="flex flex-wrap items-end justify-between gap-4">
@@ -128,6 +128,16 @@ export default function ReportingPage() {
       .filter { border:1px solid #cbd5e1; border-radius:.375rem; background:#fff; padding:.375rem .625rem; font-size:.75rem; color:#334155; }
       .panel { border:1px solid #e2e8f0; border-radius:.5rem; background:#fff; box-shadow:0 1px 2px rgb(15 23 42 / .05); }
       .icon { border-radius:.375rem; padding:.375rem; color:#64748b; transition:background-color .15s; } .icon:hover { background:#f1f5f9; }
+      @media screen {
+        html[data-theme="dark"] .mos-reporting { background:var(--mos-canvas); }
+        html[data-theme="dark"] .mos-reporting .action.secondary,
+        html[data-theme="dark"] .mos-reporting .filter,
+        html[data-theme="dark"] .mos-reporting .panel { background:var(--mos-surface); color:var(--mos-ink-secondary); border-color:var(--mos-line-strong); }
+        html[data-theme="dark"] .mos-reporting .action.secondary:hover,
+        html[data-theme="dark"] .mos-reporting .icon:hover { background:var(--mos-surface-hover); color:var(--mos-info-ink); }
+        html[data-theme="dark"] .mos-reporting .icon { color:var(--mos-ink-muted); }
+        html[data-theme="dark"] .mos-reporting :focus-visible { outline-color:var(--mos-focus); }
+      }
     `}</style>
   </main>;
 }

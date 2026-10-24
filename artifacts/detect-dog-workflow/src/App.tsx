@@ -77,7 +77,7 @@ function PreviewRenderer({
 
   if (error) {
     return (
-      <pre style={{ color: 'red', padding: '2rem', fontFamily: 'system-ui' }}>
+      <pre role="alert" style={{ color: 'hsl(var(--destructive))', padding: '2rem', fontFamily: 'system-ui', whiteSpace: 'pre-wrap' }}>
         {error}
       </pre>
     );

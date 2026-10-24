@@ -119,10 +119,11 @@ export function brandingTheme(config: BrandingConfig): CSSProperties {
     '--forest': brand.primary, '--accent': brand.accent,
     '--primary-foreground': contrastForeground(brand.primary),
     '--accent-foreground': contrastForeground(brand.accent),
-    '--paper': mixWithNeutral(brand.primary, .055),
-    '--surface': '#fafbf5', '--mint': mixWithNeutral(brand.primary, .11),
-    '--line': mixWithNeutral(brand.primary, .22),
-    '--quiet': '#4f6158',
+    // Identity is independent of appearance. CSS chooses light/dark surfaces;
+    // draft previews can use their own light tints without forcing light mode.
+    '--brand-paper': mixWithNeutral(brand.primary, .055),
+    '--brand-mint': mixWithNeutral(brand.primary, .11),
+    '--brand-line': mixWithNeutral(brand.primary, .22),
     fontFamily: config.typography === 'serif' ? 'Georgia, "Times New Roman", serif' : '"Aptos", "Segoe UI", system-ui, sans-serif',
   } as CSSProperties;
 }

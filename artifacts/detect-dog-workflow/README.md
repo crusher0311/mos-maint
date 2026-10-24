@@ -3,7 +3,7 @@
 Frontend-only presentation. Root opens Burnett dispatch, without authentication.
 `/preview/workflow/ShopWorkflow` remains available for the canvas. The named entry is
 `src/components/mockups/workflow/ShopWorkflow.tsx`. No external fonts, images,
-API calls or production imports. Only brand settings persist in browser localStorage;
+API calls or production imports. Brand settings and appearance persist separately in browser localStorage;
 workflow state is in memory. No package or backend changes.
 
 ## Burnett presentation and branding
@@ -52,6 +52,32 @@ mineral mint and burnt-orange time markers. System Aptos/Segoe UI text with loca
 Consolas/SFMono time labels. Dense horizontal planning, readable vehicle ledgers,
 quiet opacity/translate feedback, reduced-motion support. Status always has text,
 not just color. My Work is a responsive individual-job view with 44–48px controls.
+
+## Appearance
+
+The topbar's labeled **Appearance** selector is available on desktop and mobile.
+Light / Dark / System is a local browser preference, independent of brand settings
+and workflow state. System is the default and follows live OS preference changes;
+an explicit choice does not. `mos-workflow-appearance` stores only the preference,
+not the resolved System color. Invalid or inaccessible storage safely falls back
+to System; if writing is denied a selection still works until reload.
+
+The blocking `public/appearance-init.js` runs before React or lazy preview modules;
+`AppearanceProvider` wraps the complete app, including
+`/preview/workflow/ShopWorkflow`. Both entry paths share the same preference.
+Screen-only dark surface/status tokens preserve the existing pine/sage identity,
+brand foreground contrast safeguards, logos, local overrides and inheritance.
+Branding drafts survive appearance changes. Workflow, dataset and branding resets
+do not reset appearance. Print uses the light palette, keeps original identity
+colors and hides the appearance control. No image filters or document changes.
+
+Offline checks: `npm test`, `npm run typecheck`,
+`PORT=24087 BASE_PATH=/ npm run build`.
+With an **already running isolated artifact preview**:
+`npm run test:browser -- tests/browser/appearance.spec.ts`.
+This suite covers prepaint without React, direct routes, persistence, reactive
+System, denied/invalid storage, navigation, both modes, nested dialogs, mobile
+keyboard access, print media and brand/reset independence. It starts no server.
 
 ## Rules
 

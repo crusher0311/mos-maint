@@ -57,3 +57,19 @@
   outline: 2px solid var(--export-accent);
   outline-offset: 3px;
 }
+
+@media screen {
+  :global(html[data-theme="dark"]) .page {
+    --export-ink: var(--mos-ink);
+    --export-accent: #377dcc;
+    --export-wash: var(--mos-canvas);
+  }
+  :global(html[data-theme="dark"]) :is(.panel, .input, .secondary) {
+    background: var(--mos-surface);
+    border-color: var(--mos-line-strong);
+    color: var(--mos-ink);
+  }
+  :global(html[data-theme="dark"]) :is(.input, .primary, .secondary):focus-visible {
+    outline-color: var(--mos-focus);
+  }
+}

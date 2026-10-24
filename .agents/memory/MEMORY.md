@@ -109,10 +109,8 @@
 - [Mongo optional fields](mongo-optional-fields.md) — undefined optional properties can persist as null; validate real Mongo readback before enabling strict-schema configurations.
 - [Instance-scoped provider isolation](instance-scoped-provider-isolation.md) — bind deny lists only to the platform's stable replica ID; deferred callbacks must persist full replay semantics before acknowledgment.
 - [Protractor relay EC2 deployment](protractor-relay-ec2-deployment.md) — Base64-preserve SSH PEM; build separately when old Buildx blocks Compose, then drain and start with `--no-build`.
-- [Relay canary response-size stop](protractor-relay-canary-response-size.md) — hard-cap pacing passed, but three REST GETs exceeded the relay’s 5 MB response cap; stay closed until safely attributed.
+- [Relay safety](relay-safety-index.md) — response bounds, canary budgets and recovery ownership are independent safety constraints.
 - [Provider routing identity](provider-routing-identity.md) — explicit provider wins; global credentials never fill shop config; bind transport and queued/background work to one validated shop.
-- [Relay breaker ownership](protractor-relay-breaker-ownership.md) — persist outcome under a renewable fleet lease (or matching claim token) before another recovery probe can start.
-- [Protractor canary accounting](protractor-canary-accounting.md) — Mongo confirmation consumes budget; ambiguous results never refund admissions, and terminal canaries never silently reopen.
 - [Labor Rates context safety](labor-rates-context-safety.md) — scoped lookup failures do not prove provider disconnection; Rates identity resolution must not auto-learn mappings.
 - [Audit reusable job review](audit-reusable-job-review.md) — thin catalog summaries must not suppress usable history; hydrate selected items and revalidate at the write boundary.
 - [Tekmetric location switching](tekmetric-location-switching.md) — explicit matched-account access; root-bounded scopes; pre-upgrade sessions need one explicit sign-in.
@@ -148,3 +146,4 @@
 - [Export worker fixtures](export-worker-fixture-boundaries.md) — queue completion is not delivery recovery while the engine lease remains; tsx dynamic imports can bypass path-only stubs.
 - [Outbound export boundaries](protractor-export-coverage.md) — separate activation approval, restricted PG state, real DNS tests, and completed-receipt consumption for Cosmos.
 - [Local normalization recovery](protractor-local-normalization.md) — independent retries, mixed-store association safety, and real PG transaction adapter verification.
+- [Appearance scope](appearance-boundaries.md) — local screen preferences never replace shop branding or physical-output palettes.

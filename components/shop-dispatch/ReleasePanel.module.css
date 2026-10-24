@@ -60,6 +60,24 @@
 .customer > div { max-width: 820px; margin-inline: auto; }
 .empty { padding: 34px 20px; border: 1px dashed #b8c9bb; border-radius: 8px; text-align: center; color: #546b64; }
 .skeleton { min-height: 140px; border-radius: 9px; background: #e1e8dc; animation: release-breathe 1.5s ease-in-out infinite alternate; }
+/* The generated .report is intentionally light; only its surrounding UI changes. */
+@media screen {
+  :global(html[data-theme="dark"]) .panel {
+    --release-ink: var(--mos-ink);
+    --release-paper: var(--mos-surface);
+    --release-line: var(--mos-line);
+  }
+  :global(html[data-theme="dark"]) .customer { background: var(--mos-canvas); color: var(--mos-ink); }
+  :global(html[data-theme="dark"]) :is(.panel, .customer) button { background: var(--mos-surface-raised); color: var(--mos-ink); border-color: var(--mos-line-strong); }
+  :global(html[data-theme="dark"]) .panel :is(textarea, input:not([type=checkbox])) { background: var(--mos-surface-muted); color: var(--mos-ink); border-color: var(--mos-line-strong); }
+  :global(html[data-theme="dark"]) .eyebrow:not(:global([data-theme-surface="light"] *)),
+  :global(html[data-theme="dark"]) .empty:not(:global([data-theme-surface="light"] *)) { color: var(--mos-ink-muted); }
+  :global(html[data-theme="dark"]) .notice { background: var(--mos-warning-bg); color: var(--mos-warning-ink); border-color: var(--mos-warning-line); }
+  :global(html[data-theme="dark"]) .error { background: var(--mos-danger-bg); color: var(--mos-danger-ink); border-color: var(--mos-danger-line); }
+  :global(html[data-theme="dark"]) :is(.finding, .link, .empty):not(:global([data-theme-surface="light"] *)) { border-color: var(--mos-line); }
+  :global(html[data-theme="dark"]) .skeleton { background: var(--mos-surface-hover); }
+  :global(html[data-theme="dark"]) :is(.panel, .customer) :focus-visible { outline-color: var(--mos-focus); }
+}
 @keyframes release-breathe { to { opacity: .5; } }
 @media (max-width: 767px) { .fields, .compare, .reportPhotos { grid-template-columns: 1fr; } }
 @media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }

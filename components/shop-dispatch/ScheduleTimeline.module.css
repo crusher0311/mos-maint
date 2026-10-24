@@ -67,5 +67,12 @@
 .empty { padding: 20px 5px; line-height: 1.6; color: var(--muted); font-size: 12px; }
 .arrival { border-left-color: var(--accent); background: #f5e1c833; }
 .status { font-size: 12px; padding: 9px 0; color: var(--muted); }
+@media screen {
+  :global(html[data-theme="dark"]) .active { background: var(--mos-success-bg); }
+  :global(html[data-theme="dark"]) :is(.paused, .hold) { background: var(--mos-warning-bg); color: var(--mos-warning-ink); }
+  :global(html[data-theme="dark"]) .preview { background: var(--mos-success-bg); }
+  :global(html[data-theme="dark"]) .invalid { background: var(--mos-danger-bg); color: var(--mos-danger-ink); border-color: var(--mos-danger-line); }
+  :global(html[data-theme="dark"]) .unavailable { background: repeating-linear-gradient(135deg, #35425277, #35425277 4px, #26344288 4px, #26344288 8px); }
+}
 @media (max-width: 1100px) { .layout { grid-template-columns: 215px minmax(0, 1fr); } .form, .resourceForm { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 767px) { .layout { grid-template-columns: 1fr; } .queueList { max-height: 245px; } .workspace { --lane-label: 120px; } .tech { padding: 12px 7px; } .initials { display: none; } .form, .resourceForm { grid-template-columns: 1fr; } .details { padding: 14px; } }

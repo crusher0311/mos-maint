@@ -204,15 +204,15 @@ export default function LandingPage() {
               <p className="text-xs sm:text-sm text-gray-500 mb-3">Quick math owners get instantly:</p>
               <div className="grid grid-cols-3 gap-2 sm:gap-4 text-center">
                 <div>
-                  <div className="text-2xl font-bold text-gray-900">20 ROs/day</div>
+                  <div className="text-base sm:text-2xl font-bold text-gray-900">20 ROs/day</div>
                   <div className="text-sm text-gray-500">× 10 min each</div>
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-gray-900">3.3 hrs/day</div>
+                  <div className="text-base sm:text-2xl font-bold text-gray-900">3.3 hrs/day</div>
                   <div className="text-sm text-gray-500">wasted searching</div>
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-red-600">$6,600+/mo</div>
+                  <div className="text-base sm:text-2xl font-bold text-red-600">$6,600+/mo</div>
                   <div className="text-sm text-gray-500">in lost selling time</div>
                 </div>
               </div>

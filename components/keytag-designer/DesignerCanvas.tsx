@@ -216,6 +216,7 @@ export function DesignerCanvas({
   return (
     <div
       ref={canvasRef}
+      data-theme-surface="light"
       className="relative bg-white shadow-lg border border-gray-300"
       style={{
         width: layout.canvasWidth * scale,

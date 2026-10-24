@@ -18,6 +18,24 @@
   overflow: hidden;
 }
 .root * { box-sizing: border-box; }
+@media screen {
+  :global(html[data-theme="dark"]) .root {
+    --ink: var(--mos-ink);
+    --quiet: var(--mos-ink-muted);
+    --paper: var(--mos-surface-muted);
+    --surface: var(--mos-surface);
+    --line: var(--mos-line);
+    --mint: var(--mos-success-bg);
+    --orange: var(--mos-focus);
+  }
+  :global(html[data-theme="dark"]) .root .primary,
+  :global(html[data-theme="dark"]) .root .nav button[aria-pressed="true"] { color: #fafbf5; }
+  :global(html[data-theme="dark"]) .root .field :is(input, select, textarea) { background: var(--mos-surface-muted); }
+  :global(html[data-theme="dark"]) .root .notice { background: var(--mos-warning-bg); color: var(--mos-warning-ink); border-color: var(--mos-warning-line); }
+  :global(html[data-theme="dark"]) .root .error { background: var(--mos-danger-bg); color: var(--mos-danger-ink); border-color: var(--mos-danger-line); }
+  :global(html[data-theme="dark"]) .root .skeleton { background: var(--mos-surface-hover); }
+  :global(html[data-theme="dark"]) .root .item[aria-pressed="true"] { border-color: var(--mos-success-line); }
+}
 .root button,.root input,.root textarea,.root select { font: inherit; color: inherit; }
 .root button { cursor: pointer; }
 .root button:disabled { opacity: .5; cursor: not-allowed; }

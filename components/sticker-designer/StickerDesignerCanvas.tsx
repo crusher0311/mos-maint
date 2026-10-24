@@ -306,6 +306,7 @@ export function StickerDesignerCanvas({
       >
         <div
           ref={canvasRef}
+          data-theme-surface="light"
           className="relative border-2 border-gray-300 rounded-lg shadow-lg cursor-crosshair select-none"
           style={{
             width: layout.canvasWidth,

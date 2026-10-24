@@ -1,5 +1,294 @@
 @import "tailwindcss";
 
+/*
+ * Screen palette, deliberately independent of Tailwind's --color-* palette.
+ * Brand fills (including the MOS sidebar), photos and generated documents must
+ * not change when the application appearance changes.
+ *
+ * data-theme-surface="light" is an explicit document/label/QR preview boundary.
+ * Apply it to the preview itself, not its editor or modal.
+ * @scope keeps both a preview boundary and its descendants out of the bridge;
+ * the compatibility layer targets evergreen browsers with CSS scoping support.
+ */
+@custom-variant mos-screen-dark {
+  @media screen {
+    @scope (html[data-theme="dark"]) to ([data-theme-surface="light"]) {
+      @slot;
+    }
+  }
+}
+
+@media screen {
+  :root {
+    --mos-canvas: #f4f7fa;
+    --mos-surface: #ffffff;
+    --mos-surface-muted: #f8fafc;
+    --mos-surface-raised: #ffffff;
+    --mos-surface-hover: #eef2f6;
+    --mos-surface-active: #e2e8f0;
+    --mos-ink: #111827;
+    --mos-ink-secondary: #374151;
+    --mos-ink-muted: #64748b;
+    --mos-ink-subtle: #6b7280;
+    --mos-line: #e2e8f0;
+    --mos-line-strong: #cbd5e1;
+    --mos-focus: #3c81c3;
+    --mos-info-bg: #eff6ff;
+    --mos-info-ink: #1d4ed8;
+    --mos-info-line: #bfdbfe;
+    --mos-success-bg: #f0fdf4;
+    --mos-success-ink: #15803d;
+    --mos-success-line: #bbf7d0;
+    --mos-warning-bg: #fffbeb;
+    --mos-warning-ink: #92400e;
+    --mos-warning-line: #fde68a;
+    --mos-danger-bg: #fef2f2;
+    --mos-danger-ink: #b91c1c;
+    --mos-danger-line: #fecaca;
+    --mos-violet-bg: #faf5ff;
+    --mos-violet-ink: #7e22ce;
+    --mos-violet-line: #e9d5ff;
+  }
+
+  html[data-theme="dark"] {
+    --mos-canvas: #111820;
+    --mos-surface: #1a2430;
+    --mos-surface-muted: #151e28;
+    --mos-surface-raised: #23303e;
+    --mos-surface-hover: #29394a;
+    --mos-surface-active: #35485c;
+    --mos-ink: #edf2f7;
+    --mos-ink-secondary: #cbd5e1;
+    --mos-ink-muted: #a5b4c5;
+    --mos-ink-subtle: #95a6ba;
+    --mos-line: #344252;
+    --mos-line-strong: #526478;
+    --mos-focus: #89c4fa;
+    --mos-info-bg: #19334d;
+    --mos-info-ink: #a3cdff;
+    --mos-info-line: #345b83;
+    --mos-success-bg: #173b30;
+    --mos-success-ink: #91dfb2;
+    --mos-success-line: #326852;
+    --mos-warning-bg: #3e301b;
+    --mos-warning-ink: #f5cf89;
+    --mos-warning-line: #7b6032;
+    --mos-danger-bg: #40262d;
+    --mos-danger-ink: #ffadb5;
+    --mos-danger-line: #814653;
+    --mos-violet-bg: #322a48;
+    --mos-violet-ink: #d4bbfb;
+    --mos-violet-line: #65517f;
+    color-scheme: dark;
+    background: var(--mos-canvas);
+    color: var(--mos-ink);
+  }
+
+  html[data-theme="dark"] body {
+    background-color: var(--mos-canvas);
+    color: var(--mos-ink);
+  }
+
+  [data-theme-surface="light"] {
+    color-scheme: light;
+    color: #111827;
+  }
+}
+
+/*
+ * Compatibility layer for existing utility-based pages. Explicit selectors
+ * cover public/auth, dashboard/admin shells, menus (including body portals),
+ * tables, dialogs and loading/error states without replacing brand variables
+ * or touching layout. New UI can use the semantic --mos-* tokens directly.
+ * Keep this in utilities so hover/focus/disabled variants retain their cascade.
+ */
+@layer base {
+  @variant mos-screen-dark {
+    :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]), select, textarea) {
+      background-color: var(--mos-surface);
+      color: var(--mos-ink);
+      border-color: var(--mos-line-strong);
+    }
+    :where(input, textarea)::placeholder { color: var(--mos-ink-subtle); }
+    :where(dialog) {
+      background-color: var(--mos-surface-raised);
+      color: var(--mos-ink);
+      border-color: var(--mos-line);
+    }
+    :where(:focus-visible) { outline-color: var(--mos-focus); }
+  }
+}
+
+@layer utilities {
+  @variant mos-screen-dark {
+    .bg-white { background-color: var(--mos-surface); }
+    .bg-white\/95 { background-color: rgb(26 36 48 / 95%); }
+    .bg-white\/90 { background-color: rgb(26 36 48 / 90%); }
+    .bg-white\/80 { background-color: rgb(26 36 48 / 80%); }
+    .bg-white\/70 { background-color: rgb(26 36 48 / 70%); }
+    .bg-white\/60 { background-color: rgb(26 36 48 / 60%); }
+    .bg-white\/50 { background-color: rgb(26 36 48 / 50%); }
+    .bg-gray-50\/50, .bg-slate-50\/50, .bg-slate-50\/70 {
+      background-color: color-mix(in srgb, var(--mos-surface-muted) 70%, transparent);
+    }
+    .bg-gray-50, .bg-slate-50, .bg-neutral-50, .bg-zinc-50, .bg-stone-50 {
+      background-color: var(--mos-surface-muted);
+    }
+    .bg-gray-100, .bg-slate-100, .bg-neutral-100, .bg-zinc-100, .bg-stone-100 {
+      background-color: var(--mos-surface-raised);
+    }
+    .bg-gray-200, .bg-slate-200, .bg-neutral-200, .bg-zinc-200, .bg-stone-200 {
+      background-color: var(--mos-surface-hover);
+    }
+    .bg-gray-300, .bg-slate-300, .bg-neutral-300 {
+      background-color: var(--mos-surface-active);
+    }
+    .bg-\[\#f4f7fa\] { background-color: var(--mos-canvas); }
+    .bg-\[\#edf7fd\], .bg-\[\#f0f8fd\] { background-color: var(--mos-info-bg); }
+    .border-\[\#c7dfef\], .border-\[\#b7d3e8\] { border-color: var(--mos-info-line); }
+    .text-\[\#174b78\], .text-\[\#28679f\], .text-\[\#2d6aa3\],
+    .text-\[\#2f6fae\], .text-\[\#347bbd\], .text-\[\#3c81c3\], .text-mos-blue {
+      color: var(--mos-info-ink);
+    }
+    .text-black, .text-gray-950, .text-gray-900, .text-gray-800,
+    .text-slate-950, .text-slate-900, .text-slate-800,
+    .text-neutral-950, .text-neutral-900, .text-neutral-800,
+    .text-zinc-950, .text-zinc-900, .text-zinc-800, .text-stone-900, .text-stone-800 {
+      color: var(--mos-ink);
+    }
+    .text-gray-700, .text-gray-600, .text-slate-700, .text-slate-600,
+    .text-neutral-700, .text-neutral-600, .text-zinc-700, .text-zinc-600, .text-stone-700, .text-stone-600 {
+      color: var(--mos-ink-secondary);
+    }
+    .text-gray-500, .text-slate-500, .text-neutral-500, .text-zinc-500, .text-stone-500 {
+      color: var(--mos-ink-muted);
+    }
+    .text-gray-400, .text-slate-400, .text-neutral-400, .text-zinc-400, .text-stone-400 {
+      color: var(--mos-ink-subtle);
+    }
+    .border-gray-50, .border-gray-100, .border-gray-200,
+    .border-slate-100, .border-slate-200, .border-neutral-100, .border-neutral-200,
+    .border-zinc-100, .border-zinc-200, .border-stone-100, .border-stone-200 {
+      border-color: var(--mos-line);
+    }
+    .border-gray-300, .border-gray-400, .border-slate-300, .border-slate-400,
+    .border-neutral-300, .border-zinc-300, .border-stone-300 {
+      border-color: var(--mos-line-strong);
+    }
+    .divide-gray-100 > :not(:last-child), .divide-gray-200 > :not(:last-child),
+    .divide-slate-100 > :not(:last-child), .divide-slate-200 > :not(:last-child),
+    .divide-neutral-100 > :not(:last-child), .divide-neutral-200 > :not(:last-child) {
+      border-color: var(--mos-line);
+    }
+    .placeholder-gray-400::placeholder, .placeholder-gray-500::placeholder,
+    .placeholder-slate-400::placeholder, .placeholder-slate-500::placeholder {
+      color: var(--mos-ink-subtle);
+    }
+    .bg-blue-50, .bg-blue-100, .bg-blue-200, .bg-sky-50, .bg-sky-100,
+    .bg-cyan-50, .bg-cyan-100, .bg-indigo-50, .bg-indigo-100,
+    .bg-blue-50\/30, .bg-blue-50\/40, .bg-blue-50\/50, .bg-blue-50\/60, .bg-blue-100\/60 {
+      background-color: var(--mos-info-bg);
+    }
+    .text-blue-500, .text-blue-600, .text-blue-700, .text-blue-800, .text-blue-900,
+    .text-sky-600, .text-sky-700, .text-sky-800, .text-sky-900,
+    .text-cyan-600, .text-cyan-700, .text-cyan-800,
+    .text-indigo-600, .text-indigo-700, .text-indigo-800, .text-indigo-900 {
+      color: var(--mos-info-ink);
+    }
+    .border-blue-100, .border-blue-200, .border-blue-300,
+    .border-sky-100, .border-sky-200, .border-cyan-200, .border-indigo-200 {
+      border-color: var(--mos-info-line);
+    }
+    .bg-green-50, .bg-green-100, .bg-green-200, .bg-emerald-50, .bg-emerald-100,
+    .bg-teal-50, .bg-teal-100, .bg-green-50\/50 {
+      background-color: var(--mos-success-bg);
+    }
+    .text-green-500, .text-green-600, .text-green-700, .text-green-800, .text-green-900,
+    .text-emerald-600, .text-emerald-700, .text-emerald-800, .text-emerald-900,
+    .text-teal-600, .text-teal-700, .text-teal-800 {
+      color: var(--mos-success-ink);
+    }
+    .border-green-100, .border-green-200, .border-green-300,
+    .border-emerald-100, .border-emerald-200, .border-teal-200 {
+      border-color: var(--mos-success-line);
+    }
+    .bg-amber-50, .bg-amber-100, .bg-amber-200, .bg-yellow-50, .bg-yellow-100,
+    .bg-yellow-200, .bg-orange-50, .bg-orange-100, .bg-orange-200,
+    .bg-amber-50\/40, .bg-amber-50\/50 {
+      background-color: var(--mos-warning-bg);
+    }
+    .text-amber-500, .text-amber-600, .text-amber-700, .text-amber-800, .text-amber-900,
+    .text-yellow-600, .text-yellow-700, .text-yellow-800, .text-yellow-900,
+    .text-orange-600, .text-orange-700, .text-orange-800, .text-orange-900 {
+      color: var(--mos-warning-ink);
+    }
+    .border-amber-100, .border-amber-200, .border-amber-300,
+    .border-yellow-100, .border-yellow-200, .border-yellow-300,
+    .border-orange-100, .border-orange-200, .border-orange-300 {
+      border-color: var(--mos-warning-line);
+    }
+    .bg-red-50, .bg-red-100, .bg-red-200, .bg-rose-50, .bg-rose-100, .bg-rose-200, .bg-red-50\/50 {
+      background-color: var(--mos-danger-bg);
+    }
+    .text-red-500, .text-red-600, .text-red-700, .text-red-800, .text-red-900,
+    .text-rose-600, .text-rose-700, .text-rose-800, .text-rose-900 {
+      color: var(--mos-danger-ink);
+    }
+    .border-red-100, .border-red-200, .border-red-300,
+    .border-rose-100, .border-rose-200, .border-rose-300 {
+      border-color: var(--mos-danger-line);
+    }
+    .bg-purple-50, .bg-purple-100, .bg-purple-200, .bg-violet-50, .bg-violet-100,
+    .bg-pink-50, .bg-pink-100 {
+      background-color: var(--mos-violet-bg);
+    }
+    .text-purple-600, .text-purple-700, .text-purple-800, .text-purple-900,
+    .text-violet-600, .text-violet-700, .text-violet-800, .text-pink-600, .text-pink-700, .text-pink-800 {
+      color: var(--mos-violet-ink);
+    }
+    .border-purple-100, .border-purple-200, .border-purple-300,
+    .border-violet-200, .border-pink-200 {
+      border-color: var(--mos-violet-line);
+    }
+    .from-white { --tw-gradient-from: var(--mos-surface); }
+    .via-white { --tw-gradient-via: var(--mos-surface); }
+    .to-white { --tw-gradient-to: var(--mos-surface); }
+    .from-gray-50, .from-gray-100, .from-slate-50 { --tw-gradient-from: var(--mos-surface-muted); }
+    .to-gray-50, .to-gray-100, .to-slate-50 { --tw-gradient-to: var(--mos-surface-muted); }
+    .from-blue-50, .from-blue-100, .from-cyan-50, .from-sky-50 { --tw-gradient-from: var(--mos-info-bg); }
+    .to-blue-50, .to-blue-100, .to-cyan-50, .to-sky-50 { --tw-gradient-to: var(--mos-info-bg); }
+    .from-purple-50, .from-purple-100, .from-indigo-50 { --tw-gradient-from: var(--mos-violet-bg); }
+    .to-purple-50, .to-purple-100, .to-indigo-50 { --tw-gradient-to: var(--mos-violet-bg); }
+    .from-amber-50, .from-orange-50 { --tw-gradient-from: var(--mos-warning-bg); }
+    .to-amber-50, .to-orange-50 { --tw-gradient-to: var(--mos-warning-bg); }
+    .ring-offset-2, .ring-offset-4 { --tw-ring-offset-color: var(--mos-canvas); }
+    .ring-white { --tw-ring-color: var(--mos-surface); }
+
+    @media (hover: hover) {
+      .hover\:bg-white:hover { background-color: var(--mos-surface-raised); }
+      .hover\:bg-gray-50:hover, .hover\:bg-gray-100:hover, .hover\:bg-slate-50:hover,
+      .hover\:bg-slate-100:hover, .hover\:bg-neutral-50:hover, .hover\:bg-neutral-100:hover {
+        background-color: var(--mos-surface-hover);
+      }
+      .hover\:bg-gray-200:hover, .hover\:bg-gray-300:hover, .hover\:bg-slate-200:hover {
+        background-color: var(--mos-surface-active);
+      }
+      .hover\:bg-blue-50:hover, .hover\:bg-blue-100:hover { background-color: var(--mos-info-bg); }
+      .hover\:bg-red-50:hover, .hover\:bg-red-100:hover { background-color: var(--mos-danger-bg); }
+      .hover\:bg-green-50:hover, .hover\:bg-green-100:hover { background-color: var(--mos-success-bg); }
+      .hover\:bg-amber-50:hover, .hover\:bg-yellow-50:hover { background-color: var(--mos-warning-bg); }
+      .hover\:text-gray-900:hover, .hover\:text-gray-800:hover, .hover\:text-gray-700:hover,
+      .hover\:text-slate-900:hover, .hover\:text-gray-600:hover { color: var(--mos-ink); }
+      .hover\:text-blue-600:hover, .hover\:text-blue-700:hover, .hover\:text-blue-800:hover { color: var(--mos-info-ink); }
+      .hover\:text-red-600:hover, .hover\:text-red-700:hover { color: var(--mos-danger-ink); }
+      .hover\:border-gray-300:hover, .hover\:border-gray-400:hover { border-color: var(--mos-line-strong); }
+    }
+    .focus\:bg-gray-50:focus, .focus\:bg-gray-100:focus { background-color: var(--mos-surface-hover); }
+    .disabled\:bg-gray-100:disabled, .disabled\:bg-gray-200:disabled { background-color: var(--mos-surface-raised); }
+    .disabled\:text-gray-400:disabled, .disabled\:text-gray-500:disabled { color: var(--mos-ink-subtle); }
+  }
+}
+
 /* Print styles for maintenance plan PDF export */
 @media print {
   /* Hide navigation and interactive elements */

@@ -58,7 +58,7 @@ export function BrandSettings({ branding, applyBranding, storageError }: BrandSe
   };
   return <section className="page" data-testid="branding-view">
     <div className="page-heading"><div><div className="eyebrow muted">Enterprise identity / local expression</div><h1>Your shop. Your workspace.</h1><p className="muted">Proposed presentation theme—not official Burnett branding. No official visual assets were supplied.</p></div><Paintbrush className="icon"/></div>
-    <div className="section-heading"><span className="save-status" data-testid="branding-status" aria-live="polite">{dirty ? 'Draft changes · not applied' : 'Applied configuration · no draft changes'}</span><span className="muted" style={{fontSize:12}}>Only branding is stored locally. No shop or technician data is persisted.</span></div>
+    <div className="section-heading"><span className="save-status" data-testid="branding-status" aria-live="polite">{dirty ? 'Draft changes · not applied' : 'Applied configuration · no draft changes'}</span><span className="muted" style={{fontSize:12}}>Branding and appearance are stored separately in this browser. No shop or technician data is persisted.</span></div>
     {storageError && <p className="form-error" role="alert" data-testid="branding-storage-error">{storageError}</p>}
     <div className="editor-grid">
       <form className="settings-panel" onSubmit={submit} data-testid="branding-form">

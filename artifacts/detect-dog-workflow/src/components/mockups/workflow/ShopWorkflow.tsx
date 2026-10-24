@@ -8,6 +8,7 @@ import { MyWork } from './MyWork';
 import { VehicleWorkflow } from './VehicleWorkflow';
 import { BrandSettings } from './BrandSettings';
 import { Experience } from './Experience';
+import { AppearanceSelector } from './AppearanceSelector';
 import { useBranding } from './_shared/useBranding';
 import { LOCATION_IDS, LOCATION_LABELS, brandingTheme, resolveBranding, type LocationId } from './_shared/branding';
 import './workflow.css';
@@ -74,7 +75,7 @@ export function ShopWorkflow() {
       <div className="sidebar-bottom"><div className="eyebrow">Presentation prototype</div><span>Branding saved in this browser.</span><span>Workflow resets on refresh.</span><span>Proposed theme, not official branding.</span></div>
     </aside>
     <main className="main"><header className="topbar"><div className="topbar-left"><span className="demo-label">INTERACTIVE DEMO</span><span className="muted" style={{fontSize:11}}>{burnett?'YTD staff & service evidence · simulated schedule':'All names & data are fictional'}</span></div>
-      <div className="role-controls"><label>Demo dataset <select aria-label="Demo dataset" data-testid="demo-dataset" value={state.demoMode} onChange={e=>{const mode=e.target.value as DemoMode;if(mode!==state.demoMode){setError('');setModal({type:'dataset',mode});}}}><option value="burnett">Burnett YTD presentation</option><option value="fictional">Original fictional demo</option></select></label>
+      <div className="role-controls"><AppearanceSelector/><label>Demo dataset <select aria-label="Demo dataset" data-testid="demo-dataset" value={state.demoMode} onChange={e=>{const mode=e.target.value as DemoMode;if(mode!==state.demoMode){setError('');setModal({type:'dataset',mode});}}}><option value="burnett">Burnett YTD presentation</option><option value="fictional">Original fictional demo</option></select></label>
         <label>Presentation location <select aria-label="Presentation location" value={branding.activeLocation} onChange={e=>applyBranding({...branding,activeLocation:e.target.value as LocationId})}>{LOCATION_IDS.map(id=><option key={id} value={id}>{LOCATION_LABELS[id]}</option>)}</select></label>
         <label>Demo role <select aria-label="Demo role" data-testid="demo-role" value={role} onChange={e=>{const next=e.target.value as typeof role;setRole(next);setSelected(null);setView(next==='technician'?'work':'dispatch');}}><option value="dispatcher">Dispatcher</option><option value="technician">Technician</option></select></label>
         <label>Demo technician <select aria-label="Demo technician" data-testid="demo-technician" value={techId} onChange={e=>{setTechId(e.target.value);setSelected(null);}}>{state.technicians.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select></label>

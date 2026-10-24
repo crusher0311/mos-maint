@@ -7,7 +7,7 @@ import ui from "./ReleasePanel.module.css";
 export function CustomerInspectionReport({ report, mediaUrls = {}, version }: {
   report: CustomerReport; mediaUrls?: Record<string, string>; version?: number;
 }) {
-  return <article className={ui.report} style={{ "--report-brand": /^#[a-f0-9]{6}$/i.test(report.branding.primary) ? report.branding.primary : "#285746" } as CSSProperties} aria-label="Customer findings report">
+  return <article data-theme-surface="light" className={ui.report} style={{ "--report-brand": /^#[a-f0-9]{6}$/i.test(report.branding.primary) ? report.branding.primary : "#285746" } as CSSProperties} aria-label="Customer findings report">
     <header>
       {report.branding.logo && /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(report.branding.logo) && <img src={report.branding.logo} alt={`${report.branding.name} logo`} />}
       <div className={ui.eyebrow}>{report.branding.name}</div>
