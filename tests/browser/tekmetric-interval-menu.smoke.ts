@@ -1,8 +1,9 @@
 /**
- * Task 1301: real Chromium, production Tekmetric button/menu extraction,
+ * Real Chromium, production provider button/menu extraction,
  * offline chrome/background/print stubs. No main app or live data.
  *
  * Run: npx tsx tests/browser/tekmetric-interval-menu.smoke.ts
+ * Also run with INTERVAL_PROVIDER=autoflow and INTERVAL_PROVIDER=shopware.
  * For manual screenshot: npx tsx tests/browser/tekmetric-interval-fixture-server.ts
  * then open http://127.0.0.1:5101/ and right-click the MOS print button.
  */
@@ -14,13 +15,15 @@ import { fixtureHtml } from "./tekmetric-interval-fixture";
 const chromium = process.env.CHROMIUM_PATH ||
   execFileSync("which", ["chromium"], { encoding: "utf8" }).trim();
 let browser: Awaited<ReturnType<typeof puppeteer.launch>>;
+const provider = process.env.INTERVAL_PROVIDER || "tekmetric";
 
 async function openPage(width = 960, height = 700) {
   const page = await browser.newPage();
   await page.setRequestInterception(true);
   page.on("request", request => request.abort()); // No external image, API or production requests.
+  page.on("pageerror", error => { throw error; });
   await page.setViewport({ width, height, deviceScaleFactor: 1 });
-  await page.setContent(fixtureHtml());
+  await page.setContent(fixtureHtml(provider));
   await page.waitForSelector("#mos-print-button");
   return page;
 }
@@ -118,7 +121,7 @@ try {
         assert.match(text, /3,000 km/);
         assert.doesNotMatch(text, /Diesel/);
         // Preset selection should close and pass the selected interval, units and vehicle to print.
-        await page.evaluate(() => (document.querySelector("#mos-interval-dropdown")!.children[0] as HTMLElement).click());
+        await page.click("#mos-interval-dropdown > :first-child");
         await waitClosed(page);
         await page.waitForFunction(() => (window as any).calls.some((call: any) => call.action === "PRINT_STUB"));
         const calls = await page.evaluate(() => (window as any).calls);
@@ -130,10 +133,10 @@ try {
 
   // A small CSS viewport emulates browser zoom; labels must wrap, vertical
   // overflow must scroll, and the menu must remain usable in both layouts.
-  for (const [width, height] of [[320, 290], [352, 312]] as const) {
+  for (const [width, height] of [[240, 220], [320, 290], [352, 312]] as const) {
     const page = await openPage(width, height);
     try {
-      await position(page, 65, 195, true);
+      await position(page, 65, height - 80, true);
       await page.evaluate(config => { (window as any).configResult = config; }, configured);
       await open(page);
       await rendered(page);
@@ -141,6 +144,25 @@ try {
       bounded(geometry);
       assert.ok(geometry.scrollHeight > geometry.clientHeight, "tall wrapped menu should scroll");
       assert.ok(geometry.menu.top < geometry.button.top, "menu should flip upward near bottom");
+      // Scroll with real browser input and click the final preset and Customize.
+      await page.hover("#mos-interval-dropdown");
+      await page.mouse.wheel({ deltaY: 4000 });
+      await page.waitForFunction(() => {
+        const el = document.querySelector("#mos-interval-dropdown")!;
+        return el.scrollTop > 0;
+      });
+      await page.click("#mos-interval-dropdown > :nth-last-child(2)");
+      await waitClosed(page);
+      assert.deepEqual(await page.evaluate(() => (window as any).calls.find((c: any) =>
+        c.overrideInterval)?.overrideInterval), { miles: 10000, months: 12 });
+      await open(page);
+      await rendered(page);
+      await page.hover("#mos-interval-dropdown");
+      await page.mouse.wheel({ deltaY: 4000 });
+      await page.waitForFunction(() => document.querySelector("#mos-interval-dropdown")!.scrollTop > 0);
+      await page.click("#mos-interval-dropdown > :last-child");
+      await waitClosed(page);
+      assert.equal(await page.evaluate(() => (window as any).calls.filter((c: any) => c.action === "CUSTOMIZE").length), 1);
     } finally { await page.close(); }
   }
 
@@ -159,14 +181,14 @@ try {
     });
     await page.setViewport({ width: 650, height: 460, deviceScaleFactor: 1 });
     bounded(await rects(page));
-    await page.evaluate(() => (window as any).resolveConfig(null)); // delayed/missing config falls back
+     await page.evaluate(() => (window as any).resolveConfig({ config: {} })); // valid settings without intervals use defaults
     await rendered(page);
     assert.match(await page.$eval("#mos-interval-dropdown", el => el.textContent || ""), /Conventional: 3,000 mi/);
     await page.evaluate(() => window.scrollTo(0, 160));
     await waitClosed(page); // external page scrolling dismisses
     await page.evaluate(() => window.scrollTo(0, 0));
     await open(page);
-    await page.evaluate(() => (window as any).resolveConfig(null));
+    await page.evaluate(() => (window as any).resolveConfig({ config: {} }));
     await rendered(page);
     await page.evaluate(() => {
       document.querySelector("#mos-interval-dropdown")!.dispatchEvent(new Event("scroll", { bubbles: false }));
@@ -186,8 +208,10 @@ try {
     }
     await page.evaluate(config => (window as any).resolveConfig(config), configured);
     assert.equal(await page.$("#mos-interval-dropdown"), null);
+    assert.equal(await page.evaluate(() => (window as any).calls.some((c: any) =>
+      c.action === "TOAST" && c.level === "error")), false, "dismissal must not show a settings error");
     await open(page);
-    await page.evaluate(() => (window as any).resolveConfig(null));
+    await page.evaluate(() => (window as any).resolveConfig({ config: {} }));
     await rendered(page);
     await page.evaluate(() => [...document.querySelector("#mos-interval-dropdown")!.children]
       .find(el => el.textContent === "Customize...")!.dispatchEvent(new MouseEvent("click", { bubbles: true })));
@@ -195,7 +219,7 @@ try {
     assert.equal(await page.evaluate(() => (window as any).calls.filter((call: any) => call.action === "CUSTOMIZE").length), 1);
 
     await open(page);
-    await page.evaluate(() => (window as any).resolveConfig(null));
+    await page.evaluate(() => (window as any).resolveConfig({ config: {} }));
     await rendered(page);
     await page.evaluate(() => document.querySelector("#header")!.remove());
     await waitClosed(page); // removed anchor cannot leave an orphaned menu
@@ -203,7 +227,7 @@ try {
     // A nested Tekmetric scroller also dismisses; Escape and offscreen
     // anchors leave no click/scroll listeners behind.
     await page.goto("about:blank");
-    await page.setContent(fixtureHtml());
+    await page.setContent(fixtureHtml(provider));
     await open(page);
     await rendered(page);
     await page.evaluate(() => {
@@ -214,6 +238,17 @@ try {
     await open(page);
     await page.keyboard.press("Escape");
     await waitClosed(page);
+    // Settings errors must close Tekmetric cleanly; other adapters retain
+    // their existing default-interval fallback.
+    await page.evaluate(() => { (window as any).configResult = { error: "Offline config failure" }; });
+    await open(page);
+    if (provider === "tekmetric") await waitClosed(page);
+    else {
+      await rendered(page);
+      await page.keyboard.press("Escape");
+      await waitClosed(page);
+    }
+    await page.evaluate(() => { (window as any).configResult = { config: {} }; });
     await open(page);
     await page.evaluate(() => { (document.querySelector("#header") as HTMLElement).style.left = "-500px"; });
     await waitClosed(page);
@@ -228,7 +263,7 @@ try {
     assert.equal(print.overrideInterval, undefined);
     assert.equal(print.context.roId, "fixture-ro");
   } finally { await printPage.close(); }
-  console.log("✓ Task 1301 Tekmetric interval menu Chromium regressions passed");
+  console.log(`✓ ${provider} interval menu Chromium regressions passed`);
 } finally {
   await browser.close();
 }

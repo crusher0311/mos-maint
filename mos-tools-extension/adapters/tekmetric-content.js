@@ -1017,7 +1017,8 @@ async function showIntervalDropdown(event, buttonElement) {
       closeDropdown();
       return;
     }
-    const geometry = [rect.left, rect.top, rect.right, rect.bottom, left, top, width, height].join(',');
+    const geometry = [rect.left, rect.top, rect.right, rect.bottom, left, top, width, height,
+      dropdown.scrollWidth, dropdown.scrollHeight].join(',');
     if (!force && geometry === lastGeometry) return;
     lastGeometry = geometry;
     const margin = 8;
@@ -1109,9 +1110,10 @@ async function showIntervalDropdown(event, buttonElement) {
       }
     }
   } catch (err) {
+    if (closed) return;
     console.error('[MOS] Failed to fetch sticker config:', err);
     if (context.provider === 'tekmetric') {
-      dropdown.remove();
+      closeDropdown();
       showToast(err.message || 'Tekmetric sticker settings are unavailable. Please try again.', 'error');
       return;
     }
