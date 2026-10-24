@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
-import { customStickerQr, normalizeCustomQr, StickerQrError, MAX_QR_BYTES } from "@/lib/sticker-qr-image";
+import { findStickerQrShop, readCustomStickerQr, saveCustomStickerQr, deleteCustomStickerQr } from "@/lib/data/repositories/sticker-qr";
+import { normalizeCustomQr, StickerQrError, MAX_QR_BYTES } from "@/lib/sticker-qr-image";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,16 +36,14 @@ async function handle(req: NextRequest, method: "GET" | "POST" | "DELETE") {
       }
       dataUri = await normalizeCustomQr(Buffer.from(body.base64Data, "base64"));
     }
-    const db = await getDb();
-    if (!await db.collection("shops").findOne({ shopId }, { projection: { _id: 1 } })) return NextResponse.json({ error: "Shop not found" }, { status: 404 });
+    if (!await findStickerQrShop(shopId)) return NextResponse.json({ error: "Shop not found" }, { status: 404 });
     if (method === "GET") {
-      return new NextResponse(Buffer.from((await customStickerQr(db, shopId)).split(",")[1], "base64"), {
+      return new NextResponse(Buffer.from((await readCustomStickerQr(shopId)).split(",")[1], "base64"), {
         headers: { "Content-Type": "image/png", "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" },
       });
     }
-    const key = { _id: `sticker-custom-qr:${shopId}` as any, shopId, type: "sticker_custom_qr" };
-    if (method === "DELETE") await db.collection("shop_media").deleteOne(key);
-    else await db.collection("shop_media").updateOne(key, { $set: { dataUri, updatedAt: new Date() } }, { upsert: true });
+    if (method === "DELETE") await deleteCustomStickerQr(shopId);
+    else if (dataUri) await saveCustomStickerQr(shopId, dataUri);
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ error: error instanceof StickerQrError ? error.message : "Unable to process QR image." },

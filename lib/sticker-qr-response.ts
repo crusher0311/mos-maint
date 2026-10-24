@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
-import { customStickerQr, styleStickerQr, StickerQrError } from "./sticker-qr-image";
+import { findStickerQrShop, readCustomStickerQr } from "@/lib/data/repositories/sticker-qr";
+import { styleStickerQr, StickerQrError } from "./sticker-qr-image";
 import { validQrPreferences } from "./sticker-qr-appearance";
 
 /** Resolve source BEFORE invoking any legacy generated/provider path. */
@@ -12,8 +12,7 @@ export async function stickerQrResponse(req: NextRequest, generated: () => Promi
   if (!Number.isSafeInteger(shopId) || shopId <= 0) return NextResponse.json({ error: "No shop associated" }, { status: 400 });
   if (managerOnly && !["owner", "admin", "manager"].includes(session.role)) return NextResponse.json({ error: "Manager or higher required" }, { status: 403 });
   try {
-    const db = await getDb();
-    const shop = await db.collection("shops").findOne({ shopId }, { projection: { stickerConfig: 1 } });
+    const shop = await findStickerQrShop(shopId);
     if (!shop) return NextResponse.json({ error: "Shop not found" }, { status: 404 });
     const config = shop.stickerConfig || {};
     const p = req.nextUrl.searchParams;
@@ -21,7 +20,7 @@ export async function stickerQrResponse(req: NextRequest, generated: () => Promi
     if (!validQrPreferences(prefs)) return NextResponse.json({ error: "Invalid QR preferences" }, { status: 400 });
     let dataUri: string;
     let payload: any;
-    if (prefs.qrSource === "custom") dataUri = await customStickerQr(db, shopId);
+    if (prefs.qrSource === "custom") dataUri = await readCustomStickerQr(shopId);
     else {
       const response = await generated();
       if (!response.ok) return response;
