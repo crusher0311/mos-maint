@@ -11,6 +11,7 @@ import { stickerOutreach } from "../lib/sticker-outreach";
 import { resolveFeatureEntitlementsSnapshot, buildFeatures } from "../lib/featureResolver";
 import * as queue from "../lib/print-queue/repository";
 import { stickerSupplyDeps } from "../lib/sticker-supply-deps";
+import { getShopStickerSupply, updateShopStickerSupply } from "../lib/data/repositories/sticker-supply";
 import { stickerGenerateDeps } from "../lib/sticker-generate-deps";
 import { NextRequest } from "next/server";
 import { GET as supplyGET, POST as supplyPOST } from "../app/api/sticker/supply/route";
@@ -194,7 +195,8 @@ test("supply routes enforce roles, entitlement, and session-owned shop rather th
   const originals = { ...stickerSupplyDeps };
   let session: any = null;
   stickerSupplyDeps.getSession = async () => session;
-  stickerSupplyDeps.getDb = async () => db;
+  stickerSupplyDeps.getShopStickerSupply = async shopId => getShopStickerSupply(shopId, db);
+  stickerSupplyDeps.updateShopStickerSupply = async (shopId, input) => updateShopStickerSupply(shopId, input, db);
   stickerSupplyDeps.checkShopFeatureGate = async () => null;
   const request = (body: any) => new NextRequest("http://fixture/api/sticker/supply", { method: "POST", body: JSON.stringify(body) });
   const input = { operation: "configure", enabled: true, capacity: 200, revision: null, shopId: 999 };
@@ -204,6 +206,10 @@ test("supply routes enforce roles, entitlement, and session-owned shop rather th
     assert.equal((await supplyPOST(request(input))).status, 403);
     session.role = "owner";
     assert.equal((await supplyPOST(request(input))).status, 200);
+    const loaded = await supplyGET();
+    assert.equal(loaded.status, 200);
+    assert.equal(loaded.headers.get("Cache-Control"), "no-store");
+    assert.equal((await loaded.json()).supply.capacity, 200);
     assert.equal((await readStickerSupply(db, 1))?.capacity, 200);
     assert.equal(await readStickerSupply(db, 999), null);
     assert.equal((await supplyPOST(request(input))).status, 409);

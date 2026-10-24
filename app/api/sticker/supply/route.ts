@@ -1,8 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
-import { checkShopFeatureGate } from "@/lib/extension-route-guard";
-import { changeStickerSupply, readStickerSupply } from "@/lib/sticker-activity";
 
 export const dynamic = "force-dynamic";
 import { stickerSupplyDeps } from "@/lib/sticker-supply-deps";
@@ -13,7 +9,7 @@ export async function GET() {
   if (gate) return gate;
   try {
     return NextResponse.json({
-      supply: await readStickerSupply(await stickerSupplyDeps.getDb(), Number(session.shopId)),
+      supply: await stickerSupplyDeps.getShopStickerSupply(Number(session.shopId)),
       canManage: session.isPlatformAdmin || ["owner", "admin"].includes(session.role),
     }, { headers: { "Cache-Control": "no-store" } });
   } catch {
@@ -31,7 +27,7 @@ export async function POST(req: NextRequest) {
   let body;
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
   try {
-    if (!await changeStickerSupply(await stickerSupplyDeps.getDb(), Number(session.shopId), body)) {
+    if (!await stickerSupplyDeps.updateShopStickerSupply(Number(session.shopId), body)) {
       return NextResponse.json({ error: "Roll settings changed. Refresh before trying again." }, { status: 409 });
     }
     return NextResponse.json({ success: true });
