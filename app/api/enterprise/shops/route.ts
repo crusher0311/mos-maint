@@ -172,6 +172,7 @@ export async function POST(req: NextRequest) {
       }
       if (sourceShop?.enabledFeatures && typeof sourceShop.enabledFeatures === "object") {
         shopDoc.enabledFeatures = { ...sourceShop.enabledFeatures };
+        delete shopDoc.enabledFeatures.appfueled_vhi_qr;
       }
     }
 
@@ -183,7 +184,7 @@ export async function POST(req: NextRequest) {
       const inheritedFeatures: Record<string, unknown> = shopDoc.enabledFeatures || {};
       const allowedKeys = isFounderPlan(sourcePlan)
         ? new Set<string>()
-        : new Set<string>(FEATURE_KEYS.filter((k) => inheritedFeatures[k] !== true));
+        : new Set<string>(FEATURE_KEYS.filter((k) => k !== "appfueled_vhi_qr" && inheritedFeatures[k] !== true));
       const requested = additionalFeatures.map((k: unknown) => String(k));
       const disallowed = requested.filter((k) => !allowedKeys.has(k));
       if (disallowed.length > 0) {

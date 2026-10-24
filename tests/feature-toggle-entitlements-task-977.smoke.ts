@@ -275,9 +275,13 @@ async function main() {
     const e = await eff(5);
     ok(
       "founder shop: every feature key still on despite false overrides",
-      FEATURE_KEYS.every((k: FeatureKey) => e[k] === (k !== "shop_workflow")),
+      FEATURE_KEYS.every((k: FeatureKey) => e[k] === (k !== "shop_workflow" && k !== "appfueled_vhi_qr")),
       JSON.stringify(e),
     );
+    shops.set(5, { ...shops.get(5)!, enabledFeatures: { appfueled_vhi_qr: true } });
+    ok("explicit AppFueled QR grant is honored for founders", (await eff(5)).appfueled_vhi_qr === true);
+    shops.set(5, { ...shops.get(5)!, enabledFeatures: { appfueled_vhi_qr: false } });
+    ok("AppFueled QR access is reversible", (await eff(5)).appfueled_vhi_qr === false);
   }
 }
 

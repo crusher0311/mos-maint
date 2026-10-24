@@ -1,6 +1,6 @@
 import { generateShareToken } from "./report-share";
 
-export type StickerScanDestination = "appointment" | "website" | "vhi";
+export type StickerScanDestination = "appointment" | "website" | "vhi" | "appfueled";
 export const STICKER_REPORT_TTL_MS = 60 * 60 * 1000;
 export const VEHICLE_REFERENCE_PATTERN = /^[A-Za-z0-9_-]{24}$/;
 export const STICKER_VIN_PATTERN = /^[A-HJ-NPR-Z0-9]{17}$/;
@@ -23,10 +23,17 @@ export async function resolveStickerScan(
   deps: {
     resolveVehicle: (reference: string, shopId: number) => Promise<string | null>;
     canViewVhi: () => Promise<boolean>;
+    appfueledUrl?: (vin: string) => Promise<string | null>;
     now?: () => number;
   },
 ): Promise<{ kind: "vhi" | "appointment" | "website" | "none"; url: string | null }> {
   const destination = shop.stickerConfig?.scanDestination || "appointment";
+  if (destination === "appfueled") {
+    if (!reference || !VEHICLE_REFERENCE_PATTERN.test(reference)) return { kind: "none", url: null };
+    const vin = await deps.resolveVehicle(reference, shopId);
+    const url = vin && STICKER_VIN_PATTERN.test(vin) ? await deps.appfueledUrl?.(vin) : null;
+    return url ? { kind: "vhi", url } : { kind: "none", url: null };
+  }
   if (destination === "vhi" && reference && VEHICLE_REFERENCE_PATTERN.test(reference)) {
     const vin = await deps.resolveVehicle(reference, shopId);
     if (vin && STICKER_VIN_PATTERN.test(vin) && await deps.canViewVhi()) {

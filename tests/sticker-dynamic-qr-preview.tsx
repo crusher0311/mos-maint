@@ -13,7 +13,7 @@ const html = renderToStaticMarkup(
     select,input{box-sizing:border-box;width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;background:white;font:inherit}
     p{color:#6b7280;line-height:1.6}
   `}</style></head><body><main><h1>Sticker settings</h1>
-    <StickerScanDestinationSetting value="vhi" onChange={() => {}} />
+    <StickerScanDestinationSetting value="appfueled" appfueledVhiQrAvailable onChange={() => {}} />
     <label htmlFor="booking">Appointment URL</label><input id="booking" defaultValue="https://booking.example.test" />
     <p>Offline preview of the actual settings control.</p>
   </main></body></html>,

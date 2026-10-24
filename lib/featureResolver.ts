@@ -95,6 +95,7 @@ export interface FeatureEntitlements {
 }
 
 export const FEATURE_METADATA: Record<FeatureKey, { name: string; description: string }> = {
+  appfueled_vhi_qr: { name: "AppFueled VHI QR", description: "Allow this shop to opt into AppFueled vehicle report QR destinations. Disabling retains all URL data." },
   shop_workflow: { name: "Shop Workflow (pilot)", description: "Location-only opt-in for dispatch, technician work and customer transportation. Not included automatically in any plan." },
   maintenance:        { name: "Maintenance Tracking",       description: "Track vehicle maintenance schedules, DVI insights, and recommendations" },
   job_lookup:         { name: "Job Lookup",                  description: "Search historical jobs with smart autocomplete across your shop and enterprise" },
@@ -323,6 +324,7 @@ export async function getFeatureEntitlements(
   // Operator-controlled location pilot: never inherit enterprise, tier or
   // founder wildcard grants. Only this shop's explicit boolean opt-in counts.
   effectiveFeatures.shop_workflow = shopFeatures.shop_workflow === true;
+  effectiveFeatures.appfueled_vhi_qr = shopFeatures.appfueled_vhi_qr === true;
   const configuredFeatures = { ...effectiveFeatures };
   // Configured flags are preferences, not purchased grants. Explicit invoice,
   // enterprise and demo contracts retain their deliberate commercial overrides.
@@ -337,12 +339,12 @@ export async function getFeatureEntitlements(
   for (const sub of (metadata?.subscriptions ?? []) as any[]) {
     if (sub.status === "active" && typeof sub.stripeSubscriptionId === "string" &&
         sub.stripeSubscriptionId && FEATURE_KEYS.includes(sub.featureId) &&
-        sub.featureId !== "shop_workflow") paidAddons.add(sub.featureId);
+        sub.featureId !== "shop_workflow" && sub.featureId !== "appfueled_vhi_qr") paidAddons.add(sub.featureId);
   }
   for (const key of FEATURE_KEYS) {
     effectiveFeatures[key] = (paidAddons.has(key) && shopFeatures[key] !== false) ||
       (eligibility.allowed && configuredFeatures[key] &&
-      (eligibility.isTrial || commercialOverride || key === "shop_workflow" ||
+      (eligibility.isTrial || commercialOverride || key === "shop_workflow" || key === "appfueled_vhi_qr" ||
         (plan !== "trial" && planFeatures[key])));
   }
 

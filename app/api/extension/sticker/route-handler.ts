@@ -9,6 +9,7 @@ import { renderStickerStandard, renderStickerDesigner } from "@/lib/canvas-rende
 import QRCode from "qrcode";
 import { Storage } from "@google-cloud/storage";
 import { createStickerQrTarget } from "@/lib/sticker-qr-target";
+import { AppFueledQrUnavailable } from "@/lib/appfueled-qr-destination";
 import { getExtensionStickerQr } from "@/lib/extension-sticker-qr";
 import { triggerAutoBookingFromSticker, StickerBookingData } from "@/lib/auto-booking/scheduler";
 import { estimateMileageFromCarfax } from "@/lib/integrations/carfax";
@@ -221,6 +222,7 @@ interface FontStyle {
 }
 
 interface StickerConfig extends StickerQrPreferences {
+  scanDestination?: string;
   logo?: string;
   logoObjectPath?: string;
   phone?: string;
@@ -864,7 +866,7 @@ async function _POST(request: NextRequest) {
 
     let qrDataUrl: string | null = null;
     const customQr = stickerConfig.qrSource === "custom";
-    const redirectUrl = excludeQR || customQr ? "" : await createStickerQrTarget(db, mosShopId!, vin);
+    const redirectUrl = excludeQR || customQr ? "" : await createStickerQrTarget(db, mosShopId!, vin, stickerConfig.scanDestination);
     const qrColor = stickerConfig.colors?.primary || "#111111";
 
     if (!excludeQR && customQr) {
@@ -1031,6 +1033,7 @@ async function _POST(request: NextRequest) {
     }, { headers: corsHeaders });
   } catch (error: any) {
     console.error("[Extension Sticker] Generate error:", error);
+    if (error instanceof AppFueledQrUnavailable) return NextResponse.json({ error: error.message }, { status: error.status, headers: corsHeaders });
     return NextResponse.json(
       { error: "Failed to generate sticker" },
       { status: 500, headers: corsHeaders }

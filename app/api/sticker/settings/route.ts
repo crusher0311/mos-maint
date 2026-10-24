@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { validStickerLayout } from "@/lib/sticker-designer-types";
+import { getFeatureEntitlements } from "@/lib/featureResolver";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { validQrPreferences, type StickerQrPreferences } from "@/lib/sticker-qr-appearance";
@@ -114,7 +115,7 @@ interface StickerConfig extends StickerQrPreferences {
   };
   defaultSize?: "1.5x2.25" | "2x2" | "2x2.5" | "2x3" | "2x3.5";
   appointmentUrl?: string;
-  scanDestination?: "appointment" | "website" | "vhi";
+  scanDestination?: "appointment" | "website" | "vhi" | "appfueled";
   useKilometers?: boolean;
   intervals?: Partial<IntervalsConfig>;
   defaultOilType?: "diesel" | "euro" | "synthetic" | "conventional";
@@ -164,6 +165,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       config,
+      appfueledVhiQrAvailable: (await getFeatureEntitlements(shopId)).canUseFeature("appfueled_vhi_qr"),
       customQrAvailable: !!await db.collection("shop_media").findOne({ _id: `sticker-custom-qr:${shopId}` as any, shopId, type: "sticker_custom_qr" }, { projection: { _id: 1 } }),
       shopName: shop.name,
     });
@@ -197,7 +199,7 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: "Invalid sticker layout: check text, colors, borders and element limits" }, { status: 400 });
     }
     if (!validQrPreferences(body)) return NextResponse.json({ error: "Invalid QR source or background mode" }, { status: 400 });
-    if (body.scanDestination !== undefined && !["appointment", "website", "vhi"].includes(body.scanDestination)) {
+    if (body.scanDestination !== undefined && !["appointment", "website", "vhi", "appfueled"].includes(body.scanDestination)) {
       return NextResponse.json({ error: "Invalid scan destination" }, { status: 400 });
     }
 

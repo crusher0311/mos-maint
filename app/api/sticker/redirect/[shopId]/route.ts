@@ -3,6 +3,7 @@ import { getDb } from "@/lib/mongo";
 import { resolveStickerScan } from "@/lib/sticker-redirect";
 import type { StickerVehicleReference } from "@/lib/sticker-qr-target";
 import { getFeatureEntitlements } from "@/lib/featureResolver";
+import { requireAppFueledQrDestination } from "@/lib/appfueled-qr-destination";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,6 +34,12 @@ export async function GET(
         return vehicle?.vin || null;
       },
       canViewVhi: async () => (await getFeatureEntitlements(numericShopId)).canUseFeature("maintenance"),
+      appfueledUrl: async (vin) => {
+        try {
+          return await requireAppFueledQrDestination(db, numericShopId, vin,
+            async () => (await getFeatureEntitlements(numericShopId)).canUseFeature("appfueled_vhi_qr"));
+        } catch { return null; }
+      },
     });
     await db.collection("sticker_qr_scans").insertOne({
       shopId: numericShopId,
@@ -48,7 +55,7 @@ export async function GET(
 <html>
 <head><title>No Appointment URL</title></head>
 <body style="font-family: sans-serif; text-align: center; padding: 50px;">
-  <h1>Appointment booking not configured</h1>
+  <h1>QR destination unavailable</h1>
     <p>Please contact the shop directly.</p>
     ${shop.phone ? `<p>Phone: ${String(shop.phone).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)}</p>` : ""}
 </body>

@@ -151,7 +151,7 @@ export async function PUT(req: NextRequest) {
           if (sourceShop) {
             console.log(`[Enterprise] Source shop ${sourceShop.shopId} enabledFeatures: ${JSON.stringify(sourceShop.enabledFeatures)?.slice(0, 300)}`);
             if (Array.isArray(sourceShop.enabledFeatures) && sourceShop.enabledFeatures.length > 0) {
-              featuresToCopy = sourceShop.enabledFeatures;
+              featuresToCopy = sourceShop.enabledFeatures.filter((key: string) => key !== "appfueled_vhi_qr");
             }
             if (sourceShop.preferences && Object.keys(sourceShop.preferences).length > 0) {
               // Copy preferences but exclude job history shop IDs (those should be set per-shop)

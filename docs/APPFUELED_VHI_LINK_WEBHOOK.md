@@ -72,6 +72,43 @@ changing the connection ID starts a distinct dedup scope.
 No URL fetch, VHI generation, CARFAX request, QR redirect change or recovery job
 is triggered.
 
+## Optional sticker use of retained AppFueled URLs
+
+The native and legacy webhook contracts above are unchanged. There is no second
+webhook endpoint or separate URL store. Received data stays in `partner_vhi_links`.
+
+A platform admin grants **AppFueled VHI QR** (`appfueled_vhi_qr`) per shop,
+off by default including founder plans. Independently, the shop chooses
+**AppFueled vehicle VHI** in Sticker Settings → Scan destination. Appointment,
+website, existing MOS VHI, and custom uploaded QR choices remain available.
+Webhook receipt never changes that preference. Uploaded QR images retain their
+own encoded destination and are not overridden by the generated-QR setting.
+
+Generated QR codes continue using durable MOS vehicle references, preserving
+the dynamic sticker architecture and avoiding raw VINs or bearer URLs in print
+logs. For the AppFueled choice, both dashboard and extension printing validate
+the feature grant and URL first. Scans resolve the same shop/VIN to its retained
+AppFueled URL. Missing/invalid VINs or missing/conflicting URLs stop printing
+with `409`; absent access returns `403`. Scans show a friendly unavailable page,
+not a generic shop fallback. Lookups are bounded and never fetch external URLs.
+
+There must be exactly one distinct valid URL among the vehicle's receipts.
+Two different URLs are ambiguous, not evidence of which report is newest.
+All receipts are retained; the system does not guess using receipt timestamps.
+Repeated identical deliveries are safe. If conflicting URLs arrive, the shop
+can choose its usual link while the partner's intended destination is clarified.
+
+Disabling access or choosing another destination retains the saved preference,
+all receipts, and vehicle references. Re-enabling access allows reuse. Mapping
+changes and connection disable do not revoke or delete stored links. Credential
+disable still stops authentication as documented above. MOS sends no revocation
+requests and cannot disable directly shared external AppFueled URLs.
+
+The lookup is scoped to partner/shop/VIN and capped at 1500 ms. Before large-scale
+rollout, an operator may add a Mongo compound index on
+`{partnerId:1,shopId:1,vin:1,vhiUrl:1}`; no shared-store index is created by this
+change. Scan logs record the selected destination category, not the bearer URL.
+
 ## Operator setup order (separate authorized deployment work)
 
 1. On the intended environment's canonical PostgreSQL database, apply the

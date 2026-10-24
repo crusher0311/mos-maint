@@ -447,6 +447,13 @@ export async function PATCH(
 
     if (features) {
       if (isFounderPlan(effectivePlan)) {
+        if (typeof features.appfueled_vhi_qr === "boolean") {
+          await updateShopFeatures(shopId as number, { appfueled_vhi_qr: features.appfueled_vhi_qr });
+          await db.collection("audit_logs").insertOne({
+            type: "appfueled_vhi_qr_access_updated", shopId, adminEmail: session.email,
+            enabled: features.appfueled_vhi_qr, createdAt: new Date(),
+          });
+        }
         // The location pilot is an explicit opt-in even for founder shops.
         if (typeof features.shop_workflow === "boolean") {
           await updateShopFeatures(shopId as number, { shop_workflow: features.shop_workflow });

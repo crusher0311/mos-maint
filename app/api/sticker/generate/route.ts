@@ -4,6 +4,7 @@ import { getDb } from "@/lib/mongo";
 import { customStickerQr, styleStickerQr, StickerQrError } from "@/lib/sticker-qr-image";
 import { validQrPreferences, type StickerQrPreferences } from "@/lib/sticker-qr-appearance";
 import { createStickerQrTarget } from "@/lib/sticker-qr-target";
+import { AppFueledQrUnavailable } from "@/lib/appfueled-qr-destination";
 import { retainLegacyStickerHovercode } from "@/lib/sticker-legacy-hovercode";
 import { getStickerRedirectUrl } from "@/lib/sticker-utils";
 import { scaleLayoutToSize, getStickerSize, validStickerLayout } from "@/lib/sticker-designer-types";
@@ -236,6 +237,7 @@ interface FontStyle {
 }
 
 interface StickerConfig extends StickerQrPreferences {
+  scanDestination?: string;
   logo?: string;
   logoObjectPath?: string;
   phone?: string;
@@ -426,7 +428,7 @@ export async function POST(req: NextRequest) {
       catch (error) { return NextResponse.json({ error: error instanceof StickerQrError ? error.message : "Custom QR unavailable" }, { status: 409 }); }
     }
     if (includeQR && config.qrSource !== "custom") {
-      const redirectUrl = await createStickerQrTarget(db, shopId, body.vin);
+      const redirectUrl = await createStickerQrTarget(db, shopId, body.vin, dbConfig.scanDestination);
       const genericQr = redirectUrl === getStickerRedirectUrl(shopId);
       const qrColor = config.colors?.primary || "#111111";
       const qrBgColor = "#ffffff";
@@ -670,6 +672,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error("[Sticker Generate] Error:", error);
+    if (error instanceof AppFueledQrUnavailable) return NextResponse.json({ error: error.message }, { status: error.status });
     return NextResponse.json(
       { error: "Failed to generate sticker image" },
       { status: 500 }

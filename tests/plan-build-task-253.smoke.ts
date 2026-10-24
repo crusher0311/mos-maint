@@ -66,12 +66,14 @@ try {
   );
   ok(
     "baseline keys enabled except explicitly opt-in shop workflow",
-    FEATURE_KEYS.every((k) => all[k] === (k !== "shop_workflow")),
+    FEATURE_KEYS.every((k) => all[k] === (k !== "shop_workflow" && k !== "appfueled_vhi_qr")),
   );
 
   section("getFeatureEntitlements — founder shop");
   // Swap in a fake Mongo for the resolver's __deps.getDb seam.
   const originalGetDb = __deps.getDb;
+  const originalGetPgDb = __deps.getPgDb;
+  __deps.getPgDb = (() => ({ select: () => ({ from: async () => [] }) })) as unknown as typeof __deps.getPgDb;
   const founderShop = {
     shopId: 4242,
     name: "Founder Shop",
@@ -108,7 +110,7 @@ try {
     ok("plan resolved as founder", ent.billing.plan === FOUNDER_PLAN);
     ok(
       "founder keys enabled except explicitly opt-in shop workflow",
-      FEATURE_KEYS.every((k) => eff[k] === (k !== "shop_workflow")),
+      FEATURE_KEYS.every((k) => eff[k] === (k !== "shop_workflow" && k !== "appfueled_vhi_qr")),
       `eff = ${JSON.stringify(eff)}`,
     );
     ok(
@@ -160,6 +162,7 @@ try {
     );
   } finally {
     __deps.getDb = originalGetDb;
+    __deps.getPgDb = originalGetPgDb;
   }
 } finally {
   // Restore FEATURE_KEYS so other tests/imports that reuse this module

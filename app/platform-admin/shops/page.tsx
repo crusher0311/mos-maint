@@ -67,6 +67,7 @@ interface ShopFeatures {
   enhance_notes?: boolean;
   sales_coach?: boolean;
   shop_workflow?: boolean;
+  appfueled_vhi_qr?: boolean;
 }
 
 interface IntegrationDetails {
@@ -305,6 +306,7 @@ export default function PlatformShopsPage() {
     features: {
       maintenance: true, job_lookup: false, common_failures: false, oil_sticker: false,
       keytags: false, auto_booking: false, part_xref: false, labor_rates: false,
+      appfueled_vhi_qr: false,
     } as ShopFeatures,
   });
   const [createLoading, setCreateLoading] = useState(false);
@@ -332,7 +334,7 @@ export default function PlatformShopsPage() {
           shopName: "", ownerEmail: "", ownerPassword: "", ownerName: "",
           plan: "trial", status: "trial",
           trialDays: String(defaultTrialDays || 14),
-          features: { maintenance: true, job_lookup: false, common_failures: false, oil_sticker: false, keytags: false, auto_booking: false, part_xref: false, labor_rates: false },
+          features: { maintenance: true, job_lookup: false, common_failures: false, oil_sticker: false, keytags: false, auto_booking: false, part_xref: false, labor_rates: false, appfueled_vhi_qr: false },
         });
         loadShops();
       } else {
@@ -1202,10 +1204,10 @@ export default function PlatformShopsPage() {
                         // tier (e.g. Enterprise -> Starter) clears leftover
                         // features instead of leaving them all checked. The
                         // founder plan is a wildcard whose per-feature
-                        // overrides are intentionally never written (see the
-                        // updateShopSettings call below), so skip it.
+                        // overrides are intentionally never written except
+                        // explicit shop grants (see the save call below).
                         if (newPlan !== "detect_dog_founder") {
-                          setFeatureEdits(previous => ({ ...featuresForPlan(newPlan), shop_workflow: previous.shop_workflow === true }) as ShopFeatures);
+                          setFeatureEdits(previous => ({ ...featuresForPlan(newPlan), shop_workflow: previous.shop_workflow === true, appfueled_vhi_qr: previous.appfueled_vhi_qr === true }) as ShopFeatures);
                         }
                       }}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#3c81c3] text-sm"
@@ -1325,7 +1327,7 @@ export default function PlatformShopsPage() {
                 <h4 className="text-sm font-medium text-gray-900 mb-3">Feature Toggles</h4>
                 {billingEdits.plan === "detect_dog_founder" ? (
                   <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 mb-3">
-                    Detect Dog – Founder includes every current and future feature. Toggles are locked on.
+                    Detect Dog – Founder includes every current and future feature except the shop-specific Shop Workflow pilot and AppFueled VHI QR grants. Other toggles are locked on.
                   </p>
                 ) : (
                   <p className="text-xs text-gray-500 mb-3">Override plan defaults. Leave unchecked to use plan defaults.</p>
@@ -1346,8 +1348,9 @@ export default function PlatformShopsPage() {
                     { key: "estimate_assist", label: "Estimate Assist", desc: "AI-powered estimate audits and smart job building" },
                     { key: "sales_coach", label: "Sales Coach", desc: "Review open estimates and generate customer-ready sales scripts" },
                     { key: "shop_workflow", label: "Shop Workflow (pilot)", desc: "Enable only this location. Hidden for all other shops; not inherited from plans or enterprise." },
+                    { key: "appfueled_vhi_qr", label: "AppFueled VHI QR", desc: "Explicit grant for this shop only; default OFF, including Founder shops. Separate from MOS VHI. The shop must also opt in under sticker QR scan destination. Missing or conflicting vehicle URLs cannot print; removing access retains saved settings and vehicle URL data." },
                   ].map(feature => {
-                    const isFounder = billingEdits.plan === "detect_dog_founder" && feature.key !== "shop_workflow";
+                    const isFounder = billingEdits.plan === "detect_dog_founder" && feature.key !== "shop_workflow" && feature.key !== "appfueled_vhi_qr";
                     const checked = isFounder
                       ? true
                       : featureEdits[feature.key as keyof ShopFeatures] === true;
@@ -1396,8 +1399,8 @@ export default function PlatformShopsPage() {
                   billingEdits as any,
                   // Founder plan = wildcard. Don't write per-feature
                   // overrides so changing the plan later doesn't leave
-                  // stale toggles behind.
-                  billingEdits.plan === "detect_dog_founder" ? { shop_workflow: featureEdits.shop_workflow === true } : featureEdits
+                  // stale toggles behind. Preserve explicit shop grants.
+                  billingEdits.plan === "detect_dog_founder" ? { shop_workflow: featureEdits.shop_workflow === true, appfueled_vhi_qr: featureEdits.appfueled_vhi_qr === true } : featureEdits
                 )}
                 disabled={actionLoading !== null}
                 className="px-4 py-2 bg-[rgba(60,129,195,0.75)] text-white rounded-lg hover:bg-[#3c81c3] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
@@ -1480,7 +1483,7 @@ export default function PlatformShopsPage() {
                       const newData = {
                         ...createShopData,
                         plan,
-                        features: featuresForPlan(plan) as ShopFeatures,
+                        features: { ...featuresForPlan(plan), appfueled_vhi_qr: createShopData.features.appfueled_vhi_qr === true } as ShopFeatures,
                       };
                       if (plan === "enterprise" || plan === "demo") {
                         newData.status = plan === "demo" ? "demo" : "active";
@@ -1546,6 +1549,7 @@ export default function PlatformShopsPage() {
                     { key: "enhance_notes", label: "Enhance Notes (AI)" },
                     { key: "estimate_assist", label: "Estimate Assist" },
                     { key: "sales_coach", label: "Sales Coach" },
+                    { key: "appfueled_vhi_qr", label: "AppFueled VHI QR (explicit shop grant; default OFF, including Founder)" },
                   ].map(feature => (
                     <label key={feature.key} className="flex items-center gap-2 p-2 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
                       <input

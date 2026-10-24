@@ -2,6 +2,8 @@ import { randomBytes } from "crypto";
 import type { Db } from "mongodb";
 import { getStickerRedirectUrl } from "./sticker-utils";
 import { STICKER_VIN_PATTERN } from "./sticker-redirect";
+import { requireAppFueledQrDestination } from "./appfueled-qr-destination";
+import { getFeatureEntitlements } from "./featureResolver";
 
 export interface StickerVehicleReference {
   _id: string;
@@ -14,7 +16,11 @@ export interface StickerVehicleReference {
  * References are durable bearer capabilities. They deliberately have no TTL:
  * the printed reference outlives the one-hour report token minted on each scan.
  */
-export async function createStickerQrTarget(db: Db, shopId: number, rawVin?: unknown): Promise<string> {
+export async function createStickerQrTarget(db: Db, shopId: number, rawVin?: unknown, scanDestination?: string): Promise<string> {
+  if (scanDestination === "appfueled") {
+    await requireAppFueledQrDestination(db, shopId, typeof rawVin === "string" ? rawVin.trim().toUpperCase() : "",
+      async () => (await getFeatureEntitlements(shopId)).canUseFeature("appfueled_vhi_qr"));
+  }
   if (rawVin === undefined || rawVin === null || rawVin === "") return getStickerRedirectUrl(shopId);
   const vin = typeof rawVin === "string" ? rawVin.trim().toUpperCase() : "";
   // Incomplete/nonstandard records must still print; only usable VINs receive

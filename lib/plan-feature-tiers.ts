@@ -25,6 +25,7 @@ export const FEATURE_KEYS = [
   "auto_dvi",
   "sales_coach",
   "shop_workflow",
+  "appfueled_vhi_qr",
 ] as const;
 
 // Task #991: `auto_dvi` ships dark — OFF everywhere (every tier, every plan
@@ -32,7 +33,7 @@ export const FEATURE_KEYS = [
 // founder wildcard (buildAllFeaturesEnabled) still turns it on for founder
 // shops, which is the intended dev/test path. Keep any newly-dark features
 // in this list so the `[...FEATURE_KEYS]` tier fallbacks don't leak them on.
-export const DARK_LAUNCH_KEYS: readonly string[] = ["auto_dvi", "sales_coach", "shop_workflow"];
+export const DARK_LAUNCH_KEYS: readonly string[] = ["auto_dvi", "sales_coach", "shop_workflow", "appfueled_vhi_qr"];
 const LAUNCHED_KEYS = FEATURE_KEYS.filter((k) => !DARK_LAUNCH_KEYS.includes(k));
 
 export type FeatureKey = typeof FEATURE_KEYS[number];
@@ -65,7 +66,7 @@ export function isFounderPlan(plan: string | null | undefined): boolean {
  */
 export function buildAllFeaturesEnabled(): FeatureSettings {
   const out = {} as FeatureSettings;
-  for (const k of FEATURE_KEYS) out[k] = k !== "shop_workflow";
+  for (const k of FEATURE_KEYS) out[k] = k !== "shop_workflow" && k !== "appfueled_vhi_qr";
   return out;
 }
 

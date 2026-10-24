@@ -36,7 +36,7 @@ interface StickerDataConfig extends StickerQrPreferences {
   usePredictiveDate: boolean;
   defaultSize: string;
   appointmentUrl: string;
-  scanDestination: "appointment" | "website" | "vhi";
+  scanDestination: "appointment" | "website" | "vhi" | "appfueled";
   useKilometers: boolean;
   intervals: IntervalsConfig;
   defaultOilType: keyof IntervalsConfig;
@@ -91,6 +91,7 @@ export default function StickerSettingsPage() {
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [customQrAvailable, setCustomQrAvailable] = useState(false);
+  const [appfueledVhiQrAvailable, setAppfueledVhiQrAvailable] = useState(false);
   const [designerRevision, setDesignerRevision] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
@@ -209,6 +210,7 @@ export default function StickerSettingsPage() {
       if (res.ok) {
         const data = await res.json();
         setCustomQrAvailable(data.customQrAvailable === true);
+        setAppfueledVhiQrAvailable(data.appfueledVhiQrAvailable === true);
         if (data.config) {
           const fetchedConfig = {
             ...normalizeStickerQrPreferences(data.config),
@@ -659,7 +661,7 @@ export default function StickerSettingsPage() {
               </div>
 
               {config.qrSource === "generated" && <div>
-                <StickerScanDestinationSetting value={config.scanDestination} onChange={(scanDestination) => setConfig({ ...config, scanDestination })} />
+                <StickerScanDestinationSetting value={config.scanDestination} appfueledVhiQrAvailable={appfueledVhiQrAvailable} onChange={(scanDestination) => setConfig({ ...config, scanDestination })} />
                 <label className="block text-sm font-medium text-gray-700 mb-1">Appointment URL</label>
                 <input
                   type="url"
@@ -682,6 +684,7 @@ export default function StickerSettingsPage() {
           customQrAvailable={customQrAvailable}
           qr={qr}
         />
+        {config.qrSource === "custom" && <p className="text-sm text-gray-500">Uploaded QR images use their own destination. Dynamic appointment, MOS VHI, and AppFueled VHI destination settings are ignored; your saved destination is retained for generated QR codes.</p>}
 
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <h2 className="font-semibold text-gray-900 mb-4">Sticker Designer</h2>
