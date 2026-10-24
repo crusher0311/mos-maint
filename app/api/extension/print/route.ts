@@ -22,6 +22,7 @@
  */
 
 import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
+import { validPrintAction } from "@/lib/sticker-activity";
 import { NextRequest, NextResponse } from "next/server";
 import { findShopByExactShopId } from "@/lib/data/repositories/shops";
 import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
@@ -105,6 +106,9 @@ async function _POST(req: NextRequest) {
   if (!guard.ok) return guard.response;
 
   const shopId = guard.mosShopId;
+  if (body.printActionId !== undefined && !validPrintAction(body.printActionId)) {
+    return NextResponse.json({ error: "Invalid print action" }, { status: 400, headers: corsHeaders });
+  }
   // Resolve the image payload: pre-rendered image preferred, else render a
   // keytag server-side from the shop's keytag config.
   let imageBase64: string;
@@ -157,6 +161,7 @@ async function _POST(req: NextRequest) {
       : null;
 
   const jobId = await enqueuePrintJob({
+    printActionId: body.printActionId,
     shopId,
     imageBase64,
     printerId,

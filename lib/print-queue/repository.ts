@@ -12,6 +12,7 @@
 import type { Collection, Document } from "mongodb";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongo";
+import { printEventId, recordStickerActivity, validPrintAction } from "@/lib/sticker-activity";
 import {
   MAX_PRINT_IMAGE_BASE64_CHARS,
   PrintPayloadTooLargeError,
@@ -48,6 +49,7 @@ async function configCol(): Promise<Collection<Document>> {
 }
 
 export interface EnqueueInput {
+  printActionId?: string;
   shopId: number;
   imageBase64: string;
   printerId?: string | null;
@@ -84,6 +86,19 @@ export async function enqueuePrintJob(input: EnqueueInput): Promise<string> {
     failedAt: null,
   };
   const col = await jobsCol();
+  if (input.printActionId !== undefined) {
+    if (!validPrintAction(input.printActionId)) throw new Error("Invalid print action");
+    const _id = new ObjectId(printEventId(input.shopId, `queue_${input.printActionId}`).slice(0, 24));
+    // _id uniqueness makes retries enqueue the same job, not a second label.
+    try {
+      await col.updateOne({ _id, shopId: input.shopId }, {
+        $setOnInsert: { ...doc, meta: { ...doc.meta, stickerActionId: input.kind === "sticker" ? input.printActionId : null } },
+      }, { upsert: true });
+    } catch (error: any) {
+      if (error?.code !== 11000 || !await col.findOne({ _id, shopId: input.shopId })) throw error;
+    }
+    return String(_id);
+  }
   const res = await col.insertOne(doc as Document);
   return String(res.insertedId);
 }
@@ -203,8 +218,15 @@ export async function ackJob(
   else set.failedAt = now;
 
   const col = await jobsCol();
-  const res = await col.updateOne({ _id: oid, shopId }, { $set: set });
-  return res.matchedCount > 0 ? "acked" : "not_found";
+  await col.updateOne({ _id: oid, shopId, status: { $nin: ["done", "failed"] } }, { $set: set });
+  const job = await col.findOne({ _id: oid, shopId });
+  if (!job) return "not_found";
+  // Repeated acknowledgments also repair a previously interrupted accounting
+  // write, but can never turn a terminal failure into successful consumption.
+  if (job.status === "done" && job.kind === "sticker" && validPrintAction(job.meta?.stickerActionId)) {
+    await recordStickerActivity(await __deps.getDb(), shopId, job.meta.stickerActionId, "printer-ack", { source: "queue" });
+  }
+  return "acked";
 }
 
 /** Fetch a single job for a shop (admin/observability use). */

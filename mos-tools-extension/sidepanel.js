@@ -5348,7 +5348,41 @@ function updatePrintDisabledMessage() {
   elements.stickerDisabled.classList.toggle('hidden', !allPrintingDefinitivelyOff);
 }
 
+function updateStickerSupply(supply) {
+  const section = elements.stickerSection;
+  if (!section) return;
+  let notice = section.querySelector('[data-sticker-supply]');
+  if (!notice) {
+    notice = document.createElement('p');
+    notice.dataset.stickerSupply = 'true';
+    notice.style.cssText = 'padding:8px;border-radius:6px;font-size:12px;line-height:1.4';
+    section.appendChild(notice);
+  }
+  notice.hidden = !supply?.enabled;
+  notice.style.background = supply?.low ? '#fef3c7' : '#f3f4f6';
+  notice.style.color = supply?.low ? '#92400e' : '#374151';
+  notice.textContent = supply?.enabled
+    ? `${supply.low ? 'Estimated label supply is low. ' : ''}${supply.used} of ${supply.capacity} labels estimated used. Browser/PDF printing cannot confirm physical consumption. One shared shop roll; confirm “New roll loaded” in MOS sticker settings to reset.`
+    : '';
+}
+
+async function refreshStickerSupply() {
+  if (document.hidden || !currentContext?.shopId || elements.stickerSection?.classList.contains('hidden')) return;
+  const snapshot = { ...currentContext };
+  const key = stickerContextKey(snapshot);
+  const query = new URLSearchParams({ shopId: String(snapshot.shopId), provider: snapshot.provider || '' });
+  if (snapshot.swShopId != null) query.set('swShopId', String(snapshot.swShopId));
+  if (snapshot.roId != null) query.set('swRoId', String(snapshot.roId));
+  try {
+    const result = await sendMessage({ action: 'MOS_API_REQUEST', endpoint: `/api/extension/sticker?${query}`, context: snapshot });
+    if (key === stickerContextKey(currentContext) && !result.error) updateStickerSupply(result.supply);
+  } catch { /* Optional supply reads never block printing. */ }
+}
+setInterval(refreshStickerSupply, 30000);
+window.addEventListener('focus', refreshStickerSupply);
+
 async function loadStickerConfig() {
+  updateStickerSupply(null);
   const snapshot = currentContext ? { ...currentContext } : null;
   const key = stickerContextKey(snapshot);
   const sequence = ++stickerConfigRequest;
@@ -5391,6 +5425,7 @@ async function loadStickerConfig() {
     }
     
     stickerConfig = result.config;
+    updateStickerSupply(result.supply);
     stickerConfigContextKey = key;
     if (elements.stickerPrintBtn) elements.stickerPrintBtn.disabled = result.enabled !== true;
     stickerEnabled = result.enabled === true;
@@ -5746,6 +5781,7 @@ function printKeytagViaWindow(keytag) {
   printWindow.document.close();
 }
 
+let pendingStickerPrint = null;
 async function handleStickerPrint() {
   if (currentContext?.provider === 'tekmetric' &&
       (!stickerConfig || stickerConfigContextKey !== stickerContextKey(currentContext))) {
@@ -5771,6 +5807,8 @@ async function handleStickerPrint() {
     const unit = elements.stickerUnit.value;
     
     const body = {
+      printActionId: crypto.randomUUID(),
+      printIntent: 'print',
       currentMileage,
       intervalType,
       unit
@@ -5817,7 +5855,10 @@ async function handleStickerPrint() {
       body.customMonths = parseInt(elements.customMonths.value, 10) || 6;
       body.customMileage = parseInt(elements.customMileage.value.replace(/,/g, ''), 10) || 5000;
     }
-    
+    const actionKey = JSON.stringify({ ...body, printActionId: undefined });
+    if (pendingStickerPrint?.key === actionKey) body.printActionId = pendingStickerPrint.id;
+    else pendingStickerPrint = { key: actionKey, id: body.printActionId };
+
     const result = await sendMessage({
       action: 'MOS_API_REQUEST',
       endpoint: '/api/extension/sticker',
@@ -5835,8 +5876,10 @@ async function handleStickerPrint() {
     if (!result.success || !result.sticker) {
       throw new Error('Failed to generate sticker');
     }
+    pendingStickerPrint = null;
     
     // Print the sticker using an iframe
+    updateStickerSupply(result.supply);
     printStickerImage(result.sticker);
     
     showNotification('Sticker generated!', 'success');

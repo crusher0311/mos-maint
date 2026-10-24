@@ -298,6 +298,22 @@ export async function getFeatureEntitlements(
   }
 
   const plan: BillingPlan = (shop.billing?.plan as BillingPlan) || "trial";
+  const planFeatures = await getPlanFeaturesFromDatabase(plan);
+  const metadata = isIdentityPgCanonical()
+    ? await __deps.findShopFeaturesByShopId(shopId)
+    : await (await __deps.getDb()).collection("shop_features").findOne({ shopId });
+  return resolveFeatureEntitlementsSnapshot(shop, enterpriseFeatures, planFeatures,
+    metadata ? { subscriptions: metadata.subscriptions } : null);
+}
+
+/** Same authority rules for bounded fleet reads, without per-shop DB queries. */
+export function resolveFeatureEntitlementsSnapshot(
+  shop: MongoShapedShop,
+  enterpriseFeatures: Partial<FeatureSettings>,
+  planFeatures: FeatureSettings,
+  metadata: { subscriptions?: unknown } | null,
+): FeatureEntitlements {
+  const plan: BillingPlan = (shop.billing?.plan as BillingPlan) || "trial";
   const eligibility = evaluateBillingEligibility(shop);
   const status: BillingStatus = eligibility.status;
 
@@ -310,7 +326,6 @@ export async function getFeatureEntitlements(
   // FEATURE_KEYS at call time so newly added entries take effect on the
   // very next request without touching this file or PLAN_FALLBACK_KEYS.
   let effectiveFeatures: FeatureSettings;
-  const planFeatures = await getPlanFeaturesFromDatabase(plan);
   if (isFounderPlan(plan)) {
     effectiveFeatures = buildAllFeaturesEnabled();
   } else {
@@ -332,9 +347,6 @@ export async function getFeatureEntitlements(
     status === "enterprise" || status === "demo" || plan === "demo" || isFounderPlan(plan);
   // Standalone paid subscriptions are distinct from setup flags. Trials in this
   // metadata store never qualify as paid add-ons.
-  const metadata = isIdentityPgCanonical()
-    ? await __deps.findShopFeaturesByShopId(shopId)
-    : await (await __deps.getDb()).collection("shop_features").findOne({ shopId });
   const paidAddons = new Set<FeatureKey>();
   for (const sub of (metadata?.subscriptions ?? []) as any[]) {
     if (sub.status === "active" && typeof sub.stripeSubscriptionId === "string" &&

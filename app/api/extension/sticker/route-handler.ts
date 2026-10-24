@@ -1,4 +1,5 @@
 import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
+import { recordStickerActivity, readStickerSupply, validatePrintIntent } from "@/lib/sticker-activity";
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { customStickerQr, styleStickerQr, StickerQrError } from "@/lib/sticker-qr-image";
@@ -609,6 +610,7 @@ async function _GET(request: NextRequest) {
 
     return NextResponse.json({
       enabled: hasOilStickerFeature,
+      supply: hasOilStickerFeature ? await readStickerSupply(db, mosShopId!).catch(() => null) : null,
       config: {
         defaultSize: stickerConfig.defaultSize || "2x2.5",
         useKilometers: resolvedUseKilometers,
@@ -656,6 +658,7 @@ async function _POST(request: NextRequest) {
 
     _lap("auth");
     const body = await request.json();
+    if (!validatePrintIntent(body)) return NextResponse.json({ error: "Invalid print action" }, { status: 400, headers: corsHeaders });
     const {
       currentMileage,
       intervalType = "synthetic",
@@ -955,10 +958,9 @@ async function _POST(request: NextRequest) {
     _lap("render");
 
     const runStickerSideEffects = shouldRunStickerSideEffects(authResult.principal);
-    if (runStickerSideEffects) {
-      await db.collection("sticker_generations").insertOne({
-        shopId: mosShopId,
-        generatedAt: new Date(),
+    if (runStickerSideEffects && body.printIntent !== "sample" && body.printIntent !== "queue") {
+      await recordStickerActivity(db, mosShopId!, body.printActionId,
+        body.printIntent === "print" ? "handoff" : "legacy-generation", {
         generatedBy: authResult.user.email,
         source: "extension",
         size,
@@ -1010,6 +1012,7 @@ async function _POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      supply: await readStickerSupply(db, mosShopId!).catch(() => null),
       sticker: {
         dataUrl,
         size,

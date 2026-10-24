@@ -136,7 +136,7 @@ const stickerRoute = readFileSync(
 );
 assert.match(
   stickerRoute,
-  /if \(runStickerSideEffects\) \{[\s\S]*sticker_generations/,
+  /if \(runStickerSideEffects && body.printIntent !== "sample" && body.printIntent !== "queue"\) \{[\s\S]*recordStickerActivity/,
   "sticker generation telemetry must remain behind the side-effect decision",
 );
 assert.match(

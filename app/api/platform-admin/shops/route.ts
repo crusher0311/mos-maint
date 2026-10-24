@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { stickerOutreach } from "@/lib/sticker-outreach";
+import { stickerOutreachEntitlements } from "@/lib/sticker-outreach-entitlements";
 import { listAllShops } from "@/lib/data/repositories/shops";
 import { dualWritePgIdentity, isIdentityPgCanonical } from "@/lib/db/wave4-write-mode";
 import { insertShop, insertUser, platformShopUserSummary, platformShopEnterprises } from "@/lib/data/repositories/pg/identity";
@@ -62,6 +64,7 @@ export async function GET(req: NextRequest) {
     
     const defaultTrialDays = billingSettings?.trialDays ?? DEFAULT_TRIAL_DAYS;
     const shopIds = shops.map(s => s.shopId);
+    const stickerEntitlements = await stickerOutreachEntitlements(db, shops, enterprises).catch(() => null);
     
     const allShopIdVariants = shopIdVariants(shopIds);
     
@@ -83,6 +86,7 @@ export async function GET(req: NextRequest) {
     // because those collections historically store shopId as a mix of
     // string/number — narrowing that needs a per-collection audit before
     // it's safe.
+    let stickerActivityAvailable = true;
     const [userCounts, vehicleCounts, vinViewCounts, backfillProgress, tekmetricBackfillProgress, stickerCounts, stickerCountsThisMonth, cardCaptureEmailLogs, ownerEmailRows] = await Promise.all([
       read("users", () => isIdentityPgCanonical() ? platformShopUserSummary(shopIds.map(Number).filter(Number.isFinite)) : db.collection("users").aggregate([
         { $match: { shopId: { $in: allShopIdVariants } } },
@@ -105,8 +109,12 @@ export async function GET(req: NextRequest) {
       read("tekmetric", () => db.collection("tekmetric_backfill_progress").find({ shopId: { $in: allShopIdVariants } }, { maxTimeMS: 5000 }).toArray(), false),
       read("stickers", () => db.collection("sticker_generations").aggregate([
         { $match: { shopId: { $in: allShopIdVariants } } },
-        { $group: { _id: "$shopId", count: { $sum: 1 } } }
-      ], { maxTimeMS: 5000 }).toArray()),
+        { $group: { _id: { $toString: "$shopId" }, count: { $sum: 1 },
+          lastAt: { $max: "$generatedAt" },
+          lastHandoff: { $max: { $cond: [{ $eq: ["$evidence", "handoff"] }, "$generatedAt", null] } },
+          lastAck: { $max: { $cond: [{ $eq: ["$evidence", "printer-ack"] }, "$generatedAt", null] } },
+        } }
+      ], { maxTimeMS: 3000 }).toArray(), false),
       read("monthly-stickers", () => db.collection("sticker_generations").aggregate([
         { $match: { shopId: { $in: allShopIdVariants }, generatedAt: { $gte: monthStart } } },
         { $group: { _id: "$shopId", count: { $sum: 1 } } }
@@ -149,6 +157,7 @@ export async function GET(req: NextRequest) {
       ], { maxTimeMS: 5000 }).toArray(), false),
     ]);
     
+    stickerActivityAvailable = !coreOnly && !historyOnly && !unavailable.includes("stickers");
     const userCountMap = new Map<string, number>();
     for (const u of userCounts) userCountMap.set(String(u._id), (userCountMap.get(String(u._id)) || 0) + u.count);
     const vinViewCountMap = new Map(vinViewCounts.map(v => [String(v._id), v.count]));
@@ -182,6 +191,7 @@ export async function GET(req: NextRequest) {
     
     
     const stickerCountMap = new Map<string, number>();
+    const stickerActivityMap = new Map(stickerCounts.map(s => [String(s._id), s]));
     for (const s of stickerCounts) {
       const key = String(s._id);
       stickerCountMap.set(key, (stickerCountMap.get(key) || 0) + s.count);
@@ -392,6 +402,14 @@ export async function GET(req: NextRequest) {
         },
         stickerCount: coreOnly || unavailable.includes("stickers") ? null : stickerCountMap.get(String(shop.shopId)) || 0,
         stickerCountThisMonth: coreOnly || unavailable.includes("monthly-stickers") ? null : stickerCountThisMonthMap.get(String(shop.shopId)) || 0,
+        stickerActivity: stickerOutreach(shop, (() => {
+          const row = stickerActivityMap.get(String(shop.shopId));
+          if (!row) return null;
+          const ms = (v: any) => v ? new Date(v).getTime() : -1;
+          return { ...row, evidence: ms(row.lastAt) === ms(row.lastAck) ? "printer-ack" :
+            ms(row.lastAt) === ms(row.lastHandoff) ? "handoff" : "legacy-generation" };
+        })(), stickerActivityAvailable && stickerEntitlements !== null, Date.now(),
+          stickerEntitlements?.get(String(shop.shopId)) === true),
         lastCardCaptureEmail,
         cardCaptureEmailHistory: cardCaptureHistory,
         stickerConfig: shop.stickerConfig || {},

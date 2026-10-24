@@ -9,6 +9,8 @@ import {
   type IntervalsConfig,
 } from "@/lib/sticker-defaults";
 import { buildStickerPrintHtml } from "@/lib/print-sticker";
+import { StickerSupply } from "@/components/stickers/StickerSupply";
+import { stickerPrintAction, completeStickerPrintAction } from "@/lib/sticker-print-action";
 
 type UnitType = "mi" | "km" | "hrs";
 
@@ -142,8 +144,10 @@ export default function QuickStickerModal({ isOpen, onClose, vin }: QuickSticker
 
     setError(null);
     setGenerating(true);
+    const actionKey = JSON.stringify(["quick", vin, currentMileage, intervalType, customMonths, customMileage, stickerSize, unit]);
+    const printActionId = stickerPrintAction(actionKey);
 
-    const useMobilePdfPath = isMobileBrowser();
+    let useMobilePdfPath = isMobileBrowser();
 
     // CRITICAL: open the destination tab synchronously *off the user's tap*,
     // before any await. iOS Safari blocks `window.open` once a microtask
@@ -162,6 +166,9 @@ export default function QuickStickerModal({ isOpen, onClose, vin }: QuickSticker
     // is safe.
     const printWindowFeatures = useMobilePdfPath ? "" : "width=600,height=800";
     const placeholderWindow: Window | null = window.open("", "_blank", printWindowFeatures);
+    // A blocked popup is known before rendering: request PDF directly rather
+    // than performing a second side-effectful PNG + PDF generation.
+    if (!placeholderWindow) useMobilePdfPath = true;
     if (placeholderWindow) {
       try {
         placeholderWindow.document.open();
@@ -186,6 +193,8 @@ export default function QuickStickerModal({ isOpen, onClose, vin }: QuickSticker
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          printActionId,
+          printIntent: "print",
           size: stickerSize,
           vin,
           currentMileage: parseInt(currentMileage.replace(/,/g, ""), 10),
@@ -217,6 +226,7 @@ export default function QuickStickerModal({ isOpen, onClose, vin }: QuickSticker
         // 60s is plenty even on a slow connection; revoking sooner can break
         // the navigation in iOS Safari.
         setTimeout(() => URL.revokeObjectURL(pdfUrl), 60_000);
+        completeStickerPrintAction(actionKey);
         onClose();
         return;
       }
@@ -237,6 +247,8 @@ export default function QuickStickerModal({ isOpen, onClose, vin }: QuickSticker
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
+              printActionId,
+              printIntent: "print",
               size: stickerSize,
               vin,
               currentMileage: parseInt(currentMileage.replace(/,/g, ""), 10),
@@ -252,6 +264,7 @@ export default function QuickStickerModal({ isOpen, onClose, vin }: QuickSticker
             .then((pdfBlob) => {
               const pdfUrl = URL.createObjectURL(pdfBlob);
               window.location.href = pdfUrl;
+              completeStickerPrintAction(actionKey);
               setTimeout(() => URL.revokeObjectURL(pdfUrl), 60_000);
             })
             .catch(() => {
@@ -265,6 +278,7 @@ export default function QuickStickerModal({ isOpen, onClose, vin }: QuickSticker
           buildStickerPrintHtml(dataUrl, stickerSize, { autoPrint: true }),
         );
         printWindow.document.close();
+        completeStickerPrintAction(actionKey);
       };
       reader.readAsDataURL(blob);
 
@@ -293,12 +307,16 @@ export default function QuickStickerModal({ isOpen, onClose, vin }: QuickSticker
     }
     setError(null);
     setZinkStatus("queuing");
+    const actionKey = JSON.stringify(["queue", vin, currentMileage, intervalType, customMonths, customMileage, stickerSize, unit]);
+    const printActionId = stickerPrintAction(actionKey);
     try {
       const { nextServiceMileage, nextServiceDate } = calculateServiceValues();
       const res = await fetch("/api/sticker/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          printActionId,
+          printIntent: "queue",
           size: stickerSize,
           vin,
           currentMileage: parseInt(currentMileage.replace(/,/g, ""), 10),
@@ -322,13 +340,14 @@ export default function QuickStickerModal({ isOpen, onClose, vin }: QuickSticker
       const enqueueRes = await fetch("/api/print/enqueue", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageBase64: dataUrl, type: "sticker" }),
+        body: JSON.stringify({ imageBase64: dataUrl, type: "sticker", printActionId }),
       });
       if (!enqueueRes.ok) {
         const j = await enqueueRes.json().catch(() => ({}));
         throw new Error(j.error || "Failed to queue print");
       }
       setZinkStatus("queued");
+      completeStickerPrintAction(actionKey);
     } catch (err: any) {
       console.error("Failed to queue sticker to printer:", err);
       setZinkStatus("error");
@@ -373,6 +392,7 @@ export default function QuickStickerModal({ isOpen, onClose, vin }: QuickSticker
         </div>
 
         <div className="p-6 space-y-5">
+          <StickerSupply />
           {loading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="w-6 h-6 animate-spin text-blue-600" />

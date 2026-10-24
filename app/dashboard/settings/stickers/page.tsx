@@ -1,6 +1,7 @@
 "use client";
 import StickerScanDestinationSetting from "@/components/stickers/StickerScanDestinationSetting";
 import StickerQrAppearanceSetting from "@/components/stickers/StickerQrAppearanceSetting";
+import { StickerSupply } from "@/components/stickers/StickerSupply";
 import { DEFAULT_QR_PREFERENCES, normalizeStickerQrPreferences, useStickerQrAppearance } from "@/components/stickers/useStickerQrAppearance";
 import type { StickerQrPreferences } from "@/components/stickers/useStickerQrAppearance";
 
@@ -564,6 +565,7 @@ export default function StickerSettingsPage() {
       )}
 
       <div className="space-y-6">
+        <StickerSupply manage />
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <div 
             className="flex items-center justify-between cursor-pointer"

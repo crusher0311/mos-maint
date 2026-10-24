@@ -4333,6 +4333,7 @@ function invalidateStickerConfigCache(shopId, provider) {
   return _stickerConfigCacheImpl.invalidate(shopId, provider);
 }
 
+const pendingImmediateStickerActions = new Map();
 async function handleImmediateStickerPrint(context, tabId, overrideInterval = null) {
   await _stateReady;
   context = { ...context, _tabId: tabId ?? context?._tabId };
@@ -4414,6 +4415,10 @@ async function handleImmediateStickerPrint(context, tabId, overrideInterval = nu
     if (context.vehicle.model) requestBody.vehicleModel = context.vehicle.model;
   }
   
+  const actionKey = JSON.stringify(requestBody);
+  requestBody.printActionId = pendingImmediateStickerActions.get(actionKey) || crypto.randomUUID();
+  pendingImmediateStickerActions.set(actionKey, requestBody.printActionId);
+  requestBody.printIntent = 'print';
   // Call the sticker API. Task #871: hard 45s cap (same budget as
   // MOS_FETCH_TIMEOUT_MS) — a bare fetch here could hang for minutes on a
   // stalled connection, freezing the print with no feedback.
@@ -4426,6 +4431,7 @@ async function handleImmediateStickerPrint(context, tabId, overrideInterval = nu
       method: 'POST', body: JSON.stringify(requestBody),
     });
     if (!data.success || !data.sticker) throw new Error('Failed to generate sticker');
+    pendingImmediateStickerActions.delete(actionKey);
     return { success: true, sticker: data.sticker, oilType: overrideInterval ? 'custom' : requestBody.intervalType };
   }
   try {
@@ -4457,6 +4463,7 @@ async function handleImmediateStickerPrint(context, tabId, overrideInterval = nu
   if (!data.success || !data.sticker) {
     throw new Error("Failed to generate sticker");
   }
+  pendingImmediateStickerActions.delete(actionKey);
   
   return {
     success: true,

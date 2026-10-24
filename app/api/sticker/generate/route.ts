@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { recordStickerActivity, validatePrintIntent } from "@/lib/sticker-activity";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { customStickerQr, styleStickerQr, StickerQrError } from "@/lib/sticker-qr-image";
@@ -17,6 +18,7 @@ import { parseMileageInput, isAbsurdMileage, MAX_PLAUSIBLE_MILEAGE, logStickerMi
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+import { stickerGenerateDeps } from "@/lib/sticker-generate-deps";
 
 const REPLIT_SIDECAR_ENDPOINT = "http://127.0.0.1:1106";
 
@@ -42,7 +44,7 @@ async function fetchLogoAsBase64(logoUrl: string, logoObjectPath?: string, shopI
   try {
     // First, try MongoDB shop_media collection (works on Render)
     if (shopId) {
-      const db = await getDb();
+      const db = await stickerGenerateDeps.getDb();
       const numericShopId = Number(shopId);
       // Query with both string and number to handle legacy data
       const shopMedia = await db.collection("shop_media").findOne({ 
@@ -271,6 +273,8 @@ interface StickerConfig extends StickerQrPreferences {
 }
 
 interface StickerRequest {
+  printActionId?: string;
+  printIntent?: "print" | "queue" | "sample";
   vin?: string;
   vehicleYear?: number;
   vehicleMake?: string;
@@ -349,7 +353,7 @@ const SIZE_DIMENSIONS: Record<string, { width: number; height: number }> = {
 };
 
 export async function POST(req: NextRequest) {
-  const session = await getSession();
+  const session = await stickerGenerateDeps.getSession();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -361,6 +365,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body: StickerRequest = await req.json();
+    if (!validatePrintIntent(body)) return NextResponse.json({ error: "Invalid print action" }, { status: 400 });
     if (body.designerLayout !== undefined && !validStickerLayout(body.designerLayout)) {
       return NextResponse.json({ error: "Invalid sticker layout" }, { status: 400 });
     }
@@ -399,7 +404,7 @@ export async function POST(req: NextRequest) {
     const size = body.size || "2x2.5";
     const includeQR = body.includeQR !== false;
 
-    const db = await getDb();
+    const db = await stickerGenerateDeps.getDb();
     const shop = await db.collection("shops").findOne({ shopId });
 
     if (!shop) {
@@ -557,7 +562,7 @@ export async function POST(req: NextRequest) {
       const formattedMileage = mileageValue ? mileageValue.toLocaleString() : "";
 
       const startTime = Date.now();
-      imageBuffer = await renderStickerDesigner(
+      imageBuffer = await stickerGenerateDeps.renderStickerDesigner(
         {
           elements: designerLayout.elements,
           canvasWidth: designerLayout.canvasWidth,
@@ -581,7 +586,7 @@ export async function POST(req: NextRequest) {
       console.log(`[Sticker Generate] Canvas rendered in ${Date.now() - startTime}ms`);
     } else {
       const startTime = Date.now();
-      imageBuffer = await renderStickerStandard(
+      imageBuffer = await stickerGenerateDeps.renderStickerStandard(
         {
           logo: configWithBase64Logo.logo,
           phone: configWithBase64Logo.phone,
@@ -605,17 +610,14 @@ export async function POST(req: NextRequest) {
       console.log(`[Sticker Generate] Canvas rendered in ${Date.now() - startTime}ms`);
     }
 
-    // Log generation stats asynchronously (don't block response)
-    db.collection("sticker_generations").insertOne({
-      shopId,
-      generatedAt: new Date(),
-      generatedBy: session.email,
-      vin: body.vin || null,
-      vehicleYear: body.vehicleYear || null,
-      vehicleMake: body.vehicleMake || null,
-      vehicleModel: body.vehicleModel || null,
-      size,
-    }).catch(err => console.error("[Sticker Generate] Failed to log generation:", err));
+    // Do not count preview/sample/queue preparation. PDF conversion must also
+    // succeed before recording a handoff estimate.
+    const account = async () => {
+      if (body.previewConfig || body.printIntent === "sample" || body.printIntent === "queue") return;
+      await recordStickerActivity(db, shopId, body.printActionId,
+        body.printIntent === "print" ? "handoff" : "legacy-generation",
+        { generatedBy: session.email, vin: body.vin || null, size });
+    };
 
     // Trigger auto booking if customer data is provided and we have a service date
     if (body.nextServiceDate && (body.customerName || body.customerId)) {
@@ -646,7 +648,7 @@ export async function POST(req: NextRequest) {
     // AirPrint honors it.
     if (body.format === "pdf") {
       const inches = getStickerSizeInches(size);
-      const pdfBuffer = await pngBufferToSizedPdfBuffer(
+      const pdfBuffer = await stickerGenerateDeps.pngBufferToSizedPdfBuffer(
         imageBuffer,
         inches.width,
         inches.height,
@@ -654,6 +656,7 @@ export async function POST(req: NextRequest) {
         // not the design. The PDF page size stays == the true sticker size.
         STICKER_PDF_SAFE_MARGIN_IN,
       );
+      await account();
       return new NextResponse(new Uint8Array(pdfBuffer), {
         headers: {
           "Content-Type": "application/pdf",
@@ -664,6 +667,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    await account();
     return new NextResponse(new Uint8Array(imageBuffer), {
       headers: {
         "Content-Type": "image/png",

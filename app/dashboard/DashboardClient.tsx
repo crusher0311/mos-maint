@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
+import { StickerSupply } from "@/components/stickers/StickerSupply";
+import { stickerPrintAction, completeStickerPrintAction } from "@/lib/sticker-print-action";
 import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive, ArrowUp, ArrowDown, LogOut, ClipboardCheck, FileText, ThumbsUp, CheckCircle2, PauseCircle, X, Wrench, ClipboardList, AlertTriangle, Printer, Loader2, Key, HeartPulse, Plus, MessageSquareText, FileSearch } from "lucide-react";
 import JobLookup from "@/components/JobLookup";
 import EstimateAssistPanel from "@/components/EstimateAssistPanel";
@@ -504,10 +506,13 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
         console.log('Using default settings');
       }
       
+      const stickerActionKey = JSON.stringify(["dashboard", vin, currentMileage, nextServiceMileage, nextServiceDate, stickerSize]);
       const response = await fetch('/api/sticker/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          printActionId: stickerPrintAction(stickerActionKey),
+          printIntent: "print",
           vin,
           currentMileage,
           nextServiceMileage,
@@ -528,6 +533,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       }
       
       const blob = await response.blob();
+      completeStickerPrintAction(stickerActionKey);
 
       if (useMobilePdfPath) {
         navigateWindowToPdfBlob(mobilePrintWindow, blob);
@@ -780,10 +786,13 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       }
       
       // Generate the sticker image
+      const stickerActionKey = JSON.stringify(["dashboard", vin, currentMileage, nextServiceMileage, nextServiceDate, stickerSize]);
       const response = await fetch('/api/sticker/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          printActionId: stickerPrintAction(stickerActionKey),
+          printIntent: "print",
           vin,
           currentMileage,
           nextServiceMileage,
@@ -805,6 +814,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       
       // Get the image blob and convert to data URL
       const blob = await response.blob();
+      completeStickerPrintAction(stickerActionKey);
 
       if (useMobilePdfPath) {
         navigateWindowToPdfBlob(mobilePrintWindow, blob);
@@ -1150,6 +1160,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
+      <StickerSupply />
       <header className="bg-white border-b border-gray-200 px-4 sm:px-6 py-3 sm:py-4">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">

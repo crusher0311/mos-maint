@@ -145,6 +145,13 @@ interface Shop {
   backfill?: BackfillStatus | null;
   stickerCount?: number | null;
   stickerCountThisMonth?: number | null;
+  stickerActivity?: {
+    state: "recorded" | "never-recorded" | "unknown" | "unavailable";
+    lastAt: string | null;
+    evidence: "handoff" | "printer-ack" | "legacy-generation" | null;
+    inactive: boolean;
+    sortAt: string | null;
+  };
   trial?: ShopTrial | null;
   cardOnFile?: boolean;
   lastCardCaptureEmail?: CardCaptureEmailEntry | null;
@@ -208,6 +215,37 @@ function formatTimeAgo(input: string | null | undefined): string | null {
   return `${years}y ago`;
 }
 
+function StickerActivity({ shop }: { shop: Shop }) {
+  const activity = shop.stickerActivity;
+  const lastAt = activity?.lastAt ? new Date(activity.lastAt) : null;
+  const hasDate = lastAt !== null && Number.isFinite(lastAt.getTime());
+  const text = activity?.state === "recorded"
+    ? hasDate ? `Last recorded activity: ${formatTimeAgo(activity.lastAt)}` : "Last recorded activity: date unknown"
+    : activity?.state === "never-recorded" ? "Never recorded"
+    : activity?.state === "unknown" ? "Sticker activity unknown"
+    : "Sticker activity unavailable";
+  const evidence = activity?.evidence === "legacy-generation"
+    ? "Approximate legacy generation evidence; not a confirmed print."
+    : activity?.evidence === "printer-ack"
+      ? "Printer acknowledgement recorded; physical consumption is not verified."
+      : activity?.evidence === "handoff"
+        ? "Print handoff recorded; physical consumption is not verified."
+        : null;
+  return (
+    <div className="space-y-1 text-[11px] text-gray-500">
+      <div title={hasDate ? lastAt.toLocaleString() : undefined}>{text}</div>
+      {activity?.state === "recorded" && evidence && <div className="max-w-[260px]">{evidence}</div>}
+      {activity?.state === "never-recorded" && <div className="max-w-[260px]">No recorded evidence; not proof of physical inactivity.</div>}
+      {activity?.inactive === true && activity.state !== "unknown" && activity.state !== "unavailable" && (
+        <span className="inline-flex rounded bg-red-100 px-1.5 py-0.5 font-semibold text-red-700"
+          title="Outreach flag based on recorded sticker activity, not verified physical printing.">
+          NOT PRINTED IN 7 DAYS.
+        </span>
+      )}
+    </div>
+  );
+}
+
 function describeCardCaptureSource(entry: CardCaptureEmailEntry): string {
   if (entry.source === "admin") {
     return entry.adminEmail ? `admin (${entry.adminEmail})` : "admin";
@@ -263,13 +301,14 @@ export default function PlatformShopsPage() {
   const [trialResetDays, setTrialResetDays] = useState<string>("14");
   const [groupByEnterprise, setGroupByEnterprise] = useState(false);
   type TrialFilter = "all" | "trial_active" | "ending_7" | "ending_3" | "expired" | "no_card";
-  type SortBy = "createdAt" | "trialEndsAt";
+  type SortBy = "createdAt" | "trialEndsAt" | "oldestStickerActivity";
   const TRIAL_FILTERS: readonly TrialFilter[] = ["all", "trial_active", "ending_7", "ending_3", "expired", "no_card"];
-  const SORT_OPTIONS: readonly SortBy[] = ["createdAt", "trialEndsAt"];
+  const SORT_OPTIONS: readonly SortBy[] = ["createdAt", "trialEndsAt", "oldestStickerActivity"];
   const isTrialFilter = (v: string): v is TrialFilter => (TRIAL_FILTERS as readonly string[]).includes(v);
   const isSortBy = (v: string): v is SortBy => (SORT_OPTIONS as readonly string[]).includes(v);
   const [trialFilter, setTrialFilter] = useState<TrialFilter>("all");
   const [sortBy, setSortBy] = useState<SortBy>("createdAt");
+  const [stickerOutreachOnly, setStickerOutreachOnly] = useState(false);
   type ReviewFilter = "all" | "pending" | "flagged" | "approved" | "needs_review";
   const REVIEW_FILTERS: readonly ReviewFilter[] = ["all", "needs_review", "pending", "flagged", "approved"];
   const isReviewFilter = (v: string): v is ReviewFilter =>
@@ -838,6 +877,7 @@ export default function PlatformShopsPage() {
               if (!extra) return { ...shop, summaryState: "unavailable" };
               return { ...shop, userCount: extra.userCount, vehicleCount: extra.vehicleCount,
                 stickerCount: extra.stickerCount, stickerCountThisMonth: extra.stickerCountThisMonth,
+                stickerActivity: extra.stickerActivity,
                 backfill: extra.backfill, summaryState: extra.summaryState, unavailable: extra.unavailable,
                 billing: { ...shop.billing, vinViewCount: extra.billing.vinViewCount } };
             }));
@@ -871,6 +911,11 @@ export default function PlatformShopsPage() {
   const searchLower = search.toLowerCase();
   const now = Date.now();
   const filteredShops = shops
+    .filter(shop => !stickerOutreachOnly || (
+      shop.stickerActivity?.inactive === true &&
+      shop.stickerActivity.state !== "unknown" &&
+      shop.stickerActivity.state !== "unavailable"
+    ))
     .filter((shop) => {
       if (kpiFilter === "activeOrTrial") return isActiveOrTrial(shop);
       if (kpiFilter === "detectDogFounder") return isDetectDogFounderActive(shop);
@@ -901,6 +946,17 @@ export default function PlatformShopsPage() {
       return status === reviewFilter;
     })
     .sort((a, b) => {
+      if (sortBy === "oldestStickerActivity") {
+        const activityTime = (shop: Shop) => {
+          const activity = shop.stickerActivity;
+          if (!activity || activity.state === "unknown" || activity.state === "unavailable" || !activity.sortAt) return Number.POSITIVE_INFINITY;
+          const time = new Date(activity.sortAt).getTime();
+          return Number.isFinite(time) ? time : Number.POSITIVE_INFINITY;
+        };
+        const aTime = activityTime(a);
+        const bTime = activityTime(b);
+        if (aTime !== bTime) return aTime - bTime;
+      }
       if (sortBy === "trialEndsAt") {
         const aEnds = a.trial?.endsAt ? new Date(a.trial.endsAt).getTime() : Number.POSITIVE_INFINITY;
         const bEnds = b.trial?.endsAt ? new Date(b.trial.endsAt).getTime() : Number.POSITIVE_INFINITY;
@@ -1117,6 +1173,12 @@ export default function PlatformShopsPage() {
             <option value="approved">Approved</option>
           </select>
         </div>
+        <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+          <input type="checkbox" checked={stickerOutreachOnly}
+            onChange={event => setStickerOutreachOnly(event.target.checked)}
+            className="w-4 h-4 text-[#3c81c3] rounded border-gray-300 focus:ring-[#3c81c3]" />
+          Sticker outreach: inactive 7+ days
+        </label>
         {bulkApprovePendingShops.length > 0 && (
           <button
             onClick={() => setBulkApproveConfirmOpen(true)}
@@ -1155,6 +1217,7 @@ export default function PlatformShopsPage() {
           >
             <option value="createdAt">Newest first</option>
             <option value="trialEndsAt">Trial ending soonest</option>
+            <option value="oldestStickerActivity">Oldest sticker activity first</option>
           </select>
         </div>
         <label className="flex items-center gap-2 text-sm text-gray-600 whitespace-nowrap cursor-pointer">
@@ -1184,7 +1247,7 @@ export default function PlatformShopsPage() {
             {filteredShops.length === 0 ? (
               <tr>
                 <td colSpan={colSpan} className="px-4 py-8 text-center text-gray-500">
-                  {search || kpiFilter !== "none" || trialFilter !== "all" ? "No shops match your filters" : "No shops yet"}
+                  {search || kpiFilter !== "none" || trialFilter !== "all" || reviewFilter !== "all" || stickerOutreachOnly ? "No shops match your filters" : "No shops yet"}
                 </td>
               </tr>
             ) : groupByEnterprise && groupedShops ? (
@@ -2167,6 +2230,7 @@ function ShopRow(props: ShopRowProps) {
               <span className="text-gray-700 font-medium">{stickerThisMonth}</span> stickers this month
               <span className="text-gray-400"> · {stickerTotal.toLocaleString()} total</span>
             </div>
+            <StickerActivity shop={shop} />
           </div>
         </td>
 

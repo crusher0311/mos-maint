@@ -51,6 +51,8 @@ function matchField(value: any, cond: any): boolean {
         if (!(value != null && value < (operand as any))) return false;
       } else if (op === "$gt") {
         if (!(value != null && value > (operand as any))) return false;
+      } else if (op === "$nin") {
+        if ((operand as any[]).includes(value)) return false;
       } else {
         return false;
       }

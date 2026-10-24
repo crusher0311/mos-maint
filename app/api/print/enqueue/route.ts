@@ -18,6 +18,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { validPrintAction } from "@/lib/sticker-activity";
 import { requireSession } from "@/lib/auth";
 import { checkShopFeatureGate } from "@/lib/extension-route-guard";
 import {
@@ -115,6 +116,9 @@ export async function POST(req: NextRequest) {
   }
 
   const shopId = session.shopId;
+  if (body.printActionId !== undefined && !validPrintAction(body.printActionId)) {
+    return NextResponse.json({ error: "Invalid print action" }, { status: 400 });
+  }
   const type: "sticker" | "keytag" | "raw" =
     body?.type === "keytag" ? "keytag" : body?.type === "sticker" ? "sticker" : "raw";
 
@@ -138,6 +142,7 @@ export async function POST(req: NextRequest) {
       : null;
 
   const jobId = await enqueuePrintJob({
+    printActionId: body.printActionId,
     shopId,
     imageBase64,
     printerId,
