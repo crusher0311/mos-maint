@@ -108,15 +108,15 @@ export default function LandingPage() {
       <header className="bg-white border-b border-gray-100 sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-3 sm:py-4">
-            <div className="flex items-center gap-2 sm:gap-3">
+            <div className="flex items-center gap-1 sm:gap-3 shrink-0">
               <img src="/icon.png" alt="MOS.Tools" className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl" />
-              <span className="text-lg sm:text-xl font-bold text-gray-900">MOS.Tools</span>
+              <span className="text-base sm:text-xl font-bold text-gray-900">MOS.Tools</span>
             </div>
-            <div className="flex items-center gap-2 sm:gap-4">
-              <Link href="/login" className="hidden sm:block px-4 py-2 text-gray-600 hover:text-gray-900 font-medium transition-colors">
+            <div className="flex items-center gap-1 sm:gap-4 shrink-0">
+              <Link href="/login" className="inline-flex items-center justify-center min-h-11 sm:min-h-0 sm:block px-2 sm:px-4 py-2 text-sm sm:text-base whitespace-nowrap text-gray-600 hover:text-gray-900 font-medium transition-colors">
                 Sign In
               </Link>
-              <Link href="/setup" className="px-3 py-2 sm:px-5 sm:py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm sm:text-base">
+              <Link href="/setup" className="inline-flex items-center justify-center min-h-11 sm:min-h-0 px-2 py-2 sm:px-5 sm:py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm sm:text-base whitespace-nowrap">
                 Get Started
               </Link>
             </div>
