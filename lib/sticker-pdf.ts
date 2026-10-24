@@ -1,4 +1,5 @@
 import { PDFDocument } from "pdf-lib";
+export { STICKER_PDF_SAFE_MARGIN_IN } from "./sticker-print-dimensions";
 
 // PDF coordinate space is points: 1 inch = 72 points (PDF spec, default
 // user space). pdf-lib uses these units for page sizes and drawing.
@@ -35,7 +36,6 @@ export function getStickerSizeInches(size: string): { width: number; height: num
 //
 // ~0.05" ≈ 1.3mm per edge: enough to absorb typical overshoot/hardware margin
 // without visibly shrinking the sticker.
-export const STICKER_PDF_SAFE_MARGIN_IN = 0.05;
 
 // Wrap a rendered sticker PNG in a single-page PDF whose page size exactly
 // matches the requested physical sticker dimensions.

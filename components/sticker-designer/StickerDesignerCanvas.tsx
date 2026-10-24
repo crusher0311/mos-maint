@@ -3,6 +3,8 @@
 import { useRef, useState, useCallback } from "react";
 import { StickerElement, StickerLayout, STICKER_SAMPLE_DATA, resolveStickerElementContent } from "@/lib/sticker-designer-types";
 import { Image as ImageIcon } from "lucide-react";
+import { qrSizingWarnings } from "@/lib/sticker-qr-sizing";
+import { useQrArtworkGeometry } from "./useQrArtworkGeometry";
 
 interface StickerContentData {
   phone?: string;
@@ -14,6 +16,7 @@ interface StickerContentData {
 }
 
 interface StickerDesignerCanvasProps {
+  size: string;
   layout: StickerLayout;
   selectedId: string | null;
   onSelectElement: (id: string | null) => void;
@@ -42,6 +45,7 @@ interface AlignmentGuide {
 }
 
 export function StickerDesignerCanvas({
+  size,
   layout,
   selectedId,
   onSelectElement,
@@ -52,6 +56,7 @@ export function StickerDesignerCanvas({
   contentData,
 }: StickerDesignerCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
+  const qrGeometry = useQrArtworkGeometry(showQRCode ? qrUrl : undefined);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [alignmentGuides, setAlignmentGuides] = useState<AlignmentGuide[]>([]);
 
@@ -291,12 +296,23 @@ export function StickerDesignerCanvas({
   };
 
   const visibleElements = layout.elements.filter((el) => el.visible && (el.type !== "qrCode" || showQRCode));
+  const qrWarnings = visibleElements.filter(el => el.type === "qrCode")
+    .flatMap(el => qrSizingWarnings(layout, size, el, qrGeometry));
   
   // Scale factor for displaying the canvas larger while keeping internal coordinates
   const displayScale = 2;
 
   return (
     <div className="flex flex-col items-center">
+      {qrWarnings.length > 0 && (
+        <div role="status" aria-live="polite" className="mb-3 max-w-md rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+          <p className="font-semibold">QR scan warning</p>
+          <ul className="list-disc pl-5">
+            {[...new Set(qrWarnings)].map(message => <li key={message}>{message}</li>)}
+          </ul>
+          <p className="mt-1">Advisory only; editing and saving are unchanged. Check a printed label at actual size on your printer. This estimate includes the PDF safety inset; printer margins and print quality vary.</p>
+        </div>
+      )}
       <div 
         style={{ 
           width: layout.canvasWidth * displayScale, 

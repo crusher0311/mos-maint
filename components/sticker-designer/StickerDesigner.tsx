@@ -185,6 +185,7 @@ export function StickerDesigner({
       <div className="flex gap-6 items-start">
         <div className="flex-shrink-0">
           <StickerDesignerCanvas
+            size={currentSize}
             layout={layout}
             selectedId={selectedId}
             onSelectElement={setSelectedId}

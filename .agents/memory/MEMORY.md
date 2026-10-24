@@ -1,4 +1,4 @@
-- [Printed label compatibility](printed-label-compatibility.md) — saved sticker wording, keytag visibility-based validation, and preserving already-printed QR targets.
+- [Printed label compatibility](printed-label-compatibility.md) — saved sticker wording, keytag validation, printed QR targets, and advisory physical QR sizing.
 - [Tekmetric DVI webhook evidence](tekmetric-dvi-webhook-evidence.md) — live messages distinguish inspection views from estimate views; customer prefix is a name; receipt time is not event time.
 - [MyOilSticker legacy data](myoilsticker-legacy-db.md) — legacy platform's data is db `test` on the SAME cluster; user migration tooling is operator-gated, collisions link-only, scraped SMS creds never copied.
 - [Plan-pregen storm](plan-pregen-storm.md) — speeding up a slow cron unleashes its completion-triggered fan-out (web event-loop starvation); clean Mongo + uniform slowness = web CPU, not DB.
