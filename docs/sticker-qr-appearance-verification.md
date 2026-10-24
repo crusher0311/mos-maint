@@ -41,18 +41,54 @@ Shop Workflow offline checks workflow, then run
 browser cache is unavailable. The fixture is `/sticker-qr.html`; it mounts the
 real controls with synthetic endpoints and never loads the authenticated app.
 
-## Physical-size release checklist (requires printer/operator)
+## Practical pilot check (requires printer/operator)
 
-Before customer rollout, print representative generated, opaque custom and
-transparent custom codes on white, off-white (#FFFAF0), light gray (#EEEEEE)
-and a dark sticker (QR must retain white). Use each supported sticker size,
-including the smallest QR layout the shop actually uses. Test desktop PNG
-printing, Quick Sticker, extension printing and mobile PDF/AirPrint at 100%
-scale with no fit-to-page adjustment. Scan on at least two phone cameras in
-normal and dim lighting. Verify the uploaded destination and unchanged
-generated destination, not merely that a phone detects a QR.
+For an initial pilot, use one representative shop printer, its usual label
+material and its usual printing method. The full printer/material matrix below
+is recommended for wider rollout, not a gate for the initial pilot.
 
-Check the blank border remains visible and isn't cropped by printer margins.
-Repeat after switching back to generated, replacing/removing custom artwork,
-and excluding QR. Missing custom media must stop generation, not print MOS
-artwork. Retain dated printer/model/material/results evidence before release.
+- Print the smallest QR layout the shop uses at 100% scale, without fit-to-page.
+- Test a generated code and the custom code the shop intends to use.
+- Scan both with two phone cameras in normal lighting. Confirm the intended
+  destination, not just QR detection; the generated destination must be unchanged.
+- Check that the blank border remains visible and is not cropped by margins.
+- Spot-check a dark sticker background: the QR background must retain white.
+- Switch from custom back to generated and verify the generated destination.
+  Replace custom artwork and check the replacement destination. Remove custom
+  artwork while custom remains selected: generation must stop rather than
+  silently substitute MOS artwork.
+- Exclude QR and confirm the printed sticker contains no QR.
+
+A short written confirmation is sufficient; photos and a formal evidence
+package are not required. Note any failure or untested item rather than treating
+it as a pass. Fix scan, destination or cropping failures before using that
+configuration with customers.
+
+Suggested confirmation format (fill in actual observations):
+
+> Date; printer make/model; label material; sticker size/smallest QR layout;
+> print method and scale; QR source/background tested; phone models and scan/
+> destination results; border, dark-background, source-switch, replacement,
+> removal and QR-exclusion results; failures or items not tested.
+
+## Wider-rollout recommendations
+
+As more shops or printing setups are introduced, expand checks to generated,
+opaque custom and transparent custom codes on white, off-white (#FFFAF0),
+light gray (#EEEEEE) and dark backgrounds (QR must retain white). Include each
+supported sticker size and desktop PNG, Quick Sticker, extension printing and
+mobile PDF/AirPrint, at 100% scale without fit-to-page. Repeat two-phone scans
+in normal and dim lighting and the destination/border checks above.
+
+Record the printer/model/material and results for each configuration actually
+tested. A successful pilot does not establish quality on every printer or label.
+
+## Verification status and scope
+
+Physical printing and phone scans have not been performed in the isolated
+development environment. This document defines the simplified pilot check; it
+does not certify physical print quality or record a completed pilot. Software
+decoding cannot establish ink, paper or printer quality.
+
+Changing this checklist does not change application validation, QR appearance
+rules or production configuration, and does not authorize a production rollout.
