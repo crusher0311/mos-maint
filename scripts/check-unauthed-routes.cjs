@@ -87,6 +87,12 @@ function sanitizeForAuthCheck(text) {
 // that proves both the positive (guarded) and negative (unguarded) cases.
 // ---------------------------------------------------------------------------
 const AUTH_PATTERNS = [
+  // Workflow staff access throws unless a real dashboard session, current
+  // membership and inspection-read entitlement are verified.
+  /\bawait\s+staffDependencies\.access\s*\(/,
+  // Visit selection authenticates through its injected access dependency.
+  // Recognize only the actual staff guard binding, not arbitrary dependencies.
+  /\bawait\s+listInspectionVisits\s*\([^;]{0,250}\baccess\s*:\s*staffAccess\s*[,}]/,
   // Delegated tutorial handlers authenticate web sessions or extension tokens,
   // enforce personal write authority and reject stale expected-person identities.
   // Only a returned handler response counts, not a discarded call or import.

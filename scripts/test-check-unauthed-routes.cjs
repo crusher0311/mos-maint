@@ -456,6 +456,17 @@ return NextResponse.json({ ok: true });`;
   assert('extension tutorial comment is not auth', !hasTutorialAuthentication(prefix + '// ' + delegated));
   assert('extension tutorial unknown helper origin is not auth', !hasTutorialAuthentication(prefix.replace('tutorial-route-handler', 'other-handler') + delegated));
 }
+{
+  assert('workflow staff access is awaited', guardMatches('const access = await staffDependencies.access();'));
+  assert('workflow staff access import alone is not auth', !guardMatches('import { staffDependencies } from "@/lib/auto-dvi/staff/runtime";'));
+  assert('workflow unawaited staff check is not auth', !guardMatches('staffDependencies.access();'));
+  assert('workflow unrelated access object is not auth', !guardMatches('await otherDependencies.access();'));
+  const selection = 'return dispatchJson(await listInspectionVisits(req.nextUrl.searchParams.get("vin"), { access: staffAccess, read: readDispatchBoard }));';
+  assert('visit selection with real staff guard is recognized', guardMatches(selection));
+  assert('visit selection with arbitrary guard is not auth', !guardMatches(selection.replace('access: staffAccess', 'access: permissiveAccess')));
+  assert('visit selection import alone is not auth', !guardMatches('import { listInspectionVisits } from "@/lib/auto-dvi/staff/visit-selection";'));
+  assert('staff guard comment is not auth', !guardMatches('// await staffDependencies.access();'));
+}
 const total = passed + failed;
 console.log(`\nauth-lint fixture tests: ${passed}/${total} passed`);
 if (failed > 0) {
