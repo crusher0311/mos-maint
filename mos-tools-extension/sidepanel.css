@@ -2641,6 +2641,8 @@ body {
 
 .support-panel-header {
   display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
@@ -2660,6 +2662,8 @@ body {
 .support-panel-actions {
   display: flex;
   gap: 4px;
+  margin-left: auto;
+  flex-shrink: 0;
 }
 
 .support-header-btn {
@@ -2678,6 +2682,27 @@ body {
 
 .support-header-btn:hover {
   background: rgba(255,255,255,0.25);
+}
+
+.support-header-btn.support-ticket-btn {
+  width: auto;
+  padding: 0 10px;
+  gap: 6px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  background: white;
+  color: #1d4ed8;
+}
+
+.support-header-btn.support-ticket-btn:hover {
+  background: #eff6ff;
+}
+
+.support-header-btn:focus-visible {
+  outline: 2px solid white;
+  outline-offset: 2px;
 }
 
 #support-chat-view {
