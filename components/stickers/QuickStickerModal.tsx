@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { OilViscosityInput } from "./OilViscosityInput";
 import { X, Loader2, Printer, Wifi, Check, AlertCircle } from "lucide-react";
 import {
   DEFAULT_INTERVALS,
@@ -32,6 +33,8 @@ interface QuickStickerModalProps {
 
 export default function QuickStickerModal({ isOpen, onClose, vin }: QuickStickerModalProps) {
   const [loading, setLoading] = useState(false);
+  const [oilViscosity, setOilViscosity] = useState("");
+  useEffect(() => { setOilViscosity(""); }, [isOpen, vin]);
   const [generating, setGenerating] = useState(false);
   const [currentMileage, setCurrentMileage] = useState<string>("");
   const [intervalType, setIntervalType] = useState<string>("synthetic");
@@ -148,7 +151,7 @@ export default function QuickStickerModal({ isOpen, onClose, vin }: QuickSticker
 
     setError(null);
     setGenerating(true);
-    const actionKey = JSON.stringify(["quick", vin, currentMileage, intervalType, customMonths, customMileage, stickerSize, unit]);
+    const actionKey = JSON.stringify(["quick", vin, currentMileage, intervalType, customMonths, customMileage, stickerSize, unit, oilViscosity]);
     const printActionId = stickerPrintAction(actionKey);
 
     let useMobilePdfPath = isMobileBrowser();
@@ -199,6 +202,7 @@ export default function QuickStickerModal({ isOpen, onClose, vin }: QuickSticker
         body: JSON.stringify({
           printActionId,
           printIntent: "print",
+          oilViscosity,
           size: stickerSize,
           vin,
           currentMileage: parseInt(currentMileage.replace(/,/g, ""), 10),
@@ -253,6 +257,7 @@ export default function QuickStickerModal({ isOpen, onClose, vin }: QuickSticker
             body: JSON.stringify({
               printActionId,
               printIntent: "print",
+              oilViscosity,
               size: stickerSize,
               vin,
               currentMileage: parseInt(currentMileage.replace(/,/g, ""), 10),
@@ -311,7 +316,7 @@ export default function QuickStickerModal({ isOpen, onClose, vin }: QuickSticker
     }
     setError(null);
     setZinkStatus("queuing");
-    const actionKey = JSON.stringify(["queue", vin, currentMileage, intervalType, customMonths, customMileage, stickerSize, unit]);
+    const actionKey = JSON.stringify(["queue", vin, currentMileage, intervalType, customMonths, customMileage, stickerSize, unit, oilViscosity]);
     const printActionId = stickerPrintAction(actionKey);
     try {
       const { nextServiceMileage, nextServiceDate } = calculateServiceValues();
@@ -321,6 +326,7 @@ export default function QuickStickerModal({ isOpen, onClose, vin }: QuickSticker
         body: JSON.stringify({
           printActionId,
           printIntent: "queue",
+          oilViscosity,
           size: stickerSize,
           vin,
           currentMileage: parseInt(currentMileage.replace(/,/g, ""), 10),
@@ -456,6 +462,7 @@ export default function QuickStickerModal({ isOpen, onClose, vin }: QuickSticker
                   <option value="custom">Custom</option>
                 </select>
               </div>
+              <OilViscosityInput value={oilViscosity} onChange={setOilViscosity} />
 
               {intervalType === "custom" && (
                 <div className="bg-gray-50 rounded-lg p-4 space-y-4">

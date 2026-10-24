@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Detect Dog by MOS Tools</title>
   <script src="sticker-personalization-core.js"></script>
+  <script src="sticker-viscosity-core.js"></script>
   <link rel="stylesheet" href="sidepanel.css">
   <link rel="stylesheet" href="tutorials.css">
 </head>
@@ -623,6 +624,13 @@
               <div class="print-field">
                 <label for="sticker-tagline">Tagline <span class="label-hint">(optional)</span></label>
                 <input type="text" id="sticker-tagline" class="input-modern" placeholder="Thanks for your business!">
+              </div>
+              <div class="print-field">
+                <label for="sticker-viscosity">Oil viscosity (optional)</label>
+                <input id="sticker-viscosity" class="input-modern" list="sticker-viscosities" maxlength="24" placeholder="Choose or enter, e.g. 5W-30">
+                <datalist id="sticker-viscosities"></datalist>
+                <button type="button" id="sticker-viscosity-clear">Clear viscosity</button>
+                <small>Print only; add Oil viscosity in the sticker designer to display it.</small>
               </div>
               
               <div id="sticker-qr-toggle" class="print-checkbox-row">

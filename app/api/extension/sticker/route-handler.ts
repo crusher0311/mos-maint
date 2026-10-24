@@ -1,5 +1,6 @@
 import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 import { recordStickerActivity, readStickerSupply, validatePrintIntent } from "@/lib/sticker-activity";
+import { stickerViscosity } from "@/lib/sticker-viscosity";
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { customStickerQr, styleStickerQr, StickerQrError } from "@/lib/sticker-qr-image";
@@ -664,6 +665,11 @@ async function _POST(request: NextRequest) {
 
     _lap("auth");
     const body = await request.json();
+    if (body.oilViscosity !== undefined) {
+      const value = stickerViscosity.normalize(body.oilViscosity);
+      if (value === null) return NextResponse.json({ error: "Invalid oil viscosity (maximum 24 characters)" }, { status: 400, headers: corsHeaders });
+      body.oilViscosity = value;
+    }
     if (!validatePrintIntent(body)) return NextResponse.json({ error: "Invalid print action" }, { status: 400, headers: corsHeaders });
     const {
       currentMileage,
@@ -934,6 +940,7 @@ async function _POST(request: NextRequest) {
           serviceLabel: stickerConfig.serviceLabel,
           formattedDate,
           formattedMileage,
+          oilViscosity: body.oilViscosity,
           distanceUnit,
           logoDataUrl,
           qrDataUrl,

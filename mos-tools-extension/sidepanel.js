@@ -2307,6 +2307,7 @@ async function handleLogout() {
   await sendMessage({ action: 'MOS_LOGOUT' });
   isAuthenticated = false;
   currentContext = null;
+  syncStickerDraft(null);
   specsCache = {};
   hideSupportFab();
   closeSupportChat();
@@ -5414,8 +5415,27 @@ let stickerDraftContext = null;
 let stickerDraftKey = null;
 let stickerDraftEdited = false;
 let stickerDraftValue = '';
+let viscosityDraft = null;
+const viscosityInput = document.getElementById('sticker-viscosity');
+for (const grade of MosStickerViscosity.common) {
+  const option = document.createElement('option');
+  option.value = grade;
+  document.getElementById('sticker-viscosities')?.appendChild(option);
+}
+viscosityInput?.addEventListener('input', () => {
+  viscosityInput.value = viscosityInput.value.replace(/[^a-zA-Z0-9 \-]/g, '').slice(0, 24);
+  viscosityDraft = MosStickerViscosity.draft(viscosityDraft, MosStickerPersonalization.contextKey(stickerDraftContext), '', viscosityInput.value);
+});
+document.getElementById('sticker-viscosity-clear')?.addEventListener('click', () => {
+  if (!viscosityInput) return;
+  viscosityInput.value = '';
+  viscosityInput.dispatchEvent(new Event('input'));
+});
 function syncStickerDraft(context = stickerDraftContext) {
   const key = MosStickerPersonalization.contextKey(context);
+  viscosityDraft = MosStickerViscosity.draft(viscosityDraft, key,
+    context?.roId ? MosStickerViscosity.extract(context.stickerOilEvidence) : '');
+  if (viscosityInput) viscosityInput.value = viscosityDraft.value;
   if (key !== stickerDraftKey) {
     stickerDraftKey = key;
     stickerDraftEdited = false;
@@ -6096,6 +6116,7 @@ async function handleStickerPrint() {
       printActionId: crypto.randomUUID(),
       printIntent: 'print',
       workOrderId: stickerDraftContext?.roId,
+      oilViscosity: viscosityDraft?.key === printContextKey ? viscosityDraft.value : '',
       currentMileage,
       intervalType,
       unit

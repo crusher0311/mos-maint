@@ -4,6 +4,7 @@ import vm from "node:vm";
 import { webcrypto } from "node:crypto";
 import { createStickerLocationRequest } from "../mos-tools-extension/lib/sticker-location-session.js";
 import { NextRequest } from "next/server";
+import { stickerViscosity } from "../lib/sticker-viscosity";
 import { switchLocation, __deps as locationDeps } from "../lib/extension-location-session";
 
 const source = fs.readFileSync("mos-tools-extension/background.js", "utf8");
@@ -11,6 +12,7 @@ const panelSource = fs.readFileSync("mos-tools-extension/sidepanel.js", "utf8");
 async function main() {
   const shops = new Map([[1, "100"], [2, "200"]]);
   const prints: string[] = [];
+  const printedOil: string[] = [];
   let oldSession: "modern" | "legacy" | null = null;
   let issues = 0;
   locationDeps.issueExtensionSession = (async () => { issues++; throw new Error("same-shop must not issue"); }) as any;
@@ -26,6 +28,7 @@ async function main() {
     let listener: any;
     let restore: () => void;
     const sandbox: any = {
+      MosStickerViscosity: stickerViscosity,
       console, URL, AbortSignal, AbortController,
       crypto: webcrypto,
       setTimeout: (fn: () => void, ms: number) => ms === 500 ? (fn(), 0) : setTimeout(fn, ms),
@@ -59,6 +62,7 @@ async function main() {
           const body = JSON.parse(options.body);
           assert.equal(body.smsShopId, tokenShop);
           prints.push(tokenShop);
+          printedOil.push(body.oilViscosity);
           afterPost?.();
           return Response.json({ success: true, sticker: { dataUrl: `logo-${tokenShop}` } });
         }
@@ -93,12 +97,23 @@ async function main() {
     };
   };
   let w = worker();
-  const ctx = (tab: number) => ({ provider: "tekmetric", shopId: shops.get(tab), roId: "88", mileage: 10000, vehicle: { make: "Toyota" } });
+  const ctx = (tab: number) => ({ provider: "tekmetric", shopId: shops.get(tab), roId: "88", mileage: 10000, vehicle: { make: "Toyota" }, stickerOilEvidence: ["Engine oil 5w30"] });
   // Message arrives before storage restoration after worker startup.
   const pending = w.send({ action: "PRINT_STICKER_IMMEDIATE", context: ctx(1) }, 1);
   assert.equal(prints.length, 0);
   w.restore();
   assert.equal((await pending).sticker.dataUrl, "logo-100");
+  assert.equal(printedOil[0], "5W-30");
+  for (const field of ["status", "jobStatus", "authorizationStatus"]) {
+    for (const status of ["DECLINED", " Deferred "]) {
+      const stickerOilEvidence = stickerViscosity.tekmetricLines({
+        jobs: [{ name: "Oil change", parts: [{ name: "5W30" }], [field]: status }],
+      });
+      const result = await w.send({ action: "PRINT_STICKER_IMMEDIATE", context: { ...ctx(1), stickerOilEvidence } }, 1);
+      assert.equal(result.sticker.dataUrl, "logo-100");
+      assert.equal(printedOil.at(-1), "", `immediate print excludes ${field}:${status}`);
+    }
+  }
   for (const shop of ["200", "100"]) {
     shops.set(1, shop);
     const result = await w.send({ action: "PRINT_STICKER_IMMEDIATE", context: ctx(1), overrideInterval: { miles: 5000, months: 6 } }, 1);
@@ -135,7 +150,7 @@ async function main() {
   const panel: any = {
     console, elements, currentContext: null, stickerConfig: null,
     crypto: webcrypto, pendingStickerPrint: null,
-    stickerDraftContext: null, stickerDraftEdited: false,
+    stickerDraftContext: null, stickerDraftEdited: false, viscosityDraft: null,
     syncStickerDraft() {}, updateStickerSupply() {},
     MosStickerPersonalization: { contextKey: (c: any) => JSON.stringify(c) },
     applyStickerNavigation: async (message: any) => {

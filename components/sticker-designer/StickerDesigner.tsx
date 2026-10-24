@@ -17,6 +17,7 @@ import { StickerElementPanel } from "./StickerElementPanel";
 import { StickerToolbarPanel } from "./StickerToolbarPanel";
 
 interface StickerContentData {
+  oilViscosity?: string;
   phone?: string;
   tagline?: string;
   taglineLine2?: string;
@@ -137,10 +138,21 @@ export function StickerDesigner({
     commit({ ...current, selectedId: id, layout: { ...current.layout, elements: [...elements, element] } });
   }, [commit]);
 
+  const handleAddViscosity = useCallback(() => {
+    const current = editorRef.current.current;
+    if (current.layout.elements.length >= MAX_STICKER_ELEMENTS || current.layout.elements.some(e => e.type === "oilViscosity")) return;
+    const element: StickerElement = {
+      id: `viscosity-${crypto.randomUUID()}`, type: "oilViscosity", label: "Oil viscosity",
+      x: 5, y: 85, width: Math.min(130, current.layout.canvasWidth - 10), height: 20,
+      fontSize: 12, fontWeight: "bold", fontStyle: "normal", textAlign: "left", color: "#000000", visible: true,
+    };
+    commit({ ...current, selectedId: element.id, layout: { ...current.layout, elements: [...current.layout.elements, element] } });
+  }, [commit]);
+
   const handleRemoveText = useCallback((id: string) => {
     const current = editorRef.current.current;
     const element = current.layout.elements.find((item) => item.id === id);
-    if (element?.type !== "text") return;
+    if (element?.type !== "text" && element?.type !== "oilViscosity") return;
     commit({
       ...current,
       selectedId: current.selectedId === id ? null : current.selectedId,
@@ -232,6 +244,7 @@ export function StickerDesigner({
             onSelectElement={handleSelectElement}
             onUpdateElement={handleUpdateElement}
             onAddText={handleAddText}
+            onAddViscosity={handleAddViscosity}
             onRemoveText={handleRemoveText}
           />
         </div>

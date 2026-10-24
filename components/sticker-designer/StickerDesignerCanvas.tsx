@@ -8,6 +8,7 @@ import { useQrArtworkGeometry } from "./useQrArtworkGeometry";
 import { StickerTextPreview } from "./StickerTextPreview";
 
 interface StickerContentData {
+  oilViscosity?: string;
   phone?: string;
   tagline?: string;
   taglineLine2?: string;
@@ -213,6 +214,7 @@ export function StickerDesignerCanvas({
   const renderElementContent = (element: StickerElement) => {
     if (element.type !== "logo" && element.type !== "qrCode") {
       const values = { ...STICKER_SAMPLE_DATA, ...contentData };
+      if (element.type === "oilViscosity" && !values.oilViscosity) return null;
       return <StickerTextPreview element={element} text={resolveStickerElementContent(element, values)} />;
     }
     switch (element.type) {
@@ -333,7 +335,7 @@ export function StickerDesignerCanvas({
                 top: element.y,
                 width: element.width,
                 height: element.height,
-                backgroundColor: element.backgroundColor || "transparent",
+                backgroundColor: element.type === "oilViscosity" && contentData?.oilViscosity === "" ? "transparent" : element.backgroundColor || "transparent",
               }}
               onMouseDown={(e) => handleMouseDown(e, element, "move")}
             >

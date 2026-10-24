@@ -9,6 +9,7 @@ export type StickerElementType =
   | 'serviceLabel'
   | 'serviceDate'
   | 'serviceMileage'
+  | 'oilViscosity'
   | 'text';
 
 export interface StickerElement {
@@ -442,7 +443,7 @@ export function validStickerLayout(value: unknown): boolean {
     if (!e || !text(e.id, 100) || !e.id || ids.has(e.id)) return false;
     ids.add(e.id);
     if (e.type === 'text' && ++custom > MAX_CUSTOM_TEXT_ELEMENTS) return false;
-    return ['logo','qrCode','phone','tagline','taglineLine2','serviceLabel','serviceDate','serviceMileage','text'].includes(e.type) &&
+    return ['logo','qrCode','phone','tagline','taglineLine2','serviceLabel','serviceDate','serviceMileage','oilViscosity','text'].includes(e.type) &&
       text(e.label, 200) && number(e.x, -1000, 1000) && number(e.y, -1000, 1000) &&
       number(e.width, 1, 1000) && number(e.height, 1, 1000) && number(e.fontSize, 1, 200) &&
       ['normal','bold'].includes(e.fontWeight) && ['normal','italic'].includes(e.fontStyle) &&
@@ -463,12 +464,14 @@ export const STICKER_SAMPLE_DATA: Record<string, string> = {
   serviceLabel: SERVICE_LABEL_FALLBACK,
   serviceDate: 'Apr 15, 2026',
   serviceMileage: '165,000 mi',
+  oilViscosity: '5W-30',
   qrCode: 'qr-placeholder',
 };
 
 // Effective content values for a sticker, with date/mileage already formatted
 // the way they will be rendered.
 export interface StickerContentValues {
+  oilViscosity?: string;
   phone?: string;
   tagline?: string;
   taglineLine2?: string;
@@ -486,6 +489,8 @@ export function resolveStickerElementContent(
   data: StickerContentValues
 ): string {
   switch (el.type) {
+    case 'oilViscosity':
+      return data.oilViscosity ? `Oil: ${data.oilViscosity}` : '';
     case 'phone':
       return data.phone || '';
     case 'tagline':

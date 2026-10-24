@@ -288,6 +288,7 @@ export interface StickerDesignerLayout {
 }
 
 export interface StickerDesignerData {
+  oilViscosity?: string;
   phone?: string;
   tagline?: string;
   taglineLine2?: string;
@@ -322,6 +323,7 @@ export async function renderStickerDesigner(
   const serviceMileageText = data.formattedMileage ? `${data.formattedMileage} ${data.distanceUnit}` : "";
   const getContent = (el: StickerDesignerElement): string =>
     resolveStickerElementContent(el, {
+      oilViscosity: data.oilViscosity,
       phone: data.phone,
       tagline: data.tagline,
       taglineLine2: data.taglineLine2,
@@ -332,6 +334,7 @@ export async function renderStickerDesigner(
 
   for (const el of layout.elements) {
     if (!el.visible) continue;
+    if (el.type === "oilViscosity" && !data.oilViscosity) continue;
 
     const ex = Math.round(el.x * scaleX);
     const ey = Math.round(el.y * scaleY);

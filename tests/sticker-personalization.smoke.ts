@@ -3,6 +3,7 @@ import fs from "node:fs";
 import vm from "node:vm";
 import ts from "typescript";
 import { stickerPersonalization } from "../lib/sticker-personalization";
+import { stickerViscosity } from "../lib/sticker-viscosity";
 
 const read = (file: string) => fs.readFileSync(file, "utf8");
 const panelSource = read("mos-tools-extension/sidepanel.js");
@@ -25,8 +26,8 @@ assert.equal(stickerPersonalization.tagline(config, { customerName: "VIN-only st
 // Execute the real panel draft code, including its input listener.
 let input: any;
 const field = { value: "", addEventListener: (_: string, cb: any) => { input = cb; } };
-const panel: any = { MosStickerPersonalization: core, elements: { stickerTagline: field },
-  document: { getElementById: () => field },
+const panel: any = { MosStickerPersonalization: core, MosStickerViscosity: stickerViscosity, elements: { stickerTagline: field },
+  document: { getElementById: (id: string) => id === "sticker-tagline" ? field : null, createElement: () => ({}) },
   stickerContextKey: (c: any) => JSON.stringify([c?.provider, c?.shopId, c?.swShopId]),
 };
 vm.createContext(panel);
@@ -208,6 +209,7 @@ vm.runInContext(ts.transpileModule(read("app/api/sticker/settings/route.ts"),
 async function main() {
   await navigationTests();
   let rendered = "";
+  let renderedOil: unknown;
   const extensionShop: any = { stickerConfig: { ...config }, shopId: 10 };
   const extension: any = { exports: {}, console, Date, Buffer, process: { env: {} },
     fixtureShop: extensionShop,
@@ -216,12 +218,13 @@ async function main() {
         "next/server": { NextResponse: { json: (data: any, init?: any) => Response.json(data, init) } },
         "@/lib/extension-route-wrapper": { withExtensionErrorMarker: (fn: any) => fn },
         "@/lib/sticker-personalization": { stickerPersonalization },
+        "@/lib/sticker-viscosity": { stickerViscosity },
         "@/lib/mongo": { getDb: async () => db },
         "@/lib/extension-auth": { validateExtensionToken: async () => ({ authorized: true, user: { shopId: 10 } }) },
         "@/lib/extension-route-guard": { checkShopFeatureGate: async () => null },
         "@/lib/canvas-renderer": {
           renderStickerStandard: async (data: any) => { rendered = data.tagline; return Buffer.from("fixture"); },
-          renderStickerDesigner: async (_layout: any, data: any) => { rendered = data.tagline; return Buffer.from("fixture"); },
+          renderStickerDesigner: async (_layout: any, data: any) => { rendered = data.tagline; renderedOil = data.oilViscosity; return Buffer.from("fixture"); },
         },
         "@google-cloud/storage": { Storage: class {} },
         "@/lib/with-upstream-timeout": { withUpstreamTimeout: (p: any) => p },
@@ -249,6 +252,16 @@ async function main() {
       assert.equal(rendered, manual || `Thank you, ${context.customerName}`);
       assert.equal(extensionShop.stickerConfig.tagline, config.tagline);
     }
+  }
+  for (const oilViscosity of [null, 42, {}, "x".repeat(25), "5W-30\n"]) {
+    assert.equal((await extension.exports.POST({ json: async () => ({ oilViscosity }) })).status, 400);
+  }
+  for (const [oilViscosity, expected] of [["sae 5w30", "5W-30"], ["", ""], ["SAE 30", "SAE 30"]]) {
+    assert.equal((await extension.exports.POST({ json: async () => ({
+      currentMileage: 10000, excludeQR: true, oilViscosity,
+    }) })).status, 200);
+    assert.equal(renderedOil, expected);
+    assert.equal(extensionShop.stickerConfig.oilViscosity, undefined);
   }
   const put = (body: any) => route.exports.PUT({ json: async () => body });
   const get = async () => (await route.exports.GET({})).json();

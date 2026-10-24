@@ -1,3 +1,4 @@
+import { stickerViscosity } from "@/lib/sticker-viscosity";
 // app/api/dashboard/data/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
@@ -807,6 +808,7 @@ export async function GET(request: NextRequest) {
           displayMiles: "$odometer",
           displayRo: "$workOrderNumber",
           workOrderId: "$workOrderId",
+          stickerOilJobs: { $slice: [{ $ifNull: ["$data.jobs", []] }, 500] },
            // Stable Tekmetric order id, distinct from its display number.
            auditWorkOrderId: "$workOrderId",
           dviDone: {
@@ -859,6 +861,10 @@ export async function GET(request: NextRequest) {
     ]).toArray();
 
     // Fetch Shop-Ware repair orders (only if Shop-Ware is configured)
+    for (const row of tekmetricRows) {
+      row.stickerOilViscosity = stickerViscosity.extract(stickerViscosity.tekmetricLines({ jobs: row.stickerOilJobs }));
+      delete row.stickerOilJobs;
+    }
     let shopwareRows: any[] = [];
     if (isShopWareConfigured) {
       const SHOPWARE_ACTIVE_STATES = ["estimate", "in_progress"];

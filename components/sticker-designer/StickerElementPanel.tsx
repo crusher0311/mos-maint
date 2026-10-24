@@ -11,6 +11,7 @@ interface StickerElementPanelProps {
   onSelectElement: (id: string) => void;
   onUpdateElement: (id: string, updates: Partial<StickerElement>) => void;
   onAddText: () => void;
+  onAddViscosity?: () => void;
   onRemoveText: (id: string) => void;
 }
 
@@ -20,6 +21,7 @@ export function StickerElementPanel({
   onSelectElement,
   onUpdateElement,
   onAddText,
+  onAddViscosity,
   onRemoveText,
 }: StickerElementPanelProps) {
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
@@ -60,6 +62,9 @@ export function StickerElementPanel({
       </div>
 
       <div className="px-3 py-2 border-b space-y-1">
+        <button type="button" onClick={onAddViscosity}
+          disabled={elements.length >= MAX_STICKER_ELEMENTS || elements.some(e => e.type === "oilViscosity")}
+          className="w-full px-2 py-1 text-xs border rounded disabled:opacity-50">Add Oil viscosity</button>
         <button
           type="button"
           onClick={onAddText}
@@ -116,6 +121,10 @@ export function StickerElementPanel({
           
           {expandedSections.styling && (
             <div className="p-3 space-y-3 border-b">
+              {selectedElement.type === "oilViscosity" && <div className="text-xs text-gray-500">
+                Filled per print, never saved as a shop default. Move this element into a free area of your layout.
+                <button type="button" className="block text-red-700 underline" onClick={() => onRemoveText(selectedElement.id)}>Remove Oil viscosity</button>
+              </div>}
               {selectedElement.type !== "logo" && selectedElement.type !== "qrCode" && (
                 <>
                   <div>

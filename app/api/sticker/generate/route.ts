@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { stickerViscosity } from "@/lib/sticker-viscosity";
 import { recordStickerActivity, validatePrintIntent } from "@/lib/sticker-activity";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
@@ -273,6 +274,7 @@ interface StickerConfig extends StickerQrPreferences {
 }
 
 interface StickerRequest {
+  oilViscosity?: string;
   printActionId?: string;
   printIntent?: "print" | "queue" | "sample";
   vin?: string;
@@ -365,6 +367,11 @@ export async function POST(req: NextRequest) {
 
   try {
     const body: StickerRequest = await req.json();
+    if (body.oilViscosity !== undefined) {
+      const value = stickerViscosity.normalize(body.oilViscosity);
+      if (value === null) return NextResponse.json({ error: "Invalid oil viscosity (maximum 24 characters)" }, { status: 400 });
+      body.oilViscosity = value;
+    }
     if (!validatePrintIntent(body)) return NextResponse.json({ error: "Invalid print action" }, { status: 400 });
     if (body.designerLayout !== undefined && !validStickerLayout(body.designerLayout)) {
       return NextResponse.json({ error: "Invalid sticker layout" }, { status: 400 });
@@ -571,6 +578,7 @@ export async function POST(req: NextRequest) {
         },
         {
           phone: dataConfig.phone,
+          oilViscosity: body.oilViscosity,
           tagline: dataConfig.tagline,
           taglineLine2: dataConfig.taglineLine2,
           serviceLabel: dataConfig.serviceLabel,

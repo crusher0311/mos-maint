@@ -2,6 +2,7 @@
 // Manages SMS session tokens, MOS authentication, and message routing
 
 import { createStickerConfigCache } from './lib/sticker-config-cache.js';
+import './sticker-viscosity-core.js';
 import { createStickerLocationRequest } from './lib/sticker-location-session.js';
 // Side-effect import: sets globalThis.MosUndoCore (pure undo-snapshot logic,
 // shared with the content scripts which load it as a classic script).
@@ -4422,6 +4423,7 @@ async function handleImmediateStickerPrint(context, tabId, overrideInterval = nu
 
   const requestBody = {
     workOrderId: context.roId,
+    oilViscosity: context.roId ? globalThis.MosStickerViscosity.extract(context.stickerOilEvidence) : '',
     currentMileage: mileage,
     unit,
     smsShopId: context.shopId,

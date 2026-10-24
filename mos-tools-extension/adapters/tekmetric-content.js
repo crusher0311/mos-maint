@@ -60,6 +60,7 @@ const roContextCache = new Map();
 // ("Name", "Vehicle") before React hydrates, so scrape is bootstrap / fallback
 // only. We record which fields came from the API in `_apiKeys`.
 const RO_IDENTITY_FIELDS = [
+  'stickerOilEvidence',
   'vin', 'mileage', 'vehicle', 'vehicleDisplay', 'vehicleId', 'roNumber',
   'customer', 'customerName', 'customerId', 'customerPhone', 'customerEmail',
 ];
@@ -131,6 +132,7 @@ function mergeApiRoData(shopId, roId, data) {
   // Values the API actually provided this time (null = not present, so we
   // don't mark it authoritative and the scrape can still fill it).
   const apiValues = {
+    stickerOilEvidence: MosStickerViscosity.tekmetricLines(data),
     vin: v.vin || null,
     mileage: typeof mileageIn === 'number' ? mileageIn : null,
     vehicle: yearMakeModel ? { year: v.year, make: v.make, model: v.model } : null,

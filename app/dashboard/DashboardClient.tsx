@@ -3,6 +3,8 @@
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { StickerSupply } from "@/components/stickers/StickerSupply";
+import { OilViscosityInput } from "@/components/stickers/OilViscosityInput";
+import { stickerViscosity } from "@/lib/sticker-viscosity";
 import { useKeytagPrintDetails } from "@/components/keytag-designer/useKeytagPrintDetails";
 import { stickerPrintAction, completeStickerPrintAction } from "@/lib/sticker-print-action";
 import { RefreshCw, Car, CheckCircle, Clock, Search, ChevronRight, HelpCircle, ChevronLeft, Archive, ArrowUp, ArrowDown, LogOut, ClipboardCheck, FileText, ThumbsUp, CheckCircle2, PauseCircle, X, Wrench, ClipboardList, AlertTriangle, Printer, Loader2, Key, HeartPulse, Plus, MessageSquareText, FileSearch } from "lucide-react";
@@ -226,6 +228,18 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     vehicleModel?: string;
   } | null>(null);
   const [customDate, setCustomDate] = useState('');
+  const [oilViscosity, setOilViscosity] = useState('');
+  useEffect(() => {
+    setOilViscosity("");
+    setCustomStickerModal(null);
+    setStickerContextMenu(null);
+  }, [data.shopId, data.user?.shopId]);
+  // Never choose between multiple visits for the same vehicle.
+  const currentOilViscosity = (vin: string) => {
+    const rows = data.rows.filter(row => row.displayVin === vin && !row.archived);
+    return rows.length === 1 && (rows[0].auditWorkOrderId || rows[0].workOrderId)
+      ? stickerViscosity.normalize(rows[0].stickerOilViscosity ?? "") ?? "" : "";
+  };
   const [customMileage, setCustomMileage] = useState('');
   const stickerContextRef = useRef<HTMLDivElement>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -448,6 +462,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
 
   const handleOpenCustomModal = () => {
     if (!stickerContextMenu) return;
+    setOilViscosity(currentOilViscosity(stickerContextMenu.vin));
     const nextDate = new Date();
     nextDate.setMonth(nextDate.getMonth() + 3);
     setCustomDate(nextDate.toISOString().split('T')[0]);
@@ -473,7 +488,8 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       customStickerModal.customerName,
       customStickerModal.vehicleYear,
       customStickerModal.vehicleMake,
-      customStickerModal.vehicleModel
+      customStickerModal.vehicleModel,
+      oilViscosity
     );
     setCustomStickerModal(null);
   };
@@ -486,7 +502,8 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     customerName?: string,
     vehicleYear?: number,
     vehicleMake?: string,
-    vehicleModel?: string
+    vehicleModel?: string,
+    oilViscosity = currentOilViscosity(vin)
   ) => {
     // iOS Safari/AirPrint ignores CSS `@page { size }`. Open a placeholder
     // tab synchronously off the user's tap (before any await), then
@@ -511,12 +528,13 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
         console.log('Using default settings');
       }
       
-      const stickerActionKey = JSON.stringify(["dashboard", vin, currentMileage, nextServiceMileage, nextServiceDate, stickerSize]);
+      const stickerActionKey = JSON.stringify(["dashboard", vin, currentMileage, nextServiceMileage, nextServiceDate, stickerSize, oilViscosity]);
       const response = await fetch('/api/sticker/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           printActionId: stickerPrintAction(stickerActionKey),
+          oilViscosity,
           printIntent: "print",
           vin,
           currentMileage,
@@ -704,6 +722,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     vehicleMake?: string,
     vehicleModel?: string
   ) => {
+    const oilViscosity = currentOilViscosity(vin);
     if (!currentMileage) {
       alert("Mileage is required to print a sticker");
       return;
@@ -805,13 +824,14 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       }
       
       // Generate the sticker image
-      const stickerActionKey = JSON.stringify(["dashboard", vin, currentMileage, nextServiceMileage, nextServiceDate, stickerSize]);
+      const stickerActionKey = JSON.stringify(["dashboard", vin, currentMileage, nextServiceMileage, nextServiceDate, stickerSize, oilViscosity]);
       const response = await fetch('/api/sticker/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           printActionId: stickerPrintAction(stickerActionKey),
           printIntent: "print",
+          oilViscosity,
           vin,
           currentMileage,
           nextServiceMileage,
@@ -1864,6 +1884,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
               </button>
             </div>
             <div className="p-6 space-y-4">
+              <OilViscosityInput value={oilViscosity} onChange={setOilViscosity} />
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Next Service Date</label>
                 <input

@@ -52,6 +52,7 @@
       ],
       "js": [
         "undo-core.js",
+        "sticker-viscosity-core.js",
         "telemetry-core.js",
         "sticker-print-core.js",
         "sticker-button-preference.js",

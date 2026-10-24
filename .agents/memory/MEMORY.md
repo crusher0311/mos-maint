@@ -1,4 +1,5 @@
 - [Printed label compatibility](printed-label-compatibility.md) — saved sticker wording, keytag validation, printed QR targets, and advisory physical QR sizing.
+- [Sticker viscosity policy](sticker-viscosity-policy.md) — print-only current-RO evidence; no specification/history inference or persistent defaults.
 - [Optional keytag details](keytag-optional-details.md) — print-only identification values; no vehicle-profile persistence, new provider lookups, or prototype changes.
 - [Tekmetric DVI webhook evidence](tekmetric-dvi-webhook-evidence.md) — live messages distinguish inspection views from estimate views; customer prefix is a name; receipt time is not event time.
 - [MyOilSticker legacy data](myoilsticker-legacy-db.md) — legacy platform's data is db `test` on the SAME cluster; user migration tooling is operator-gated, collisions link-only, scraped SMS creds never copied.
