@@ -19,6 +19,9 @@ import {
   resolveStickerElementContent,
   SERVICE_LABEL_FALLBACK,
   STICKER_SAMPLE_DATA,
+  STICKER_SIZES,
+  createDefaultLayout,
+  scaleLayoutToSize,
   type StickerContentValues,
 } from "../lib/sticker-designer-types";
 
@@ -53,6 +56,28 @@ eq("(c) both empty -> shared fallback", resolveLabel("", ""), SERVICE_LABEL_FALL
 console.log("Fallback is a single source of truth");
 
 eq("preview sample === renderer fallback", STICKER_SAMPLE_DATA.serviceLabel, SERVICE_LABEL_FALLBACK);
+eq("intended default wording", SERVICE_LABEL_FALLBACK, "Next Oil Service");
+
+console.log("Fresh layouts inherit global edits at every supported size");
+for (const size of STICKER_SIZES) {
+  const layout = createDefaultLayout(size.value);
+  const element = layout.elements.find(el => el.type === "serviceLabel")!;
+  eq(`${size.value}: no seeded override`, element.content, undefined);
+  eq(`${size.value}: default wording`, resolveStickerElementContent(element, {}), "Next Oil Service");
+  for (const serviceLabel of ["Next Maintenance", "Next Tire Service"]) {
+    eq(`${size.value}: global edit ${serviceLabel}`,
+      resolveStickerElementContent(element, { serviceLabel }), serviceLabel);
+  }
+  // Model a persisted layout round trip, including an intentional old-default override.
+  for (const content of ["Next LOF", "Next Service Due"]) {
+    element.content = content;
+    const saved = JSON.parse(JSON.stringify(layout));
+    const resized = scaleLayoutToSize(saved, "2x3");
+    const restored = resized.elements.find(el => el.type === "serviceLabel")!;
+    eq(`${size.value}: saved override survives reload/resize`,
+      resolveStickerElementContent(restored, { serviceLabel: "Changed Global" }), content);
+  }
+}
 
 console.log("Other text fields resolve consistently (no regression)");
 

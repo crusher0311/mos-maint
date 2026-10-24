@@ -196,7 +196,6 @@ export function createDefaultElements(size: StickerSizeConfig): StickerElement[]
       textAlign: 'center',
       color: '#000000',
       visible: true,
-      content: 'Next Service Due',
     },
     {
       id: 'serviceDate',
@@ -339,7 +338,6 @@ function create2x2DefaultElements(): StickerElement[] {
       textAlign: 'left',
       color: '#000000',
       visible: true,
-      content: 'Next Service Due',
     },
     {
       id: 'serviceDate',
@@ -411,6 +409,9 @@ export function scaleLayoutToSize(layout: StickerLayout, newSizeValue: string): 
 
 // Single source of truth for the Service Label fallback. Used by BOTH the
 // designer preview and the node-canvas printer so they can never drift.
+// New layouts inherit the global "Next Oil Service" default (no seeded content).
+// Saved element content remains an explicit override, including the old default
+// wording: we cannot distinguish a seeded value from a shop's intentional choice.
 export const SERVICE_LABEL_FALLBACK = 'Next Oil Service';
 
 export const STICKER_SAMPLE_DATA: Record<string, string> = {

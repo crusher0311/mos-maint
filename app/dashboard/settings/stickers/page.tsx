@@ -4,7 +4,7 @@ import StickerScanDestinationSetting from "@/components/stickers/StickerScanDest
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Loader2, Check, Download, Calendar, Settings2, Upload, ChevronDown, ChevronRight, RefreshCw, Save, Copy, Building2 } from "lucide-react";
 import { StickerDesigner } from "@/components/sticker-designer";
-import { StickerLayout, createDefaultLayout, getStickerSize, DEFAULT_STICKER_SIZE } from "@/lib/sticker-designer-types";
+import { StickerLayout, createDefaultLayout, getStickerSize, DEFAULT_STICKER_SIZE, SERVICE_LABEL_FALLBACK } from "@/lib/sticker-designer-types";
 import CopyFromLocationDropdown, { CopySettingsToAllButton } from "@/components/ui/CopyFromLocationDropdown";
 
 interface IntervalConfig {
@@ -68,7 +68,7 @@ const DEFAULT_CONFIG: StickerDataConfig = {
   phone: "",
   tagline: "",
   taglineLine2: "",
-  serviceLabel: "Next Oil Service",
+  serviceLabel: SERVICE_LABEL_FALLBACK,
   showQRCode: true,
   roundMileage: true,
   usePredictiveDate: false,
