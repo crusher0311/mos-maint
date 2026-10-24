@@ -166,7 +166,7 @@ export type JobIndexEntry = {
   
   metadata: {
     indexedAt: Date;
-    sourceType: "protractor" | "tekmetric" | "autoflow";
+    sourceType: "protractor" | "tekmetric" | "autoflow" | "shopmonkey";
   };
 };
 

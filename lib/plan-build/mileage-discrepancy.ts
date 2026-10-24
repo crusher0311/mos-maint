@@ -96,6 +96,8 @@ export function detectMileageDiscrepancy(
 /** Resolve a friendly shop-history source label from an integration provider key. */
 export function shopHistoryLabelFromProvider(provider?: string | null): string {
   switch ((provider || "").toLowerCase()) {
+    case "shopmonkey":
+      return "Shopmonkey";
     case "tekmetric":
       return "Tekmetric";
     case "shopware":

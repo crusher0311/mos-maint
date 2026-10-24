@@ -524,6 +524,12 @@ export async function resolveMileageFromRo(
 ): Promise<number | null> {
   const vinUpper = vin.toUpperCase();
 
+  if (provider === "shopmonkey") {
+    const { findShopmonkeyRo, shopmonkeyRoMileage } = await import("@/lib/plan-build/shopmonkey-ro");
+    const ro = await findShopmonkeyRo(db, [shopId, String(shopId)], { vin: vinUpper, roId: roNumber || undefined, requireMileage: true });
+    return shopmonkeyRoMileage(ro);
+  }
+
   if (provider === "tekmetric") {
     const query: any = {
       shopId: { $in: [String(shopId), Number(shopId)] },

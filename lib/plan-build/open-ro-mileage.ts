@@ -24,12 +24,14 @@
  */
 
 import { sql } from "drizzle-orm";
+import { findShopmonkeyRo, shopmonkeyRoMileage, shopmonkeyRoDate } from "./shopmonkey-ro";
 import type { MileageDiscrepancy } from "./mileage-discrepancy";
 import { MILEAGE_DISCREPANCY_TOLERANCE_MILES, shopHistoryLabelFromProvider } from "./mileage-discrepancy";
 
 export type OpenRoMileageIntegration =
   | "tekmetric"
   | "shopware"
+  | "shopmonkey"
   | "protractor"
   | "autoflow"
   | "normalized";
@@ -170,6 +172,16 @@ export async function resolveOpenRoMileage(opts: {
   const integration = ((provider || "tekmetric").toLowerCase()) as OpenRoMileageIntegration;
 
   try {
+    if (integration === "shopmonkey") {
+      const ro = await findShopmonkeyRo(db, shopIdVariants, { vin: vinUpper, requireMileage: true });
+      const miles = shopmonkeyRoMileage(ro);
+      return miles == null ? null : {
+        miles,
+        integration,
+        roIdentifier: ro.workOrderNumber == null ? null : String(ro.workOrderNumber),
+        roDate: shopmonkeyRoDate(ro),
+      };
+    }
     if (integration === "tekmetric") {
       const wo = await db.collection("tekmetric_work_orders").findOne(
         { shopId: { $in: shopIdVariants }, vin: vinUpper },

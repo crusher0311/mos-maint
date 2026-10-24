@@ -68,6 +68,35 @@ export async function searchMongoJobIndex(
     return matchStage;
   };
 
+  // Normalized Shopmonkey history predates the nested job.keywords shape.
+  // Keep the existing indexed keyword query untouched. A separate, bounded
+  // shop/provider-scoped query reads those flat rows, then the SAME per-shop
+  // cap and round-robin below apply to both shapes.
+  const fetchCandidates = async (variants: (number | string)[], cap: number): Promise<any[]> => {
+    const canonical = await db.collection("job_index")
+      .aggregate([{ $match: buildMatch(variants) }, { $limit: cap }], { maxTimeMS: 8000 }).toArray();
+    if (!coreTokens.length) return canonical;
+    const flatMatch: Record<string, any> = {
+      shopId: { $in: variants }, sourceSystem: "shopmonkey",
+      "job.keywords": { $exists: false },
+      $and: coreTokens.map(token => ({
+        title: { $regex: expandTokenVariants(token).map(v => v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), $options: "i" },
+      })),
+    };
+    if (vehicleMake) flatMatch["vehicle.make"] = prefixCaseVariants(vehicleMake);
+    if (strictModel && vehicleModel) flatMatch["vehicle.model"] = exactCaseVariants(vehicleModel);
+    try {
+      const flat = await db.collection("job_index")
+        .aggregate([{ $match: flatMatch }, { $limit: cap }], { maxTimeMS: 2000, hint: { shopId: 1 } }).toArray();
+      const rows = [...canonical, ...flat];
+      sortByPerformedAtDesc(rows);
+      return rows.slice(0, cap);
+    } catch (err) {
+      diagnostics && (diagnostics.error = `Shopmonkey history search failed: ${(err as Error).message}`);
+      return canonical;
+    }
+  };
+
   // NOTE: do NOT add a DB-side `$sort: { performedAt: -1 }` to any of these
   // queries. Measured against live enterprise data (June 2026), the date-sort
   // makes the query ~160x slower (~22s vs ~0.1s) and guarantees a timeout for
@@ -85,10 +114,7 @@ export async function searchMongoJobIndex(
     // Single shop: nothing to balance — one bounded fetch, ordered in app code.
     if (searchShopIds.length === 1) {
       const variants = [Number(searchShopIds[0]), String(searchShopIds[0])];
-      const docs = await db
-        .collection("job_index")
-        .aggregate([{ $match: buildMatch(variants) }, { $limit: limit }], { maxTimeMS: 8000 })
-        .toArray();
+      const docs = await fetchCandidates(variants, limit);
       sortByPerformedAtDesc(docs);
       return docs.map((d) => ({ ...d, dataSource: "job_index" }));
     }
@@ -107,10 +133,7 @@ export async function searchMongoJobIndex(
     const fetchShop = async (shopId: number): Promise<any[]> => {
       try {
         const variants = [Number(shopId), String(shopId)];
-        const docs = await db
-          .collection("job_index")
-          .aggregate([{ $match: buildMatch(variants) }, { $limit: perShopLimit }], { maxTimeMS: 8000 })
-          .toArray();
+        const docs = await fetchCandidates(variants, perShopLimit);
         sortByPerformedAtDesc(docs);
         return docs;
       } catch (err) {

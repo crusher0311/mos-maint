@@ -31,6 +31,8 @@ export interface VehicleDocForName {
 }
 
 export interface CustomerNameSources {
+  /** Customer snapshot from the Shopmonkey normalized work order. */
+  shopmonkeyWorkOrder?: { customer?: { fullName?: string | null; companyName?: string | null } } | null;
   /** Latest Tekmetric `tekmetric_work_orders` doc for the VIN/shop, or null. */
   tekmetricWorkOrder?: TekmetricWorkOrderForName | null;
   /** `protractorVehicleResult.vehicle` when the Protractor lookup succeeded. */
@@ -92,7 +94,11 @@ export function resolveCustomerName(sources: CustomerNameSources): string | null
   const swName = nonEmptyString(sources.shopWareWorkOrder?.customerName);
   if (swName) return swName;
 
-  // 4. Vehicles collection — last resort.
+  const smCustomer = sources.shopmonkeyWorkOrder?.customer;
+  const smName = smCustomer?.fullName?.trim() || smCustomer?.companyName?.trim();
+  if (smName && smName !== TEKMETRIC_UNKNOWN_CUSTOMER_SENTINEL) return smName;
+
+  // Vehicles collection — last resort.
   const vDocName = nonEmptyString(sources.vehicleDoc?.customerName);
   if (vDocName) return vDocName;
 

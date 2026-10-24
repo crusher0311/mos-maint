@@ -9,6 +9,7 @@ import { findShopBySmsId } from "@/lib/extension-shop-lookup";
 import { searchJobsCombined } from "@/lib/job-search-combined";
 import { batchDecodeSquishes, toSquishPublic } from "@/lib/integrations/dataone-local";
 import { resolveJobSearchSpecs } from "@/lib/job-search-specs";
+import { findShopmonkeyRo } from "@/lib/plan-build/shopmonkey-ro";
 import {
   findTekmetricWorkOrderByWorkOrderId,
   findTekmetricRepairOrderById,
@@ -53,6 +54,17 @@ async function resolveVehicleContext(
     return { year, make, model, engine, vin };
   }
   
+  if (provider === "shopmonkey") {
+    const ro = await findShopmonkeyRo(db, [mosShopId, String(mosShopId)], { roId });
+    const vehicle = ro?.vehicle;
+    return {
+      year: year || vehicle?.year?.toString() || null,
+      make: make || vehicle?.make || null,
+      model: model || vehicle?.model || null,
+      engine: engine || vehicle?.engineDescription || null,
+      vin: vin || vehicle?.vin || null,
+    };
+  }
   const workOrder = await findTekmetricWorkOrderByWorkOrderId(mosShopId, String(roId));
   
   if (workOrder) {
@@ -166,13 +178,14 @@ async function _GET(request: NextRequest) {
       mosShopId = parseInt(auth.user.shopId);
       const shopDoc = await db.collection("shops").findOne(
         { shopId: { $in: [mosShopId, String(mosShopId)] } },
-        { projection: { integrationProvider: 1, tekmetric: 1, protractor: 1, autoflow: 1 } }
+        { projection: { integrationProvider: 1, tekmetric: 1, protractor: 1, autoflow: 1, "shopmonkey.apiKey": 1 } }
       );
       if (shopDoc) {
         provider = shopDoc.integrationProvider 
           || (shopDoc.tekmetric?.shopId ? 'tekmetric' 
             : shopDoc.protractor?.connectionId ? 'protractor' 
-            : shopDoc.autoflow?.domain ? 'autoflow' 
+             : shopDoc.autoflow?.domain ? 'autoflow'
+             : shopDoc.shopmonkey?.apiKey ? 'shopmonkey'
             : 'tekmetric');
       }
     }
@@ -318,10 +331,13 @@ async function _GET(request: NextRequest) {
     }
 
     const formattedJobs = results.map((job: any) => {
-      const sourceType = job.metadata?.sourceType || "protractor";
+      const sourceType = job.metadata?.sourceType || job.sourceSystem || "protractor";
       
       const lines = job.job?.lines || job.lines || [];
-      const rawTotals = job.job?.totals || job.totals || {};
+      const rawTotals = job.job?.totals || job.totals || {
+        laborHours: job.hours, laborAmount: job.laborTotal,
+        partsAmount: job.partsTotal, totalAmount: job.total,
+      };
       
       const laborLines = lines.filter((l: any) => l.lineType === "labor");
       const partLines = lines.filter((l: any) => l.lineType === "part");

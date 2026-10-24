@@ -49,6 +49,7 @@ import {
 } from "@/lib/plan-build/triage";
 import { listTekmetricDeferredWorkByVin } from "@/lib/data/repositories/tekmetric-deferred-work";
 import { resolveCustomerName } from "@/lib/plan-build/customer-name";
+import { findShopmonkeyRo } from "@/lib/plan-build/shopmonkey-ro";
 import { buildCarfaxMatchDiagnostics } from "@/lib/plan-build/carfax-match-diagnostic";
 import { recordUnmatchedCarfaxDescription } from "@/lib/carfax-match-log";
 import { isRemediedSinceInspection } from "@/lib/dvi-prefill-history";
@@ -1044,6 +1045,14 @@ export async function POST(req: NextRequest) {
       customerName = resolveCustomerName({ shopWareWorkOrder: shopWareWorkOrderForName });
     }
 
+    if (!customerName && (shopDoc?.integrationProvider === "shopmonkey" || shopDoc?.shopmonkey?.apiKey)) {
+      try {
+        const ro = await findShopmonkeyRo(db, [Number(shopId), String(shopId)], { vin: vinUpper });
+        customerName = resolveCustomerName({ shopmonkeyWorkOrder: ro });
+      } catch (err: any) {
+        console.warn(`[PlanBuild] Shopmonkey customer lookup failed: ${err.message}`);
+      }
+    }
     if (!customerName) {
       let vehicleDocForName: { customerName?: string | null } | null = null;
       try {
@@ -1220,6 +1229,7 @@ export async function POST(req: NextRequest) {
     try {
       const provider =
         (shopDoc as any)?.integrationProvider ||
+        ((shopDoc as any)?.shopmonkey?.apiKey ? "shopmonkey" : null) ||
         (tekmetricWOs.length > 0 ? "tekmetric" : protractorWOs.length > 0 ? "protractor" : null);
       const carfaxRecsForCheck =
         (carfaxResult as any).ok && Array.isArray((carfaxResult as any).serviceRecords)
