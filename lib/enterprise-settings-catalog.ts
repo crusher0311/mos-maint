@@ -80,6 +80,8 @@ export const PROTECTED_STICKER_FIELDS = [
 ] as const;
 
 const COPYABLE_STICKER_FIELDS = [
+  // QR source and custom media stay location-specific. Copying a template must
+  // never activate another location's artwork or change its routing ownership.
   "enabled",
   "logo",
   "logoObjectPath",

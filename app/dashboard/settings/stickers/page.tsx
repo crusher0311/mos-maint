@@ -1,5 +1,8 @@
 "use client";
 import StickerScanDestinationSetting from "@/components/stickers/StickerScanDestinationSetting";
+import StickerQrAppearanceSetting from "@/components/stickers/StickerQrAppearanceSetting";
+import { DEFAULT_QR_PREFERENCES, normalizeStickerQrPreferences, useStickerQrAppearance } from "@/components/stickers/useStickerQrAppearance";
+import type { StickerQrPreferences } from "@/components/stickers/useStickerQrAppearance";
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Loader2, Check, Download, Calendar, Settings2, Upload, ChevronDown, ChevronRight, RefreshCw, Save, Copy, Building2 } from "lucide-react";
@@ -21,7 +24,7 @@ interface IntervalsConfig {
   conventional: IntervalConfig;
 }
 
-interface StickerDataConfig {
+interface StickerDataConfig extends StickerQrPreferences {
   enabled: boolean;
   logo: string;
   phone: string;
@@ -63,6 +66,7 @@ const OIL_TYPES: { key: keyof IntervalsConfig; label: string; description: strin
 ];
 
 const DEFAULT_CONFIG: StickerDataConfig = {
+  ...DEFAULT_QR_PREFERENCES,
   enabled: true,
   logo: "",
   phone: "",
@@ -85,14 +89,23 @@ export default function StickerSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [regeneratingQr, setRegeneratingQr] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
-  const [qrUrl, setQrUrl] = useState<string | null>(null);
+  const [customQrAvailable, setCustomQrAvailable] = useState(false);
+  const [designerRevision, setDesignerRevision] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [config, setConfig] = useState<StickerDataConfig>(DEFAULT_CONFIG);
   const [designerLayout, setDesignerLayout] = useState<StickerLayout>(() => createDefaultLayout(DEFAULT_STICKER_SIZE));
   const [currentSize, setCurrentSize] = useState(DEFAULT_STICKER_SIZE);
+  const qr = useStickerQrAppearance({
+    qrSource: config.qrSource,
+    qrBackgroundMode: config.qrBackgroundMode,
+    background: designerLayout.backgroundColor,
+    included: config.showQRCode,
+    ready: !loading,
+    customQrAvailable,
+    onCustomQrAvailableChange: setCustomQrAvailable,
+  });
   
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
   const autoSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -124,12 +137,6 @@ export default function StickerSettingsPage() {
     fetchSettings();
   }, []);
 
-  useEffect(() => {
-    if (!loading) {
-      refreshQrPreview();
-    }
-  }, [config.showQRCode, loading]);
-
   // Auto-save effect - saves 1.5 seconds after user stops making changes
   useEffect(() => {
     // Skip until initial load is complete
@@ -153,6 +160,7 @@ export default function StickerSettingsPage() {
       try {
         const res = await fetch("/api/sticker/settings", {
           method: "PUT",
+          credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             enabled: config.enabled,
@@ -162,6 +170,8 @@ export default function StickerSettingsPage() {
             taglineLine2: config.taglineLine2,
             serviceLabel: config.serviceLabel,
             showQRCode: config.showQRCode,
+            qrSource: config.qrSource,
+            qrBackgroundMode: config.qrBackgroundMode,
             roundMileage: config.roundMileage,
             usePredictiveDate: config.usePredictiveDate,
             defaultSize: currentSize,
@@ -195,11 +205,13 @@ export default function StickerSettingsPage() {
 
   async function fetchSettings() {
     try {
-      const res = await fetch("/api/sticker/settings");
+      const res = await fetch("/api/sticker/settings", { credentials: "include", cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
+        setCustomQrAvailable(data.customQrAvailable === true);
         if (data.config) {
           const fetchedConfig = {
+            ...normalizeStickerQrPreferences(data.config),
             enabled: data.config.enabled ?? DEFAULT_CONFIG.enabled,
             logo: data.config.logo ? `${data.config.logo.split('?')[0]}?t=${Date.now()}` : DEFAULT_CONFIG.logo,
             phone: data.config.phone ?? DEFAULT_CONFIG.phone,
@@ -227,30 +239,21 @@ export default function StickerSettingsPage() {
           if (data.config.designerLayout) {
             setDesignerLayout(data.config.designerLayout);
           } else {
-            setDesignerLayout(createDefaultLayout(fetchedConfig.defaultSize));
+            setDesignerLayout({
+              ...createDefaultLayout(fetchedConfig.defaultSize),
+              backgroundColor: data.config.colors?.background || "#ffffff",
+            });
           }
+          setDesignerRevision(value => value + 1);
         }
+      } else {
+        setMessage({ type: "error", text: "Failed to load sticker settings. Reload this page to retry." });
       }
     } catch (err) {
       console.error("Failed to fetch sticker settings:", err);
+      setMessage({ type: "error", text: "Failed to load sticker settings. Reload this page to retry." });
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function refreshQrPreview() {
-    if (!config.showQRCode) {
-      setQrUrl(null);
-      return;
-    }
-    try {
-      const res = await fetch(`/api/sticker/qr-cache`);
-      if (res.ok) {
-        const blob = await res.blob();
-        setQrUrl(URL.createObjectURL(blob));
-      }
-    } catch (err) {
-      console.error("Failed to load QR preview:", err);
     }
   }
 
@@ -321,29 +324,6 @@ export default function StickerSettingsPage() {
     setSelectedTargetShops(otherShops);
   }
 
-  async function regenerateQrCode() {
-    setRegeneratingQr(true);
-    setMessage(null);
-    try {
-      // Use cached QR endpoint to regenerate
-      const res = await fetch("/api/sticker/qr-cache", {
-        method: "POST",
-      });
-      if (res.ok) {
-        setMessage({ type: "success", text: "QR code regenerated and cached" });
-        refreshQrPreview();
-      } else {
-        const data = await res.json();
-        setMessage({ type: "error", text: data.error || "Failed to regenerate QR code" });
-      }
-    } catch (err) {
-      console.error("Failed to regenerate QR code:", err);
-      setMessage({ type: "error", text: "Failed to regenerate QR code" });
-    } finally {
-      setRegeneratingQr(false);
-    }
-  }
-
   const handleDesignerChange = useCallback((layout: StickerLayout, size: string) => {
     setDesignerLayout(layout);
     setCurrentSize(size);
@@ -351,11 +331,14 @@ export default function StickerSettingsPage() {
   }, []);
 
   async function saveSettings() {
+    if (autoSaveTimeoutRef.current) clearTimeout(autoSaveTimeoutRef.current);
     setSaving(true);
+    setSaveStatus("saving");
     setMessage(null);
     try {
       const res = await fetch("/api/sticker/settings", {
         method: "PUT",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           enabled: config.enabled,
@@ -365,6 +348,8 @@ export default function StickerSettingsPage() {
           taglineLine2: config.taglineLine2,
           serviceLabel: config.serviceLabel,
           showQRCode: config.showQRCode,
+          qrSource: config.qrSource,
+          qrBackgroundMode: config.qrBackgroundMode,
           roundMileage: config.roundMileage,
           usePredictiveDate: config.usePredictiveDate,
           defaultSize: currentSize,
@@ -372,17 +357,21 @@ export default function StickerSettingsPage() {
           scanDestination: config.scanDestination,
           useKilometers: config.useKilometers,
           intervals: config.intervals,
+          defaultOilType: config.defaultOilType,
           designerLayout: designerLayout,
         }),
       });
       
       if (res.ok) {
+        setSaveStatus("saved");
         setMessage({ type: "success", text: "Sticker settings saved!" });
       } else {
+        setSaveStatus("unsaved");
         const data = await res.json();
         setMessage({ type: "error", text: data.error || "Failed to save settings" });
       }
     } catch (err) {
+      setSaveStatus("unsaved");
       setMessage({ type: "error", text: "Failed to save settings" });
     } finally {
       setSaving(false);
@@ -400,11 +389,16 @@ export default function StickerSettingsPage() {
     try {
       const res = await fetch("/api/sticker/generate", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           size: currentSize,
           includeQR: config.showQRCode,
           designerLayout: designerLayout,
+          previewConfig: {
+            qrSource: config.qrSource,
+            qrBackgroundMode: config.qrBackgroundMode,
+          },
           dataConfig: {
             logo: config.logo,
             phone: config.phone,
@@ -664,7 +658,7 @@ export default function StickerSettingsPage() {
                 />
               </div>
 
-              <div>
+              {config.qrSource === "generated" && <div>
                 <StickerScanDestinationSetting value={config.scanDestination} onChange={(scanDestination) => setConfig({ ...config, scanDestination })} />
                 <label className="block text-sm font-medium text-gray-700 mb-1">Appointment URL</label>
                 <input
@@ -674,18 +668,30 @@ export default function StickerSettingsPage() {
                   placeholder="https://booking.yourshop.com"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
-              </div>
+              </div>}
             </div>
           )}
         </div>
 
+        <StickerQrAppearanceSetting
+          qrSource={config.qrSource}
+          qrBackgroundMode={config.qrBackgroundMode}
+          onChange={preferences => setConfig(previous => ({ ...previous, ...preferences }))}
+          background={designerLayout.backgroundColor}
+          included={config.showQRCode}
+          customQrAvailable={customQrAvailable}
+          qr={qr}
+        />
+
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <h2 className="font-semibold text-gray-900 mb-4">Sticker Designer</h2>
           <StickerDesigner
+            key={designerRevision}
             initialLayout={designerLayout}
             initialSize={currentSize}
             logoUrl={config.logo || undefined}
-            qrUrl={config.showQRCode ? qrUrl || undefined : undefined}
+            qrUrl={qr.qrUrl}
+            showQRCode={config.showQRCode}
             contentData={{
               phone: config.phone || undefined,
               tagline: config.tagline || undefined,
@@ -722,13 +728,13 @@ export default function StickerSettingsPage() {
               {config.showQRCode && (
                 <button
                   type="button"
-                  onClick={regenerateQrCode}
-                  disabled={regeneratingQr}
+                    onClick={qr.refresh}
+                    disabled={qr.previewLoading || qr.mediaBusy || (config.qrSource === "custom" && !customQrAvailable)}
                   className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 disabled:text-gray-400"
-                  title="Refresh the cached QR code image"
+                    title="Reload the QR image using the current source and background"
                 >
-                  <RefreshCw size={14} className={regeneratingQr ? "animate-spin" : ""} />
-                  {regeneratingQr ? "Regenerating..." : "Refresh QR"}
+                    <RefreshCw size={14} />
+                    {qr.previewLoading ? "Loading preview…" : "Refresh QR"}
                 </button>
               )}
               <label className="flex items-center gap-2 cursor-pointer">

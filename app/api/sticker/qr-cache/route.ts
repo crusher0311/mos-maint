@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
+import { stickerQrResponse } from "@/lib/sticker-qr-response";
 import { getDb } from "@/lib/mongo";
 import { updateHovercodeLogo } from "@/lib/hovercode";
 import { getStickerRedirectUrl } from "@/lib/sticker-utils";
@@ -332,7 +333,8 @@ async function fetchExistingQR(hovercodeId: string, target: string): Promise<str
 }
 
 // GET - Retrieve cached QR code or generate new one
-export async function GET(req: NextRequest) {
+export const GET = (req: NextRequest) => stickerQrResponse(req, () => generatedGET(req));
+async function generatedGET(req: NextRequest) {
   if (req.nextUrl.searchParams.get("vin")) return generateVehicleQR(req);
   const session = await getSession();
   if (!session) {
@@ -469,7 +471,8 @@ export async function GET(req: NextRequest) {
 }
 
 // POST - Refresh cached QR code (re-fetch from HoverCode if configured, or create new)
-export async function POST(req: NextRequest) {
+export const POST = (req: NextRequest) => stickerQrResponse(req, () => generatedPOST(req), true, true);
+async function generatedPOST(req: NextRequest) {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { stickerQrResponse } from "@/lib/sticker-qr-response";
 import QRCode from "qrcode";
 import { createCanvas, loadImage } from "canvas";
 import { getSession } from "@/lib/auth";
@@ -261,7 +262,8 @@ async function generateStyledQR(
   return outputCanvas.toBuffer("image/png");
 }
 
-export async function GET(req: NextRequest) {
+export const GET = (req: NextRequest) => stickerQrResponse(req, () => generatedGET(req));
+async function generatedGET(req: NextRequest) {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -323,7 +325,8 @@ export async function GET(req: NextRequest) {
   }
 }
 
-export async function POST(req: NextRequest) {
+export const POST = (req: NextRequest) => stickerQrResponse(req, () => generatedPOST(req), true);
+async function generatedPOST(req: NextRequest) {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

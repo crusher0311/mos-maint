@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
+import { customStickerQr, styleStickerQr, StickerQrError } from "@/lib/sticker-qr-image";
+import { validQrPreferences, type StickerQrPreferences } from "@/lib/sticker-qr-appearance";
 import { createStickerQrTarget } from "@/lib/sticker-qr-target";
 import { retainLegacyStickerHovercode } from "@/lib/sticker-legacy-hovercode";
 import { getStickerRedirectUrl } from "@/lib/sticker-utils";
@@ -233,7 +235,7 @@ interface FontStyle {
   size?: number;
 }
 
-interface StickerConfig {
+interface StickerConfig extends StickerQrPreferences {
   logo?: string;
   logoObjectPath?: string;
   phone?: string;
@@ -354,6 +356,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body: StickerRequest = await req.json();
+    if (body.previewConfig && !validQrPreferences(body.previewConfig)) return NextResponse.json({ error: "Invalid QR preferences" }, { status: 400 });
 
     // Coerce caller-supplied mileage to numbers (strings like "71,378"
     // are accepted) and refuse implausible values so a bad payload never
@@ -412,11 +415,15 @@ export async function POST(req: NextRequest) {
     const configWithBase64Logo = { ...config, logo: logoDataUrl || undefined };
 
     let qrDataUrl: string | null = null;
-    if (includeQR) {
+    if (includeQR && config.qrSource === "custom") {
+      try { qrDataUrl = await customStickerQr(db, shopId); }
+      catch (error) { return NextResponse.json({ error: error instanceof StickerQrError ? error.message : "Custom QR unavailable" }, { status: 409 }); }
+    }
+    if (includeQR && config.qrSource !== "custom") {
       const redirectUrl = await createStickerQrTarget(db, shopId, body.vin);
       const genericQr = redirectUrl === getStickerRedirectUrl(shopId);
       const qrColor = config.colors?.primary || "#111111";
-      const qrBgColor = config.colors?.background || "#ffffff";
+      const qrBgColor = "#ffffff";
       const shopName = shop.name || `Shop ${shopId}`;
       
       // First, check shop_media cache (unified QR cache with proper logo)
@@ -498,6 +505,7 @@ export async function POST(req: NextRequest) {
     }
 
     let designerLayout = body.designerLayout || shop.stickerConfig?.designerLayout;
+    if (qrDataUrl) qrDataUrl = await styleStickerQr(qrDataUrl, config, designerLayout?.backgroundColor || config.colors?.background);
     
     if (designerLayout && designerLayout.elements) {
       const targetSize = getStickerSize(size);

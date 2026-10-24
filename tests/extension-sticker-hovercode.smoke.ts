@@ -181,6 +181,22 @@ async function main() {
   assert.equal(rendered.at(-1), null);
   assert.equal(calls.length, before);
   assert.equal(refs.length, refCount);
+  // Custom mode must bypass both provider and target creation, and never fall
+  // back to a generated code after removal.
+  shop.stickerConfig = { qrSource: "custom", qrBackgroundMode: "match", colors: { background: "#eeeeee" } };
+  media.push({ _id: "sticker-custom-qr:42", shopId: 42, type: "sticker_custom_qr", dataUri: expected });
+  await print({ vin: "1HGCM82633A004352" });
+  assert.equal(calls.length, before);
+  assert.equal(refs.length, refCount);
+  media.splice(media.findIndex(row => row.type === "sticker_custom_qr"), 1);
+  const missing = await route.POST(new NextRequest("https://stickers.example.test/api/extension/sticker", {
+    method: "POST", body: JSON.stringify({ currentMileage: 10000 }),
+  }));
+  assert.equal(missing.status, 409);
+  assert.match((await missing.json()).error, /Custom QR image is unavailable/);
+  await print({ excludeQR: true });
+  assert.equal(rendered.at(-1), null);
+  assert.equal(calls.length, before);
   assert.ok(logs.some(log => log.includes("provider_http_503")));
   assert.ok(logs.some(log => log.includes("timeout")));
   assert.ok(logs.every(log => !log.includes("?v=") && !log.includes("secret provider") && !log.includes("must-not-log")));

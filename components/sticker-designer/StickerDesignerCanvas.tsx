@@ -2,7 +2,7 @@
 
 import { useRef, useState, useCallback } from "react";
 import { StickerElement, StickerLayout, STICKER_SAMPLE_DATA, resolveStickerElementContent } from "@/lib/sticker-designer-types";
-import { QrCode, Image as ImageIcon } from "lucide-react";
+import { Image as ImageIcon } from "lucide-react";
 
 interface StickerContentData {
   phone?: string;
@@ -20,6 +20,7 @@ interface StickerDesignerCanvasProps {
   onUpdateElement: (id: string, updates: Partial<StickerElement>) => void;
   logoUrl?: string;
   qrUrl?: string;
+  showQRCode?: boolean;
   contentData?: StickerContentData;
 }
 
@@ -47,6 +48,7 @@ export function StickerDesignerCanvas({
   onUpdateElement,
   logoUrl,
   qrUrl,
+  showQRCode = true,
   contentData,
 }: StickerDesignerCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -259,7 +261,7 @@ export function StickerDesignerCanvas({
         }
         return (
           <div className="flex items-center justify-center w-full h-full bg-gray-100 text-gray-400 border border-dashed border-gray-300 rounded">
-            <QrCode size={Math.min(element.width, element.height) * 0.5} />
+            <span className="text-center text-[9px] leading-tight px-1">QR image unavailable</span>
           </div>
         );
 
@@ -288,7 +290,7 @@ export function StickerDesignerCanvas({
     }
   };
 
-  const visibleElements = layout.elements.filter((el) => el.visible);
+  const visibleElements = layout.elements.filter((el) => el.visible && (el.type !== "qrCode" || showQRCode));
   
   // Scale factor for displaying the canvas larger while keeping internal coordinates
   const displayScale = 2;

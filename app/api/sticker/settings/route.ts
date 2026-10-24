@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
+import { validQrPreferences, type StickerQrPreferences } from "@/lib/sticker-qr-appearance";
 import { updateHovercodeDestination as sharedUpdateHovercodeDestination } from "@/lib/hovercode";
 
 export const runtime = "nodejs";
@@ -79,7 +80,7 @@ interface DesignerLayout {
   version?: number;
 }
 
-interface StickerConfig {
+interface StickerConfig extends StickerQrPreferences {
   enabled?: boolean;
   logo?: string;
   phone?: string;
@@ -159,6 +160,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       config,
+      customQrAvailable: !!await db.collection("shop_media").findOne({ _id: `sticker-custom-qr:${shopId}` as any, shopId, type: "sticker_custom_qr" }, { projection: { _id: 1 } }),
       shopName: shop.name,
     });
   } catch (error) {
@@ -187,11 +189,14 @@ export async function PUT(req: NextRequest) {
 
   try {
     const body: Partial<StickerConfig> = await req.json();
+    if (!validQrPreferences(body)) return NextResponse.json({ error: "Invalid QR source or background mode" }, { status: 400 });
     if (body.scanDestination !== undefined && !["appointment", "website", "vhi"].includes(body.scanDestination)) {
       return NextResponse.json({ error: "Invalid scan destination" }, { status: 400 });
     }
 
     const allowedFields = [
+      "qrSource",
+      "qrBackgroundMode",
       "enabled",
       "logo",
       "phone",

@@ -86,6 +86,15 @@ search paths.
 `libuuid.so.1` under `env -i`; the library was not actually missing from the
 workspace. Clearing loader configuration caused a false dependency failure.
 
+Browser fixture runners may request a newer Playwright browser than the cached
+Chromium installation. A missing executable is not evidence that no browser is
+installed; existing Puppeteer-managed Chromium may be usable with an explicit
+executable path and its missing native-library directories.
+
+**Why:** Artifact Playwright and root Puppeteer have independent browser caches.
+**How to apply:** Inspect existing browser installations before downloading another
+copy, and preserve the narrow library-search-path rule below.
+
 **How to apply:** Preserve only noncredential runtime paths such as
 `LD_AUDIT`, `REPLIT_LD_LIBRARY_PATH`, `LD_LIBRARY_PATH`,
 `NIX_LD_LIBRARY_PATH`, `NIX_LD` and font configuration when

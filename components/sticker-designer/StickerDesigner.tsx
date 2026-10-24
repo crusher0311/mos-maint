@@ -27,6 +27,7 @@ interface StickerDesignerProps {
   initialSize?: string;
   logoUrl?: string;
   qrUrl?: string;
+  showQRCode?: boolean;
   contentData?: StickerContentData;
   onChange?: (layout: StickerLayout, size: string) => void;
 }
@@ -41,6 +42,7 @@ export function StickerDesigner({
   initialSize = DEFAULT_STICKER_SIZE,
   logoUrl,
   qrUrl,
+  showQRCode = true,
   contentData,
   onChange,
 }: StickerDesignerProps) {
@@ -189,6 +191,7 @@ export function StickerDesigner({
             onUpdateElement={handleUpdateElement}
             logoUrl={logoUrl}
             qrUrl={qrUrl}
+            showQRCode={showQRCode}
             contentData={contentData}
           />
         </div>

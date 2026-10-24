@@ -102,7 +102,7 @@ export async function getExtensionStickerQr(
       body: JSON.stringify({
         workspace, qr_data: target, dynamic: true,
         display_name: `${shopName} - Oil Sticker`,
-        primary_color: "#111111", background_color: config.colors?.background || "#ffffff",
+        primary_color: "#111111", background_color: "#ffffff",
         pattern: "Squares", eye_style: "Rounded", size: 300,
         logo_url: `${logoBase}/appointment-logo.png`, generate_png: true,
       }),

@@ -224,7 +224,7 @@ export async function renderStickerStandard(
       const qrImg = await loadBase64Image(data.qrDataUrl);
       const qrDrawSize = Math.min(qrSize, serviceSectionHeight);
       const qrY = serviceY + (serviceSectionHeight - qrDrawSize) / 2;
-      ctx.drawImage(qrImg, padding, qrY, qrDrawSize, qrDrawSize);
+      drawImageContain(ctx, qrImg, padding, qrY, qrDrawSize, qrDrawSize);
       qrRenderedWidth = qrDrawSize + Math.round(10 * sf);
     } catch (e) {
       console.warn("[Canvas Renderer] QR load failed:", e);

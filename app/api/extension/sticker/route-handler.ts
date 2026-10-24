@@ -1,6 +1,8 @@
 import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongo";
+import { customStickerQr, styleStickerQr, StickerQrError } from "@/lib/sticker-qr-image";
+import type { StickerQrPreferences } from "@/lib/sticker-qr-appearance";
 import { validateExtensionToken, getAuthErrorStatus, buildAuthErrorBody, requireExtensionPrincipalScope } from "@/lib/extension-auth";
 import { checkShopFeatureGate } from "@/lib/extension-route-guard";
 import { renderStickerStandard, renderStickerDesigner } from "@/lib/canvas-renderer";
@@ -206,7 +208,7 @@ async function svgToPngDataUri(svgContent: string, size: number = 300, externalL
 async function fallbackQRGeneration(url: string, color: string = "#111111"): Promise<string> {
   return await QRCode.toDataURL(url, {
     width: 300,
-    margin: 2,
+    margin: 4,
     color: { dark: color, light: "#ffffff" },
     errorCorrectionLevel: "H",
   });
@@ -218,7 +220,7 @@ interface FontStyle {
   size?: number;
 }
 
-interface StickerConfig {
+interface StickerConfig extends StickerQrPreferences {
   logo?: string;
   logoObjectPath?: string;
   phone?: string;
@@ -858,10 +860,15 @@ async function _POST(request: NextRequest) {
     };
 
     let qrDataUrl: string | null = null;
-    const redirectUrl = excludeQR ? "" : await createStickerQrTarget(db, mosShopId!, vin);
+    const customQr = stickerConfig.qrSource === "custom";
+    const redirectUrl = excludeQR || customQr ? "" : await createStickerQrTarget(db, mosShopId!, vin);
     const qrColor = stickerConfig.colors?.primary || "#111111";
 
-    if (!excludeQR) {
+    if (!excludeQR && customQr) {
+      try { qrDataUrl = await customStickerQr(db, mosShopId!); }
+      catch (error) { return NextResponse.json({ error: error instanceof StickerQrError ? error.message : "Custom QR unavailable" }, { status: 409, headers: corsHeaders }); }
+    }
+    if (!excludeQR && !customQr) {
       qrDataUrl = await getExtensionStickerQr(db, mosShopId!, redirectUrl, stickerConfig, shop.name || `Shop ${mosShopId}`, {
         timeoutMs: STICKER_QR_TIMEOUT_MS,
         svgToPng: svgToPngDataUri,
@@ -877,7 +884,7 @@ async function _POST(request: NextRequest) {
         },
       });
     }
-    if (!excludeQR && !qrDataUrl) {
+    if (!excludeQR && !customQr && !qrDataUrl) {
       qrDataUrl = await fallbackQRGeneration(redirectUrl, qrColor);
     }
 
@@ -887,6 +894,7 @@ async function _POST(request: NextRequest) {
       console.log("[Extension Sticker] QR code excluded by user for this sticker");
     }
     _lap("qr");
+    if (qrDataUrl) qrDataUrl = await styleStickerQr(qrDataUrl, stickerConfig, stickerConfig.designerLayout?.backgroundColor || stickerConfig.colors?.background);
 
     let image: Buffer;
     
