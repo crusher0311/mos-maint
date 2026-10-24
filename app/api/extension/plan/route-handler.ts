@@ -72,7 +72,45 @@ import {
  */
 export const __deps = {
   getDb,
+  tekmetricRequest: async (path: string, shopId?: number) =>
+    (await import("@/lib/integrations/tekmetric/client")).tekmetricRequest(path, {}, shopId),
+  resolveProtractorRo: async (shopId: number, roId: string) =>
+    (await import("@/lib/integrations/protractor/client")).resolveWorkOrderGuid(shopId, roId),
+  readProtractorRo: async (shopId: number, id: string) =>
+    (await import("@/lib/integrations/protractor/client")).fetchWorkOrderById(shopId, id, { priority: true, timeoutMs: 6000, maxRetries: 0 }),
+  readShopwareRo: async (tenantId: number, roId: number, shopId: number) =>
+    (await import("@/lib/integrations/shopware/client")).getRepairOrder(tenantId, roId, shopId),
+  isRoNegativelyCached,
+  recordRoNegativeCache,
+  clearRoNegativeCache,
 };
+
+// Only native RO identities may supply evidence. In particular an AutoFlow RO
+// number must never be sent to the linked Protractor shop as though it were native.
+export async function readNativeRoJobTitles(provider: string, shopId: number, roId: string, shop: any): Promise<string[] | null> {
+  if (provider === "shopware") {
+    if (!/^\d+$/.test(roId) || !shop?.shopware?.tenantId || !shop?.shopware?.swShopId) return null;
+    const ro = await __deps.readShopwareRo(Number(shop.shopware.tenantId), Number(roId), shopId);
+    if (String(ro.id) !== String(Number(roId)) || String(ro.shop_id) !== String(shop.shopware.swShopId) || !Array.isArray(ro.services)) return null;
+    return ro.services.map(s => s.title).filter((s): s is string => typeof s === "string" && !!s.trim());
+  }
+  if (provider === "protractor") {
+    if (!/^(?:\d+|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.test(roId)) return null;
+    const resolved = await __deps.resolveProtractorRo(shopId, roId);
+    if (!resolved.ok || !resolved.workOrderGuid) return null;
+    const result = await __deps.readProtractorRo(shopId, resolved.workOrderGuid);
+    const ro = result.workOrder;
+    if (!result.ok || !ro || ro.ID.toLowerCase() !== resolved.workOrderGuid.toLowerCase() ||
+        (/^\d+$/.test(roId) && String(ro.WorkOrderNumber) !== String(Number(roId))) ||
+        !Array.isArray(ro.ServicePackages)) return null;
+    return ro.ServicePackages.map(s => s.Title).filter((s): s is string => typeof s === "string" && !!s.trim());
+  }
+  return null;
+}
+
+export function canReadNativeTekmetricRo(provider: string, isAutoflowAnchored: boolean): boolean {
+  return provider === "tekmetric" && !isAutoflowAnchored;
+}
 
 /**
  * Bumped whenever the extension on-demand analyzer's output shape changes
@@ -279,6 +317,11 @@ function isApprovedThisVisit(serviceTitle: string, authorizedJobs: string[], kno
 
 function isOnCurrentRO(serviceTitle: string, allRoJobs: string[], knownServiceKey?: string): boolean {
   if (!allRoJobs.length || !serviceTitle) return false;
+  // Unknown/custom services have no canonical pattern. Exact title evidence
+  // still proves presence on this RO; never use containment or search synonyms.
+  const normalizeTitle = (value: string) => value.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  const title = normalizeTitle(serviceTitle);
+  if (title && allRoJobs.some(jobName => normalizeTitle(jobName) === title)) return true;
   const serviceKey = (knownServiceKey && SERVICE_KEY_PATTERNS[knownServiceKey]) ? knownServiceKey : mapServiceToKey(serviceTitle);
   if (!serviceKey) return false;
   const patterns = SERVICE_KEY_PATTERNS[serviceKey];
@@ -514,28 +557,28 @@ async function clearRoNegativeCache(roId: string, mosShopId?: number): Promise<v
   }
 }
 
-async function fetchTekmetricRoCached(roId: string, forceRefresh = false, mosShopId?: number): Promise<any | null> {
+export async function fetchTekmetricRoCached(roId: string, forceRefresh = false, mosShopId?: number): Promise<any | null> {
+  const cacheKey = negCacheKey(roId, mosShopId);
   if (!forceRefresh) {
-    const cached = tekmetricRoCache.get(roId);
+    const cached = tekmetricRoCache.get(cacheKey);
     if (cached && Date.now() - cached.fetchedAt < TEKMETRIC_RO_CACHE_TTL) {
       return cached.data;
     }
     // Cross-instance short-circuit: if another worker just timed out on this
     // RO within the last 30s, don't re-pay the 6s ceiling — bail immediately
     // and let the caller use its Mongo fallback.
-    if (await isRoNegativelyCached(roId, mosShopId)) {
+    if (await __deps.isRoNegativelyCached(roId, mosShopId)) {
       console.log(`[Extension] Tekmetric RO ${roId} (shop ${mosShopId ?? "?"}) negative-cached (recent timeout) — skipping live call`);
       return null;
     }
   }
   try {
-    const { tekmetricRequest } = await import("@/lib/integrations/tekmetric/client");
     // Heart-shop slowdown mitigation: cap the upstream Tekmetric call at 6s.
     // On timeout `data` is null and the caller falls back to the Mongo
     // `tekmetric_work_orders` cache (possibly stale but always present)
     // rather than blocking the VHI panel for 30s+ while Tekmetric stalls.
     const data = await withUpstreamTimeout(
-      tekmetricRequest(`/repair-orders/${roId}`, {}, mosShopId),
+      __deps.tekmetricRequest(`/repair-orders/${roId}`, mosShopId),
       6000,
       `tekmetric /repair-orders/${roId}`,
       null,
@@ -543,14 +586,14 @@ async function fetchTekmetricRoCached(roId: string, forceRefresh = false, mosSho
     if (data == null) {
       // Negative-cache the timeout so concurrent advisors on other Render
       // instances don't all repay the 6s wait for the same RO.
-      await recordRoNegativeCache(roId, mosShopId);
+      await __deps.recordRoNegativeCache(roId, mosShopId);
       return null;
     }
-    tekmetricRoCache.set(roId, { data, fetchedAt: Date.now() });
+    tekmetricRoCache.set(cacheKey, { data, fetchedAt: Date.now() });
     // Success — eagerly clear any cross-instance negative entry (fire and
     // forget; a stale entry would otherwise suppress live calls for up to
     // the full TTL even though the upstream has recovered).
-    void clearRoNegativeCache(roId, mosShopId);
+    void __deps.clearRoNegativeCache(roId, mosShopId);
     if (tekmetricRoCache.size > 200) {
       const oldest = Array.from(tekmetricRoCache.entries())
         .sort((a, b) => a[1].fetchedAt - b[1].fetchedAt)[0];
@@ -559,7 +602,7 @@ async function fetchTekmetricRoCached(roId: string, forceRefresh = false, mosSho
     return data;
   } catch (e: any) {
     console.error(`[Extension] Tekmetric RO fetch failed for ${roId}:`, e.message);
-    await recordRoNegativeCache(roId, mosShopId);
+    await __deps.recordRoNegativeCache(roId, mosShopId);
   }
   return null;
 }
@@ -1519,6 +1562,7 @@ async function _GET(request: NextRequest) {
     const roId = searchParams.get("roId");
     const providerHint = searchParams.get("provider"); // Optional hint, we verify against actual config
     const forceRefresh = searchParams.get("refresh") === "true";
+    const refreshRo = forceRefresh || searchParams.get("refreshRo") === "true";
     // Task #645: the odometer the advisor typed on the open RO, scraped from
     // the page by the content script. This is the most dependable mileage
     // source (it's literally what's on screen), so it anchors the VHI math
@@ -1631,6 +1675,7 @@ async function _GET(request: NextRequest) {
     let currentRoDate: Date | null = null;
     let currentRoAuthorizedJobs: string[] = [];
     let currentRoAllJobs: string[] = [];
+    let currentRoEvidenceAvailable = false;
 
     // AutoFlow pages anchor on the AutoFlow flag rather than the resolved
     // provider: a dual-integration shop (e.g. Protractor+AutoFlow) resolves to
@@ -1714,14 +1759,14 @@ async function _GET(request: NextRequest) {
         }
         // AutoFlow has no entries in work_orders; suppress that fallthrough.
         workOrder = null;
-      } else if (provider === "tekmetric") {
+      } else if (canReadNativeTekmetricRo(provider, isAutoflowAnchored)) {
         workOrder = await db.collection("tekmetric_work_orders").findOne({
           shopId: { $in: [String(mosShopId), Number(mosShopId)] },
           workOrderId: String(roId)
         });
         console.log(`[Extension] Tekmetric WO lookup: mosShopId=${mosShopId}, roId=${roId}, found=${!!workOrder}`);
         
-        const liveData = await fetchTekmetricRoCached(String(roId), forceRefresh, mosShopId ? Number(mosShopId) : undefined);
+        const liveData = await fetchTekmetricRoCached(String(roId), refreshRo, mosShopId ? Number(mosShopId) : undefined);
         if (liveData) {
           const liveOdometer = liveData.milesIn || liveData.mileageIn || liveData.vehicle?.mileage;
           let roVin = liveData.vehicle?.vin || liveData.vehicleVin;
@@ -1762,6 +1807,7 @@ async function _GET(request: NextRequest) {
             console.log(`[Extension] Tekmetric WO updated with live API data: odometer=${workOrder.odometer}`);
           }
           if (liveData.jobs && Array.isArray(liveData.jobs)) {
+            currentRoEvidenceAvailable = true;
             currentRoAllJobs = liveData.jobs
               .filter((j: any) => j.name)
               .map((j: any) => j.name);
@@ -1868,14 +1914,15 @@ async function _GET(request: NextRequest) {
       }
     }
 
-    if (roId && vin && provider === "tekmetric" && currentRoAuthorizedJobs.length === 0) {
-      const liveData = await fetchTekmetricRoCached(String(roId), forceRefresh, mosShopId ? Number(mosShopId) : undefined);
+    if (roId && vin && canReadNativeTekmetricRo(provider, isAutoflowAnchored) && currentRoAuthorizedJobs.length === 0) {
+      const liveData = await fetchTekmetricRoCached(String(roId), refreshRo, mosShopId ? Number(mosShopId) : undefined);
       if (liveData) {
         if (!mileage) {
           const liveOdometer = liveData.milesIn || liveData.mileageIn || liveData.vehicle?.mileage;
           if (liveOdometer) mileage = liveOdometer;
         }
         if (liveData.jobs && Array.isArray(liveData.jobs)) {
+          currentRoEvidenceAvailable = true;
           currentRoAllJobs = liveData.jobs
             .filter((j: any) => j.name)
             .map((j: any) => j.name);
@@ -1892,6 +1939,17 @@ async function _GET(request: NextRequest) {
             ? `${liveData.customer.firstName} ${liveData.customer.lastName}`
             : liveData.customer?.name || null;
         }
+      }
+    }
+
+    if (roId && !isAutoflowAnchored && (provider === "protractor" || provider === "shopware")) {
+      const titles = await withUpstreamTimeout(
+        readNativeRoJobTitles(provider, Number(mosShopId), String(roId), shopDoc).catch(() => null),
+        8000, "extension current RO job titles", null,
+      );
+      if (titles !== null) {
+        currentRoAllJobs = titles;
+        currentRoEvidenceAvailable = true;
       }
     }
 
@@ -2136,8 +2194,8 @@ async function _GET(request: NextRequest) {
       console.warn(`[Extension] Failed to record viewed VIN: ${e?.message}`);
     }
 
-    if (provider === "tekmetric" && roId && (!repairOrderNumber || !customerName) && shopDoc?.tekmetric?.shopId) {
-      const data = await fetchTekmetricRoCached(String(roId), forceRefresh, mosShopId ? Number(mosShopId) : undefined);
+    if (canReadNativeTekmetricRo(provider, isAutoflowAnchored) && roId && (!repairOrderNumber || !customerName) && shopDoc?.tekmetric?.shopId) {
+      const data = await fetchTekmetricRoCached(String(roId), refreshRo, mosShopId ? Number(mosShopId) : undefined);
       if (data) {
         if (!repairOrderNumber) repairOrderNumber = data.repairOrderNumber || null;
         if (!customerName) {
@@ -2460,6 +2518,7 @@ async function _GET(request: NextRequest) {
         shopLogo: shopDoc?.branding?.logo || null,
         locationIdentifier: shopDoc?.locationIdentifier || shopDoc?.name || null,
         authorizedJobsHash: cachedAuthorizedHash,
+        currentRoJobTitles: currentRoEvidenceAvailable ? currentRoAllJobs : null,
         reportUrl,
       }, { headers: corsHeaders });
     }
@@ -2792,6 +2851,7 @@ async function _GET(request: NextRequest) {
       shopLogo: shopDoc?.branding?.logo || null,
       locationIdentifier: shopDoc?.locationIdentifier || shopDoc?.name || null,
       authorizedJobsHash,
+      currentRoJobTitles: currentRoEvidenceAvailable ? currentRoAllJobs : null,
       reportUrl: reportUrl2,
     }, { headers: corsHeaders });
 

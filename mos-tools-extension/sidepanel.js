@@ -458,16 +458,35 @@ function syncEstimateAuditStatusRefresh() {
 const PLAN_CACHE_TTL_MS = 5 * 60 * 1000;
 const PLAN_CACHE_MAX = 30;
 const planCache = new Map(); // cacheKey -> { data, ts }
+// Confirmed adds associate a recommendation with the selected provider title.
+// This is not evidence by itself: refreshed plans must contain that exact job.
+const recommendationAddEvidence = new Map();
+function normalizeEstimateTitle(value) {
+  return String(value || '').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+}
 function planCacheKey(ctx) {
   if (!ctx || !ctx.roId) return null;
-  return `${ctx.shopId || ''}::${ctx.roId}`;
+  return JSON.stringify([ctx.provider || '', ctx.shopId ?? '', String(ctx.roId)]);
 }
 function setPlanCache(key, data) {
   if (!key) return;
-  planCache.set(key, { data, ts: Date.now() });
+  const associations = recommendationAddEvidence.get(key);
+  const titles = new Set((data.currentRoJobTitles || []).map(normalizeEstimateTitle).filter(Boolean));
+  if (associations) {
+    for (const bucket of ['overdue', 'dueSoon', 'complimentary', 'recommended']) {
+      for (const item of data[bucket] || []) {
+        const jobTitle = associations.get(recommendationIdentity(item));
+        if (jobTitle && titles.has(jobTitle)) item.onCurrentRO = true;
+      }
+    }
+  }
+  planCache.set(key, { data, ts: Date.now(), mutationVersion: planCache.get(key)?.mutationVersion || 0 });
   if (planCache.size > PLAN_CACHE_MAX) {
     const oldest = planCache.keys().next().value;
-    if (oldest !== undefined) planCache.delete(oldest);
+    if (oldest !== undefined) {
+      planCache.delete(oldest);
+      recommendationAddEvidence.delete(oldest);
+    }
   }
 }
 // After a job is successfully added to the current RO, flip the matching VHI
@@ -478,9 +497,28 @@ function setPlanCache(key, data) {
 // estimate (seen live on RO #26362: control arm + alignment added, badge
 // never appeared). Expiring `ts` keeps the instant repaint but forces a
 // quiet background revalidation, where the server recomputes On Estimate
-// from the live RO via service-key pattern matching (the authoritative
-// check — this local title match is only an optimistic preview of it).
-function markServiceOnEstimate(jobName, cacheKeyOverride) {
+// from current RO evidence (canonical patterns or exact title matches).
+// Origin associations only survive revalidation when their selected job's
+// exact title is still present on that RO.
+function recommendationIdentity(item) {
+  return JSON.stringify([item.key || '', item.serviceKey || '', item.title || item.service || item.name || '']);
+}
+
+function captureRecommendationOrigin(service) {
+  return { cacheKey: planCacheKey(currentContext), identity: recommendationIdentity(service) };
+}
+
+// Search-origin intent is limited to the RO, search text and results tab that
+// the recommendation opened. Manual searches/navigation must not reuse it.
+let recommendationSearchOrigin = null;
+function getRecommendationSearchOrigin(tab) {
+  const origin = recommendationSearchOrigin;
+  const query = tab === 'canned' ? elements.cannedSearch.value : elements.jobSearch.value;
+  return origin && origin.tab === tab && origin.query === query &&
+    origin.cacheKey === planCacheKey(currentContext) ? { ...origin } : null;
+}
+
+function markServiceOnEstimate(jobName, cacheKeyOverride, origin) {
   try {
     // Callers snapshot the cache key before their (slow) add request so a
     // late success after the user switched ROs never marks the wrong entry.
@@ -488,15 +526,22 @@ function markServiceOnEstimate(jobName, cacheKeyOverride) {
     if (!key) return;
     const entry = planCache.get(key);
     if (!entry || !entry.data) return;
-    const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    entry.mutationVersion = (entry.mutationVersion || 0) + 1;
+    const norm = normalizeEstimateTitle;
     const target = norm(jobName);
+    if (origin?.cacheKey === key && target) {
+      let associations = recommendationAddEvidence.get(key);
+      if (!associations) recommendationAddEvidence.set(key, associations = new Map());
+      associations.set(origin.identity, target);
+    }
     let flipped = false;
-    if (target) {
+    if (target || origin) {
       for (const bucket of ['overdue', 'dueSoon', 'complimentary', 'recommended']) {
         for (const item of entry.data[bucket] || []) {
           if (item.onCurrentRO) continue;
           const t = norm(item.title || item.service || item.name);
-          if (t && (t === target || t.includes(target) || target.includes(t))) {
+          const isOrigin = origin?.cacheKey === key && recommendationIdentity(item) === origin.identity;
+          if (isOrigin || (t && t === target)) {
             item.onCurrentRO = true;
             flipped = true;
           }
@@ -506,6 +551,8 @@ function markServiceOnEstimate(jobName, cacheKeyOverride) {
     // Expire (don't delete) so the next visit still paints instantly from
     // cache but re-checks with the server in the background.
     entry.ts = 0;
+    if (origin && recommendationSearchOrigin?.identity === origin.identity &&
+        recommendationSearchOrigin?.cacheKey === key) recommendationSearchOrigin = null;
     // Only repaint if the user is still viewing the RO the job was added to.
     if (flipped && currentContext && key === planCacheKey(currentContext)) {
       renderPlan(entry.data, currentContext.roId, currentContext.shopId);
@@ -1037,10 +1084,12 @@ function setupEventListeners() {
   
   // Canned job search
   elements.cannedSearch.addEventListener('input', () => {
+    recommendationSearchOrigin = null;
     filterCannedJobs(elements.cannedSearch.value);
   });
   
   // Job search
+  elements.jobSearch.addEventListener('input', () => { recommendationSearchOrigin = null; });
   elements.jobSearchBtn.addEventListener('click', handleJobSearch);
   elements.jobSearch.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') handleJobSearch();
@@ -1489,6 +1538,7 @@ function renderSessionTierBanner() {
 const RO_INDEPENDENT_TABS = ['rates', 'concern', 'create-ro'];
 
 function switchJobsSubTab(subtab) {
+  recommendationSearchOrigin = null;
   const subBtns = document.querySelectorAll('#tab-jobs .sub-tab-btn');
   subBtns.forEach(btn => btn.classList.toggle('active', btn.dataset.subtab === subtab));
   const lookupPanel = document.getElementById('subtab-lookup');
@@ -1498,6 +1548,7 @@ function switchJobsSubTab(subtab) {
 }
 
 function switchTab(tab) {
+  recommendationSearchOrigin = null;
   clearVehicleHistory();
   if (tab === 'lookup') { tab = 'jobs'; switchJobsSubTab('lookup'); }
   else if (tab === 'canned') { tab = 'jobs'; switchJobsSubTab('canned'); }
@@ -1672,6 +1723,7 @@ function updateContext(context) {
   }
   
   const prevContext = currentContext;
+  if (planCacheKey(prevContext) !== planCacheKey(context)) recommendationSearchOrigin = null;
   const historyContextChanged =
     vehicleHistoryContextKey(prevContext) !== vehicleHistoryContextKey(context);
   // Clear before publishing the next context or starting any other render.
@@ -2160,6 +2212,9 @@ async function handleLogin(e) {
 }
 
 async function handleLogout() {
+  recommendationSearchOrigin = null;
+  recommendationAddEvidence.clear();
+  planCache.clear();
   clearVehicleHistory();
   if (vehicleHistoryTimer) clearInterval(vehicleHistoryTimer);
   vehicleHistoryTimer = null;
@@ -2203,6 +2258,7 @@ async function loadPlan(forceRefresh = false) {
   // server can anchor the VHI on it instead of falling to a CARFAX estimate.
   const reqOdometer = currentContext.scrapedOdometer || null;
   const cacheKey = planCacheKey(currentContext);
+  const requestMutationVersion = planCache.get(cacheKey)?.mutationVersion || 0;
 
   // Stale-while-revalidate: paint cached content instantly when we have it.
   let servedFromCache = false;
@@ -2236,6 +2292,9 @@ async function loadPlan(forceRefresh = false) {
     if (reqVin) params.set('vin', reqVin);
     if (reqOdometer) params.set('odometer', String(reqOdometer));
     if (forceRefresh) params.set('refresh', 'true');
+    // Re-read the RO after a confirmed add without rebuilding recommendations
+    // or forcing paid/external history refreshes.
+    if (recommendationAddEvidence.has(cacheKey) || planCache.get(cacheKey)?.ts === 0) params.set('refreshRo', 'true');
     
     let result;
     let lastError;
@@ -2256,9 +2315,13 @@ async function loadPlan(forceRefresh = false) {
     
     if (result.error) throw new Error(result.error);
 
+    // A response that started before a confirmed add is not revalidation of
+    // that add. Leave its expired optimistic cache intact for the next read.
+    if ((planCache.get(cacheKey)?.mutationVersion || 0) !== requestMutationVersion) return;
     setPlanCache(cacheKey, result);
     renderPlan(result, reqRoId, reqShopId, reqProvider, reqVin);
   } catch (err) {
+    if ((planCache.get(cacheKey)?.mutationVersion || 0) !== requestMutationVersion) return;
     // The user already moved on to another RO/shop — drop this stale failure.
     if (currentContext?.roId !== reqRoId || currentContext?.shopId !== reqShopId) return;
     // We already have cached content on screen — keep it rather than wiping
@@ -2864,10 +2927,12 @@ function setupAddDropdowns() {
       if (action === 'search-history') {
         switchTab('lookup');
         elements.jobSearch.value = normalizedName;
+        recommendationSearchOrigin = { ...captureRecommendationOrigin(service), tab: 'lookup', query: normalizedName };
         await handleJobSearch();
       } else if (action === 'search-canned') {
         switchTab('canned');
         elements.cannedSearch.value = normalizedName;
+        recommendationSearchOrigin = { ...captureRecommendationOrigin(service), tab: 'canned', query: normalizedName };
         filterCannedJobs(normalizedName);
       } else if (action === 'add-generic') {
         await handleAddService(service);
@@ -3842,7 +3907,7 @@ function setupJobItemHandlers() {
       const lookupId = btn.dataset.lookupId;
       const job = lookupJobsDataMap.get(lookupId);
       if (job) {
-        handleAddJob(job);
+        handleAddJob(job, undefined, undefined, undefined, undefined, getRecommendationSearchOrigin('lookup'));
       } else {
         console.error('[MOS] Lookup job not found:', lookupId);
       }
@@ -3928,7 +3993,7 @@ function renderCannedJobs(jobs) {
       const cannedId = btn.dataset.cannedId;
       const job = cannedJobsDataMap.get(cannedId);
       if (job) {
-        handleAddCannedJob(job);
+        handleAddCannedJob(job, getRecommendationSearchOrigin('canned'));
       } else {
         console.error('[MOS] Canned job not found:', cannedId);
       }
@@ -3979,7 +4044,7 @@ async function handleAddService(service) {
     parts: service.parts || []
   };
   
-  await handleAddJob(jobData);
+  await handleAddJob(jobData, undefined, undefined, undefined, undefined, captureRecommendationOrigin(service));
 }
 
 async function handleSwAddFinding(service, isDraft = false) {
@@ -4022,7 +4087,7 @@ async function handleSwAddFinding(service, isDraft = false) {
 // `auditSelection` is an opaque source identity returned by the resolver. It
 // is deliberately separate from preview data: server-side write routes
 // rehydrate this identity before constructing a provider payload.
-async function handleAddJob(job, source, auditSelection, auditFinding, auditToken) {
+async function handleAddJob(job, source, auditSelection, auditFinding, auditToken, recommendationOrigin) {
   if (auditToken && !estimateAuditTokenIsCurrent(auditToken)) return false;
   if (!currentUserCanWrite) {
     notifyReadOnlyBlocked();
@@ -4051,7 +4116,7 @@ async function handleAddJob(job, source, auditSelection, auditFinding, auditToke
       if (result.success) {
         showNotification(`Added: ${result.jobName || serviceName}`, 'success');
         showAuditWriteWarnings(result);
-        markServiceOnEstimate(result.jobName || serviceName, reqPlanCacheKey);
+        markServiceOnEstimate(result.jobName || serviceName, reqPlanCacheKey, recommendationOrigin);
         return true;
       } else {
         throw new Error(result.error || 'Failed to add service');
@@ -4149,7 +4214,7 @@ async function handleAddJob(job, source, auditSelection, auditFinding, auditToke
       if (result.success) {
         showNotification(`Added: ${result.jobName || jobData.title}`, 'success');
         showAuditWriteWarnings(result);
-        markServiceOnEstimate(result.jobName || jobData.title, reqPlanCacheKey);
+        markServiceOnEstimate(result.jobName || jobData.title, reqPlanCacheKey, recommendationOrigin);
         // Task #1094: snapshot for undo (server returns the created package id).
         if (result.servicePackageId && result.workOrderId) {
           recordSidepanelAdd('protractor', mosShopId, currentContext.roId, [{
@@ -4215,7 +4280,7 @@ async function handleAddJob(job, source, auditSelection, auditFinding, auditToke
     if (result.success) {
       showNotification(`Added: ${result.jobName}`, 'success');
       showAuditWriteWarnings(result);
-      markServiceOnEstimate(result.jobName || jobData.name, reqPlanCacheKey);
+      markServiceOnEstimate(result.jobName || jobData.name, reqPlanCacheKey, recommendationOrigin);
       // Task #1094: the background snapshotted the created job id inside
       // CREATE_TEKMETRIC_JOB — just repaint the undo bar.
       refreshUndoBar();
@@ -4272,7 +4337,7 @@ function notifyPageJobCreated(urlPatterns, jobName, providerLabel) {
   }
 }
 
-async function handleAddCannedJob(job) {
+async function handleAddCannedJob(job, recommendationOrigin) {
   console.log('[MOS] handleAddCannedJob called:', job);
 
   if (!currentUserCanWrite) { notifyReadOnlyBlocked(); return; }
@@ -4294,7 +4359,7 @@ async function handleAddCannedJob(job) {
       }, undefined, 'Still adding this job — big shops can take a minute. Please keep this panel open…');
       if (result.success) {
         showNotification(`Added: ${result.jobName || serviceName}`, 'success');
-        markServiceOnEstimate(result.jobName || serviceName, reqPlanCacheKey);
+        markServiceOnEstimate(result.jobName || serviceName, reqPlanCacheKey, recommendationOrigin);
       } else {
         throw new Error(result.error || 'Failed to add service');
       }
@@ -4346,7 +4411,7 @@ async function handleAddCannedJob(job) {
 
         if (result.success) {
           showNotification(`Added: ${result.jobName || cannedJobTitle}`, 'success');
-          markServiceOnEstimate(result.jobName || cannedJobTitle, reqPlanCacheKey);
+          markServiceOnEstimate(result.jobName || cannedJobTitle, reqPlanCacheKey, recommendationOrigin);
 
           // Task #1094: snapshot for undo (server returns the applied package id).
           if (result.servicePackageId && result.workOrderId) {
@@ -4376,7 +4441,7 @@ async function handleAddCannedJob(job) {
     } else {
       console.log('[MOS] Adding as generic Protractor job (no canned job ID)');
       // Task #888 — mark as canned so the template's labor rate is kept.
-      await handleAddJob(job, 'canned');
+      await handleAddJob(job, 'canned', undefined, undefined, undefined, recommendationOrigin);
     }
     return;
   }
@@ -4415,12 +4480,12 @@ async function handleAddCannedJob(job) {
       
       console.log('[MOS] Tekmetric canned job add result:', result);
       
-      if (result.error) {
-        throw new Error(result.error);
+      if (!result.success || result.error) {
+        throw new Error(result.error || 'Failed to add canned job');
       }
       
       showNotification(`Added: ${job.name}`, 'success');
-      markServiceOnEstimate(job.name, reqPlanCacheKey);
+      markServiceOnEstimate(job.name, reqPlanCacheKey, recommendationOrigin);
 
       // Task #1094: this path writes via the server's official Tekmetric API,
       // so pull the created job id(s) out of its response (best-effort — the
@@ -4439,7 +4504,7 @@ async function handleAddCannedJob(job) {
   } else {
     console.log('[MOS] Adding as generic job (no tekmetricId)');
     // Task #888 — mark as canned so the template's labor rate is kept.
-    await handleAddJob(job, 'canned');
+    await handleAddJob(job, 'canned', undefined, undefined, undefined, recommendationOrigin);
   }
 }
 

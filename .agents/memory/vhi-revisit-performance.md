@@ -19,8 +19,17 @@ was historically NOT milliseconds because each surface still did extra work per 
   ('rates') whenever roChanged===false on an RO-dependent tab — yanking the user
   off Plan/Jobs. Rule: only fall back to an RO-independent tab when there is
   genuinely **no** `context.roId`; otherwise stay put.
-- **Stale-response guard must key on `roId + shopId`** (not roId alone) — roIds
+- **Stale-response guard must key on provider + shop + RO** (not roId alone) — roIds
   collide across shops/providers, so a late response could paint the wrong vehicle.
+
+### Selected-job status evidence
+An advisor can intentionally choose a canned/history job whose title differs
+from the recommendation. Keep that explicit association separate from service
+synonyms and recommendation eligibility; it must not teach the shared mapper.
+**Why:** selected titles may be shop-specific packages, not semantic aliases.
+**How to apply:** immediate success may credit the originating recommendation;
+subsequent revalidation needs exact evidence that the selected job remains on
+the same provider/shop/RO. Never retain a badge solely because an add once succeeded.
 
 ## Dashboard (app/dashboard/vehicles/[vin]/plan/page.tsx)
 - It's a `force-dynamic` Suspense server component: every nav re-runs `PlanContent`
