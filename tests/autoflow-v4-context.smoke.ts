@@ -14,7 +14,7 @@
  *   1. detectAutoflowShopId: v3 subdomain, v4 path number, generic hosts.
  *   2. v4 DVI URL yields roId via the explicit /shop/<n>/dvi/<id> pattern.
  *   3. Adjacent-cell labels resolve VIN + mileage on v4 DVI pages.
- *   4. Mileage sanity cap: 1,234,556 accepted (real fleet vehicle), >=2M rejected.
+ *   4. Mileage sanity cap: 1,234,556 accepted (real fleet vehicle), >2M rejected.
  *   5. v3 label[for] hint path still works (regression).
  *   6. classifyDviUrlShape v4/v3/other classification.
  *   7. Legacy AutoFlow boards show Create RO while DVI pages do not, and no
@@ -252,7 +252,7 @@ async function run() {
     ok("v4 adjacent-cell mileage resolved (1,234,556 accepted)", ctx.mileage === 1234556, `mileage=${ctx.mileage}`);
   }
 
-  // 4b. Mileage >= 2,000,000 rejected (phone numbers / ids masquerading).
+  // 4b. Mileage > 2,000,000 rejected (phone numbers / ids masquerading).
   {
     setPage(
       "https://app.autoflow.com/shop/1360/dvi/98766",
@@ -260,7 +260,7 @@ async function run() {
       [makeInput({ value: "8065551234", cellLabel: "Mileage" })],
     );
     const ctx = g._detectContextRaw();
-    ok("mileage >= 2M rejected", ctx.mileage === null, `mileage=${ctx.mileage}`);
+    ok("mileage > 2M rejected", ctx.mileage === null, `mileage=${ctx.mileage}`);
   }
 
   // 5. v3 regression: label[for] hint path still resolves VIN/mileage.

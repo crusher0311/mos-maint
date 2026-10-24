@@ -38,6 +38,13 @@ let contextCheckInterval = null;
 // still low enough to reject phone numbers / ids masquerading as mileage.
 const MAX_SANE_MILEAGE = 2000000;
 
+function parseDetectedMileage(text) {
+  const match = String(text || '').trim().match(/^(?:(?:Mileage|Odometer|Miles|KM)\s*\*?\s*:?\s*)?(\d{1,3}(?:,\d{3})+|\d+)(?:\s*(?:mi|miles|km))?$/i);
+  if (!match) return null;
+  const value = Number(match[1].replace(/,/g, ''));
+  return value > 0 && value <= MAX_SANE_MILEAGE ? value : null;
+}
+
 // AutoFlow shop id detection across v3 (per-shop subdomain) and v4 (shared
 // host with the shop slug in the path). Generic infrastructure subdomains
 // (app/www/admin/...) are NOT shop ids, so on v4 we read the path instead.
@@ -373,10 +380,9 @@ function _detectContextRaw() {
     for (const sel of mileageSelectors) {
       const els = document.querySelectorAll(sel);
       for (const el of els) {
-        const m = el.textContent.match(/[\d,]+/);
-        if (m) {
-          const v = parseInt(m[0].replace(/,/g, ""));
-          if (v > 100 && v < MAX_SANE_MILEAGE) {
+        const v = parseDetectedMileage(el.textContent);
+        if (v !== null) {
+          if (v > 100) {
             context.mileage = v;
             break;
           }
@@ -397,10 +403,9 @@ function _detectContextRaw() {
       outer: for (const rx of passes) {
         for (const f of fieldHints) {
           if (!rx.test(f.hint)) continue;
-          const m = f.value.replace(/,/g, "").match(/\d+/);
-          if (m) {
-            const v = parseInt(m[0]);
-            if (v > 100 && v < MAX_SANE_MILEAGE) { context.mileage = v; break outer; }
+          const v = parseDetectedMileage(f.value);
+          if (v !== null) {
+            if (v > 100) { context.mileage = v; break outer; }
           }
         }
       }
@@ -410,14 +415,14 @@ function _detectContextRaw() {
       // Tolerate a required-asterisk and assorted separators between the label
       // ("Mileage"/"Odometer") and the number ("Mileage *: 191,485").
       const patterns = [
-        /(?:Odometer|Mileage)\s*\*?\s*[:\-]?\s*([\d,]+)/i,
-        /(?:Miles|KM)\s*\*?\s*[:\-]?\s*([\d,]+)/i
+        /\b(?:Odometer|Mileage)\s*\*?\s*:?\s*(\S+)(?!\S|\s+\d)/i,
+        /\b(?:Miles|KM)\s*\*?\s*:?\s*(\S+)(?!\S|\s+\d)/i
       ];
       for (const p of patterns) {
         const m = pageText.match(p);
         if (m) {
-          const v = parseInt(m[1].replace(/,/g, ""));
-          if (v > 0 && v < MAX_SANE_MILEAGE) {
+          const v = parseDetectedMileage(m[1]);
+          if (v > 0) {
             context.mileage = v;
             break;
           }

@@ -78,7 +78,7 @@ async function main() {
 
   // Run the real context detector in isolation, including SPA location changes.
   const adapter = fs.readFileSync("mos-tools-extension/adapters/shopware-content.js", "utf8");
-  const detector = adapter.slice(adapter.indexOf("function detectContext()"), adapter.indexOf("function updateContext()"));
+  const detector = adapter.slice(adapter.indexOf("function parseDetectedMileage("), adapter.indexOf("function updateContext()"));
   const sandbox: any = {
     URL, console: { log() {} },
     window: { location: { href: "https://shared.shop-ware.com/work_orders/12?shop_id=6194", hostname: "shared.shop-ware.com" } },

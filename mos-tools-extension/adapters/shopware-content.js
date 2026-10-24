@@ -35,6 +35,14 @@ try {
 let lastContext = null;
 let contextCheckInterval = null;
 
+// Accept only complete odometer tokens within the server's inclusive cap.
+function parseDetectedMileage(text) {
+  const match = String(text || '').trim().match(/^(?:(?:Odometer\s+In|Mileage|Odometer|In|Out)\s*:?\s*)?(\d{1,3}(?:,\d{3})+|\d+)(?:\s*(?:mi|miles|km))?(?:\s+Out:\s*[\d,]+)?$/i);
+  if (!match) return null;
+  const value = Number(match[1].replace(/,/g, ''));
+  return value > 0 && value <= 2000000 ? value : null;
+}
+
 // ==================== CONTEXT DETECTION ====================
 function detectContext() {
   const url = window.location.href;
@@ -248,10 +256,9 @@ function detectContext() {
     for (const sel of mileageSelectors) {
       const els = document.querySelectorAll(sel);
       for (const el of els) {
-        const m = el.textContent.match(/[\d,]+/);
-        if (m) {
-          const v = parseInt(m[0].replace(/,/g, ''));
-          if (v > 100 && v < 1000000) { context.mileage = v; break; }
+        const v = parseDetectedMileage(el.textContent);
+        if (v !== null) {
+          if (v > 100) { context.mileage = v; break; }
         }
       }
       if (context.mileage) break;
@@ -260,16 +267,16 @@ function detectContext() {
     if (!context.mileage) {
       // Shop-Ware shows "Odometer In: 2222  Out: 39390"
       const patterns = [
-        /Odometer\s+In:\s*([\d,]+)/i,
-        /Odometer[:\s]*([\d,]+)/i,
-        /Mileage[:\s]*([\d,]+)/i,
-        /In:\s*([\d,]+)/i
+        /\bOdometer\s+In:\s*(\S+)(?!\S|\s+\d)/i,
+        /\bOdometer[:\s]+(\S+)(?!\S|\s+\d)/i,
+        /\bMileage[:\s]+(\S+)(?!\S|\s+\d)/i,
+        /\bIn:\s*(\S+)(?!\S|\s+\d)/i
       ];
       for (const p of patterns) {
         const m = pageText.match(p);
         if (m) {
-          const v = parseInt(m[1].replace(/,/g, ''));
-          if (v > 0 && v < 1000000) { context.mileage = v; break; }
+          const v = parseDetectedMileage(m[1]);
+          if (v > 0) { context.mileage = v; break; }
         }
       }
     }

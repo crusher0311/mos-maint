@@ -38,6 +38,15 @@ try {
 let lastContext = null;
 let contextCheckInterval = null;
 
+// Match a whole odometer token, never a numeric substring of a sign, ID,
+// decimal or malformed thousands grouping. Keep the server's inclusive cap.
+function parseDetectedMileage(text) {
+  const match = String(text || '').trim().match(/^(?:(?:Odometer\s+In|Mileage|Miles|Odometer|In|Out)\s*:?\s*)?(\d{1,3}(?:,\d{3})+|\d+)(?:\s*(?:mi|miles|km))?(?:\s+Out:\s*[\d,]+)?$/i);
+  if (!match) return null;
+  const value = Number(match[1].replace(/,/g, ''));
+  return value > 0 && value <= 2000000 ? value : null;
+}
+
 // ==================== CONTEXT DETECTION ====================
 // Cache of last-known good context fields per RO ID. Tekmetric hides the VIN
 // (and sometimes mileage) in the DOM when the user switches to the Inspections
@@ -350,10 +359,9 @@ function _detectContextRaw() {
       const elements = document.querySelectorAll(sel);
       for (const el of elements) {
         const text = el.textContent || '';
-        const match = text.match(/[\d,]+/);
-        if (match) {
-          const value = parseInt(match[0].replace(/,/g, ''));
-          if (value > 100 && value < 1000000) {
+        const value = parseDetectedMileage(text);
+        if (value !== null) {
+          if (value > 100) {
             context.mileage = value;
             console.log('[MOS Tools] Mileage extracted via selector:', sel);
             break;
@@ -366,17 +374,17 @@ function _detectContextRaw() {
     // Strategy 2: Look for "In: 40,238" or "Out: 40,238" patterns in page text
     if (!context.mileage) {
       const mileagePatterns = [
-        /In:\s*([\d,]+)/i,
-        /Out:\s*([\d,]+)/i,
-        /Mileage[:\s]*([\d,]+)/i,
-        /Odometer[:\s]*([\d,]+)/i
+        /\bIn:\s*(\S+)(?!\S|\s+\d)/i,
+        /\bOut:\s*(\S+)(?!\S|\s+\d)/i,
+        /\bMileage[:\s]+(\S+)(?!\S|\s+\d)/i,
+        /\bOdometer[:\s]+(\S+)(?!\S|\s+\d)/i
       ];
       
       for (const pattern of mileagePatterns) {
         const match = pageText.match(pattern);
         if (match) {
-          const value = parseInt(match[1].replace(/,/g, ''));
-          if (value > 100 && value < 1000000) {
+          const value = parseDetectedMileage(match[1]);
+          if (value > 100) {
             context.mileage = value;
             console.log('[MOS Tools] Mileage extracted via regex pattern');
             break;
@@ -393,8 +401,8 @@ function _detectContextRaw() {
         if (/^(In|Out):?\s*[\d,]+$/i.test(text)) {
           const match = text.match(/[\d,]+/);
           if (match) {
-            const value = parseInt(match[0].replace(/,/g, ''));
-            if (value > 100 && value < 1000000) {
+            const value = parseDetectedMileage(text);
+            if (value > 100) {
               context.mileage = value;
               console.log('[MOS Tools] Mileage extracted via In/Out element');
               break;
