@@ -2193,6 +2193,19 @@ const PREFILL_STATUS_META = {
   ok: { label: 'OK', color: '#22c55e' },
 };
 
+// Maintenance timing is separate from the inspection rating.
+function prefillRatingMeta(update) {
+  const ratings = {
+    RQRSATTN: { label: 'Red', color: '#ef4444' },
+    MAYRQRATTN: { label: 'Yellow', color: '#f59e0b' },
+    CHCKD: { label: 'Green', color: '#22c55e' },
+    NA: { label: 'Not Applicable', color: '#6b7280' },
+  };
+  const rating = ratings[update.rating?.code];
+  const timing = PREFILL_STATUS_META[update.status]?.label;
+  return rating ? { ...rating, label: rating.label + (timing ? ` · ${timing}` : '') } : null;
+}
+
 // Task #1107: review modal shown BEFORE any Tekmetric write. Mirrors the
 // enhance-notes modal (checkboxes + select-all + editable text + Cancel/Apply)
 // and AutoFlow's showAfReviewModal. Cancel / Esc / overlay click dismiss with
@@ -2275,7 +2288,7 @@ function showPrefillReviewModal(msg) {
 
   updates.forEach((u, idx) => {
     const meta = PREFILL_BASIS_META[u.basis] || PREFILL_BASIS_META.vhi;
-    const statusMeta = PREFILL_STATUS_META[u.status];
+    const statusMeta = prefillRatingMeta(u);
 
     const card = document.createElement('div');
     Object.assign(card.style, {
@@ -2499,7 +2512,7 @@ function showPrefillSummaryModal(result) {
 
   updates.forEach((u) => {
     const meta = PREFILL_BASIS_META[u.basis] || PREFILL_BASIS_META.vhi;
-    const statusMeta = PREFILL_STATUS_META[u.status];
+    const statusMeta = prefillRatingMeta(u);
 
     const card = document.createElement('div');
     Object.assign(card.style, {

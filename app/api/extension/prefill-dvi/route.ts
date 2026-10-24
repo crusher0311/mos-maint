@@ -1,4 +1,5 @@
 import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
+import { resolveTekmetricMaintenanceColor } from "@/lib/tekmetric-maintenance-color";
 import { NextRequest, NextResponse } from "next/server";
 import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
 import { rebuildVhi } from "@/lib/vhi-rebuild";
@@ -134,10 +135,7 @@ async function _POST(request: NextRequest) {
   // `tekmetric_work_orders` cache. Other providers (Protractor / Shop-Ware /
   // AutoFlow) degrade gracefully to VHI-only. Soft-fails so a Mongo hiccup
   // never breaks the pre-fill.
-  const providerLower = String(provider || "").toLowerCase();
-  const isTekmetric = providerLower
-    ? providerLower === "tekmetric"
-    : !!(guard.shopDoc as any)?.tekmetric?.shopId;
+  const isTekmetric = guard.provider === "tekmetric";
   let pastFindings = new Map<string, PastInspectionFinding>();
   if (isTekmetric) {
     try {
@@ -245,13 +243,19 @@ async function _POST(request: NextRequest) {
         finding = `[Inspection] ${displayName} — ${note || "flagged to monitor"} (from prior inspection${dateSuffix}).`;
       }
     } else if (vhiItem && vhiItem.status === "overdue") {
-      // (3) Generic VHI interval projection (unchanged behavior).
-      rating = RATINGS.RQRSATTN;
+      // Only generic Tekmetric maintenance projections honor this opt-in.
+      const yellow = isTekmetric && resolveTekmetricMaintenanceColor(
+        (guard.shopDoc as any)?.preferences?.tekmetricMaintenanceColor,
+      ) === "yellow";
+      rating = yellow ? RATINGS.MAYRQRATTN : RATINGS.RQRSATTN;
       const overBy = !isMisc && milesUntilDue ? Math.abs(milesUntilDue) : null;
+      const recommendation = yellow
+        ? "Recommend scheduling maintenance; condition requires technician inspection."
+        : "Recommend immediate service.";
       finding = withLastReported(
         overBy
-          ? `[VHI] ${displayName} — OVERDUE by ${overBy.toLocaleString()} ${distLabelFull}. Recommend immediate service.`
-          : `[VHI] ${displayName} — OVERDUE. Recommend immediate service.`,
+          ? `[VHI] ${displayName} — OVERDUE by ${overBy.toLocaleString()} ${distLabelFull}. ${recommendation}`
+          : `[VHI] ${displayName} — OVERDUE. ${recommendation}`,
       );
       confidence = "high";
     } else if (vhiItem && vhiItem.status === "due_soon") {
@@ -291,9 +295,12 @@ async function _POST(request: NextRequest) {
   const dueSoonCount = updates.filter((u) => u.status === "due_soon").length;
   const okCount = updates.filter((u) => u.status === "upcoming" || u.status === "ok").length;
   const skippedCount = skippedNoServiceKey.length + skippedNoSignal.length;
+  const redCount = updates.filter((u) => u.rating.code === "RQRSATTN").length;
+  const yellowCount = updates.filter((u) => u.rating.code === "MAYRQRATTN").length;
+  const greenCount = updates.filter((u) => u.rating.code === "CHCKD").length;
 
   console.log(
-    `[Prefill DVI] ${vin} shop ${resolvedShopId}: ${updates.length} updates (${overdueCount} red, ${dueSoonCount} yellow, ${okCount} green), ${skippedCount} skipped`
+    `[Prefill DVI] ${vin} shop ${resolvedShopId}: ${updates.length} updates (${redCount} red, ${yellowCount} yellow, ${greenCount} green), ${skippedCount} skipped`
   );
   // Task #897: mineable skip detail — one line per reason so production logs
   // expose the sheet vocabulary the matcher doesn't recognize yet.
@@ -322,6 +329,9 @@ async function _POST(request: NextRequest) {
       overdue: overdueCount,
       dueSoon: dueSoonCount,
       ok: okCount,
+      red: redCount,
+      yellow: yellowCount,
+      green: greenCount,
     },
     // Task #897: skip diagnostics, split by reason (see loop above).
     skippedTasks: {

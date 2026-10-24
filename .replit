@@ -82,13 +82,13 @@ outputType = "webview"
 name = "Offline DVI push outcomes"
 author = "agent"
 
+[workflows.workflow.metadata]
+outputType = "webview"
+
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "node_modules/.bin/tsx tests/browser/dvi-push-fixture-server.ts"
 waitForPort = 5000
-
-[workflows.workflow.metadata]
-outputType = "webview"
 
 [[workflows.workflow]]
 name = "Offline terminal history"

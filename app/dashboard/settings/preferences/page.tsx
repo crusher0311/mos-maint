@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import VehicleHistorySharingSettings from "@/components/vehicle-history-sharing-settings";
+import { resolveTekmetricMaintenanceColor, type TekmetricMaintenanceColor } from "@/lib/tekmetric-maintenance-color";
 import { Settings, Loader2, Check, Globe, List, Eye, Car, Tag, Building2 } from "lucide-react";
 
 const WORKFLOW_STAGES = [
@@ -32,6 +33,9 @@ export default function PreferencesPage() {
   const [saved, setSaved] = useState(false);
   const [hasProtractor, setHasProtractor] = useState(false);
   const [hasTekmetric, setHasTekmetric] = useState(false);
+  const [tekmetricMaintenanceColor, setTekmetricMaintenanceColor] = useState<TekmetricMaintenanceColor>("red");
+  const [maintenanceColorChanged, setMaintenanceColorChanged] = useState(false);
+  const [canManageMaintenanceColor, setCanManageMaintenanceColor] = useState(false);
   const [hasShopware, setHasShopware] = useState(false);
   const [tekmetricLabels, setTekmetricLabels] = useState<TekmetricLabel[]>([]);
   const [selectedTekmetricLabels, setSelectedTekmetricLabels] = useState<string[]>([]);
@@ -59,6 +63,8 @@ export default function PreferencesPage() {
         setShowRecalls(data.showRecalls !== false);
         setRecallsExpanded(data.recallsExpanded !== false);
         setSelectedTekmetricLabels(data.tekmetricLabels || []);
+        setTekmetricMaintenanceColor(resolveTekmetricMaintenanceColor(data.tekmetricMaintenanceColor));
+        setCanManageMaintenanceColor(data.canManageTekmetricMaintenanceColor === true);
         setEnterpriseShops(data.enterpriseShops || []);
         setJobHistoryShopIds(data.jobHistoryShopIds || null);
         setShopwareAddMode(data.shopwareAddMode || "finding-published");
@@ -141,6 +147,7 @@ export default function PreferencesPage() {
           showRecalls,
           recallsExpanded,
           tekmetricLabels: selectedTekmetricLabels,
+          ...(hasTekmetric && canManageMaintenanceColor && maintenanceColorChanged ? { tekmetricMaintenanceColor } : {}),
           jobHistoryShopIds,
           shopwareAddMode,
           floatingDetectDogEnabled:
@@ -382,6 +389,41 @@ export default function PreferencesPage() {
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {hasTekmetric && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Tekmetric Inspection Autofill</h2>
+            <label htmlFor="maintenance-color" className="block text-sm font-medium text-gray-700 mb-2">
+              Past-due maintenance autofill color
+            </label>
+            <select
+              id="maintenance-color"
+              disabled={!canManageMaintenanceColor}
+              value={tekmetricMaintenanceColor}
+              onChange={(e) => {
+                setTekmetricMaintenanceColor(resolveTekmetricMaintenanceColor(e.target.value));
+                setMaintenanceColorChanged(true);
+              }}
+              className="border border-gray-300 rounded-lg p-2 text-gray-900"
+            >
+              <option value="red">Red (current guidelines/default)</option>
+              <option value="yellow">Yellow</option>
+            </select>
+            {!canManageMaintenanceColor && (
+              <p className="text-sm text-gray-500 mt-2">Only shop owners, admins, and managers can change this setting.</p>
+            )}
+            <p className="text-sm text-gray-500 mt-3">
+              Applies only to future autofills at this location based solely on overdue maintenance
+              history and intervals, not technician-confirmed urgent conditions or prior inspection
+              findings. Maintenance stays overdue in VHI regardless of color. Recent-service and
+              prior-finding rules stay unchanged.
+            </p>
+            <p className="text-sm text-gray-500 mt-2">
+              Existing inspection lines are not recolored. Review before applying; technicians can
+              still edit ratings in Tekmetric, including changing yellow to red after inspection.
+            </p>
           </div>
         )}
 

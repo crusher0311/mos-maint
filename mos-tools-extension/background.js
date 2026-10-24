@@ -5441,6 +5441,7 @@ async function applyPrefillDvi(context, inspectionId, approved, tabId) {
       .filter((u) => u._applied)
       .map((u) => ({
         taskName: u.taskName,
+        rating: u.rating,
         inspectionGroup: u.inspectionGroup,
         status: u.status,
         basis: u.basis,

@@ -3,6 +3,7 @@ import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
 import { getEnterpriseByShopId } from "@/lib/enterprise";
 import { isOverrideUnit, type ShopDistanceDoc } from "@/lib/shop-distance-unit";
+import { canManageTekmetricMaintenanceColor, isTekmetricMaintenanceColor, resolveTekmetricMaintenanceColor } from "@/lib/tekmetric-maintenance-color";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,6 +42,8 @@ export async function GET() {
     showRecalls: shop?.preferences?.showRecalls !== false,
     recallsExpanded: shop?.preferences?.recallsExpanded !== false,
     tekmetricLabels: shop?.preferences?.tekmetricLabels || [],
+    tekmetricMaintenanceColor: resolveTekmetricMaintenanceColor(shop?.preferences?.tekmetricMaintenanceColor),
+    canManageTekmetricMaintenanceColor: canManageTekmetricMaintenanceColor(sess.role),
     jobHistoryShopIds: shop?.preferences?.jobHistoryShopIds || null,
     shopwareAddMode: shop?.preferences?.shopwareAddMode || "finding-published",
     floatingDetectDogEnabled:
@@ -64,7 +67,15 @@ export async function PUT(req: NextRequest) {
   const sess = await getSession();
   if (!sess) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { distanceUnit, timezone, workflowStages, showInspectItems, showOnlyWithMileage, showRecalls, recallsExpanded, tekmetricLabels, jobHistoryShopIds, shopwareAddMode, floatingDetectDogEnabled } = await req.json();
+  const { distanceUnit, timezone, workflowStages, showInspectItems, showOnlyWithMileage, showRecalls, recallsExpanded, tekmetricLabels, jobHistoryShopIds, shopwareAddMode, floatingDetectDogEnabled, tekmetricMaintenanceColor } = await req.json();
+
+  if (tekmetricMaintenanceColor !== undefined && !canManageTekmetricMaintenanceColor(sess.role)) {
+    return NextResponse.json({ error: "Only shop owners, admins, and managers can change the maintenance autofill color" }, { status: 403 });
+  }
+
+  if (tekmetricMaintenanceColor !== undefined && !isTekmetricMaintenanceColor(tekmetricMaintenanceColor)) {
+    return NextResponse.json({ error: "Invalid Tekmetric maintenance color" }, { status: 400 });
+  }
 
   if (distanceUnit && !["miles", "kilometers"].includes(distanceUnit)) {
     return NextResponse.json({ error: "Invalid distance unit" }, { status: 400 });
@@ -85,6 +96,7 @@ export async function PUT(req: NextRequest) {
   }
 
   const updates: Record<string, any> = {};
+  if (tekmetricMaintenanceColor !== undefined) updates["preferences.tekmetricMaintenanceColor"] = tekmetricMaintenanceColor;
 
   // Distance unit: owners MAY deliberately override their unit. We don't block
   // them — but we only record an explicit owner override when their choice
