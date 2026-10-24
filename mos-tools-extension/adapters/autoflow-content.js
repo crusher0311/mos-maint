@@ -1689,25 +1689,15 @@ function checkAndInjectCreateRoButton() {
 }
 
 function printStickerFromContentScript(sticker) {
+  let html;
+  try { html = MosStickerPrintCore.buildHtml(sticker); }
+  catch (error) { showToast(error.message, 'error'); return; }
   const iframe = document.createElement('iframe');
   iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:none;';
   document.body.appendChild(iframe);
   const doc = iframe.contentDocument || iframe.contentWindow.document;
   doc.open();
-  doc.write(`
-    <!DOCTYPE html>
-    <html><head><title>Print Sticker</title><style>
-      @page { margin: 0; size: auto; }
-      * { margin: 0; padding: 0; box-sizing: border-box; }
-      html, body { width: 100%; height: 100%; }
-      img {
-        width: ${sticker.widthInches || '2in'};
-        height: ${sticker.heightInches || '2.5in'};
-        display: block;
-      }
-    </style></head>
-    <body><img id="sticker" src="${sticker.dataUrl}" /></body></html>
-  `);
+  doc.write(html);
   doc.close();
   const img = doc.getElementById('sticker');
   const doPrint = () => {
@@ -1716,14 +1706,10 @@ function printStickerFromContentScript(sticker) {
       setTimeout(() => iframe.remove(), 1000);
     }, 100);
   };
-  if (img.complete) doPrint();
-  else {
-    img.onload = doPrint;
-    img.onerror = () => {
-      showToast('Failed to load sticker image', 'error');
-      iframe.remove();
-    };
-  }
+  MosStickerPrintCore.whenReady(img, doPrint, () => {
+    showToast('Failed to load sticker image', 'error');
+    iframe.remove();
+  });
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {

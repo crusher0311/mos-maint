@@ -11,17 +11,7 @@ export const PDF_POINTS_PER_INCH = 72;
 // Safari/AirPrint ignore CSS `@page { size }` and default to letter, so the
 // only reliable way to make a sticker print at its true size on iOS is to
 // hand AirPrint a PDF whose embedded page size already matches the sticker.
-export const STICKER_SIZE_INCHES: Record<string, { width: number; height: number }> = {
-  "1.5x2.25": { width: 1.5, height: 2.25 },
-  "2x2":      { width: 2.0, height: 2.0 },
-  "2x2.5":    { width: 2.0, height: 2.5 },
-  "2x3":      { width: 2.0, height: 3.0 },
-  "2x3.5":    { width: 2.0, height: 3.5 },
-};
-
-export function getStickerSizeInches(size: string): { width: number; height: number } {
-  return STICKER_SIZE_INCHES[size] || STICKER_SIZE_INCHES["2x2.5"];
-}
+export { STICKER_SIZE_INCHES, getStickerSizeInches } from "./sticker-print-dimensions";
 
 // Quiet-zone safe margin (inches, per edge) baked into the mobile sticker PDF.
 //

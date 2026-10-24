@@ -17,6 +17,7 @@ import { findShopBySmsIdDetailed, findAutoflowStickerShop } from "@/lib/extensio
 import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
 import { parseMileageInput, parseMonthsInput, isAbsurdMileage, MAX_PLAUSIBLE_MILEAGE, logStickerMileageReject } from "@/lib/sticker-mileage";
 import { shouldRunStickerSideEffects } from "@/lib/extension-basic-tools";
+import { getStickerSizeInches } from "@/lib/sticker-print-dimensions";
 
 // Hard deadlines for external lookups during sticker generation. Each of
 // these is decorative/optional (predictive date, logo, Hovercode QR) — a
@@ -72,14 +73,6 @@ const SIZE_DIMENSIONS: Record<string, { width: number; height: number }> = {
   "2x2.5": { width: 591, height: 739 },
   "2x3": { width: 591, height: 887 },
   "2x3.5": { width: 591, height: 1035 },
-};
-
-const SIZE_INCHES: Record<string, { width: string; height: string }> = {
-  "1.5x2.25": { width: "1.48in", height: "2.22in" },
-  "2x2": { width: "1.97in", height: "1.97in" },
-  "2x2.5": { width: "1.97in", height: "2.46in" },
-  "2x3": { width: "1.97in", height: "2.96in" },
-  "2x3.5": { width: "1.97in", height: "3.45in" },
 };
 
 async function fetchLogoAsBase64(logoUrl: string, logoObjectPath?: string, shopId?: string): Promise<string | null> {
@@ -1006,7 +999,7 @@ async function _POST(request: NextRequest) {
     const base64Image = image.toString("base64");
     const dataUrl = `data:image/png;base64,${base64Image}`;
 
-    const sizeInches = SIZE_INCHES[size] || SIZE_INCHES["2x2.5"];
+    const sizeInches = getStickerSizeInches(size);
 
     console.log(
       // Better Stack's ingest drops the JSON-braces payload after `phases=`
@@ -1020,8 +1013,8 @@ async function _POST(request: NextRequest) {
       sticker: {
         dataUrl,
         size,
-        widthInches: sizeInches.width,
-        heightInches: sizeInches.height,
+        widthInches: `${sizeInches.width}in`,
+        heightInches: `${sizeInches.height}in`,
         nextServiceMileage,
         nextServiceDate,
         unit,

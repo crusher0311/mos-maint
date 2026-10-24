@@ -1281,6 +1281,9 @@ function openStickerPanel() {
 }
 
 function printStickerFromContentScript(sticker) {
+  let html;
+  try { html = MosStickerPrintCore.buildHtml(sticker); }
+  catch (error) { showToast(error.message, 'error'); return; }
   const bound = sticker?.mosPrintContext;
   if (bound) {
     const current = detectContext();
@@ -1296,27 +1299,7 @@ function printStickerFromContentScript(sticker) {
   
   const doc = iframe.contentDocument || iframe.contentWindow.document;
   doc.open();
-  doc.write(`
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>Print Sticker</title>
-      <style>
-        @page { margin: 0; size: auto; }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        html, body { width: 100%; height: 100%; }
-        img { 
-          width: ${sticker.widthInches};
-          height: ${sticker.heightInches};
-          display: block;
-        }
-      </style>
-    </head>
-    <body>
-      <img id="sticker" src="${sticker.dataUrl}" />
-    </body>
-    </html>
-  `);
+  doc.write(html);
   doc.close();
   
   const img = doc.getElementById('sticker');
@@ -1336,11 +1319,10 @@ function printStickerFromContentScript(sticker) {
     }, 100);
   };
   
-  if (img.complete) {
-    doPrint();
-  } else {
-    img.onload = doPrint;
-  }
+  MosStickerPrintCore.whenReady(img, doPrint, () => {
+    iframe.remove();
+    showToast('Failed to load sticker image', 'error');
+  });
 }
 
 // Task #1086: per-user injected-button visibility (resolved server-side

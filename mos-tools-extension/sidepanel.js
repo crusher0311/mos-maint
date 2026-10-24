@@ -5872,6 +5872,9 @@ function printStickerImage(sticker) {
 }
 
 function printStickerViaWindow(sticker) {
+  let html;
+  try { html = MosStickerPrintCore.buildHtml(sticker); }
+  catch (error) { showNotification(error.message, 'error'); return; }
   // Fallback: Open a popup window for printing
   const printWindow = window.open('', '_blank', 'width=400,height=500');
   if (!printWindow) {
@@ -5881,28 +5884,7 @@ function printStickerViaWindow(sticker) {
   }
   
   printWindow.document.open();
-  printWindow.document.write(`
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>Print Sticker</title>
-      <style>
-        @page { margin: 0; size: auto; }
-        @media print { @page { margin: 0; } }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        html, body { width: 100%; height: 100%; }
-        img { 
-          width: ${sticker.widthInches};
-          height: ${sticker.heightInches};
-          display: block;
-        }
-      </style>
-    </head>
-    <body>
-      <img id="sticker" src="${sticker.dataUrl}" />
-    </body>
-    </html>
-  `);
+  printWindow.document.write(html);
   printWindow.document.close();
   
   const img = printWindow.document.getElementById('sticker');
@@ -5915,11 +5897,10 @@ function printStickerViaWindow(sticker) {
       }, 100);
     };
     
-    if (img.complete) {
-      doPrint();
-    } else {
-      img.onload = doPrint;
-    }
+    MosStickerPrintCore.whenReady(img, doPrint, () => {
+      showNotification('Failed to load sticker image', 'error');
+      printWindow.close();
+    });
   }
 }
 

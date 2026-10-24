@@ -1958,7 +1958,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               console.log('[Concern] Re-injecting content script and retrying...');
               await chrome.scripting.executeScript({
                 target: { tabId: targetTabId },
-                files: ['adapters/shopware-content.js']
+                files: ['sticker-print-core.js', 'adapters/shopware-content.js']
               });
               await new Promise(r => setTimeout(r, 500));
               res = await trySend(targetTabId);
