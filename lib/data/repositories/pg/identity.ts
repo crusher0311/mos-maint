@@ -279,6 +279,26 @@ export async function listAllShops() {
   return rows.map((r) => shopRowToDoc(r)!);
 }
 
+/** Platform-admin list summaries, scoped to the canonical shop identities. */
+export async function platformShopUserSummary(ids: number[], owners = false) {
+  if (!ids.length) return [];
+  if (owners) {
+    const rows = await getDb().selectDistinctOn([users.shopId], {
+      _id: users.shopId, email: users.email, createdAt: users.createdAt,
+    }).from(users).where(and(inArray(users.shopId, ids), inArray(users.role, ["owner", "admin"])))
+      .orderBy(users.shopId, users.createdAt);
+    const first = new Map<number, { _id: number; email: string }>();
+    for (const row of rows) if (row._id !== null && !first.has(row._id)) first.set(row._id, { _id: row._id, email: row.email });
+    return [...first.values()];
+  }
+  return getDb().select({ _id: users.shopId, count: sql<number>`count(*)::int` })
+    .from(users).where(inArray(users.shopId, ids)).groupBy(users.shopId);
+}
+
+export async function platformShopEnterprises() {
+  return getDb().select({ _id: enterpriseAccounts.id, name: enterpriseAccounts.name }).from(enterpriseAccounts);
+}
+
 export async function findShopByStripeCustomerId(customerId: string) {
   const rows = await getDb().select().from(shops).where(eq(shops.stripeCustomerId, customerId)).limit(1);
   return rows[0] ? shopRowToDoc(rows[0]) : null;

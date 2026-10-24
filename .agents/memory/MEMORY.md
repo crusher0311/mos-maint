@@ -148,3 +148,4 @@
 - [Local normalization recovery](protractor-local-normalization.md) — independent retries, mixed-store association safety, and real PG transaction adapter verification.
 - [Appearance scope](appearance-boundaries.md) — local screen preferences never replace shop branding or physical-output palettes.
 - [CARFAX setup policy](carfax-settings-policy.md) — save without Maintenance with a warning; testing means save/reload, not paid upstream validation.
+- [Admin refresh scroll](admin-refresh-scroll.md) — retained rows alone do not preserve scroll when feedback shifts document layout.

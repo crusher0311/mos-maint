@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listAllShops } from "@/lib/data/repositories/shops";
-import { dualWritePgIdentity } from "@/lib/db/wave4-write-mode";
-import { insertShop, insertUser } from "@/lib/data/repositories/pg/identity";
+import { dualWritePgIdentity, isIdentityPgCanonical } from "@/lib/db/wave4-write-mode";
+import { insertShop, insertUser, platformShopUserSummary, platformShopEnterprises } from "@/lib/data/repositories/pg/identity";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { assertNoLegacyPasswordField } from "@/lib/user-write-guard";
@@ -10,6 +10,7 @@ import bcrypt from "bcryptjs";
 import { sendEmail, makeCredentialsWelcomeEmail } from "@/lib/email";
 import { getStripe, getBillingSettings } from "@/lib/stripe";
 import { computeAutoFlagReasons, getReviewFields } from "@/lib/shop-review";
+import { shopIdVariants, shopSummaryCache, timeShopRead } from "@/lib/platform-shops-read";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,8 +18,13 @@ export const dynamic = "force-dynamic";
 const DEFAULT_TRIAL_DAYS = 14;
 const MAX_TRIAL_DAYS = 365;
 
-export async function GET() {
-  const session = await getSession();
+export async function GET(req: NextRequest) {
+  const started = performance.now();
+  const mode = req?.nextUrl.searchParams.get("view") || "legacy";
+  const coreOnly = mode === "core";
+  const historyOnly = mode === "history";
+  const includeHistory = mode === "legacy" || historyOnly;
+  const session = await timeShopRead("authentication", getSession);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -29,11 +35,27 @@ export async function GET() {
   try {
     const db = await getDb();
     
-    const [shops, billingSettings, enterprises] = await Promise.all([
+    const [allShops, billingSettings, enterprises] = await timeShopRead("core", () => Promise.all([
       listAllShops() as Promise<any[]>,
       getBillingSettings(),
-      db.collection("enterprise_accounts").find().toArray(),
-    ]);
+      isIdentityPgCanonical() ? platformShopEnterprises() : db.collection("enterprise_accounts").find().toArray(),
+    ]));
+    const historyId = req?.nextUrl.searchParams.get("shopId");
+    if (historyOnly && !historyId) return NextResponse.json({ error: "shopId required" }, { status: 400 });
+    const shops = historyOnly ? allShops.filter(s => String(s.shopId) === historyId) : allShops;
+    const unavailable: string[] = [];
+    const scope = `${isIdentityPgCanonical() ? "pg" : "mongo"}:${JSON.stringify(shops.map(s => String(s.shopId)).sort())}`;
+    const read = async (stage: string, load: () => Promise<any[]>, cache = true) => {
+      if (coreOnly || (historyOnly && stage !== "email" && stage !== "owners") ||
+          (!includeHistory && (stage === "email" || stage === "owners"))) return [];
+      try {
+        return await timeShopRead(stage, () => cache
+          ? shopSummaryCache.read(`${stage}:${scope}:${stage === "monthly-stickers" ? new Date().toISOString().slice(0, 7) : ""}`, load) : load());
+      } catch {
+        unavailable.push(stage);
+        return [];
+      }
+    };
     
     // Build enterprise lookup map
     const enterpriseMap = new Map(enterprises.map(e => [e._id.toString(), e]));
@@ -41,7 +63,7 @@ export async function GET() {
     const defaultTrialDays = billingSettings?.trialDays ?? DEFAULT_TRIAL_DAYS;
     const shopIds = shops.map(s => s.shopId);
     
-    const allShopIdVariants = shopIds.flatMap(id => [id, String(id), Number(id)]).filter(id => id !== null && !isNaN(id as number));
+    const allShopIdVariants = shopIdVariants(shopIds);
     
     // Get first day of current month for monthly sticker counts
     const monthStart = new Date();
@@ -62,34 +84,34 @@ export async function GET() {
     // string/number — narrowing that needs a per-collection audit before
     // it's safe.
     const [userCounts, vehicleCounts, vinViewCounts, backfillProgress, tekmetricBackfillProgress, stickerCounts, stickerCountsThisMonth, cardCaptureEmailLogs, ownerEmailRows] = await Promise.all([
-      db.collection("users").aggregate([
-        { $match: { shopId: { $in: shopIds } } },
-        { $group: { _id: "$shopId", count: { $sum: 1 } } }
-      ]).toArray(),
-      db.collection("vehicles").aggregate([
+      read("users", () => isIdentityPgCanonical() ? platformShopUserSummary(shopIds.map(Number).filter(Number.isFinite)) : db.collection("users").aggregate([
         { $match: { shopId: { $in: allShopIdVariants } } },
         { $group: { _id: "$shopId", count: { $sum: 1 } } }
-      ]).toArray(),
+      ], { maxTimeMS: 5000 }).toArray()),
+      read("vehicles", () => db.collection("vehicles").aggregate([
+        { $match: { shopId: { $in: allShopIdVariants } } },
+        { $group: { _id: "$shopId", count: { $sum: 1 } } }
+      ], { maxTimeMS: 5000 }).toArray()),
       // Wave 1: viewed_vins counts now read from Postgres.
-      (async () => {
+      read("vins", async () => {
         const { pgViewedVinsAggregateByShop } = await import("@/lib/db/repositories/wave1");
-        const rows = await pgViewedVinsAggregateByShop();
+        const rows = await pgViewedVinsAggregateByShop(shopIds.map(Number).filter(Number.isFinite));
         const allow = new Set(shopIds.map(Number));
         return rows
           .filter((r) => allow.has(Number(r.shopId)))
           .map((r) => ({ _id: r.shopId, count: r.count }));
-      })(),
-      db.collection("backfill_progress").find({ shopId: { $in: shopIds.map(Number) } }).toArray(),
-      db.collection("tekmetric_backfill_progress").find({ shopId: { $in: shopIds.map(Number) } }).toArray(),
-      db.collection("sticker_generations").aggregate([
+      }),
+      read("protractor", () => db.collection("backfill_progress").find({ shopId: { $in: allShopIdVariants } }, { maxTimeMS: 5000 }).toArray(), false),
+      read("tekmetric", () => db.collection("tekmetric_backfill_progress").find({ shopId: { $in: allShopIdVariants } }, { maxTimeMS: 5000 }).toArray(), false),
+      read("stickers", () => db.collection("sticker_generations").aggregate([
         { $match: { shopId: { $in: allShopIdVariants } } },
         { $group: { _id: "$shopId", count: { $sum: 1 } } }
-      ]).toArray(),
-      db.collection("sticker_generations").aggregate([
+      ], { maxTimeMS: 5000 }).toArray()),
+      read("monthly-stickers", () => db.collection("sticker_generations").aggregate([
         { $match: { shopId: { $in: allShopIdVariants }, generatedAt: { $gte: monthStart } } },
         { $group: { _id: "$shopId", count: { $sum: 1 } } }
-      ]).toArray(),
-      db.collection("audit_logs").aggregate([
+      ], { maxTimeMS: 5000 }).toArray()),
+      read("email", () => db.collection("audit_logs").aggregate([
         {
           $match: {
             type: { $in: ["shop_card_capture_email_resent", "shop_trial_reminder_sent"] },
@@ -101,21 +123,21 @@ export async function GET() {
           $group: {
             _id: "$shopId",
             entries: {
-              $push: {
+              $firstN: { n: 10, input: {
                 type: "$type",
                 ownerEmail: "$ownerEmail",
                 adminEmail: "$adminEmail",
                 mode: "$mode",
                 daysLeft: "$daysLeft",
                 createdAt: "$createdAt",
-              },
+              } },
             },
           },
         },
         { $project: { entries: { $slice: ["$entries", 10] } } },
-      ]).toArray(),
-      db.collection("users").aggregate([
-        { $match: { shopId: { $in: shopIds }, role: { $in: ["owner", "admin"] } } },
+      ], { maxTimeMS: 5000 }).toArray(), false),
+      read("owners", () => isIdentityPgCanonical() ? platformShopUserSummary(shopIds.map(Number).filter(Number.isFinite), true) : db.collection("users").aggregate([
+        { $match: { shopId: { $in: allShopIdVariants }, role: { $in: ["owner", "admin"] } } },
         { $sort: { createdAt: 1 } },
         {
           $group: {
@@ -124,10 +146,11 @@ export async function GET() {
             emailLower: { $first: "$emailLower" },
           },
         },
-      ]).toArray(),
+      ], { maxTimeMS: 5000 }).toArray(), false),
     ]);
     
-    const userCountMap = new Map(userCounts.map(u => [String(u._id), u.count]));
+    const userCountMap = new Map<string, number>();
+    for (const u of userCounts) userCountMap.set(String(u._id), (userCountMap.get(String(u._id)) || 0) + u.count);
     const vinViewCountMap = new Map(vinViewCounts.map(v => [String(v._id), v.count]));
     const backfillMap = new Map(backfillProgress.map(b => [String(b.shopId), b]));
     const tekmetricBackfillMap = new Map(tekmetricBackfillProgress.map(b => [String(b.shopId), b]));
@@ -147,10 +170,10 @@ export async function GET() {
     const jobIndexCountMap = new Map<string, number>();
     if (zeroCounterTekShopIds.length > 0) {
       const variants = zeroCounterTekShopIds.flatMap((id) => [id, String(id)]);
-      const jobIndexCounts = await db.collection("job_index").aggregate([
+      const jobIndexCounts = await read("fallback", () => shopSummaryCache.read(`fallback:${scope}:${JSON.stringify(zeroCounterTekShopIds.sort())}`, () => db.collection("job_index").aggregate([
         { $match: { shopId: { $in: variants } } },
         { $group: { _id: "$shopId", count: { $sum: 1 } } },
-      ]).toArray();
+      ], { maxTimeMS: 5000 }).toArray()), false);
       for (const r of jobIndexCounts) {
         const key = String(r._id);
         jobIndexCountMap.set(key, (jobIndexCountMap.get(key) || 0) + (r.count as number));
@@ -330,15 +353,17 @@ export async function GET() {
 
       const reviewFields = getReviewFields(shop);
       return {
-        _id: shop._id,
+        _id: String(shop._id ?? shop.shopId),
         shopId: shop.shopId,
         name: shop.name || `Shop ${shop.shopId}`,
         locationIdentifier: shop.locationIdentifier || null,
         enterpriseId: shop.enterpriseId?.toString() || null,
         enterpriseName: enterprise?.name || null,
-        createdAt: shop.createdAt || shop._id.getTimestamp?.() || new Date(),
-        userCount: userCountMap.get(String(shop.shopId)) || 0,
-        vehicleCount: vehicleCountMap.get(String(shop.shopId)) || 0,
+        createdAt: shop.createdAt || shop._id?.getTimestamp?.() || new Date(),
+        summaryState: coreOnly ? "loading" : "ready",
+        unavailable,
+        userCount: coreOnly || unavailable.includes("users") ? null : userCountMap.get(String(shop.shopId)) || 0,
+        vehicleCount: coreOnly || unavailable.includes("vehicles") ? null : vehicleCountMap.get(String(shop.shopId)) || 0,
         integrations,
         isLocked: shop.isLocked || false,
         cardOnFile,
@@ -358,20 +383,20 @@ export async function GET() {
           plan: shop.billing?.plan || "trial",
           status: shop.billing?.status || "trial",
           isPaid,
-          vinViewCount,
+          vinViewCount: coreOnly || unavailable.includes("vins") ? null : vinViewCount,
           cardOnFile,
           stripeSubscriptionAmount: (typeof shop.stripeSubscriptionAmount === "number" ? shop.stripeSubscriptionAmount : null)
             ?? (typeof shop.billing?.stripeSubscriptionAmount === "number" ? shop.billing.stripeSubscriptionAmount : null),
           stripeProductName: shop.billing?.stripeProductName || null,
           stripeCustomerId: shop.billing?.stripeCustomerId || shop.stripeCustomerId || null,
         },
-        stickerCount: stickerCountMap.get(String(shop.shopId)) || 0,
-        stickerCountThisMonth: stickerCountThisMonthMap.get(String(shop.shopId)) || 0,
+        stickerCount: coreOnly || unavailable.includes("stickers") ? null : stickerCountMap.get(String(shop.shopId)) || 0,
+        stickerCountThisMonth: coreOnly || unavailable.includes("monthly-stickers") ? null : stickerCountThisMonthMap.get(String(shop.shopId)) || 0,
         lastCardCaptureEmail,
         cardCaptureEmailHistory: cardCaptureHistory,
         stickerConfig: shop.stickerConfig || {},
         enabledFeatures: shop.enabledFeatures || {},
-        backfill: activeIntegration ? (() => {
+        backfill: !coreOnly && !unavailable.includes(activeIntegration || "") && activeIntegration ? (() => {
           const bf = activeIntegration === "protractor" ? backfill : tekmetricBackfill;
           const completed = bf?.completed || false;
           const inProgress = bf?.inProgress === true;
@@ -412,7 +437,7 @@ export async function GET() {
             inProgress: inProgress || isTekmetricActive || false,
             status,
             isStale,
-            totalJobsIndexed: bf?.totalJobsIndexed || jobIndexCountMap.get(String(shop.shopId)) || 0,
+            totalJobsIndexed: bf?.totalJobsIndexed || (unavailable.includes("fallback") ? null : jobIndexCountMap.get(String(shop.shopId)) || 0),
             currentChunkDate: bf?.currentChunkEnd || bf?.currentChunkStart || null,
             source: activeIntegration,
             lastAttemptedAt: bf?.lastAttemptedAt || bf?.lastRunAt || null,
@@ -453,6 +478,7 @@ export async function GET() {
       };
     });
     
+    console.info("[platform-shops-read]", { stage: "total", ms: Math.round(performance.now() - started) });
     return NextResponse.json({
       ok: true,
       shops: enrichedShops.sort((a, b) => 

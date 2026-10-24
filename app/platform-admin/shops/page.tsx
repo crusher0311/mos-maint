@@ -15,7 +15,7 @@ import DataStatusPanel from "@/components/DataStatusPanel";
 interface ShopBilling {
   plan: string;
   isPaid: boolean;
-  vinViewCount: number;
+  vinViewCount: number | null;
   status?: string;
   stripeSubscriptionAmount?: number | null;
   stripeProductName?: string | null;
@@ -97,7 +97,7 @@ interface BackfillStatus {
   inProgress: boolean;
   status: "completed" | "active" | "stale" | "error" | "pending";
   isStale?: boolean;
-  totalJobsIndexed: number;
+  totalJobsIndexed: number | null;
   processedCount: number;
   currentChunkDate: string | null;
   lastAttemptedAt: string | null;
@@ -130,8 +130,11 @@ interface Shop {
   enterpriseId?: string | null;
   enterpriseName?: string | null;
   createdAt: string;
-  userCount: number;
-  vehicleCount: number;
+  userCount: number | null;
+  vehicleCount: number | null;
+  summaryState?: "loading" | "ready" | "unavailable";
+  unavailable?: string[];
+  readRevision?: number;
   integrations: string[];
   billing: ShopBilling;
   isLocked?: boolean;
@@ -140,8 +143,8 @@ interface Shop {
   usableFeatures?: ShopFeatures;
   eligibility?: { reason?: string | null };
   backfill?: BackfillStatus | null;
-  stickerCount?: number;
-  stickerCountThisMonth?: number;
+  stickerCount?: number | null;
+  stickerCountThisMonth?: number | null;
   trial?: ShopTrial | null;
   cardOnFile?: boolean;
   lastCardCaptureEmail?: CardCaptureEmailEntry | null;
@@ -239,6 +242,8 @@ type KpiFilter = "none" | "activeOrTrial" | "detectDogFounder";
 export default function PlatformShopsPage() {
   const [shops, setShops] = useState<Shop[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const loadGeneration = useRef(0);
   const [search, setSearch] = useState("");
   const [impersonating, setImpersonating] = useState<number | null>(null);
   const [defaultTrialDays, setDefaultTrialDays] = useState(14);
@@ -809,20 +814,45 @@ export default function PlatformShopsPage() {
   }, []);
 
   const loadShops = async () => {
+    const generation = ++loadGeneration.current;
     setLoading(true);
+    setLoadError(null);
     try {
-      const res = await fetch("/api/platform-admin/shops");
+      const res = await fetch("/api/platform-admin/shops?view=core", { cache: "no-store" });
       const data = await res.json();
-      if (data.ok) {
-        setShops(data.shops || []);
+      if (!res.ok || !data.ok) throw new Error("Shop list unavailable");
+      if (generation === loadGeneration.current) {
+        setShops((data.shops || []).map((s: Shop) => ({ ...s, readRevision: generation })));
         if (typeof data.defaultTrialDays === "number") {
           setDefaultTrialDays(data.defaultTrialDays);
         }
+        // Summary responses may never replace authoritative fields or newer edits.
+        void fetch("/api/platform-admin/shops?view=summary", { cache: "no-store" })
+          .then(async response => {
+            const summary = await response.json();
+            if (!response.ok || !summary.ok) throw new Error("Summaries unavailable");
+            if (generation !== loadGeneration.current) return;
+            const byId = new Map<string, Shop>(summary.shops.map((s: Shop) => [String(s.shopId), s]));
+            setShops(current => current.map(shop => {
+              const extra = byId.get(String(shop.shopId));
+              if (!extra) return { ...shop, summaryState: "unavailable" };
+              return { ...shop, userCount: extra.userCount, vehicleCount: extra.vehicleCount,
+                stickerCount: extra.stickerCount, stickerCountThisMonth: extra.stickerCountThisMonth,
+                backfill: extra.backfill, summaryState: extra.summaryState, unavailable: extra.unavailable,
+                billing: { ...shop.billing, vinViewCount: extra.billing.vinViewCount } };
+            }));
+          }).catch(() => {
+            if (generation !== loadGeneration.current) return;
+            setShops(current => current.map(s => ({ ...s, summaryState: "unavailable" })));
+          });
       }
-    } catch (err) {
-      console.error("Error loading shops:", err);
+    } catch {
+      if (generation === loadGeneration.current) {
+        setLoadError("Could not refresh shops. Existing rows are retained. Please retry.");
+        setShops(current => current.map(s => s.summaryState === "loading" ? { ...s, summaryState: "unavailable" } : s));
+      }
     } finally {
-      setLoading(false);
+      if (generation === loadGeneration.current) setLoading(false);
     }
   };
 
@@ -917,7 +947,7 @@ export default function PlatformShopsPage() {
       })()
     : null;
 
-  if (loading) {
+  if (loading && shops.length === 0) {
     return (
       <div className="p-8">
         <div className="animate-pulse space-y-4">
@@ -963,6 +993,8 @@ export default function PlatformShopsPage() {
 
   return (
     <div className="p-8 space-y-6">
+      {loadError && <p role="alert" style={{ position: "fixed", bottom: 16, right: 16, zIndex: 50, background: "white", padding: 12 }}>{loadError}</p>}
+      {loading && <p role="status" style={{ position: "fixed", bottom: 16, right: 16, zIndex: 50, background: "white", padding: 12 }}>Refreshing shops…</p>}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">All Shops</h1>
@@ -1000,7 +1032,9 @@ export default function PlatformShopsPage() {
             Resume All Incomplete
           </button>
           <button
-            onClick={loadShops}
+            onClick={() => void loadShops()}
+            aria-label="Refresh"
+            title="Refresh"
             className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg"
           >
             <RefreshCw className="w-5 h-5" />
@@ -2022,9 +2056,26 @@ function ShopRow(props: ShopRowProps) {
   const needsReview = reviewStatus !== "approved";
 
   const isExpanded = expandedShop === shop._id;
-  const stickerThisMonth = shop.stickerCountThisMonth || 0;
-  const stickerTotal = shop.stickerCount || 0;
-  const lastEmail = shop.lastCardCaptureEmail || null;
+  const countText = (value: number | null | undefined) => value == null
+    ? shop.summaryState === "loading" ? "Loading…" : "Unavailable"
+    : value.toLocaleString();
+  const stickerThisMonth = countText(shop.stickerCountThisMonth);
+  const stickerTotal = countText(shop.stickerCount);
+  const [history, setHistory] = useState<CardCaptureEmailEntry[] | null>(null);
+  const [historyError, setHistoryError] = useState(false);
+  useEffect(() => {
+    if (!isExpanded) return;
+    let active = true;
+    setHistoryError(false);
+    fetch(`/api/platform-admin/shops?view=history&shopId=${encodeURIComponent(shop.shopId)}`, { cache: "no-store" })
+      .then(async res => {
+        const data = await res.json();
+        if (!res.ok || !data.ok || !data.shops[0] || data.shops[0].unavailable?.length) throw new Error();
+        if (active) setHistory(data.shops[0].cardCaptureEmailHistory);
+      }).catch(() => { if (active) setHistoryError(true); });
+    return () => { active = false; };
+  }, [isExpanded, shop.shopId, shop.readRevision]);
+  const lastEmail = history?.[0] || null;
   const sentAgo = lastEmail ? formatTimeAgo(lastEmail.sentAt) : null;
 
   return (
@@ -2091,9 +2142,9 @@ function ShopRow(props: ShopRowProps) {
               <div className="text-[11px] text-gray-500 mt-1 flex items-center gap-2 flex-wrap">
                 <span>ID {shop.shopId}</span>
                 <span className="text-gray-300">·</span>
-                <span className="inline-flex items-center gap-1"><Users className="w-3 h-3" />{shop.userCount}</span>
+                <span className="inline-flex items-center gap-1"><Users className="w-3 h-3" />{countText(shop.userCount)}</span>
                 <span className="text-gray-300">·</span>
-                <span className="inline-flex items-center gap-1"><Car className="w-3 h-3" />{shop.vehicleCount.toLocaleString()}</span>
+                <span className="inline-flex items-center gap-1"><Car className="w-3 h-3" />{countText(shop.vehicleCount)}</span>
                 {shop.enterpriseName && !hideEnterpriseLine && (
                   <>
                     <span className="text-gray-300">·</span>
@@ -2109,7 +2160,7 @@ function ShopRow(props: ShopRowProps) {
         <td className="px-4 py-3">
           <div className="space-y-1.5">
             <div className="text-sm text-gray-900">
-              VINs viewed: <span className="font-medium">{shop.billing.vinViewCount.toLocaleString()}</span>
+              VINs viewed: <span className="font-medium">{countText(shop.billing.vinViewCount)}</span>
               {shop.billing.isPaid && <span className="ml-1 text-green-500 text-[11px]">(Paid)</span>}
             </div>
             <div className="text-[11px] text-gray-500">
@@ -2168,7 +2219,9 @@ function ShopRow(props: ShopRowProps) {
 
         {/* Backfill cell */}
         <td className="px-4 py-3 text-center">
-          <BackfillCell backfill={shop.backfill || null} />
+          {shop.summaryState === "loading" ? "Loading…" :
+            shop.summaryState === "unavailable" || shop.unavailable?.some(s => s === "tekmetric" || s === "protractor")
+              ? "Unavailable" : <BackfillCell backfill={shop.backfill || null} />}
         </td>
 
         {/* Created cell */}
@@ -2315,6 +2368,9 @@ function ShopRow(props: ShopRowProps) {
       {isExpanded && (
         <tr className="bg-blue-50">
           <td colSpan={6} className="px-4 pb-4">
+            <div className="mb-3 text-sm whitespace-pre-line">
+              {historyError ? "Email history unavailable" : history === null ? "Loading email history…" : buildCardCaptureHistoryTitle(history)}
+            </div>
             <DataStatusPanel shopId={shop.shopId} />
           </td>
         </tr>
@@ -2423,7 +2479,7 @@ function ShopRowMenu({
 
 function BackfillCell({ backfill }: { backfill: BackfillStatus | null }) {
   if (!backfill) return <span className="text-gray-300">—</span>;
-  const count = backfill.totalJobsIndexed.toLocaleString();
+  const count = backfill.totalJobsIndexed == null ? "Unavailable" : backfill.totalJobsIndexed.toLocaleString();
   // Full-page mode running: dedicated worker is paginating the shop with
   // no date filter. Show purple Zap so on-call can tell this apart from
   // a regular date-window chunker run.

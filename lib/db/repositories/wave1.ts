@@ -167,15 +167,25 @@ export async function pgCountViewedVinsBetween(
   return Number(row?.c ?? 0);
 }
 
-export async function pgViewedVinsAggregateByShop(): Promise<
+export async function pgViewedVinsAggregateByShop(shopIds?: number[]): Promise<
   { shopId: number; count: number }[]
 > {
+  if (shopIds?.length === 0) return [];
+  if (shopIds) {
+    return db().transaction(async tx => {
+      await tx.execute(sql`SET LOCAL statement_timeout = '5s'`);
+      const rows = await tx.select({ shopId: viewedVins.shopId, count: sql<number>`count(*)::int` })
+        .from(viewedVins).where(inArray(viewedVins.shopId, shopIds)).groupBy(viewedVins.shopId);
+      return rows.map(r => ({ shopId: r.shopId, count: Number(r.count) }));
+    });
+  }
   const rows = await db()
     .select({
       shopId: viewedVins.shopId,
       count: sql<number>`count(*)::int`,
     })
     .from(viewedVins)
+    .where(shopIds ? inArray(viewedVins.shopId, shopIds) : sql`true`)
     .groupBy(viewedVins.shopId);
   return rows.map((r) => ({ shopId: r.shopId, count: Number(r.count) }));
 }
