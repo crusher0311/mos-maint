@@ -1,3 +1,4 @@
+// gate-exempt: Credential sign-in issues a session after account/shop access checks; tab shop lookup is advisory, and product entitlements are enforced by downstream feature routes.
 import { withExtensionErrorMarker } from "@/lib/extension-route-wrapper";
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "node:crypto";
