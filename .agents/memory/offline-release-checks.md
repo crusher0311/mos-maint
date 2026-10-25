@@ -3,6 +3,16 @@ name: Offline release checks
 description: Interpreting elapsed-time failures and non-exiting smoke tests during release verification.
 ---
 
+Direct Next compilation does not execute npm's prebuild lifecycle.
+
+**Why:** Compilation and selected extension tests passed, but Render's full
+prebuild chain found a browser-global dependency missing from an older VM fixture.
+
+**How to apply:** Verify the complete npm prebuild chain for the release tree,
+not just Next compilation and focused tests. Browser-handler VM fixtures must
+explicitly supply browser globals used by the real handler; preserve assertions
+and network isolation rather than bypassing the failing fixture.
+
 Treat Render compilation memory separately from the running application's plan.
 
 **Why:** The combined application compiled locally but exhausted a roughly 2 GB V8 heap on Render after regression tests passed; the large web runtime plan did not prevent that build-process limit.
