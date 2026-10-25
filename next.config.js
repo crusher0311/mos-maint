@@ -45,6 +45,9 @@ const nextConfig = {
     ];
   },
   experimental: {
+    // Bound build-time page workers: several Node heaps exceeded Render's
+    // aggregate 8 GiB builder limit. This does not limit runtime concurrency.
+    cpus: 1,
     serverActions: {
       allowedOrigins: ['*'],
     },

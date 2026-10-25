@@ -9,6 +9,18 @@ Treat Render compilation memory separately from the running application's plan.
 
 **How to apply:** Check the failing stage and heap diagnostics before recommending a paid upgrade. A build-command-only heap allowance keeps runtime settings unchanged. Use one lockfile install and one full build connected with `&&`, not a semicolon chain that repeats builds and can mask an earlier failure.
 
+Check Render service events when a build log ends silently.
+
+**Why:** After increasing the Node heap, compilation succeeded but page generation
+was killed at the builder's aggregate 8 GiB limit. Only the Render build/deploy
+event exposed the OOM termination; the text log stopped at zero generated pages.
+Increasing each process's heap does not bound all parallel workers' memory.
+
+**How to apply:** Read the event's failure reason and memory limit before retrying.
+Bound build-time worker concurrency before increasing costs; distinguish a V8
+heap error from a container-wide OOM. Filter logs to build output and avoid
+dumping runtime request labels, which can contain authentication query values.
+
 Use one combined preload entry point when Next production workers inherit offline guards.
 
 **Why:** Next 15 worker spawning combined repeated NODE_OPTIONS `--require` paths into a single nonexistent filename after compilation succeeded.

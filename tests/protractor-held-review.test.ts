@@ -92,7 +92,7 @@ test("evidence is append-only, page-scoped and sanitized again when reviewed", a
 test("runner carries child evidence into the atomic held-day push without resetting receipts", () => {
   const runner = readFileSync("scripts/protractor-weekend/run.ts", "utf8");
   const ingest = readFileSync("scripts/protractor-weekend/ingest.ts", "utf8");
-  assert.match(runner, /failure = await child\(pageId, owner\)/);
+  assert.match(runner, /const outcome = await child\(pageId, owner\);\s*failure = outcome.failure;/);
   assert.match(runner, /\$push:\s*heldDayPush\(entry.pendingDays\[cursor.cursor\], cursor.page/);
   assert.match(runner, /failure = sanitizedHeldFailure\(message\)/);
   assert.match(ingest, /if \(prior\) \{ unresolved\+\+; continue; \}/);

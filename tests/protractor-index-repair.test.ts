@@ -5,6 +5,7 @@ import { spawnSync } from "node:child_process";
 import { applyIndexRepair, prepareIndexRepair, type RepairStore } from "../lib/protractor-index-repair";
 import { reviewDigest } from "../lib/protractor-held-review";
 import { indexRepairStore } from "../scripts/protractor-weekend/index-repair-store";
+import { guardMongoDb } from "../lib/invoice-repair/guarded-drivers";
 
 const scope = { campaignId: "protractor-weekend-2026-10-17", shopId: 139, days: ["2026-10-16"] };
 const id = "abcd1234-1234-1234-1234-123456789abc";
@@ -95,6 +96,15 @@ test("fully present concurrent index keys are no-op, but a newly missing unappro
   f.rows.splice(0, 1);
   await assert.rejects(applyIndexRepair(f.store, manifest, approval, "test"), /changed/);
 });
+test("adapter refuses an unfenced database before reads or writes", async () => {
+  const { manifest } = await prepared();
+  const db: any = { collection: () => { assert.fail("Unfenced database accessed"); } };
+  const client: any = { startSession: () => { assert.fail("Unfenced session started"); } };
+  const pg: any = { begin: () => { assert.fail("Unfenced transaction started"); } };
+  await assert.rejects(indexRepairStore(db, client, pg).insertOnly(
+    manifest, [], async () => { assert.fail("Unfenced revalidation started"); },
+  ), /mandatory database boundary/);
+});
 test("adapter uses insertMany only, rechecks before staging/commit and never auto-retries lost commit", async () => {
   const { manifest } = await prepared();
   for (const fail of ["none", "commit", "second-check", "existing", "unique"]) {
@@ -107,6 +117,7 @@ test("adapter uses insertMany only, rechecks before staging/commit and never aut
       endSession: async () => { events.push("end"); },
     };
     const db: any = { collection: (name: string) => {
+      if (name === "invoice_repair_installation") return { findOne: async () => null };
       assert.equal(name, "job_index");
       return {
         listIndexes: () => ({ toArray: async () => fail === "unique" ? [] :
@@ -120,7 +131,10 @@ test("adapter uses insertMany only, rechecks before staging/commit and never aut
     } };
     const pg: any = { begin: async (fn: any) => fn({ unsafe: async (sql: string) => { events.push(sql); } }) };
     let checks = 0;
-    const action = indexRepairStore(db, { startSession: () => session } as any, pg)
+    const guardedDb = guardMongoDb(db, {
+      run: async work => work(), retainUnknown: () => {},
+    });
+    const action = indexRepairStore(guardedDb, { startSession: () => session } as any, pg)
       .insertOnly(manifest, [{ workOrderId: id, servicePackageId: "job-2" }], async () => {
         events.push("check"); if (++checks === 2 && fail === "second-check") throw Error();
       });
