@@ -56,6 +56,8 @@ function loadHandler() {
     // AbortController per attempt; the vm context only exposes ES
     // intrinsics, so Node globals must be injected explicitly.
     AbortController,
+    // Browser URL parsing is used to identify location-scoped print requests.
+    URL,
     // `handleMosApiRequest` reports auth telemetry; the function lives
     // above the extracted slice, so stub it as a no-op (the test asserts
     // token state + error codes, not telemetry).
