@@ -3,6 +3,12 @@ name: Offline release checks
 description: Interpreting elapsed-time failures and non-exiting smoke tests during release verification.
 ---
 
+Use one combined preload entry point when Next production workers inherit offline guards.
+
+**Why:** Next 15 worker spawning combined repeated NODE_OPTIONS `--require` paths into a single nonexistent filename after compilation succeeded.
+
+**How to apply:** Have one absolute-path preload require both network denial and the server-only test shim; retain credential-free subprocess environments. Do not remove safeguards to get the build through.
+
 Use absolute paths for offline NODE_OPTIONS preloads in release checkouts.
 
 **Why:** Route-entrypoint tests spawn Node in temporary fixture directories.
