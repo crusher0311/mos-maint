@@ -277,7 +277,7 @@ async function verifyMileageFallback() {
   );
   assert.match(
     planBuildRouteSource,
-    /\.\.\.mileageMetadata,\s*\n\s*deferredWork:/,
+    /\.\.\.mileageMetadata,\s*(?:\.\.\.\(customerAnchorWins\s*\?\s*\{[^}]*mileageInputSource:\s*"customer_entered"[^}]*\}\s*:\s*\{\}\),\s*)?deferredWork:/,
     "plan-build persists mileage provenance in the cached plan",
   );
 
