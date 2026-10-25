@@ -95,6 +95,8 @@
       "js": [
         "telemetry-core.js",
         "adapters/shopmonkey-buttons.js",
+        "sticker-print-core.js",
+        "sticker-button-preference.js",
         "adapters/shopmonkey-content.js",
         "realtime-subscriber.js",
         "vhi-coach.js"

@@ -6,11 +6,25 @@ export async function createStickerLocationRequest(context, deps) {
   const revision = deps.revision?.(snapshot._tabId);
   async function assertCurrent() {
     const current = deps.identity();
-    if (revision !== deps.revision?.(snapshot._tabId)) throw new Error('Tekmetric page changed. Please try again.');
+    if (revision !== deps.revision?.(snapshot._tabId)) throw new Error('Provider page changed. Please try again.');
     if (current.token !== identity.token || current.epoch !== identity.epoch ||
         current.apiUrl !== identity.apiUrl) throw new Error('MOS login changed. Please try again.');
     const tab = await deps.getTab(snapshot._tabId);
     const url = new URL(tab.url);
+    if (snapshot.provider === 'shopmonkey') {
+      const live = await deps.getContext(snapshot._tabId);
+      const order = `${url.pathname}${url.hash}`.match(/\/orders?\/([a-zA-Z0-9-]+)/)?.[1];
+      if (!/(^|\.)shopmonkey\.cloud$/.test(url.hostname) ||
+          !order || order !== String(snapshot.roId) ||
+          live?.provider !== 'shopmonkey' || !snapshot.shopId ||
+          String(live.shopId) !== String(snapshot.shopId) ||
+          String(live.roId) !== String(snapshot.roId) ||
+          String(live.locationId || '') !== String(snapshot.locationId || '') ||
+          String(live.companyId || '') !== String(snapshot.companyId || '')) {
+        throw new Error('Shopmonkey location or order changed. Reopen Print from the current order.');
+      }
+      return;
+    }
     const shop = url.pathname.match(/\/(?:admin\/)?shop\/(\d+)(?:\/|$)/)?.[1];
     if (!/(^|\.)tekmetric\.com$/.test(url.hostname) || String(shop) !== String(snapshot.shopId)) {
       throw new Error('Tekmetric location changed. Please print again from the current location.');
@@ -32,9 +46,9 @@ export async function createStickerLocationRequest(context, deps) {
     return data;
   };
   const scope = await send('/api/extension/auth/switch-location', {
-    method: 'POST', body: JSON.stringify({ provider: 'tekmetric', smsShopId: String(snapshot.shopId) }),
+    method: 'POST', body: JSON.stringify({ provider: snapshot.provider, smsShopId: String(snapshot.shopId) }),
   }, identity.token);
-  if (!scope.token || scope.provider !== 'tekmetric' || String(scope.smsShopId) !== String(snapshot.shopId)) {
+  if (!scope.token || scope.provider !== snapshot.provider || String(scope.smsShopId) !== String(snapshot.shopId)) {
     throw new Error('Tekmetric location could not be confirmed. Nothing was printed.');
   }
   await assertCurrent();
@@ -45,6 +59,7 @@ export async function createStickerLocationRequest(context, deps) {
       const data = await send(path, options, scope.token);
       await assertCurrent();
       if (data.sticker) data.sticker.mosPrintContext = snapshot;
+      if (data.image) data.mosPrintContext = snapshot;
       return data;
     },
   };

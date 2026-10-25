@@ -73,7 +73,7 @@ test('injects a full-width row below native Print without moving native controls
   f.controller.update();
   assert.equal(f.group(), undefined);
   f.requests[0].callback(allowed);
-  assert.deepEqual(f.group().children.slice(0, 2).map(e => e.textContent), ['Detect Dog', 'Print']);
+   assert.deepEqual(f.group().children.slice(0, 2).map(e => e.children[0].alt), ['Detect Dog', 'Print']);
   const group = f.group();
   assert.deepEqual(f.row().children, [f.toolbar, group]);
   assert.equal(f.row().style.flexWrap, 'wrap');
@@ -86,6 +86,8 @@ test('injects a full-width row below native Print without moving native controls
   group.children[1].click();
   assert.equal(f.requests[2].msg.action, 'OPEN_STICKER_PANEL');
   assert.equal(f.requests[2].msg.context.roId, 'order-a');
+  group.children[1].handlers.contextmenu({ preventDefault() {}, stopPropagation() {} });
+  assert.equal(f.requests[3].msg.action, 'OPEN_STICKER_PANEL');
   assert.equal(f.requests.some(r => /PRINT_STICKER|CREATE.*JOB/.test(r.msg.action)), false);
   f.replaceRow();
   f.controller.update();

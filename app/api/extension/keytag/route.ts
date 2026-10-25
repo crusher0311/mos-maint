@@ -7,6 +7,7 @@ import { renderKeytagLegacy, renderKeytagDesigner } from "@/lib/canvas-renderer"
 import { DesignerLayout } from "@/lib/keytag-designer-types";
 import { resolvePaperSize } from "@/lib/keytag-paper-sizes";
 import { normalizeKeytagExtraValues } from "@/lib/keytag-extra-fields";
+import { checkShopmonkeyPrintTarget } from "@/lib/shopmonkey-print-target";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -62,6 +63,8 @@ async function _GET(req: NextRequest) {
     );
   }
 
+  const targetFailure = await checkShopmonkeyPrintTarget(authResult, req.nextUrl.searchParams.get("provider"), req.nextUrl.searchParams.get("shopId"));
+  if (targetFailure) return NextResponse.json({ error: targetFailure.error }, { status: targetFailure.status, headers: corsHeaders });
   const shopId = authResult.user?.shopId;
   if (!shopId) {
     return NextResponse.json(
@@ -124,6 +127,9 @@ async function _POST(req: NextRequest) {
     );
   }
 
+  const body = await req.json();
+  const targetFailure = await checkShopmonkeyPrintTarget(authResult, body.provider, body.smsShopId);
+  if (targetFailure) return NextResponse.json({ error: targetFailure.error }, { status: targetFailure.status, headers: corsHeaders });
   const shopId = authResult.user?.shopId;
   if (!shopId) {
     return NextResponse.json(
@@ -140,8 +146,6 @@ async function _POST(req: NextRequest) {
   if (denied) return denied;
 
   try {
-    const body: KeytagRequest = await req.json();
-
     if (!body.customerName || !body.vehicleInfo || !body.roNumber) {
       return NextResponse.json(
         { error: "Missing required fields: customerName, vehicleInfo, roNumber" },

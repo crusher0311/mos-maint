@@ -1,6 +1,6 @@
 // Order-local launchers only. No provider writes or automatic printing.
 (function (root) {
-  function create({ document, send, getContext, now = Date.now }) {
+  function create({ document, send, getContext, print, assetUrl = p => globalThis.chrome?.runtime?.getURL(p) || `/mos-tools-extension/${p}`, now = Date.now }) {
     const id = 'mos-shopmonkey-actions';
     let scope = null;
     let generation = 0;
@@ -10,7 +10,7 @@
     let layoutTarget = null;
     let priorWrap = '';
     const key = c => c?.provider === 'shopmonkey' && c.shopId && c.roId
-      ? JSON.stringify([c.shopId, c.roId]) : null;
+      ? JSON.stringify([c.shopId, c.roId, c.locationId, c.companyId]) : null;
     const remove = () => {
       document.getElementById(id)?.remove();
       if (layoutTarget) layoutTarget.style.flexWrap = priorWrap;
@@ -42,8 +42,8 @@
       }
       const visibility = settings.buttonVisibility?.shopmonkey;
       const launcher = settings.floatingButtonEnabled === true;
-      const print = settings.features?.oil_sticker === true && visibility?.oil_sticker !== false;
-      if (!launcher && !print) { remove(); return; }
+      const showPrint = settings.features?.oil_sticker === true && visibility?.oil_sticker !== false;
+      if (!launcher && !showPrint) { remove(); return; }
       if (existing?.parentElement === target) return;
       remove();
       const group = document.createElement('span');
@@ -57,30 +57,46 @@
       function button(label, action) {
         const el = document.createElement('button');
         el.type = 'button';
-        el.textContent = label;
-        el.title = action === 'OPEN_STICKER_PANEL' ? 'Open Detect Dog Print tab' : 'Open Detect Dog';
+        const image = document.createElement('img');
+        image.src = assetUrl(action === 'OPEN_STICKER_PANEL' ? 'icons/mos-print-button.png' : 'icons/mos-fab.png');
+        image.alt = label;
+        image.style.cssText = 'height:28px;display:block';
+        el.appendChild(image);
+        el.title = action === 'OPEN_STICKER_PANEL' ? 'MOS Oil Sticker\nLeft-click: Print | Right-click: Customize' : 'Open Detect Dog';
         el.setAttribute('aria-label', el.title);
-        el.style.cssText = 'height:24px;padding:0 8px;border:1px solid #bfdbfe;border-radius:4px;background:#eff6ff;color:#1d4ed8;font:500 12px system-ui;cursor:pointer';
+        el.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;min-height:32px;padding:2px;border:0;border-radius:4px;background:transparent;cursor:pointer';
         const mountedScope = scope;
         el.addEventListener('click', event => {
           event.preventDefault();
           event.stopPropagation();
           const current = getContext();
-          if (key(current) !== mountedScope || !settings || now() >= expires) {
+          if (document.getElementById(id) !== group || key(current) !== mountedScope || !settings || now() >= expires) {
             invalidate();
+            return;
+          }
+          if (action === 'OPEN_STICKER_PANEL' && print) {
+            print(current, message => { status.textContent = message; });
             return;
           }
           // Send synchronously inside the gesture so Chrome can open the panel.
           send({ action, context: current }, response => {
             if (key(getContext()) !== mountedScope) return;
             status.textContent = response?.success
-              ? '' : 'Could not open Detect Dog. Reload this page and try again.';
+              ? '' : response?.error || 'Could not open Detect Dog. Reload this page and try again.';
+          });
+        });
+        if (action === 'OPEN_STICKER_PANEL') el.addEventListener('contextmenu', event => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (document.getElementById(id) !== group || key(getContext()) !== mountedScope || now() >= expires) return;
+          send({ action: 'OPEN_STICKER_PANEL', context: getContext() }, response => {
+            if (key(getContext()) === mountedScope) status.textContent = response?.success ? '' : response?.error || 'Could not open Print.';
           });
         });
         group.appendChild(el);
       }
       if (launcher) button('Detect Dog', 'OPEN_SIDE_PANEL');
-      if (print) button('Print', 'OPEN_STICKER_PANEL');
+      if (showPrint) button('Print', 'OPEN_STICKER_PANEL');
       group.appendChild(status);
       // Leave native controls and their DOM ownership intact. The full-width
       // flex item forms a new row below Print/Send/Message, aligned with Print.
@@ -107,7 +123,7 @@
       // Also bounds hung messages. A later update can retry after 10 seconds.
       expires = now() + 10000;
       const request = ++generation;
-      send({ action: 'GET_SHOP_FEATURES', provider: 'shopmonkey', shopId: context.shopId }, response => {
+      send({ action: 'GET_SHOP_FEATURES', provider: 'shopmonkey', shopId: context.shopId, context }, response => {
         if (request !== generation || key(getContext()) !== scope) return;
         pending = false;
         settings = response?.success ? response : null;

@@ -735,6 +735,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (sender?.tab?.id != null) incomingContext._tabId = sender.tab.id;
     incomingContext = decorateLaborRateContext(incomingContext, incomingContext._tabId);
     if (incomingContext._tabId != null) {
+      const prior = smsContextsByTab.get(incomingContext._tabId);
+      const key = c => JSON.stringify([c?.provider, c?.shopId, c?.roId, c?.locationId, c?.companyId]);
+      if (key(prior) !== key(incomingContext)) {
+        stickerTabRevisions.set(incomingContext._tabId, (stickerTabRevisions.get(incomingContext._tabId) || 0) + 1);
+      }
       smsContextsByTab.set(incomingContext._tabId, incomingContext);
     }
     console.log("[MOS] SMS context updated:", incomingContext);
@@ -842,6 +847,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
         const apiBase = mosApiUrl || 'https://mos.tools';
         const provider = message.provider || currentSmsContext?.provider || '';
+        let data;
+        if (provider === 'shopmonkey' && mosAuthSource === 'explicit') {
+          const context = message.context || smsContextsByTab.get(sender.tab?.id ?? activeTabId);
+          const scoped = await stickerLocationRequest({ ...context, _tabId: sender.tab?.id ?? context?._tabId });
+          data = await scoped.request(`/api/extension/features?shopId=${encodeURIComponent(shopId)}&provider=shopmonkey`);
+        } else {
         const res = await fetch(`${apiBase}/api/extension/features?shopId=${shopId}&provider=${provider}&_token=${encodeURIComponent(requestToken)}`, {
           headers: { 'Authorization': `Bearer ${requestToken}` },
           signal: controller.signal,
@@ -850,7 +861,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           respond({ success: false, transient: true });
           return;
         }
-        const data = await res.json();
+        data = await res.json();
+        }
         // Mirror lib/extension-write-guard so the content script can hide
         // the Create RO button for read-only users without an extra round
         // trip. mosUser is populated at login time in chrome.storage.local.
@@ -1480,12 +1492,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     (async () => {
       try {
         await _stateReady;
-        if (message.provider === 'tekmetric' && mosAuthSource === 'explicit') {
+        if (['tekmetric', 'shopmonkey'].includes(message.provider) && mosAuthSource === 'explicit') {
           const scoped = await stickerLocationRequest({
-            provider: 'tekmetric', shopId: message.shopId,
+            ...message.context, provider: message.provider, shopId: message.shopId,
             _tabId: sender.tab?.id ?? message.context?._tabId,
           });
-          sendResponse(await scoped.request(`/api/extension/sticker?shopId=${encodeURIComponent(message.shopId)}&provider=tekmetric`));
+          sendResponse(await scoped.request(`/api/extension/sticker?shopId=${encodeURIComponent(message.shopId)}&provider=${message.provider}`));
         } else {
           sendResponse(await getStickerConfigCached(message.shopId, message.provider, {
             context: message.context, forceRefresh: message.forceRefresh === true,
@@ -3097,15 +3109,17 @@ async function _doMosFetch(endpoint, options, token) {
 
 async function handleMosApiRequest(endpoint, options = {}) {
   await _stateReady;
-  if (['/api/extension/sticker', '/api/extension/keytag'].includes(String(endpoint).split('?')[0]) && mosAuthSource === 'explicit') {
+  const endpointPath = String(endpoint).split('?')[0];
+  if (['/api/extension/sticker', '/api/extension/keytag', '/api/extension/features', '/api/extension/ro-context'].includes(endpointPath)) {
     const body = options.body ? JSON.parse(options.body) : {};
     const query = new URL(endpoint, 'https://mos.invalid').searchParams;
     const provider = body.provider || query.get('provider');
-    if (provider === 'tekmetric') {
+    if (provider === 'shopmonkey' || (provider === 'tekmetric' && mosAuthSource === 'explicit' &&
+        ['/api/extension/sticker', '/api/extension/keytag'].includes(endpointPath))) {
       const context = options.context;
       const shopId = body.smsShopId || query.get('shopId');
-      if (!context || String(context.shopId) !== String(shopId)) {
-        throw new Error('Current Tekmetric tab context is required. Please retry from the location page.');
+      if (!context || context.provider !== provider || String(context.shopId) !== String(shopId)) {
+        throw new Error('Current provider tab context is required. Please retry from the location page.');
       }
       const scoped = await stickerLocationRequest({ ...context, _tabId: options.sourceTabId ?? context._tabId });
       return scoped.request(endpoint, options);
@@ -4245,12 +4259,13 @@ async function createTekmetricJob(shopId, roId, jobData, auditSelection, vehicle
 const pendingStickerNavigation = new Map();
 async function stickerLocationRequest(context) {
   await _stateReady;
-  if (!context?._tabId || !context.shopId || context.provider !== 'tekmetric') {
+  if (!context?._tabId || !context.shopId || !['tekmetric', 'shopmonkey'].includes(context.provider)) {
     throw new Error('Current Tekmetric tab and location are required to print.');
   }
   return createStickerLocationRequest(context, {
     identity: () => ({ token: mosApiToken, apiUrl: mosApiUrl, epoch: authEpoch }),
     getTab: (id) => chrome.tabs.get(id),
+    getContext: (id) => chrome.tabs.sendMessage(id, { action: 'GET_PAGE_CONTEXT' }),
     revision: (id) => stickerTabRevisions.get(id) || 0,
     fetch: (...args) => fetch(...args),
   });
@@ -4377,7 +4392,7 @@ const pendingImmediateStickerActions = new Map();
 async function handleImmediateStickerPrint(context, tabId, overrideInterval = null) {
   await _stateReady;
   context = { ...context, _tabId: tabId ?? context?._tabId };
-  const scoped = context.provider === 'tekmetric' && mosAuthSource === 'explicit'
+  const scoped = ['tekmetric', 'shopmonkey'].includes(context.provider) && mosAuthSource === 'explicit'
     ? await stickerLocationRequest(context) : null;
   if (!mosApiToken) {
     throw new Error("Not authenticated with MOS. Please login first.");
@@ -4409,7 +4424,7 @@ async function handleImmediateStickerPrint(context, tabId, overrideInterval = nu
     // the cache's short fetch timeout. The config is optional (defaults
     // exist), so any failure degrades instead of stalling the print.
     const cachedEntry = scoped
-      ? await scoped.request(`/api/extension/sticker?shopId=${encodeURIComponent(context.shopId)}&provider=tekmetric`)
+      ? await scoped.request(`/api/extension/sticker?shopId=${encodeURIComponent(context.shopId)}&provider=${encodeURIComponent(context.provider)}`)
       : await getStickerConfigCached(context.shopId, context.provider || 'tekmetric', { context });
     if (cachedEntry && cachedEntry.config) {
       if (context.useKilometers == null && cachedEntry.config.useKilometers) unit = 'km';

@@ -15,7 +15,7 @@ export async function switchLocation(request: NextRequest, validatedAuth?: Exten
     const auth = validatedAuth ?? await __deps.validateExtensionToken(request);
     if (!auth.authorized) return reply(buildAuthErrorBody(auth), getAuthErrorStatus(auth));
     const principal = auth.principal;
-    const signIn = () => reply({ code: "EXPLICIT_LOGIN_REQUIRED", error: "Sign in to MOS once to enable Tekmetric location switching." }, 403);
+    const signIn = () => reply({ code: "EXPLICIT_LOGIN_REQUIRED", error: "Sign in to MOS once to enable location switching." }, 403);
     if (!principal || principal.assurance !== "verified") return signIn();
     const account = auth.accountUser;
     if (!isActiveExtensionUser(account)) return signIn();
@@ -23,13 +23,15 @@ export async function switchLocation(request: NextRequest, validatedAuth?: Exten
     const assigned = [...new Set([account.shopId, ...(Array.isArray(account.shopIds) ? account.shopIds : [])]
       .filter(id => /^[1-9]\d*$/.test(String(id))).map(Number))];
     const body = await request.json();
-    if (body.provider !== "tekmetric" || !/^[1-9]\d*$/.test(String(body.smsShopId || ""))) {
-      return reply({ code: "CONTEXT_REQUIRED", error: "A current Tekmetric location is required." }, 400);
+    const provider = body.provider;
+    if (!["tekmetric", "shopmonkey"].includes(provider) ||
+        !(provider === "tekmetric" ? /^[1-9]\d*$/ : /^(?:[a-f0-9]{24}|[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12})$/i).test(String(body.smsShopId || ""))) {
+      return reply({ code: "CONTEXT_REQUIRED", error: "A current provider location is required. Reopen the order and try again." }, 400);
     }
     // Match the authenticated identity only. Same email and enterprise membership
     // are not employee assignments; duplicate user documents are not merged here.
     const target = await __deps.findShopBySmsIdDetailed(String(body.smsShopId), {
-      providerHint: "tekmetric",
+      providerHint: provider,
       providerHintIsAuthoritative: true,
       userShopIds: assigned,
       isPlatformAdmin: auth.accountUser?.role === "platform_admin" || auth.accountUser?.isPlatformAdmin === true,
@@ -41,7 +43,7 @@ export async function switchLocation(request: NextRequest, validatedAuth?: Exten
         conflict: [409, "SHOP_MAPPING_CONFLICT", "This Tekmetric location has conflicting MOS mappings. Ask a platform admin to repair them."],
       } as const;
       const [status, code, error] = failures[target.status];
-      return reply({ code, error }, status);
+      return reply({ code, error: error.replaceAll("Tekmetric", provider === "shopmonkey" ? "Shopmonkey" : "Tekmetric") }, status);
     }
     const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") || "";
     if (!token || !Number.isFinite(principal.expiresAt.getTime()) || principal.expiresAt.getTime() <= Date.now()) {
@@ -50,26 +52,26 @@ export async function switchLocation(request: NextRequest, validatedAuth?: Exten
     const sameShop = principal.isLegacy
       ? auth.legacyTokenHasExpiry === true && assigned.length === 1 &&
         Number(account.shopId) === target.mosShopId && assigned[0] === target.mosShopId
-      : principal.provider === "tekmetric" && principal.shopId === target.mosShopId &&
+      : principal.provider === provider && principal.shopId === target.mosShopId &&
         assigned.includes(target.mosShopId);
     if (sameShop) {
       // No issuance, persistence, elevation or renewal: reuse the validated bearer.
       return reply({ token, shopId: target.mosShopId, smsShopId: String(body.smsShopId),
-        provider: "tekmetric", expiresAt: principal.expiresAt.toISOString(), reused: true }, 200);
+        provider, expiresAt: principal.expiresAt.toISOString(), reused: true }, 200);
     }
     // Only a provenance-bearing root may obtain a DIFFERENT location's authority.
     if (principal.isLegacy || principal.parentTokenHash ||
         !["password", "login_code"].includes(principal.authenticationMethod || "")) return signIn();
     const issued = await __deps.issueExtensionSession({
-      shopId: target.mosShopId, provider: "tekmetric", assurance: "verified",
+      shopId: target.mosShopId, provider, assurance: "verified",
       userId: principal.userId, expiresAt: new Date(Math.min(principal.expiresAt.getTime(), Date.now() + 5 * 60_000)),
       parentTokenHash: hashExtensionSessionToken(token),
       canWrite: principal.capabilities.includes("write"),
       isAdmin: principal.capabilities.includes("admin"),
     });
     return reply({ token: issued.token, shopId: target.mosShopId, smsShopId: String(body.smsShopId),
-      provider: "tekmetric", expiresAt: issued.principal.expiresAt.toISOString() }, 200);
+      provider, expiresAt: issued.principal.expiresAt.toISOString() }, 200);
   } catch {
-    return reply({ code: "LOCATION_LOOKUP_FAILED", error: "Tekmetric location access could not be checked. Please try again; nothing was printed." }, 503);
+    return reply({ code: "LOCATION_LOOKUP_FAILED", error: "Location access could not be checked. Please try again; nothing was printed." }, 503);
   }
 }

@@ -109,6 +109,7 @@ function looksLikeShopmonkeyId(v) {
 // There can be a sibling `ld:<envId>:$diagnostics` key whose suffix is not
 // base64 JSON, so we skip anything that fails to decode.
 function detectLaunchDarklyContext() {
+  const contexts = new Map();
   try {
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i) || '';
@@ -123,10 +124,11 @@ function detectLaunchDarklyContext() {
       } catch (_) { continue; }
       const companyId = json && json.company && json.company.key ? json.company.key : null;
       const locationId = json && json.location && json.location.key ? json.location.key : null;
-      if (companyId || locationId) return { companyId, locationId };
+      if (companyId || locationId) contexts.set(JSON.stringify([companyId, locationId]), { companyId, locationId });
     }
   } catch (e) {}
-  return { companyId: null, locationId: null };
+  return contexts.size === 1 ? [...contexts.values()][0]
+    : { companyId: null, locationId: null, ambiguous: contexts.size > 1 };
 }
 
 // Discover the Shopmonkey per-shop identifier (companyId / locationId). Shopmonkey
@@ -153,6 +155,7 @@ function detectShopIdentifiers() {
   // Primary source: the LaunchDarkly context key (canonical ids).
   if (!out.companyId || !out.locationId) {
     const ld = detectLaunchDarklyContext();
+    if (ld.ambiguous && !out.locationId) return { companyId: null, locationId: null };
     if (!out.companyId && ld.companyId) out.companyId = ld.companyId;
     if (!out.locationId && ld.locationId) out.locationId = ld.locationId;
   }
@@ -181,6 +184,12 @@ function detectShopIdentifiers() {
 
 function detectContext() {
   const ctx = _detectContextRaw();
+  // The URL can advance before React replaces the preceding order header.
+  // Do not cache or expose that old vehicle under the new order identity.
+  const ready = Array.from(document.querySelectorAll('[data-testid^="addLabelBtnOrder-"]'))
+    .some(el => el.getAttribute('data-testid') === `addLabelBtnOrder-${ctx.roId}`);
+  if (!ready) return { provider: ctx.provider, shopId: ctx.shopId,
+    locationId: ctx.locationId, companyId: ctx.companyId, roId: null };
   rememberOrderContext(ctx);
   hydrateContextFromCache(ctx);
   return ctx;
@@ -299,9 +308,9 @@ function updateContext() {
   const contextStr = JSON.stringify(context);
   if (contextStr !== JSON.stringify(lastContext)) {
     lastContext = context;
+    safeSendMessage({ action: "SET_SMS_CONTEXT", context });
     if (context.shopId) {
       console.log("[MOS Tools] Shopmonkey context changed:", context.roId ? `Order ${context.roId}` : 'shop-level', context);
-      safeSendMessage({ action: "SET_SMS_CONTEXT", context });
     } else {
       // No resolvable shop identifier yet — surface as a drop so telemetry can
       // flag shops where the companyId/locationId probe needs live tuning.
@@ -313,10 +322,26 @@ function updateContext() {
 
 // ==================== INIT ====================
 function init() {
+  globalThis.MosStickerButtonPreference?.start(detectContext);
+  chrome.runtime.onMessage.addListener((message, _sender, reply) => {
+    if (message.action === 'GET_PAGE_CONTEXT') { reply(detectContext()); return false; }
+    if (['PRINT_STICKER_FROM_PANEL', 'PRINT_KEYTAG_FROM_PANEL'].includes(message.action)) {
+      printShopmonkeySticker(message.sticker, message.action === 'PRINT_KEYTAG_FROM_PANEL').then(() => reply({ success: true }),
+        error => reply({ success: false, error: error.message }));
+      return true;
+    }
+  });
   orderButtons = globalThis.MosShopmonkeyButtons?.create({
     document,
     send: safeSendMessage,
     getContext: detectContext,
+    print: (context, notify) => {
+      if (globalThis.MosStickerButtonPreference?.route(context, notify)) return;
+      safeSendMessage({ action: 'PRINT_STICKER_IMMEDIATE', context }, result => {
+        if (!result?.success) { notify(result?.error || 'Sign in to Detect Dog and try again.'); return; }
+        printShopmonkeySticker(result.sticker).catch(error => notify(error.message));
+      });
+    },
   });
   updateContext();
   // Shopmonkey can replace the tag row without changing the order URL.
@@ -350,6 +375,42 @@ function init() {
 
   window.addEventListener('popstate', () => {
     updateContext();
+  });
+}
+
+async function printShopmonkeySticker(sticker, keytag = false) {
+  const expected = sticker?.mosPrintContext;
+  const current = () => {
+    const live = detectContext();
+    return expected?.provider === 'shopmonkey' && expected.shopId && expected.roId &&
+      ['shopId', 'roId', 'locationId', 'companyId'].every(k => String(expected[k] || '') === String(live[k] || ''));
+  };
+  if (!current()) throw new Error('Shopmonkey order or location changed. Reopen Print from the current order.');
+  let html;
+  if (keytag) {
+    const width = String(sticker.widthInches).replace(/in$/, '');
+    const height = String(sticker.heightInches).replace(/in$/, '');
+    if (![width, height].every(v => /^\d+(\.\d+)?$/.test(v) && Number(v) > 0 && Number(v) <= 12)) {
+      throw new Error('Invalid keytag paper dimensions.');
+    }
+    const image = String(sticker.dataUrl || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    html = `<html><head><style>@page{size:${width}in ${height}in;margin:0}body{margin:0}img{width:${width}in;height:${height}in}</style></head><body><img id="sticker" src="${image}"></body></html>`;
+  } else html = MosStickerPrintCore.buildHtml(sticker);
+  const frame = document.createElement('iframe');
+  frame.style.cssText = 'position:fixed;width:0;height:0;border:0';
+  document.body.appendChild(frame);
+  await new Promise((resolve, reject) => {
+    const fail = message => { frame.remove(); reject(new Error(message)); };
+    const timer = setTimeout(() => fail('Sticker image timed out. Please try again.'), 10000);
+    const doc = frame.contentDocument;
+    doc.open(); doc.write(html); doc.close();
+    MosStickerPrintCore.whenReady(doc.getElementById('sticker'), () => {
+      clearTimeout(timer);
+      if (!current()) return fail('Order changed while preparing the sticker. Please print again.');
+      frame.contentWindow.print();
+      setTimeout(() => frame.remove(), 1000);
+      resolve();
+    }, () => { clearTimeout(timer); fail('Sticker image could not load.'); });
   });
 }
 

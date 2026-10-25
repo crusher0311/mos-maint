@@ -491,7 +491,7 @@ async function resolveMosShopId(
       userShopIds,
       isPlatformAdmin,
       providerHint: effectiveProvider,
-      providerHintIsAuthoritative: Boolean(principalProvider) || effectiveProvider === "tekmetric" || effectiveProvider === "shopware",
+      providerHintIsAuthoritative: Boolean(principalProvider) || ["tekmetric", "shopware", "shopmonkey"].includes(effectiveProvider || ""),
       shopwareLocationId: shopwareContext.locationId,
       shopwareRepairOrderId: shopwareContext.repairOrderId,
     });
@@ -537,6 +537,10 @@ async function resolveMosShopId(
     } };
   }
 
+  if (effectiveProvider === "shopmonkey") return {
+    mosShopId: null, shop: null, resolvedProvider: null,
+    lookupFailure: { status: 400, error: "Open a Shopmonkey order at the current location before printing." },
+  };
   // No explicit shop context (e.g. side panel opened without a page): fall
   // back to the user's primary shop.
   if (authResult.user?.shopId) {

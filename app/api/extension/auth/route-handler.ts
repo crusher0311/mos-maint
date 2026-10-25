@@ -4,6 +4,7 @@ import crypto from "node:crypto";
 import type { Db } from "mongodb";
 import { getDb } from "@/lib/mongo";
 import bcrypt from "bcryptjs";
+import { findShopBySmsIdDetailed } from "@/lib/extension-shop-lookup";
 import { isSuperAdmin } from "@/lib/super-admins";
 import {
   issueExtensionSession,
@@ -22,11 +23,13 @@ export const __deps: {
   issueExtensionSession: typeof issueExtensionSession;
   lookupExtensionSession: typeof lookupExtensionSession;
   revokeExtensionSession: typeof revokeExtensionSession;
+  findShopBySmsIdDetailed: typeof findShopBySmsIdDetailed;
 } = {
   getDb: () => getDb(),
   issueExtensionSession,
   lookupExtensionSession,
   revokeExtensionSession,
+  findShopBySmsIdDetailed,
 };
 
 const corsHeaders = {
@@ -318,6 +321,17 @@ async function _POST(request: NextRequest) {
     // gate kept is the EXPLICIT requestedShopId check above — the user asking
     // for a shop they aren't assigned to is a genuine security boundary.
     let contextMatch = contextMatches.length === 1 ? contextMatches[0] : null;
+    if (normalizedRequestedProvider === "shopmonkey" && normalizedSmsShopId) {
+      // Canonical ownership is checked globally before account access. A
+      // company shared with an inaccessible location must remain ambiguous.
+      const target = await __deps.findShopBySmsIdDetailed(normalizedSmsShopId, {
+        providerHint: "shopmonkey", providerHintIsAuthoritative: true,
+        userShopIds: [user.shopId, ...(user.shopIds || [])].map(Number),
+        isPlatformAdmin: user.role === "platform_admin" || user.isPlatformAdmin === true,
+      });
+      contextMatch = target.status === "resolved"
+        ? { shop: target.shopDoc, provider: "shopmonkey" } : null;
+    }
     if (normalizedSmsShopId && contextMatches.length !== 1) {
       console.info(
         `[Extension Auth] context advisory-miss smsShopId=${normalizedSmsShopId} matches=${contextMatches.length} provider=${normalizedRequestedProvider || "any"} — signing in without tab-context scoping`,

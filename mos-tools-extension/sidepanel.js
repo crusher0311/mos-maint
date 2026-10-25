@@ -2021,7 +2021,8 @@ async function fetchShopFeatures() {
     try {
       result = await sendMessage({
         action: 'MOS_API_REQUEST',
-        endpoint: `/api/extension/features?shopId=${shopAtStart}&provider=${providerAtStart}`
+        endpoint: `/api/extension/features?shopId=${shopAtStart}&provider=${providerAtStart}`,
+        context: currentContext ? { ...currentContext } : null,
       });
     } catch (err) {
       result = { error: (err && err.message) || 'fetch failed' };
@@ -5456,7 +5457,8 @@ document.getElementById('sticker-tagline')?.addEventListener('input', event => {
   stickerDraftValue = event.target.value;
 });
 const stickerContextKey = (ctx) => `${ctx?._tabId}:${ctx?.provider}:${ctx?.shopId}` +
-  (ctx?.provider === 'shopware' ? `:${ctx?.swShopId}:${ctx?.roId}` : '');
+  (ctx?.provider === 'shopware' ? `:${ctx?.swShopId}:${ctx?.roId}` :
+    ctx?.provider === 'shopmonkey' ? `:${ctx?.locationId}:${ctx?.companyId}:${ctx?.roId}` : '');
 let keytagEnabled = false;
 // Oil-sticker entitlement as last seen from /api/extension/sticker.
 //   true  = enabled, false = definitively disabled, null = unknown/transient.
@@ -5612,6 +5614,13 @@ async function loadStickerConfig() {
     
     if (result.error) {
       showSettingsError(result.error);
+      if (/Sign in to MOS once/.test(result.error) && elements.stickerError) {
+        const signIn = document.createElement('button');
+        signIn.type = 'button';
+        signIn.textContent = 'Sign in to MOS';
+        signIn.addEventListener('click', showLoginState);
+        elements.stickerError.appendChild(signIn);
+      }
       loadKeytagSection();
       return;
     }
@@ -5670,6 +5679,7 @@ async function loadStickerConfig() {
 //   insufficient: API returned but missing required fields → keep locked
 //   error: fetch failed → keep locked
 let keytagStatus = 'idle';
+let keytagManualContextKey = null;
 let keytagInFlightKey = null; // shopId|roId of the currently-in-flight enrichment
 let keytagLastEnrichedKey = null; // shopId|roId we last successfully enriched
 
@@ -5756,6 +5766,14 @@ function makeRoKey(ctx) {
 }
 
 function recomputeKeytagPrintLock() {
+  if (currentContext?.provider === 'shopmonkey' && shopFeatures.maintenance !== true) {
+    const key = keytagExtraContextKey(currentContext);
+    const ready = shopFeatures.keytags === true && !!currentContext.roId &&
+      key === keytagManualContextKey && key === keytagExtrasKey &&
+      [elements.keytagCustomer, elements.keytagVehicle, elements.keytagRo].every(input => input?.value?.trim());
+    setKeytagPrintLocked(!ready, 'Enter the customer name, vehicle and order number for this order to print a keytag.');
+    return;
+  }
   if (keytagStatus === 'ready') {
     setKeytagPrintLocked(false, '');
   } else if (keytagStatus === 'loading' || keytagStatus === 'idle') {
@@ -5776,7 +5794,7 @@ async function loadKeytagSection() {
   }
   
   elements.keytagSection.classList.remove('hidden');
-  void loadKeytagExtras().catch(error => {
+  void loadKeytagExtras().then(recomputeKeytagPrintLock).catch(error => {
     if (elements.keytagError) {
       elements.keytagError.textContent = error.message;
       elements.keytagError.classList.remove('hidden');
@@ -5785,6 +5803,27 @@ async function loadKeytagSection() {
 
   const roKey = makeRoKey(currentContext);
   const extraContextKey = keytagExtraContextKey(currentContext);
+  const manual = currentContext?.provider === 'shopmonkey' && shopFeatures.maintenance !== true;
+  for (const input of [elements.keytagVehicle, elements.keytagRo]) {
+    if (input) input.readOnly = !manual;
+  }
+  if (manual) {
+    // Keytag-only subscriptions must not require the Maintenance read API.
+    // These values are print-only and never become provider/customer records.
+    if (keytagManualContextKey !== extraContextKey) {
+      for (const input of [elements.keytagCustomer, elements.keytagVehicle, elements.keytagRo, elements.keytagMileage]) {
+        if (input) input.value = '';
+      }
+      updateKeytagFields();
+      keytagManualContextKey = extraContextKey;
+    }
+    for (const input of [elements.keytagCustomer, elements.keytagVehicle, elements.keytagRo]) {
+      if (input) input.oninput = recomputeKeytagPrintLock;
+    }
+    recomputeKeytagPrintLock();
+    return;
+  }
+  keytagManualContextKey = null;
 
   // If we've already successfully enriched THIS ro, just refresh the form.
   if (roKey && keytagLastEnrichedKey === roKey && keytagStatus === 'ready') {
@@ -5846,7 +5885,8 @@ async function loadKeytagSection() {
 
     const result = await sendMessage({
       action: 'MOS_API_REQUEST',
-      endpoint: `/api/extension/ro-context?${params}`
+      endpoint: `/api/extension/ro-context?${params}`,
+      context: currentContext ? { ...currentContext } : null,
     });
 
     // Stale-response guard: discard if the user navigated to a different RO
@@ -5945,6 +5985,11 @@ function updateKeytagFields() {
 async function handleKeytagPrint() {
   const printContext = { ...currentContext };
   const printContextKey = keytagExtraContextKey(currentContext);
+  if (currentContext?.provider === 'shopmonkey' && shopFeatures.maintenance !== true &&
+      (!currentContext.roId || printContextKey !== keytagManualContextKey || shopFeatures.keytags !== true)) {
+    recomputeKeytagPrintLock();
+    return;
+  }
   const customerName = elements.keytagCustomer?.value?.trim() || '';
   const vehicleInfo = elements.keytagVehicle?.value?.trim() || '';
   const roNumber = elements.keytagRo?.value?.trim() || '';
@@ -6003,6 +6048,7 @@ async function handleKeytagPrint() {
     
     // Print the keytag using same mechanism as sticker
     const keytagData = {
+      mosPrintContext: result.mosPrintContext,
       dataUrl: result.image,
       widthInches: result.dimensions?.width || '3.45in',
       heightInches: result.dimensions?.height || '1.11in'
@@ -6029,6 +6075,16 @@ async function handleKeytagPrint() {
 }
 
 function printKeytagImage(keytag) {
+  if (keytag.mosPrintContext?.provider === 'shopmonkey') {
+    chrome.tabs.sendMessage(keytag.mosPrintContext._tabId, {
+      action: 'PRINT_KEYTAG_FROM_PANEL', sticker: keytag,
+    }, response => {
+      if (chrome.runtime.lastError || !response?.success) {
+        showNotification(response?.error || 'Reopen Print from the originating Shopmonkey order.', 'error');
+      }
+    });
+    return;
+  }
   console.log('[MOS] Sending keytag to content script for printing');
   
   // Try to print via content script first
@@ -6089,7 +6145,7 @@ function printKeytagViaWindow(keytag) {
 let pendingStickerPrint = null;
 async function handleStickerPrint() {
   const printContextKey = MosStickerPersonalization.contextKey(currentContext);
-  if (currentContext?.provider === 'tekmetric' &&
+  if (['tekmetric', 'shopmonkey'].includes(currentContext?.provider) &&
       (!stickerConfig || stickerConfigContextKey !== stickerContextKey(currentContext))) {
     showNotification('Load sticker settings for this Tekmetric location before printing.', 'error');
     await loadStickerConfig();

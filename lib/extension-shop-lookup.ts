@@ -256,8 +256,19 @@ export async function findShopBySmsIdDetailed(
         { "shopware.tenantId": smsShopId },
       ];
     } else if (authoritativeProvider === "shopmonkey") {
+      // Location ownership wins globally, before access filtering. Company IDs
+      // are usable only when they identify exactly one canonical location.
+      const locations = await db.collection("shops").find({
+        "shopmonkey.locationId": smsShopId,
+      }).limit(2).toArray();
+      if (locations.length > 1) return {
+        status: "conflict", provider: "shopmonkey", identifier: smsShopId,
+        conflictType: "canonical", shopIds: locations.map(s => s.shopId),
+      };
+      if (locations.length === 1) return isShopAccessible(locations[0], userShopIds, isPlatformAdmin)
+        ? resolvedShop(locations[0], "shopmonkey")
+        : { status: "access_denied", provider: "shopmonkey" };
       clauses = [
-        { "shopmonkey.locationId": smsShopId },
         { "shopmonkey.companyId": smsShopId },
       ];
     }
