@@ -3,6 +3,12 @@ name: Offline release checks
 description: Interpreting elapsed-time failures and non-exiting smoke tests during release verification.
 ---
 
+Treat Render compilation memory separately from the running application's plan.
+
+**Why:** The combined application compiled locally but exhausted a roughly 2 GB V8 heap on Render after regression tests passed; the large web runtime plan did not prevent that build-process limit.
+
+**How to apply:** Check the failing stage and heap diagnostics before recommending a paid upgrade. A build-command-only heap allowance keeps runtime settings unchanged. Use one lockfile install and one full build connected with `&&`, not a semicolon chain that repeats builds and can mask an earlier failure.
+
 Use one combined preload entry point when Next production workers inherit offline guards.
 
 **Why:** Next 15 worker spawning combined repeated NODE_OPTIONS `--require` paths into a single nonexistent filename after compilation succeeded.
