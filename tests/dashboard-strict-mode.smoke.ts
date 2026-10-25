@@ -22,8 +22,13 @@ Object.defineProperty(globalThis, "navigator", { value: dom.window.navigator, co
 const originalLoad = (Module as any)._load;
 const emptyPanel = () => null;
 (Module as any)._load = function(request: string, parent: any, isMain: boolean) {
+  // Keep hook lifecycle real; a panel-only stub cannot stand in for a hook.
+  if (request === "@/components/keytag-designer/useKeytagPrintDetails") {
+    return originalLoad.call(this, request, parent, isMain);
+  }
   if (request.startsWith("@/components/")) {
-    return { __esModule: true, default: emptyPanel, VinSpecsTooltip: emptyPanel };
+    return { __esModule: true, default: emptyPanel, VinSpecsTooltip: emptyPanel,
+      StickerSupply: emptyPanel, OilViscosityInput: emptyPanel };
   }
   if (request === "next/link") {
     return { __esModule: true, default: ({ children, href }: any) => React.createElement("a", { href }, children) };
