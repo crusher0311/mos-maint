@@ -87,7 +87,7 @@ export async function searchMongoJobIndex(
     if (strictModel && vehicleModel) flatMatch["vehicle.model"] = exactCaseVariants(vehicleModel);
     try {
       const flat = await db.collection("job_index")
-        .aggregate([{ $match: flatMatch }, { $limit: cap }], { maxTimeMS: 2000, hint: { shopId: 1 } }).toArray();
+        .aggregate([{ $match: flatMatch }, { $limit: cap }], { maxTimeMS: 2000, hint: { shopId: 1, title: 1 } }).toArray();
       const rows = [...canonical, ...flat];
       sortByPerformedAtDesc(rows);
       return rows.slice(0, cap);

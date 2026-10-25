@@ -23,7 +23,7 @@ export async function findShopmonkeyRo(
   }
   const rows = await db.collection("normalized_work_orders").find(query, {
     // Existing index: bound the scan to this shop, never the entire mirror.
-    hint: { shopId: 1, updatedAt: -1 },
+    hint: { shopId: 1, closedDate: -1 },
     projection: { vehicle: 1, customer: 1, odometerIn: 1, odometerOut: 1, workOrderNumber: 1, status: 1, checkInDate: 1, completedDate: 1, closedDate: 1 },
     maxTimeMS: 2000,
   }).limit(501).toArray();

@@ -26,7 +26,7 @@ async function main() {
       assert.equal(query["provenance.sourceIds.system"], "shopmonkey");
       assert.equal(query["softDelete.isDeleted"].$ne, true);
       assert.equal(options.maxTimeMS, 2000);
-      assert.deepEqual(options.hint, { shopId: 1, updatedAt: -1 });
+      assert.deepEqual(options.hint, { shopId: 1, closedDate: -1 });
       if (query.$or) {
         assert.deepEqual(query.$or.at(-1)["provenance.sourceIds"].$elemMatch,
           { system: "shopmonkey", idType: "repair_order_id", idValue: "order-fixture" });
@@ -100,7 +100,7 @@ async function main() {
       const flat = match.sourceSystem === "shopmonkey";
       if (flat) {
         assert.equal(options.maxTimeMS, 2000);
-        assert.deepEqual(options.hint, { shopId: 1 });
+        assert.deepEqual(options.hint, { shopId: 1, title: 1 });
         assert.equal(match["job.keywords"].$exists, false);
         assert.ok(new RegExp(match.$and[0].title.$regex, "i").test("Oil change"));
       }
