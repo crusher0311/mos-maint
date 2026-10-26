@@ -45,7 +45,8 @@ export async function createStickerLocationRequest(context, deps) {
     const response = await deps.fetch(`${identity.apiUrl}${path}`, {
       ...options,
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      signal: AbortSignal.timeout(options.method === 'POST' && path.includes('/sticker') ? 45000 : 8000),
+      signal: AbortSignal.timeout(path.split('?')[0] === '/api/extension/plan' ? 60000 :
+        options.method === 'POST' && path.includes('/sticker') ? 45000 : 8000),
     });
     const data = await response.json();
     if (!response.ok) throw Object.assign(new Error(data.error || 'Tekmetric location request failed. Please try again.'), { code: data.code });

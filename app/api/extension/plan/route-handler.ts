@@ -1600,7 +1600,10 @@ async function _GET(request: NextRequest) {
     const shopResult = await findShopBySmsId(smsShopId, { 
       userShopIds, 
       isPlatformAdmin, 
-      providerHint: providerHint || undefined 
+      providerHint: auth.principal?.provider === "shopmonkey" ? "shopmonkey" : providerHint || undefined,
+      // First-class Shopmonkey reads must use canonical, read-only ownership.
+      // Never discover/learn a mapping while handling a plan request.
+      providerHintIsAuthoritative: auth.principal?.provider === "shopmonkey",
     });
 
     if (!shopResult) {

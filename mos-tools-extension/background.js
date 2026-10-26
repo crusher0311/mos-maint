@@ -3141,7 +3141,7 @@ async function _doMosFetch(endpoint, options, token) {
 async function handleMosApiRequest(endpoint, options = {}) {
   await _stateReady;
   const endpointPath = String(endpoint).split('?')[0];
-  if (['/api/extension/sticker', '/api/extension/keytag', '/api/extension/features', '/api/extension/ro-context'].includes(endpointPath)) {
+  if (['/api/extension/sticker', '/api/extension/keytag', '/api/extension/features', '/api/extension/ro-context', '/api/extension/plan'].includes(endpointPath)) {
     const body = options.body ? JSON.parse(options.body) : {};
     const query = new URL(endpoint, 'https://mos.invalid').searchParams;
     const provider = body.provider || query.get('provider');
