@@ -11,7 +11,7 @@ export async function createBoundedFixture() {
     trial: { startedAt: null, endsAt: "2030-01-01T00:00:00Z", days: 14, daysLeft: 7, cardOnFile: false },
     cardOnFile: false, reviewStatus: "pending",
   }));
-  const state = { pageDelay: 0, summaryDelay: 20, fail: false, summaryFail: false,
+  const state = { pageDelay: 0, summaryDelay: 20, summaryGate: null as Promise<void> | null, fail: false, summaryFail: false,
     noFleet: false, requests: [] as string[], writes: [] as { path: string; body: any }[] };
   const bundle = await build({
     stdin: { contents: `import React from "react"; import {createRoot} from "react-dom/client";
@@ -63,6 +63,7 @@ export async function createBoundedFixture() {
           billing: { ...s.billing, plan: "STALE PLAN", vinViewCount: 27 }, summaryState: "ready",
         })) };
         const fail = state.summaryFail;
+        await state.summaryGate;
         await new Promise(r => setTimeout(r, state.summaryDelay));
         json(fail ? { ok: false } : result, fail ? 503 : 200); return;
       }

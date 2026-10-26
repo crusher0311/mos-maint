@@ -8,6 +8,8 @@ import { createBoundedFixture } from "./bounded-loading-fixture";
 
 test("bounded pages, debounced server scopes, bulk safety, retained refresh and stale guards", { timeout: 60000 }, async () => {
   const fixture = await createBoundedFixture();
+  let releaseInitialSummary!: () => void;
+  fixture.state.summaryGate = new Promise<void>(resolve => { releaseInitialSummary = resolve; });
   fixture.state.summaryDelay = 1100;
   const listen = async (s: http.Server) => {
     await new Promise<void>(resolve => s.listen(0, "127.0.0.1", resolve));
@@ -47,6 +49,8 @@ test("bounded pages, debounced server scopes, bulk safety, retained refresh and 
     assert.ok((await text()).includes("Approve 123 pending"));
     assert.ok((await text()).includes("Resend card-capture to 123 shops"));
     assert.ok(!fixture.state.requests.some(s => s.includes("view=history")), "history is on demand");
+    fixture.state.summaryGate = null;
+    releaseInitialSummary();
     await button("Resend card-capture to 123 shops");
     await wait("Resend card-capture email to 123 shops");
     await button("Send 123 emails"); await wait("Bulk card-capture results"); await button("Close");
