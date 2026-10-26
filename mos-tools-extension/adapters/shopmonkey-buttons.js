@@ -10,6 +10,7 @@
     let layoutTarget = null;
     let priorWrap = '';
     let settingsError = '';
+    let failures = 0;
     const key = c => c?.provider === 'shopmonkey' && c.shopId && c.roId
       ? JSON.stringify([c.shopId, c.roId, c.locationId, c.companyId]) : null;
     const remove = () => {
@@ -88,6 +89,13 @@
         el.title = action === 'OPEN_STICKER_PANEL' ? 'MOS Oil Sticker\nLeft-click: Print | Right-click: Customize' : 'Open Detect Dog';
         el.setAttribute('aria-label', el.title);
         el.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;min-height:32px;padding:2px;border:0;border-radius:4px;background:transparent;cursor:pointer';
+        if (action === 'OPEN_SIDE_PANEL') {
+          // The launcher opens the browser side panel; it is not an inline
+          // order action. Keep Print in the toolbar and the launcher at the edge.
+          el.id = 'mos-shopmonkey-fab';
+          el.style.cssText = 'position:fixed;right:12px;top:200px;width:48px;height:48px;z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:0;border:1px solid #e0e0e0;border-radius:8px;background:white;box-shadow:0 4px 12px rgba(0,0,0,.2);cursor:pointer';
+          image.style.cssText = 'width:100%;height:100%;object-fit:contain;display:block;border-radius:8px';
+        }
         const mountedScope = scope;
         el.addEventListener('click', event => {
           event.preventDefault();
@@ -138,6 +146,7 @@
         expires = 0;
         pending = false;
         settingsError = '';
+        failures = 0;
         remove();
       }
       render();
@@ -163,7 +172,13 @@
         };
         settingsError = settings ? '' : errors[response?.code] ||
           'Detect Dog could not load this location’s print permissions. Retrying automatically…';
-        expires = now() + (settings ? 30000 : 10000);
+        failures = settings ? 0 : failures + 1;
+        const terminal = ['SHOP_UNLINKED', 'SHOP_FORBIDDEN', 'SHOP_MAPPING_CONFLICT',
+          'EXPLICIT_LOGIN_REQUIRED', 'TOKEN_EXPIRED'].includes(response?.code);
+        // Fast recovery from a first-load race, bounded backoff on repeated
+        // failures. Genuine access denials must not become a rapid retry loop.
+        expires = now() + (settings ? 30000 : terminal ? 30000 :
+          Math.min(10000, 2000 * 2 ** Math.min(failures - 1, 3)));
         const eligibilityEnd = Date.parse(settings?.eligibility?.eligibleUntil);
         if (Number.isFinite(eligibilityEnd)) expires = Math.min(expires, eligibilityEnd);
         remove();

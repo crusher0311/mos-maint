@@ -36,6 +36,12 @@ test('fresh page bridges early session activity and subsequent fetch/XHR locatio
     }
     await page.waitForFunction(() => window.scopes.includes('bbbbbbbbbbbbbbbbbbbbbbbb'));
     assert.equal(await page.locator('#mos-shopmonkey-actions button').count(), 2);
+    const fab = page.locator('#mos-shopmonkey-fab');
+    assert.equal(await fab.evaluate(el => getComputedStyle(el).position), 'fixed');
+    const box = await fab.boundingBox();
+    assert.equal(box.width, 48);
+    assert.equal(box.y, 200);
+    assert.equal(await page.evaluate(() => innerWidth) - box.x - box.width, 12);
     await page.evaluate(() => {
       const xhr = new XMLHttpRequest();
       xhr.open('GET', '/api/v3/order');

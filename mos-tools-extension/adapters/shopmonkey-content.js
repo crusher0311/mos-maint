@@ -305,8 +305,11 @@ function _detectContextRaw() {
     // its own line. Limit the search to that header, never maintenance
     // suggestions ("120,000 mi") or assignments elsewhere on the page.
     if (!context.mileage && vinMatch) {
-      const afterVin = pageText.slice(vinMatch.index + vinMatch[0].length);
-      const headerMileage = afterVin.match(/^[ \t]*\r?\n[ \t]*(\d{1,3}(?:,\d{3})+|\d{2,7})[ \t]*(?:mi|miles|km)?[ \t]*(?:\/[ \t]*[-–—]?)?[ \t]*(?:\r?\n|$)/i);
+      const afterVin = pageText.slice(vinMatch.index + vinMatch[0].length).replace(/\u00a0/g, ' ');
+      // Flex layouts may flatten VIN and odometer onto one line or split
+      // the "/" and missing outgoing mileage onto separate lines.
+      // Stay immediately adjacent to the VIN, never scan arbitrary page numbers.
+      const headerMileage = afterVin.match(/^[ \t\r\n\u00a0]+(\d{1,3}(?:,\d{3})+|\d{2,7})[ \t]*(?:mi|miles)?[ \t]*(?:\r?\n[ \t]*)?(?:\/[ \t\r\n]*[-–—]?)?[ \t]*(?:\r?\n|$)/i);
       if (headerMileage) {
         const miles = Number(headerMileage[1].replace(/,/g, ''));
         if (miles > 0 && miles < 2000000) context.mileage = miles;

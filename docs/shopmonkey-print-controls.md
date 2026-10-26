@@ -1,8 +1,9 @@
 # Shopmonkey controls and printing
 
 Supported order controls are the branded Detect Dog launcher and oil-sticker
-button. Native Print/Send/Message remain untouched. Controls stay on the
-previously approved separate row beneath native Print. There are no new DVI,
+button. Native Print/Send/Message remain untouched. Print stays on the
+previously approved separate row beneath native Print; Detect Dog floats at
+the viewport edge. There are no new DVI,
 notes, or provider write-back buttons.
 
 Left click follows the shop's existing open-Print-first preference; otherwise it
@@ -56,6 +57,18 @@ permission loads show an inline status below Print rather than silent absence.
 Request headers, bodies and URLs are no longer written to interceptor console
 logs. Opt-in diagnostic capture additionally redacts credential headers
 case-insensitively. This does not retroactively sanitize previously saved logs.
+
+The Detect Dog launcher is fixed at the viewport's right edge; Print remains
+in the order toolbar. Both retain the same server-authorized visibility rules.
+First transient permission failures become eligible for retry after two seconds
+(on the next normal context scan), backing off to ten seconds for repeated
+failures. Explicit access/sign-in/mapping failures retry at thirty seconds.
+This reduces the previous fixed ten-second retry penalty; it does not establish
+the cause of any particular live startup delay.
+
+Header mileage parsing accepts immediate VIN-adjacent values on the same line,
+blank-line-separated values and split outgoing-mileage placeholders, including
+nonbreaking spaces. It does not search unrelated maintenance suggestions.
 
 Run `node --test tests/shopmonkey-session-context.test.cjs` for passive-context,
 expiry, tab-isolation and logging checks. The browser suite also covers the

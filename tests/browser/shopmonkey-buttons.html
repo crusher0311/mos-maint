@@ -34,6 +34,7 @@ const ctx = {provider:'shopmonkey',shopId:'demo',roId:'04c4dad9-c97c-41b2-9ac9-8
 if (new URLSearchParams(location.search).has('missingLocation')) ctx.shopId = null;
 const controller = MosShopmonkeyButtons.create({
   document, getContext: () => ctx,
+  assetUrl: p => new URL('../../mos-tools-extension/' + p, location.href).href,
   send(message, done) {
     if (message.action === 'GET_SHOP_FEATURES') {
       done({success:true,floatingButtonEnabled:true,features:{oil_sticker:true}});
