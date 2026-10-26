@@ -25,7 +25,7 @@ export default function HovercodePage() {
 
   const loadShops = async () => {
     try {
-      const res = await fetch("/api/platform-admin/shops");
+      const res = await fetch("/api/platform-admin/shops?view=core");
       const data = await res.json();
       if (data.ok) {
         const shopsWithQR = data.shops.map((shop: any) => ({

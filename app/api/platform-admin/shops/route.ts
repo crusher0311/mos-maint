@@ -12,7 +12,8 @@ import bcrypt from "bcryptjs";
 import { sendEmail, makeCredentialsWelcomeEmail } from "@/lib/email";
 import { getStripe, getBillingSettings } from "@/lib/stripe";
 import { computeAutoFlagReasons, getReviewFields } from "@/lib/shop-review";
-import { shopIdVariants, shopSummaryCache, timeShopRead } from "@/lib/platform-shops-read";
+import { shopIdVariants, shopSummaryCache, timeShopRead, shopReadLimiter, fleetTotalsCache, fleetActivityCache } from "@/lib/platform-shops-read";
+import { paginateShops, summaryShopIds } from "@/lib/platform-shops-pagination";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,8 +23,9 @@ const MAX_TRIAL_DAYS = 365;
 
 export async function GET(req: NextRequest) {
   const started = performance.now();
-  const mode = req?.nextUrl.searchParams.get("view") || "legacy";
-  const coreOnly = mode === "core";
+  const mode = req?.nextUrl.searchParams.get("view") || "page";
+  const pageOnly = mode === "page";
+  const coreOnly = mode === "core" || pageOnly;
   const historyOnly = mode === "history";
   const includeHistory = mode === "legacy" || historyOnly;
   const session = await timeShopRead("authentication", getSession);
@@ -35,6 +37,13 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    if (!["page", "core", "summary", "history"].includes(mode)) {
+      return NextResponse.json({ error: "Use bounded page or summary view" }, { status: 400 });
+    }
+    const selectedIds = mode === "summary" ? summaryShopIds(req.nextUrl.searchParams) : null;
+    if (mode === "summary" && !selectedIds) {
+      return NextResponse.json({ error: "Summary requires 1–50 shopIds" }, { status: 400 });
+    }
     const db = await getDb();
     
     const [allShops, billingSettings, enterprises] = await timeShopRead("core", () => Promise.all([
@@ -44,7 +53,8 @@ export async function GET(req: NextRequest) {
     ]));
     const historyId = req?.nextUrl.searchParams.get("shopId");
     if (historyOnly && !historyId) return NextResponse.json({ error: "shopId required" }, { status: 400 });
-    const shops = historyOnly ? allShops.filter(s => String(s.shopId) === historyId) : allShops;
+    const shops = historyOnly ? allShops.filter(s => String(s.shopId) === historyId) :
+      selectedIds ? allShops.filter(s => selectedIds.includes(String(s.shopId))) : allShops;
     const unavailable: string[] = [];
     const scope = `${isIdentityPgCanonical() ? "pg" : "mongo"}:${JSON.stringify(shops.map(s => String(s.shopId)).sort())}`;
     const read = async (stage: string, load: () => Promise<any[]>, cache = true) => {
@@ -52,7 +62,7 @@ export async function GET(req: NextRequest) {
           (!includeHistory && (stage === "email" || stage === "owners"))) return [];
       try {
         return await timeShopRead(stage, () => cache
-          ? shopSummaryCache.read(`${stage}:${scope}:${stage === "monthly-stickers" ? new Date().toISOString().slice(0, 7) : ""}`, load) : load());
+          ? shopSummaryCache.read(`${stage}:${scope}:${stage === "monthly-stickers" ? new Date().toISOString().slice(0, 7) : ""}`, () => shopReadLimiter.run(load), true) : shopReadLimiter.run(load));
       } catch {
         unavailable.push(stage);
         return [];
@@ -64,7 +74,9 @@ export async function GET(req: NextRequest) {
     
     const defaultTrialDays = billingSettings?.trialDays ?? DEFAULT_TRIAL_DAYS;
     const shopIds = shops.map(s => s.shopId);
-    const stickerEntitlements = await stickerOutreachEntitlements(db, shops, enterprises).catch(() => null);
+    const needsFleetActivity = pageOnly && (req.nextUrl.searchParams.get("stickerOutreachOnly") === "true" || req.nextUrl.searchParams.get("sortBy") === "oldestStickerActivity");
+    const stickerEntitlements = coreOnly && !needsFleetActivity ? null :
+      await shopReadLimiter.run(() => stickerOutreachEntitlements(db, shops, enterprises)).catch(() => null);
     
     const allShopIdVariants = shopIdVariants(shopIds);
     
@@ -114,7 +126,7 @@ export async function GET(req: NextRequest) {
           lastHandoff: { $max: { $cond: [{ $eq: ["$evidence", "handoff"] }, "$generatedAt", null] } },
           lastAck: { $max: { $cond: [{ $eq: ["$evidence", "printer-ack"] }, "$generatedAt", null] } },
         } }
-      ], { maxTimeMS: 3000 }).toArray(), false),
+      ], { maxTimeMS: 3000 }).toArray()),
       read("monthly-stickers", () => db.collection("sticker_generations").aggregate([
         { $match: { shopId: { $in: allShopIdVariants }, generatedAt: { $gte: monthStart } } },
         { $group: { _id: "$shopId", count: { $sum: 1 } } }
@@ -157,7 +169,7 @@ export async function GET(req: NextRequest) {
       ], { maxTimeMS: 5000 }).toArray(), false),
     ]);
     
-    stickerActivityAvailable = !coreOnly && !historyOnly && !unavailable.includes("stickers");
+    stickerActivityAvailable = needsFleetActivity || (!coreOnly && !historyOnly && !unavailable.includes("stickers"));
     const userCountMap = new Map<string, number>();
     for (const u of userCounts) userCountMap.set(String(u._id), (userCountMap.get(String(u._id)) || 0) + u.count);
     const vinViewCountMap = new Map(vinViewCounts.map(v => [String(v._id), v.count]));
@@ -192,6 +204,20 @@ export async function GET(req: NextRequest) {
     
     const stickerCountMap = new Map<string, number>();
     const stickerActivityMap = new Map(stickerCounts.map(s => [String(s._id), s]));
+    // Fleet activity is requested only for an explicit fleet activity filter/sort,
+    // never on ordinary page load. Reuse a five-minute bounded snapshot.
+    if (needsFleetActivity) {
+      try {
+        const rows = await fleetActivityCache.read(`activity:${scope}`, () => shopReadLimiter.run(() =>
+          db.collection("sticker_generations").aggregate([
+            { $match: { shopId: { $in: allShopIdVariants } } },
+            { $group: { _id: { $toString: "$shopId" }, count: { $sum: 1 }, lastAt: { $max: "$generatedAt" },
+              lastHandoff: { $max: { $cond: [{ $eq: ["$evidence", "handoff"] }, "$generatedAt", null] } },
+              lastAck: { $max: { $cond: [{ $eq: ["$evidence", "printer-ack"] }, "$generatedAt", null] } } } },
+          ], { maxTimeMS: 3000 }).toArray()), true);
+        rows.forEach(s => stickerActivityMap.set(String(s._id), s));
+      } catch { unavailable.push("fleet-activity"); }
+    }
     for (const s of stickerCounts) {
       const key = String(s._id);
       stickerCountMap.set(key, (stickerCountMap.get(key) || 0) + s.count);
@@ -409,7 +435,7 @@ export async function GET(req: NextRequest) {
           const ms = (v: any) => v ? new Date(v).getTime() : -1;
           return { ...row, evidence: ms(row.lastAt) === ms(row.lastAck) ? "printer-ack" :
             ms(row.lastAt) === ms(row.lastHandoff) ? "handoff" : "legacy-generation" };
-        })(), stickerActivityAvailable && stickerEntitlements !== null, Date.now(),
+        })(), stickerActivityAvailable && !unavailable.includes("fleet-activity") && stickerEntitlements !== null, Date.now(),
           stickerEntitlements?.get(String(shop.shopId)) === true),
         lastCardCaptureEmail,
         cardCaptureEmailHistory: cardCaptureHistory,
@@ -496,6 +522,17 @@ export async function GET(req: NextRequest) {
         },
       };
     });
+
+    if (pageOnly) {
+      const result = paginateShops(enrichedShops, req.nextUrl.searchParams);
+      const [fleet] = await fleetTotalsCache.read(`totals:${isIdentityPgCanonical()}`, async () => [result.fleet]);
+      const activityUnavailable = needsFleetActivity && (unavailable.includes("fleet-activity") || stickerEntitlements === null);
+      if (activityUnavailable) {
+        return NextResponse.json({ ok: false, error: "Fleet sticker activity is temporarily unavailable; retry later." }, { status: 503 });
+      }
+      return NextResponse.json({ ok: true, ...result, fleet, defaultTrialDays, activityUnavailable },
+        { headers: { "Cache-Control": "no-store" } });
+    }
     
     console.info("[platform-shops-read]", { stage: "total", ms: Math.round(performance.now() - started) });
     return NextResponse.json({

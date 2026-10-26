@@ -266,14 +266,16 @@ function buildCardCaptureHistoryTitle(history: CardCaptureEmailEntry[] | undefin
   return `Card-capture email history (most recent first):\n${lines.join("\n")}`;
 }
 
-const isActiveOrTrial = (shop: Shop): boolean => {
-  if (shop.isLocked) return false;
-  const status = shop.billing.status;
-  return status === "active" || status === "trial";
-};
-
-const isDetectDogFounderActive = (shop: Shop): boolean =>
-  shop.billing.plan === "detect_dog_founder" && shop.billing.status === "active";
+type BulkTrialShop = Pick<Shop, "shopId" | "name" | "trial" | "cardOnFile">;
+type BulkReviewShop = Pick<Shop, "shopId" | "name" | "reviewStatus">;
+interface FleetStats {
+  total: number;
+  activeOrTrial: number;
+  active: number;
+  trialing: number;
+  founder: number;
+  updatedAt: string | null;
+}
 
 type KpiFilter = "none" | "activeOrTrial" | "detectDogFounder";
 
@@ -282,6 +284,15 @@ export default function PlatformShopsPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const loadGeneration = useRef(0);
+  const requestController = useRef<AbortController | null>(null);
+  const hasLoaded = useRef(false);
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState<{ page: number; pageSize: number; total: number; totalPages: number } | null>(null);
+  const [fleet, setFleet] = useState<FleetStats | null>(null);
+  const [activityUnavailable, setActivityUnavailable] = useState(false);
+  const [bulkEligibleShops, setBulkEligibleShops] = useState<BulkTrialShop[]>([]);
+  const [bulkApprovePendingShops, setBulkApprovePendingShops] = useState<BulkReviewShop[]>([]);
+  const [loadedScope, setLoadedScope] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [impersonating, setImpersonating] = useState<number | null>(null);
   const [defaultTrialDays, setDefaultTrialDays] = useState(14);
@@ -322,6 +333,15 @@ export default function PlatformShopsPage() {
   const [bulkApproveConfirmOpen, setBulkApproveConfirmOpen] = useState(false);
   const [bulkApproveSubmitting, setBulkApproveSubmitting] = useState(false);
   const [kpiFilter, setKpiFilter] = useState<KpiFilter>("none");
+  const filterKey = JSON.stringify({ search, kpiFilter, trialFilter, reviewFilter, sortBy, stickerOutreachOnly });
+  const [debouncedFilters, setDebouncedFilters] = useState({ key: filterKey });
+  const debouncedFilterKey = debouncedFilters.key;
+  const previousFilterKey = useRef(filterKey);
+  // Updated during render: even a response completing before effect cleanup is obsolete.
+  const currentScope = `${filterKey}:${page}`;
+  const scopeRef = useRef(currentScope);
+  scopeRef.current = currentScope;
+  const bulkScopeUnavailable = loading || !!loadError || loadedScope !== currentScope;
   const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
   const [bulkSending, setBulkSending] = useState(false);
   type BulkResult = {
@@ -494,6 +514,7 @@ export default function PlatformShopsPage() {
   };
 
   const sendBulkCardCapture = async (shopIds: (number | string)[]) => {
+    if (bulkScopeUnavailable || shopIds.length === 0) return;
     setBulkSending(true);
     try {
       const res = await fetch("/api/platform-admin/shops/bulk-card-capture", {
@@ -561,7 +582,7 @@ export default function PlatformShopsPage() {
   };
 
   const submitBulkApprove = async (shopIds: (number | string)[]) => {
-    if (shopIds.length === 0) return;
+    if (bulkScopeUnavailable || shopIds.length === 0) return;
     setBulkApproveSubmitting(true);
     try {
       const res = await fetch("/api/platform-admin/shops/bulk-approve", {
@@ -849,50 +870,90 @@ export default function PlatformShopsPage() {
   };
 
   useEffect(() => {
-    loadShops();
-  }, []);
+    if (previousFilterKey.current === filterKey) return;
+    previousFilterKey.current = filterKey;
+    // Invalidate immediately, not after the debounce window.
+    ++loadGeneration.current;
+    requestController.current?.abort();
+    setLoading(true);
+    setBulkConfirmOpen(false);
+    setBulkApproveConfirmOpen(false);
+    const timer = setTimeout(() => {
+      setPage(1);
+      setDebouncedFilters({ key: filterKey });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [filterKey]);
+
+  useEffect(() => {
+    if (filterKey === debouncedFilterKey) void loadShops();
+    return () => {
+      ++loadGeneration.current;
+      requestController.current?.abort();
+    };
+  }, [debouncedFilters, page]);
 
   const loadShops = async () => {
+    if (filterKey !== debouncedFilterKey) return;
     const generation = ++loadGeneration.current;
+    requestController.current?.abort();
+    const controller = new AbortController();
+    requestController.current = controller;
+    const scope = currentScope;
+    const isCurrent = () => !controller.signal.aborted &&
+      generation === loadGeneration.current && scope === scopeRef.current;
     setLoading(true);
     setLoadError(null);
     try {
-      const res = await fetch("/api/platform-admin/shops?view=core", { cache: "no-store" });
+      const params = new URLSearchParams({ view: "page", page: String(page),
+        search, kpiFilter, trialFilter, reviewFilter, sortBy, stickerOutreachOnly: String(stickerOutreachOnly) });
+      const res = await fetch(`/api/platform-admin/shops?${params}`, { cache: "no-store", signal: controller.signal });
       const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error("Shop list unavailable");
-      if (generation === loadGeneration.current) {
-        setShops((data.shops || []).map((s: Shop) => ({ ...s, readRevision: generation })));
+      if (!res.ok || !data.ok || !Array.isArray(data.shops) || !data.pagination) throw new Error("Shop list unavailable");
+      if (isCurrent()) {
+        hasLoaded.current = true;
+        const pageShops: Shop[] = data.shops;
+        setShops(pageShops.map(s => ({ ...s, summaryState: "loading", readRevision: generation })));
+        setPagination(data.pagination);
+        setFleet(data.fleet ?? null);
+        setActivityUnavailable(data.activityUnavailable === true);
+        setBulkEligibleShops(data.bulkEligibleShops ?? []);
+        setBulkApprovePendingShops(data.bulkApprovePendingShops ?? []);
+        setLoadedScope(scope);
         if (typeof data.defaultTrialDays === "number") {
           setDefaultTrialDays(data.defaultTrialDays);
         }
         // Summary responses may never replace authoritative fields or newer edits.
-        void fetch("/api/platform-admin/shops?view=summary", { cache: "no-store" })
+        if (pageShops.length === 0) return;
+        const summaryParams = new URLSearchParams({ view: "summary", shopIds: pageShops.map(s => String(s.shopId)).join(",") });
+        void fetch(`/api/platform-admin/shops?${summaryParams}`, { cache: "no-store", signal: controller.signal })
           .then(async response => {
             const summary = await response.json();
             if (!response.ok || !summary.ok) throw new Error("Summaries unavailable");
-            if (generation !== loadGeneration.current) return;
+            if (!isCurrent()) return;
             const byId = new Map<string, Shop>(summary.shops.map((s: Shop) => [String(s.shopId), s]));
             setShops(current => current.map(shop => {
+              if (shop.readRevision !== generation) return shop;
               const extra = byId.get(String(shop.shopId));
               if (!extra) return { ...shop, summaryState: "unavailable" };
               return { ...shop, userCount: extra.userCount, vehicleCount: extra.vehicleCount,
                 stickerCount: extra.stickerCount, stickerCountThisMonth: extra.stickerCountThisMonth,
                 stickerActivity: extra.stickerActivity,
                 backfill: extra.backfill, summaryState: extra.summaryState, unavailable: extra.unavailable,
-                billing: { ...shop.billing, vinViewCount: extra.billing.vinViewCount } };
+                billing: { ...shop.billing, vinViewCount: extra.billing?.vinViewCount ?? null } };
             }));
           }).catch(() => {
-            if (generation !== loadGeneration.current) return;
-            setShops(current => current.map(s => ({ ...s, summaryState: "unavailable" })));
+            if (!isCurrent()) return;
+            setShops(current => current.map(s => s.readRevision === generation ? { ...s, summaryState: "unavailable" } : s));
           });
       }
     } catch {
-      if (generation === loadGeneration.current) {
+      if (isCurrent()) {
         setLoadError("Could not refresh shops. Existing rows are retained. Please retry.");
         setShops(current => current.map(s => s.summaryState === "loading" ? { ...s, summaryState: "unavailable" } : s));
       }
     } finally {
-      if (generation === loadGeneration.current) setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
   };
 
@@ -902,79 +963,8 @@ export default function PlatformShopsPage() {
     );
   }, [defaultTrialDays]);
 
-  // KPI numbers
-  const activeOrTrialShops = shops.filter(isActiveOrTrial);
-  const activeCount = activeOrTrialShops.filter((s) => s.billing.status === "active").length;
-  const trialingCount = activeOrTrialShops.filter((s) => s.billing.status === "trial").length;
-  const detectDogFounderShops = shops.filter(isDetectDogFounderActive);
-
-  const searchLower = search.toLowerCase();
-  const now = Date.now();
-  const filteredShops = shops
-    .filter(shop => !stickerOutreachOnly || (
-      shop.stickerActivity?.inactive === true &&
-      shop.stickerActivity.state !== "unknown" &&
-      shop.stickerActivity.state !== "unavailable"
-    ))
-    .filter((shop) => {
-      if (kpiFilter === "activeOrTrial") return isActiveOrTrial(shop);
-      if (kpiFilter === "detectDogFounder") return isDetectDogFounderActive(shop);
-      return true;
-    })
-    .filter(shop =>
-      shop.name?.toLowerCase().includes(searchLower) ||
-      (shop.locationIdentifier && shop.locationIdentifier.toLowerCase().includes(searchLower)) ||
-      (shop.enterpriseName && shop.enterpriseName.toLowerCase().includes(searchLower)) ||
-      String(shop.shopId).includes(search)
-    )
-    .filter(shop => {
-      if (trialFilter === "all") return true;
-      const endsAtMs = shop.trial?.endsAt ? new Date(shop.trial.endsAt).getTime() : null;
-      const cardOnFile = !!shop.cardOnFile;
-      const daysLeft = shop.trial?.daysLeft ?? null;
-      if (trialFilter === "trial_active") return endsAtMs !== null && endsAtMs > now;
-      if (trialFilter === "ending_7") return endsAtMs !== null && endsAtMs > now && (daysLeft ?? 999) <= 7;
-      if (trialFilter === "ending_3") return endsAtMs !== null && endsAtMs > now && (daysLeft ?? 999) <= 3;
-      if (trialFilter === "expired") return endsAtMs !== null && endsAtMs <= now;
-      if (trialFilter === "no_card") return endsAtMs !== null && !cardOnFile;
-      return true;
-    })
-    .filter(shop => {
-      if (reviewFilter === "all") return true;
-      const status = (shop.reviewStatus || "approved") as ShopReviewStatus;
-      if (reviewFilter === "needs_review") return status === "pending" || status === "flagged";
-      return status === reviewFilter;
-    })
-    .sort((a, b) => {
-      if (sortBy === "oldestStickerActivity") {
-        const activityTime = (shop: Shop) => {
-          const activity = shop.stickerActivity;
-          if (!activity || activity.state === "unknown" || activity.state === "unavailable" || !activity.sortAt) return Number.POSITIVE_INFINITY;
-          const time = new Date(activity.sortAt).getTime();
-          return Number.isFinite(time) ? time : Number.POSITIVE_INFINITY;
-        };
-        const aTime = activityTime(a);
-        const bTime = activityTime(b);
-        if (aTime !== bTime) return aTime - bTime;
-      }
-      if (sortBy === "trialEndsAt") {
-        const aEnds = a.trial?.endsAt ? new Date(a.trial.endsAt).getTime() : Number.POSITIVE_INFINITY;
-        const bEnds = b.trial?.endsAt ? new Date(b.trial.endsAt).getTime() : Number.POSITIVE_INFINITY;
-        if (aEnds !== bEnds) return aEnds - bEnds;
-      }
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    });
-
-  const bulkEligibleShops = filteredShops.filter(
-    (s) => !!s.trial?.endsAt && !s.cardOnFile,
-  );
-
-  // Shops eligible for bulk-approve: every shop in the current filtered view
-  // that is currently pending review (not flagged — those need a manual
-  // decision since the admin already chose to flag them).
-  const bulkApprovePendingShops = filteredShops.filter(
-    (s) => (s.reviewStatus || "approved") === "pending",
-  );
+  // The server owns membership and order; summaries never refilter this page.
+  const filteredShops = shops;
 
   const groupedShops = groupByEnterprise
     ? (() => {
@@ -996,14 +986,14 @@ export default function PlatformShopsPage() {
           const shopsInGroup = enterpriseMap.get(key)!;
           groups.push({
             enterprise: key ? (shopsInGroup[0]?.enterpriseName || `Enterprise ${key}`) : null,
-            shops: shopsInGroup.sort((a, b) => (a.locationIdentifier || a.name).localeCompare(b.locationIdentifier || b.name))
+            shops: shopsInGroup
           });
         });
         return groups;
       })()
     : null;
 
-  if (loading && shops.length === 0) {
+  if (loading && !hasLoaded.current) {
     return (
       <div className="p-8">
         <div className="animate-pulse space-y-4">
@@ -1111,8 +1101,8 @@ export default function PlatformShopsPage() {
           icon={<TrendingUp className="w-5 h-5 text-green-600" />}
           iconBg="bg-green-100"
           label="Total Shops Active/Trial"
-          value={activeOrTrialShops.length}
-          subtitle={`${activeCount} active · ${trialingCount} in trial`}
+          value={fleet?.activeOrTrial ?? "Unavailable"}
+          subtitle={fleet ? `${fleet.active} active · ${fleet.trialing} in trial` : "Fleet statistics unavailable"}
           active={kpiFilter === "activeOrTrial"}
           onClick={() => toggleKpi("activeOrTrial")}
         />
@@ -1120,11 +1110,18 @@ export default function PlatformShopsPage() {
           icon={<Sparkles className="w-5 h-5 text-amber-600" />}
           iconBg="bg-amber-100"
           label="Detect Dog Founder Active Subscriptions"
-          value={detectDogFounderShops.length}
-          subtitle={detectDogFounderShops.length === 1 ? "1 paid founder shop" : `${detectDogFounderShops.length} paid founder shops`}
+          value={fleet?.founder ?? "Unavailable"}
+          subtitle={fleet ? `${fleet.founder} paid founder shop${fleet.founder === 1 ? "" : "s"}` : "Fleet statistics unavailable"}
           active={kpiFilter === "detectDogFounder"}
           onClick={() => toggleKpi("detectDogFounder")}
         />
+      </div>
+
+      <div className="text-xs text-gray-500">
+        {fleet ? `${fleet.total} shops in fleet · Fleet updated ${fleet.updatedAt && Number.isFinite(new Date(fleet.updatedAt).getTime()) ? new Date(fleet.updatedAt).toLocaleString() : "time unavailable"}` : "Fleet statistics unavailable"}
+        {loadError && fleet && " · Showing previously loaded statistics"}
+        {activityUnavailable && " · Sticker activity statistics unavailable"}
+        <div>Fleet statistics may be cached for up to 60 seconds. Informational usage counts may be cached for up to 5 minutes; billing and edit fields reload with each successful page refresh.</div>
       </div>
 
       <div className="flex flex-wrap gap-4 items-center">
@@ -1182,7 +1179,7 @@ export default function PlatformShopsPage() {
         {bulkApprovePendingShops.length > 0 && (
           <button
             onClick={() => setBulkApproveConfirmOpen(true)}
-            disabled={bulkApproveSubmitting}
+            disabled={bulkApproveSubmitting || bulkScopeUnavailable}
             title="Approve every pending shop in the current filtered view (re-enables transactional email)"
             className="flex items-center gap-2 px-3 py-2 text-sm bg-emerald-100 text-emerald-800 hover:bg-emerald-200 rounded-lg disabled:opacity-50"
           >
@@ -1197,7 +1194,7 @@ export default function PlatformShopsPage() {
         {bulkEligibleShops.length > 0 && (
           <button
             onClick={() => setBulkConfirmOpen(true)}
-            disabled={bulkSending}
+            disabled={bulkSending || bulkScopeUnavailable}
             title="Resend the card-capture email to every filtered trial shop without a card on file"
             className="flex items-center gap-2 px-3 py-2 text-sm bg-amber-100 text-amber-800 hover:bg-amber-200 rounded-lg disabled:opacity-50"
           >
@@ -1227,7 +1224,7 @@ export default function PlatformShopsPage() {
             onChange={(e) => setGroupByEnterprise(e.target.checked)}
             className="w-4 h-4 text-[#3c81c3] rounded border-gray-300 focus:ring-[#3c81c3]"
           />
-          Group by Enterprise
+          Group by Enterprise (this page)
         </label>
       </div>
 
@@ -1247,7 +1244,7 @@ export default function PlatformShopsPage() {
             {filteredShops.length === 0 ? (
               <tr>
                 <td colSpan={colSpan} className="px-4 py-8 text-center text-gray-500">
-                  {search || kpiFilter !== "none" || trialFilter !== "all" || reviewFilter !== "all" || stickerOutreachOnly ? "No shops match your filters" : "No shops yet"}
+                  {loadError ? "Shop list unavailable. Use Refresh to retry." : search || kpiFilter !== "none" || trialFilter !== "all" || reviewFilter !== "all" || stickerOutreachOnly ? "No shops match your filters" : "No shops yet"}
                 </td>
               </tr>
             ) : groupByEnterprise && groupedShops ? (
@@ -1257,7 +1254,7 @@ export default function PlatformShopsPage() {
                     <div className="flex items-center gap-2 font-medium text-gray-700">
                       <Building2 className="w-4 h-4" />
                       {group.enterprise || "Standalone Shops"}
-                      <span className="text-xs text-gray-500 font-normal">({group.shops.length} location{group.shops.length !== 1 ? 's' : ''})</span>
+                      <span className="text-xs text-gray-500 font-normal">({group.shops.length} location{group.shops.length !== 1 ? 's' : ''} on this page)</span>
                     </div>
                   </td>
                 </tr>,
@@ -1275,8 +1272,17 @@ export default function PlatformShopsPage() {
         </table>
       </div>
 
-      <div className="text-sm text-gray-500">
-        Showing {filteredShops.length} of {shops.length} shops
+      <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-gray-500">
+        <span>{pagination ? `Showing ${shops.length ? (pagination.page - 1) * 50 + 1 : 0}–${shops.length ? (pagination.page - 1) * 50 + shops.length : 0} of ${pagination.total} matching shops` : "Shop count unavailable"}</span>
+        <div className="flex items-center gap-3">
+          <button onClick={() => setPage(Math.max(1, page - 1))}
+            disabled={bulkScopeUnavailable || page <= 1}
+            className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-50">Previous</button>
+          <span>{pagination ? `Page ${pagination.page} of ${Math.max(1, pagination.totalPages)} · 50 per page` : "50 per page"}</span>
+          <button onClick={() => setPage(page + 1)}
+            disabled={bulkScopeUnavailable || !pagination || page >= pagination.totalPages}
+            className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-50">Next</button>
+        </div>
       </div>
 
       {selectedShop && modalAction === "manageFeatures" && (
@@ -1831,7 +1837,7 @@ export default function PlatformShopsPage() {
         </div>
       )}
 
-      {bulkConfirmOpen && (
+      {bulkConfirmOpen && !bulkScopeUnavailable && (
         <BulkCardCaptureConfirmDialog
           shops={bulkEligibleShops}
           sending={bulkSending}
@@ -1866,7 +1872,7 @@ export default function PlatformShopsPage() {
         />
       )}
 
-      {bulkApproveConfirmOpen && (
+      {bulkApproveConfirmOpen && !bulkScopeUnavailable && (
         <BulkApproveConfirmDialog
           shops={bulkApprovePendingShops}
           submitting={bulkApproveSubmitting}
@@ -1980,7 +1986,7 @@ function BulkApproveConfirmDialog({
   onCancel,
   onConfirm,
 }: {
-  shops: Shop[];
+  shops: BulkReviewShop[];
   submitting: boolean;
   onCancel: () => void;
   onConfirm: () => void;
@@ -2002,7 +2008,7 @@ function BulkApproveConfirmDialog({
         </h3>
         <p className="text-sm text-gray-600 mb-4">
           This re-enables transactional email for every pending shop in the
-          current filtered view and clears their auto-flag reasons. Flagged
+          current filtered view across all pages and clears their auto-flag reasons. Flagged
           shops are not touched.
         </p>
         <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 mb-4 max-h-64 overflow-y-auto">
@@ -2011,9 +2017,6 @@ function BulkApproveConfirmDialog({
               <span className="font-medium text-gray-800 truncate">{s.name}</span>
               <span className="text-xs text-gray-500 whitespace-nowrap">
                 ID {s.shopId}
-                {Array.isArray(s.autoFlagReasons) && s.autoFlagReasons.length > 0
-                  ? ` · ${s.autoFlagReasons.length} reason${s.autoFlagReasons.length === 1 ? "" : "s"}`
-                  : ""}
               </span>
             </div>
           ))}
@@ -2051,7 +2054,7 @@ function KpiCard({
   icon: React.ReactNode;
   iconBg: string;
   label: string;
-  value: number;
+  value: number | string;
   subtitle?: string;
   active: boolean;
   onClick: () => void;
@@ -2618,7 +2621,7 @@ function BackfillCell({ backfill }: { backfill: BackfillStatus | null }) {
 function BulkCardCaptureConfirmDialog({
   shops, sending, onCancel, onConfirm,
 }: {
-  shops: Shop[];
+  shops: BulkTrialShop[];
   sending: boolean;
   onCancel: () => void;
   onConfirm: () => void;
@@ -2638,7 +2641,7 @@ function BulkCardCaptureConfirmDialog({
           Resend card-capture email to {shops.length} shop{shops.length === 1 ? "" : "s"}
         </h3>
         <p className="text-sm text-gray-600 mb-4">
-          Each shop&apos;s owner will get a fresh Stripe card-setup link. Sends are
+          Includes matching shops across all pages. Each shop&apos;s owner will get a fresh Stripe card-setup link. Sends are
           rate-limited and you&apos;ll get a per-shop summary when finished.
         </p>
         <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 mb-4 max-h-64 overflow-y-auto">

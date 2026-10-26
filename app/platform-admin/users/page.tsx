@@ -209,7 +209,7 @@ export default function PlatformUsersPage() {
     if (createShops.length === 0) {
       setCreateShopsLoading(true);
       try {
-        const res = await fetch("/api/platform-admin/shops");
+        const res = await fetch("/api/platform-admin/shops?view=core");
         const data = await res.json();
         const shops = (data.shops || []).map((s: any) => ({
           shopId: String(s.shopId),

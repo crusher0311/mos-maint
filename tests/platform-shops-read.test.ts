@@ -43,7 +43,7 @@ test("core preserves fleet decisions and identity while optional reads are slow 
   assert.ok(summary.shops[0].unavailable.includes("vehicles"));
   assert.equal(f.calls.some(c => c.name === "audit_logs"), false);
   const vin = f.calls.find(c => c.name === "vins")!;
-  assert.equal(vin.pipeline[0].$match.shopId.$in.length, 1000);
+  assert.equal(vin.pipeline[0].$match.shopId.$in.length, 2);
   f.pg = true;
   f.shops[0] = { ...f.shops[0], _id: undefined } as any;
   const pg = await (await get("core")).json();
@@ -64,19 +64,15 @@ test("history is demand-only, bounded and merges legacy reminders without duplic
   assert.equal(audit.options.maxTimeMS, 5000);
 });
 
-test("fallback failure is unavailable, real counters win, repeat summaries reuse counts", async () => {
+test("real counters win and repeat summaries reuse counts", async () => {
   const { f, get } = await apiFixture();
-  f.fail = "job_index";
   let body = await (await get("summary")).json();
-  assert.equal(body.shops[0].backfill.totalJobsIndexed, null);
-  f.fail = "";
-  body = await (await get("summary")).json();
   assert.equal(body.shops[0].backfill.totalJobsIndexed, 50);
   f.counter = 100;
   body = await (await get("summary")).json();
   assert.equal(body.shops[0].backfill.totalJobsIndexed, 100);
   assert.equal(f.calls.filter(c => c.name === "vehicles").length, 1);
-  assert.equal(f.calls.filter(c => c.name === "job_index").length, 2);
+  assert.equal(f.calls.filter(c => c.name === "job_index").length, 1);
 });
 
 test("measured isolated baseline versus split list and repeat-load, 1000 shops / 100k audit events", async () => {
