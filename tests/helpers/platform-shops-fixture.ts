@@ -59,6 +59,7 @@ export async function apiFixture(options: { baseline?: boolean; size?: number } 
     } };
   }
   const stubs: Record<string, string> = {
+    "@/lib/sticker-outreach-entitlements": `export const stickerOutreachEntitlements = async (_db, shops) => new Map(shops.map(s => [String(s.shopId), true]));`,
     "next/server": `export const NextResponse = {json: (data, init) => new Response(JSON.stringify(data), init)};`,
     "@/lib/auth": `export const getSession = async () => fixture.signedIn ? {isPlatformAdmin: fixture.admin} : null;`,
     "@/lib/mongo": `export const getDb = async () => ({collection: name => ({
@@ -91,8 +92,8 @@ export async function apiFixture(options: { baseline?: boolean; size?: number } 
   new Function("fixture", "module", "exports", bundle.outputFiles[0].text)(f, module, module.exports);
   return {
     f,
-    get: (view = "legacy", shopId?: string) => module.exports.GET({
-      nextUrl: new URL(`https://offline.invalid/api/platform-admin/shops?view=${view}${shopId ? `&shopId=${shopId}` : ""}`),
+    get: (view = "page", shopId?: string, query = "") => module.exports.GET({
+      nextUrl: new URL(`https://offline.invalid/api/platform-admin/shops?view=${view}${shopId ? `&shopId=${shopId}` : ""}${view === "summary" ? "&shopIds=1,2" : ""}&${query}`),
     }) as Promise<Response>,
   };
 }
