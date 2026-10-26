@@ -152,7 +152,17 @@
         if (request !== generation || key(getContext()) !== scope) return;
         pending = false;
         settings = response?.success ? response : null;
-        settingsError = settings ? '' : 'Detect Dog could not load this location’s print permissions. Open the extension to check your sign-in, then refresh this page.';
+        const errors = {
+          SHOP_UNLINKED: 'This Shopmonkey location is not linked in Detect Dog.',
+          SHOP_FORBIDDEN: 'Your Detect Dog account does not have access to this location.',
+          SHOP_MAPPING_CONFLICT: 'This location has conflicting mappings. Ask your administrator to review them.',
+          EXPLICIT_LOGIN_REQUIRED: 'Open Detect Dog and sign in to enable location access.',
+          TOKEN_EXPIRED: 'Your Detect Dog session expired. Open the extension and sign in.',
+          CONTEXT_CHANGED: 'The location or order changed while checking permissions. Retrying automatically…',
+          FEATURES_TIMEOUT: 'The permission check timed out. Retrying automatically…',
+        };
+        settingsError = settings ? '' : errors[response?.code] ||
+          'Detect Dog could not load this location’s print permissions. Retrying automatically…';
         expires = now() + (settings ? 30000 : 10000);
         const eligibilityEnd = Date.parse(settings?.eligibility?.eligibleUntil);
         if (Number.isFinite(eligibilityEnd)) expires = Math.min(expires, eligibilityEnd);

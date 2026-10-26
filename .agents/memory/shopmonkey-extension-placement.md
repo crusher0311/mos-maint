@@ -32,3 +32,16 @@ selecting an arbitrary cached identity would risk the wrong print settings.
 **How to apply:** Keep credentials out of diagnostics and page messages. Resolve
 ownership and account access server-side, invalidate stale tab context, and show
 a visible unavailable state instead of silently choosing a different location.
+
+Do not treat one minute of provider network inactivity as evidence that the
+current tab changed locations.
+
+**Why:** An idle order stopped supplying qualifying requests, causing valid
+location identifiers to disappear while the order ID remained present. Server
+permission checks around the reported incident succeeded; that did not prevent
+the client from discarding context.
+
+**How to apply:** Retain only advisory identifiers in tab memory for a bounded
+window no longer than the observed token expiry. Continue checking server
+authority, reject navigation and identity changes, and distinguish client context
+failures from actual permission denials. Never persist the provider credential.

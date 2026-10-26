@@ -56,7 +56,7 @@ try {
     activeSessionContext = value && looksLikeShopmonkeyId(value.locationId) &&
       looksLikeShopmonkeyId(value.companyId) && value.path === window.location.pathname &&
       Number.isFinite(value.expiresAt) && value.expiresAt > Date.now() &&
-      value.expiresAt <= Date.now() + 61000 ? value : null;
+      value.expiresAt <= Date.now() + 1801000 ? value : null;
     updateContext();
   });
 } catch (_) {}
@@ -163,6 +163,7 @@ function detectShopIdentifiers() {
     }
     // Do not fall back to another tab's cached location after session expiry
     // or SPA navigation. Wait for fresh same-tab activity.
+    activeSessionContext = null;
     return out;
   }
   try {

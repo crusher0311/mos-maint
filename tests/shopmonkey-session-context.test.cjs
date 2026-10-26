@@ -37,6 +37,10 @@ test('early same-tab context replays without credentials and updates on switchin
   f.location.pathname = '/order/two';
   f.request();
   assert.equal(f.messages.at(-1).context, null);
+  f.location.pathname = '/order/one';
+  f.request();
+  assert.equal(f.messages.at(-1).context, null);
+  f.location.pathname = '/order/two';
   f.observe(a);
   assert.equal(f.messages.at(-1).context.path, '/order/two');
 });
@@ -44,7 +48,8 @@ test('separate tabs, expired or invalid claims, wrong hosts and foreign messages
   const f = fixture(), second = fixture();
   f.observe(a); second.observe(b);
   f.request(); assert.equal(f.messages.at(-1).context.locationId, a);
-  f.advance(60001); f.request(); assert.equal(f.messages.at(-1).context, null);
+  f.advance(60001); f.request(); assert.equal(f.messages.at(-1).context.locationId, a);
+  f.advance(940000); f.request(); assert.equal(f.messages.at(-1).context, null);
   for (const extra of [{ exp: 0 }, { iss: 'https://other.test' }, { aud: 'other' }, { cid: 'bad' }]) {
     f.observe(a, extra); assert.equal(f.messages.at(-1).context, null);
   }
@@ -66,7 +71,7 @@ test('content adapter prefers fresh session context over stale storage and clear
   vm.runInContext(fs.readFileSync('mos-tools-extension/adapters/shopmonkey-content.js', 'utf8'), sandbox);
   handlers.message({ source: window, origin: location.origin, data: {
     type: 'MOS_SHOPMONKEY_SESSION_CONTEXT',
-    context: { companyId: company, locationId: a, path: location.pathname, expiresAt: Date.now() + 60000 },
+    context: { companyId: company, locationId: a, path: location.pathname, expiresAt: Date.now() + 1800000 },
   } });
   assert.equal(vm.runInContext('detectShopIdentifiers().locationId', sandbox), a);
   location.pathname = '/order/two';
@@ -76,6 +81,19 @@ test('content adapter prefers fresh session context over stale storage and clear
     type: 'MOS_SHOPMONKEY_SESSION_CONTEXT', observed: true, context: null,
   } });
   assert.equal(vm.runInContext('detectShopIdentifiers().locationId', sandbox), null);
+});
+test('idle context is bounded to thirty minutes even with long-lived provider claims', () => {
+  const f = fixture();
+  f.observe(a, { exp: 9999999 });
+  f.advance(120000);
+  f.request();
+  assert.equal(f.messages.at(-1).context.locationId, a);
+  f.advance(1679999);
+  f.request();
+  assert.equal(f.messages.at(-1).context.locationId, a);
+  f.advance(1);
+  f.request();
+  assert.equal(f.messages.at(-1).context, null);
 });
 test('interceptor fetch and XHR diagnostics never log request credentials or bodies', async () => {
   const logs = [], observed = [];

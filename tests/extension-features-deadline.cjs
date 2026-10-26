@@ -42,6 +42,21 @@ async function scenario(overrides = {}) {
     features:{},floatingButtonEnabled:true
   })})});
   assert.equal(visible.replies[0].floatingButtonEnabled,true);
+  for (const expected of ['CONTEXT_CHANGED', 'SHOP_FORBIDDEN', 'SHOP_UNLINKED', 'EXPLICIT_LOGIN_REQUIRED']) {
+    const warnings = [];
+    const failure = await scenario({
+      console: { warn: (...args) => warnings.push(args) },
+      fetch: async () => { throw Object.assign(new Error('PRIVATE credential URL'), { code: expected }); },
+    });
+    assert.equal(failure.replies[0].code, expected);
+    assert.ok(!JSON.stringify([warnings, failure.replies]).includes('PRIVATE'));
+  }
+  const unknown = await scenario({
+    fetch: async () => { throw Object.assign(new Error('PRIVATE'), { code: 'PRIVATE' }); },
+  });
+  assert.equal(unknown.replies[0].code, 'FEATURES_REQUEST_FAILED');
+  const signedOut = await scenario({ mosApiToken: null });
+  assert.equal(signedOut.replies[0].code, 'EXPLICIT_LOGIN_REQUIRED');
   good.timeout();await flush();
   assert.equal(good.replies.length,1,'successful reply settles once');
   for (const overrides of [

@@ -842,7 +842,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const requestToken = mosApiToken;
         const shopId = message.shopId || currentSmsContext?.shopId;
         if (!requestToken || !shopId) {
-          respond({ success: false, transient: true });
+          respond({ success: false, transient: true,
+            code: !requestToken ? 'EXPLICIT_LOGIN_REQUIRED' : 'CONTEXT_CHANGED' });
           return;
         }
         const apiBase = mosApiUrl || 'https://mos.tools';
@@ -895,8 +896,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           buttonVisibility: data.buttonVisibility || null,
         });
       } catch (err) {
-        console.warn("[MOS] Feature fetch failed");
-        respond({ success: false, transient: true });
+        // Never log an arbitrary exception message: fetch errors can contain
+        // credential-bearing URLs. Expose only known diagnostic codes.
+        const codes = new Set(['SHOP_UNLINKED', 'SHOP_FORBIDDEN',
+          'SHOP_MAPPING_CONFLICT', 'EXPLICIT_LOGIN_REQUIRED', 'TOKEN_EXPIRED',
+          'LOCATION_LOOKUP_FAILED', 'MOS_REQUEST_TIMEOUT', 'CONTEXT_CHANGED']);
+        const code = codes.has(err?.code) ? err.code :
+          ['TimeoutError', 'AbortError'].includes(err?.name) ? 'FEATURES_TIMEOUT' : 'FEATURES_REQUEST_FAILED';
+        console.warn("[MOS] Feature fetch failed", code);
+        respond({ success: false, transient: true, code });
       }
     })();
     return true;

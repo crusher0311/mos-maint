@@ -46,7 +46,8 @@ Decoded session claims are advisory, not verified authentication. Existing MOS
 canonical ownership and account-access checks remain mandatory.
 
 Fresh session context takes precedence over storage hints. After it expires
-(at most 60 seconds without fresh authenticated activity) or the order path
+(at most 30 minutes without fresh authenticated activity, never beyond the
+observed provider token's expiry) or the order path
 changes, printing stays unavailable until new same-tab activity confirms
 context. Requests are never generated merely to refresh it. Early observations
 can be replayed when the content script starts. Unresolved location and failed

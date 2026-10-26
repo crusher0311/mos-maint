@@ -6,6 +6,7 @@
   const id = value => typeof value === 'string' &&
     /^(?:[a-f0-9]{24}|[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12})$/i.test(value);
   function emit() {
+    if (latest && (latest.path !== location.pathname || latest.expiresAt <= Date.now())) latest = null;
     const valid = latest && latest.path === location.pathname &&
       latest.expiresAt > Date.now();
     window.postMessage({ type: 'MOS_SHOPMONKEY_SESSION_CONTEXT',
@@ -30,7 +31,10 @@
         // Decoded claims are advisory context, NOT authentication. The MOS
         // server must still resolve canonical ownership and account access.
         latest = { companyId: claims.cid, locationId: claims.lid,
-          path: location.pathname, expiresAt: Math.min(claims.exp * 1000, Date.now() + 60000) };
+          // Idle time is not evidence of a location switch. Keep advisory
+          // identifiers for a bounded session window, never beyond token expiry.
+          // Navigation and newly observed credentials still invalidate them.
+          path: location.pathname, expiresAt: Math.min(claims.exp * 1000, Date.now() + 1800000) };
         emit();
       } catch (_) { latest = null; emit(); }
     },

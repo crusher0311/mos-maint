@@ -68,6 +68,29 @@ function fixture() {
 }
 const allowed = { success: true, floatingButtonEnabled: true, features: { oil_sticker: true } };
 
+test('temporary permission failure explains automatic retry and recovers without refresh', () => {
+  const f = fixture();
+  f.controller.update();
+  f.requests[0].callback({ success: false, code: 'FEATURES_TIMEOUT' });
+  assert.match(f.document.getElementById('mos-shopmonkey-status').textContent, /timed out.*automatically/);
+  assert.equal(f.group(), undefined);
+  f.tick(10001);
+  f.controller.update();
+  assert.equal(f.requests.length, 2);
+  f.requests[1].callback(allowed);
+  assert.ok(f.group());
+});
+
+test('denied access is not described as a sign-in problem and arbitrary errors stay hidden', () => {
+  const f = fixture();
+  f.controller.update();
+  f.requests[0].callback({ success: false, code: 'SHOP_FORBIDDEN' });
+  assert.match(f.document.getElementById('mos-shopmonkey-status').textContent, /does not have access/);
+  f.controller.invalidate();
+  f.requests[1].callback({ success: false, code: 'PRIVATE', error: 'PRIVATE' });
+  assert.ok(!f.document.getElementById('mos-shopmonkey-status').textContent.includes('PRIVATE'));
+});
+
 test('injects a full-width row below native Print without moving native controls', () => {
   const f = fixture();
   f.controller.update();

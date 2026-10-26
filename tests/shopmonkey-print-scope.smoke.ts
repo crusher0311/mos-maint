@@ -78,7 +78,7 @@ async function main() {
   assert.equal((await one.request("/sticker")).config.logo, `Bearer ${a}`);
   assert.equal((await two.request("/keytag")).mosPrintContext.shopId, b);
   afterFetch = () => { live = { ...live, roId: "new-order" }; };
-  await assert.rejects(one.request("/sticker"), /changed/);
+  await assert.rejects(one.request("/sticker"), { code: "CONTEXT_CHANGED" });
   console.log("✓ Shopmonkey canonical location, company ambiguity, cross-provider authority, old sessions, concurrent tabs and late responses");
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

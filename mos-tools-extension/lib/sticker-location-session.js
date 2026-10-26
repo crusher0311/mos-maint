@@ -4,11 +4,14 @@ export async function createStickerLocationRequest(context, deps) {
   const snapshot = { ...context };
   const identity = deps.identity();
   const revision = deps.revision?.(snapshot._tabId);
+  function changed(message) {
+    return Object.assign(new Error(message), { code: 'CONTEXT_CHANGED' });
+  }
   async function assertCurrent() {
     const current = deps.identity();
-    if (revision !== deps.revision?.(snapshot._tabId)) throw new Error('Provider page changed. Please try again.');
+    if (revision !== deps.revision?.(snapshot._tabId)) throw changed('Provider page changed. Please try again.');
     if (current.token !== identity.token || current.epoch !== identity.epoch ||
-        current.apiUrl !== identity.apiUrl) throw new Error('MOS login changed. Please try again.');
+        current.apiUrl !== identity.apiUrl) throw changed('MOS login changed. Please try again.');
     const tab = await deps.getTab(snapshot._tabId);
     const url = new URL(tab.url);
     if (snapshot.provider === 'shopmonkey') {
@@ -21,7 +24,7 @@ export async function createStickerLocationRequest(context, deps) {
           String(live.roId) !== String(snapshot.roId) ||
           String(live.locationId || '') !== String(snapshot.locationId || '') ||
           String(live.companyId || '') !== String(snapshot.companyId || '')) {
-        throw new Error('Shopmonkey location or order changed. Reopen Print from the current order.');
+        throw changed('Shopmonkey location or order changed. Reopen Print from the current order.');
       }
       return;
     }
