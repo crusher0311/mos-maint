@@ -52,12 +52,11 @@
     var method = opts.method || 'GET';
     var requestHeaders = opts.headers || (arguments[0] && arguments[0].headers);
     rememberTekmetricProof(url, requestHeaders);
+    window.MosShopmonkeySessionContext?.observe(url, requestHeaders);
     if (method !== 'GET') {
-      console.log('[MOS Intercept] ' + method + ' ' + url);
       if (opts.body) {
         try {
           var bodyStr = typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body);
-          console.log('[MOS Intercept] Body:', bodyStr.substring(0, 2000));
 
           if (method === 'PATCH' && url.match(/\/api\/job\/\d+/)) {
             var parsed = JSON.parse(bodyStr);
@@ -77,14 +76,6 @@
             console.log('[MOS Intercept] Job authorization detected');
             window.postMessage({ type: 'MOS_JOBS_AUTHORIZED' }, '*');
           }
-        } catch(e) {}
-      }
-      if (opts.headers) {
-        try {
-          var h = opts.headers instanceof Headers
-            ? Object.fromEntries(opts.headers.entries())
-            : opts.headers;
-          console.log('[MOS Intercept] Headers:', JSON.stringify(h));
         } catch(e) {}
       }
     }
@@ -122,9 +113,9 @@
           reqHeaders = opts.headers instanceof Headers
             ? Object.fromEntries(opts.headers.entries())
             : Object.assign({}, opts.headers);
-          if (reqHeaders['x-auth-token']) reqHeaders['x-auth-token'] = '[REDACTED]';
-          if (reqHeaders['authorization']) reqHeaders['authorization'] = '[REDACTED]';
-          if (reqHeaders['Authorization']) reqHeaders['Authorization'] = '[REDACTED]';
+          Object.keys(reqHeaders).forEach(function(key) {
+            if (/authorization|cookie|token|secret|api.?key/i.test(key)) reqHeaders[key] = '[REDACTED]';
+          });
         }
       } catch(e) {}
 
@@ -177,12 +168,11 @@
   };
   XMLHttpRequest.prototype.send = function(body) {
     rememberTekmetricProof(this._mosUrl, this._mosHeaders);
+    window.MosShopmonkeySessionContext?.observe(this._mosUrl, this._mosHeaders);
     if (this._mosMethod && this._mosMethod !== 'GET') {
-      console.log('[MOS Intercept XHR] ' + this._mosMethod + ' ' + this._mosUrl);
       if (body) {
         try {
           var bodyStr = (typeof body === 'string' ? body : JSON.stringify(body)).substring(0, 2000);
-          console.log('[MOS Intercept XHR] Body:', bodyStr);
 
           if (this._mosMethod === 'PATCH' && this._mosUrl && this._mosUrl.match(/\/api\/job\/\d+/)) {
             var parsed = JSON.parse(typeof body === 'string' ? body : JSON.stringify(body));

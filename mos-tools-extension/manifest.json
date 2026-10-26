@@ -82,6 +82,7 @@
         "https://*.shopmonkey.cloud/*"
       ],
       "js": [
+        "adapters/shopmonkey-session-context.js",
         "adapters/interceptor.js"
       ],
       "run_at": "document_start",

@@ -9,10 +9,12 @@
     let pending = false;
     let layoutTarget = null;
     let priorWrap = '';
+    let settingsError = '';
     const key = c => c?.provider === 'shopmonkey' && c.shopId && c.roId
       ? JSON.stringify([c.shopId, c.roId, c.locationId, c.companyId]) : null;
     const remove = () => {
       document.getElementById(id)?.remove();
+      document.getElementById('mos-shopmonkey-status')?.remove();
       if (layoutTarget) layoutTarget.style.flexWrap = priorWrap;
       layoutTarget = null;
     };
@@ -36,6 +38,27 @@
       const context = getContext();
       const target = anchor(context);
       const existing = document.getElementById(id);
+      let notice = '';
+      if (context?.roId && target && !scope) {
+        notice = 'Detect Dog cannot confirm this Shopmonkey location. Refresh the page; if this persists, sign in to Shopmonkey again. Printing is unavailable until the location is confirmed.';
+      } else if (scope && target && !settings) {
+        notice = settingsError || 'Detect Dog is checking this location’s print permissions…';
+      }
+      if (notice) {
+        const priorNotice = document.getElementById('mos-shopmonkey-status');
+        if (priorNotice?.parentElement === target && priorNotice.textContent === notice) return;
+        remove();
+        const status = document.createElement('span');
+        status.id = 'mos-shopmonkey-status';
+        status.setAttribute('role', 'status');
+        status.style.cssText = 'display:block;flex:0 0 100%;width:100%;font-size:12px;color:#92400e;padding:6px 0';
+        status.textContent = notice;
+        layoutTarget = target;
+        priorWrap = target.style.flexWrap;
+        target.style.flexWrap = 'wrap';
+        target.appendChild(status);
+        return;
+      }
       if (!scope || key(context) !== scope || !target || !settings || now() >= expires) {
         remove();
         return;
@@ -114,11 +137,13 @@
         settings = null;
         expires = 0;
         pending = false;
+        settingsError = '';
         remove();
       }
       render();
       if (!scope || !anchor(context) || (pending && now() < expires) || now() < expires) return;
       settings = null;
+      settingsError = '';
       pending = true;
       // Also bounds hung messages. A later update can retry after 10 seconds.
       expires = now() + 10000;
@@ -127,6 +152,7 @@
         if (request !== generation || key(getContext()) !== scope) return;
         pending = false;
         settings = response?.success ? response : null;
+        settingsError = settings ? '' : 'Detect Dog could not load this location’s print permissions. Open the extension to check your sign-in, then refresh this page.';
         expires = now() + (settings ? 30000 : 10000);
         const eligibilityEnd = Date.parse(settings?.eligibility?.eligibleUntil);
         if (Number.isFinite(eligibilityEnd)) expires = Math.min(expires, eligibilityEnd);

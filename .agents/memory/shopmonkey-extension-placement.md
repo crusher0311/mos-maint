@@ -21,3 +21,14 @@ provider-specific menu implementation.
 
 **How to apply:** Preserve location-scoped configuration and final order checks
 for both immediate print and panel-based customization.
+
+Treat current-tab Shopmonkey session identifiers as advisory location context,
+never as MOS authentication or permission to print.
+
+**Why:** The live order page supplied no usable location through the existing
+storage probes. Shared browser storage can also retain other locations, so
+selecting an arbitrary cached identity would risk the wrong print settings.
+
+**How to apply:** Keep credentials out of diagnostics and page messages. Resolve
+ownership and account access server-side, invalidate stale tab context, and show
+a visible unavailable state instead of silently choosing a different location.

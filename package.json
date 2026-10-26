@@ -101,7 +101,7 @@
     "test:shopmonkey-sync-wiring": "NODE_OPTIONS='--require ./scripts/_stubs/server-only-stub.cjs' tsx tests/shopmonkey-sync-wiring.smoke.ts",
     "test:shopmonkey-history-ingest": "NODE_OPTIONS='--require ./scripts/_stubs/server-only-stub.cjs' tsx tests/shopmonkey-history-ingest.smoke.ts",
     "test:shopmonkey-page-context": "node --test tests/shopmonkey-page-context.test.cjs",
-    "test:shopmonkey-buttons": "node --test tests/shopmonkey-buttons.test.cjs",
+    "test:shopmonkey-buttons": "node --test tests/shopmonkey-buttons.test.cjs tests/shopmonkey-page-context.test.cjs tests/shopmonkey-session-context.test.cjs",
     "test:cron-staleness": "tsx tests/cron-health-alerter-staleness.smoke.ts",
     "test:cron-scheduler-fetch-timeout": "tsx tests/cron-scheduler-fetch-timeout.smoke.ts",
     "test:cron-lock-pg": "NODE_OPTIONS='--require ./tests/helpers/deny-network-egress.cjs' node --import tsx tests/cron-lock-pg.smoke.ts && npm run test:cron-run-leases",

@@ -43,6 +43,23 @@ try {
 let lastContext = null;
 let contextCheckInterval = null;
 let orderButtons = null;
+let activeSessionContext = null;
+let sessionContextObserved = false;
+try {
+  window.addEventListener('message', event => {
+    if (event.source !== window || event.origin !== window.location.origin ||
+      event.data?.type !== 'MOS_SHOPMONKEY_SESSION_CONTEXT') return;
+    const value = event.data.context;
+    // A null reply before any activity must not suppress legacy discovery.
+    if (!value && !sessionContextObserved && event.data.observed !== true) return;
+    sessionContextObserved = true;
+    activeSessionContext = value && looksLikeShopmonkeyId(value.locationId) &&
+      looksLikeShopmonkeyId(value.companyId) && value.path === window.location.pathname &&
+      Number.isFinite(value.expiresAt) && value.expiresAt > Date.now() &&
+      value.expiresAt <= Date.now() + 61000 ? value : null;
+    updateContext();
+  });
+} catch (_) {}
 
 // ==================== CONTEXT DETECTION ====================
 // Shopmonkey hides some fields (VIN, mileage) once the user navigates between
@@ -139,6 +156,15 @@ function detectLaunchDarklyContext() {
 // shopmonkey.locationId / shopmonkey.companyId).
 function detectShopIdentifiers() {
   const out = { companyId: null, locationId: null };
+  if (sessionContextObserved) {
+    if (activeSessionContext?.path === window.location.pathname &&
+      activeSessionContext.expiresAt > Date.now()) {
+      return { companyId: activeSessionContext.companyId, locationId: activeSessionContext.locationId };
+    }
+    // Do not fall back to another tab's cached location after session expiry
+    // or SPA navigation. Wait for fresh same-tab activity.
+    return out;
+  }
   try {
     const url = window.location.href;
     // URL query params (?companyId=...&locationId=...) or path segments.
@@ -299,7 +325,6 @@ function _detectContextRaw() {
     if (emailMatch) context.customerEmail = emailMatch[0];
   } catch (e) {}
 
-  console.log('[MOS Tools] Shopmonkey context:', context);
   return context;
 }
 
@@ -310,7 +335,7 @@ function updateContext() {
     lastContext = context;
     safeSendMessage({ action: "SET_SMS_CONTEXT", context });
     if (context.shopId) {
-      console.log("[MOS Tools] Shopmonkey context changed:", context.roId ? `Order ${context.roId}` : 'shop-level', context);
+      console.log("[MOS Tools] Shopmonkey context updated");
     } else {
       // No resolvable shop identifier yet — surface as a drop so telemetry can
       // flag shops where the companyId/locationId probe needs live tuning.
@@ -322,6 +347,7 @@ function updateContext() {
 
 // ==================== INIT ====================
 function init() {
+  window.postMessage({ type: 'MOS_REQUEST_SHOPMONKEY_CONTEXT' }, window.location.origin);
   globalThis.MosStickerButtonPreference?.start(detectContext);
   chrome.runtime.onMessage.addListener((message, _sender, reply) => {
     if (message.action === 'GET_PAGE_CONTEXT') { reply(detectContext()); return false; }

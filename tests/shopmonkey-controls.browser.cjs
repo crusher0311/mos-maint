@@ -3,6 +3,49 @@ const assert = require('node:assert/strict');
 const { chromium } = require('../artifacts/detect-dog-workflow/node_modules/playwright');
 const fs = require('node:fs');
 const { execFileSync } = require('node:child_process');
+test('fresh page bridges early session activity and subsequent fetch/XHR location switches', async () => {
+  const browser = await chromium.launch({ executablePath: execFileSync('which', ['chromium'], { encoding: 'utf8' }).trim(), headless: true, args: ['--no-sandbox'] });
+  try {
+    const page = await browser.newPage();
+    await page.route('**/*', route => route.fulfill({
+      contentType: route.request().isNavigationRequest() ? 'text/html' : 'application/json',
+      body: route.request().isNavigationRequest()
+        ? fs.readFileSync('tests/browser/shopmonkey-buttons.html', 'utf8').split('<script')[0] : '{}',
+    }));
+    await page.goto('https://app.shopmonkey.cloud/order/04c4dad9-c97c-41b2-9ac9-85db074de4b8');
+    await page.evaluate(() => {
+      window.scopes = [];
+      window.chrome = { runtime: { id: 'offline', getURL: p => p, onMessage: { addListener() {} },
+        sendMessage(message, done) {
+          if (message.action === 'GET_SHOP_FEATURES') {
+            window.scopes.push(message.shopId);
+            done({ success: true, floatingButtonEnabled: true, features: { oil_sticker: true } });
+          }
+          return Promise.resolve();
+        },
+      } };
+      window.testToken = lid => 'header.' + btoa(JSON.stringify({ cid: 'aaaaaaaaaaaaaaaaaaaaaaaa',
+        lid, iss: 'https://api.shopmonkey.cloud', aud: 'shop', exp: Date.now() / 1000 + 3600 })) + '.signature';
+    });
+    for (const name of ['shopmonkey-session-context', 'interceptor']) {
+      await page.addScriptTag({ content: fs.readFileSync(`mos-tools-extension/adapters/${name}.js`, 'utf8') });
+    }
+    await page.evaluate(() => fetch('/api/v3/order', { headers: { Authorization: 'Bearer ' + testToken('bbbbbbbbbbbbbbbbbbbbbbbb') } }));
+    for (const name of ['shopmonkey-buttons', 'shopmonkey-content']) {
+      await page.addScriptTag({ content: fs.readFileSync(`mos-tools-extension/adapters/${name}.js`, 'utf8') });
+    }
+    await page.waitForFunction(() => window.scopes.includes('bbbbbbbbbbbbbbbbbbbbbbbb'));
+    assert.equal(await page.locator('#mos-shopmonkey-actions button').count(), 2);
+    await page.evaluate(() => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('GET', '/api/v3/order');
+      xhr.setRequestHeader('Authorization', 'Bearer ' + testToken('cccccccccccccccccccccccc'));
+      xhr.send();
+    });
+    await page.waitForFunction(() => window.scopes.includes('cccccccccccccccccccccccc'));
+    assert.equal(await page.evaluate(() => detectContext().locationId), 'cccccccccccccccccccccccc');
+  } finally { await browser.close(); }
+});
 test('Shopmonkey branded controls, gestures, toolbar replacement and stale clicks', async () => {
   const browser = await chromium.launch({ executablePath: execFileSync('which', ['chromium'], { encoding: 'utf8' }).trim(), headless: true, args: ['--no-sandbox'] });
   try {
@@ -39,6 +82,12 @@ test('Shopmonkey branded controls, gestures, toolbar replacement and stale click
     await page.evaluate(() => { ctx.shopId = 'another-location'; oldControl.click(); });
     assert.equal(await page.locator('#action').textContent(), '');
     assert.equal(await page.locator('button[title="Print"]').count(), 1);
+    await page.evaluate(() => { ctx.shopId = null; controller.update(); });
+    await page.getByText(/Detect Dog cannot confirm this Shopmonkey location/).waitFor();
+    assert.equal(await controls.count(), 0);
+    await page.evaluate(() => { ctx.shopId = 'restored-location'; controller.update(); });
+    assert.equal(await controls.count(), 2);
+    assert.equal(await page.locator('#mos-shopmonkey-status').count(), 0);
   } finally { await browser.close(); }
 });
 
