@@ -83,7 +83,7 @@ export const PLAN_FALLBACK_KEYS: Record<BillingPlan, readonly FeatureKey[]> = {
   // Existing MOS Pro checkout contract, not a renamed Detect Dog tier.
   pro: ["maintenance", "job_lookup", "common_failures", "oil_sticker", "keytags", "auto_booking", "part_xref"],
   trial:              ["maintenance"],
-  starter:            ["maintenance", "oil_sticker"],
+  starter:            ["maintenance", "oil_sticker", "keytags"],
   plus:               ["maintenance", "job_lookup", "common_failures", "oil_sticker", "concern_assistant", "estimate_assist", "dvi_prefill", "enhance_notes"],
   elite:              [...LAUNCHED_KEYS],
   professional:       [...LAUNCHED_KEYS],

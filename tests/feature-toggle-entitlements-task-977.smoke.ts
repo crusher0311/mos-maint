@@ -30,6 +30,7 @@ import {
   normalizeShopFeatureOverrides,
   FEATURE_KEYS,
   FOUNDER_PLAN,
+  featuresForPlan,
   __deps,
   type FeatureKey,
 } from "../lib/featureResolver";
@@ -86,10 +87,11 @@ function fakeDb() {
 
 // Fake PG for getPlanFeaturesFromDatabase: zero rows → static fallback
 // plan map (deterministic, no live platform_features read).
+let catalogRows: unknown[] = [];
 function fakePgDb() {
   return {
     select: (_cols?: unknown) => ({
-      from: async (_table?: unknown) => [] as unknown[],
+      from: async (_table?: unknown) => catalogRows,
     }),
   };
 }
@@ -105,6 +107,26 @@ async function eff(shopId: number): Promise<Record<string, boolean>> {
 }
 
 async function main() {
+  section("Starter Keytags contract");
+  {
+    ok("Starter UI defaults include Keytags", featuresForPlan("starter").keytags);
+    shops.set(20, { shopId: 20, billing: { plan: "starter", status: "active" }, enabledFeatures: {} });
+    ok("empty catalog fallback grants Starter Keytags", (await eff(20)).keytags);
+    catalogRows = [{ slug: "keytags", status: "active", includedInTiers: ["elite", "enterprise"] }];
+    ok("old catalog membership does not block Starter Keytags", (await eff(20)).keytags);
+    shops.get(20)!.enabledFeatures = { keytags: false };
+    ok("explicit shop disable still wins", !(await eff(20)).keytags);
+    shops.get(20)!.enabledFeatures = { keytags: true };
+    ok("explicit shop enable is eligible on Starter", (await eff(20)).keytags);
+    for (const status of ["canceled", "paused", "unpaid", "incomplete"]) {
+      shops.get(20)!.billing = { plan: "starter", status, paymentType: "stripe" };
+      ok(`${status} billing cannot use Starter Keytags`, !(await eff(20)).keytags);
+    }
+    shops.get(20)!.billing = { plan: "starter", status: "active" };
+    catalogRows = [{ slug: "keytags", status: "inactive", includedInTiers: ["starter"] }];
+    ok("global disable still wins", !(await eff(20)).keytags);
+    catalogRows = [];
+  }
   section("normalizeShopFeatureOverrides (pure)");
   {
     const fromArray = normalizeShopFeatureOverrides(["keytags", "oil_sticker", "bogus_key"]);

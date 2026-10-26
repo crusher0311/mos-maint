@@ -209,6 +209,13 @@ export async function getPlanFeaturesFromDatabase(plan: BillingPlan): Promise<Fe
       seenKeys.add(featureKey);
       if (pf.status !== "active") continue;
       const includedInTiers = (pf.includedInTiers as string[] | null) || [];
+      // Starter includes Keytags even while the editable catalog retains its
+      // old elite-only membership. A globally inactive feature still wins above;
+      // billing eligibility and explicit shop disabling still apply below.
+      if (plan === "starter" && featureKey === "keytags") {
+        enabled.add(featureKey);
+        continue;
+      }
       // Legacy packages predate the editable Detect Dog tier catalog. Their
       // contracts are explicit key sets, not absent legacy tier tags.
       // A present inactive row still wins above (intentional global disable).
