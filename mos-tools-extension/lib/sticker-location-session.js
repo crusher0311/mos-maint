@@ -1,6 +1,8 @@
 // One immutable credential/context per operation. Never installs a scoped token
 // as the global login; never persists one across worker restarts.
 export async function createStickerLocationRequest(context, deps) {
+  // Optional fixed-stage observer; diagnostics must never affect authorization.
+  const stage = name => { try { deps.onStage?.(name); } catch (_) {} };
   const snapshot = { ...context };
   const identity = deps.identity();
   const revision = deps.revision?.(snapshot._tabId);
@@ -37,6 +39,7 @@ export async function createStickerLocationRequest(context, deps) {
       if (String(ro) !== String(snapshot.roId)) throw new Error('Repair order changed. Please print again.');
     }
   }
+  stage('context_validation');
   await assertCurrent();
   const send = async (path, options, token) => {
     const response = await deps.fetch(`${identity.apiUrl}${path}`, {
@@ -48,18 +51,23 @@ export async function createStickerLocationRequest(context, deps) {
     if (!response.ok) throw Object.assign(new Error(data.error || 'Tekmetric location request failed. Please try again.'), { code: data.code });
     return data;
   };
+  stage('switch_location');
   const scope = await send('/api/extension/auth/switch-location', {
     method: 'POST', body: JSON.stringify({ provider: snapshot.provider, smsShopId: String(snapshot.shopId) }),
   }, identity.token);
   if (!scope.token || scope.provider !== snapshot.provider || String(scope.smsShopId) !== String(snapshot.shopId)) {
     throw new Error('Tekmetric location could not be confirmed. Nothing was printed.');
   }
+  stage('scope_validation');
   await assertCurrent();
   return {
     assertCurrent,
     async request(path, options = {}) {
+      stage('request_context_validation');
       await assertCurrent();
+      stage('features_request');
       const data = await send(path, options, scope.token);
+      stage('response_context_validation');
       await assertCurrent();
       if (data.sticker) data.sticker.mosPrintContext = snapshot;
       if (data.image) data.mosPrintContext = snapshot;

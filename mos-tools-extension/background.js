@@ -814,6 +814,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === "GET_SHOP_FEATURES") {
+    // Request-local, fixed vocabulary only. Never include identity, URLs or errors.
+    const timingNow = () => globalThis.performance?.now() ?? Date.now();
+    const timingStart = timingNow();
+    let timingStage = 'worker_restore';
+    let stageStart = timingStart;
+    const durations = {};
+    const stage = name => {
+      durations[timingStage] = (durations[timingStage] || 0) + Math.max(0, timingNow() - stageStart);
+      timingStage = name;
+      stageStart = timingNow();
+    };
     // Bound the entire message (including worker restore/bootstrap/body read),
     // not only response headers. Settle once; late results cannot revive it.
     const controller = new AbortController();
@@ -822,7 +833,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (settled) return;
       settled = true;
       clearTimeout(deadline);
-      sendResponse(value);
+      stage(timingStage);
+      sendResponse(message.provider === 'shopmonkey' ? { ...value, startupTiming: {
+        durations: { ...durations }, totalMs: Math.max(0, timingNow() - timingStart), lastStage: timingStage,
+      } } : value);
     };
     const deadline = setTimeout(() => {
       controller.abort();
@@ -836,6 +850,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         // fetch went to "null/api/..." and failed with "Failed to fetch"
         // on every attempt (Task: AutoFlow v4 feature-fetch loop).
         await _stateReady;
+        if (settled) return;
+        stage('bootstrap_binding');
         await ensureBootstrapBoundToActiveTab();
         if (settled) return;
         const requestEpoch = authEpoch;
@@ -851,9 +867,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         let data;
         if (provider === 'shopmonkey' && mosAuthSource === 'explicit') {
           const context = message.context || smsContextsByTab.get(sender.tab?.id ?? activeTabId);
-          const scoped = await stickerLocationRequest({ ...context, _tabId: sender.tab?.id ?? context?._tabId });
+          stage('scope_setup');
+          const scoped = await stickerLocationRequest({ ...context, _tabId: sender.tab?.id ?? context?._tabId },
+            name => { if (!settled) stage(name); });
+          if (settled) return;
+          stage('features_request');
           data = await scoped.request(`/api/extension/features?shopId=${encodeURIComponent(shopId)}&provider=shopmonkey`);
         } else {
+        stage('features_request');
         const res = await fetch(`${apiBase}/api/extension/features?shopId=${shopId}&provider=${provider}&_token=${encodeURIComponent(requestToken)}`, {
           headers: { 'Authorization': `Bearer ${requestToken}` },
           signal: controller.signal,
@@ -864,6 +885,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
         data = await res.json();
         }
+        if (settled) return;
+        stage('user_storage');
         // Mirror lib/extension-write-guard so the content script can hide
         // the Create RO button for read-only users without an extra round
         // trip. mosUser is populated at login time in chrome.storage.local.
@@ -4265,12 +4288,13 @@ async function createTekmetricJob(shopId, roId, jobData, auditSelection, vehicle
 
 // ------ STICKER PRINTING ------
 const pendingStickerNavigation = new Map();
-async function stickerLocationRequest(context) {
+async function stickerLocationRequest(context, onStage) {
   await _stateReady;
   if (!context?._tabId || !context.shopId || !['tekmetric', 'shopmonkey'].includes(context.provider)) {
     throw new Error('Current Tekmetric tab and location are required to print.');
   }
   return createStickerLocationRequest(context, {
+    onStage,
     identity: () => ({ token: mosApiToken, apiUrl: mosApiUrl, epoch: authEpoch }),
     getTab: (id) => chrome.tabs.get(id),
     getContext: (id) => chrome.tabs.sendMessage(id, { action: 'GET_PAGE_CONTEXT' }),

@@ -9,6 +9,7 @@
 // verification on a real Shopmonkey session (Task #587 / T010 deferred check).
 
 console.log("[MOS Tools] Shopmonkey content script loaded");
+const shopmonkeyStartupAt = globalThis.performance?.now() ?? Date.now();
 
 function safeSendMessage(msg, callback) {
   try {
@@ -362,6 +363,7 @@ function init() {
     }
   });
   orderButtons = globalThis.MosShopmonkeyButtons?.create({
+    startupAt: shopmonkeyStartupAt,
     document,
     send: safeSendMessage,
     getContext: detectContext,

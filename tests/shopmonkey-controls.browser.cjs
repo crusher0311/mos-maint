@@ -3,6 +3,99 @@ const assert = require('node:assert/strict');
 const { chromium } = require('../artifacts/detect-dog-workflow/node_modules/playwright');
 const fs = require('node:fs');
 const { execFileSync } = require('node:child_process');
+test('startup diagnostics isolate cold restore, early/late hydration, scope exchange and timeout offline', async () => {
+  const vm = require('node:vm');
+  const { createStickerLocationRequest } = await import('../mos-tools-extension/lib/sticker-location-session.js');
+  const source = fs.readFileSync('mos-tools-extension/background.js', 'utf8');
+  const start = source.indexOf('  if (message.action === "GET_SHOP_FEATURES")');
+  const branch = `(function() { ${source.slice(start, source.indexOf('// ------ UNDO SNAPSHOTS', start))} })()`;
+  const browser = await chromium.launch({ executablePath: execFileSync('which', ['chromium'], { encoding: 'utf8' }).trim(), headless: true, args: ['--no-sandbox'] });
+  const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+  try {
+    for (const mode of ['early', 'late', 'timeout']) {
+      const page = await browser.newPage();
+      const logs = [];
+      page.on('console', msg => {
+        if (msg.text().startsWith('[MOS Shopmonkey startup] ')) logs.push(JSON.parse(msg.text().slice('[MOS Shopmonkey startup] '.length)));
+      });
+      await page.route('**/*', route => route.request().isNavigationRequest()
+        ? route.fulfill({ contentType: 'text/html', body: fs.readFileSync('tests/browser/shopmonkey-buttons.html', 'utf8').split('<script')[0] })
+        : route.abort());
+      const order = '04c4dad9-c97c-41b2-9ac9-85db074de4b8';
+      const shop = 'bbbbbbbbbbbbbbbbbbbbbbbb';
+      let calls = 0;
+      let stateReady;
+      await page.exposeFunction('featuresOffline', message => new Promise(sendResponse => {
+        calls++;
+        const sandbox = {
+          message, sendResponse, Date, AbortController, setTimeout: fn => setTimeout(fn, 180), clearTimeout,
+          _stateReady: stateReady,
+          ensureBootstrapBoundToActiveTab: () => pause(10),
+          authEpoch: 1, mosApiToken: 'PRIVATE-TOKEN', mosApiUrl: 'https://private.invalid',
+          mosAuthSource: 'explicit', sender: { tab: { id: 1 } }, console,
+          chrome: { storage: { local: { get: (_, done) => done({ mosUser: { role: 'viewer' } }) } } },
+          stickerLocationRequest: (context, onStage) => createStickerLocationRequest(context, {
+            onStage, identity: () => ({ token: 'PRIVATE-TOKEN', apiUrl: 'https://private.invalid', epoch: 1 }),
+            getTab: async () => ({ url: page.url() }),
+            getContext: () => page.evaluate(() => detectContext()),
+            fetch: async url => {
+              if (mode === 'timeout' && calls === 1) return new Promise(() => {});
+              await pause(15);
+              return Response.json(url.endsWith('/switch-location')
+                ? { token: 'PRIVATE-CHILD', provider: 'shopmonkey', smsShopId: shop }
+                : { features: { oil_sticker: true }, floatingButtonEnabled: true });
+            },
+          }),
+        };
+        vm.runInNewContext(branch, sandbox);
+      }));
+      await page.goto(`https://app.shopmonkey.cloud/order/${order}${mode === 'early' ? `?locationId=${shop}` : ''}`);
+      await page.evaluate(() => {
+        window.chrome = { runtime: { id: 'offline', getURL: p => p, onMessage: { addListener() {} },
+          sendMessage(message, done) {
+            if (message.action === 'GET_SHOP_FEATURES') window.featuresOffline(message).then(done);
+            return Promise.resolve();
+          } } };
+      });
+      // Simulate a newly awakened worker whose storage restore is still pending.
+      let restore;
+      stateReady = new Promise(resolve => { restore = resolve; });
+      for (const name of ['shopmonkey-buttons', 'shopmonkey-content']) {
+        await page.addScriptTag({ content: fs.readFileSync(`mos-tools-extension/adapters/${name}.js`, 'utf8') });
+      }
+      if (mode !== 'early') {
+        await page.waitForTimeout(60);
+        assert.equal(calls, 0, 'no authorization request before same-tab location hydration');
+        await page.evaluate(({ shop }) => window.postMessage({
+          type: 'MOS_SHOPMONKEY_SESSION_CONTEXT', observed: true,
+          context: { companyId: 'aaaaaaaaaaaaaaaaaaaaaaaa', locationId: shop, path: location.pathname, expiresAt: Date.now() + 60000 },
+        }, location.origin), { shop });
+      }
+      while (!calls) await pause(5);
+      await pause(25);
+      restore();
+      if (mode === 'timeout') {
+        await page.waitForFunction(() => document.getElementById('mos-shopmonkey-status')?.textContent.includes('timed out'));
+        assert.equal(await page.locator('#mos-shopmonkey-actions').count(), 0);
+        assert.ok(logs.some(x => x.stage === 'switch_location' && x.outcome === 'incomplete'));
+      }
+      await page.waitForSelector('#mos-shopmonkey-actions', { timeout: 6000 });
+      assert.equal(calls, mode === 'timeout' ? 2 : 1);
+      for (const stage of ['context_ready', 'context_to_request', 'worker_restore', 'bootstrap_binding',
+        'context_validation', 'switch_location', 'features_request', 'message_round_trip', 'controls_visible']) {
+        assert.ok(logs.some(x => x.stage === stage), `${mode}: ${stage}`);
+      }
+      assert.ok(logs.some(x => x.stage === 'worker_restore' && x.durationMs >= 20));
+      if (mode !== 'early') assert.ok(logs.some(x => x.stage === 'context_ready' && x.durationMs >= 50));
+      for (const entry of logs) {
+        assert.deepEqual(Object.keys(entry).sort(), ['attempt', 'durationMs', 'outcome', 'stage']);
+        assert.ok(Number.isFinite(entry.durationMs) && entry.durationMs >= 0);
+      }
+      assert.doesNotMatch(JSON.stringify(logs), /PRIVATE|https:|bbbbbbbb|04c4dad9|customer|Bearer/);
+      await page.close();
+    }
+  } finally { await browser.close(); }
+});
 test('fresh page bridges early session activity and subsequent fetch/XHR location switches', async () => {
   const browser = await chromium.launch({ executablePath: execFileSync('which', ['chromium'], { encoding: 'utf8' }).trim(), headless: true, args: ['--no-sandbox'] });
   try {

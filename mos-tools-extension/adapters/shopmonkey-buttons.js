@@ -1,6 +1,15 @@
 // Order-local launchers only. No provider writes or automatic printing.
 (function (root) {
-  function create({ document, send, getContext, print, assetUrl = p => globalThis.chrome?.runtime?.getURL(p) || `/mos-tools-extension/${p}`, now = Date.now }) {
+  function create({ document, send, getContext, print, assetUrl = p => globalThis.chrome?.runtime?.getURL(p) || `/mos-tools-extension/${p}`, now = Date.now,
+    clock = () => globalThis.performance?.now() ?? Date.now(), startupAt = clock(),
+    diagnostic = value => console.info('[MOS Shopmonkey startup]', JSON.stringify(value)) }) {
+    // Local console only; fixed fields, no context objects or arbitrary errors.
+    let contextAt = null;
+    let attempt = 0;
+    let rendered = false;
+    const emit = (stage, durationMs, outcome) => {
+      try { diagnostic({ stage, durationMs: Math.max(0, Math.round(durationMs)), attempt, outcome }); } catch (_) {}
+    };
     const id = 'mos-shopmonkey-actions';
     let scope = null;
     let generation = 0;
@@ -135,11 +144,18 @@
       priorWrap = target.style.flexWrap;
       target.style.flexWrap = 'wrap';
       target.appendChild(group);
+      if (!rendered) {
+        rendered = true;
+        emit('controls_visible', clock() - startupAt, 'success');
+      }
     }
     function update() {
       const context = getContext();
       const next = key(context);
       if (next !== scope) {
+        contextAt = next ? clock() : null;
+        rendered = false;
+        if (next) emit('context_ready', contextAt - startupAt, 'ready');
         generation++;
         scope = next;
         settings = null;
@@ -151,14 +167,28 @@
       }
       render();
       if (!scope || !anchor(context) || (pending && now() < expires) || now() < expires) return;
+      if (pending) emit('message_round_trip', clock() - requestStarted, 'timeout');
       settings = null;
       settingsError = '';
       pending = true;
       // Also bounds hung messages. A later update can retry after 10 seconds.
       expires = now() + 10000;
       const request = ++generation;
+      attempt++;
+      requestStarted = clock();
+      const started = requestStarted;
+      emit('context_to_request', started - contextAt, 'ready');
       send({ action: 'GET_SHOP_FEATURES', provider: 'shopmonkey', shopId: context.shopId, context }, response => {
         if (request !== generation || key(getContext()) !== scope) return;
+        emit('message_round_trip', clock() - started, response?.success ? 'success' :
+          response?.code === 'FEATURES_TIMEOUT' ? 'timeout' : 'failure');
+        const timing = response?.startupTiming;
+        for (const name of ['worker_restore', 'bootstrap_binding', 'scope_setup', 'context_validation',
+          'switch_location', 'scope_validation', 'request_context_validation', 'features_request',
+          'response_context_validation', 'user_storage']) {
+          const ms = timing?.durations?.[name];
+          if (Number.isFinite(ms) && ms >= 0) emit(name, ms, timing.lastStage === name && !response.success ? 'incomplete' : 'complete');
+        }
         pending = false;
         settings = response?.success ? response : null;
         const errors = {
@@ -179,12 +209,14 @@
         // failures. Genuine access denials must not become a rapid retry loop.
         expires = now() + (settings ? 30000 : terminal ? 30000 :
           Math.min(10000, 2000 * 2 ** Math.min(failures - 1, 3)));
+        if (!settings) emit('retry_wait_scheduled', expires - now(), terminal ? 'denied' : 'retry');
         const eligibilityEnd = Date.parse(settings?.eligibility?.eligibleUntil);
         if (Number.isFinite(eligibilityEnd)) expires = Math.min(expires, eligibilityEnd);
         remove();
         render();
       });
     }
+    let requestStarted = 0;
     function invalidate() {
       generation++;
       settings = null;
