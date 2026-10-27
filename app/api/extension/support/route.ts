@@ -115,7 +115,8 @@ async function handleChat(user: any, body: any) {
   const { response, articleIds } = await generateAIResponse(
     message.trim(),
     chatSession.messages,
-    user.email
+    user.email,
+    Number(chatSession.shopId)
   );
 
   const assistantMessage: ChatMessage = {

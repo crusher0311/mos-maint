@@ -51,7 +51,8 @@ export async function POST(req: NextRequest) {
   const { response, articleIds } = await generateAIResponse(
     message.trim(),
     chatSession.messages,
-    session.email
+    session.email,
+    Number(chatSession.shopId)
   );
 
   const assistantMessage: ChatMessage = {

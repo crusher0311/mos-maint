@@ -64,7 +64,7 @@ export async function resolveShopItemKeys(
     const validKeys = Object.keys(SERVICE_KEYS);
     const names = needAi.map((r) => r.name);
     const started = Date.now();
-    const openai = getOpenAI();
+    const openai = getOpenAI({ feature: "auto-dvi-resolve-keys", shopId });
 
     const completion = await Promise.race([
       openai.chat.completions.create({

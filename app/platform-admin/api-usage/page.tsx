@@ -1,4 +1,5 @@
 "use client";
+import OpenAiUsagePanel from "@/components/platform-admin/OpenAiUsagePanel";
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import Image from "next/image";
@@ -476,6 +477,7 @@ export default function ApiUsageDashboard() {
 
       <div>
         <div className="flex items-center justify-between mb-4">
+          <OpenAiUsagePanel />
           <h2 className="text-lg font-semibold text-gray-900">Individual Integrations</h2>
           <span className="text-xs text-gray-400">Drag cards to reorder</span>
         </div>

@@ -170,7 +170,7 @@ export async function POST(req: NextRequest) {
       ];
     }
 
-    const openai = getOpenAI();
+    const openai = getOpenAI({ feature: ROUTE, shopId: Number(sess.shopId) });
     const aiStart = Date.now();
     let response;
     try {

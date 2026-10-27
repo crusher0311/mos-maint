@@ -98,7 +98,7 @@ Return ONLY a JSON object with these fields:
 Return ONLY valid JSON, no other text.`;
     }
 
-    const openai = getOpenAI();
+    const openai = getOpenAI({ feature: "/api/extension/protractor/vin-plate-ocr", shopId: guard.mosShopId });
     const ocrStart = Date.now();
     const response = await openai.chat.completions.create({
       model: "gpt-4o",

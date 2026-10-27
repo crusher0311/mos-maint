@@ -89,7 +89,7 @@ export async function extractVoiceFindings(
   if (!t.ok || !t.transcript) return { ok: false, error: t.error || "Transcription failed" };
 
   try {
-    const openai = getOpenAI();
+    const openai = getOpenAI({ feature: "/api/auto-dvi/voice", shopId });
     const started = Date.now();
     const completion = await openai.chat.completions.create(
       {

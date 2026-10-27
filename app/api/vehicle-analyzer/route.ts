@@ -299,7 +299,7 @@ export async function POST(req: NextRequest) {
     };
 
     const startTime = Date.now();
-    const openai = getOpenAI();
+    const openai = getOpenAI({ feature: "/api/vehicle-analyzer", shopId: Number(shopId) });
     const resp = await openai.chat.completions.create({
       model: chosenModel,
       temperature: 0.2,

@@ -124,7 +124,7 @@ async function _POST(request: NextRequest) {
   const startTime = Date.now();
 
   try {
-    const openai = getOpenAI();
+    const openai = getOpenAI({ feature: "/api/extension/enhance-findings", shopId: shopId ? Number(shopId) : undefined });
 
     const vehicleContext = vehicleInfo
       ? `Vehicle: ${vehicleInfo.year || ""} ${vehicleInfo.make || ""} ${vehicleInfo.model || ""} ${vehicleInfo.trim || ""}`.trim()

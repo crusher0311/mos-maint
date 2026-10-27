@@ -233,7 +233,7 @@ export async function POST(req: NextRequest) {
     let aiVehicleHours: { hours: number; rationale: string } | null = null;
     if (knowledgeBaseJob && !shouldUseAiFallback(knowledgeBaseJob) && vehicleContext.make && vehicleContext.model) {
       try {
-        const openai = __deps.getOpenAI();
+        const openai = __deps.getOpenAI({ feature: "/api/estimate-assist/job-builder", shopId });
         const startTime = Date.now();
         const vehicleStr = [
           vehicleContext.year, vehicleContext.make, vehicleContext.model, vehicleContext.submodel,
@@ -286,7 +286,7 @@ export async function POST(req: NextRequest) {
     let aiResult: AIEnhancedJobResult | null = null;
     if (shouldUseAiFallback(knowledgeBaseJob)) {
       try {
-        const openai = __deps.getOpenAI();
+        const openai = __deps.getOpenAI({ feature: "/api/estimate-assist/job-builder", shopId });
         const startTime = Date.now();
         const vehicleStr = [vehicleContext.year, vehicleContext.make, vehicleContext.model].filter(Boolean).join(" ");
 

@@ -214,7 +214,7 @@ async function _POST(request: NextRequest) {
       }
     }
 
-    const openai = getOpenAI();
+    const openai = getOpenAI({ feature: "/api/extension/concern-assistant", shopId: mosShopId });
     const db = await getDb();
     const userId = auth.user._id?.toString() || auth.user.id?.toString();
 

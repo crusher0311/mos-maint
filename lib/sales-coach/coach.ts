@@ -33,7 +33,7 @@ export async function transcribeAudio(
     }
   }
 
-  const openai = getOpenAI();
+  const openai = getOpenAI({ feature: "sales-coach-transcription" });
   const ext = mime.includes("ogg") ? "ogg" : mime.includes("mp4") ? "mp4" : mime.includes("mpeg") ? "mp3" : "webm";
   const file = new File([new Uint8Array(audio)], `pitch.${ext}`, { type: mime });
   const res = await openai.audio.transcriptions.create({
@@ -64,7 +64,7 @@ export async function coachPitch(
   ctx: SalesCoachScenarioContext,
   transcript: string,
 ): Promise<SalesCoachFeedback> {
-  const openai = getOpenAI();
+  const openai = getOpenAI({ feature: "sales-coach-feedback" });
   const start = Date.now();
   const completion = await openai.chat.completions.create({
     model: "gpt-4o",

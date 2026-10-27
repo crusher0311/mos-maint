@@ -25,7 +25,7 @@ export async function POST(req:Request){
     if(!admission.send)return admission.result?dispatchJson({result:admission.result}):dispatchJson({error:"This photo scan is unconfirmed. Your photo is saved; enter mileage manually or use a new photo."},409);
     const start=Date.now();
     try{
-      const completion=await getOpenAI().chat.completions.create({
+      const completion=await getOpenAI({feature:"/api/dashboard/protractor/odometer-ocr",shopId:s.shopId}).chat.completions.create({
         model:"gpt-4o",temperature:0,max_tokens:180,response_format:{type:"json_object"},
         messages:[{role:"system",content:odometerPrompt},{role:"user",content:[{type:"image_url",image_url:{url:`data:${photo.mime};base64,${photo.bytes.toString("base64")}`,detail:"high"}}]}],
       },{timeout:20000,maxRetries:0});

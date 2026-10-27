@@ -1,4 +1,5 @@
 - [All Shops load policy](platform-shops-load-policy.md) — page optional statistics, preserve fleet bulk scope, and separate cached stats from fresh authority.
+- [AI accounting boundaries](ai-accounting-boundaries.md) — estimated app spend is not the organization bill; preserve unknown coverage, privacy and retry accounting.
 - [Next router roots](next-router-root-compatibility.md) — keep app/pages entrypoints at the same root; validate generated types after builds, without a concurrent dev server.
 - [Shopmonkey integration](shopmonkey-history-ingest.md) — history safety, mileage/query limits, dashboard wiring, API quirks, and extension placement.
 - [Printed label compatibility](printed-label-compatibility.md) — saved sticker wording, keytag validation, printed QR targets, and advisory physical QR sizing.
