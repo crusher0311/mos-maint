@@ -1,6 +1,18 @@
 // lib/ai.ts
 import OpenAI from "openai";
 import { trackApiRequest } from "@/lib/api-usage-tracker";
+import { insertUsageRecords } from "@/lib/data/repositories/api-usage";
+import { boundedUsageWriter, trackedAiFetch, wasAutomaticallyTracked, type AiContext } from "@/lib/openai-usage";
+import { getSlowQueryCaller } from "@/lib/slow-query/caller-context";
+
+const writeAiUsage = boundedUsageWriter(async record => { await insertUsageRecords([record]); });
+export function getTrackedAiFetch(context?: Partial<AiContext>) {
+  return trackedAiFetch({
+    feature: context?.feature ?? getSlowQueryCaller() ?? "unattributed-openai",
+    shopId: context?.shopId,
+    source: context?.source ?? getOpenAIConfig()?.source ?? "direct",
+  }, writeAiUsage);
+}
 
 // Available OpenAI models via Replit AI Integrations
 export const MODELS = [
@@ -53,7 +65,7 @@ export function getOpenAIKey(): { apiKey: string; source: 'direct' | 'replit' } 
 }
 
 // OpenAI SDK client - returns the official OpenAI SDK instance
-export function getOpenAI(): OpenAI {
+export function getOpenAI(context?: Partial<AiContext>): OpenAI {
   const config = getOpenAIConfig();
   
   if (!config) {
@@ -63,6 +75,7 @@ export function getOpenAI(): OpenAI {
   return new OpenAI({
     apiKey: config.apiKey,
     baseURL: config.baseUrl,
+    fetch: getTrackedAiFetch(context),
   });
 }
 
@@ -81,7 +94,7 @@ export async function runResponse(model: string, input: string): Promise<{
   const { apiKey, baseUrl, source } = config;
 
   try {
-    const resp = await fetch(`${baseUrl}/responses`, {
+    const resp = await getTrackedAiFetch({ feature: "ai-run-response", source })(`${baseUrl}/responses`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -126,6 +139,7 @@ async function safeText(resp: Response) {
 }
 
 interface OpenAiUsageShape {
+  id?: string;
   usage?: {
     prompt_tokens?: number;
     completion_tokens?: number;
@@ -148,6 +162,7 @@ export function trackOpenAiCall(
   latencyMs: number,
   statusCode: number = 200
 ): void {
+  if (wasAutomaticallyTracked(completion?.id)) return;
   const usage = completion?.usage;
   if (!usage) return;
   trackApiRequest(

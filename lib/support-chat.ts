@@ -1,15 +1,13 @@
 import { ObjectId } from "mongodb";
-import OpenAI from "openai";
+import { getOpenAI as createTrackedOpenAI } from "@/lib/ai";
 import { searchArticles, incrementViewCounts, KnowledgeArticle } from "./knowledge-base";
 import * as repo from "@/lib/data/repositories/support-chat-sessions";
 
 // Lazy client: module-level `new OpenAI()` throws at Next build-time
 // page-data collection when OPENAI_API_KEY is momentarily absent
 // (2026-08-17 prod build failure). Constructed on first use instead.
-let _openai: OpenAI | null = null;
-function getOpenAI(): OpenAI {
-  if (!_openai) _openai = new OpenAI();
-  return _openai;
+function getOpenAI(shopId?: number) {
+  return createTrackedOpenAI({ feature: "support-chat", shopId });
 }
 
 export interface ChatMessage {
@@ -67,6 +65,7 @@ export async function generateAIResponse(
   userMessage: string,
   sessionHistory: ChatMessage[],
   userEmail: string,
+  shopId?: number,
 ): Promise<{ response: string; articleIds: string[] }> {
   const relevantArticles = await searchArticles(userMessage, 5);
 
@@ -123,7 +122,7 @@ PLATFORM CONTEXT:
 Keep responses under 200 words unless detailed steps are needed. Always be helpful and solution-oriented.`;
 
   try {
-    const completion = await getOpenAI().chat.completions.create({
+    const completion = await getOpenAI(shopId).chat.completions.create({
       model: "gpt-4o-mini",
       messages: [{ role: "system", content: systemPrompt }, ...conversationHistory],
       max_tokens: 600,

@@ -69,7 +69,7 @@ export interface AuditEvaluatorDeps {
     shopId: number,
     currentMiles?: number | null,
   ) => Promise<any>;
-  getOpenAI?: () => any;
+  getOpenAI?: (context?: { feature: string; shopId?: number }) => any;
   trackOpenAiCall?: (
     shopId: number | null | undefined,
     route: string,
@@ -156,7 +156,7 @@ export async function evaluateAudit(
   let aiFindings: AuditFinding[] = [];
   let aiStatus: AuditAiStatus = { status: "completed" };
   try {
-    const openai = d.getOpenAI();
+    const openai = d.getOpenAI({ feature: "/api/estimate-assist/audit", shopId: input.shopId });
     const startedAt = d.now().getTime();
     // `getOpenAI` is deliberately an injectable structural dependency. Give
     // the timeout helper an explicit result type so its `null` degradation

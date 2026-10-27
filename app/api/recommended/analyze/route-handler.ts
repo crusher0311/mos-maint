@@ -6,6 +6,7 @@ import { resolveAutoflowConfig, fetchDviWithCache } from "@/lib/integrations/aut
 import { resolveCarfaxConfig, fetchCarfaxWithCache } from "@/lib/integrations/carfax";
 import { logUsage, estimateCost, estimateTokens } from "@/lib/usage";
 import { trackApiRequest } from "@/lib/api-usage-tracker";
+import { getTrackedAiFetch } from "@/lib/ai";
 import { enforceAiBudget } from "@/lib/ai-budget";
 import { getFeatureEntitlements } from "@/lib/featureResolver";
 import { canAccessShopFeature } from "@/lib/shop-feature-access";
@@ -55,13 +56,13 @@ function extractJsonBlock(text: string): string | null {
 }
 
 /** Call OpenAI Responses API without the SDK */
-async function callOpenAI(model: string, systemPrompt: string, userPrompt: string): Promise<{
+async function callOpenAI(model: string, systemPrompt: string, userPrompt: string, shopId?: number): Promise<{
   ok: boolean; text?: string; error?: string;
 }> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return { ok: false, error: "OPENAI_API_KEY is not set" };
 
-  const resp = await fetch("https://api.openai.com/v1/responses", {
+  const resp = await getTrackedAiFetch({ feature: "/api/recommended/analyze", shopId })("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -348,14 +349,14 @@ export async function POST(req: Request) {
     const aiStartTime = Date.now();
     const ai = __deps.callOpenAIFn
       ? await __deps.callOpenAIFn(model, systemPrompt, userPrompt)
-      : await callOpenAI(model, systemPrompt, userPrompt);
+      : await callOpenAI(model, systemPrompt, userPrompt, logShopIdNum ?? undefined);
     const aiDuration = Date.now() - aiStartTime;
 
     // Track API request for traffic monitoring (Responses API doesn't return
     // usage, so we estimate prompt/completion tokens for budget accounting).
     const estPrompt = estimateTokens(systemPrompt + userPrompt);
     const estCompletion = estimateTokens(ai.text ?? "");
-    __deps.trackApiRequest(
+    if (__deps.callOpenAIFn) __deps.trackApiRequest(
       "openai",
       "/api/recommended/analyze",
       "POST",

@@ -175,7 +175,7 @@ export async function POST(request: NextRequest) {
         // result is generic and reusable across all shops. Per-shop
         // customisation (avoid drop + prefer reorder) is applied via
         // post-processing on every read.
-        const openai = getOpenAI();
+        const openai = getOpenAI({ feature: "/api/dashboard/concern-assistant:followup", shopId: Number(session.shopId) });
         const prompt = generateFollowUpPrompt(concern, SYMPTOM_QUESTION_GUIDE, "");
         const startTime = Date.now();
 
@@ -266,7 +266,7 @@ export async function POST(request: NextRequest) {
       const biasedGuide = biasSymptomGuide(SYMPTOM_QUESTION_GUIDE, hints.avoid);
       const hintsBlock = renderHintsForPrompt(hints);
 
-      const openai = getOpenAI();
+      const openai = getOpenAI({ feature: "/api/dashboard/concern-assistant:review", shopId: Number(session.shopId) });
       const prompt = generateReviewPrompt(concern, answeredQuestions, biasedGuide, hintsBlock);
       const startTime = Date.now();
 
@@ -339,7 +339,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      const openai = getOpenAI();
+      const openai = getOpenAI({ feature: "/api/dashboard/concern-assistant:cleanup", shopId: Number(session.shopId) });
       const prompt = generateCleanConversationPrompt(conversationText);
       const startTime = Date.now();
 

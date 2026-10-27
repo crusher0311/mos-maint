@@ -92,7 +92,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const openai = __deps.getOpenAI();
+    const openai = __deps.getOpenAI({ feature: "/api/estimate-assist/language", shopId: Number(session.shopId) });
     const startTime = Date.now();
 
     const inputText = lineItems

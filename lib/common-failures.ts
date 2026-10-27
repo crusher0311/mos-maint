@@ -224,7 +224,7 @@ export async function getCommonFailures(
     aiFailures = cached;
     wasCached = true;
   } else {
-    aiFailures = await fetchFailuresFromAI(year, make, model, mileage, engine);
+    aiFailures = await fetchFailuresFromAI(year, make, model, mileage, engine, shopIds.length === 1 ? shopIds[0] : undefined);
     cache.set(CACHE_KEY_PREFIX, cacheKey, aiFailures, CACHE_TTL.LONG * 12);
   }
   
@@ -263,9 +263,10 @@ async function fetchFailuresFromAI(
   make: string,
   model: string,
   mileage: number,
-  engine?: string
+  engine?: string,
+  shopId?: number
 ): Promise<CommonFailure[]> {
-  const openai = getOpenAI();
+  const openai = getOpenAI({ feature: "/api/vehicle/common-failures", shopId });
   
   const vehicleDescription = engine 
     ? `${year} ${make} ${model} with ${engine} engine at ${mileage.toLocaleString()} miles`

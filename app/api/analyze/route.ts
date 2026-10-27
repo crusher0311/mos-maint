@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { logUsage, estimateTokens, estimateCost } from "@/lib/usage";
 import { trackApiRequest } from "@/lib/api-usage-tracker";
-import { trackOpenAiCall } from "@/lib/ai";
+import { getTrackedAiFetch } from "@/lib/ai";
 import { enforceAiBudget } from "@/lib/ai-budget";
 import { getSession } from "@/lib/auth";
 import { userHasShopAccess } from "@/lib/data/repositories/shop-access";
@@ -248,7 +248,7 @@ Instructions:
   // Call OpenAI Chat Completions (works with gpt-4.1 / gpt-4o / 4.1-turbo etc.)
   const startTime = Date.now();
   try {
-    const resp = await fetch("https://api.openai.com/v1/chat/completions", {
+    const resp = await getTrackedAiFetch({ feature: "/api/analyze", shopId: shopId ? Number(shopId) : undefined })("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -271,13 +271,11 @@ Instructions:
       // Cap how much of the provider error body we read/log/echo.
       const t = (await resp.text().catch(() => "")).slice(0, 500);
       // Track failed request
-      trackApiRequest('openai', '/api/analyze', 'POST', resp.status, Date.now() - startTime, shopId ? Number(shopId) : undefined).catch(() => {});
       return Response.json({ ok: false, error: `OpenAI error: ${resp.status} ${t}` }, { status: 500 });
     }
 
     const data = await resp.json();
     // Track successful request with token usage
-    trackOpenAiCall(shopId ? Number(shopId) : undefined, "/api/analyze", { usage: data?.usage }, Date.now() - startTime);
     const raw =
       data?.choices?.[0]?.message?.content ??
       (typeof data === "string" ? data : JSON.stringify(data));
@@ -315,7 +313,6 @@ Instructions:
   } catch (e: any) {
     const timedOut = e?.name === "TimeoutError" || e?.name === "AbortError";
     if (timedOut) {
-      trackApiRequest('openai', '/api/analyze', 'POST', 504, Date.now() - startTime, shopIdNum).catch(() => {});
       return Response.json(
         { ok: false, error: "AI provider did not respond in time" },
         { status: 504 }

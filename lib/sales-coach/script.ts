@@ -221,7 +221,7 @@ function contextHash(ctx: SalesCoachScenarioContext): string {
 const MODEL = "gpt-4o";
 
 async function generateScript(ctx: SalesCoachScenarioContext): Promise<SalesScript> {
-  const openai = getOpenAI();
+  const openai = getOpenAI({ feature: "sales-coach-script" });
   const jobs = ctx.jobs
     .map((j) =>
       `- ${j.title} — $${j.total.toFixed(2)}${j.declined ? " [DEFERRED/DECLINED]" : ""}`)

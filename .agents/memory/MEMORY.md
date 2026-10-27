@@ -1,4 +1,5 @@
 - [Starter Keytags](starter-keytags-policy.md) — Starter includes Keytags; preserve billing checks and explicit disabling.
+- [AI accounting boundaries](ai-accounting-boundaries.md) — estimated app spend is not the organization bill; preserve unknown coverage, privacy and retry accounting.
 - [Next router roots](next-router-root-compatibility.md) — keep app/pages entrypoints at the same root; validate generated types after builds, without a concurrent dev server.
 - [Shopmonkey integration](shopmonkey-history-ingest.md) — history safety, mileage/query limits, dashboard wiring, API quirks, and extension placement.
 - [Printed label compatibility](printed-label-compatibility.md) — saved sticker wording, keytag validation, printed QR targets, and advisory physical QR sizing.

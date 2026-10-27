@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const openai = getOpenAI();
+    const openai = getOpenAI({ feature: "/api/auto-dvi/photo-assign", shopId: Number(session.shopId) });
     const started = Date.now();
     const completion = await openai.chat.completions.create(
       {
