@@ -666,7 +666,7 @@ export default function StickerSettingsPage() {
                   type="text"
                   value={config.serviceLabel}
                   onChange={(e) => setConfig({ ...config, serviceLabel: e.target.value })}
-                  placeholder="Next Oil Service"
+                  placeholder={SERVICE_LABEL_FALLBACK}
                   maxLength={25}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
@@ -711,7 +711,7 @@ export default function StickerSettingsPage() {
               phone: config.phone || undefined,
               tagline: config.tagline || undefined,
               taglineLine2: config.taglineLine2 || undefined,
-              serviceLabel: config.serviceLabel || undefined,
+              serviceLabel: config.serviceLabel,
             }}
             onChange={handleDesignerChange}
           />

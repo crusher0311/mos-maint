@@ -416,16 +416,14 @@ export function scaleLayoutToSize(layout: StickerLayout, newSizeValue: string): 
 
 // Single source of truth for the Service Label fallback. Used by BOTH the
 // designer preview and the node-canvas printer so they can never drift.
-// New layouts inherit the global "Next Oil Service" default (no seeded content).
-// Saved element content remains an explicit override, including the old default
-// wording: we cannot distinguish a seeded value from a shop's intentional choice.
-export const SERVICE_LABEL_FALLBACK = 'Next Oil Service';
+// The main Service Label is authoritative, including for legacy layouts.
+export const SERVICE_LABEL_FALLBACK = 'Next Service Due';
 export const MAX_STICKER_ELEMENTS = 32;
 export const MAX_CUSTOM_TEXT_ELEMENTS = 12;
 export const MAX_STICKER_TEXT_LENGTH = 200;
 export const MAX_STICKER_BORDER_WIDTH = 4;
 
-// Validate without normalizing: legacy Service Label overrides must survive verbatim.
+// Validate without normalizing saved layout data.
 export function validStickerLayout(value: unknown): boolean {
   if (!value || typeof value !== 'object') return false;
   const l = value as StickerLayout;
@@ -483,7 +481,7 @@ export interface StickerContentValues {
 // Shared resolution rule for what text an element renders. This is the single
 // source of truth used by the designer preview (StickerDesignerCanvas) and the
 // node-canvas printer (renderStickerDesigner) so the preview is always WYSIWYG.
-// Priority for the service label: per-element override -> global config -> fallback.
+// Service labels ignore saved element content; all other text rules are unchanged.
 export function resolveStickerElementContent(
   el: { type: string; content?: string },
   data: StickerContentValues
@@ -498,7 +496,7 @@ export function resolveStickerElementContent(
     case 'taglineLine2':
       return data.taglineLine2 || '';
     case 'serviceLabel':
-      return el.content || data.serviceLabel || SERVICE_LABEL_FALLBACK;
+      return data.serviceLabel?.trim() ? data.serviceLabel : SERVICE_LABEL_FALLBACK;
     case 'serviceDate':
       return data.serviceDate || '';
     case 'serviceMileage':

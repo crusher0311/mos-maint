@@ -8,7 +8,7 @@
  * the preview always matches what prints. Both now call the single shared
  * `resolveStickerElementContent` with one shared fallback string. This test
  * locks in:
- *   (a) per-element "Label Text" override wins,
+ *   (a) main Service Label wins over legacy element content,
  *   (b) only the global "Service Label" set,
  *   (c) neither set -> the shared fallback,
  * plus that the preview sample fallback and the renderer fallback are the SAME
@@ -38,7 +38,7 @@ function eq(name: string, got: unknown, want: unknown) {
 
 // The preview feeds only `serviceLabel` (the global Sticker Content field); the
 // printer feeds the same plus formatted runtime values. For the label, both
-// reduce to: element.content || serviceLabel || fallback. Model both call sites
+// reduce to: nonblank serviceLabel or fallback. Model both call sites
 // by resolving the same element with the same data.
 function resolveLabel(content: string | undefined, serviceLabel: string | undefined): string {
   const data: StickerContentValues = { serviceLabel };
@@ -47,7 +47,13 @@ function resolveLabel(content: string | undefined, serviceLabel: string | undefi
 
 console.log("Service Label resolution — preview === print across the matrix");
 
-eq("(a) per-element override wins over global", resolveLabel("Next LOF", "Global Label"), "Next LOF");
+eq("(a) main label wins over legacy content", resolveLabel("Next LOF", "Global Label"), "Global Label");
+for (const content of ["Next Service Due", "Next Oil Service", "Custom override"]) {
+  for (const label of [undefined, "", "   ", "\t"]) {
+    eq("blank main ignores legacy content", resolveLabel(content, label), "Next Service Due");
+  }
+  eq("typed wording is preserved", resolveLabel(content, "  Next Oil Service  "), "  Next Oil Service  ");
+}
 eq("(b) only global Service Label set", resolveLabel(undefined, "Next Maintenance"), "Next Maintenance");
 eq("(b) empty per-element falls through to global", resolveLabel("", "Next Maintenance"), "Next Maintenance");
 eq("(c) neither set -> shared fallback", resolveLabel(undefined, undefined), SERVICE_LABEL_FALLBACK);
@@ -56,14 +62,14 @@ eq("(c) both empty -> shared fallback", resolveLabel("", ""), SERVICE_LABEL_FALL
 console.log("Fallback is a single source of truth");
 
 eq("preview sample === renderer fallback", STICKER_SAMPLE_DATA.serviceLabel, SERVICE_LABEL_FALLBACK);
-eq("intended default wording", SERVICE_LABEL_FALLBACK, "Next Oil Service");
+eq("intended default wording", SERVICE_LABEL_FALLBACK, "Next Service Due");
 
 console.log("Fresh layouts inherit global edits at every supported size");
 for (const size of STICKER_SIZES) {
   const layout = createDefaultLayout(size.value);
   const element = layout.elements.find(el => el.type === "serviceLabel")!;
   eq(`${size.value}: no seeded override`, element.content, undefined);
-  eq(`${size.value}: default wording`, resolveStickerElementContent(element, {}), "Next Oil Service");
+  eq(`${size.value}: default wording`, resolveStickerElementContent(element, {}), "Next Service Due");
   for (const serviceLabel of ["Next Maintenance", "Next Tire Service"]) {
     eq(`${size.value}: global edit ${serviceLabel}`,
       resolveStickerElementContent(element, { serviceLabel }), serviceLabel);
@@ -74,8 +80,9 @@ for (const size of STICKER_SIZES) {
     const saved = JSON.parse(JSON.stringify(layout));
     const resized = scaleLayoutToSize(saved, "2x3");
     const restored = resized.elements.find(el => el.type === "serviceLabel")!;
-    eq(`${size.value}: saved override survives reload/resize`,
-      resolveStickerElementContent(restored, { serviceLabel: "Changed Global" }), content);
+    eq(`${size.value}: legacy content is retained but cannot shadow main wording`,
+      resolveStickerElementContent(restored, { serviceLabel: "Changed Global" }), "Changed Global");
+    eq(`${size.value}: no stored layout migration`, restored.content, content);
   }
 }
 
