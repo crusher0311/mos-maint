@@ -248,3 +248,17 @@ mtime_ms = 1792928997502
 storage_uri = "gcs://replit-rams-assets-picard/rams/assets/repl:a5a4005c-4e3d-4ce9-896c-c46425944606/4b2a25cc-49ab-4ce5-ae41-6ddbdb2fa591/108f3c06-524c-453f-b853-2c2dda238b86"
 storage_version_token = "1792929014850276"
 content_type = "text/csv"
+
+[[outputs]]
+id = "s1O-qiglpU53zV0zco6em"
+uri = "file://generated-artifacts/weekly-production-errors.csv"
+type = "table"
+title = "Past seven days — production error inventory"
+description = "Sanitized grouped counts and daily totals for the MOS web service, October 21–28, 2026. Counts are log records, not unique incidents; weekly and daily rows overlap."
+logical_id = "e0f4afbf-90aa-4755-b5ca-0d31ee2df8ba"
+content_hash = "sha256:a00ab7e0288d020c6c23d88bdfaf941f687f5b9bae5a547b1012ea2a429bfb7f"
+size = 13570
+mtime_ms = 1793217084532
+storage_uri = "gcs://replit-rams-assets-picard/rams/assets/repl:a5a4005c-4e3d-4ce9-896c-c46425944606/e0f4afbf-90aa-4755-b5ca-0d31ee2df8ba/e3129a11-19d3-4e0a-b0a9-c3c9f519a5ee"
+storage_version_token = "1793217137846939"
+content_type = "text/csv"
