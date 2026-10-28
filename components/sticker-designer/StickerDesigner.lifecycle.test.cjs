@@ -155,9 +155,8 @@ test("sticker controls, custom text limits, selection and history are Strict Mod
     assert.equal(toolbarProps.canRedo, false, "new edit truncates redo branch");
 
     await select("serviceLabel");
-    await edit("Return for oil service");
-    await click("Use shop default");
-    assert.equal(selected().content, undefined, "clear preserves service label inheritance");
+    assert.ok(!button("Use shop default"), "service label has no competing override");
+    assert.equal(dom.window.document.querySelector("#sticker-element-content"), null);
     assert.ok(!button("Remove custom text"), "built-in elements cannot be removed");
     await select("logo");
     assert.ok(button("contain"), "logo fit controls preserved");

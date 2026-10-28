@@ -283,25 +283,19 @@ export function StickerElementPanel({
                 </div>
               )}
 
-              {(selectedElement.type === "serviceLabel" || selectedElement.type === "text") && (
+              {selectedElement.type === "text" && (
                 <div>
-                  <label htmlFor="sticker-element-content" className="block text-xs text-gray-500 mb-1">{selectedElement.type === "text" ? "Custom Text" : "Label Text"}</label>
+                  <label htmlFor="sticker-element-content" className="block text-xs text-gray-500 mb-1">Custom Text</label>
                   <input
                     id="sticker-element-content"
                     type="text"
                     maxLength={MAX_STICKER_TEXT_LENGTH}
                     value={selectedElement.content || ""}
                     onChange={(e) => onUpdateElement(selectedElement.id, { content: e.target.value.replace(/[\r\n\u2028\u2029]/g, " ").slice(0, MAX_STICKER_TEXT_LENGTH) })}
-                    placeholder={selectedElement.type === "text" ? "Enter text" : "Next Oil Service"}
+                    placeholder="Enter text"
                     className="w-full px-2 py-1 text-sm border rounded"
                   />
                   <p className="text-xs text-gray-500 mt-1">{(selectedElement.content || "").length}/{MAX_STICKER_TEXT_LENGTH} characters · single line</p>
-                  {selectedElement.type === "serviceLabel" && (
-                    <div className="mt-1">
-                      <p className="text-xs text-gray-500">Leave blank to use the shop&apos;s service label.</p>
-                      {!!selectedElement.content && <button type="button" className="text-xs text-blue-700 hover:underline" onClick={() => onUpdateElement(selectedElement.id, { content: undefined })}>Use shop default</button>}
-                    </div>
-                  )}
                   {selectedElement.type === "text" && (
                     <button type="button" className="flex items-center gap-1 mt-2 text-xs text-red-700 hover:underline" onClick={() => {
                       if (window.confirm("Remove this custom text? You can undo this change.")) onRemoveText(selectedElement.id);

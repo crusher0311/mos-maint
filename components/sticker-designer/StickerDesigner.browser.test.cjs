@@ -16,6 +16,7 @@ const tailwind = require("@tailwindcss/postcss");
   );
   const server = await createServer({
     configFile: path.join(root, "tests/shop-dispatch-browser/vite.config.mjs"),
+    server: { port: 24119 },
     plugins: [{
       name: "isolated-sticker-controls-fixture",
       configureServer(vite) {
@@ -42,7 +43,7 @@ const tailwind = require("@tailwindcss/postcss");
     const errors = [];
     page.on("pageerror", (error) => errors.push(error.message));
     await page.route("**/api/**", (route) => route.abort("blockedbyclient"));
-    await page.goto("http://127.0.0.1:24100/sticker-designer-controls.html");
+    await page.goto("http://127.0.0.1:24119/sticker-designer-controls.html");
     const button = (name) => page.getByRole("button", { name, exact: true });
     const state = () => page.getByTestId("layout-state").textContent().then(JSON.parse);
     const panel = page.locator(".w-72");
@@ -64,9 +65,14 @@ const tailwind = require("@tailwindcss/postcss");
     assert.equal((await state()).elements.find(e => e.type === "serviceLabel").color, "red");
     await page.getByLabel("Text color value", { exact: true }).fill("#000000");
     assert.equal((await state()).elements.find((e) => e.type === "serviceLabel").underline, true);
-    await page.getByLabel("Label Text", { exact: true }).fill("Return for oil service");
-    await button("Use shop default").click();
-    assert.equal((await state()).elements.find((e) => e.type === "serviceLabel").content, undefined);
+    assert.equal(await page.getByLabel("Label Text", { exact: true }).count(), 0);
+    assert.equal(await button("Use shop default").count(), 0);
+    const beforeLabelEdits = await state();
+    for (const label of ["Next Oil Service", "Next Maintenance", "", "   "]) {
+      await page.getByLabel("Service Label", { exact: true }).fill(label);
+      assert.equal(await page.getByRole("img", { name: label.trim() ? label : "Next Service Due", exact: true }).count(), 1);
+      assert.deepEqual(await state(), beforeLabelEdits, "wording edits do not mutate layout");
+    }
     await button("Add custom text").click();
     await page.getByLabel("Custom Text", { exact: true }).fill("Ask about tire rotation");
     const id = (await custom()).id;
@@ -118,7 +124,7 @@ const tailwind = require("@tailwindcss/postcss");
     assert.equal((await state()).elements.filter((e) => e.type === "text").length, 12);
     assert.deepEqual(errors, []);
     passed = true;
-    console.log("Sticker designer browser lifecycle checks passed. Fixture: http://127.0.0.1:24100/sticker-designer-controls.html");
+    console.log("Sticker designer browser lifecycle checks passed. Fixture: http://127.0.0.1:24119/sticker-designer-controls.html");
   } finally {
     await browser.close();
     if (!passed || !process.argv.includes("--keep-open")) await server.close();

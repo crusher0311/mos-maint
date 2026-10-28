@@ -241,7 +241,7 @@ export async function renderStickerStandard(
   ctx.fillStyle = serviceLabelColor;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  const labelText = config.serviceLabel || "Next Svc Due:";
+  const labelText = resolveStickerElementContent({ type: "serviceLabel" }, config);
   const labelY = serviceY + serviceSectionHeight / 2 - valueSize;
   ctx.fillText(labelText, serviceInfoCenterX, labelY, serviceInfoWidth);
 

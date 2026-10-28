@@ -1,12 +1,12 @@
 ---
 name: Sticker label inheritance
-description: Why saved legacy label text is preserved rather than migrated.
+description: Main Service Label authority and printed text compatibility.
 ---
-New sticker layouts should inherit the global Service Label, with “Next Oil Service” as the intended default wording. Do not automatically clear saved “Next Service Due” element overrides.
+The main Service Label is the only wording authority. Blank or whitespace-only wording means “Next Service Due”; legacy element content must never override it. Keep saved layouts intact rather than bulk-migrating them.
 
-**Why:** A saved old default is indistinguishable from a shop intentionally choosing that exact wording. Preserving shop customization is safer than guessing intent.
+**Why:** The user explicitly rejected per-element precedence and warning/opt-in inheritance controls, superseding the earlier compatibility policy.
 
-**How to apply:** Change fresh-layout defaults without rewriting persisted element content. Any future migration of legacy overrides needs an explicit user choice.
+**How to apply:** Resolve wording at render time from the main field across preview and all print paths. Keep styling and positioning controls, but no independent service-label text editor.
 
 Designer text overflow should follow the established printer behavior (single-line horizontal compression), not introduce ellipsis or new wrapping.
 
