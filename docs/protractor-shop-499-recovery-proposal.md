@@ -75,6 +75,109 @@ not cover unassigned callbacks, differently associated records, archives,
 partner mappings, alternate deployed targets, or every derived-data store.
 They must never justify clearing a binding or resetting history.
 
+## Follow-up bounded read-only review — 2026-10-30, approximately 19:03–19:06 UTC
+
+The decision remains **HOLD**. Existing credentials were consumed only in isolated
+runtime memory for Render control-plane GETs and direct Mongo/PostgreSQL drivers.
+No application modules were initialized. No production mutation, provider request,
+log scan, credential display, deployment, or repair occurred. PostgreSQL sessions
+reported read-only mode; statements had 2-second budgets and 500ms lock timeouts.
+Mongo used one connection, no read/write retries, 2-second operation budgets and
+bounded indexed document reads. Errors were reduced to codes.
+
+### Render evidence, including linked environment groups
+
+- The production web service and dedicated callback worker both reported a live
+  deploy at commit `ff1d065692ef83c6bee3809a1f1df600a3030366`. Their deploy finish
+  times were 18:58:56Z and 18:50:31Z respectively. Both were not suspended.
+- The backfill-drain, export, and legacy background worker services were
+  suspended. This is service configuration evidence, not proof that every
+  previously outstanding operation has settled.
+- Service-local variables and linked environment groups were read. Web had two
+  linked groups; callback worker had one. The web groups had no differing
+  overlapping database/canonical/export configuration values.
+- For web and callback worker, `IDENTITY_PG_CANONICAL`,
+  `PROTRACTOR_OPS_PG_CANONICAL`, `PROTRACTOR_CACHE_PG_CANONICAL`,
+  `WRITE_MONGO_PROTRACTOR_OPS`, `WRITE_MONGO_PROTRACTOR_CACHE`, and
+  `CRON_LOCK_PG_CANONICAL` were unset in the observed combined configuration.
+  Their repository defaults retain Mongo identity/Protractor ops/cache and
+  Mongo scheduler-lock routing. Normalized ingestion is already PG canonical
+  in code, independently of an imagined normalized-canonical flag;
+  `WRITE_MONGO_NORMALIZED` was unset, which leaves its Mongo shadow enabled.
+- Web and callback worker inherited Mongo credentials matching the read runtime
+  and no Mongo database override. The selected ordinary PostgreSQL URL matched
+  the prior external production target. These comparisons returned booleans
+  only. Render configuration is not an attestation of every running replica's
+  loaded environment or all process-local work.
+- Web exports were disabled (`PROTRACTOR_EXPORTS_ENABLED=0`). The callback worker
+  enable flag was true. A dedicated restricted export URL/role was inherited
+  by web and the suspended export worker, even though it was absent from the
+  workspace environment. Thus workspace-only secret availability did not
+  establish the deployed export target.
+
+### Corrected schema interpretation and retained-identity checks
+
+- An indexed numeric/string shop lookup again found exactly one shop: numeric
+  ID, configured false, retained generation, no usable stored credentials or
+  account binding, and no checkpoint-write-token property. No target binding
+  was derived. Indexed backfill sampling again found one incomplete record;
+  the projected in-progress/owner/lease/activity fields were absent.
+- **Correction to the earlier subscription interpretation:** the repository
+  records token, callback URL, registration mode and first/last ensured
+  timestamps. It does not write the previously projected connection ID,
+  `active`, or `verifiedAt` fields. Their absence is not failed verification or
+  historical identity evidence. The live Mongo subscription collection had
+  only its `_id` index; no new shop-filter scan was attempted.
+- Mongo admin audit is keyed logically by `targetShopId`, not `shopId`, but its
+  live indexes lead with `_id`, creation time, or admin email. Legacy audit had
+  only `_id`. Neither had an ownership-leading index, so no broad audit scan
+  was attempted. External PG admin audit did have a target-shop-leading index;
+  an exact target-shop read with limit 3 returned no rows.
+- Scoped backup/archive collection-name metadata discovery returned no
+  candidates. This was not a search of Atlas backup retention, external
+  archives, or every possible audit store; those remain unknown.
+- The live Mongo callback indexes lead with `_id`, object identity, received
+  time, or method, not shop or historical account. No callback scan was
+  repeated. Without trusted prior linkage, callback history remains unknown.
+
+### Restricted exports and leases
+
+- A direct read-only connection to the actual inherited export target
+  succeeded. Schema usage was available, authenticated/session roles matched,
+  and the role was neither superuser nor RLS-bypassing. This is not a complete
+  revalidation of every runtime role restriction.
+- **Correction to earlier export queries:** configs use enterprise ID and
+  `shopIds` (plural); states use enterprise/revision/shop composite identity;
+  hashes use state/entity keys; receipts use delivery IDs; health uses
+  `id='worker'`. A uniform `doc->>'shopId'` query is not valid ownership
+  discovery across these stores. Live primary and expression indexes matched
+  those key shapes, including enterprise/revision-leading state ownership.
+- The exact worker-health key returned no row. The shop projection had no
+  enterprise linkage. No shop-specific config/state/pending/receipt assertion
+  can therefore be made from these checks; no unrestricted config/history
+  scan was attempted and no payload or encrypted secret was read out.
+- Exact Mongo scheduler-lock keys for the eight repository Protractor jobs in
+  database `mos` returned no rows. An exact PG provider drain-lease read also
+  returned no row. One initial PG lease projection used a nonexistent column
+  and failed; the corrected projection used the repository's `owner` column.
+  Neither empty result proves process termination, callback admission
+  settlement, absence of a legacy Mongo drain lease, or completion of an
+  outstanding database operation. The callback worker remains enabled/live.
+
+### Stop condition and smallest next evidence
+
+No trusted historical shop-to-account proof was recovered. Do not repeat
+unindexed callback/audit scans or infer identity from current credentials,
+business name, or the guard screenshot. The smallest next step is for the
+operator to identify **one pre-disconnect backup/audit evidence source and
+timestamp** through a restricted channel, allowing an exact shop-record lookup
+and independent account/location corroboration. Alternatively, securely
+available original credentials may be compared against the retained generation
+with only a match boolean returned. Any enterprise/export linkage must also
+come from a trusted ownership source before keyed pending/receipt reads.
+Worker settlement and fresh snapshot approval remain separate unmet gates.
+The earlier pinned digests have not been refreshed or approved by this review.
+
 ## Canonical ownership gates still open
 
 | Domain | Code path / expected store | Required proof before approval |
