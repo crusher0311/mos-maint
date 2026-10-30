@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { processNextReportRun, refreshActiveReports } from "@/lib/report-run-service";
+import { processTireRunBatch } from "@/lib/tire-dot-report-service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,7 +12,8 @@ async function handle(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const refreshed = await refreshActiveReports();
-  return NextResponse.json({ ok: true, refreshed, ...(await processNextReportRun()) });
+  const tireDot = await processTireRunBatch();
+  return NextResponse.json({ ok: true, refreshed, tireDot, ...(await processNextReportRun()) });
 }
 export const GET = handle;
 export const POST = handle;

@@ -47,13 +47,13 @@ args = "Offline CAR Experts DVI pilot"
 name = "MOS Maintenance MVP"
 author = "agent"
 
+[workflows.workflow.metadata]
+outputType = "console"
+
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "npm run dev"
-waitForPort = 5000
-
-[workflows.workflow.metadata]
-outputType = "webview"
+args = "env -i PATH=\"$PATH\" HOME=\"$HOME\" PROTRACTOR_OFFLINE_ALLOW_LOOPBACK=true NODE_OPTIONS='--require ./tests/helpers/deny-network-egress.cjs --require ./scripts/_stubs/server-only-stub.cjs' node --import tsx -e \"require('./tests/browser/tire-dot-fixture-server.ts').createTireFixture().then(s=>s.listen(3000,'0.0.0.0'))\""
+waitForPort = 3000
 
 [[workflows.workflow]]
 name = "typecheck"
@@ -144,6 +144,10 @@ externalPort = 3000
 [[ports]]
 localPort = 5000
 externalPort = 80
+
+[[ports]]
+localPort = 5012
+externalPort = 6000
 
 [[ports]]
 localPort = 5101

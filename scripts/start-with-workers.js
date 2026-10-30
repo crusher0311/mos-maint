@@ -116,6 +116,16 @@ async function main() {
   console.log('[3/4] Protractor Sync Worker DISABLED (using webhooks + daily cron)');
 
   console.log('[4/5] Starting Plan Prefetch Worker...');
+  // Separate process; provider discovery is gated by the approved pilot control
+  // and each shop's overnight window. No work occurs without enrollment.
+  const tirePilotWorker = spawn(process.execPath, ['--require', './scripts/_stubs/server-only-stub.cjs',
+    '--import', 'tsx', 'scripts/heart-tire-dot-pilot-worker.ts'], {
+    stdio: 'inherit', env: workerEnv,
+  });
+  tirePilotWorker.on('error', () => console.error('[HEART Tire Pilot] Failed to start'));
+  tirePilotWorker.on('exit', code => {
+    if (code) console.error('[HEART Tire Pilot] Exited; durable checkpoints retained');
+  });
   const planPrefetchWorker = spawn('npx', ['tsx', 'scripts/plan-prefetch-worker.ts'], {
     stdio: 'inherit',
     env: workerEnv
@@ -145,6 +155,7 @@ async function main() {
     nextServer.kill('SIGTERM');
     tekmetricWorker.kill('SIGTERM');
     planPrefetchWorker.kill('SIGTERM');
+    tirePilotWorker.kill('SIGTERM');
     process.exit(0);
   });
 
@@ -153,6 +164,7 @@ async function main() {
     nextServer.kill('SIGINT');
     tekmetricWorker.kill('SIGINT');
     planPrefetchWorker.kill('SIGINT');
+    tirePilotWorker.kill('SIGINT');
     process.exit(0);
   });
 }

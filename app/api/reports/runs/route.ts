@@ -4,6 +4,7 @@ import { ReportDefinitionError } from "@/lib/report-definition-compiler";
 import { lookupReportRun, requestReportRun } from "@/lib/report-run-service";
 import { ReportingScopeError } from "@/lib/reporting-scope";
 import { safeReportFailure } from "@/lib/report-run-failure";
+import { requestTireRun, tireRunResponse, TireDotError } from "@/lib/tire-dot-report-service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,6 +14,10 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
     const body = await req.json();
+    if (body.kind === "tekmetric-tire-dot") {
+      const run = await requestTireRun(session, body);
+      return NextResponse.json(tireRunResponse(run), { status: run.status === "succeeded" ? 200 : 202, headers: { "Cache-Control": "private, no-store" } });
+    }
     if (body.lookupOnly === true) {
       const run = await lookupReportRun(session as any, {
         definition: body.definition,
@@ -52,6 +57,7 @@ export async function POST(req: NextRequest) {
       generatedAt: response.run.generatedAt,
     }, { status: response.run.status === "succeeded" ? 200 : 202 });
   } catch (error) {
+    if (error instanceof TireDotError) return NextResponse.json({ error: error.message }, { status: error.status });
     if (error instanceof ReportingScopeError) return NextResponse.json({ error: error.message }, { status: error.status });
     if (error instanceof ReportDefinitionError) return NextResponse.json({ error: error.message, field: error.field }, { status: 400 });
     const message = error instanceof Error ? error.message : "Report could not be queued";
