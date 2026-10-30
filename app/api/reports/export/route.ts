@@ -7,6 +7,8 @@ import { declarativeReportCsv, reportingCsvResult } from "@/lib/reporting-delive
 import { findSavedReportingDefinition } from "@/lib/data/repositories/saved-reporting-definitions";
 import { canReadCustomReport } from "@/lib/custom-report-access";
 import { requestReportRun } from "@/lib/report-run-service";
+import { readableTireRun, TireDotError } from "@/lib/tire-dot-report-service";
+import { tireCsv } from "@/lib/tire-dot-report";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,6 +19,17 @@ export async function GET(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
     const p = req.nextUrl.searchParams;
+    if (p.get("kind") === "tekmetric-tire-dot") {
+      const run = await readableTireRun(session, p.get("runId") || "");
+      const view = p.get("view");
+      if (view !== "details" && view !== "invoices") return NextResponse.json({ error: "Choose details or invoices" }, { status: 400 });
+      if (run.status !== "succeeded" || !run.result) return NextResponse.json({ error: run.error || "Report is still preparing" }, { status: run.status === "failed" ? 409 : 202 });
+      return new NextResponse(tireCsv(run.result, view), { headers: {
+        "Content-Type": "text/csv; charset=utf-8", "Cache-Control": "private, no-store",
+        "Content-Disposition": `attachment; filename="tekmetric-tire-dot-${view}-${run.definition.dateRange.start}-${run.definition.dateRange.end}.csv"`,
+        "X-Report-Coverage": run.result.coverage.status, "X-Report-Limited": String(run.result.limited),
+      } });
+    }
     const reportId = p.get("reportId") || p.get("savedReportId") || undefined;
     const rawVersion = p.get("reportVersion") || p.get("savedReportVersion");
     const reportVersion = rawVersion == null ? undefined : Number(rawVersion);
@@ -113,6 +126,7 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (error) {
+    if (error instanceof TireDotError) return NextResponse.json({ error: error.message }, { status: error.status });
     if (error instanceof ReportingScopeError) {
       return NextResponse.json(
         { error: error.message, kind: error.status === 401 || error.status === 403 ? "authorization" : "validation", retryable: false },

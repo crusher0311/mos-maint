@@ -23,6 +23,7 @@
  * docs/runbooks/db-integration-cache-cutover.md.
  */
 import { and, desc, eq, inArray, notInArray, or, sql } from "drizzle-orm";
+import { preserveDotFields } from "@/lib/integrations/tekmetric/dot-preserving-update";
 import { getDb } from "@/lib/db/drizzle";
 import { tekmetricWorkOrders, tekmetricRepairOrders } from "@/lib/db/schema/wave3";
 
@@ -75,13 +76,19 @@ export async function upsertWorkOrderSnapshot(
 ): Promise<void> {
   const db = getDb();
   const cols = workOrderColumns(set);
-  await db
+  await db.transaction(async tx => {
+    // Also serializes first insert: a row lock alone cannot lock a missing row.
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`tekmetric-dot:${shopId}:${workOrderId}`}, 0))`);
+    const [old] = await tx.select({payload:tekmetricWorkOrders.payload}).from(tekmetricWorkOrders)
+      .where(and(eq(tekmetricWorkOrders.shopId,shopId),eq(tekmetricWorkOrders.workOrderId,workOrderId))).for("update");
+    const next = set.data === undefined ? set : {...set,data:preserveDotFields((old?.payload as any)?.data,set.data)};
+    await tx
     .insert(tekmetricWorkOrders)
     .values({
       shopId,
       workOrderId,
       ...cols,
-      payload: set,
+      payload: next,
     } as typeof tekmetricWorkOrders.$inferInsert)
     .onConflictDoUpdate({
       target: [tekmetricWorkOrders.shopId, tekmetricWorkOrders.workOrderId],
@@ -89,9 +96,10 @@ export async function upsertWorkOrderSnapshot(
       // updates don't clobber fields written by a prior fuller fetch.
       set: {
         ...cols,
-        payload: sql`${tekmetricWorkOrders.payload} || ${JSON.stringify(set)}::jsonb`,
+        payload: sql`${tekmetricWorkOrders.payload} || ${JSON.stringify(next)}::jsonb`,
       } as Partial<typeof tekmetricWorkOrders.$inferInsert>,
     });
+  });
 }
 
 /**

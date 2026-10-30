@@ -9,6 +9,9 @@ import {
   TekmetricCustomer
 } from ".";
 import { getRepairOrderInspectionsWithXAuth } from "./client";
+import { dotPreservingUpdate } from "./dot-preserving-update";
+import { captureMissingTireDots } from "./tire-dot-capture";
+import { tekmetricRequest } from "./client";
 import {
   classifyWebhookCoverage,
   selectPollCadence,
@@ -434,6 +437,8 @@ export async function syncShopIncremental(
   }
 }
 
+let tireDotCaptureWindow = 0;
+let tireDotCaptureUsed = 0;
 async function upsertWorkOrder(
   db: any,
   shopId: number,
@@ -446,6 +451,21 @@ async function upsertWorkOrder(
   const vin = vehicle.vin?.toUpperCase();
   if (!vin) return;
 
+  ro = await captureMissingTireDots(ro,{mosShopId:shopId,providerShopId:tekmetricShopId},{
+    // No implicit fleet enrollment. No environment changes are made by this code.
+    enabled:(process.env.TEKMETRIC_TIRE_DOT_CAPTURE_SHOPS||"").split(",").map(s=>s.trim()).includes(String(shopId)),
+    currentShop:()=>db.collection("shops").findOne({shopId:{$in:[shopId,String(shopId)]}},
+      {projection:{shopId:1,integrationProvider:1,smsProvider:1,smsType:1,"tekmetric.shopId":1,tekmetricShopId:1},maxTimeMS:2000}),
+    takeBudget:()=>{
+      const window=Math.floor(Date.now()/60000);
+      if(window!==tireDotCaptureWindow){tireDotCaptureWindow=window;tireDotCaptureUsed=0;}
+      if(tireDotCaptureUsed>=5)return false;
+      tireDotCaptureUsed++;return true;
+    },
+    // Uses the existing fleet-wide Tekmetric limiter and background credential
+    // lane, in addition to the five-per-process-minute enrichment ceiling.
+    detail:(id)=>tekmetricRequest(`/repair-orders/${id}`,{},tekmetricShopId,false,false,"background"),
+  });
   const statusName = ro.repairOrderStatus?.name || ro.repairOrderStatus?.code || "Open";
   const statusCode = ro.repairOrderStatus?.code || "";
   const label = ro.repairOrderCustomLabel?.name || ro.repairOrderLabel?.name || "";
@@ -505,7 +525,7 @@ async function upsertWorkOrder(
       shopId: { $in: [String(shopId), Number(shopId)] },
       workOrderId: String(ro.id)
     },
-    { 
+    dotPreservingUpdate({
       $set: {
         shopId,
         workOrderId: String(ro.id),
@@ -535,7 +555,7 @@ async function upsertWorkOrder(
         inspections: inspectionsToStore,
       },
       $setOnInsert: { dviCompletedAt: null, lastInspection: null }
-    },
+    }),
     { upsert: true }
   );
 

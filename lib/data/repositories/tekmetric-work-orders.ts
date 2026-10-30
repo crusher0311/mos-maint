@@ -14,6 +14,7 @@
 // docs/runbooks/db-integration-cache-cutover.md.
 import type { Collection, Document } from "mongodb";
 import { getDb } from "@/lib/data/db";
+import { dotPreservingUpdate } from "@/lib/integrations/tekmetric/dot-preserving-update";
 import {
   isTekmetricCachePgCanonical,
   shouldShadowWriteMongoTekmetricCache,
@@ -330,7 +331,7 @@ async function upsertTekmetricWorkOrderSnapshotMongo(
   const col = await collection();
   await col.updateOne(
     { shopId, workOrderId },
-    { $set: set },
+    dotPreservingUpdate({ $set: set }),
     { upsert: true },
   );
 }

@@ -262,3 +262,143 @@ mtime_ms = 1793217084532
 storage_uri = "gcs://replit-rams-assets-picard/rams/assets/repl:a5a4005c-4e3d-4ce9-896c-c46425944606/e0f4afbf-90aa-4755-b5ca-0d31ee2df8ba/e3129a11-19d3-4e0a-b0a9-c3c9f519a5ee"
 storage_version_token = "1793217137846939"
 content_type = "text/csv"
+
+[[outputs]]
+id = "hl_buMuQv6Q3GqsNbgVJa"
+uri = "file://generated-artifacts/heart-tire-dot-validation/reconciliation-summary.csv"
+type = "table"
+title = "HEART reconciliation by location"
+description = "October 1–20 Tekmetric export: matched invoice counts, exact sales totals, and unresolved amounts by location."
+logical_id = "de298fea-1db6-4114-ab58-229f47aaa4cd"
+content_hash = "sha256:c6039aa2920900c2fb6321583f038de0d071601c83fa0473df563060c206223c"
+size = 1437
+mtime_ms = 1793382834744
+storage_uri = "gcs://replit-rams-assets-picard/rams/assets/repl:a5a4005c-4e3d-4ce9-896c-c46425944606/de298fea-1db6-4114-ab58-229f47aaa4cd/28616a0f-cc55-4469-b3cf-67f8718e31ae"
+storage_version_token = "1793382909420563"
+content_type = "text/csv"
+
+[[outputs]]
+id = "NWHGuRoJeGTAvCXW4duyL"
+uri = "file://generated-artifacts/heart-tire-dot-validation/unresolved-invoices.csv"
+type = "table"
+title = "72 unresolved HEART invoices"
+description = "Invoice numbers and export amounts not resolved through the bounded indexed stored-record lookup. Not proof of absence from every store."
+logical_id = "19d65cb7-86fb-4a8f-afb9-ba5110ee95e9"
+content_hash = "sha256:d1978649f5c7842983007a369831c239f11e5d6e6aebda7d2544bab627826771"
+size = 11196
+mtime_ms = 1793382834740
+storage_uri = "gcs://replit-rams-assets-picard/rams/assets/repl:a5a4005c-4e3d-4ce9-896c-c46425944606/19d65cb7-86fb-4a8f-afb9-ba5110ee95e9/96f8d35f-3f0a-42c3-bbe2-5ffcd3df1b3a"
+storage_version_token = "1793382909947101"
+content_type = "text/csv"
+
+[[outputs]]
+id = "1dutXaIfgUd0UWtEZm_1R"
+uri = "file://generated-artifacts/heart-tire-dot-validation/sales-reconciliation.csv"
+type = "table"
+title = "Full invoice-by-invoice comparison"
+description = "All 2,620 export invoices with match status, stored total, cent-denominated difference, and differing monetary fields."
+logical_id = "62c7ff2e-7767-47eb-80f8-4844e7563275"
+content_hash = "sha256:41fbbfb81ae34867ff09af946323f17e120c46176ff9f1062c8fd1995877607c"
+size = 386542
+mtime_ms = 1793382798016
+storage_uri = "gcs://replit-rams-assets-picard/rams/assets/repl:a5a4005c-4e3d-4ce9-896c-c46425944606/62c7ff2e-7767-47eb-80f8-4844e7563275/e9678477-161e-40fa-933e-266acce367ad"
+storage_version_token = "1793382910455945"
+content_type = "text/csv"
+
+[[outputs]]
+id = "XY5zTku5cxhR5GqI4PSz4"
+uri = "file://generated-artifacts/heart-tire-dot-validation/sales-reconciliation-updated.csv"
+type = "table"
+title = "Corrected HEART invoice reconciliation"
+description = "Supersedes the earlier comparison: 2,618 invoices match all monetary fields after direct raw invoice-number checks; 2 remain unresolved. Amount columns are in cents."
+logical_id = "b3eeb7f7-e3b2-4d52-bfda-87f259df070f"
+content_hash = "sha256:b432d7ae3a675ce8b1a030a70ef15cbba8cf9405f9b6c966be9a469b6443b455"
+size = 409981
+mtime_ms = 1793383232200
+storage_uri = "gcs://replit-rams-assets-picard/rams/assets/repl:a5a4005c-4e3d-4ce9-896c-c46425944606/b3eeb7f7-e3b2-4d52-bfda-87f259df070f/bc706793-9af6-4502-ad1e-5cab28ce1949"
+storage_version_token = "1793383238826880"
+content_type = "text/csv"
+
+[[outputs]]
+id = "t82bYDvzVI7uNHwAL80ch"
+uri = "file://generated-artifacts/heart-tire-dot-validation/unresolved-invoices-updated.csv"
+type = "table"
+title = "Two remaining unresolved invoices"
+description = "Supersedes the 72-invoice list. Remaining export total: $132.51. Not a certification of absence from all stores."
+logical_id = "05c17042-e7cf-4b85-a09d-a1b16817cfba"
+content_hash = "sha256:f11ccfd149cad61ee318f4a736c4c2f6f6a493d177113e67a52955a624b8d97c"
+size = 388
+mtime_ms = 1793383232206
+storage_uri = "gcs://replit-rams-assets-picard/rams/assets/repl:a5a4005c-4e3d-4ce9-896c-c46425944606/05c17042-e7cf-4b85-a09d-a1b16817cfba/848b2e2d-1bc4-411a-ac4f-f8545d411ebc"
+storage_version_token = "1793383239377268"
+content_type = "text/csv"
+
+[[outputs]]
+id = "EkB0vuPeuFgStbQe1pPR8"
+uri = "file://generated-artifacts/heart-tire-dot-validation/2026-08-01_2026-08-31/august-reconciliation.csv"
+type = "table"
+title = "August HEART invoice reconciliation"
+description = "All 4,248 exported invoices, raw-record comparison outcomes, differences in cents, lookup evidence, linked invoices, and coverage limitations."
+logical_id = "ca7d3834-9cf5-4fac-959d-dfc3fa876e13"
+content_hash = "sha256:f801cd7315836b85df7da2b3eaf644850e73ee757aa231e7752efd487a37c723"
+size = 1251025
+mtime_ms = 1793383759062
+storage_uri = "gcs://replit-rams-assets-picard/rams/assets/repl:a5a4005c-4e3d-4ce9-896c-c46425944606/ca7d3834-9cf5-4fac-959d-dfc3fa876e13/da88f487-2f20-4c87-b197-7b178dfbe54a"
+storage_version_token = "1793383766496854"
+content_type = "text/csv"
+
+[[outputs]]
+id = "VQcsfGdcvWsLensTH6K5S"
+uri = "file://generated-artifacts/heart-tire-dot-validation/2026-08-01_2026-08-31/august-exceptions.csv"
+type = "table"
+title = "Five August reconciliation exceptions"
+description = "Two monetary mismatches, two conflicting raw-copy cases, and one unlocated linked negative-sales entry."
+logical_id = "adb5a8ce-5ebf-43c7-b0e1-ad57716353dd"
+content_hash = "sha256:2aba5000d3fa9c9bcb954904762fc585c925c65006eee2dfb001ecac3d3ea9ab"
+size = 1920
+mtime_ms = 1793383759065
+storage_uri = "gcs://replit-rams-assets-picard/rams/assets/repl:a5a4005c-4e3d-4ce9-896c-c46425944606/adb5a8ce-5ebf-43c7-b0e1-ad57716353dd/e084fc92-a0ff-4af3-90c5-a66b5ef2d8e6"
+storage_version_token = "1793383766998342"
+content_type = "text/csv"
+
+[[outputs]]
+id = "yW8AIXsUQim3ZLZ7jcgjq"
+uri = "file://generated-artifacts/heart-tire-dot-validation/2026-08-01_2026-08-31/detail-recovery/august-tire-details-PARTIAL.csv"
+type = "table"
+title = "Updated partial August DOT details"
+description = "543 candidates recovered; 385 eligible tire invoices and 176 DOT entries across 48 invoices. Known Northbrook invoice and repeated DOT entries preserved. 431 candidates remain."
+logical_id = "35e6b206-8683-44c0-a975-ca407d9c446d"
+content_hash = "sha256:e1a2c8728a1d98bf956da5286c7a378b1c66a82cf8f45dd24cc37420678442c8"
+size = 418122
+mtime_ms = 1793386545464
+storage_uri = "gcs://replit-rams-assets-picard/rams/assets/repl:a5a4005c-4e3d-4ce9-896c-c46425944606/35e6b206-8683-44c0-a975-ca407d9c446d/4ee550ab-247f-41d6-a200-096a7d6ec47d"
+storage_version_token = "1793386654841499"
+content_type = "text/csv"
+
+[[outputs]]
+id = "0SEWM6EgLSwoKG-oSYy3P"
+uri = "file://generated-artifacts/heart-tire-dot-validation/2026-08-01_2026-08-31/detail-recovery/august-tire-invoices-PARTIAL.csv"
+type = "table"
+title = "Updated partial tire invoice reconciliation"
+description = "One row per included tire invoice, with missing-data exceptions and incomplete coverage. Not the complete all-invoice sales population."
+logical_id = "089142ac-90a7-474c-8dac-4290601b81d1"
+content_hash = "sha256:bb059fd78c7fbc8cf7f28dd078d54fb6795a0a9e01fcd208f1289b798d463e7a"
+size = 282103
+mtime_ms = 1793386545465
+storage_uri = "gcs://replit-rams-assets-picard/rams/assets/repl:a5a4005c-4e3d-4ce9-896c-c46425944606/089142ac-90a7-474c-8dac-4290601b81d1/95351ec9-4d83-4901-a43a-559fde1c288a"
+storage_version_token = "1793386655596342"
+content_type = "text/csv"
+
+[[outputs]]
+id = "n1cXrr0k4xuQPWlF_H730"
+uri = "file://generated-artifacts/heart-tire-dot-validation/2026-08-01_2026-08-31/detail-recovery/recovery-coverage-PARTIAL.csv"
+type = "table"
+title = "Updated recovery coverage by location"
+description = "543 of 974 candidate invoices recovered. Shared-budget continuation stopped on HTTP 429; 431 candidates remain unchecked."
+logical_id = "ef5e0f0c-4e18-470b-a63d-a342b4a083b5"
+content_hash = "sha256:d1191b18b662642f2faa94f75e9a2a1edc8536180eed7aaa60e10c3792af174f"
+size = 1580
+mtime_ms = 1793386545467
+storage_uri = "gcs://replit-rams-assets-picard/rams/assets/repl:a5a4005c-4e3d-4ce9-896c-c46425944606/ef5e0f0c-4e18-470b-a63d-a342b4a083b5/f4cefde7-f18f-4a46-974f-94502b12549e"
+storage_version_token = "1793386656187266"
+content_type = "text/csv"

@@ -1,5 +1,6 @@
 import { getDb } from "@/lib/mongo";
-import { 
+import { dotPreservingUpdate } from "./dot-preserving-update";
+import {
   getRepairOrders, 
   getVehicle, 
   getCustomer,
@@ -184,7 +185,7 @@ async function runInitialSync(
             shopId: { $in: [String(numericShopId), numericShopId] },
             workOrderId: String(ro.id)
           },
-          { 
+          dotPreservingUpdate({
             $set: {
               shopId: numericShopId,
               workOrderId: String(ro.id),
@@ -210,7 +211,7 @@ async function runInitialSync(
               dviDone: dviDetected || (existing?.dviDone === true),
             },
             $setOnInsert: { dviCompletedAt: null, lastInspection: null }
-          },
+          }),
           { upsert: true }
         );
       }

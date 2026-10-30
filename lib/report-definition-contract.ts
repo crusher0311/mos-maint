@@ -12,6 +12,8 @@ import {
 } from "@/lib/reporting-kpi-contract";
 
 export const REPORT_DEFINITION_VERSION = 1 as const;
+// Row-evidence reports deliberately do not masquerade as numeric KPI metrics.
+export type { TireDotDefinition, TireDotDetail, TireDotInvoice, TireDotResult } from "./tire-dot-report-contract";
 export const REPORT_DEFINITION_MAX_ROWS = REPORTING_DIMENSION_LIMIT;
 export const REPORT_DEFINITION_MAX_FILTER_VALUES = 100;
 export const REPORT_DEFINITION_MAX_QUERY_COST = 2_000_000;

@@ -6,6 +6,7 @@ import { indexTekmetricWorkOrderJobs } from "@/lib/integrations/tekmetric/job-in
 import { getVehicle, getCustomer } from "@/lib/integrations/tekmetric";
 import { invalidateCachedPlan } from "@/lib/plan-cache";
 import { triggerVhiOnWorkOrderClose, triggerVhiOnWorkOrderCreate, extractAuthorizedJobsFromTekmetricRo } from "@/lib/vhi-webhook-trigger";
+import { dotPreservingUpdate } from "@/lib/integrations/tekmetric/dot-preserving-update";
 import {
   NormalizedIngestionService,
   scheduleAuditReceiptForNormalizedPayload,
@@ -303,10 +304,10 @@ export async function POST(req: NextRequest) {
         // cross-shop collision on workOrderId.
         const result = await db.collection("tekmetric_work_orders").updateOne(
           { tekmetricShopId, workOrderId: String(roId) },
-          {
+          dotPreservingUpdate({
             $set: terminalUpdate,
             $setOnInsert: { workOrderId: String(roId), createdAt: new Date() },
-          },
+          }),
           { upsert: true }
         );
 
@@ -544,7 +545,7 @@ export async function POST(req: NextRequest) {
 
         const upsertResult = await db.collection("tekmetric_work_orders").updateOne(
           { workOrderId: String(roId) },
-          { $set: setFields, $setOnInsert: setOnInsert },
+          dotPreservingUpdate({ $set: setFields, $setOnInsert: setOnInsert }),
           { upsert: true }
         );
         const wasInsert = !!upsertResult.upsertedId;
