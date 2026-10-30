@@ -1,6 +1,31 @@
 # Babes Auto: same-account recovery review
 
-## Decision — HOLD, not approved for execution
+## Current outcome — approved one-field repair completed
+
+On 2026-10-30 at approximately 19:39 UTC, the operator-approved repair set
+only `protractor.accountBinding` on the existing live shop record. The restored
+original credential pair again matched the retained generation. A bounded,
+`_id`-ordered inventory completed across all 521 current shop records and found
+no conflicting stored account ID or account binding.
+
+Fresh preconditions confirmed a disconnected Protractor record, absent live
+credentials/binding/checkpoint-write marker, and no active backfill flag or
+sampled owner/lease. The majority-acknowledged update used exact whole-document
+BSON equality plus absent binding/writer-token predicates; one record matched
+and one was modified. Readback confirmed that removing the newly added field
+reproduced the pre-write shop document exactly. Backfill progress was unchanged.
+
+No reconnect, provider request, import, lock clearing, deployment, credential
+replacement or restored-copy deletion was performed. This is not a claim of
+global worker quiescence: the change restores proven metadata while keeping
+the shop disconnected. Normal reconnect remains a separate action.
+
+The earlier proposal and findings below are historical preparation, not an
+instruction to rerun the repair. The temporary recovery collection remains
+present and contains sensitive historical configuration; removal requires
+separate approval after recovery verification.
+
+## Original proposal — historical
 
 Prepared 2026-10-30. Scope: MOS shop **499**, same Protractor account, not a
 migration. The operator's confirmation establishes intent; it does not recover
