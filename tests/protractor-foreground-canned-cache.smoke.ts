@@ -53,9 +53,12 @@ let emptyListShouldSucceed = false;
 const fakeDb = {
   collection(name: string) {
     return {
-      findOne: async () => {
+      findOne: async (filter: any) => {
         if (name === "protractor_canned_jobs") return state.cached;
         if (name === "shops") {
+          // Mongo equality is type-sensitive: the string-ID probe must not
+          // return this numeric-ID shop and manufacture a duplicate identity.
+          if (filter?.shopId !== SHOP_ID) return null;
           return {
             shopId: SHOP_ID,
             integrationProvider: "protractor",
