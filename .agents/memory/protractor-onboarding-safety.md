@@ -25,3 +25,9 @@ Cross-store checkpoint fencing deliberately favors data isolation over automatic
 **Why:** A PostgreSQL checkpoint operation can settle after its caller times out; expiring a Mongo-side guard too early lets a disconnected or superseded worker advance another lifecycle's checkpoint.
 
 **How to apply:** Operator recovery must terminate the owning worker and confirm its outstanding database operations have ended before clearing a stranded writer guard. Provider migrations also need to stop legacy ingestion, not merely fence onboarding status updates.
+
+The operator confirmed on October 30, 2026 that Babes Auto (MOS shop 499) is reconnecting the same Protractor account, not migrating to a different account.
+
+**Why:** A retained credential-pair fingerprint mismatch can represent changed credentials, not a changed provider account. The operator's confirmation establishes intent, not independent provider-identity evidence.
+
+**How to apply:** Preserve existing data and checkpoints. Treat this as same-account reconnect recovery; require scoped identity verification and explicit approval before any production reconciliation rather than clearing the retained binding.
