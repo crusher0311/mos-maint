@@ -5,6 +5,16 @@ description: How the activity-profile quiet-window gate is wired and gated; flip
 
 # Smart per-shop backfill timing (activity-log quiet windows)
 
+The user explicitly wants Protractor historical backfills to be manually
+requested or scheduled for execution outside business hours.
+
+**Why:** A callback-only connection approval must not make historical recovery
+permanently inaccessible, but history workloads must not disrupt daytime use.
+
+**How to apply:** Treat this as a product requirement, not authorization to
+activate a production import or remove provider safety restrictions. Separate
+request/scheduling from approved execution and retain off-hours enforcement.
+
 Per-shop timezone + quiet window(s) + confidence are inferred from organic
 webhook/callback activity and used to gate each shop's *historical backfill* to
 its own local quiet window. Sits ON TOP of the global concurrency cap + worker
