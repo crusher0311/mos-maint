@@ -5,17 +5,13 @@ import { countServiceItemsByShop } from "@/lib/data/repositories/protractor-serv
 import { getEffectiveProtractorOutboundPolicy } from "./client";
 import { getProtractorOperatorStop } from "@/lib/data/repositories/api-usage";
 import { runWithInitialSyncFence } from "./initial-sync-fence";
+import { connectionBinding, accountBinding, storedAccountBinding, ConnectionIdentityError } from "./connection-identity";
+export { connectionBinding } from "./connection-identity";
 
 export class ConnectionConflict extends Error {
-  constructor() {
-    super("This shop has a different provider or Protractor connection. Contact support for a controlled data migration before changing the connection.");
+  constructor(public code = "PROTRACTOR_CONNECTION_CONFLICT", message = "This shop has a different provider or Protractor connection. Contact support for a controlled data migration before changing the connection.") {
+    super(message);
   }
-}
-
-export function connectionBinding(connectionId: string, apiKey: string): string {
-  return crypto.createHash("sha256").update(JSON.stringify([
-    connectionId.trim().toLowerCase(), apiKey.trim().toLowerCase(),
-  ])).digest("hex");
 }
 
 export function storedBinding(shop: any): string | undefined {
@@ -36,19 +32,42 @@ export async function saveProtractorConnection(
   const generation = connectionBinding(connectionId, apiKey);
   const previous = storedBinding(shop);
   const provider = shop.integrationProvider?.trim().toLowerCase();
-  if ((provider && provider !== "protractor") || (previous && previous !== generation) ||
+  let identity: string | undefined;
+  try { identity = storedAccountBinding(shop); }
+  catch (error) {
+    if (!(error instanceof ConnectionIdentityError)) throw error;
+    throw new ConnectionConflict("PROTRACTOR_RECONNECT_REVIEW_REQUIRED",
+      "Stored Protractor identity needs an administrator review before reconnecting. Existing history has not been changed.");
+  }
+  const nextIdentity = accountBinding(connectionId);
+  if ((provider && provider !== "protractor") || (identity && identity !== nextIdentity) ||
       (!previous && (shop.tekmetric?.shopId || shop.tekmetricShopId || shop.shopware?.shopId ||
         shop.protractor?.configuredAt || shop.protractor?.initialSyncState))) {
     throw new ConnectionConflict();
   }
+  if (previous && previous !== generation && !identity) {
+    throw new ConnectionConflict("PROTRACTOR_RECONNECT_REVIEW_REQUIRED",
+      "This disconnected shop has no retained account identity to verify these credentials. An administrator must review same-account recovery. Existing history has not been changed.");
+  }
   const checkpoint = await progress.findByShop(shopId);
+  const rotatingCredentials = !!previous && previous !== generation;
+  if (rotatingCredentials && checkpoint?.inProgress === true) {
+    throw new ConnectionConflict("PROTRACTOR_RECONNECT_WORKER_BUSY",
+      "Historical sync is still marked in progress. An administrator must confirm it has stopped before credentials can be changed.");
+  }
   const workerActive = checkpoint?.inProgress === true &&
     Date.now() - new Date(checkpoint.lastActivityAt || 0).getTime() < 30 * 60_000;
   const initialSyncState = shop.protractorBackfillComplete === true || checkpoint?.completed === true
     ? "complete"
     : workerActive ? "running" : shop.protractor?.initialSyncState === "failed" ? "failed" : "pending";
   const savedSyncError = initialSyncState === "failed" ? shop.protractor?.initialSyncError ?? null : null;
-  const update = await shops.updateOne(connectionSnapshot(shop), { $set: writableConnectionFields(shop, {
+  const update = await shops.updateOne(connectionSnapshot(shop), {
+    // Top-level credentials are canonical. Do not leave a previous nested key
+    // behind after rotation; it would conflict with the newly saved pair.
+    ...(shop.protractor === null ? {} : { $unset: {
+      "protractor.connectionId": "", "protractor.apiKey": "",
+    } }),
+    $set: writableConnectionFields(shop, {
     protractorConnectionId: connectionId,
     protractorApiKey: apiKey,
     protractorWebhookToken: shop.protractorWebhookToken || crypto.randomBytes(16).toString("hex"),
@@ -56,6 +75,8 @@ export async function saveProtractorConnection(
     "protractor.configured": true,
     "protractor.configuredAt": shop.protractor?.configuredAt || new Date(),
     "protractor.connectionGeneration": generation,
+    "protractor.accountBinding": nextIdentity,
+    ...(rotatingCredentials ? { "protractor.syncRevision": crypto.randomUUID() } : {}),
     "protractor.locations": locations || [],
     "protractor.updateWorkOrderPackage": shop.protractor?.updateWorkOrderPackage ?? true,
     "protractor.updateWorkOrderLine": shop.protractor?.updateWorkOrderLine ?? true,

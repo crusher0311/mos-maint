@@ -38,7 +38,7 @@ export function connectionSnapshot(shop: any) {
     ...(shop.protractor === null ? { protractor: snapshotField(null) } : {}),
     ...Object.fromEntries([
       "integrationProvider", "protractorConnectionId", "protractorApiKey",
-      "protractor.connectionGeneration", "protractor.connectionId", "protractor.apiKey",
+      "protractor.connectionGeneration", "protractor.accountBinding", "protractor.connectionId", "protractor.apiKey",
       "protractor.configured", "protractor.syncRevision",
     ].map(path => [path, snapshotField(path.split(".").reduce((v, key) => v?.[key], shop))])),
     "protractor.checkpointWriteToken": { $exists: false },

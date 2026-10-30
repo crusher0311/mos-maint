@@ -340,6 +340,80 @@ async function run() {
     return result(true);
   });
   assert.notEqual(shop.protractor.initialSyncState, "complete", "old chunk cannot finish a disconnected/reconnected configuration");
+  // Same-account credential changes are distinct from account migrations.
+  const { connectionBinding, accountBinding } = require("../lib/integrations/protractor/connection-identity");
+  const oldGeneration = connectionBinding("offline-id", "old-key");
+  const legacyConnected = () => ({
+    _id: "offline-shop", shopId: 42, integrationProvider: "protractor",
+    protractorConnectionId: "offline-id", protractorApiKey: "old-key",
+    protractor: { configured: true, connectionGeneration: oldGeneration,
+      initialSyncState: "failed", initialSyncError: "retained failure", syncRevision: "old-revision" },
+  });
+  shop = legacyConnected();
+  shop.protractor.connectionId = "offline-id";
+  shop.protractor.apiKey = "old-key";
+  cursor = { completed: false, currentChunkEnd: "retained-cursor", inProgress: false };
+  const retainedCursor = structuredClone(cursor);
+  assert.equal((await route.POST(req())).status, 200, "same ID permits validated key rotation");
+  assert.equal(shop.protractor.accountBinding, accountBinding("offline-id"));
+  assert.equal(shop.protractor.apiKey, undefined, "rotation removes stale nested credentials");
+  assert.equal(shop.protractor.connectionGeneration, connectionBinding("offline-id", "offline-key"));
+  assert.notEqual(shop.protractor.syncRevision, "old-revision", "rotation fences old workers");
+  assert.equal(shop.protractor.initialSyncState, "failed");
+  assert.equal(shop.protractor.initialSyncError, "retained failure");
+  assert.deepEqual(cursor, retainedCursor, "rotation preserves cursor and history state");
+  assert.equal((await route.DELETE(req())).status, 200);
+  assert.equal(shop.protractor.accountBinding, accountBinding("offline-id"), "disconnect retains non-secret account identity");
+  assert.equal((await route.POST(req({ connectionId: "offline-id", apiKey: "next-key" }))).status, 200,
+    "retained identity supports changed key after disconnect");
+  assert.equal((await route.POST(req({ connectionId: "other-account", apiKey: "next-key" }))).status, 409,
+    "a valid key never authorizes account migration");
+
+  shop = legacyConnected();
+  assert.equal((await route.DELETE(req())).status, 200, "legacy disconnect learns identity before removing credentials");
+  assert.equal(shop.protractor.accountBinding, accountBinding("offline-id"));
+  assert.equal((await route.POST(req())).status, 200);
+
+  shop = { _id: "offline-shop", shopId: 42, integrationProvider: "protractor",
+    protractor: { configured: false, connectionGeneration: oldGeneration, initialSyncState: "pending" } };
+  const unidentified = structuredClone(shop);
+  const writesBeforeReview = writes;
+  let reconnectConflict = await route.POST(req());
+  assert.equal(reconnectConflict.status, 409);
+  assert.equal((await reconnectConflict.json()).code, "PROTRACTOR_RECONNECT_REVIEW_REQUIRED");
+  assert.deepEqual(shop, unidentified, "no submitted identity self-authorizes recovery");
+  assert.equal(writes, writesBeforeReview);
+  assert.equal((await route.POST(req({ connectionId: "offline-id", apiKey: "old-key" }))).status, 200,
+    "exact legacy fingerprint can establish identity without migration");
+
+  shop = legacyConnected();
+  cursor.inProgress = true;
+  cursor.lastActivityAt = new Date(0);
+  reconnectConflict = await route.POST(req());
+  assert.equal((await reconnectConflict.json()).code, "PROTRACTOR_RECONNECT_WORKER_BUSY",
+    "an old timestamp does not prove an outstanding worker stopped");
+  cursor.inProgress = false;
+  shop.protractor.checkpointWriteToken = "held";
+  assert.equal((await route.POST(req())).status, 409);
+  delete shop.protractor.checkpointWriteToken;
+  beforeWrite = () => { shop.protractor.accountBinding = accountBinding("competing-account"); };
+  assert.equal((await route.POST(req())).status, 409, "account identity participates in CAS");
+  assert.equal(shop.protractorApiKey, "old-key");
+
+  for (const corrupt of [
+    { accountBinding: accountBinding("other-account") },
+    { accountBinding: "invalid" },
+    { connectionId: "other-account" },
+    { apiKey: "different-key" },
+    { connectionGeneration: connectionBinding("other-account", "old-key") },
+  ]) {
+    shop = legacyConnected();
+    Object.assign(shop.protractor, corrupt);
+    const untouched = structuredClone(shop);
+    assert.equal((await route.POST(req())).status, 409, "inconsistent stored identity fails closed");
+    assert.equal((await route.DELETE(req())).status, 409, "disconnect cannot hide conflicting identity");
+    assert.deepEqual(shop, untouched);
+  }
   console.log("Protractor onboarding routes and staged worker offline coverage passed");
 }
 run().catch(error => { console.error(error); process.exitCode = 1; });

@@ -31,3 +31,16 @@ The operator confirmed on October 30, 2026 that Babes Auto (MOS shop 499) is rec
 **Why:** A retained credential-pair fingerprint mismatch can represent changed credentials, not a changed provider account. The operator's confirmation establishes intent, not independent provider-identity evidence.
 
 **How to apply:** Preserve existing data and checkpoints. Treat this as same-account reconnect recovery; require scoped identity verification and explicit approval before any production reconciliation rather than clearing the retained binding.
+
+Account continuity and credential rotation are different decisions. Preserve
+account identity through disconnect, but do not infer a lost historical identity
+from newly submitted credentials alone.
+
+**Why:** The old credential-pair fingerprint cannot distinguish key rotation from
+an account change after both original credentials are removed. Provider validation
+proves access to the submitted account, not ownership of the retained history.
+
+**How to apply:** Allow automatic same-account rotation only with retained or
+consistent stored identity evidence; keep unresolved legacy reconnects under
+review. Preserve checkpoints and reject rotation while a writer or historical
+operation remains active; a stale timestamp is not permission to clear it.
