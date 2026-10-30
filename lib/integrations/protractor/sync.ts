@@ -1,4 +1,5 @@
 import { getDb } from "@/lib/mongo";
+import { getFleetHistoryContext } from "./fleet-history-context";
 import {
   resolveProtractorConfig,
   protractorFetch,
@@ -272,7 +273,7 @@ async function backfillShopChunk(
   const today = new Date();
   today.setHours(23, 59, 59, 999);
   
-  const yearsToBackfill = getBackfillYears();
+  const yearsToBackfill = getFleetHistoryContext()?.horizonYears ?? getBackfillYears();
   const oldestDate = new Date();
   oldestDate.setFullYear(oldestDate.getFullYear() - yearsToBackfill);
   oldestDate.setHours(0, 0, 0, 0);

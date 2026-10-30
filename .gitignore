@@ -99,4 +99,5 @@ attached_assets/*_Service_Package_Sales_Data_*.csv
 # Authenticated invoice source captures contain customer and vehicle details.
 attached_assets/jwt-701-approved-recovery-source*.json
 /generated-artifacts/
+/app/platform-admin/protractor-history/tests/screenshots/
 /tests/shop-dispatch-browser/screenshots/

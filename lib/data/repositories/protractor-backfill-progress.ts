@@ -104,16 +104,17 @@ export async function findStaleBackfills(
 
 export async function findProgressForShops(
   shopIds: number[],
-): Promise<Array<{ shopId: number; completed: boolean }>> {
+): Promise<Array<{ shopId: number; completed: boolean; currentChunkEnd?: Date | null }>> {
   if (isProtractorOpsPgCanonical()) return pg.findProgressForShops(shopIds);
   const col = await collection();
   const docs = await col
     .find({ shopId: { $in: shopIds } })
-    .project({ shopId: 1, completed: 1 })
+    .project({ shopId: 1, completed: 1, currentChunkEnd: 1 })
     .toArray();
   return docs.map((d: any) => ({
     shopId: Number(d.shopId),
     completed: d.completed === true,
+    currentChunkEnd: d.currentChunkEnd,
   }));
 }
 

@@ -143,6 +143,11 @@ export class BackgroundSyncRestricted extends Error {
 }
 
 export async function assertBackgroundSyncAllowed(): Promise<void> {
+  const fleet = await import("./fleet-history-context");
+  if (fleet.getFleetHistoryContext()) {
+    try { await fleet.assertFleetHistoryContext(); return; }
+    catch { throw new BackgroundSyncRestricted(); }
+  }
   let policy;
   let stop;
   try {
