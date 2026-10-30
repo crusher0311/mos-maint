@@ -66,6 +66,7 @@ function loadHandler() {
     setTimeout: (fn: any) => fn(),
     clearTimeout: () => {},
     AbortController,
+    URL,
     Promise,
     Error,
     Set,
