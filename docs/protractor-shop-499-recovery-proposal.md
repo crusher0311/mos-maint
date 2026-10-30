@@ -4,8 +4,9 @@
 
 Prepared 2026-10-30. Scope: MOS shop **499**, same Protractor account, not a
 migration. The operator's confirmation establishes intent; it does not recover
-the historical account identity. No identity can be derived from the retained
-credential-pair fingerprint alone.
+the historical account identity by itself. The 19:37 UTC restored-record review
+below now establishes credential continuity independently of that confirmation.
+No identity was derived from the retained credential-pair fingerprint alone.
 
 The proposed change is **one metadata field only**, subject to the proof and
 approval gates below. There is no recovery writer in this change. Do not run
@@ -178,6 +179,68 @@ come from a trusted ownership source before keyed pending/receipt reads.
 Worker settlement and fresh snapshot approval remain separate unmet gates.
 The earlier pinned digests have not been refreshed or approved by this review.
 
+## Restored historical record review — 2026-10-30 19:37:40 UTC
+
+The operator reports completing an Atlas selective restore of the October 26,
+2026 15:50 CDT snapshot into `recovery_babes_20261026.shops`, using Create as new
+and restoring only `_id` indexes. This source/time provenance is operator
+supplied; the read runtime did not independently inspect the Atlas restore job.
+
+Using one direct Mongo connection with retries disabled, 2-second operation
+budgets, and no application/provider initialization:
+
+- The current shop was fetched using its actual `shopId` index, checking numeric
+  and string representations with limit 3. Exactly one numeric record matched.
+- Its exact BSON `_id` was used to fetch the historical record through `_id_`.
+  The restored record was found. No restored collection scan or restored
+  `shopId` query was made.
+- The historical and current typed shop ID match; both identify Protractor as
+  provider. The historical record was configured.
+- Historical stored connection IDs and keys were internally consistent.
+  Both ID locations were not populated, so this is agreement among populated
+  fields, not a claim that two independent IDs corroborate each other.
+- The original stored credential pair was normalized and hashed using exactly
+  the existing `connectionBinding` logic: SHA-256 over JSON of the trimmed,
+  lowercase ID and key. **It exactly matches the current retained generation.**
+  It also matches the historical generation. Only match booleans were returned;
+  no credentials, connection ID, generation hash, account-binding digest, or
+  full document was displayed or saved.
+- The historical record had no account binding. Historical and current name
+  values agree, and their retained nonempty location arrays agree exactly.
+  These are corroboration of the restored record association, not independent
+  provider validation; no provider request was made.
+
+**Identity finding:** with the stated Atlas provenance, the restored original
+credential pair supplies the previously missing exact generation-match proof
+under option 2 below. Historical account continuity is established without
+using newly submitted credentials, guessing the fingerprint, or relying on a
+business-name match. The account binding can be derived again inside a secure
+runtime from this proven historical ID; no target digest is retained here.
+
+The fresh live record remains configured exactly false, credentials absent,
+account-binding property absent, retained generation and sync revision present,
+initial sync pending, and checkpoint-write-token property absent. Indexed
+progress sampling found one incomplete record without projected active
+in-progress/owner/lease fields. These observations are not an atomic snapshot
+or a guarantee against subsequent concurrent changes.
+
+Current shop indexes do **not** lead with any historical account ID or account
+binding path. Cross-shop account uniqueness was therefore not queried; no
+unindexed scan or index creation was attempted. This specific check remains
+unverified, rather than asserted unique from empty samples.
+
+No metadata repair, reconnect, provider validation, service pause, restore
+deletion, or processing activation was performed or authorized. For a narrow
+metadata-only decision, the remaining review is the explicit target binding,
+fresh exact-record predicate and drift/concurrency protection, and the
+unresolved cross-shop uniqueness check. The live callback worker is not proof
+that it owns a shop-499 checkpoint; absence of a token is likewise not proof of
+all-worker settlement. This read does not establish a need to stop every
+service or authorize doing so. Broader callback/export/history-processing
+questions remain separate from this new identity evidence and any subsequent
+reconnect or activation approval. The older snapshot digests below were not
+refreshed and must not be silently reused as current approval evidence.
+
 ## Canonical ownership gates still open
 
 | Domain | Code path / expected store | Required proof before approval |
@@ -325,9 +388,12 @@ After a separately approved application:
 ## Review outcome
 
 The preparation is complete, but recovery is **not execution-ready**. Missing:
-trusted historical account proof, deployed canonical ownership, callback/export
-evidence, worker/DB-operation settlement, and an approved target binding and
-fresh snapshot packet. No production correction has been performed.
+an approved target binding and fresh exact metadata approval packet, including
+resolution of the scoped concurrency/uniqueness questions above. Trusted
+historical account continuity was obtained in the 19:37 UTC restored-record
+review. Earlier callback/export/worker observations retain their stated limits
+for any subsequent processing or reconnect decision; they are not new evidence
+of an active shop-specific writer. No production correction has been performed.
 
 References: `docs/protractor-same-account-reconnect.md`,
 `lib/integrations/protractor/onboarding.ts`,
