@@ -15,6 +15,19 @@ permanently inaccessible, but history workloads must not disrupt daytime use.
 activate a production import or remove provider safety restrictions. Separate
 request/scheduling from approved execution and retain off-hours enforcement.
 
+The user clarified that the intended product scope is normal Protractor
+operation across other connected shops, not a permanent shop-by-shop pilot
+requiring agent-mediated edits.
+
+**Why:** Routine integration operations must not depend on the operator repeatedly
+returning to this conversation to unlock processing.
+
+**How to apply:** Design automatic eligible-shop off-hours history scheduling
+and self-service operational controls. Do not make individual import approvals
+the permanent normal flow. A coordinated production rollout still needs capacity
+limits and emergency stops; this direction is not permission for an unbounded
+fleet backlog release.
+
 Per-shop timezone + quiet window(s) + confidence are inferred from organic
 webhook/callback activity and used to gate each shop's *historical backfill* to
 its own local quiet window. Sits ON TOP of the global concurrency cap + worker
