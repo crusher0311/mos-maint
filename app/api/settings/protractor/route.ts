@@ -6,6 +6,7 @@ import { resolveConnectionShop, connectionSnapshot, assertCheckpointIdle, assert
 import { ensureProtractorWebhookSubscription } from "@/lib/integrations/protractor/webhook-subscribe";
 import { validateCredentials, validationFailure } from "./validation";
 import { saveProtractorConnection, ConnectionConflict, initialSyncStatus, storedBinding } from "@/lib/integrations/protractor/onboarding";
+import { storedAccountBinding, ConnectionIdentityError } from "@/lib/integrations/protractor/connection-identity";
 import {
   DEFAULT_PART_COST_RATIO, MIN_PART_COST_RATIO, MAX_PART_COST_RATIO, isValidPartCostRatio,
 } from "@/lib/integrations/protractor/part-cost";
@@ -15,6 +16,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 function safeFailure(err: unknown) {
+  if (err instanceof ConnectionIdentityError) {
+    return NextResponse.json({ error: "Stored Protractor identity needs an administrator review. No connection changes were saved.", code: "PROTRACTOR_RECONNECT_REVIEW_REQUIRED" }, { status: 409 });
+  }
   if (err instanceof ShopConnectionError) {
     return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
   }
@@ -103,7 +107,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err: any) {
     if (err instanceof ConnectionConflict) {
-      return NextResponse.json({ error: err.message, code: "PROTRACTOR_CONNECTION_CONFLICT" }, { status: 409 });
+      return NextResponse.json({ error: err.message, code: err.code }, { status: 409 });
     }
     return safeFailure(err);
   }
@@ -155,6 +159,7 @@ export async function DELETE(_req: NextRequest) {
     const shop = await resolveConnectionShop(db, shopId);
     assertCheckpointIdle(shop);
     const generation = storedBinding(shop);
+    const identity = storedAccountBinding(shop);
     const changed = await db.collection("shops").updateOne(connectionSnapshot(shop), {
       $unset: { protractorConnectionId: "", protractorApiKey: "", ...(shop.protractor === null ? {} : { "protractor.connectionId": "", "protractor.apiKey": "" }) },
       $set: writableConnectionFields(shop, {
@@ -162,6 +167,7 @@ export async function DELETE(_req: NextRequest) {
         "protractor.disconnectedAt": new Date(),
         "protractor.syncRevision": crypto.randomUUID(),
         ...(generation ? { "protractor.connectionGeneration": generation } : {}),
+        ...(identity ? { "protractor.accountBinding": identity } : {}),
         updatedAt: new Date(),
       }),
     });
