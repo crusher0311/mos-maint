@@ -5,6 +5,8 @@ import {
 } from "./jwt-overnight-context";
 import type { JwtOvernightRequest } from "@/lib/protractor-jwt-overnight-policy";
 import type { ShopHistoryRequest } from "@/lib/protractor-shop-history-policy";
+import { getFleetHistoryContext, assertFleetHistoryContext } from "./fleet-history-context";
+import { fleetHistoryEndpointAllowed, type FleetHistoryPermit } from "./fleet-history-policy";
 import {getShopHistoryContext,historyContextError,historyDispatchError} from "./shop-history-context";
 import crypto from "node:crypto";
 import https from "node:https";
@@ -198,6 +200,7 @@ export const __protractorClientTestHooks: {
       overnightRequest?: JwtOvernightRequest;
       historyRequest?: ShopHistoryRequest;
       historyBindingDigest?: string;
+      fleetHistory?: FleetHistoryPermit;
       transport?: "direct" | "relay";
       environment?: "production" | "development" | "test" | "unknown";
     },
@@ -242,6 +245,7 @@ export const __protractorClientTestHooks: {
         overnightRequest?: JwtOvernightRequest;
         historyRequest?: ShopHistoryRequest;
         historyBindingDigest?: string;
+        fleetHistory?: FleetHistoryPermit;
         transport?: "direct" | "relay";
         environment?: "production" | "development" | "test" | "unknown";
       },
@@ -1021,6 +1025,10 @@ function localPolicyError(context: string): { ok: false; error: string } | null 
   const decision = getProtractorOutboundPolicy();
   const overnight = getJwtOvernightContext();
   const history = getShopHistoryContext();
+  const fleet = getFleetHistoryContext();
+  if (fleet && !["rest", "transport_attempt", "transport_dispatch"].includes(context))
+    return { ok: false, error: "Fleet history permits only scoped REST reads" };
+  if (decision.allowed && fleet?.active) return null;
   if(history && !["rest","transport_attempt","transport_dispatch"].includes(context))
     return {ok:false,error:"Shop history permits only daily invoice REST reads"};
   if(decision.allowed && history?.active && Date.now()<history.expiresAtMs)return null;
@@ -1223,6 +1231,7 @@ async function runFleetGuardedTransportAttempt<T>(
       interactiveAtAdmission.context !== undefined ||
       getJwtOvernightContext() !== undefined ||
       getShopHistoryContext() !== undefined ||
+      getFleetHistoryContext() !== undefined ||
       finalPolicy.requireTimedTrial === true
     ) {
       // The local env flag cannot encode the persisted scope or whether the
@@ -1279,6 +1288,11 @@ async function runFleetGuardedTransportAttempt<T>(
       return { ok: false, error: interactiveBeforeConfirm.error };
     }
     const overnightBeforeConfirm = jwtOvernightContextError(actualShopId);
+    if (getFleetHistoryContext()) {
+      if (!leaseToken) return { ok: false, error: "Fleet history requires physical lease" };
+      try { await assertFleetHistoryContext(actualShopId, config.connectionId); }
+      catch { return { ok: false, error: "Fleet history paused or superseded" }; }
+    }
     const historyBeforeConfirm=historyContextError(actualShopId,config.connectionId);
     if(historyBeforeConfirm)return {ok:false,error:historyBeforeConfirm};
     if(getShopHistoryContext() && !leaseToken)return {ok:false,error:"Shop history requires fleet lease"};
@@ -1297,6 +1311,7 @@ async function runFleetGuardedTransportAttempt<T>(
           overnightRequest: getJwtOvernightContext()?.request,
           historyRequest: getShopHistoryContext()?.request,
           historyBindingDigest: getShopHistoryContext()?.bindingDigest,
+          fleetHistory: getFleetHistoryContext(),
           transport: dispatchTransport,
           environment: resolveProtractorEnvironment(process.env),
         }),
@@ -1501,6 +1516,13 @@ export async function protractorFetch<T>(
   opts?: { priority?: boolean; maxRetries?: number; timeoutMs?: number; deadlineAtMs?: number }
 ): Promise<{ ok: boolean; data?: T; error?: string }> {
   const historyError=historyDispatchError(endpoint,options.method??"GET",Number(shopId),options.body);
+  if (getFleetHistoryContext()) {
+    if (!fleetHistoryEndpointAllowed(endpoint, options.method ?? "GET", options.body) ||
+        options.headers !== undefined || opts?.priority === true)
+      return { ok: false, error: "Request outside fleet history read scope" };
+    try { await assertFleetHistoryContext(Number(shopId), config.connectionId); }
+    catch { return { ok: false, error: "Fleet history paused or superseded" }; }
+  }
   if(historyError)return {ok:false,error:historyError};
   if(getShopHistoryContext()){
     if(options.headers!==undefined || opts?.priority===true || getJwtOvernightContext())

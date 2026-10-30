@@ -1084,6 +1084,7 @@ export async function acquireProtractorPhysicalTransportLease(
 }
 
 import {historyAdmissionExpression,type ShopHistoryRequest} from "@/lib/protractor-shop-history-policy";
+import { fleetHistoryAdmission, type FleetHistoryPermit } from "@/lib/integrations/protractor/fleet-history-policy";
 export interface ProtractorPhysicalTransportConfirmationContext {
   requireTimedTrial?: boolean;
   callbackReceivedAt?: Date;
@@ -1091,6 +1092,7 @@ export interface ProtractorPhysicalTransportConfirmationContext {
   overnightRequest?: JwtOvernightRequest;
   historyRequest?: ShopHistoryRequest;
   historyBindingDigest?: string;
+  fleetHistory?: FleetHistoryPermit;
   transport?: "direct" | "relay";
   environment?: "production" | "development" | "test" | "unknown";
 }
@@ -1136,6 +1138,12 @@ export async function confirmProtractorPhysicalTransportLease(
     {$eq:["$canary.mode","live"]},{$eq:[environment,"production"]},relayRequiredExpression,
     {$literal:context.callbackReceivedAt===undefined && context.interactiveShopId===undefined && context.overnightRequest===undefined},
   ]}:{$literal:false};
+  const fleetAdmission = context.fleetHistory ? { $and: [
+    fleetHistoryAdmission(context.fleetHistory), relayRequiredExpression,
+    { $eq: [environment, "production"] },
+    { $literal: context.callbackReceivedAt === undefined && context.interactiveShopId === undefined &&
+      context.overnightRequest === undefined && context.historyRequest === undefined },
+  ] } : { $literal: false };
   const overnightAdmissionExpression = context.overnightRequest
     ? {
       $and: [
@@ -1199,6 +1207,7 @@ export async function confirmProtractorPhysicalTransportLease(
               { $gt: [interactiveShopId, 0] },
               overnightAdmissionExpression,
               historyAdmission,
+              fleetAdmission,
             ],
           },
         ],
@@ -1283,6 +1292,7 @@ export async function confirmProtractorPhysicalTransportLease(
           // callback, interactive, bounded or legacy unscoped permission.
           ...(context.overnightRequest ? [overnightAdmissionExpression] : []),
           ...(context.historyRequest ? [historyAdmission] : []),
+          ...(context.fleetHistory ? [fleetAdmission] : []),
           {
             $or: [
               { $ne: ["$canary.mode", "live"] },
@@ -1296,6 +1306,7 @@ export async function confirmProtractorPhysicalTransportLease(
     [{
       $set: {
         ...(context.overnightRequest ? jwtOvernightConsumptionFields(context.overnightRequest) : {}),
+        ...(context.fleetHistory ? { "fleetHistoryGrant.consumed": { $add: ["$fleetHistoryGrant.consumed", 1] } } : {}),
         ...(context.historyRequest ? {
           [`${context.historyRequest.pilot==="invoiceRecovery"?"invoiceRecovery":context.historyRequest.pilot==="weekend"?"weekendHistory":context.historyRequest.pilot==="avid"?"avidHistory":context.historyRequest.pilot==="afton"?"aftonPilot":"shopHistory"}.consumedRequests`]:
             {$add:[`$${context.historyRequest.pilot==="invoiceRecovery"?"invoiceRecovery":context.historyRequest.pilot==="weekend"?"weekendHistory":context.historyRequest.pilot==="avid"?"avidHistory":context.historyRequest.pilot==="afton"?"aftonPilot":"shopHistory"}.consumedRequests`,1]},

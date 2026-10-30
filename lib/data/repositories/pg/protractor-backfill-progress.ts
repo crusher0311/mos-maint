@@ -268,15 +268,16 @@ export async function findStaleBackfills(
  */
 export async function findProgressForShops(
   shopIds: number[],
-): Promise<Array<{ shopId: number; completed: boolean }>> {
+): Promise<Array<{ shopId: number; completed: boolean; currentChunkEnd?: Date | null }>> {
   if (shopIds.length === 0) return [];
   const db = getDb();
   const rows = await db
     .select({
       shopId: protractorBackfillProgress.shopId,
       completed: protractorBackfillProgress.completed,
+      currentChunkEnd: protractorBackfillProgress.currentChunkEnd,
     })
     .from(protractorBackfillProgress)
     .where(inArray(protractorBackfillProgress.shopId, shopIds));
-  return rows.map((r) => ({ shopId: r.shopId, completed: r.completed ?? false }));
+  return rows.map((r) => ({ shopId: r.shopId, completed: r.completed ?? false, currentChunkEnd: r.currentChunkEnd }));
 }

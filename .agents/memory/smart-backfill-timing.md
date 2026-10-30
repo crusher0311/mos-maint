@@ -5,6 +5,39 @@ description: How the activity-profile quiet-window gate is wired and gated; flip
 
 # Smart per-shop backfill timing (activity-log quiet windows)
 
+The user explicitly wants Protractor historical backfills to be manually
+requested or scheduled for execution outside business hours.
+
+**Why:** A callback-only connection approval must not make historical recovery
+permanently inaccessible, but history workloads must not disrupt daytime use.
+
+**How to apply:** Treat this as a product requirement, not authorization to
+activate a production import or remove provider safety restrictions. Separate
+request/scheduling from approved execution and retain off-hours enforcement.
+
+The user clarified that the intended product scope is normal Protractor
+operation across other connected shops, not a permanent shop-by-shop pilot
+requiring agent-mediated edits.
+
+**Why:** Routine integration operations must not depend on the operator repeatedly
+returning to this conversation to unlock processing.
+
+**How to apply:** Design automatic eligible-shop off-hours history scheduling
+and self-service operational controls. Do not make individual import approvals
+the permanent normal flow. A coordinated production rollout still needs capacity
+limits and emergency stops; this direction is not permission for an unbounded
+fleet backlog release.
+
+Normal history must use its own bounded authority rather than removing the
+shared callback-only restriction.
+
+**Why:** Removing that restriction also exposes older fleet discovery and
+resume paths, not just the new scheduler, and can release unrelated backlog.
+
+**How to apply:** Keep legacy workers suspended during rollout. Grant history
+reads narrowly at physical dispatch, separate from callbacks and interactive
+requests; never use a global permission change as a scheduling shortcut.
+
 Per-shop timezone + quiet window(s) + confidence are inferred from organic
 webhook/callback activity and used to gate each shop's *historical backfill* to
 its own local quiet window. Sits ON TOP of the global concurrency cap + worker
