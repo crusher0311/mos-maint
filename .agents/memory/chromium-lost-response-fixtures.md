@@ -14,3 +14,14 @@ retry logic.
 **How to apply:** Declare a larger Content-Length than the partial JSON response,
 flush some response bytes, then destroy the response. Count received requests
 and assert persisted identity before returning any acknowledgment.
+
+For intentional status-read failures, wait for DOM readiness followed by the
+expected rendered warning rather than requiring network-idle navigation.
+
+**Why:** The offline settings fixture repeatedly timed out waiting for
+`networkidle0` with a 503 status response even though rendered-state assertions
+passed when navigation waited for DOM readiness.
+
+**How to apply:** Keep explicit deadlines and assertions on visible failure,
+retry, and persisted state; network quiescence is not the success condition for
+a failure-state test.

@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
+import { resolveConnectionShop, exactShop, assertMatched, ShopConnectionError } from "@/lib/integrations/protractor/shop-record";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,10 +16,7 @@ export async function GET(req: NextRequest) {
     const shopId = Number(session.shopId);
     const db = await getDb();
     
-    const shop = await db.collection("shops").findOne(
-      { shopId: { $in: [String(shopId), Number(shopId)] } },
-      { projection: { protractor: 1, tekmetric: 1, autoflow: 1, smsProvider: 1 } }
-    );
+    const shop = await resolveConnectionShop(db, shopId);
 
     return NextResponse.json({
       smsProvider: shop?.smsProvider || null,
@@ -33,8 +31,7 @@ export async function GET(req: NextRequest) {
       }
     });
   } catch (err: any) {
-    console.error("[Integrations Settings] Error:", err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: err instanceof ShopConnectionError ? err.message : "Integration settings unavailable. Retry shortly." }, { status: err instanceof ShopConnectionError ? err.status : 503 });
   }
 }
 
@@ -55,19 +52,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid SMS provider" }, { status: 400 });
     }
 
-    await db.collection("shops").updateOne(
-      { shopId: { $in: [String(shopId), Number(shopId)] } },
+    const shop = await resolveConnectionShop(db, shopId);
+    assertMatched(await db.collection("shops").updateOne(
+      exactShop(shop),
       { 
         $set: { 
           smsProvider: smsProvider || null,
           updatedAt: new Date()
         } 
       }
-    );
+    ));
 
     return NextResponse.json({ ok: true, smsProvider });
   } catch (err: any) {
-    console.error("[Integrations Settings] Error:", err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: err instanceof ShopConnectionError ? err.message : "Integration settings unavailable. Retry shortly." }, { status: err instanceof ShopConnectionError ? err.status : 503 });
   }
 }

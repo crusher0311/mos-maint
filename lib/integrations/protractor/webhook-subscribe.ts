@@ -27,6 +27,7 @@ import { getDb } from "@/lib/mongo";
 import { ensureSubscriptionRecord } from "@/lib/data/repositories/protractor-webhook-subscriptions";
 import crypto from "crypto";
 import type { Db } from "mongodb";
+import { resolveConnectionShop, exactShop, snapshotField, assertMatched } from "./shop-record";
 
 export type EnsureProtractorSubscriptionResult = {
   ok: boolean;
@@ -92,20 +93,17 @@ export async function ensureProtractorWebhookSubscription(opts: {
 
   const db = opts.db ?? (await getDb());
 
-  const shop = await db.collection("shops").findOne(
-    { shopId },
-    { projection: { protractorWebhookToken: 1 } },
-  );
+  const shop = await resolveConnectionShop(db, shopId);
 
   let token: string | undefined = shop?.protractorWebhookToken;
   let generatedToken = false;
   if (!token) {
     token = crypto.randomBytes(16).toString("hex");
     generatedToken = true;
-    await db.collection("shops").updateOne(
-      { shopId },
+    assertMatched(await db.collection("shops").updateOne(
+      { ...exactShop(shop), protractorWebhookToken: snapshotField(shop.protractorWebhookToken) },
       { $set: { protractorWebhookToken: token } },
-    );
+    ));
   }
 
   const callbackUrl = buildProtractorCallbackUrl(token);

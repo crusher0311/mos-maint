@@ -32,6 +32,7 @@ interface IntegrationStatus {
   autoflow: { configured: boolean };
   protractor: {
     configured: boolean;
+    unavailable?: boolean;
     connectionId?: string;
     initialSyncState?: "running" | "complete" | "failed";
     initialSyncVehicles?: number | null;
@@ -101,7 +102,7 @@ export default function IntegrationsPage() {
       ]);
 
       const autoflowData = autoflowRes?.ok ? await autoflowRes.json() : {};
-      const protractorData = protractorRes?.ok ? await protractorRes.json() : {};
+      const protractorData = protractorRes?.ok ? await protractorRes.json().catch(() => null) : null;
       const tekmetricData = tekmetricRes?.ok ? await tekmetricRes.json() : {};
       const shopwareData = shopwareRes?.ok ? await shopwareRes.json() : {};
       const shopmonkeyData = shopmonkeyRes?.ok ? await shopmonkeyRes.json() : {};
@@ -112,12 +113,13 @@ export default function IntegrationsPage() {
           configured: Boolean(autoflowData.configured || autoflowData.autoflowApiKey) 
         },
         protractor: {
-          configured: Boolean(protractorData.configured),
-          connectionId: protractorData.connectionId,
-          webhookToken: protractorData.webhookToken,
-          initialSyncState: protractorData.initialSyncState,
-          initialSyncVehicles: protractorData.initialSyncVehicles,
-          initialSyncError: protractorData.initialSyncError,
+          configured: Boolean(protractorData?.configured),
+          unavailable: typeof protractorData?.configured !== "boolean",
+          connectionId: protractorData?.connectionId,
+          webhookToken: protractorData?.webhookToken,
+          initialSyncState: protractorData?.initialSyncState,
+          initialSyncVehicles: protractorData?.initialSyncVehicles,
+          initialSyncError: protractorData?.initialSyncError,
         } as any,
         tekmetric: {
           configured: Boolean(tekmetricData.configured),
@@ -150,7 +152,11 @@ export default function IntegrationsPage() {
         },
       };
 
-      setStatuses(newStatuses);
+      setStatuses(previous => ({
+        ...newStatuses,
+        protractor: newStatuses.protractor.unavailable
+          ? { ...previous.protractor, unavailable: true } : newStatuses.protractor,
+      }));
 
       // Fetch saved smsProvider preference
       const integrationsRes = await fetch("/api/settings/integrations").catch(() => null);
@@ -305,7 +311,10 @@ export default function IntegrationsPage() {
             </div>
             
             {shopManagement === "protractor" && (
-              <ProtractorSection status={statuses.protractor} onUpdate={fetchAllStatuses} />
+              <ProtractorSection status={statuses.protractor} onUpdate={fetchAllStatuses}
+                onCommitted={configured => setStatuses(previous => ({
+                  ...previous, protractor: { configured },
+                }))} />
             )}
             {shopManagement === "tekmetric" && (
               <TekmetricSection status={statuses.tekmetric} onUpdate={fetchAllStatuses} />
@@ -886,9 +895,10 @@ function CarfaxSection({ status, onUpdate }: { status: CarfaxSettingsStatus; onU
   );
 }
 
-function ProtractorSection({ status, onUpdate }: {
+function ProtractorSection({ status, onUpdate, onCommitted }: {
   status: {
     configured: boolean;
+    unavailable?: boolean;
     connectionId?: string;
     webhookToken?: string;
     initialSyncState?: "pending" | "running" | "complete" | "failed";
@@ -896,6 +906,7 @@ function ProtractorSection({ status, onUpdate }: {
     initialSyncError?: string | null;
   };
   onUpdate: () => void;
+  onCommitted: (configured: boolean) => void;
 }) {
   const [connectionId, setConnectionId] = useState("");
   const [apiKey, setApiKey] = useState("");
@@ -959,6 +970,7 @@ function ProtractorSection({ status, onUpdate }: {
 
       if (res.ok) {
         setMessage({ type: "success", text: "Protractor connected. Historical imports require separate approval; saved sync progress is unchanged." });
+        onCommitted(true);
         setConnectionId("");
         setApiKey("");
         onUpdate();
@@ -1000,7 +1012,11 @@ function ProtractorSection({ status, onUpdate }: {
       const res = await fetch("/api/settings/protractor", { method: "DELETE" });
       if (res.ok) {
         setMessage({ type: "success", text: "Disconnected" });
+        onCommitted(false);
         onUpdate();
+      } else {
+        const data = await res.json();
+        setMessage({ type: "error", text: data.error || "Failed to disconnect. Reload status and retry." });
       }
     } catch (err) {
       setMessage({ type: "error", text: "Failed" });
@@ -1009,9 +1025,24 @@ function ProtractorSection({ status, onUpdate }: {
     }
   }
 
+  const unavailableNotice = status.unavailable ? (
+    <div role="alert" className="p-3 bg-amber-50 text-amber-800 text-sm rounded-lg">
+      Protractor status is temporarily unavailable. {status.configured ? "Showing the last saved connection." : "Connection status could not be confirmed."}
+      <button onClick={() => onUpdate()} className="block underline mt-2">Retry status</button>
+    </div>
+  ) : null;
+
+  if (status.unavailable && !status.configured) {
+    return <div className="space-y-3 border-t pt-4">
+      {message && <p role="status">{message.text}</p>}
+      {unavailableNotice}
+    </div>;
+  }
+
   if (status.configured) {
     return (
       <div className="space-y-3 border-t pt-4">
+        {unavailableNotice}
         <div className="bg-green-50 border border-green-200 rounded-lg p-3">
           <div className="flex items-center gap-2 text-sm text-green-800">
             <CheckCircle className="w-4 h-4" />

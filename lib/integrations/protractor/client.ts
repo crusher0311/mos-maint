@@ -59,6 +59,7 @@ import {
   type ProtractorEndpointClass,
 } from "./relay-transport";
 import { readShopProtractorCredentials } from "./shop-eligibility";
+import { resolveConnectionShop } from "./shop-record";
 import {
   getProtractorInteractiveTransportContext,
   type ProtractorInteractiveTransportContext,
@@ -659,17 +660,7 @@ export function computeAuthentication(connectionId: string, apiKey: string): str
 export async function resolveProtractorConfig(shopId: number | string): Promise<ProtractorConfig> {
   const normalizedShopId = Number(shopId);
   const db = await getDb();
-  const shop = await db.collection("shops").findOne(
-    { $or: [{ shopId: String(shopId) }, { shopId: Number(shopId) }] },
-    {
-      projection: {
-        integrationProvider: 1,
-        protractor: 1,
-        protractorConnectionId: 1,
-        protractorApiKey: 1,
-      },
-    }
-  );
+  const shop = await resolveConnectionShop(db, shopId);
 
   // Never substitute process-wide credentials for a requested shop. Doing so
   // can send a non-Protractor shop through another tenant's Protractor account.
