@@ -1,7 +1,8 @@
 import { NextResponse, NextRequest } from "next/server";
 import { getDb } from "@/lib/mongo";
 import { getSession } from "@/lib/auth";
-import { resolveProtractorConfig } from "@/lib/integrations/protractor";
+import { readShopProtractorCredentials } from "@/lib/integrations/protractor/shop-eligibility";
+import { resolveConnectionShop, connectionSnapshot, assertCheckpointIdle, assertMatched, ShopConnectionError, writableConnectionFields, snapshotField } from "@/lib/integrations/protractor/shop-record";
 import { ensureProtractorWebhookSubscription } from "@/lib/integrations/protractor/webhook-subscribe";
 import { validateCredentials, validationFailure } from "./validation";
 import { saveProtractorConnection, ConnectionConflict, initialSyncStatus, storedBinding } from "@/lib/integrations/protractor/onboarding";
@@ -13,18 +14,29 @@ import crypto from "crypto";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function safeFailure(err: unknown) {
+  if (err instanceof ShopConnectionError) {
+    return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
+  }
+  return NextResponse.json({ error: "Protractor settings are temporarily unavailable. Retry the status before making changes.", code: "PROTRACTOR_SETTINGS_UNAVAILABLE" }, { status: 503 });
+}
+
 export async function GET(_req: NextRequest) {
   try {
     const session = await getSession();
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const shopId = Number(session.shopId);
-    const config = await resolveProtractorConfig(shopId);
     const db = await getDb();
-    const shop = await db.collection("shops").findOne({ shopId });
+    const shop = await resolveConnectionShop(db, shopId);
+    const credentials = readShopProtractorCredentials(shop);
+    const config = { configured: !!credentials, connectionId: credentials?.connectionId, apiKey: credentials?.apiKey };
     let webhookToken = shop?.protractorWebhookToken;
     if (config.configured && !webhookToken) {
       webhookToken = crypto.randomBytes(16).toString("hex");
-      await db.collection("shops").updateOne({ shopId }, { $set: { protractorWebhookToken: webhookToken } });
+      assertMatched(await db.collection("shops").updateOne({
+        ...connectionSnapshot(shop),
+        protractorWebhookToken: snapshotField(shop.protractorWebhookToken),
+      }, { $set: { protractorWebhookToken: webhookToken } }));
     }
     return NextResponse.json({
       configured: config.configured,
@@ -41,7 +53,7 @@ export async function GET(_req: NextRequest) {
       partCostEstimateRatioDefault: DEFAULT_PART_COST_RATIO,
     });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return safeFailure(err);
   }
 }
 
@@ -93,7 +105,7 @@ export async function POST(req: NextRequest) {
     if (err instanceof ConnectionConflict) {
       return NextResponse.json({ error: err.message, code: "PROTRACTOR_CONNECTION_CONFLICT" }, { status: 409 });
     }
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return safeFailure(err);
   }
 }
 
@@ -112,10 +124,11 @@ export async function PATCH(req: NextRequest) {
     }
     const raw = body.partCostEstimateRatio;
     const db = await getDb();
+    const shop = await resolveConnectionShop(db, shopId);
     if (raw === null || raw === "" || raw === undefined) {
-      await db.collection("shops").updateOne({ shopId }, {
+      assertMatched(await db.collection("shops").updateOne(connectionSnapshot(shop), {
         $unset: { partCostEstimateRatio: "" }, $set: { updatedAt: new Date() },
-      });
+      }));
       return NextResponse.json({ ok: true, partCostEstimateRatio: null });
     }
     const ratio = Number(raw);
@@ -124,10 +137,10 @@ export async function PATCH(req: NextRequest) {
         error: `Cost ratio must be a number between ${MIN_PART_COST_RATIO} and ${MAX_PART_COST_RATIO} (e.g. 0.6 = cost is 60% of retail)`,
       }, { status: 400 });
     }
-    await db.collection("shops").updateOne({ shopId }, { $set: { partCostEstimateRatio: ratio, updatedAt: new Date() } });
+    assertMatched(await db.collection("shops").updateOne(connectionSnapshot(shop), { $set: { partCostEstimateRatio: ratio, updatedAt: new Date() } }));
     return NextResponse.json({ ok: true, partCostEstimateRatio: ratio });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return safeFailure(err);
   }
 }
 
@@ -139,29 +152,22 @@ export async function DELETE(_req: NextRequest) {
     // Retain the binding and cached data. Rebinding data to another connection
     // requires an operator-controlled migration, not destructive web cleanup.
     const shopId = Number(session.shopId);
-    const shop = await db.collection("shops").findOne({ shopId });
+    const shop = await resolveConnectionShop(db, shopId);
+    assertCheckpointIdle(shop);
     const generation = storedBinding(shop);
-    const changed = await db.collection("shops").updateOne({
-      shopId,
-      protractorConnectionId: shop?.protractorConnectionId ?? { $exists: false },
-      protractorApiKey: shop?.protractorApiKey ?? { $exists: false },
-      "protractor.connectionGeneration": shop?.protractor?.connectionGeneration ?? { $exists: false },
-      "protractor.checkpointWriteToken": { $exists: false },
-    }, {
-      $unset: { protractorConnectionId: "", protractorApiKey: "", "protractor.connectionId": "", "protractor.apiKey": "" },
-      $set: {
+    const changed = await db.collection("shops").updateOne(connectionSnapshot(shop), {
+      $unset: { protractorConnectionId: "", protractorApiKey: "", ...(shop.protractor === null ? {} : { "protractor.connectionId": "", "protractor.apiKey": "" }) },
+      $set: writableConnectionFields(shop, {
         "protractor.configured": false,
         "protractor.disconnectedAt": new Date(),
         "protractor.syncRevision": crypto.randomUUID(),
         ...(generation ? { "protractor.connectionGeneration": generation } : {}),
         updatedAt: new Date(),
-      },
+      }),
     });
-    if (changed.matchedCount !== 1) {
-      return NextResponse.json({ error: "Connection changed; reload and retry.", code: "PROTRACTOR_CONNECTION_CONFLICT" }, { status: 409 });
-    }
+    assertMatched(changed);
     return NextResponse.json({ ok: true, message: "Protractor disconnected" });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return safeFailure(err);
   }
 }

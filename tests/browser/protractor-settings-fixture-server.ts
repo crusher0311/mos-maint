@@ -20,6 +20,8 @@ export async function createProtractorSettingsFixture() {
   const unexpected: string[] = [];
   let scenario: Scenario = "pending";
   let saved: Record<string, unknown> = { configured: false };
+  let statusFailure = false;
+  let failAfterSave = false;
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url!, "http://offline.invalid");
     res.setHeader("Cache-Control", "no-store");
@@ -31,6 +33,13 @@ export async function createProtractorSettingsFixture() {
       return;
     }
     // Deliberate synthetic sign-in; no real session middleware or database.
+    if (url.pathname === "/offline-preview") {
+      res.writeHead(302, {
+        "Set-Cookie": "offline-session=fixture-shop; Path=/; HttpOnly; SameSite=Lax",
+        Location: "/dashboard/settings/integrations",
+      }).end();
+      return;
+    }
     if (!req.headers.cookie?.split("; ").includes("offline-session=fixture-shop")) {
       if (url.pathname.startsWith("/api/")) return json(401, { error: "Unauthorized" });
       res.writeHead(401).end("Offline fixture sign-in required"); return;
@@ -48,7 +57,11 @@ export async function createProtractorSettingsFixture() {
     const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : null;
     calls.push({ method: req.method!, path: url.pathname, body });
     if (url.pathname === "/api/settings/protractor") {
-      if (req.method === "GET") return json(200, saved);
+      if (req.method === "GET") return statusFailure ? json(503, { error: "Temporary read failure" }) : json(200, saved);
+      if (req.method === "DELETE") {
+        saved = { ...saved, configured: false };
+        return json(200, { ok: true });
+      }
       if (req.method === "POST") {
         if (scenario === "rejected") return json(500, { error: rejectedMessage });
         if (scenario === "unavailable") return json(500, { error: unavailableMessage });
@@ -57,6 +70,7 @@ export async function createProtractorSettingsFixture() {
           initialSyncState: scenario, initialSyncVehicles: scenario === "failed" ? 17 : 0,
           initialSyncError: scenario === "failed" ? "Previous import interrupted" : null,
         };
+        if (failAfterSave) statusFailure = true;
         return json(200, { ok: true, ...saved });
       }
     }
@@ -81,7 +95,9 @@ export async function createProtractorSettingsFixture() {
   });
   return {
     server, calls, unexpected,
-    reset(next: Scenario) { scenario = next; saved = { configured: false }; calls.length = 0; },
+    reset(next: Scenario) { scenario = next; saved = { configured: false }; calls.length = 0; statusFailure = false; failAfterSave = false; },
+    failStatus(value: boolean) { statusFailure = value; },
+    failRefreshAfterSave() { failAfterSave = true; },
     snapshot() { return structuredClone(saved); },
   };
 }

@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { resolveConnectionShop, connectionSnapshot, assertCheckpointIdle, assertMatched, writableConnectionFields } from "./shop-record";
 import * as progress from "@/lib/data/repositories/protractor-backfill-progress";
 import { countServiceItemsByShop } from "@/lib/data/repositories/protractor-service-items";
 import { getEffectiveProtractorOutboundPolicy } from "./client";
@@ -28,10 +29,10 @@ export async function saveProtractorConnection(
   db: any, shopId: number, connectionId: string, apiKey: string, locations?: any[],
 ) {
   const shops = db.collection("shops");
-  const shop = await shops.findOne({ shopId });
+  const shop = await resolveConnectionShop(db, shopId);
   // Authenticated sessions must resolve to an existing shop. Never upsert a
   // shop from a stale session or allow a competing POST to overwrite a binding.
-  if (!shop) throw new ConnectionConflict();
+  assertCheckpointIdle(shop);
   const generation = connectionBinding(connectionId, apiKey);
   const previous = storedBinding(shop);
   const provider = shop.integrationProvider?.trim().toLowerCase();
@@ -47,17 +48,7 @@ export async function saveProtractorConnection(
     ? "complete"
     : workerActive ? "running" : shop.protractor?.initialSyncState === "failed" ? "failed" : "pending";
   const savedSyncError = initialSyncState === "failed" ? shop.protractor?.initialSyncError ?? null : null;
-  const update = await shops.updateOne({
-    shopId,
-    // Exact snapshot CAS protects concurrent provider/credential changes.
-    integrationProvider: shop.integrationProvider ?? { $exists: false },
-    protractorConnectionId: shop.protractorConnectionId ?? { $exists: false },
-    protractorApiKey: shop.protractorApiKey ?? { $exists: false },
-    "protractor.connectionGeneration": shop.protractor?.connectionGeneration ?? { $exists: false },
-    "protractor.connectionId": shop.protractor?.connectionId ?? { $exists: false },
-    "protractor.apiKey": shop.protractor?.apiKey ?? { $exists: false },
-    "protractor.checkpointWriteToken": { $exists: false },
-  }, { $set: {
+  const update = await shops.updateOne(connectionSnapshot(shop), { $set: writableConnectionFields(shop, {
     protractorConnectionId: connectionId,
     protractorApiKey: apiKey,
     protractorWebhookToken: shop.protractorWebhookToken || crypto.randomBytes(16).toString("hex"),
@@ -71,8 +62,8 @@ export async function saveProtractorConnection(
     "protractor.initialSyncState": initialSyncState,
     "protractor.initialSyncError": savedSyncError,
     updatedAt: new Date(),
-  } });
-  if (update.matchedCount !== 1) throw new ConnectionConflict();
+  }) });
+  assertMatched(update);
 
   // Durable discovery through the canonical repository; no new queue, fleet
   // switch, cleanup, or request-lifetime worker. Preserve every existing cursor.

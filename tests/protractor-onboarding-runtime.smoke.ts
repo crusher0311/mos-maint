@@ -6,7 +6,10 @@ import { getProtractorInteractiveTransportContext } from "../lib/integrations/pr
 const Module = require("module");
 const originalLoad = Module._load;
 let session: any = { shopId: "42" };
-let shop: any = { shopId: 42 };
+let shop: any = { _id: "offline-shop", shopId: 42 };
+let duplicate: any = null;
+let beforeWrite: (() => void) | undefined;
+let readFails = false;
 let cursor: any = null;
 let policy: any = { allowed: true };
 let stop: any = null;
@@ -22,20 +25,34 @@ const get = (obj: any, path: string) => path.split(".").reduce((v, key) => v?.[k
 function set(obj: any, path: string, value: any) {
   const parts = path.split(".");
   const last = parts.pop()!;
-  for (const part of parts) obj = obj[part] ??= {};
+  for (const part of parts) {
+    assert.notEqual(obj[part], null, "Mongo rejects dotted writes below null");
+    obj = obj[part] ??= {};
+  }
   obj[last] = value;
 }
 function matches(filter: any) {
   return Object.entries(filter).every(([key, value]: any) => {
-    if (value && typeof value === "object" && "$exists" in value) return (get(shop, key) !== undefined) === value.$exists;
+    if (value && typeof value === "object") {
+      const actual = get(shop, key);
+      if ("$exists" in value && (actual !== undefined) !== value.$exists) return false;
+      if ("$eq" in value && !(value.$eq === null ? actual == null : actual === value.$eq)) return false;
+      return true;
+    }
+    if (value === null) return get(shop, key) == null;
     return get(shop, key) === value;
   });
 }
 const db = { collection: (name: string) => {
   assert.equal(name, "shops", "no destructive cache cleanup or raw progress storage");
   return {
-    findOne: async () => structuredClone(shop),
+    findOne: async (filter: any) => {
+      if (readFails) throw new Error("sensitive-read-error");
+      if (duplicate && filter.shopId === duplicate.shopId) return structuredClone(duplicate);
+      return shop && matches(filter) ? structuredClone(shop) : null;
+    },
     updateOne: async (filter: any, update: any) => {
+      const mutate = beforeWrite; beforeWrite = undefined; mutate?.();
       assert.notEqual(getProtractorInteractiveTransportContext()?.active, true, "DB mutations must not inherit validation scope");
       if (!matches(filter)) return { matchedCount: 0 };
       writes++;
@@ -87,6 +104,7 @@ const mocks: Record<string, any> = {
     },
   },
   "@/lib/data/repositories/protractor-service-items": { countServiceItemsByShop: async () => 7 },
+  "@/lib/data/repositories/protractor-webhook-subscriptions": { ensureSubscriptionRecord: async () => {} },
 };
 Module._load = function(request: string, parent: any, ...rest: any[]) {
   if (mocks[request]) return mocks[request];
@@ -96,6 +114,9 @@ Module._load = function(request: string, parent: any, ...rest: any[]) {
   return originalLoad.call(this, request, parent, ...rest);
 };
 const route = require("../app/api/settings/protractor/route");
+const preferences = require("../app/api/settings/integrations/route");
+const { resolveProtractorConfig } = require("../lib/integrations/protractor/client");
+const { ensureProtractorWebhookSubscription } = require("../lib/integrations/protractor/webhook-subscribe");
 const testRoute = require("../app/api/settings/protractor/test/route");
 const { runStagedInitialSync } = require("../lib/integrations/protractor/onboarding");
 const { writeProtractorCheckpoint, markProtractorBackfillComplete, withInitialSyncCheckpointFence } =
@@ -132,6 +153,61 @@ async function run() {
     throwValidation = false;
   }
   validation = { ok: true, locations: [] };
+  // Realistic null-vs-missing matching and exact legacy shop identity lifecycle.
+  for (const id of [42, "42"]) {
+    for (const nullable of [false, true]) {
+      shop = { _id: "offline-shop", shopId: id, unrelated: { retained: true },
+        ...(nullable ? { integrationProvider: null, protractorConnectionId: null, protractorApiKey: null,
+          protractor: { connectionId: null, apiKey: null, connectionGeneration: null, updateWorkOrderLine: false } } : {}) };
+      cursor = { completed: true, currentChunkEnd: "history-kept" };
+      assert.equal((await route.POST(req())).status, 200);
+      assert.equal((await (await route.GET(req())).json()).configured, true);
+      assert.equal((await resolveProtractorConfig(42)).apiKey, "offline-key");
+      const savedToken = shop.protractorWebhookToken;
+      assert.equal((await ensureProtractorWebhookSubscription({ shopId: 42, db })).token, savedToken);
+      assert.equal(shop.shopId, id);
+      assert.equal((await preferences.POST(new NextRequest("http://localhost/api/settings/integrations",
+        { method: "POST", body: JSON.stringify({ smsProvider: "protractor" }) }))).status, 200);
+      assert.equal((await (await preferences.GET(req())).json()).smsProvider, "protractor");
+      assert.equal((await route.POST(req())).status, 200);
+      assert.deepEqual(shop.unrelated, { retained: true });
+      assert.equal(cursor.currentChunkEnd, "history-kept");
+      if (nullable) assert.equal(shop.protractor.updateWorkOrderLine, false);
+      assert.equal((await route.DELETE(req())).status, 200);
+      assert.equal((await (await route.GET(req())).json()).configured, false);
+      assert.equal((await route.POST(req())).status, 200);
+      assert.equal(workCalls, 0);
+    }
+  }
+  shop = { _id: "offline-shop", shopId: "42", protractor: null };
+  assert.equal((await route.POST(req())).status, 200, "null parent supports first connection");
+  shop = { _id: "offline-shop", shopId: "42", protractor: null };
+  assert.equal((await route.DELETE(req())).status, 200, "null parent supports disconnect");
+  shop = { _id: "offline-shop", shopId: 42, integrationProvider: null };
+  cursor = null;
+  beforeWrite = () => { delete shop.integrationProvider; };
+  let conflict = await route.POST(req());
+  assert.equal(conflict.status, 409);
+  assert.equal((await conflict.json()).code, "PROTRACTOR_SNAPSHOT_CHANGED");
+  assert.equal(shop.protractorApiKey, undefined);
+  beforeWrite = () => { shop.protractor = { apiKey: "concurrent-offline-key" }; };
+  conflict = await route.POST(req());
+  assert.equal((await conflict.json()).code, "PROTRACTOR_SNAPSHOT_CHANGED");
+  shop = { _id: "offline-shop", shopId: 42, protractor: { checkpointWriteToken: "busy" } };
+  assert.equal((await (await route.POST(req())).json()).code, "PROTRACTOR_CHECKPOINT_BUSY");
+  shop = null;
+  assert.equal((await (await route.POST(req())).json()).code, "SHOP_NOT_FOUND");
+  shop = { _id: "offline-shop", shopId: 42 };
+  duplicate = { _id: "duplicate", shopId: "42" };
+  assert.equal((await (await route.POST(req())).json()).code, "SHOP_ID_AMBIGUOUS");
+  await assert.rejects(() => resolveProtractorConfig(42), { code: "SHOP_ID_AMBIGUOUS" });
+  duplicate = null;
+  readFails = true;
+  const unavailable = await route.GET(req());
+  assert.equal(unavailable.status, 503);
+  assert.doesNotMatch(JSON.stringify(await unavailable.json()), /sensitive/);
+  readFails = false;
+  writes = 0;
   assert.equal((await testRoute.POST(req())).status, 200);
   assert.equal(writes, 0);
   const warnings: string[] = [];
