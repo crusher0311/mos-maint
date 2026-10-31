@@ -93,6 +93,24 @@ test("real Mongo: all invoices, two-pass verification, leases, retries, publicat
     await tickTirePilot(db, throttled); await tickTirePilot(db, throttled);
     assert.equal(calls, 1);
     assert.equal((await control.findOne({ _id: PILOT_CONTROL }))?.failure, "provider_throttled");
+    for (const status of [400, 401, 403, 429, 500, 503]) {
+      await reset();
+      await tickTirePilot(db, { ...deps, page: async (_l, _p, before) => {
+        await before(); calls++;
+        throw Object.assign(Error("provider_http_error"), { status, body: "private upstream body" });
+      } });
+      const failed = await control.findOne({ _id: PILOT_CONTROL });
+      assert.equal(failed.failureHttpStatus, status);
+      assert.equal(failed.failure, status === 429 ? "provider_throttled" : "provider_http_error");
+      assert.equal(failed.nextAt.getTime(), now.getTime() + 60 * 60_000);
+      assert(!JSON.stringify(failed).includes("private"));
+      await tickTirePilot(db, deps);
+      assert.equal(calls, 1, "cooldown prevents another request");
+      now = new Date(now.getTime() + 60 * 60_000);
+      await tickTirePilot(db, deps);
+      assert.equal((await control.findOne({ _id: PILOT_CONTROL }))?.failureHttpStatus, null);
+      now = new Date("2026-10-31T07:00:00Z");
+    }
     await reset(); now = new Date("2026-10-31T18:00:00Z");
     await tickTirePilot(db, deps); assert.equal(calls, 0);
     await reset();
