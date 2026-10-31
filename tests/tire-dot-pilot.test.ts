@@ -149,12 +149,86 @@ test("real Mongo: all invoices, two-pass verification, leases, retries, publicat
     await tickTirePilot(db, deps); assert.equal(calls, 0);
     await reset();
     const manualBudget = createTirePilotManualBudget(["--daytime-once"], () => now)!;
-    assert.equal((await tickTirePilot(db, { ...deps, manualBudget })).status, "refreshing");
+    const original = await control.findOne({ _id: PILOT_CONTROL });
+    for (let i = 0; i < 4; i++) {
+      assert.equal((await tickTirePilot(db, deps)).status, "waiting_for_overnight_window");
+      assert.deepEqual(await control.findOne({ _id: PILOT_CONTROL }), original,
+        "ineligible scheduler neither leases nor reschedules shared work");
+    }
+    const interleaved = await Promise.all([
+      tickTirePilot(db, deps), tickTirePilot(db, { ...deps, manualBudget }),
+    ]);
+    assert(interleaved.some(r => r.status === "refreshing"));
     assert.equal(calls, 1);
     assert.equal(manualBudget.requests, 1);
+    const progress = await control.findOne({ _id: PILOT_CONTROL });
+    assert.equal((await tickTirePilot(db, { ...deps, manualBudget })).reason, "next_attempt_not_due");
+    assert.equal(calls, 1, "manual run still honors page pacing");
     advance();
+    for (let i = 0; i < 4; i++) {
+      assert.equal((await tickTirePilot(db, deps)).status, "waiting_for_overnight_window");
+      assert.deepEqual(await control.findOne({ _id: PILOT_CONTROL }), progress);
+    }
     assert.equal((await tickTirePilot(db, { ...deps, manualBudget })).status, "ready");
     assert.equal(manualBudget.requests, 2);
+    // Preflight cannot steal another worker's lease, bypass cooldowns, or
+    // spend an expired/exhausted allowance even if no scheduled worker runs.
+    for (const gate of ["disabled", "cooldown", "lease", "expired", "exhausted"]) {
+      await reset();
+      const budget = createTirePilotManualBudget(["--daytime-once"], () => now)!;
+      if (gate === "disabled") await control.updateOne({ _id: PILOT_CONTROL }, { $set: { enabled: false } });
+      if (gate === "cooldown") await control.updateOne({ _id: PILOT_CONTROL },
+        { $set: { nextAt: new Date(now.getTime() + 60_000), failure: "provider_throttled" } });
+      if (gate === "lease") await control.updateOne({ _id: PILOT_CONTROL },
+        { $set: { lease: "other", leaseUntil: new Date(now.getTime() + 60_000) } });
+      if (gate === "expired") now = new Date(now.getTime() + 15 * 60_000);
+      if (gate === "exhausted") for (let i = 0; i < 20; i++) budget.admit();
+      const before = await control.findOne({ _id: PILOT_CONTROL });
+      assert.equal((await tickTirePilot(db, { ...deps, manualBudget: budget })).status, "idle");
+      assert.deepEqual(await control.findOne({ _id: PILOT_CONTROL }), before);
+      assert.equal(calls, 0);
+    }
+    await reset();
+    const unavailable = { ...deps, locations: async () => { throw Error("private lookup details"); } };
+    const beforeUnavailable = await control.findOne({ _id: PILOT_CONTROL });
+    assert.equal((await tickTirePilot(db, unavailable)).reason, "eligibility_unavailable");
+    assert.deepEqual(await control.findOne({ _id: PILOT_CONTROL }), beforeUnavailable);
+    // The preflight read is advisory; the atomic claim must reject changed state.
+    now = new Date("2026-10-31T07:00:00Z"); await reset();
+    const raced = { ...deps, locations: async () => {
+      await control.updateOne({ _id: PILOT_CONTROL }, { $set: { nextAt: new Date(now.getTime() + 60_000) } });
+      return locations;
+    } };
+    assert.equal((await tickTirePilot(db, raced)).reason, "claim_changed");
+    assert.equal(calls, 0);
+    // A continuation uses the current shop's window, not every shop's window.
+    // At 09:00 UTC Chicago is open (04:00), New York is closed (05:00).
+    now = new Date("2026-10-31T09:00:00Z"); await reset();
+    const mixedLocations = [
+      ...locations, { shopId: 2, providerShopId: 11, timezone: "America/New_York" },
+    ];
+    const mixed = { ...deps, locations: async () => mixedLocations };
+    assert.equal((await tickTirePilot(db, mixed)).status, "waiting_for_overnight_window");
+    assert.equal(await builds.countDocuments({}), 0, "new builds require all windows open");
+    await builds.insertOne({ _id: "mixed", state: "building", scopeHash: pilotHash(mixedLocations),
+      locations: mixedLocations, pass: 0, shopIndex: 0, page: 0, requests: 0, totals: {} });
+    await control.updateOne({ _id: PILOT_CONTROL }, { $set: { build: "mixed" } });
+    assert.equal((await tickTirePilot(db, mixed)).status, "refreshing");
+    advance();
+    const beforeClosedLocation = await control.findOne({ _id: PILOT_CONTROL });
+    assert.equal((await tickTirePilot(db, mixed)).status, "waiting_for_overnight_window");
+    assert.deepEqual(await control.findOne({ _id: PILOT_CONTROL }), beforeClosedLocation);
+    assert.equal(calls, 1, "closed second location does not make a provider request");
+    // Scope changes detected in preflight never modify active manual work.
+    const beforeScope = await control.findOne({ _id: PILOT_CONTROL });
+    assert.equal((await tickTirePilot(db, deps)).reason, "scope_changed");
+    assert.deepEqual(await control.findOne({ _id: PILOT_CONTROL }), beforeScope);
+    now = new Date("2026-10-31T18:00:00Z");
+    await reset();
+    await control.updateOne({ _id: PILOT_CONTROL }, { $set: { failure: "incomplete_invoice_payload" } });
+    await tickTirePilot(db, { ...deps, manualBudget: createTirePilotManualBudget(["--daytime-once"], () => now)! });
+    assert.equal((await control.findOne({ _id: PILOT_CONTROL }))!.failure, null,
+      "successful progress clears stale failure status");
     // The physical request guard rechecks expiry after a limiter wait.
     await reset();
     const expiringBudget = createTirePilotManualBudget(["--daytime-once"], () => now)!;
@@ -171,7 +245,7 @@ test("real Mongo: all invoices, two-pass verification, leases, retries, publicat
     c = await control.findOne({ _id: PILOT_CONTROL });
     await evidence.updateMany({ generation: c!.build }, { $set: { verified: true } });
     await builds.updateOne({ _id: c!.build }, { $set: { pass: 1, shopIndex: 1, page: 0 } });
-    advance(); await tickTirePilot(db, deps);
+    now = new Date("2026-11-01T18:00:00Z"); await tickTirePilot(db, deps);
     assert.equal(calls, 1);
     assert.equal((await builds.findOne({ state: "published" }))?.finalMonth, true);
   } finally {

@@ -16,19 +16,51 @@ export const pilotWindow = (location: PilotLocation, now: Date) =>
 
 /** Exactly one bounded page. Durable checkpoints survive process exits.
  * Only reporting collections are written; no provider or invoice write API. */
-export async function tickTirePilot(db: Db, deps: PilotWorkerDeps) {
+export async function tickTirePilot(db: Db, deps: PilotWorkerDeps): Promise<{ status: string; reason?: string }> {
   const controls = db.collection<any>("tire_dot_pilot_control");
   const builds = db.collection<any>("tire_dot_pilot_generations");
   const evidence = db.collection<any>("tire_dot_pilot_evidence");
   const now = deps.now();
   const windowOpen = (location: PilotLocation, at: Date) => deps.manualBudget
     ? deps.manualBudget.available() : pilotWindow(location, at);
+  // Eligibility is read-only: an off-hours scheduler must not claim the
+  // daytime runner's queue just to push its shared nextAt forward.
+  const snapshot = await controls.findOne({ _id: PILOT_CONTROL }, { maxTimeMS: 2000 });
+  if (!snapshot?.enabled) return { status: "idle", reason: "disabled" };
+  if (snapshot.nextAt > now) return { status: "idle", reason: "next_attempt_not_due" };
+  if (snapshot.leaseUntil && snapshot.leaseUntil >= now) return { status: "idle", reason: "lease_busy" };
+  if (deps.manualBudget && !deps.manualBudget.available())
+    return { status: "idle", reason: "manual_budget_exhausted" };
+  if (!deps.manualBudget) {
+    try {
+      const eligibleLocations = (await deps.locations(snapshot.enterpriseId)).sort((a, b) => a.shopId - b.shopId);
+      if (!eligibleLocations.length || eligibleLocations.length > 50 ||
+          new Set(eligibleLocations.map(l => l.shopId)).size !== eligibleLocations.length)
+        return { status: "idle", reason: "scope_invalid" };
+      const candidate = snapshot.build && await builds.findOne({ _id: snapshot.build }, {
+        projection: { state: 1, scopeHash: 1, pass: 1, shopIndex: 1 }, maxTimeMS: 2000,
+      });
+      if (candidate && candidate.scopeHash !== pilotHash(eligibleLocations))
+        return { status: "idle", reason: "scope_changed" };
+      // Publication recovery has no provider work and remains possible by day.
+      const publicationOnly = candidate?.state === "published" ||
+        (candidate?.state === "building" && candidate.pass === 1 && candidate.shopIndex === eligibleLocations.length);
+      const required = candidate?.state === "building"
+        ? eligibleLocations.slice(candidate.shopIndex, candidate.shopIndex + 1) : eligibleLocations;
+      if (!publicationOnly && (!required.length || !required.every(l => pilotWindow(l, deps.now()))))
+        return { status: "waiting_for_overnight_window", reason: "outside_schedule" };
+    } catch {
+      return { status: "idle", reason: "eligibility_unavailable" };
+    }
+  }
   const lease = randomUUID();
+  const claimAt = deps.now();
   const control = await controls.findOneAndUpdate({
-    _id: PILOT_CONTROL, enabled: true, nextAt: { $lte: now },
-    $or: [{ leaseUntil: { $exists: false } }, { leaseUntil: { $lt: now } }],
-  }, { $set: { lease, leaseUntil: new Date(now.getTime() + 90_000) } }, { returnDocument: "after", maxTimeMS: 2000 });
-  if (!control) return { status: "idle" };
+    _id: PILOT_CONTROL, enabled: true, enterpriseId: snapshot.enterpriseId,
+    build: snapshot.build ?? null, nextAt: { $eq: snapshot.nextAt, $lte: claimAt },
+    $or: [{ leaseUntil: { $exists: false } }, { leaseUntil: { $lt: claimAt } }],
+  }, { $set: { lease, leaseUntil: new Date(claimAt.getTime() + 90_000) } }, { returnDocument: "after", maxTimeMS: 2000 });
+  if (!control) return { status: "idle", reason: "claim_changed" };
   const owned = { _id: PILOT_CONTROL, lease };
   const release = async (status: string, delay: number, extra: Record<string, any> = {}) => {
     await controls.updateOne({ ...owned, enabled: true, leaseUntil: { $gt: deps.now() } }, { $set: { status, failureHttpStatus: null, nextAt: new Date(deps.now().getTime() + delay), ...extra },
@@ -151,7 +183,7 @@ export async function tickTirePilot(db: Db, deps: PilotWorkerDeps) {
     const advanced = await builds.updateOne({ _id: build._id, state: "building", pass: build.pass,
       shopIndex: build.shopIndex, page: build.page }, { $set: { pass, shopIndex, page: next, totals: build.totals } });
     if (!advanced.matchedCount) throw Error("checkpoint_conflict");
-    if (!done) return release("refreshing", 10_000);
+    if (!done) return release("refreshing", 10_000, { failure: null });
     return publish();
   } catch (error: any) {
     const failureHttpStatus = error?.message === "provider_http_error" &&
