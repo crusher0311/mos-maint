@@ -3,6 +3,7 @@ import type { Db } from "mongodb";
 import { PILOT_CONTROL, PILOT_MAX_REQUESTS, PILOT_PAGE_SIZE, PILOT_RANGE,
   pilotEvidence, pilotHash, pilotInRange, validatePilotPage } from "./tire-dot-pilot";
 import { reconciliationWindow } from "./integrations/tekmetric/reconciliation-policy";
+import { describePilotMismatch } from "./tire-dot-pilot-mismatch";
 
 export interface PilotLocation { shopId: number; providerShopId: number; timezone: string }
 export interface PilotWorkerDeps {
@@ -165,7 +166,21 @@ export async function tickTirePilot(db: Db, deps: PilotWorkerDeps): Promise<{ st
       for (const row of rows) {
         const matched = await evidence.updateOne({ generation: build._id, shopId: location.shopId,
           key: row.key, hash: row.hash, page: build.page }, { $set: { verified: true } });
-        if (!matched.matchedCount) throw Error("provider_evidence_changed");
+        if (!matched.matchedCount) {
+          // Best-effort, bounded metadata only. Failure to record diagnostics
+          // must never replace the original fail-closed verification outcome.
+          try {
+            const prior = await evidence.findOne({ generation: build._id, shopId: location.shopId, key: row.key },
+              { projection: { page: 1, hash: 1, inMonth: 1, data: 1 }, maxTimeMS: 2000 });
+            const diagnostic = { ...describePilotMismatch(prior, row, build.page),
+              shopId: location.shopId, invoiceId: row.data.id, observedAt: deps.now().toISOString() };
+            await builds.updateOne({ _id: build._id, state: "building", mismatch: { $exists: false } },
+              { $set: { mismatch: diagnostic } }, { maxTimeMS: 2000 });
+          } catch {
+            console.warn("[HEART Tire Pilot] Mismatch diagnostics unavailable; verification remains rejected");
+          }
+          throw Error("provider_evidence_changed");
+        }
       }
     }
     const nextPage = build.page + 1;

@@ -120,6 +120,34 @@ test("real Mongo: all invoices, two-pass verification, leases, retries, publicat
     await tickTirePilot(db, changed);
     c = await control.findOne({ _id: PILOT_CONTROL });
     assert.equal(c?.failure, "provider_evidence_changed"); assert.equal(c?.published, undefined);
+    const mismatchBuild = await builds.findOne({ state: "failed", failure: "provider_evidence_changed" });
+    assert.deepEqual(mismatchBuild?.mismatch.changedPaths, ["invoice.milesIn"]);
+    assert.equal(mismatchBuild?.mismatch.shopId, 1);
+    assert.equal(mismatchBuild?.mismatch.invoiceId, 1);
+    assert.equal(mismatchBuild?.mismatch.contentChanged, true);
+    assert.equal(mismatchBuild?.mismatch.pageChanged, false);
+    assert.ok(!JSON.stringify(mismatchBuild?.mismatch).includes("private"));
+    // Diagnostics are optional: a storage failure must not turn a mismatch
+    // into a retryable generic error, publication, or checkpoint advancement.
+    await reset(); await tickTirePilot(db, deps); advance();
+    const unavailableDiagnosticsDb = { collection(name: string) {
+      const collection = db.collection(name);
+      if (name !== "tire_dot_pilot_generations") return collection;
+      return new Proxy(collection, { get(target, property) {
+        if (property === "updateOne") return (filter: any, update: any, options: any) => {
+          if (update.$set?.mismatch) throw Error("private diagnostic storage failure");
+          return target.updateOne(filter, update, options);
+        };
+        const value = Reflect.get(target, property);
+        return typeof value === "function" ? value.bind(target) : value;
+      } });
+    } };
+    await tickTirePilot(unavailableDiagnosticsDb as any, changed);
+    c = await control.findOne({ _id: PILOT_CONTROL });
+    assert.equal(c?.failure, "provider_evidence_changed");
+    assert.equal(c?.published, undefined);
+    assert.equal(c?.build, null);
+    assert.equal((await builds.findOne({ state: "failed" }))?.mismatch, undefined);
     await reset();
     const throttled = { ...deps, page: async (_l: any, _p: number, before: () => Promise<void>) => {
       await before(); calls++; throw Object.assign(Error("throttled"), { status: 429 });
