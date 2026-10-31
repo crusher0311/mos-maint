@@ -109,7 +109,7 @@ export async function tickTirePilot(db: Db, deps: PilotWorkerDeps) {
     const rows = page.content.map((raw: any) => {
       const data = pilotEvidence(raw, location.providerShopId);
       if (!Number.isFinite(Date.parse(data.postedDate)) || !Array.isArray(data.jobs) ||
-          data.jobs.some((j: any) => typeof j.authorized !== "boolean" || !Array.isArray(j.parts)))
+          data.jobs.some((j: any) => (typeof j.authorized !== "boolean" && j.authorized !== null) || !Array.isArray(j.parts)))
         throw Error("incomplete_invoice_payload");
       return { key: String(data.id), data, hash: pilotHash(data), inMonth: pilotInRange(data) };
     });

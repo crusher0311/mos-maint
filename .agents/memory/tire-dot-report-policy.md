@@ -93,6 +93,17 @@ the cause of the remaining provider throttling was not established.
 **How to apply:** Honor provider throttling even after a slot grant. Stop the
 operator recovery instead of bypassing coordination or guessing a higher cap.
 
+Real Tekmetric invoice-list responses can contain `authorized: null` jobs even
+when posted dates, jobs, and parts arrays are present.
+
+**Why:** An approved read-only diagnostic on 2026-10-31 found six such jobs in a
+50-invoice page; boolean-only fixtures had hidden the contract mismatch.
+
+**How to apply:** Preserve null as unknown, never coerce it into approval or
+decline. Keep candidate tire invoices visible as exceptions without counting
+unknown-authorized parts as sold. Use sanitized source-shape fixtures; local
+mock success alone is not proof of live provider compatibility.
+
 DOT preservation carries omitted fields only on uniquely matched current
 shop/RO/job/part identities with unchanged quantity; explicit arrays remain
 authoritative and carried evidence must be labeled as unconfirmed.

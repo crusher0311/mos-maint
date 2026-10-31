@@ -8,6 +8,7 @@ import { MongoClient } from "mongodb";
 import { pilotEvidence, pilotHash, pilotInRange, PILOT_CONTROL } from "../lib/tire-dot-pilot";
 import { tickTirePilot } from "../lib/tire-dot-pilot-worker";
 import { createTirePilotManualBudget } from "../lib/tire-dot-manual-budget";
+import { nullableAuthorizationInvoice } from "./fixtures/tekmetric-null-authorization";
 
 const invoice = (id = 1) => ({ id, shopId: 10, repairOrderNumber: id,
   postedDate: "2026-10-15T10:00:00Z", repairOrderStatus: { code: "POSTED", name: "Posted" },
@@ -65,6 +66,39 @@ test("real Mongo: all invoices, two-pass verification, leases, retries, publicat
       },
     };
     const advance = () => { now = new Date(now.getTime() + 11_000); };
+    const sourceDeps = { ...deps, page: async (_l: any, page: number, before: () => Promise<void>) => {
+      await before(); calls++;
+      return { content: [nullableAuthorizationInvoice()], number: page, size: 50,
+        totalElements: 1, totalPages: 1 };
+    } };
+    await reset();
+    assert.equal((await tickTirePilot(db, sourceDeps)).status, "refreshing");
+    advance();
+    assert.equal((await tickTirePilot(db, sourceDeps)).status, "ready");
+    const sourceControl = await control.findOne({ _id: PILOT_CONTROL });
+    const retained = await evidence.findOne({ generation: sourceControl!.published });
+    assert.equal(retained!.verified, true);
+    assert.equal(retained!.data.jobs[1].authorized, null);
+    assert.equal(retained!.data.jobs[2].authorized, null);
+    assert.equal(sourceControl!.invoiceCount, 1);
+    // Nullable authorization does not permit missing/malformed payload fields.
+    for (const bad of ["missing_authorized", "string_authorized", "missing_parts", "missing_jobs", "invalid_date"]) {
+      await reset();
+      const invalid = { ...sourceDeps, page: async (l: any, p: number, before: () => Promise<void>) => {
+        const page = await sourceDeps.page(l, p, before);
+        const row: any = page.content[0];
+        if (bad === "missing_authorized") delete row.jobs[0].authorized;
+        if (bad === "string_authorized") row.jobs[0].authorized = "true";
+        if (bad === "missing_parts") delete row.jobs[0].parts;
+        if (bad === "missing_jobs") delete row.jobs;
+        if (bad === "invalid_date") row.postedDate = "invalid";
+        return page;
+      } };
+      assert.equal((await tickTirePilot(db, invalid)).status, "deferred");
+      const rejected = await control.findOne({ _id: PILOT_CONTROL });
+      assert.equal(rejected!.failure, "incomplete_invoice_payload");
+      assert.equal(rejected!.published, undefined);
+    }
     await reset();
     const first = await Promise.all([tickTirePilot(db, deps), tickTirePilot(db, deps)]);
     assert.equal(calls, 1); assert.ok(first.some(r => r.status === "idle"));

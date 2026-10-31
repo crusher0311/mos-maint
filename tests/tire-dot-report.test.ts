@@ -2,6 +2,25 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { emptyTireResult, extractTireInvoice, tireCsv, tireSaleCandidate, validateTireDefinition } from "../lib/tire-dot-report";
 import { TIRE_DOT_LIMITS } from "../lib/tire-dot-report-contract";
+import { nullableAuthorizationInvoice } from "./fixtures/tekmetric-null-authorization";
+
+test("source-backed nullable authorization is an exception, never an approved tire sale", () => {
+  const raw = nullableAuthorizationInvoice();
+  const def = validateTireDefinition({ dateRange: { start: "2026-10-01", end: "2026-10-31" }, locationIds: [32] });
+  const r = emptyTireResult(def, [{ shopId: 32, name: "Example" }]);
+  extractTireInvoice(r, 32, { data: raw });
+  assert.equal(r.counts.tireQuantity, 2);
+  assert.equal(r.counts.dotEntries, 2);
+  assert.deepEqual(r.details.map(d => d.dot), ["001", "001"]);
+  assert.match(r.invoices[0].exceptions.join(" "), /authorization is unknown/);
+  assert.match(tireCsv(r, "invoices"), /authorization is unknown/);
+  const unknownOnly = emptyTireResult(def, [{ shopId: 32, name: "Example" }]);
+  extractTireInvoice(unknownOnly, 32, { data: { ...raw, jobs: raw.jobs.filter(j => j.authorized === null) } });
+  assert.equal(unknownOnly.invoices.length, 1, "unknown-only tire invoice stays visible");
+  assert.equal(unknownOnly.counts.tireQuantity, 0);
+  assert.equal(unknownOnly.details.length, 0);
+  assert(unknownOnly.coverage.reasons.some(r => r.includes("authorization is unknown")));
+});
 
 export const definition = () => validateTireDefinition({ dateRange: { start: "2024-08-14", end: "2024-08-14" }, locationIds: [311, 32] });
 export const result = () => emptyTireResult(definition(), [{ shopId: 311, name: "Fixture location" }, { shopId: 32, name: "Other fixture" }]);
