@@ -5,6 +5,7 @@ import { listShopsByShopIds } from "../lib/data/repositories/shops";
 import { tickTirePilot, type PilotLocation } from "../lib/tire-dot-pilot-worker";
 import { fetchTirePilotPage } from "../lib/tire-dot-pilot-transport";
 import { processNextTireRun } from "../lib/tire-dot-report-service";
+import { createTirePilotManualBudget } from "../lib/tire-dot-manual-budget";
 
 let stop = false;
 process.on("SIGTERM", () => { stop = true; });
@@ -25,18 +26,26 @@ async function locations(enterpriseId: string): Promise<PilotLocation[]> {
   });
 }
 async function main() {
+  const manualBudget = createTirePilotManualBudget(process.argv, () => new Date());
+  if (manualBudget && process.env.RENDER !== "true") throw Error("Manual pilot requires the production Render runtime");
   do {
+    if (manualBudget && !manualBudget.available()) break;
     try {
       const db = await getDb();
-      const result = await tickTirePilot(db, { now: () => new Date(), locations,
+      const result = await tickTirePilot(db, { now: () => new Date(), locations, manualBudget,
         page: (location, page, beforeRequest) => fetchTirePilotPage(db, location, page, beforeRequest) });
       if (result.status !== "idle") console.log("[HEART Tire Pilot]", result.status);
+      if (manualBudget && !["idle", "refreshing"].includes(result.status)) break;
       // Completed evidence can be reported in business hours, without HTTP to
       // Tekmetric. A second worker only claims persisted report pages.
-      await processNextTireRun(true);
-    } catch { console.error("[HEART Tire Pilot] Worker unavailable; retrying after bounded pause"); }
+      if (!manualBudget) await processNextTireRun(true);
+    } catch {
+      console.error("[HEART Tire Pilot] Worker unavailable; retrying after bounded pause");
+      if (manualBudget) break;
+    }
     if (process.argv.includes("--once") || stop) break;
     await new Promise(resolve => setTimeout(resolve, 10_000));
   } while (!stop);
+  if (manualBudget) console.log("[HEART Tire Pilot] Bounded manual run stopped", { requests: manualBudget.requests });
 }
 main().then(() => process.exit(0)).catch(() => process.exit(1));

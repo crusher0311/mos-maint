@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { MongoClient } from "mongodb";
 import { pilotEvidence, pilotHash, pilotInRange, PILOT_CONTROL } from "../lib/tire-dot-pilot";
 import { tickTirePilot } from "../lib/tire-dot-pilot-worker";
+import { createTirePilotManualBudget } from "../lib/tire-dot-manual-budget";
 
 const invoice = (id = 1) => ({ id, shopId: 10, repairOrderNumber: id,
   postedDate: "2026-10-15T10:00:00Z", repairOrderStatus: { code: "POSTED", name: "Posted" },
@@ -94,6 +95,25 @@ test("real Mongo: all invoices, two-pass verification, leases, retries, publicat
     assert.equal((await control.findOne({ _id: PILOT_CONTROL }))?.failure, "provider_throttled");
     await reset(); now = new Date("2026-10-31T18:00:00Z");
     await tickTirePilot(db, deps); assert.equal(calls, 0);
+    await reset();
+    const manualBudget = createTirePilotManualBudget(["--daytime-once"], () => now)!;
+    assert.equal((await tickTirePilot(db, { ...deps, manualBudget })).status, "refreshing");
+    assert.equal(calls, 1);
+    assert.equal(manualBudget.requests, 1);
+    advance();
+    assert.equal((await tickTirePilot(db, { ...deps, manualBudget })).status, "ready");
+    assert.equal(manualBudget.requests, 2);
+    // The physical request guard rechecks expiry after a limiter wait.
+    await reset();
+    const expiringBudget = createTirePilotManualBudget(["--daytime-once"], () => now)!;
+    const delayed = { ...deps, manualBudget: expiringBudget,
+      page: async (l: any, p: number, before: () => Promise<void>) => {
+        now = new Date(now.getTime() + 15 * 60_000);
+        return deps.page(l, p, before);
+      } };
+    assert.equal((await tickTirePilot(db, delayed)).status, "deferred");
+    assert.equal(calls, 0);
+    assert.equal(expiringBudget.requests, 0);
     // Final-checkpoint crash recovery needs no additional provider request.
     now = new Date("2026-11-01T07:00:00Z"); await reset(); await tickTirePilot(db, deps);
     c = await control.findOne({ _id: PILOT_CONTROL });

@@ -9,6 +9,7 @@ export interface PilotWorkerDeps {
   now(): Date;
   locations(enterpriseId: string): Promise<PilotLocation[]>;
   page(location: PilotLocation, page: number, beforeRequest: () => Promise<void>): Promise<any>;
+  manualBudget?: { available(): boolean; admit(): void };
 }
 export const pilotWindow = (location: PilotLocation, now: Date) =>
   reconciliationWindow({ ...location, startHour: 1, endHour: 5, enabled: true }, now);
@@ -20,6 +21,8 @@ export async function tickTirePilot(db: Db, deps: PilotWorkerDeps) {
   const builds = db.collection<any>("tire_dot_pilot_generations");
   const evidence = db.collection<any>("tire_dot_pilot_evidence");
   const now = deps.now();
+  const windowOpen = (location: PilotLocation, at: Date) => deps.manualBudget
+    ? deps.manualBudget.available() : pilotWindow(location, at);
   const lease = randomUUID();
   const control = await controls.findOneAndUpdate({
     _id: PILOT_CONTROL, enabled: true, nextAt: { $lte: now },
@@ -48,7 +51,7 @@ export async function tickTirePilot(db: Db, deps: PilotWorkerDeps) {
     });
     if (build?.state === "failed") build = null;
     if (!build) {
-      if (!locations.every(l => pilotWindow(l, now))) return release("waiting_for_overnight_window", 60_000);
+      if (!locations.every(l => windowOpen(l, now))) return release("waiting_for_overnight_window", 60_000);
       build = { _id: randomUUID(), enterpriseId: control.enterpriseId, scopeHash,
         start: PILOT_RANGE.start, end: PILOT_RANGE.end, startedAt: now.toISOString(),
         state: "building", pass: 0, shopIndex: 0, page: 0, requests: 0, locations,
@@ -76,13 +79,16 @@ export async function tickTirePilot(db: Db, deps: PilotWorkerDeps) {
     // Recover a crash after the final checkpoint or after manifest publication.
     if (build.pass === 1 && build.shopIndex === locations.length) return publish();
     const location = build.locations[build.shopIndex] as PilotLocation;
-    if (!pilotWindow(location, now)) return release("waiting_for_overnight_window", 60_000);
+    if (!windowOpen(location, now)) return release("waiting_for_overnight_window", 60_000);
     if (build.requests >= PILOT_MAX_REQUESTS) throw Error("request_limit");
     const page = await deps.page(location, build.page, async () => {
       // Limiter waits must not permit requests outside the window or old leases.
       const current = (await deps.locations(control.enterpriseId)).sort((a, b) => a.shopId - b.shopId);
       if (pilotHash(current) !== scopeHash) throw Error("scope_changed");
-      if (!pilotWindow(location, deps.now())) throw Error("window_closed");
+      if (!windowOpen(location, deps.now())) throw Error("window_closed");
+      // Charge every physical attempt, including retries after limiter waits.
+      // This allowance never replaces the durable cumulative request budget.
+      deps.manualBudget?.admit();
       const renewed = await controls.updateOne({ ...owned, enabled: true,
         leaseUntil: { $gt: deps.now() }, $or: [
           { requestsUsed: { $exists: false } }, { requestsUsed: { $lt: PILOT_MAX_REQUESTS } },

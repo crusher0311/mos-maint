@@ -37,6 +37,23 @@ node --require ./scripts/_stubs/server-only-stub.cjs --import tsx scripts/heart-
 
 ## Limits and publication
 
+### Explicit bounded daytime continuation
+
+After operator approval and verification of the deployed release, a Render
+one-off job may run the same worker with `--daytime-once`:
+
+```sh
+node --require ./scripts/_stubs/server-only-stub.cjs --import tsx scripts/heart-tire-dot-pilot-worker.ts --daytime-once
+```
+
+This process-local allowance expires after 15 minutes or 20 physical request
+admissions, whichever comes first. It does not change the persisted schedule
+or reset any cumulative budget, cooldown, checkpoint, or enrollment. Expiry
+is rechecked after rate-limiter waits. It stops on deferral or publication and
+does not run queued report rendering. Unfinished discovery resumes from its
+existing checkpoint during the normal overnight window. A new invocation
+requires renewed operator approval; never schedule this command repeatedly.
+
 - Provider work only 01:00–05:00 shop-local time. Use configured shop timezone,
   or America/Chicago for the approved HEART pilot when absent.
 - 50 invoices per page; one page per tick with at least ten seconds between
