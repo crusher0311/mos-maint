@@ -97,6 +97,15 @@ export function extractTireInvoice(result: TireDotResult, shopId: number, source
   for (const [ji, job] of raw.jobs.entries()) {
     if (!object(job) || removed(job)) continue;
     const state = String(job.status ?? job.jobStatus ?? job.authorizationStatus ?? "").toLowerCase();
+    // Provider null means unknown, not approved or declined. Keep candidate
+    // invoices visible as exceptions without manufacturing sold-tire totals.
+    if (job.authorized === null && !/declined|deferred/.test(state) &&
+        Array.isArray(job.parts) && job.parts.some((part: any) =>
+          object(part) && !removed(part) && tireSaleCandidate(part))) {
+      const reason = "Tire job authorization is unknown; its parts are excluded from sold-tire totals";
+      if (!invoice.exceptions.includes(reason)) invoice.exceptions.push(reason);
+      tireCoverageGap(result, reason);
+    }
     if (job.authorized !== true || /declined|deferred|pending|open/.test(state)) continue;
     if (!Array.isArray(job.parts)) {
       tireCoverageGap(result, "Some authorized jobs lack a raw parts collection."); continue;
@@ -137,7 +146,7 @@ export function extractTireInvoice(result: TireDotResult, shopId: number, source
       invoice.exceptions = [...new Set([...invoice.exceptions, ...exceptions])];
     }
   }
-  if (!invoice.partLines) return;
+  if (!invoice.partLines && !invoice.exceptions.length) return;
   if (result.details.length + details.length > TIRE_DOT_LIMITS.rows ||
       Buffer.byteLength(JSON.stringify([result, details, invoice])) > TIRE_DOT_LIMITS.bytes) {
     result.limited = true; tireCoverageGap(result, "Result safety limit reached; counts are partial. Select fewer locations or shorter dates."); return;
