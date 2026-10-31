@@ -56,15 +56,18 @@ function ReleaseEditor({ visitId, shopId, inspection }: { visitId: string; shopI
       for (const id of finding.photoIds) {
         urls[id] = `/api/shop-dispatch/inspection/media?${new URLSearchParams({ visitId, sheet: source.sheet.key, item: source.item.id, mediaId: id })}`;
       }
+      for (const clip of finding.clips ?? []) {
+        urls[clip.id] = `/api/shop-dispatch/inspection/release?${new URLSearchParams({visitId, mediaId: clip.id})}`;
+      }
     }
     return urls;
   }
   if (api.loading) return <div className={ui.skeleton} role="status" aria-label="Checking customer release availability" />;
   // The release endpoint is the only authority. Technicians receive no release UI.
-  if (api.authority && !api.authority.canPublish) return null;
+  if (api.authority && !api.authority.canPublish && !api.authority.canRevoke && !api.authority.canDeliver) return null;
   if (!api.authority) return <section className={ui.panel}><h2>Customer findings release</h2><p className={ui.error} role="alert">{api.error}</p><button onClick={() => void api.reload()}>Retry availability check</button></section>;
   const blocked = api.busy || !!api.pending || !api.storageReady;
-  const gateBlocked = blocked || !api.authority.enabled;
+  const gateBlocked = blocked || !api.authority.enabled || !api.authority.canPublish;
   const retryBlocked = api.busy || (!api.authority.enabled && !(api.pending?.type === "link" && (api.pending.action === "revoke" || api.pending.action === "copy")));
   const valid = findings.length > 0 && findings.length <= 120 && findings.every(entry => entry.customerText.trim() && available.some(source => source.key === keyOf(entry.sheet, entry.item) && (source.sheet.active || entry.includeInactive)));
   const customerUrl = api.link?.token && !api.link.revokedAt && new Date(api.link.expiresAt).getTime() > Date.now() ? `${typeof window !== "undefined" ? window.location.origin : ""}/workflow-report#${encodeURIComponent(api.link.token)}` : "";
@@ -75,6 +78,7 @@ function ReleaseEditor({ visitId, shopId, inspection }: { visitId: string; shopI
     <p>Select saved findings and write customer-facing explanations. Active-sheet findings start included; inactive sheets require an explicit opt-in. Internal notes and recommendations are never automatically copied.</p>
     <p className={ui.notice}>Findings only. No repair authorization, vehicle clearance, provider synchronization, or customer delivery is performed here. “Published” and “copied” do not mean “sent.”</p>
     {!api.authority.enabled && <p className={ui.notice}>The release gate is off. Existing published reports remain viewable; valid links can be copied and existing links can be revoked. Preparing, publishing, creating, extending, and replacing are unavailable.</p>}
+    {!api.authority.canPublish && <p className={ui.notice}>Publication is restricted. Existing link access can still be revoked by authorized staff. Copying or delivering an existing report requires its separate permission; no new publication is allowed.</p>}
     {api.error && <p className={ui.error} role="alert">{api.error}</p>}
     {api.notice && <p className={ui.notice} role="status">{api.notice}</p>}
     {api.pending && <div className={ui.notice} role="status"><strong>{api.busy ? "Awaiting server receipt" : "Unconfirmed request retained"} · {api.pending.type}</strong><p>The exact request body and any request ID are retained in this tab’s session storage. Selection and link changes are blocked until the request is resolved.</p><button disabled={retryBlocked} onClick={() => void api.retry()}>Retry exact retained request</button></div>}
@@ -83,6 +87,7 @@ function ReleaseEditor({ visitId, shopId, inspection }: { visitId: string; shopI
       {!available.length && <div className={ui.empty}><h3>No eligible saved findings</h3><p>Save an evaluated, non-N/A finding in the inspection before preparing a customer release.</p></div>}
       {available.map(({ sheet, item, result, key }) => {
         const selected = findings.find(entry => keyOf(entry.sheet, entry.item) === key);
+        const clips = api.authority?.clips?.filter(clip => clip.sheet === sheet.key && clip.item === item.id) ?? [];
         return <article className={ui.finding} key={key}>
           <small>{sheet.sheet.name} · v{sheet.sheet.version} · {sheet.active ? "Active sheet" : "Inactive sheet"} · {result.rating}</small>
           <label className={ui.check}><input type="checkbox" checked={!!selected} onChange={event => change(event.target.checked ? [...findings, { sheet: sheet.key, item: item.id, includeInactive: !sheet.active, customerText: "", nextStep: "", photoIds: [], concernIds: [] }] : findings.filter(entry => keyOf(entry.sheet, entry.item) !== key))} /><span><strong>{item.name}{item.position ? ` · ${item.position}` : ""}</strong>{!sheet.active && " · Explicitly include inactive-sheet evidence"}</span></label>
@@ -93,6 +98,17 @@ function ReleaseEditor({ visitId, shopId, inspection }: { visitId: string; shopI
             <strong>Photos · choose individually (up to 6)</strong>
             <div className={ui.photos}>{result.photos.map((photo, index) => <label key={photo.id}><img src={`/api/shop-dispatch/inspection/media?${new URLSearchParams({ visitId, sheet: sheet.key, item: item.id, mediaId: photo.id })}`} alt={`Saved photo ${index + 1} for ${item.name}`} loading="lazy" /><span className={ui.check}><input type="checkbox" checked={selected.photoIds.includes(photo.id)} disabled={!selected.photoIds.includes(photo.id) && selected.photoIds.length >= 6} onChange={event => patch(selected, { photoIds: event.target.checked ? [...selected.photoIds, photo.id] : selected.photoIds.filter(id => id !== photo.id) })} />Include photo {index + 1}</span></label>)}</div>
             {!result.photos.length && <p><small>No saved photos on this finding.</small></p>}
+            <fieldset><legend>Prepared silent clips · optional, choose up to 3</legend>
+              <p><small>No clips are selected by default. Captions are released exactly as reviewed during preparation.</small></p>
+              {clips.map(clip => <label className={ui.check} key={clip.id}>
+                <input type="checkbox" checked={(selected.clipIds ?? []).includes(clip.id)}
+                  disabled={!(selected.clipIds ?? []).includes(clip.id) && (selected.clipIds?.length ?? 0) >= 3}
+                  onChange={event => patch(selected, {clipIds: event.target.checked ? [...(selected.clipIds ?? []), clip.id] :
+                    (selected.clipIds ?? []).filter(id => id !== clip.id)})} />
+                <span className={ui.copy}>{clip.caption}<small> · {clip.durationSeconds.toFixed(1)}s · silent</small></span>
+              </label>)}
+              {!clips.length && <p><small>No prepared clips available for this finding. Text and photos can still be released.</small></p>}
+            </fieldset>
             {!!api.authority?.concerns.length && <fieldset><legend>Explicit concern associations · original words retained</legend>{api.authority.concerns.map(concern => <label className={ui.check} key={concern.id}><input type="checkbox" checked={selected.concernIds.includes(concern.id)} disabled={!selected.concernIds.includes(concern.id) && selected.concernIds.length >= 20} onChange={event => patch(selected, { concernIds: event.target.checked ? [...selected.concernIds, concern.id] : selected.concernIds.filter(id => id !== concern.id) })} /><span className={ui.copy}>{concern.words}</span></label>)}</fieldset>}
           </>}
         </article>;
@@ -115,7 +131,7 @@ function ReleaseEditor({ visitId, shopId, inspection }: { visitId: string; shopI
       <div className={ui.actions}><button disabled={gateBlocked || (!!expiry && (!expiryISO || new Date(expiry).getTime() <= Date.now()))} onClick={() => { setCopied(""); void api.changeLink("create", undefined, expiryISO); }}>Create access link</button></div>
       {!api.authority.links.length && <p className={ui.empty}>No access links have been created.</p>}
       {api.authority.links.map(link => <div className={ui.link} key={link.id}><small>{link.revokedAt ? `Revoked ${new Date(link.revokedAt).toLocaleString()}` : `Expires ${new Date(link.expiresAt).toLocaleString()}`}</small><div className={ui.actions}>
-        <button disabled={blocked || !!link.revokedAt || !(new Date(link.expiresAt).getTime() > Date.now())} onClick={async () => {
+        <button disabled={blocked || !(api.authority!.canCopy ?? api.authority!.canPublish) || !!link.revokedAt || !(new Date(link.expiresAt).getTime() > Date.now())} onClick={async () => {
           setCopied("");
           const receipt = await api.changeLink("copy", link.id);
           if (!receipt?.token) return;
@@ -124,7 +140,7 @@ function ReleaseEditor({ visitId, shopId, inspection }: { visitId: string; shopI
             setCopied("Link copied. It has not been sent or delivered.");
           } catch { setCopied("Copy was unavailable. Select the retrieved URL below and copy it manually."); }
         }}>Copy link</button>
-        <button disabled={gateBlocked || !!link.revokedAt || !expiryISO || new Date(expiryISO).getTime() <= Math.max(Date.now(), new Date(link.expiresAt).getTime())} onClick={() => void api.changeLink("extend", link.id, expiryISO)}>Extend to selected expiry</button><button disabled={blocked || !!link.revokedAt} onClick={() => { if (window.confirm("Revoke this access link? Anyone using it will lose access.")) { setCopied(""); void api.changeLink("revoke", link.id); } }}>Revoke</button><button disabled={gateBlocked || (!!expiry && (!expiryISO || new Date(expiry).getTime() <= Date.now()))} onClick={() => { if (window.confirm("Replace this link and invalidate the previous token?")) { setCopied(""); void api.changeLink("replace", link.id, expiryISO); } }}>Replace link</button>
+        <button disabled={gateBlocked || !!link.revokedAt || !expiryISO || new Date(expiryISO).getTime() <= Math.max(Date.now(), new Date(link.expiresAt).getTime())} onClick={() => void api.changeLink("extend", link.id, expiryISO)}>Extend to selected expiry</button><button disabled={blocked || !(api.authority!.canRevoke ?? api.authority!.canPublish) || !!link.revokedAt} onClick={() => { if (window.confirm("Revoke this access link? Anyone using it will lose access.")) { setCopied(""); void api.changeLink("revoke", link.id); } }}>Revoke</button><button disabled={gateBlocked || (!!expiry && (!expiryISO || new Date(expiry).getTime() <= Date.now()))} onClick={() => { if (window.confirm("Replace this link and invalidate the previous token?")) { setCopied(""); void api.changeLink("replace", link.id, expiryISO); } }}>Replace link</button>
       </div></div>)}
       {customerUrl && <div className={ui.notice}><label>Customer URL · private bearer link<input readOnly value={customerUrl} aria-label="Customer report link" /></label><div className={ui.actions}><button disabled={blocked} onClick={async () => { try { await navigator.clipboard.writeText(customerUrl); setCopied("Link copied. It has not been sent."); } catch { setCopied("Copy was unavailable. Select the URL and copy it manually."); } }}>Copy customer link</button></div>{copied && <p role="status">{copied}</p>}</div>}
     </section>}

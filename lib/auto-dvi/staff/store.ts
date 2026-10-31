@@ -4,6 +4,7 @@ import { applyBindingAdmission } from "../workflow-binding-state";
 import { digest } from "../../shop-dispatch/service";
 import { requireThat } from "../../shop-dispatch/model";
 import { pilotOperationSchema, type PilotOperation } from "../pilot/model";
+import { inspectionPolicySchema, type InspectionPolicy } from "./inspection-policy";
 import { proposalSchema, arrivalAssociationSchema, type ArrivalAssociation, applyStaffCommand, initialInspection, instanceKey, photoSchema, sheetSchema, findingSchema,
   type Photo, type StaffCommand, type StaffInspection, type StaffSheet } from "./model";
 
@@ -18,6 +19,7 @@ const marker = z.object({revision, actor: z.string(), at: z.string().datetime()}
 export const staffStateSchema = z.object({
   version: z.literal(1), revision, evidenceRevision: revision, startedAt: z.string().datetime().nullable(), ready: marker, reviewed: marker,
   proposals: z.array(proposalSchema).max(60).optional(),
+  policy: inspectionPolicySchema.optional(),
   sheets: z.array(z.object({key: z.string(), sheet: sheetSchema, active: z.boolean(), selection: z.enum(["default", "manual"]),
     results: z.record(z.string(), findingSchema.extend({photos: z.array(photoSchema).max(6),
       arrivalPhotos: z.array(arrivalAssociationSchema).max(12).optional(), actor: z.string(), at: z.string().datetime()})),
@@ -166,6 +168,7 @@ export class StaffRepository implements WorkflowInspectionRepository {
     command: StaffCommand | {type: "initialize"} | {type: "photo"; sheet: string; item: string; photo: Photo};
     catalog: StaffSheet[]; defaultSheet: string; canReview: boolean;
     arrivalPhoto?: ArrivalAssociation;
+    policy?: InspectionPolicy;
     authorize: () => Promise<void>;
   }) {
     const {shopId, visitId, requestId, actor, command} = input;
@@ -190,7 +193,7 @@ export class StaffRepository implements WorkflowInspectionRepository {
       requireThat(!current, "Inspection already initialized", 409);
       const sheet = input.catalog.find(s => instanceKey(s) === input.defaultSheet);
       requireThat(sheet, "Approved default sheet unavailable", 409);
-      next = initialInspection(sheet);
+      next = initialInspection(sheet, input.policy);
       next.revision = 1;
     } else {
       requireThat(current, "Initialize the approved inspection first", 409);

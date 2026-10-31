@@ -23,6 +23,7 @@ export function PilotInspectionPanel({ visitId, shopId, blocked, evidenceRevisio
     <p role="status"><small>{api.error}</small></p><button type="button" disabled={api.busy} onClick={() => void api.load()}>Check pilot availability</button>
   </section> : null;
   const operation = data.operation;
+  const reportOptions = (data.reportOptions ?? []).filter(option => Date.parse(option.expiresAt) > Date.now());
   const locked = blocked || api.busy || !!api.storageError || !!api.error || api.uncertain || api.admitted || !data.enabled || !data.canSend;
   const validPreview = operation?.state === "preview" && api.previewId === operation.id && operation.evidenceRevision === data.evidenceRevision && data.evidenceRevision === evidenceRevision;
   const labelSource = typeof data.labelEvidence === "string" ? data.labelEvidence
@@ -45,6 +46,27 @@ export function PilotInspectionPanel({ visitId, shopId, blocked, evidenceRevisio
         </label>)}
       </fieldset>
       {!data.candidates?.length && <div className={styles.empty}><strong>No saved findings available</strong><p>Save eligible inspection evidence before preparing a preview.</p></div>}
+      <fieldset className={css.report} disabled={locked}>
+        <legend>Optional published report</legend>
+        <label className={styles.check}><input type="checkbox" checked={!!api.publishedReport} disabled={locked || !reportOptions.length}
+          onChange={event => api.choosePublishedReport(event.target.checked ? reportOptions[0] ?? null : null)} />
+          Include existing published report link</label>
+        {!reportOptions.length && <p><small>Publish and create a link in customer release first. No active published report links are available.</small></p>}
+        {!!api.publishedReport && <label>Active report version and link
+          <select value={JSON.stringify([api.publishedReport.version, api.publishedReport.linkId])}
+            onChange={event => {
+              const option = reportOptions.find(entry => JSON.stringify([entry.version, entry.linkId]) === event.target.value);
+              if (option) api.choosePublishedReport({ version: option.version, linkId: option.linkId });
+            }}>
+            {!reportOptions.some(option => option.version === api.publishedReport?.version && option.linkId === api.publishedReport?.linkId) &&
+              <option value={JSON.stringify([api.publishedReport.version, api.publishedReport.linkId])} disabled>Selected link is no longer active</option>}
+            {reportOptions.map(option => <option key={JSON.stringify([option.version, option.linkId])} value={JSON.stringify([option.version, option.linkId])}>
+              Version {option.version} · Link {option.linkId} · expires {new Date(option.expiresAt).toLocaleString()}
+            </option>)}
+          </select>
+        </label>}
+        <p><small>Uses an existing link only; this never publishes a report or creates a link. Selected findings must exactly equal the published report findings. The server rejects a mismatch; it will not fall back to findings-only delivery.</small></p>
+      </fieldset>
       <button type="button" disabled={locked || !api.selected.length || data.evidenceRevision !== evidenceRevision} onClick={() => void api.write("preview")}>Preview selected saved findings</button>
       {operation?.state === "preview" && !validPreview && <p><small>Previous preview is not approved for sending. Selection or inspection state changed; create a new explicit preview.</small></p>}
     </>}
@@ -53,10 +75,17 @@ export function PilotInspectionPanel({ visitId, shopId, blocked, evidenceRevisio
       <div className={css.metadata}><small>Operation {operation.id}</small><small>Work order {operation.workOrderGuid}</small><small>Evidence {operation.evidenceRevision}</small>
         {operation.observedAt && <small>Observed {new Date(operation.observedAt).toLocaleString()}</small>}</div>
       {operation.warning && <p className={styles.notice}>{operation.warning}</p>}
+      {operation.publishedReport && <div className={css.report} aria-label="Frozen published report">
+        <strong>Published report · version {operation.publishedReport.version}</strong>
+        <p>URL: <code>{operation.publishedReport.url}</code></p>
+        <p><small>Destination: {operation.publishedReport.destination} (inspection line Notes)<br />
+          Link: {operation.publishedReport.linkId}<br />Expires: {new Date(operation.publishedReport.expiresAt).toLocaleString()}</small></p>
+        <p>For this report link, confirmed means exact URL readback in Notes only. Protractor clickability remains unverified.</p>
+      </div>}
       <ul className={css.lines}>{operation.lines.map(line => <li key={line.key}><strong>{line.title}</strong><p>{line.result}</p>{line.notes && <p>{line.notes}</p>}</li>)}</ul>
       {operation.state === "preview" && <div className={css.confirm}><h4>2. Review risk, then confirm separately</h4>
         <label className={styles.check}><input type="checkbox" checked={api.acknowledged} disabled={locked || !validPreview} onChange={event => api.setAcknowledged(event.target.checked)} />
-          I reviewed this frozen preview and target work order. I understand this writes saved findings to the external CAR Experts test-instance work order, native labels are not independently verified, and a partial or uncertain outcome must not be resent.</label>
+          I reviewed this frozen preview and target work order. I understand this writes saved findings{operation.publishedReport ? " and the existing published report URL in inspection line Notes" : ""} to the external CAR Experts test-instance work order, native labels are not independently verified, and a partial or uncertain outcome must not be resent.</label>
         <div><button type="button" className={styles.primary} disabled={locked || !validPreview || !api.acknowledged} onClick={() => {
           if (window.confirm("Send these frozen saved findings to this CAR Experts test-instance work order? This is an external write. Do not resend if the outcome is uncertain.")) void api.write("send");
         }}>Send saved findings</button></div>
@@ -68,6 +97,8 @@ export function PilotInspectionPanel({ visitId, shopId, blocked, evidenceRevisio
     </div>}
     <div className={styles.actions} style={{ marginTop: 16 }}>
       <button type="button" disabled={api.busy} onClick={() => void api.load()}>Check pilot status</button>
+      {api.canRetryPreview && !api.admitted && <button type="button" disabled={api.busy || blocked || !!api.storageError || !data.enabled || !data.canSend}
+        onClick={() => void api.write("preview", true)}>Retry exact preview request (not a send)</button>}
       {(api.admitted || api.uncertain) && <button type="button" disabled={api.busy} onClick={() => void api.write("reconcile")}>Reconcile existing operation</button>}
     </div>
     <small>No resend or replacement after admission. Reloading discovers the existing server operation; it never sends findings.</small>

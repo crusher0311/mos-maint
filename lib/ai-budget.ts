@@ -53,6 +53,8 @@ interface EnforceBudgetArgs {
   shopId?: number | null;
   route: string;
   isPlatformAdmin?: boolean;
+  /** Automatic background assistance must not spend when budget reads fail. */
+  failClosed?: boolean;
 }
 
 interface BudgetCheckResult {
@@ -79,7 +81,11 @@ export async function enforceAiBudget(args: EnforceBudgetArgs): Promise<NextResp
 
     return NextResponse.json(result.body, { status: result.status ?? 429, headers });
   } catch (err: any) {
-    // Never block the request because budget enforcement itself failed.
+    if (args.failClosed) {
+      console.error("[AI-Budget] budget unavailable; background assistance blocked");
+      return NextResponse.json({error: "AI budget could not be verified"}, {status: 503});
+    }
+    // Preserve legacy interactive behavior unless explicitly overridden.
     console.error("[AI-Budget] enforce failed (allowing request):", err?.message || err);
     return null;
   }

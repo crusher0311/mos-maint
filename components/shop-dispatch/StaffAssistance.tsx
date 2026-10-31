@@ -9,11 +9,12 @@ type Voice = {itemId: string; name: string; rating: "green" | "yellow" | "red" |
 type Assignment = {index: number; itemId: string | null; label: string | null};
 type Target = {itemId: string; sheet: string; item: string; name: string};
 type Suggestions = {revision: number; items?: Check[]; findings?: Voice[]; targets?: Target[]; assignments?: Assignment[]; transcript?: string; hidden?: unknown[]};
-export function StaffAssistance({visitId, inspection, disabled, command, upload, onDraft}: {
+export function StaffAssistance({visitId, inspection, disabled, command, upload, onDraft, onLockChange}: {
   visitId: string; inspection: StaffInspection; disabled: boolean;
   command: (command: StaffCommand) => Promise<InspectionResponse | null>;
   upload: (sheet: string, item: string, file: File, provenance: "upload") => Promise<InspectionResponse | null>;
   onDraft: (sheet: string, item: string, value: FindingInput) => void;
+  onLockChange?: (locked: boolean) => void;
 }) {
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
   const [suggestions, setSuggestions] = useState<Suggestions | null>(null);
@@ -23,6 +24,12 @@ export function StaffAssistance({visitId, inspection, disabled, command, upload,
   const stream = useRef<MediaStream | null>(null);
   const files = useRef<File[]>([]);
   const mounted = useRef(true);
+  const lockCallback = useRef(onLockChange);
+  lockCallback.current = onLockChange;
+  useEffect(() => {
+    lockCallback.current?.(busy || recording);
+    return () => lockCallback.current?.(false);
+  }, [busy, recording]);
   useEffect(() => {
     mounted.current = true;
     return () => {mounted.current = false; if (recorder.current?.state === "recording") recorder.current.stop(); stream.current?.getTracks().forEach(t => t.stop());};
@@ -44,27 +51,40 @@ export function StaffAssistance({visitId, inspection, disabled, command, upload,
     finally {if (mounted.current) setBusy(false);}
   }
   async function record() {
-    setError("");
+    setError(""); setRecording(true);
     try {
       const media = await navigator.mediaDevices.getUserMedia({audio: true});
+      if (!mounted.current) {media.getTracks().forEach(track => track.stop()); return;}
       stream.current = media;
       const rec = new MediaRecorder(media); recorder.current = rec;
       const chunks: Blob[] = [];
-      rec.ondataavailable = e => {if (e.data.size) chunks.push(e.data);};
+      let bytes = 0, oversized = false;
+      const timer = setTimeout(() => {if (rec.state === "recording") rec.stop();}, 60_000);
+      const visibility = () => {if (document.visibilityState !== "visible" && rec.state === "recording") rec.stop();};
+      document.addEventListener("visibilitychange", visibility);
+      rec.ondataavailable = e => {
+        if (!e.data.size || oversized) return;
+        bytes += e.data.size;
+        if (bytes > 6 * 1024 * 1024) {oversized = true; if (rec.state === "recording") rec.stop(); return;}
+        chunks.push(e.data);
+      };
       rec.onstop = () => {
+        clearTimeout(timer); document.removeEventListener("visibilitychange", visibility);
         media.getTracks().forEach(t => t.stop());
         if (!mounted.current) return;
         setRecording(false);
+        if (oversized) {setError("Short dictation exceeded 6 MiB and was not submitted. Use bounded visit recording or enter findings manually."); return;}
         const form = new FormData();
         form.set("audio", new File(chunks, "inspection-dictation.webm", {type: rec.mimeType || "audio/webm"}));
         void request("voice", form);
       };
-      rec.start(); setRecording(true);
-    } catch {setError("Microphone unavailable. You can upload an audio file or enter findings manually.");}
+      rec.start(500); setRecording(true);
+    } catch {if (mounted.current) {setRecording(false); setError("Microphone unavailable. You can upload an audio file or enter findings manually.");}}
   }
   const locked = disabled || busy || recording || !!stale;
   return <details className={styles.panel}><summary>Inspection assistance · review before accepting</summary>
     <p>Suggestions are not inspected findings. Confirm scope checks, review dictated findings, and approve each photo assignment. No historical rating or maintenance urgency is saved as an inspection.</p>
+    <p><small>Short dictation stops after one minute or when this screen is hidden. Longer narrated inspections use the bounded visit recording controls when enabled.</small></p>
     <div className={styles.actions}>
       <button disabled={disabled || busy || recording} onClick={() => void request("generate")}>Suggest VHI, custom checks and recalls</button>
       <button disabled={disabled || busy} onClick={() => recording ? recorder.current?.stop() : void record()}>{recording ? "Stop and review dictation" : "Record voice findings"}</button>

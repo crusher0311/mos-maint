@@ -111,7 +111,8 @@ outputType = "console"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "PROTRACTOR_OFFLINE_ALLOW_LOOPBACK=true NODE_OPTIONS='--require ./tests/helpers/deny-network-egress.cjs --require ./scripts/_stubs/server-only-stub.cjs' node --import tsx tests/browser/staff-inspection-fixture-server.ts"
+args = "env -i PATH=\"$PATH\" HOME=\"$HOME\" PROTRACTOR_OFFLINE_ALLOW_LOOPBACK=true NODE_OPTIONS=\"--require ./tests/helpers/deny-network-egress.cjs --require ./scripts/_stubs/server-only-stub.cjs\" node --import tsx -e \"require('./tests/browser/staff-inspection-fixture-server.ts').createStaffBrowserFixture(true,false,false,true).then(async f=>{await f.fixture.initialize();f.server.listen(3001,'0.0.0.0')})\""
+waitForPort = 3001
 
 [[workflows.workflow]]
 name = "Offline Protractor exports"
@@ -140,6 +141,10 @@ outputType = "webview"
 [[ports]]
 localPort = 3000
 externalPort = 3000
+
+[[ports]]
+localPort = 3001
+externalPort = 6000
 
 [[ports]]
 localPort = 5000

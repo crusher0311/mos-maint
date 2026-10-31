@@ -5,6 +5,14 @@ description: Product access must follow the target shop through every direct and
 
 A shop product entitlement is a boundary around the data and capability, not just its primary dashboard page. Enforce it after resolving the target shop across dashboard APIs, extension APIs, signed public links and media, partner endpoints, and features that derive output from cached product data.
 
+The user requires the existing DVI feature block to be the outer gate for the
+entire DVI first release, not a parallel master switch. Keep narrower recording,
+publication and delivery approvals underneath it. Preserve ordinary non-DVI
+check-in and VHI behavior.
+
+**Why:** Deploying a DVI pilot must not expose its additions to DVI-disabled
+shops. Worker enrollment alone must not authorize background work.
+
 Trial setup toggles are preferences, never perpetual paid grants. A malformed nested deadline must not revive an older legacy deadline. Preserve deliberate invoice/demo/founder exceptions separately from package purchases.
 
 **Why:** Trial setup can manually enable features beyond the trial's default tier, and those preferences remain after conversion or downgrade. Erasing preferences loses configuration; treating them as purchases extends access.

@@ -153,5 +153,7 @@
 - [Optional tutorial safety](optional-tutorial-safety.md) — production help stays opt-in; no automatic business-control activation or account-age inference.
 - [Tekmetric maintenance color](tekmetric-maintenance-color-policy.md) — yellow is explicit per-shop opt-in; maintenance timing and inspection condition remain separate.
 - [DVI consolidation boundary](dvi-consolidation-boundary.md) — workflow visit authority; parity before retirement; no live activation or artifact changes.
+- [DVI policy defaults](dvi-policy-default-preservation.md) — explicit policy adoption preserves legacy partial releases; pinned completion is not permanent release authority.
+- [DVI foreground recording](dvi-foreground-recording.md) — independently decodable segments, missing WebM duration, and fail-closed background budgets.
 - [Tire DOT report boundaries](tire-dot-report-policy.md) — preserve repeated raw DOT occurrences; separate invoice reconciliation and production approval.
 - [Overnight reconciliation scope](overnight-reconciliation-scope.md) — complete invoice corrections, including removed lines; fence old writers and respect mixed-store boundaries.

@@ -24,6 +24,7 @@ export interface VoiceTranscribeResult {
 export async function transcribeInspectionAudio(
   audio: Buffer,
   mimeType: string,
+  signal?: AbortSignal,
 ): Promise<VoiceTranscribeResult> {
   if (!audio?.length) return { ok: false, error: "Empty audio" };
   if (audio.length > MAX_AUDIO_BYTES) return { ok: false, error: "Audio too large (max 25MB)" };
@@ -45,7 +46,7 @@ export async function transcribeInspectionAudio(
         "Content-Type": mimeType || "audio/webm",
       },
       body: new Uint8Array(audio),
-      signal: AbortSignal.timeout(30_000),
+      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
     });
     if (!res.ok) {
       const text = (await res.text().catch(() => "")).slice(0, 200);
@@ -84,11 +85,13 @@ export async function extractVoiceFindings(
   audio: Buffer,
   mimeType: string,
   checklist: VoiceChecklistItem[],
+  signal?: AbortSignal,
 ): Promise<VoiceFindingsResult> {
-  const t = await transcribeInspectionAudio(audio, mimeType);
+  const t = await transcribeInspectionAudio(audio, mimeType, signal);
   if (!t.ok || !t.transcript) return { ok: false, error: t.error || "Transcription failed" };
 
   try {
+    signal?.throwIfAborted();
     const openai = getOpenAI({ feature: "/api/auto-dvi/voice", shopId });
     const started = Date.now();
     const completion = await openai.chat.completions.create(
@@ -101,7 +104,7 @@ export async function extractVoiceFindings(
           { role: "user", content: t.transcript },
         ],
       },
-      { signal: AbortSignal.timeout(STRUCTURE_TIMEOUT_MS) },
+      { signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(STRUCTURE_TIMEOUT_MS)]) : AbortSignal.timeout(STRUCTURE_TIMEOUT_MS) },
     );
     trackOpenAiCall(shopId, "/api/auto-dvi/voice", completion as any, Date.now() - started, 200);
     let parsed: unknown = null;

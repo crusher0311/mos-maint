@@ -2,6 +2,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { sheetSchema, type StaffItem, type StaffSheet } from "@/lib/auto-dvi/staff/model";
 import { useSheetCatalog, type SheetCatalog, type SheetCommand } from "./use-sheet-catalog";
+import { policyDraftSchema, type PolicyDraft } from "@/lib/auto-dvi/staff/inspection-policy";
+import { InspectionPolicyEditor, draftFromPolicy } from "./InspectionPolicyEditor";
 import styles from "./sheet-manager.module.css";
 
 const keyOf = (sheet: StaffSheet) => `${sheet.id}@${sheet.version}`;
@@ -23,13 +25,14 @@ export function SheetManager({ api: supplied, onLockChange }: { api?: SheetCatal
   const { data, forbidden, loading, busy, pending, conflict, error, notice } = api;
   const [selection, setSelection] = useState("");
   const [draft, setDraft] = useState<StaffSheet | null>(null);
+  const [policyDraft, setPolicyDraft] = useState<PolicyDraft | null>(null);
   const [makeDefault, setMakeDefault] = useState(false);
   const [validation, setValidation] = useState("");
   const [filter, setFilter] = useState("");
   const [showArchived, setShowArchived] = useState(false);
   const [reuseKey, setReuseKey] = useState("");
   const [confirmation, setConfirmation] = useState<SheetCommand | null>(null);
-  const locked = !!draft || !!pending || busy || conflict || !!confirmation;
+  const locked = !!draft || !!policyDraft || !!pending || busy || conflict || !!confirmation;
   const lockCallback = useRef(onLockChange);
   lockCallback.current = onLockChange;
   useEffect(() => { lockCallback.current?.(locked); }, [locked]);
@@ -100,10 +103,21 @@ export function SheetManager({ api: supplied, onLockChange }: { api?: SheetCatal
       if (saved) setSelection(keyOf(saved));
       setDraft(null);
     }
-    if (receipt) setConfirmation(null);
+    if (receipt) { setConfirmation(null); setPolicyDraft(null); }
   }
   async function discard() {
-    if (await api.discardAndReload()) { setDraft(null); setConfirmation(null); setValidation(""); setReuseKey(""); setMakeDefault(false); }
+    if (await api.discardAndReload()) { setDraft(null); setPolicyDraft(null); setConfirmation(null); setValidation(""); setReuseKey(""); setMakeDefault(false); }
+  }
+  async function savePolicy() {
+    if (!policyDraft || editingBlocked || !data?.canManage) return;
+    const result = policyDraftSchema.safeParse(policyDraft);
+    if (!result.success) {
+      setValidation(result.error.issues.map(issue => `${issue.path.join(".") || "Policy"}: ${issue.message}`).join(" · "));
+      return;
+    }
+    setValidation("");
+    const receipt = await api.command({ type: "policy", policy: result.data });
+    if (receipt) setPolicyDraft(null);
   }
   async function confirm() {
     if (!confirmation) return;
@@ -120,7 +134,7 @@ export function SheetManager({ api: supplied, onLockChange }: { api?: SheetCatal
       <small>Managers publish new, immutable versions. Technicians use approved sheets; publishing, changing the default or archiving never rewrites sheets or findings already attached to a visit. Matching item, procedure, position and measurement identities allow same-visit reuse without repeating work.</small>
     </header>
     {error && <div className={styles.error} role="alert"><strong>{error}</strong>
-      {!pending && !conflict && !draft && <div className={styles.actions}><button disabled={busy || loading} onClick={() => void api.reload()}>Retry loading sheets</button></div>}</div>}
+      {!pending && !conflict && !draft && !policyDraft && <div className={styles.actions}><button disabled={busy || loading} onClick={() => void api.reload()}>Retry loading sheets</button></div>}</div>}
     {pending && <div className={styles.notice} role="alert"><strong>{busy ? "Waiting for a save receipt." : "The last save is unconfirmed."}</strong><p>The exact request and draft are retained. Do not create another change or leave this workspace. Retry uses the same request ID and payload.</p>
       <button disabled={busy} onClick={() => void retry()}>Retry exact save</button></div>}
     {conflict && <div className={styles.notice} role="alert"><strong>The catalog changed. Your draft has not been rebased.</strong><p>Review or copy your draft below before explicitly discarding it. Reloading replaces the base revision; it does not merge changes.</p><button disabled={busy || loading} onClick={() => void discard()}>Discard draft and reload latest</button></div>}
@@ -130,6 +144,11 @@ export function SheetManager({ api: supplied, onLockChange }: { api?: SheetCatal
       <div className={styles.empty}><h3>No catalog loaded</h3><p>A network error is not a permission decision. Retry to check DVI access again.</p></div> : <>
       {!data.canManage && <div className={styles.notice}><strong>Read-only · {data.scopeLabel} owns these definitions.</strong><p>{data.scope === "enterprise" ? "An enterprise manager maintains these approved templates. Local managers and technicians cannot change them here." : "Your account can preview approved sheets. A manager with sheet-management permission must publish changes."} Technician inspection access is separate from management access.</p></div>}
       {!data.inspectionEnabled && <div className={styles.notice}>Technician inspections are currently disabled. Publishing or managing sheets does not enable inspection admissions or change the DVI rollout. Catalog access and technician inspection access are separate.</div>}
+      <InspectionPolicyEditor policy={data.policy} draft={policyDraft} canManage={data.canManage}
+        locked={locked} blocked={editingBlocked} pending={!!pending}
+        onEdit={() => { if (!locked && data.canManage) { setValidation(""); setPolicyDraft(draftFromPolicy(data.policy)); } }}
+        onChange={setPolicyDraft} onSave={() => void savePolicy()}
+        onDiscard={() => { if (window.confirm("Discard this local policy draft and load the latest catalog?")) void discard(); }} />
       <div className={styles.row}><div className={styles.actions}><span className={styles.badge}>{latest.filter(sheet => !data.archivedSheetIds.includes(sheet.id)).length} active definitions</span><small>Catalog revision {data.revision}</small></div>
         <div className={styles.actions}><button disabled={locked || loading} onClick={() => void api.reload()}>Refresh catalog</button>{data.canManage && <button className={styles.primary} disabled={locked || loading} onClick={() => start()}>Create sheet</button>}</div></div>
       <p><small>The default starts new inspections only. Archived definitions and every approved version remain available for historical reference.</small></p>

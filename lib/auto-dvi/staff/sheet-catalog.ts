@@ -5,6 +5,7 @@ import {canonical} from "../durable/model";
 import {configurationSchema, type StaffConfiguration} from "./configuration";
 import {sheetSchema, itemSchema, instanceKey, STAFF_SHEET_TEMPLATES, type StaffItem} from "./model";
 import {TIRE_BATTERY_SHEET} from "./tire-battery-sheet";
+import {policyDraftSchema} from "./inspection-policy";
 
 const editableSheet = z.object({
   id: z.string().regex(/^[a-zA-Z0-9_-]{1,60}$/),
@@ -15,6 +16,7 @@ const editableSheet = z.object({
 export const catalogRequestSchema = z.object({
   requestId: z.string().uuid(), revision: z.number().int().nonnegative(),
   command: z.discriminatedUnion("type", [
+    z.object({type: z.literal("policy"), policy: policyDraftSchema}).strict(),
     z.object({type: z.literal("save"), sheet: editableSheet, makeDefault: z.boolean()}).strict(),
     z.object({type: z.literal("default"), sheet: z.string().max(80)}).strict(),
     z.object({type: z.literal("archive"), sheetId: z.string().max(60), archived: z.boolean()}).strict(),
@@ -28,12 +30,13 @@ export interface CatalogStore {
   read(key: string): Promise<StaffConfiguration | null>;
   cas(key: string, before: StaffConfiguration | null, after: StaffConfiguration): Promise<boolean>;
 }
-export interface CatalogDependencies {access(): Promise<CatalogAccess>; store: CatalogStore}
+export interface CatalogDependencies {access(): Promise<CatalogAccess>; store: CatalogStore; now?: () => string}
 export function catalogSnapshot(access: CatalogAccess, config: StaffConfiguration | null) {
   return {scope: access.scope, scopeLabel: access.scopeLabel, canManage: access.canManage,
     revision: config?.catalogRevision ?? 0, sheets: config?.sheets ?? [],
     archivedSheetIds: config?.archivedSheetIds ?? [], defaultSheet: config?.defaultSheet ?? "",
-    templates: [...STAFF_SHEET_TEMPLATES, TIRE_BATTERY_SHEET], inspectionEnabled: !!config?.enabledShopIds.includes(access.shopId)};
+    templates: [...STAFF_SHEET_TEMPLATES, TIRE_BATTERY_SHEET], inspectionEnabled: !!config?.enabledShopIds.includes(access.shopId),
+    policy: config?.policies?.[String(access.shopId)] ?? null};
 }
 const hash = (value: unknown) => createHash("sha256").update(canonical(value)).digest("hex");
 // This is the same semantic identity used to reuse findings across sheets.
@@ -60,7 +63,12 @@ export async function updateCatalog(raw: unknown, deps: CatalogDependencies) {
     version: 1, enabledShopIds: [], sheets: [], defaultSheet: "", rules: {}, individual: {},
   });
   const command = request.command;
-  if (command.type === "save") {
+  if (command.type === "policy") {
+    const key = String(access.shopId);
+    (next.policies ??= {})[key] = {...command.policy,
+      version: (before?.policies?.[key]?.version ?? 0) + 1,
+      actor: access.actor, at: deps.now?.() ?? new Date().toISOString()};
+  } else if (command.type === "save") {
     const history = next.sheets.filter(s => s.id === command.sheet.id);
     const latest = Math.max(0, ...history.map(s => s.version));
     requireThat(command.sheet.version === latest, "Sheet version changed; reload before saving", 409);

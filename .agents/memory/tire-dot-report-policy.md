@@ -109,8 +109,8 @@ start and first page progress when explaining elapsed time.
 Real Tekmetric invoice-list responses can contain `authorized: null` jobs even
 when posted dates, jobs, and parts arrays are present.
 
-**Why:** An approved read-only diagnostic on 2026-10-31 found six such jobs in a
-50-invoice page; boolean-only fixtures had hidden the contract mismatch.
+**Why:** Boolean-only fixtures hide the distinction between missing approval
+evidence and an explicit decline in real provider payloads.
 
 **How to apply:** Preserve null as unknown, never coerce it into approval or
 decline. Keep candidate tire invoices visible as exceptions without counting

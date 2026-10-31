@@ -1,0 +1,11 @@
+.editor { margin-block: 1rem; padding: 1rem; border: 1px solid #b8c9c0; border-radius: .65rem; background: #eef4f0; color: #243d34; }
+.range { display: flex; flex-wrap: wrap; gap: .8rem; margin-block: .8rem; }
+.range label { display: grid; gap: .35rem; flex: 1 1 9rem; }
+.editor textarea { width: 100%; }
+.check { display: flex; gap: .6rem; align-items: flex-start; margin-block: .9rem; }
+.check input { flex: none; margin-top: .25rem; }
+.video { display: block; width: 100%; max-height: 26rem; border-radius: .5rem; background: #20362f; }
+.clip { margin: 1rem 0; padding: .8rem; border: 1px solid #c6d4cb; border-radius: .6rem; }
+.clip figcaption { white-space: pre-wrap; margin-block: .65rem; line-height: 1.55; }
+.playback { display: flex; flex-wrap: wrap; gap: .7rem; align-items: center; margin-block: 1rem; }
+@media (max-width: 767px) { .range { display: grid; grid-template-columns: 1fr; } }

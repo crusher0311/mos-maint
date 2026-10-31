@@ -11,10 +11,18 @@ import {ROArrivalPhotos} from "../../lib/data/repositories/ro-arrival-photos";
 import {randomUUID} from "node:crypto";
 import {TIRE_BATTERY_SHEET} from "../../lib/auto-dvi/staff/tire-battery-sheet";
 import {inspectionHistory} from "../../lib/auto-dvi/staff/history";
+import {RecordingRepository, MongoRecordingPersistence} from "../../lib/auto-dvi/staff/recording-store";
+import {RecordingMediaStorage} from "../../lib/auto-dvi/staff/recording-media";
+import {recordingContext, startRecording, stopRecording, uploadRecordingSegment, requestRecordingClip, retryRecordingProcessing} from "../../lib/auto-dvi/staff/recording-service";
+import {processRecordingSegment} from "../../lib/auto-dvi/staff/recording-worker";
+import {processRecordingClip} from "../../lib/auto-dvi/staff/recording-clip-worker";
 
-export async function createStaffBrowserFixture(releases = false, arrivals = false, tire = false) {
+export async function createStaffBrowserFixture(releases = false, arrivals = false, tire = false, recordings = false) {
   const isolated = await isolatedStaffDatabase(27817);
   const fixture = await staffFixture(isolated.client);
+  if (recordings) fixture.setAccess({config: {...fixture.access.config!, recording: {enabledShopIds: [1]}}});
+  const recordingStore = new RecordingRepository(new MongoRecordingPersistence(async () => fixture.db));
+  const recordingMedia = new RecordingMediaStorage(async () => fixture.db);
   if (tire) fixture.setAccess({config: {...fixture.access.config!, sheets: [TIRE_BATTERY_SHEET], defaultSheet: "tire-battery@1"}});
   const arrivalPhotos = new ROArrivalPhotos(async () => fixture.db);
   if (arrivals) {
@@ -46,10 +54,51 @@ export async function createStaffBrowserFixture(releases = false, arrivals = fal
       access.authority.actorId = access.actor; access.authority.roles = [actor];
       const deps = {...fixture.deps, access: async () => structuredClone(access)};
       const releaseDeps: ReleaseDependencies = {staff: deps, media: fixture.media,
+        preparedClips: (shopId, visitId) => (recordingStore.store as MongoRecordingPersistence).preparedClips(shopId, visitId),
+        readClip: (id, shopId, visitId) => recordingMedia.readReleased(id, shopId, visitId),
         store: new MongoReleaseStorage(async () => fixture.db),
         branding: async () => ({name: "Synthetic sending shop", phone: "555-0100", primary: "#285746", logo: null}),
         secret: () => "isolated-browser-signing-key-no-production-use", publicEntitled: async () => true};
       calls.push(`${req.method} ${url.pathname}`);
+      if (recordings && url.pathname === "/api/shop-dispatch/inspection/recordings") {
+        const recordingDeps = {staff: deps, repository: recordingStore};
+        let recording;
+        if (req.method === "GET") {
+          recording = (await recordingContext({visitId: url.searchParams.get("visitId"), id: url.searchParams.get("id")}, recordingDeps)).record;
+          if (url.searchParams.has("mediaId")) {
+            const mediaId = url.searchParams.get("mediaId")!;
+            if (!recording.clips?.some(c => c.mediaId === mediaId && c.state === "ready")) throw Error("Clip unavailable");
+            const file = await recordingMedia.readReleased(mediaId, recording.shopId, recording.visitId);
+            res.setHeader("Content-Type", file.mime); res.end(file.bytes); return;
+          }
+        } else {
+          const parts: Buffer[] = []; let size = 0;
+          for await (const part of req) {size += part.length; if (size > 4 * 1024 * 1024 + 16000) throw Error("Fixture upload limit"); parts.push(Buffer.from(part));}
+          if (req.headers["content-type"]?.startsWith("application/json")) {
+            const {action, ...body} = JSON.parse(Buffer.concat(parts).toString());
+            recording = action === "start" ? await startRecording(body, recordingDeps) :
+              action === "clip" ? await requestRecordingClip(body, recordingDeps) :
+              action === "retry-processing" ? await retryRecordingProcessing(body, recordingDeps) : await stopRecording(body, recordingDeps);
+            if (action === "clip") setTimeout(() => {void processRecordingClip({visitId: body.visitId, id: body.id},
+              body.clipId, recordingDeps, recordingMedia).catch(() => {});}, 20);
+          } else {
+            const form = await new Response(Buffer.concat(parts), {headers: {"content-type": req.headers["content-type"]!}}).formData();
+            const file = form.get("file") as File;
+            const scope = {visitId: String(form.get("visitId")), id: String(form.get("id"))}, sequence = Number(form.get("sequence"));
+            recording = await uploadRecordingSegment({...scope, sequence, durationSeconds: Number(form.get("durationSeconds")),
+              mime: form.get("mime")}, Buffer.from(await file.arrayBuffer()), recordingDeps, recordingMedia);
+            // Isolated, deterministic narration processor; no AI/provider calls.
+            // Queue after acknowledgment rather than processing inside upload.
+            setTimeout(() => {void processRecordingSegment(scope, sequence, recordingDeps, recordingMedia, {
+              async process(input) {return {drafts: [{id: `fixture-${sequence}`, target: input.targets[0], source: "narration",
+                rating: "yellow", notes: "Synthetic narrated tire concern", caption: "Synthetic reviewed-caption candidate",
+                startSeconds: 0, endSeconds: Math.min(1, input.maximumSeconds), confirmed: false}]};},
+            }).catch(() => {});}, 20);
+          }
+        }
+        const {contributorEmail: _, ...visible} = recording;
+        reply({recording: visible, scope: JSON.stringify([recording.shopId, recording.actor, recording.visitId])}); return;
+      }
       if (url.pathname === "/api/dashboard/protractor/arrival-photos") {
         const board = await fixture.deps.board.read(1);
         const visit = board.visits.find(v => v.id === url.searchParams.get("visitId") || v.sourceId === url.searchParams.get("workOrderId"));

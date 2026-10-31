@@ -346,7 +346,8 @@ export async function getCachedPlan(
   // Task #333: when a shop flips between miles and kilometers, the cached
   // distance fields (now stored in shop unit) become wrong. Skip stale
   // cache entries whose distanceUnit no longer matches the shop preference.
-  distanceUnit?: "miles" | "kilometers"
+  distanceUnit?: "miles" | "kilometers",
+  readBounds?: {limit: number; maxTimeMS: number},
 ): Promise<CachedPlan | null> {
   // Task #998: reads dispatch through the plan-cache store facade
   // (PG-canonical behind PLAN_CACHE_PG_CANONICAL, Mongo otherwise). The
@@ -356,6 +357,7 @@ export async function getCachedPlan(
     shopId,
     vin,
     db,
+    readBounds,
   )) as unknown as CachedPlan[];
 
   if (candidates.length === 0) {

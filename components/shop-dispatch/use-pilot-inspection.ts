@@ -1,17 +1,23 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+export type PublishedReportReference = { version: number; linkId: string };
+export type PublishedReportOption = PublishedReportReference & { expiresAt: string };
 export type PilotOperation = {
   id: string; visitId: string; workOrderGuid: string; evidenceRevision: number;
   state: "preview" | "admitted" | "pending" | "partial" | "conflict" | "confirmed";
   acknowledged: boolean; observedAt: string | null;
   lines: { key: string; title: string; result: string; notes: string }[];
   warning?: string | null; recoveryAllowed: false;
+  publishedReport?: PublishedReportOption & {
+    url: string; reportDigest: string; destination: "inspection-line-notes"; clickability: "unverified";
+  };
 };
 export type PilotResponse = {
   enabled: boolean; canSend: boolean; evidenceRevision: number; workOrderGuid: string | null;
   warning?: string | null; labelEvidence?: unknown; operation: PilotOperation | null;
   candidates: { sheet: string; item: string; name: string; rating: string | null }[];
+  reportOptions?: PublishedReportOption[];
 };
 type RequestIds = { previewRequestId?: string; sendRequestId?: string };
 const endpoint = "/api/shop-dispatch/inspection/pilot";
@@ -33,6 +39,9 @@ export function usePilotInspection(visitId: string, shopId: number | undefined, 
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [acknowledged, setAcknowledged] = useState(false);
   const [selected, setSelected] = useState<{ sheet: string; item: string }[]>([]);
+  const [publishedReport, setPublishedReport] = useState<PublishedReportReference | null>(null);
+  // An explicit preview-only retry replays these exact bytes, never current inputs.
+  const previewBody = useRef<string | null>(null);
   const active = useRef(false);
   const initialized = useRef(false);
   const edited = useRef(false);
@@ -109,11 +118,27 @@ export function usePilotInspection(visitId: string, shopId: number | undefined, 
     setSelected(previous => previous.some(entry => entry.sheet === sheet && entry.item === item)
       ? previous.filter(entry => entry.sheet !== sheet || entry.item !== item) : [...previous, { sheet, item }]);
   }
-  async function write(action: "preview" | "send" | "reconcile") {
+  function choosePublishedReport(reference: PublishedReportReference | null) {
+    if (active.current || blockedRef.current || storageError || error || uncertain || admissionObserved ||
+      !data?.enabled || !data.canSend || (data.operation && data.operation.state !== "preview") || ids.current.sendRequestId) return;
+    if (reference && !data.reportOptions?.some(option => option.version === reference.version &&
+      option.linkId === reference.linkId && Date.parse(option.expiresAt) > Date.now())) return;
+    edited.current = true; selectionGeneration.current++;
+    setPreviewId(null); setAcknowledged(false);
+    setPublishedReport(reference ? { version: reference.version, linkId: reference.linkId } : null);
+  }
+  async function write(action: "preview" | "send" | "reconcile", retryPreview = false) {
     if (active.current || !data) return;
     const admitted = admissionObserved || !!ids.current.sendRequestId || !!data.operation && data.operation.state !== "preview";
-    if (action !== "reconcile" && (blockedRef.current || storageError || !data.enabled || !data.canSend || admitted || uncertain || error)) return;
-    if (action === "preview" && (!selected.length || data.evidenceRevision !== evidenceRevision)) return;
+    const exactRetry = retryPreview && action === "preview" && uncertain && !!ids.current.previewRequestId && !!previewBody.current;
+    if (retryPreview && !exactRetry) return;
+    if (action !== "reconcile" && (blockedRef.current || storageError || !data.enabled || !data.canSend || admitted || (!exactRetry && (uncertain || error)))) return;
+    if (action === "preview" && !exactRetry && (!selected.length || data.evidenceRevision !== evidenceRevision)) return;
+    if (action === "preview" && !exactRetry && publishedReport && !data.reportOptions?.some(option =>
+      option.version === publishedReport.version && option.linkId === publishedReport.linkId && Date.parse(option.expiresAt) > Date.now())) {
+      setError("Selected published report link is no longer active. Check pilot status and select an active link; no findings-only fallback was sent.");
+      return;
+    }
     if (action === "send" && (!acknowledged || !previewId || previewId !== data.operation?.id || data.operation.state !== "preview" || data.operation.evidenceRevision !== data.evidenceRevision || data.evidenceRevision !== evidenceRevision)) return;
     if (action === "reconcile" && !admitted && !uncertain) return;
     active.current = true; setBusy(true); setError("");
@@ -121,7 +146,8 @@ export function usePilotInspection(visitId: string, shopId: number | undefined, 
     let dispatched = false;
     try {
       let body: object;
-      if (action === "reconcile") body = { action, visitId };
+      if (exactRetry) body = JSON.parse(previewBody.current!);
+      else if (action === "reconcile") body = { action, visitId };
       else {
         // The server identifies send by previewId; never persist an unused UUID.
         const requestId = action === "preview" ? crypto.randomUUID() : previewId!;
@@ -136,12 +162,15 @@ export function usePilotInspection(visitId: string, shopId: number | undefined, 
         }
         ids.current = next;
         body = action === "preview"
-          ? { action, visitId, requestId, evidenceRevision: data.evidenceRevision, selected }
+          ? { action, visitId, requestId, evidenceRevision: data.evidenceRevision, selected,
+            ...(publishedReport ? { publishedReport } : {}) }
           : { action, visitId, previewId, confirmed: true };
       }
+      const serializedBody = exactRetry ? previewBody.current! : JSON.stringify(body);
+      if (action === "preview") previewBody.current = serializedBody;
       setAcknowledged(false); setPreviewId(null); setUncertain(true);
       dispatched = true;
-      const response = await fetch(endpoint, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const response = await fetch(endpoint, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: serializedBody });
       const value = await response.json() as PilotResponse & { error?: string };
       if (!response.ok || !valid(value) || !value.operation) throw new Error(value.error || "No complete pilot receipt was received.");
       setData(value);
@@ -155,7 +184,8 @@ export function usePilotInspection(visitId: string, shopId: number | undefined, 
       setError(cause instanceof Error ? cause.message : "Pilot response was lost.");
     } finally { active.current = false; setBusy(false); }
   }
-  return { data, loading, busy, error, storageError, uncertain, selected, previewId, acknowledged,
+  return { data, loading, busy, error, storageError, uncertain, selected, previewId, acknowledged, publishedReport,
+    canRetryPreview: uncertain && !!ids.current.previewRequestId && !!previewBody.current && !ids.current.sendRequestId,
     admitted: admissionObserved || !!ids.current.sendRequestId || !!data?.operation && data.operation.state !== "preview",
-    toggle, setAcknowledged, load, write };
+    toggle, choosePublishedReport, setAcknowledged, load, write };
 }

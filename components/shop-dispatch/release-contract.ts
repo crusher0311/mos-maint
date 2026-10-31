@@ -2,6 +2,13 @@ import { z } from "zod";
 
 // Client-only contract validation. Do not import runtime staff/server models.
 const words = z.string().max(2000);
+export const releasedClip = z.object({
+  id: z.string().regex(/^[a-f0-9]{24}$/), caption: words.refine(value => !!value.trim()),
+  durationSeconds: z.number().finite().positive().max(15),
+}).strict();
+export const releaseClips = z.array(releasedClip.extend({
+  sheet: z.string().min(1).max(80), item: z.string().min(1).max(80),
+}).strict());
 export const releaseBranding = z.object({
   name: z.string().min(1).max(120), phone: z.string().max(40),
   primary: z.string().regex(/^#[a-f0-9]{6}$/i),
@@ -17,6 +24,7 @@ export const customerReport = z.object({
     rating: z.enum(["green", "yellow", "red"]), customerText: words, nextStep: words,
     measurements: z.array(z.object({ label: z.string(), value: z.union([z.string(), z.number().finite()]), unit: z.string().nullable() })),
     photoIds: z.array(z.string()).max(6), concernIds: z.array(z.string()).max(20),
+    clips: z.array(releasedClip).max(3).optional(),
   })).max(120),
 });
 const selection = z.object({
@@ -24,6 +32,7 @@ const selection = z.object({
     sheet: z.string().min(1).max(80), item: z.string().min(1).max(80),
     includeInactive: z.boolean(), customerText: words.refine(value => value.trim().length > 0), nextStep: words,
     photoIds: z.array(z.string().regex(/^[a-f0-9]{24}$/)).max(6),
+    clipIds: z.array(z.string().regex(/^[a-f0-9]{24}$/)).max(3).optional(),
     concernIds: z.array(z.string().max(100)).max(20),
   }).strict()).min(1).max(120),
   acknowledgeExcludedHazards: z.boolean(),

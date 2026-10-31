@@ -40,6 +40,7 @@ import { ROSharedDraftPanel, VehicleArrivalCapture } from "./ROSharedDraftPanel"
 import type { ROSession } from "./ro-session-store";
 import { ROOdometerCapture } from "./ROOdometerCapture";
 import type { OdometerCapture } from "./ro-odometer";
+import { ROIntakeContext } from "./ROIntakeContext";
 
 const US_STATES = [
   "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD",
@@ -1323,6 +1324,10 @@ export default function NewWorkOrderModal({ isOpen, onClose, onCreated, requeste
                 onMileageChange={value => { setMileageInput(value); setArrivalMileageConfirmed(false);
                   setOdometerCapture(previous => previous ? { ...previous, confirmed: null } : null); }}
                 onVinConfirm={setArrivalVinConfirmed} onMileageConfirm={setArrivalMileageConfirmed} />}
+              {recovery.sharedSupported && <ROIntakeContext enabled={recovery.ready && recovery.enabled} scope={`${scopeKey}:${recovery.session?.handoffRequestId}`}
+                vin={createNewVehicle ? newVehicle.vin || arrivalVin : arrivalVin || selectedVehicle?.vin || ""}
+                mileage={mileageInput} unit={recovery.distanceUnit ?? undefined}
+                confirmed={isOpen && arrivalVinConfirmed && arrivalMileageConfirmed} />}
               {recovery.sharedSupported && <ROOdometerCapture recovery={recovery} capture={odometerCapture} onCapture={setOdometerCapture}
                 onApply={(reading, capture) => { setMileageInput(reading); setArrivalMileageConfirmed(true); setOdometerCapture(capture);
                   if (createNewVehicle) setNewVehicle(previous => ({ ...previous, odometer: reading })); }} />}

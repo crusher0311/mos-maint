@@ -6,6 +6,7 @@ import { ReleasePanel } from "./ReleasePanel";
 import { PilotInspectionPanel } from "./PilotInspectionPanel";
 import { ArrivalPhotoDocumentation } from "./ArrivalPhotoDocumentation";
 import { StaffAssistance } from "./StaffAssistance";
+import { StaffRecordingPanel } from "./StaffRecordingPanel";
 import { StaffProposedWork } from "./StaffProposedWork";
 import { StaffCaptureEditor, captureKind } from "./StaffCaptureEditor";
 import { StaffAdvisorView } from "./StaffAdvisorView";
@@ -41,12 +42,14 @@ function InspectionEditor({ visitId, shopId, closed, onLockChange, startRequeste
   }, [startRequested, api.data, api.loading, api.pending, api.conflict, closed]);
   const [drafts, setDrafts] = useState<Drafts>({});
   const [proposalDirty, setProposalDirty] = useState(false);
+  const [recordingLock, setRecordingLock] = useState(false);
+  const [assistanceLock, setAssistanceLock] = useState(false);
   const [view, setView] = useState<"editor" | "advisor">("editor");
   const [sheetChoice, setSheetChoice] = useState("");
   const [keepActive, setKeepActive] = useState(false);
   const [retryFile, setRetryFile] = useState<File | undefined>();
   const dirty = Object.keys(drafts).length > 0;
-  const shouldWarnBeforeLeave = dirty || proposalDirty || !!api.pending || api.busy;
+  const shouldWarnBeforeLeave = dirty || proposalDirty || recordingLock || assistanceLock || !!api.pending || api.busy;
   const lockCallback = useRef(onLockChange);
   lockCallback.current = onLockChange;
   useEffect(() => {
@@ -84,9 +87,12 @@ function InspectionEditor({ visitId, shopId, closed, onLockChange, startRequeste
   const inspection = data.inspection;
   const readOnly = closed || !!data.record?.closed || !data.enabled || !data.canEdit;
   const recoveryAllowed = !closed && !data.record?.closed && data.enabled && !!data.bindingRequest;
-  const locked = readOnly || api.busy || !!api.pending || api.conflict;
+  // Capture owns its own lock. Never feed it back into its external disabled
+  // prop, or it would stop itself immediately after admission.
+  const externalLocked = readOnly || api.busy || !!api.pending || api.conflict;
+  const locked = externalLocked || recordingLock || assistanceLock;
   const missing = inspection ? missingRequirements(inspection) : [];
-  const reviewAllowed = !closed && !data.record?.closed && data.enabled && data.canReview && !api.busy && !api.pending && !api.conflict && !dirty && !proposalDirty;
+  const reviewAllowed = !closed && !data.record?.closed && data.enabled && data.canReview && !api.busy && !api.pending && !api.conflict && !dirty && !proposalDirty && !recordingLock && !assistanceLock;
   return <section className={`${styles.panel} ${ui.panel}`} data-testid="staff-inspection-panel" aria-label="Internal staff inspection">
     <div className={ui.heading}><div><div className={styles.eyebrow}>Staff workspace · Internal only</div><h2>Vehicle inspection</h2><p>Document findings in their original measured units. This does not release a vehicle, authorize work, or change dispatch capacity.</p></div><span className={styles.chip}>{inspection ? `Revision ${inspection.revision} · Evidence ${inspection.evidenceRevision}` : "Not initialized"}</span></div>
     <StaffInspectionHistory visitId={visitId} />
@@ -110,7 +116,7 @@ function InspectionEditor({ visitId, shopId, closed, onLockChange, startRequeste
     {(api.conflict || dirty) && <div className={styles.notice}>
       <strong>{api.conflict ? "Revision conflict — draft retained" : `${Object.keys(drafts).length} unsaved item draft(s)`}</strong>
       <p>Drafts remain in memory on this page only. Comparing never replaces your entries. After a conflict, review both versions, then explicitly discard/reload before entering a new submission; drafts are never silently rebased.</p>
-      <div className={styles.actions}><button disabled={api.busy} onClick={() => void api.compare()}>Compare with latest server values</button><button disabled={api.busy || !!api.pending} onClick={async () => {
+      <div className={styles.actions}><button disabled={api.busy} onClick={() => void api.compare()}>Compare with latest server values</button><button disabled={api.busy || !!api.pending || recordingLock || assistanceLock} onClick={async () => {
         if (!window.confirm("Discard all unsaved inspection entries and load the latest server values? This cannot undo saved evidence.")) return;
         if (await api.discardAndReload()) setDrafts({});
       }}>Discard drafts and reload latest</button></div>
@@ -118,13 +124,20 @@ function InspectionEditor({ visitId, shopId, closed, onLockChange, startRequeste
     {api.latest && <details open><summary>Server comparison · no local entries replaced</summary><div className={ui.compare}><div><h3>Your entries / loaded evidence</h3><pre>{JSON.stringify({ inspection, unsavedEntries: drafts }, null, 2)}</pre></div><div><h3>Latest server evidence</h3><pre>{JSON.stringify(api.latest.inspection, null, 2)}</pre></div></div></details>}
     {!inspection ? <div className={styles.empty}><h3>Start a digital vehicle inspection</h3><p>Create a saved DVI with the shop’s approved inspection sheet. Inspection work is recorded when you save your first finding. This never creates a provider ticket or sends findings.</p><button className={styles.primary} disabled={locked || !data.catalog.length} onClick={() => void api.command({ type: "initialize", boardRevision: data.boardRevision })}>Start DVI</button>{!data.catalog.length && <p>No approved sheets are available. Ask a manager to provision a sheet.</p>}</div> : <>
       <div className={ui.status}><span><small>Work</small><br />{inspection.startedAt ? `Started ${new Date(inspection.startedAt).toLocaleString()}` : "Not started"}</span><span><small>Readiness</small><br />{stamp(inspection.ready, inspection.evidenceRevision)}</span><span><small>Advisor review</small><br />{stamp(inspection.reviewed, inspection.evidenceRevision)}</span></div>
+      <p><small>{inspection.policy
+        ? `Inspection policy v${inspection.policy.version} · ${inspection.policy.completionMode === "captured-findings" ? "Review captured findings; untouched checks remain not evaluated" : "Complete required checks"} · saved ${new Date(inspection.policy.at).toLocaleString()}. This inspection keeps this policy; current role restrictions also apply.`
+        : "Original inspection requirements apply. New shop policies do not change this inspection."}</small></p>
       <div className={ui.views} role="group" aria-label="Inspection view">
         <button type="button" aria-pressed={view === "editor"} disabled={shouldWarnBeforeLeave || api.conflict} onClick={() => { if (!shouldWarnBeforeLeave && !api.conflict) setView("editor"); }}>Inspection editor</button>
         <button type="button" aria-pressed={view === "advisor"} disabled={shouldWarnBeforeLeave || api.conflict} onClick={() => { if (!shouldWarnBeforeLeave && !api.conflict) setView("advisor"); }}>Advisor overview · read only</button>
         {shouldWarnBeforeLeave || api.conflict ? <small>Save or explicitly discard drafts and resolve pending requests or conflicts before switching views.</small> : <small>The advisor overview shows saved evidence, never unsaved entries.</small>}
       </div>
       {view === "advisor" ? <StaffAdvisorView inspection={inspection} visitId={visitId} /> : <>
-      <StaffAssistance visitId={visitId} inspection={inspection} disabled={locked || dirty}
+      {data.recordingEnabled && <StaffRecordingPanel visitId={visitId} inspection={inspection}
+        disabled={externalLocked || assistanceLock || proposalDirty} onLockChange={setRecordingLock}
+        onDraft={(sheet, item, value) => update(draftKey(sheet, item), value)} />}
+      <StaffAssistance visitId={visitId} inspection={inspection} disabled={externalLocked || dirty || recordingLock}
+        onLockChange={setAssistanceLock}
         command={api.command} upload={api.upload}
         onDraft={(sheet, item, value) => update(draftKey(sheet, item), value)} />
       <details><summary>Manage approved sheets · multiple sheets may be active</summary><div className={styles.form}>
@@ -140,13 +153,15 @@ function InspectionEditor({ visitId, shopId, closed, onLockChange, startRequeste
         }} onPhoto={(file, provenance) => { void api.upload(sheet.key, item.id, file, provenance); }} />)}
       </section>)}
       </>}
-      <details><summary>Saved evidence completeness · {missing.length} missing requirement(s)</summary>{missing.length ? <ul>{missing.map((entry, index) => <li key={`${entry.sheet}/${entry.item}/${index}`}>{inspection.sheets.find(sheet => sheet.key === entry.sheet)?.sheet.name} · {entry.name}: {entry.message}</li>)}</ul> : <p>All active-sheet requirements are documented in saved evidence.</p>}</details>
+      <details><summary>Saved evidence completeness · {missing.length} missing requirement(s)</summary>{missing.length ? <ul>{missing.map((entry, index) => <li key={`${entry.sheet}/${entry.item}/${index}`}>{inspection.sheets.find(sheet => sheet.key === entry.sheet)?.sheet.name} · {entry.name}: {entry.message}</li>)}</ul> : <p>The applicable completion requirements are documented in saved evidence. Untouched checks are not evaluated.</p>}</details>
       <div className={styles.actions} style={{ marginTop: 16 }}>
         <button className={styles.primary} disabled={locked || dirty || !inspection.startedAt || !!missing.length} onClick={() => void api.command({ type: "ready" })}>Mark internal inspection ready</button>
         <button disabled={!reviewAllowed || !inspection.startedAt || !!missing.length} onClick={() => void api.command({ type: "review" })}>Record advisor review</button>
       </div><small>Readiness and review reference saved evidence only. Any evidence change makes earlier markers stale. These markers do not authorize customer release.</small>
       <StaffProposedWork visitId={visitId} inspection={inspection} disabled={locked || dirty || !data.canReview} command={api.command} onLockChange={setProposalDirty} />
-      <ReleasePanel visitId={visitId} shopId={shopId} inspection={inspection} />
+      <fieldset disabled={locked || dirty || proposalDirty} style={{border: 0, padding: 0, margin: 0, minWidth: 0}}>
+        <ReleasePanel visitId={visitId} shopId={shopId} inspection={inspection} />
+      </fieldset>
       <p><small>Provider export is available only through separately approved visit-scoped integrations. Unsupported destinations and priced-work export are unavailable; there is no fallback to legacy VIN findings.</small></p>
       <PilotInspectionPanel visitId={visitId} shopId={shopId} evidenceRevision={inspection.evidenceRevision} blocked={dirty || proposalDirty || locked} />
     </>}

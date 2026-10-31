@@ -1,0 +1,80 @@
+import test, {before, after} from "node:test";
+import assert from "node:assert/strict";
+import {randomUUID} from "node:crypto";
+import {isolatedStaffDatabase, staffFixture} from "./helpers/staff-inspection-fixture";
+import {RecordingRepository, MongoRecordingPersistence} from "../lib/auto-dvi/staff/recording-store";
+import {startRecording, recordingContext, stopRecording, uploadRecordingSegment, requestRecordingClip} from "../lib/auto-dvi/staff/recording-service";
+import {RecordingMediaStorage} from "../lib/auto-dvi/staff/recording-media";
+import {processRecordingSegment} from "../lib/auto-dvi/staff/recording-worker";
+import {processRecordingClip} from "../lib/auto-dvi/staff/recording-clip-worker";
+let isolated: Awaited<ReturnType<typeof isolatedStaffDatabase>>;
+before(async () => {isolated = await isolatedStaffDatabase(27943);});
+after(async () => {await isolated.close();});
+test("recording admission uses canonical visit, server targets and fresh contributor authority", async () => {
+  const fixture = await staffFixture(isolated.client);
+  const access = await fixture.deps.access();
+  fixture.setAccess({config: {...access.config!, recording: {enabledShopIds: [1]}}});
+  const deps = {staff: fixture.deps, repository: new RecordingRepository(new MongoRecordingPersistence(async () => fixture.db))};
+  const request = {visitId: "visit-one", id: randomUUID(), inspectionRevision: 1};
+  await assert.rejects(startRecording(request, deps), /binding/);
+  await fixture.initialize();
+  const first = await startRecording(request, deps);
+  assert.equal(first.targets[0].sheet, "fixture@1");
+  assert.equal(first.targets[0].item, "tire.lf");
+  assert.equal(first.segments.length, 0);
+  assert.equal((await startRecording(request, deps)).id, first.id);
+  await assert.rejects(startRecording({...request, inspectionRevision: 0}, deps), /Original/);
+  const scope = {visitId: request.visitId, id: request.id};
+  await assert.rejects(recordingContext({...scope, visitId: "visit-two"}, deps), /binding/);
+  fixture.setAccess({actor: "different-contributor"});
+  await assert.rejects(recordingContext(scope, deps), /contributor/);
+  fixture.setAccess({actor: first.actor, canEdit: false});
+  await assert.rejects(recordingContext(scope, deps), /disabled/);
+  fixture.setAccess({canEdit: true});
+  const media = new RecordingMediaStorage(async () => fixture.db);
+  // Synthetic EBML header exercises storage/receipt ownership only, not codec
+  // validation; the processing worker must validate duration/container tracks.
+  const bytes = Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 1, 2, 3]);
+  const upload = {...scope, sequence: 0, durationSeconds: 1, mime: "video/webm"};
+  const uploaded = await uploadRecordingSegment(upload, bytes, deps, media);
+  assert.equal(uploaded.segments.length, 1);
+  const receipt = uploaded.segments[0];
+  const owner = {shopId: 1, visitId: first.visitId, recordingId: first.id, actor: first.actor};
+  assert.deepEqual((await media.read(owner, receipt.mediaId, receipt.digest)).bytes, bytes);
+  await assert.rejects(media.read({...owner, visitId: "another-visit"}, receipt.mediaId, receipt.digest), /not found/);
+  assert.equal((await uploadRecordingSegment(upload, bytes, deps, media)).segments.length, 1);
+  await assert.rejects(uploadRecordingSegment(upload, Buffer.concat([bytes, Buffer.from([4])]), deps, media), /original/);
+  let processed = 0;
+  const evidenceBeforeProcessing = structuredClone((await fixture.repository.read(1, "visit-one"))!.results.staff);
+  const processor = {async process() {processed++; return {drafts: [{id: "narrated", target: first.targets[0],
+    source: "narration", rating: "yellow", notes: "Narrated concern", caption: "Draft caption",
+    startSeconds: 0, endSeconds: 1, confirmed: false}]};}};
+  const outcome = await processRecordingSegment(scope, 0, deps, media, processor);
+  assert.equal(outcome.segments[0].state, "processed");
+  assert.equal(outcome.segments[0].drafts[0].confirmed, false);
+  await processRecordingSegment(scope, 0, deps, media, processor);
+  assert.equal(processed, 1);
+  assert.deepEqual((await fixture.repository.read(1, "visit-one"))!.results.staff, evidenceBeforeProcessing);
+  await assert.rejects(media.readReleased(receipt.mediaId, 1, "visit-one"), /unavailable/);
+  const clipRequest = {...scope, clipId: randomUUID(), sequence: 0, draftId: "narrated",
+    startSeconds: 0, endSeconds: 1, caption: "Reviewed caption", confirmCaptionAndSelection: true};
+  await requestRecordingClip(clipRequest, deps);
+  await requestRecordingClip(clipRequest, deps);
+  await assert.rejects(requestRecordingClip({...clipRequest, caption: "Changed"}, deps), /original/);
+  const clip = await processRecordingClip(scope, clipRequest.clipId, deps, media,
+    async () => ({bytes: Buffer.from([0, 0, 0, 24, 102, 116, 121, 112, 105, 115, 111, 109]), mime: "video/mp4", durationSeconds: 1}));
+  assert.equal(clip.clips!.length, 1);
+  assert.equal(clip.clips![0].state, "ready");
+  const prepared = clip.clips![0];
+  assert.equal((await media.readReleased(prepared.mediaId!, 1, "visit-one")).mime, "video/mp4");
+  await assert.rejects(media.readReleased(prepared.mediaId!, 2, "visit-one"), /unavailable/);
+  assert.equal((await deps.repository.store.read(1, "visit-one", first.id))!.clips![0].caption, "Reviewed caption");
+  assert.equal((await stopRecording(scope, deps)).state, "stopped");
+  assert.equal((await uploadRecordingSegment(upload, bytes, deps, media)).segments.length, 1);
+  await assert.rejects(uploadRecordingSegment({...upload, sequence: 1}, bytes, deps, media), /stopped/);
+  assert.equal((await stopRecording(scope, deps)).state, "stopped");
+  const board = await fixture.deps.board.read(1);
+  board.visits[0].closed = true;
+  await fixture.deps.board.save(1, board.revision, {...board, revision: board.revision + 1});
+  await assert.rejects(recordingContext(scope, deps), /Closed/);
+});

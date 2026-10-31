@@ -1,6 +1,7 @@
 import {z} from "zod";
 import {sheetSchema, instanceKey, type StaffSheet} from "./model";
 import {pilotConfigurationSchema} from "../pilot/model";
+import {inspectionPolicySchema} from "./inspection-policy";
 
 const rules = z.object({read: z.enum(["allow", "deny"]).optional(), edit: z.enum(["allow", "deny"]).optional(),
   sensitive: z.enum(["allow", "deny"]).optional(), publish: z.enum(["allow", "deny"]).optional()}).strict();
@@ -15,7 +16,13 @@ export const configurationSchema = z.object({
     revision: z.number().int().positive(),
   }).strict()).max(200).optional(),
   pilot: pilotConfigurationSchema.optional(),
+  policies: z.record(z.string().regex(/^[1-9][0-9]*$/), inspectionPolicySchema).optional(),
+  recording: z.object({enabledShopIds: z.array(z.number().int().positive()).max(500)}).strict().optional(),
   release: z.object({
+    publicReportOrigin: z.string().url().refine(value => {
+      try {const url = new URL(value); return url.protocol === "https:" && url.origin === value && !url.username && !url.password;}
+      catch {return false;}
+    }, "An explicitly approved HTTPS report origin is required").optional(),
     enabledShopIds: z.array(z.number().int().positive()).max(500),
     publicPhone: z.string().max(40),
     defaultExpiryDays: z.number().int().min(1).max(365),
