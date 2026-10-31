@@ -23,6 +23,8 @@ async function main() {
   let panelLoading = Promise.resolve();
   let switchFailure: string | null = null;
   let afterPost: (() => void) | null = null;
+  let afterRead: (() => void) | null = null;
+  let historyReads = 0;
   const forwarded: any[] = [];
   const worker = () => {
     let listener: any;
@@ -66,7 +68,10 @@ async function main() {
           afterPost?.();
           return Response.json({ success: true, sticker: { dataUrl: `logo-${tokenShop}` } });
         }
-        assert.equal(new URL(url).searchParams.get("shopId"), tokenShop);
+        const params = new URL(url).searchParams;
+        assert.equal(params.get("shopId") || params.get("smsShopId"), tokenShop);
+        if (new URL(url).pathname === "/api/extension/vehicle-history") historyReads++;
+        afterRead?.();
         return Response.json({ enabled: true, config: { defaultOilType: "synthetic", logo: `logo-${tokenShop}` } });
       },
       chrome: {
@@ -94,6 +99,7 @@ async function main() {
         sandbox.mosAuthSource = "explicit";
         restore!();
       },
+      request: (endpoint: string, context: any) => sandbox.handleMosApiRequest(endpoint, { context }),
     };
   };
   let w = worker();
@@ -103,6 +109,31 @@ async function main() {
   assert.equal(prints.length, 0);
   w.restore();
   assert.equal((await pending).sticker.dataUrl, "logo-100");
+  for (const shop of ["100", "14245", "100"]) {
+    shops.set(1, shop);
+    for (const route of ["plan", "vehicle-history", "features", "labor-rates"]) {
+      const key = route === "labor-rates" ? "smsShopId" : "shopId";
+      const response = await w.request(`/api/extension/${route}?${key}=${shop}&provider=tekmetric`,
+        { ...ctx(1), _tabId: 1 });
+      assert.equal(response.config.logo, `logo-${shop}`);
+    }
+  }
+  await assert.rejects(w.request("/api/extension/plan?shopId=14245&provider=tekmetric",
+    { ...ctx(1), _tabId: 1 }), /context is required/);
+  assert.equal(historyReads, 3, "A → B → A history reads use the correct scoped token");
+  shops.set(1, "14245");
+  afterRead = () => { shops.set(1, "100"); };
+  await assert.rejects(w.request("/api/extension/vehicle-history?shopId=14245&provider=tekmetric",
+    { ...ctx(1), _tabId: 1 }), /location changed/);
+  afterRead = null;
+  const readsBeforeDenial = historyReads;
+  shops.set(1, "14245");
+  switchFailure = "Your MOS account cannot access this Tekmetric location.";
+  await assert.rejects(w.request("/api/extension/vehicle-history?shopId=14245&provider=tekmetric",
+    { ...ctx(1), _tabId: 1 }), /cannot access/);
+  assert.equal(historyReads, readsBeforeDenial, "Denied scope never requests history");
+  switchFailure = null;
+  shops.set(1, "100");
   assert.equal(printedOil[0], "5W-30");
   for (const field of ["status", "jobStatus", "authorizationStatus"]) {
     for (const status of ["DECLINED", " Deferred "]) {
@@ -169,6 +200,9 @@ async function main() {
     switchTab: () => { panelLoading = panel.loadStickerConfig(); },
   };
   vm.createContext(panel);
+  panel.document = { createElement: () => ({ addEventListener() {} }) };
+  panel.showLoginState = () => {};
+  elements.stickerError.appendChild = () => {};
   vm.runInContext(panelSource.slice(panelSource.indexOf("async function loadStickerConfig()"), panelSource.indexOf("// Status enum drives")), panel);
   vm.runInContext(panelSource.slice(panelSource.indexOf("async function handleStickerPrint()"), panelSource.indexOf("function printStickerViaWindow(")), panel);
   const switchBranch = panelSource.slice(panelSource.indexOf("if (message.action === 'SWITCH_TO_STICKER_TAB')"), panelSource.indexOf("if (message.action === 'SWITCH_TO_CREATE_RO')"));

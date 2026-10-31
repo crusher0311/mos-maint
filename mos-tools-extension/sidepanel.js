@@ -2355,6 +2355,13 @@ async function loadPlan(forceRefresh = false) {
   // server can anchor the VHI on it instead of falling to a CARFAX estimate.
   const reqOdometer = currentContext.scrapedOdometer || null;
   const requestContext = { ...currentContext };
+  const requestSession = laborRateSessionDiscriminator;
+  const requestTab = currentContext._tabId ?? currentContext.tabId;
+  const requestStillCurrent = () => isAuthenticated &&
+    requestSession === laborRateSessionDiscriminator &&
+    requestTab === (currentContext?._tabId ?? currentContext?.tabId) &&
+    currentContext?.provider === reqProvider &&
+    currentContext?.shopId === reqShopId && currentContext?.roId === reqRoId;
   const cacheKey = planCacheKey(currentContext);
   const requestMutationVersion = planCache.get(cacheKey)?.mutationVersion || 0;
 
@@ -2412,6 +2419,7 @@ async function loadPlan(forceRefresh = false) {
       break;
     }
     
+    if (!requestStillCurrent()) return;
     if (result.error) throw new Error(result.error);
     if (!canLoadMaintenancePlan() ||
         currentContext?.provider !== reqProvider ||
@@ -2424,6 +2432,7 @@ async function loadPlan(forceRefresh = false) {
     setPlanCache(cacheKey, result);
     renderPlan(result, reqRoId, reqShopId, reqProvider, reqVin);
   } catch (err) {
+    if (!requestStillCurrent()) return;
     if (!canLoadMaintenancePlan()) return;
     if ((planCache.get(cacheKey)?.mutationVersion || 0) !== requestMutationVersion) return;
     // The user already moved on to another RO/shop — drop this stale failure.

@@ -32,11 +32,11 @@ export async function createStickerLocationRequest(context, deps) {
     }
     const shop = url.pathname.match(/\/(?:admin\/)?shop\/(\d+)(?:\/|$)/)?.[1];
     if (!/(^|\.)tekmetric\.com$/.test(url.hostname) || String(shop) !== String(snapshot.shopId)) {
-      throw new Error('Tekmetric location changed. Please print again from the current location.');
+      throw changed('Tekmetric location changed. Reopen the intended repair order and retry.');
     }
     if (snapshot.roId) {
       const ro = url.pathname.match(/\/repair-orders\/(\d+)/)?.[1];
-      if (String(ro) !== String(snapshot.roId)) throw new Error('Repair order changed. Please print again.');
+      if (String(ro) !== String(snapshot.roId)) throw changed('Repair order changed. Retry from the current repair order.');
     }
   }
   stage('context_validation');
@@ -49,7 +49,7 @@ export async function createStickerLocationRequest(context, deps) {
         options.method === 'POST' && path.includes('/sticker') ? 45000 : 8000),
     });
     const data = await response.json();
-    if (!response.ok) throw Object.assign(new Error(data.error || 'Tekmetric location request failed. Please try again.'), { code: data.code });
+    if (!response.ok) throw Object.assign(new Error(data.error || 'Shop access could not be confirmed. Open the intended repair order and retry; if this persists, ask your administrator to verify your shop assignment and provider mapping.'), { code: data.code });
     return data;
   };
   stage('switch_location');

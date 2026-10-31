@@ -1600,16 +1600,17 @@ async function _GET(request: NextRequest) {
     const shopResult = await findShopBySmsId(smsShopId, { 
       userShopIds, 
       isPlatformAdmin, 
-      providerHint: auth.principal?.provider === "shopmonkey" ? "shopmonkey" : providerHint || undefined,
-      // First-class Shopmonkey reads must use canonical, read-only ownership.
+      providerHint: ["shopmonkey", "tekmetric"].includes(auth.principal?.provider || "")
+        ? auth.principal!.provider : providerHint || undefined,
+      // First-class location reads must use canonical, read-only ownership.
       // Never discover/learn a mapping while handling a plan request.
-      providerHintIsAuthoritative: auth.principal?.provider === "shopmonkey",
+      providerHintIsAuthoritative: ["shopmonkey", "tekmetric"].includes(auth.principal?.provider || ""),
     });
 
     if (!shopResult) {
       console.log(`[Extension Plan] SHOP FAIL: No shop found for SMS shop ${smsShopId}, userShopIds: ${userShopIds.join(',')}, elapsed=${Date.now() - reqStart}ms`);
       return NextResponse.json(
-        { error: `No accessible shop configured for SMS shop ID ${smsShopId}` },
+        { code: "SHOP_CONTEXT_UNAVAILABLE", error: "VHI shop access could not be confirmed. Open the intended repair order and retry. If this persists, ask your administrator to verify your shop assignment and Tekmetric mapping. Signing in again does not repair a shop mapping or assignment. Vehicle history has not been checked." },
         { status: 404, headers: corsHeaders }
       );
     }
