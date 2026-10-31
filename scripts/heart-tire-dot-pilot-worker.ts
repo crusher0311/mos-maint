@@ -26,15 +26,26 @@ async function locations(enterpriseId: string): Promise<PilotLocation[]> {
   });
 }
 async function main() {
+  const startedAt = Date.now();
   const manualBudget = createTirePilotManualBudget(process.argv, () => new Date());
   if (manualBudget && process.env.RENDER !== "true") throw Error("Manual pilot requires the production Render runtime");
+  const mode = manualBudget ? "manual" : "scheduled";
+  console.log("[HEART Tire Pilot] Started", { mode, at: new Date(startedAt).toISOString() });
+  let lastOutcome = "", lastLoggedAt = 0;
   do {
     if (manualBudget && !manualBudget.available()) break;
     try {
       const db = await getDb();
       const result = await tickTirePilot(db, { now: () => new Date(), locations, manualBudget,
         page: (location, page, beforeRequest) => fetchTirePilotPage(db, location, page, beforeRequest) });
-      if (result.status !== "idle") console.log("[HEART Tire Pilot]", result.status);
+      const reason = "reason" in result ? result.reason : undefined;
+      const outcome = `${result.status}:${reason || ""}`;
+      if (outcome !== lastOutcome || Date.now() - lastLoggedAt >= 60_000) {
+        console.log("[HEART Tire Pilot] Progress", { mode, at: new Date().toISOString(),
+          elapsedMs: Date.now() - startedAt, status: result.status, reason,
+          ...(manualBudget ? { requests: manualBudget.requests } : {}) });
+        lastOutcome = outcome; lastLoggedAt = Date.now();
+      }
       if (manualBudget && !["idle", "refreshing"].includes(result.status)) break;
       // Completed evidence can be reported in business hours, without HTTP to
       // Tekmetric. A second worker only claims persisted report pages.
@@ -46,6 +57,9 @@ async function main() {
     if (process.argv.includes("--once") || stop) break;
     await new Promise(resolve => setTimeout(resolve, 10_000));
   } while (!stop);
-  if (manualBudget) console.log("[HEART Tire Pilot] Bounded manual run stopped", { requests: manualBudget.requests });
+  if (manualBudget) console.log("[HEART Tire Pilot] Bounded manual run stopped", {
+    requests: manualBudget.requests, elapsedMs: Date.now() - startedAt,
+    reason: stop ? "signal" : !manualBudget.available() ? "budget_exhausted" : "terminal_outcome",
+  });
 }
 main().then(() => process.exit(0)).catch(() => process.exit(1));
