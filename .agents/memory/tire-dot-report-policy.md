@@ -127,3 +127,17 @@ also undo genuine clears or resurrect removed tire lines.
 **How to apply:** Use the same policy for both canonical stores; do not activate
 background enrichment or write isolated recovered evidence into production
 without separate rollout approval.
+
+Treat daytime two-pass failures as possible source changes, not automatically
+worker defects. Retained webhook copies are corroboration, not a substitute for
+the exact second-pass response.
+
+**Why:** A read-only investigation found a newer provider modification timestamp
+on the first unverified invoice after a partially verified page. The cached
+webhook also omitted DOT fields that the list capture included, including on
+other invoices whose verification had passed. That channel difference alone
+cannot explain a list-to-list mismatch.
+
+**How to apply:** Preserve bounded, sanitized mismatch evidence before proposing
+changes to verification. Distinguish padded provider-list totals from invoices
+inside the report date range, and do not certify an abandoned generation.
