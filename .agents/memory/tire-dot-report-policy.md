@@ -93,6 +93,19 @@ the cause of the remaining provider throttling was not established.
 **How to apply:** Honor provider throttling even after a slot grant. Stop the
 operator recovery instead of bypassing coordination or guessing a higher cap.
 
+An off-hours scheduled worker must not repeatedly reschedule shared work that
+an explicitly approved daytime worker is eligible to process.
+
+**Why:** Read-only investigation on 2026-10-31 found both modes sharing the same
+lease and next-eligible time. Normal daytime attempts can push that time forward
+between manual pages. The bounded manual job exited successfully after its time
+budget with incomplete progress; exact attribution of idle time was not logged.
+
+**How to apply:** Check scheduled eligibility before claiming shared provider
+work, while retaining atomic lease ownership, cooldowns and manual budgets.
+Test normal/manual interleaving, and distinguish platform job start, command
+start and first page progress when explaining elapsed time.
+
 Real Tekmetric invoice-list responses can contain `authorized: null` jobs even
 when posted dates, jobs, and parts arrays are present.
 
