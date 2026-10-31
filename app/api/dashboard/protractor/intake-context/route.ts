@@ -1,9 +1,9 @@
 import {ZodError} from "zod";
+import {getSession} from "@/lib/auth";
 import {checkInAccess} from "@/lib/auto-dvi/staff/check-in-access";
 import {createIntakeContextReader, intakeContextSchema} from "@/lib/auto-dvi/staff/intake-context";
 import {getFeatureEntitlements} from "@/lib/featureResolver";
-import {getDb} from "@/lib/data/db";
-import {getCachedPlan} from "@/lib/plan-cache";
+import {findIntakeCachedPlan} from "@/lib/data/repositories/cached-plans";
 import {dispatchFailure, dispatchJson, requestBody} from "@/lib/shop-dispatch/http";
 import {requireThat} from "@/lib/shop-dispatch/model";
 import {IntakePreparation} from "@/lib/auto-dvi/staff/intake-preparation";
@@ -13,6 +13,7 @@ export const dynamic = "force-dynamic";
 const readContext = createIntakeContextReader();
 export async function POST(req: Request) {
   try {
+    if (!await getSession()) return dispatchJson({error: "Sign-in required"}, 401);
     const access = await checkInAccess();
     const entitlements = await getFeatureEntitlements(access.shopId);
     requireThat(entitlements.isFeatureEnabled("auto_dvi") && entitlements.isFeatureEnabled("maintenance"),
@@ -20,8 +21,7 @@ export async function POST(req: Request) {
     const input = intakeContextSchema.parse(await requestBody(req, 1024));
     // Cache-first, with optional gated preparation; never paid CARFAX or an
     // inspection mutation. Ordinary non-DVI check-in does not enter this path.
-    let result = await readContext(async () => getCachedPlan(await getDb(), input.vin, access.shopId, input.mileage,
-      input.distanceUnit, {limit: 8, maxTimeMS: 2000}));
+    let result = await readContext(() => findIntakeCachedPlan(access.shopId, input.vin, input.mileage, input.distanceUnit));
     if (result.status === "missing") {
       const staff = await staffAccess();
       if (staff.shopId === access.shopId && staff.actor === access.actor &&

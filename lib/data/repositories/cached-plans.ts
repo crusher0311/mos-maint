@@ -9,7 +9,14 @@
 import type { Collection, Document } from "mongodb";
 import { getDb } from "@/lib/data/db";
 import type { CachedPlanVariant } from "@/lib/plan-cache";
-import { PLAN_CACHE_SCHEMA_VERSION } from "@/lib/plan-cache";
+import { PLAN_CACHE_SCHEMA_VERSION, getCachedPlan } from "@/lib/plan-cache";
+
+/** Bounded, cache-only intake lookup; never builds a plan or calls a provider. */
+export async function findIntakeCachedPlan(
+  shopId: number, vin: string, mileage: number, distanceUnit: "miles" | "kilometers",
+) {
+  return getCachedPlan(await getDb(), vin, shopId, mileage, distanceUnit, {limit: 8, maxTimeMS: 2000});
+}
 
 const COLLECTION = "cached_plans";
 

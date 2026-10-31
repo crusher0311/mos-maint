@@ -1,4 +1,5 @@
 import {z, ZodError} from "zod";
+import {getSession} from "@/lib/auth";
 import {dispatchFailure, dispatchJson, requestBody} from "@/lib/shop-dispatch/http";
 import {requireThat} from "@/lib/shop-dispatch/model";
 import {recordingContext, startRecording, stopRecording, uploadRecordingSegment, requestRecordingClip, retryRecordingProcessing} from "@/lib/auto-dvi/staff/recording-service";
@@ -24,6 +25,7 @@ function response(recording: Recording) {
 }
 export async function GET(req: Request) {
   try {
+    if (!await getSession()) return dispatchJson({error: "Sign-in required"}, 401);
     const query = new URL(req.url).searchParams;
     const ctx = await recordingContext({visitId: query.get("visitId"), id: query.get("id")}, deps);
     if (query.has("mediaId")) {
@@ -39,6 +41,7 @@ export async function GET(req: Request) {
 }
 export async function POST(req: Request) {
   try {
+    if (!await getSession()) return dispatchJson({error: "Sign-in required"}, 401);
     if (req.headers.get("content-type")?.startsWith("application/json")) {
       const {action, ...body} = actions.parse(await requestBody(req, 12000));
       return response(action === "start" ? await startRecording(body, deps) :
