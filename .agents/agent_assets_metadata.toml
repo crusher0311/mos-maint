@@ -402,3 +402,31 @@ mtime_ms = 1793386545467
 storage_uri = "gcs://replit-rams-assets-picard/rams/assets/repl:a5a4005c-4e3d-4ce9-896c-c46425944606/ef5e0f0c-4e18-470b-a63d-a342b4a083b5/f4cefde7-f18f-4a46-974f-94502b12549e"
 storage_version_token = "1793386656187266"
 content_type = "text/csv"
+
+[[outputs]]
+id = "Tk-HOlrNKx68oAxmQBhhn"
+uri = "file://.local/reports/openai-spend-coverage-2026-10-26--30.md"
+type = "text"
+title = "OpenAI spend coverage investigation"
+description = "Read-only evidence report with daily comparisons, deployed coverage, model attribution and unresolved caller ownership."
+logical_id = "18df747f-a09e-44df-a87d-7c4f27f715eb"
+content_hash = "sha256:256c3e9269238082c77a4fa0a0be643337adf35423154e088ef6a93ee829fed6"
+size = 16759
+mtime_ms = 1793392191821
+storage_uri = "gcs://replit-rams-assets-picard/rams/assets/repl:a5a4005c-4e3d-4ce9-896c-c46425944606/18df747f-a09e-44df-a87d-7c4f27f715eb/41d4a4db-9ec2-49d7-a2fa-db1567aaddc5"
+storage_version_token = "1793392248997558"
+content_type = "text/markdown"
+
+[[outputs]]
+id = "F7t5uf1LPpEXCb6vsqgS2"
+uri = "file://.local/reports/openai-caller-research-2026-10-30.md"
+type = "text"
+title = "OpenAI caller investigation — production key identified"
+description = "Updated October 31 with masked-identifier matching against production, workspace and QA. Caller attribution remains unresolved; no production changes or AI calls."
+logical_id = "e03d78e2-df5e-4a8b-b367-58de45837ab4"
+content_hash = "sha256:8f6f2ba25b997a6b5a8e1128af80443df48121e1601c7f5acabe4fbddc1054a5"
+size = 10614
+mtime_ms = 1793445512654
+storage_uri = "gcs://replit-rams-assets-picard/rams/assets/repl:a5a4005c-4e3d-4ce9-896c-c46425944606/e03d78e2-df5e-4a8b-b367-58de45837ab4/b9c4857f-18bd-45ed-ae9c-a2f5fddbcd4b"
+storage_version_token = "1793445524862269"
+content_type = "text/markdown"

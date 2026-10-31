@@ -111,6 +111,15 @@ export async function pgInsertUsageRecords(records: AnyDoc[]): Promise<void> {
     .onConflictDoNothing({ target: apiUsage.id });
 }
 
+/** Stable transport-attempt ID makes delivery retries idempotent. */
+export async function pgUpsertAiUsageRecord(record: AnyDoc): Promise<void> {
+  const row = usageRow(record);
+  await getDb().insert(apiUsage).values(row).onConflictDoUpdate({
+    target: apiUsage.id, set: row,
+    where: sql`${apiUsage.extra}->>'aiOutcome' IS DISTINCT FROM 'complete'`,
+  });
+}
+
 /* -------------------------------------------------------------------------- */
 /* api_rate_limits                                                             */
 /* -------------------------------------------------------------------------- */

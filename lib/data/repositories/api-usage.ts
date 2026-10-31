@@ -18,6 +18,7 @@ import {
   pgClaimRateLimitSlot,
   pgCountUsage,
   pgInsertUsageRecords,
+  pgUpsertAiUsageRecord,
   pgRecent429s,
   pgReleaseRateLimitSlot,
   pgTopShops,
@@ -743,6 +744,23 @@ export async function insertUsageRecords(records: Document[]): Promise<void> {
   }
   const col = await usageCollection();
   await col.insertMany(records.map((r) => ({ ...r })));
+}
+
+/** Metadata-only AI outbox delivery. No indexes, migration, or fallback writes. */
+export async function upsertAiUsageRecord(record: Document): Promise<void> {
+  if (record.provider !== "openai" || typeof record._id !== "string") throw new Error("Invalid AI usage record");
+  const mongoWrite = async () => {
+    const col = await usageCollection();
+    await col.updateOne({ _id: record._id } as any, [{
+      $replaceWith: { $cond: [
+        { $eq: ["$aiOutcome", "complete"] }, "$$ROOT", { $literal: record },
+      ] },
+    }], { upsert: true });
+  };
+  if (isApiUsagePgCanonical()) {
+    await pgUpsertAiUsageRecord(record);
+    await shadowWriteMongoIntegrationOps(shouldShadowWriteMongoApiUsage, "api_usage.ai", mongoWrite);
+  } else await mongoWrite();
 }
 
 export interface RateLimitClaimResult {

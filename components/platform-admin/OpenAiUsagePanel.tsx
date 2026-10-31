@@ -15,6 +15,7 @@ const metricsSchema = z.object({
   unpricedRequests: metric,
   unknownUsageRequests: metric,
   legacyRequests: metric,
+  pendingRequests: metric.optional(),
 });
 const rowSchema = metricsSchema.extend({ name: z.union([z.string(), z.number(), z.null()]) });
 const responseSchema = z.object({
@@ -152,6 +153,7 @@ export default function OpenAiUsagePanel() {
             <p className="font-medium">Telemetry coverage{incompleteCost(data.totals) ? " is incomplete" : " is limited to recorded requests"}</p>
             <p>Unpriced requests: {number(data.totals.unpricedRequests)} · Unknown usage: {number(data.totals.unknownUsageRequests)} · Legacy requests: {number(data.totals.legacyRequests)}.</p>
             <p>These categories may overlap. Partial totals exclude unknown values; even zero missing-record counts cannot prove historical completeness.</p>
+            <p>Unconfirmed journal attempts: {number(data.totals.pendingRequests ?? 0)}. These may have been interrupted before dispatch or before their outcome was recorded; they do not establish successful calls or zero spend.</p>
             {data.truncated && <p className="font-semibold">Results truncated: additional records were not included. All totals and breakdowns shown are partial, not fleet-wide totals.</p>}
           </div>
         </div>

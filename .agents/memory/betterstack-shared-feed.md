@@ -43,7 +43,11 @@ or inspect a raw line to confirm origin.
 `curl -s -G "https://$BETTERSTACK_QUERY_HOST" -u "$BETTERSTACK_QUERY_USERNAME:$BETTERSTACK_QUERY_PASSWORD" --data-urlencode "query@/tmp/q.sql"`.
 Secrets are only readable from the project runtime env (bash/node), not the masked viewEnvVars or the code_execution sandbox.
 
-**Retention split:** the remote Better Stack ClickHouse table only retains ~1 HOUR of logs. Anything older must be read from the synced `production_logs` table in Supabase prod PG (`SUPABASE_PROD_DATABASE_URL`, ~30d retention).
+**Retention split:** the remote hot table has short retention, but the current MCP `{{source}}` query template includes historical S3 as well as recent logs. Check current query-help and query-windows before assuming history is unavailable. The synced `production_logs` table in Supabase prod PG is an alternative, not a required historical path.
+
+**Why:** On 2026-10-30 the current MCP successfully retrieved five days of MOS history while query-help described approximately 30 minutes of hot storage. The older hot-only assumption would have incorrectly declared the history inaccessible.
+
+**How to apply:** Establish freshness, use the nested host filter, and preflight historical query size; keep the same bounded aggregate-only privacy constraints on either store.
 
 Keep historical text searches tightly bounded and report retrieval gaps.
 

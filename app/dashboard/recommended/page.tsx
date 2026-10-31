@@ -2,6 +2,7 @@
 import { requireSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import RecommendedClient from "./RecommendedClient";
+import { analyzerModel } from "@/lib/openai-model-policy";
 import { getFeatureEntitlements } from "@/lib/featureResolver";
 import { canAccessShopFeature } from "@/lib/shop-feature-access";
 
@@ -26,7 +27,8 @@ export default async function RecommendedPage({
 
   const query = await searchParams;
   const vin = query.vin || "";
-  const selectedModel = query.model || "gpt-4o";
+  const selectedModel = analyzerModel(query.model, "gpt-4o");
+  if (!selectedModel) return <p role="alert">Unsupported AI model. Remove the model parameter and choose an approved model.</p>;
 
   return (
     <RecommendedClient 

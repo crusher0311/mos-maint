@@ -1,5 +1,6 @@
 // app/api/recommended/analyze/route.ts
 import { NextResponse } from "next/server";
+import { analyzerModel, MODEL_POLICY_ERROR } from "@/lib/openai-model-policy";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { resolveAutoflowConfig, fetchDviWithCache } from "@/lib/integrations/autoflow";
@@ -220,7 +221,8 @@ export async function POST(req: Request) {
     }
 
     const vin = String(body?.vin || "").toUpperCase().trim();
-    const model = String(body?.model || "gpt-4.1");
+    const model = analyzerModel(body?.model);
+    if (!model) return NextResponse.json({ ok: false, error: MODEL_POLICY_ERROR }, { status: 400 });
 
     // Resolve shopId from session first so it can gate all downstream DB reads.
     // This must come before any VIN/vehicle lookup so we can scope those queries.
