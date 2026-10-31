@@ -111,7 +111,7 @@ function earlyPipeline(input: any[], pipeline: any[]): any[] {
       docs = docs.map((doc) => {
         const copy = { ...doc };
         for (const [key, expression] of Object.entries(stage.$addFields)) {
-          copy[key] = evaluate(expression, copy);
+          copy[key] = evaluate(expression, doc);
         }
         return copy;
       });
@@ -119,13 +119,18 @@ function earlyPipeline(input: any[], pipeline: any[]): any[] {
       docs = docs.map((doc) => {
         const copy = { ...doc };
         for (const [key, expression] of Object.entries(stage.$set)) {
-          copy[key] = evaluate(expression, copy);
+          copy[key] = evaluate(expression, doc);
         }
         return copy;
       });
     } else if (stage.$sort) {
-      const [key, direction] = Object.entries(stage.$sort)[0] as [string, number];
-      docs.sort((a, b) => pathValue(a, key) > pathValue(b, key) ? direction : -direction);
+      docs.sort((a, b) => {
+        for (const [key, direction] of Object.entries(stage.$sort) as [string, number][]) {
+          if (pathValue(a, key) > pathValue(b, key)) return direction;
+          if (pathValue(a, key) < pathValue(b, key)) return -direction;
+        }
+        return 0;
+      });
     } else if (stage.$group) {
       const grouped = new Map<string, any>();
       for (const doc of docs) {
@@ -198,6 +203,15 @@ const events = [
   { shopId: "432", provider: "autoflow", vehicleVin: "VIN-D", receivedAt: new Date("2026-09-17T12:00:00Z"), payload: { ticket: {} } },
 ];
 
+// Preserve event ordering without letting these active fixtures age out of the
+// real route's rolling 30-day window as the calendar advances.
+const originalEventTimes = events.map(event => +event.receivedAt);
+function refreshFixtureDates(now: number) {
+  const shift = now - Date.parse("2026-09-17T13:00:00Z");
+  events.forEach((event, index) => { event.receivedAt = new Date(originalEventTimes[index] + shift); });
+}
+let groupedVins: string[] = [];
+
 const dbStub = {
   collection(name: string) {
     return {
@@ -210,19 +224,18 @@ const dbStub = {
         if (name !== "events") return { toArray: async () => [] };
         capturedPipeline = pipeline;
         const grouped = earlyPipeline(events, pipeline);
-        const activeVin = grouped.find((row) => row._id === "VIN-A");
-        const latest = activeVin?.latest;
+        groupedVins = grouped.map(row => row._id);
         return {
-          toArray: async () => latest ? [{
+          toArray: async () => grouped.map(({ latest, _id }) => ({
             displayName: "Grand Rapids",
             displayVehicle: "2020 Ford",
-            displayVin: "VIN-A",
+            displayVin: _id,
             displayMiles: 1,
             displayRo: "RO-1",
             dviDone: true,
             updatedAt: latest.receivedAt,
             af: { status: latest.statusRaw, miles: 1, createdAt: latest.receivedAt },
-          }] : [],
+          })),
         };
       },
     };
@@ -248,21 +261,45 @@ async function main() {
     console.error("dashboard route exports", Object.keys(route), typeof route.GET, Object.keys((route as any).default || {}));
     throw new Error("dashboard GET handler did not load");
   }
+  const realNow = Date.now;
+  try {
+  for (const now of [realNow(), Date.parse("2026-10-31T20:40:32Z"), Date.parse("2027-12-31T23:00:00Z")]) {
+  Date.now = () => now;
+  refreshFixtureDates(now);
+  capturedPipeline = null;
+  groupedVins = [];
   const response = await GET(new NextRequest("http://localhost/api/dashboard/data?page=1"));
   const body = await response.json();
+  const pipeline = capturedPipeline as any[] | null;
+  // Only synthetic fixture identifiers and structural response data; no body,
+  // customer fields, authentication data, or raw error messages.
+  const diagnostics = JSON.stringify({
+    now: new Date(now).toISOString(), status: response.status,
+    rowCount: Array.isArray(body.rows) ? body.rows.length : null,
+    groupedVins, pipelineStages: pipeline?.length ?? 0,
+  });
+  ok("dashboard route succeeds", response.status === 200, diagnostics);
+  ok("dashboard route returns the captured active AutoFlow row", body.rows?.some((row: any) => row.displayVin === "VIN-A"), diagnostics);
+  ok("aggregation returns exactly the active fixture", JSON.stringify(groupedVins) === '["VIN-A"]', diagnostics);
+  ok("closed VIN is absent from the captured aggregation result", !body.rows?.some((row: any) => row.displayVin === "VIN-B"), diagnostics);
+  ok("malformed non-string status is safely inactive", !body.rows?.some((row: any) => row.displayVin === "VIN-C"), diagnostics);
+  ok("missing status is safely inactive", !body.rows?.some((row: any) => row.displayVin === "VIN-D"), diagnostics);
+  ok("captured dashboard pipeline exists", Array.isArray(pipeline));
 
-  ok("dashboard route returns the captured active AutoFlow row", body.rows?.some((row: any) => row.displayVin === "VIN-A"));
-  ok("closed VIN is absent from the captured aggregation result", !body.rows?.some((row: any) => row.displayVin === "VIN-B"));
-  ok("malformed non-string status is safely inactive", !body.rows?.some((row: any) => row.displayVin === "VIN-C"));
-  ok("missing status is safely inactive", !body.rows?.some((row: any) => row.displayVin === "VIN-D"));
-  ok("captured dashboard pipeline exists", Array.isArray(capturedPipeline));
-
-  const lookups = (capturedPipeline || []).filter((stage) => stage.$lookup);
+  const lookups = (pipeline || []).filter((stage) => stage.$lookup);
   for (const collection of ["dvi_results", "dvi"]) {
     const lookup = lookups.find((stage) => stage.$lookup.from === collection)?.$lookup;
     const serialized = JSON.stringify(lookup || {});
     ok(`${collection} lookup scopes by shop`, /shopId/.test(serialized));
     ok(`${collection} lookup has a tenant-aware expression`, /\$eq.*shopId|shopId.*\$eq/.test(serialized));
+  }
+  const cutoff = pipeline?.[0]?.$match?.receivedAt?.$gte;
+  ok("production window remains exactly 30 days", +cutoff === now - 30 * 86400000, diagnostics);
+  const staleEvents = events.map(event => ({ ...event, receivedAt: new Date(now - 31 * 86400000) }));
+  ok("old active events remain outside the window", earlyPipeline(staleEvents, pipeline || []).length === 0, diagnostics);
+  }
+  } finally {
+    Date.now = realNow;
   }
   if (failed > 0) process.exitCode = 1;
 }
