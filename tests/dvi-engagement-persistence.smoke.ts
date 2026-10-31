@@ -35,6 +35,14 @@ const collection = {
   },
 };
 const fakePg: any = {
+  select() {
+    return { from() { return { where() { return {
+      async for(mode: string) {
+        assert.equal(mode, "update", "snapshot preservation locks its existing row");
+        return [];
+      },
+    }; } }; } };
+  },
   insert() {
     return { values() {
       return { async onConflictDoUpdate(options: any) {

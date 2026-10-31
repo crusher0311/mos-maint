@@ -59,7 +59,8 @@ assert.equal(
 
 const page = readFileSync("app/dashboard/reporting/page.tsx", "utf8");
 assert.doesNotMatch(page, /api\/reports\/kpis/, "opening Reporting must not execute the fixed full-KPI workload");
-assert.match(page, /Nothing is queried until you click Run/);
+assert.match(page, /Reports build in the background/);
+assert.doesNotMatch(page, /fetch\(["'`]\/api\/reports\/runs/, "opening the reporting shell must not start a report");
 const route = readFileSync("app/api/reports/runs/[id]/route.ts", "utf8");
 assert.match(route, /readableRunFor/, "status reads revalidate current authorization");
 const worker = readFileSync("lib/report-run-service.ts", "utf8");
