@@ -31,7 +31,7 @@ export async function tickTirePilot(db: Db, deps: PilotWorkerDeps) {
   if (!control) return { status: "idle" };
   const owned = { _id: PILOT_CONTROL, lease };
   const release = async (status: string, delay: number, extra: Record<string, any> = {}) => {
-    await controls.updateOne({ ...owned, enabled: true, leaseUntil: { $gt: deps.now() } }, { $set: { status, nextAt: new Date(deps.now().getTime() + delay), ...extra },
+    await controls.updateOne({ ...owned, enabled: true, leaseUntil: { $gt: deps.now() } }, { $set: { status, failureHttpStatus: null, nextAt: new Date(deps.now().getTime() + delay), ...extra },
       $unset: { lease: "", leaseUntil: "" } });
     return { status };
   };
@@ -154,6 +154,9 @@ export async function tickTirePilot(db: Db, deps: PilotWorkerDeps) {
     if (!done) return release("refreshing", 10_000);
     return publish();
   } catch (error: any) {
+    const failureHttpStatus = error?.message === "provider_http_error" &&
+      Number.isInteger(error.status) && error.status >= 400 && error.status <= 599
+      ? error.status : null;
     const code = error?.status === 429 ? "provider_throttled" :
       /^(scope_|lease_|window_|request_limit|provider_|incomplete_|duplicate_|invoice_|checkpoint_)/.test(error?.message || "")
         ? error.message : "refresh_unavailable";
@@ -161,6 +164,6 @@ export async function tickTirePilot(db: Db, deps: PilotWorkerDeps) {
       "duplicate_pagination_identity", "invoice_count_mismatch", "request_limit", "incomplete_invoice_payload"].includes(code);
     if (restart && build) await builds.updateOne({ _id: build._id, state: "building" },
       { $set: { state: "failed", failure: code } });
-    return release("deferred", 60 * 60_000, { failure: code, ...(restart ? { build: null } : {}) });
+    return release("deferred", 60 * 60_000, { failure: code, failureHttpStatus, ...(restart ? { build: null } : {}) });
   }
 }

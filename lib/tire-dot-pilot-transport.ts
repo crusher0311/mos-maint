@@ -21,14 +21,15 @@ export async function fetchTirePilotPage(db: Db, location: PilotLocation, page: 
   // The documented posted-date filters enumerate ALL invoices. A one-day pad
   // protects boundaries; retained report evidence is filtered to exact UTC days.
   const params = new URLSearchParams({ shop: String(location.providerShopId),
-    postedDateStart: "2026-09-30", postedDateEnd: "2026-11-02",
+    postedDateStart: "2026-09-30T00:00:00.000Z", postedDateEnd: "2026-11-02T00:00:00.000Z",
     sort: "repairOrderNumber", sortDirection: "ASC", size: String(PILOT_PAGE_SIZE), page: String(page) });
   const response = await fetch(`https://shop.tekmetric.com/api/v1/repair-orders?${params}`, {
     headers: { Authorization: `Bearer ${token.accessToken}`, Accept: "application/json" },
     redirect: "error", signal: AbortSignal.timeout(15_000),
   });
   if (!response.ok) {
-    await response.body?.cancel();
+    // A body-cleanup failure must not hide the safe HTTP status.
+    await response.body?.cancel().catch(() => {});
     throw Object.assign(Error("provider_http_error"), { status: response.status });
   }
   if (!response.body) throw Error("provider_empty_response");
