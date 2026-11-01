@@ -2,6 +2,16 @@
 name: Tire DOT reporting boundaries
 description: Retained DOT occurrences, reconciliation population and production approval boundary.
 ---
+Tire repair materials, including tire patches and plugs, are not tire sales
+and must not generate missing-DOT requirements merely because they are parts.
+
+**Why:** The user identified two flagged invoices as tire repairs, not tires
+sold. An empty provider DOT array does not validate the report's classification.
+
+**How to apply:** Validate tire-sale classification before treating an empty
+DOT response as missing registration evidence. Exclude repair materials at the
+line level while preserving genuine tire-sale lines on mixed invoices.
+
 Tire DOT reporting uses raw Tekmetric part evidence; repeated DOT values represent
 separate recorded entries, not duplicates to remove. Reconciliation needs one row
 per location/provider invoice, including missing-DOT exceptions.
