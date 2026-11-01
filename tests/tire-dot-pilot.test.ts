@@ -34,10 +34,15 @@ test("pilot retains repeated DOT evidence and excludes PII; exact October UTC ra
 test("real Mongo: all invoices, two-pass verification, leases, retries, publication recovery, and throttling", async () => {
   const directory = await mkdtemp(join(tmpdir(), "tire-pilot-"));
   const server = spawn("mongod", ["--dbpath", directory, "--bind_ip", "127.0.0.1", "--port", "27933", "--quiet"],
-    { env: { PATH: process.env.PATH, HOME: directory, NODE_ENV: "test" }, stdio: "ignore" });
+    { env: { PATH: process.env.PATH, HOME: directory, NODE_ENV: "test" }, stdio: ["ignore", "pipe", "pipe"] });
+  let startup = "";
+  const capture = (chunk: Buffer) => { startup = (startup + chunk.toString()).slice(-4000); };
+  server.stdout.on("data", capture);
+  server.stderr.on("data", capture);
   const client = new MongoClient("mongodb://127.0.0.1:27933/pilot", { serverSelectionTimeoutMS: 300 });
   try {
     for (let i = 0; ; i++) {
+      if (server.exitCode !== null || server.signalCode !== null) throw Error(`Disposable Mongo exited: ${startup}`);
       try { await client.connect(); break; } catch (e) {
         if (i > 25) throw e;
         await new Promise(r => setTimeout(r, 200));
@@ -277,8 +282,12 @@ test("real Mongo: all invoices, two-pass verification, leases, retries, publicat
     assert.equal(calls, 1);
     assert.equal((await builds.findOne({ state: "published" }))?.finalMonth, true);
   } finally {
-    await client.close(); server.kill("SIGTERM");
-    await new Promise(resolve => server.once("exit", resolve));
+    await client.close();
+    if (server.exitCode === null && server.signalCode === null) {
+      const exited = new Promise(resolve => server.once("exit", resolve));
+      server.kill("SIGTERM");
+      await exited;
+    }
     await rm(directory, { recursive: true, force: true });
   }
 });

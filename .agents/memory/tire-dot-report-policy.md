@@ -67,6 +67,17 @@ evidence contained DOTs, so it is not a wholesale replacement evidence source.
 vehicle identity, preserve provenance, and retain the pinned DOT evidence.
 Empty captured DOT arrays still do not prove what the provider UI contains.
 
+Shop-local reporting dates must pin each location's IANA timezone and preserve
+legacy UTC executions. Changing the timezone label alone is not a correction.
+
+**Why:** The user expects Central business dates, including CST/CDT transitions.
+The existing October pilot was verified against UTC boundaries; those counts
+cannot establish complete coverage of a shifted local calendar month.
+
+**How to apply:** Resolve new zones from authorized shop settings, distinguish
+local executions in cache identity and exports, and disclose unverified boundary
+coverage until a separately approved collection verifies the local interval.
+
 Distinguish absent DOT properties from explicit empty arrays and UI evidence.
 
 **Why:** A confirmed HEART tire invoice displays four DOTs in Tekmetric while

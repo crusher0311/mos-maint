@@ -22,7 +22,7 @@ export async function createTireFixture() {
     const json = (value: unknown, status = 200) => { res.writeHead(status, { "Content-Type": "application/json" }).end(JSON.stringify(value)); };
     if (url.pathname === "/fixture/control") { denied = url.searchParams.get("deny") === "true"; mode = url.searchParams.get("mode") || "normal"; json({ posts, polls, downloads }); return; }
     if (url.pathname === "/fixture/stats") { json({ posts, polls, downloads }); return; }
-    if (url.pathname === "/api/reports/tire-dot/locations") { json(denied ? { error: "Access revoked" } : { locations: [{ shopId: 311, name: "Fixture North" }, { shopId: 32, name: "Fixture South" }] }, denied ? 403 : 200); return; }
+    if (url.pathname === "/api/reports/tire-dot/locations") { json(denied ? { error: "Access revoked" } : { locations: [{ shopId: 311, name: "Fixture North", timeZone: "America/Chicago" }, { shopId: 32, name: "Fixture South", timeZone: "America/Chicago" }] }, denied ? 403 : 200); return; }
     if (url.pathname === "/api/reports/runs") {
       posts++; polls = 0;
       json({ runId: "fixture-run", status: "queued", stage: "queued" }, 202); return;

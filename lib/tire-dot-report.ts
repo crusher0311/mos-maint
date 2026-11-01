@@ -1,5 +1,6 @@
 import type { TireDotDefinition, TireDotResult, TireDotDetail, TireDotInvoice } from "./tire-dot-report-contract";
 import { TIRE_DOT_LIMITS } from "./tire-dot-report-contract";
+import { tireLocalDay, validTireTimeZone } from "./tire-dot-dates";
 
 type Raw = Record<string, any>;
 const text = (v: unknown): string | null => typeof v === "string" && v.trim() ? v : typeof v === "number" && Number.isFinite(v) ? String(v) : null;
@@ -14,12 +15,16 @@ export function validateTireDefinition(input: any): TireDotDefinition {
   if (start > end || (Date.parse(end) - Date.parse(start)) / 86_400_000 >= 366) throw new Error("Choose an inclusive date range of at most 366 days");
   if (!Array.isArray(input.locationIds) || !input.locationIds.length || input.locationIds.length > 500 ||
       input.locationIds.some((id: unknown) => !Number.isSafeInteger(id) || Number(id) <= 0)) throw new Error("Select authorized Tekmetric locations");
-  return { kind: "tekmetric-tire-dot", version: 1, dateRange: { start, end }, locationIds: [...new Set<number>(input.locationIds)].sort((a,b) => a-b) };
+  if (input.timeZones !== undefined && (!input.timeZones || input.locationIds.some((id: number) => !validTireTimeZone(input.timeZones[id]))))
+    throw new Error("Each selected location needs a valid reporting timezone");
+  return { kind: "tekmetric-tire-dot", version: 1, dateRange: { start, end }, locationIds: [...new Set<number>(input.locationIds)].sort((a,b) => a-b),
+    ...(input.timeZones ? { timeZones: Object.fromEntries(input.locationIds.map((id: number) => [id, input.timeZones[id]])) } : {}) };
 }
 
 export function emptyTireResult(definition: TireDotDefinition, locations: TireDotResult["locations"]): TireDotResult {
   return {
     generatedAt: "", dateRange: definition.dateRange, shopIds: definition.locationIds, locations,
+    ...(definition.timeZones ? { timeZones: definition.timeZones } : {}),
     details: [], invoices: [], counts: { invoices: 0, partLines: 0, tireQuantity: 0, dotEntries: 0 },
     coverage: { status: "stored-evidence-only", scanned: 0, missingRaw: 0, missingPostedDate: 0,
       reasons: ["Retained Tekmetric work-order snapshots only; upstream import completeness and current provider state are not verified. Extraction is not a point-in-time provider snapshot."] },
@@ -63,7 +68,7 @@ export function extractTireInvoice(result: TireDotResult, shopId: number, source
     result.coverage.missingPostedDate++; tireCoverageGap(result, "Records without a valid Tekmetric posted date cannot be assigned to this period."); return;
   }
   const postedDate = new Date(postedInput).toISOString();
-  const day = postedDate.slice(0, 10);
+  const day = result.timeZones ? tireLocalDay(postedDate, result.timeZones[shopId]) : postedDate.slice(0, 10);
   if (day < result.dateRange.start || day > result.dateRange.end) return;
   // A postedDate is finalization evidence; contradictory explicit status vetoes it.
   const postedReceivable = status === "accounts receivable" && raw.repairOrderStatus?.code === "ACCRECV" && raw.repairOrderStatus?.postedOrAccrecv === true;
@@ -89,6 +94,7 @@ export function extractTireInvoice(result: TireDotResult, shopId: number, source
     key, shopId, location: result.locations.find(l => l.shopId === shopId)?.name || `Shop ${shopId}`,
     providerRoId: id, invoiceNumber: text(raw.repairOrderNumber),
     postedDate, vin: text(v.vin ?? raw.vin ?? doc.vin),
+    ...(doc.vinProvenance ? { vinProvenance: String(doc.vinProvenance) } : {}),
     vehicle: [v.year ?? raw.vehicleYear ?? doc.vehicleYear, v.make ?? raw.vehicleMake ?? doc.vehicleMake, v.model ?? raw.vehicleModel ?? doc.vehicleModel].map(text).filter(Boolean).join(" ") || null,
     mileage,
   };
@@ -127,7 +133,7 @@ export function extractTireInvoice(result: TireDotResult, shopId: number, source
       if (!common.vin) exceptions.push("Missing VIN");
       const dots = Array.isArray(part.dotNumbers) ? part.dotNumbers : [];
       const valid = dots.filter((d: unknown) => typeof d === "string" && d.trim() !== "");
-      if (!valid.length) exceptions.push("Missing DOT");
+      if (!valid.length) exceptions.push("No DOT in captured evidence (not verified against Tekmetric UI)");
       if (!Object.hasOwn(part,"dotNumbers")) {
         exceptions.push("DOT field absent from captured payload");
         tireCoverageGap(result,"Some tire parts omit the DOT field; this does not establish that Tekmetric has no recorded DOTs.");
@@ -166,7 +172,8 @@ export function tireCsv(result: TireDotResult, view: "details" | "invoices") {
   };
   const fields = ["Location", "Shop ID", "Provider RO ID", "Invoice number", "Posted date UTC", "VIN", "Vehicle", "Invoice mileage",
     ...(view === "details" ? ["Job ID", "Part ID", "Entry index", "Description", "Brand", "Part quantity (repeated per DOT)", "DOT"] : ["Part lines", "Tire quantity", "DOT entries"]),
-    "Exceptions", `Start UTC inclusive: ${result.dateRange.start}`, `End UTC inclusive: ${result.dateRange.end}`,
+    "Exceptions", "VIN provenance", "Reporting timezone", "Posted local date",
+    `Start ${result.timeZones ? "shop-local" : "UTC"} inclusive: ${result.dateRange.start}`, `End ${result.timeZones ? "shop-local" : "UTC"} inclusive: ${result.dateRange.end}`,
     `Executed shop IDs: ${result.shopIds.join(";")}`, `Generated UTC: ${result.generatedAt}`,
     `Coverage: ${result.coverage.status}`, `Limited: ${result.limited}`, `Coverage notes: ${result.coverage.reasons.join("; ")}`];
   const rows = view === "details" ? result.details : result.invoices;
@@ -174,7 +181,9 @@ export function tireCsv(result: TireDotResult, view: "details" | "invoices") {
     const d = row as TireDotDetail; const i = row as TireDotInvoice;
     return [cell(row.location),cell(row.shopId),cell(row.providerRoId,true),cell(row.invoiceNumber,row.invoiceNumber !== null),cell(row.postedDate),cell(row.vin,true),cell(row.vehicle),cell(row.mileage),
       ...(view === "details" ? [cell(d.jobId,true),cell(d.partId,true),cell(d.entryIndex),cell(d.description),cell(d.brand),cell(d.quantity),cell(d.dot,d.dot !== null)] : [cell(i.partLines),cell(i.tireQuantity),cell(i.dotEntries)]),
-      cell(row.exceptions.join("; ") || "None recorded"),cell(result.dateRange.start),cell(result.dateRange.end),cell(result.shopIds.join(";")),cell(result.generatedAt),
+      cell(row.exceptions.join("; ") || "None recorded"),cell(row.vinProvenance || (row.vin ? "Captured invoice" : "Unavailable")),
+      cell(result.timeZones?.[row.shopId] || "UTC"),cell(tireLocalDay(row.postedDate, result.timeZones?.[row.shopId] || "UTC")),
+      cell(result.dateRange.start),cell(result.dateRange.end),cell(result.shopIds.join(";")),cell(result.generatedAt),
       cell(result.coverage.status),cell(result.limited),cell(result.coverage.reasons.join("; "))].join(",");
   }).join("\r\n") + "\r\n";
 }

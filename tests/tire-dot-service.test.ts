@@ -6,6 +6,37 @@ import { rawInvoice } from "./tire-dot-report.test";
 import type { TireDotRun } from "../lib/data/repositories/tire-dot-report-runs";
 d.findTirePilot = async () => null;
 
+test("new local runs pin authoritative zones, reject missing zones, and preserve legacy UTC requests", async () => {
+  const old = { ...d };
+  const flag = process.env.REPORTING_TIRE_DOT_ENABLED;
+  try {
+    process.env.REPORTING_TIRE_DOT_ENABLED = "true";
+    let zone: string | undefined = "America/Chicago";
+    d.resolveReportingScope = async () => ({ kind: "shop", shopIds: [1], shops: [{ shopId: 1, name: "Fixture" }] }) as any;
+    d.listShopsByShopIds = async (_ids, projection) => {
+      assert.equal(projection?.["tekmetric.shopId"], 1);
+      assert.equal(projection?.timezone, 1);
+      return [{ shopId: 1, tekmetric: { shopId: 10 }, timezone: zone }] as any;
+    };
+    d.findTirePilot = async () => null;
+    d.createTireRun = async input => input as any;
+    const input = { dateRange: { start: "2026-10-01", end: "2026-10-31" }, locationIds: [1],
+      scope: { kind: "shop", shopId: 1 }, timeZones: { 1: "Asia/Tokyo" } };
+    const session = { email: "fixture@example.test" };
+    const local = await requestTireRun(session, { ...input, dateBasis: "shop-local" });
+    assert.deepEqual(local.definition.timeZones, { 1: "America/Chicago" });
+    assert.deepEqual(local.partial.timeZones, local.definition.timeZones);
+    const legacy = await requestTireRun(session, input);
+    assert.equal(legacy.definition.timeZones, undefined);
+    zone = undefined;
+    await assert.rejects(requestTireRun(session, { ...input, dateBasis: "shop-local" }), /valid timezone/);
+  } finally {
+    Object.assign(d, old);
+    if (flag === undefined) delete process.env.REPORTING_TIRE_DOT_ENABLED;
+    else process.env.REPORTING_TIRE_DOT_ENABLED = flag;
+  }
+});
+
 test("report batches preserve pilot scope, sequential checkpoints, budgets, and cancellation", async () => {
   const original = { ...d };
   const flag = process.env.REPORTING_TIRE_DOT_ENABLED;

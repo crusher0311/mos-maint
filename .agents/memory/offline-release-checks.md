@@ -3,6 +3,15 @@ name: Offline release checks
 description: Interpreting elapsed-time failures and non-exiting smoke tests during release verification.
 ---
 
+Check `/tmp` capacity before starting disposable databases after large builds.
+
+**Why:** This environment uses a 5 GB tmpfs. Two isolated Next build outputs
+exhausted it, crashing disposable Mongo during startup and masking the failure
+behind an exit-listener cleanup race.
+
+**How to apply:** Remove only known disposable outputs from completed builds.
+Consume startup diagnostics and check process exit state before awaiting exit;
+do not treat an unresolved test promise as a pass.
 Direct Next compilation does not execute npm's prebuild lifecycle.
 
 **Why:** Compilation and selected extension tests passed, but Render's full
