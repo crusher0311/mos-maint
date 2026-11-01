@@ -19,14 +19,19 @@ versions, authorization, coverage exceptions and refresh admission are retained.
    Existing processing continues; HEART gains its local batching improvement.
 2. Stage one dedicated worker, with the existing application's required database
    configuration, running:
-   `node --import tsx scripts/report-queue-worker.ts`
-   Use the same server-only preload convention as the existing production worker
-   if required by that runtime. Do not run this against shared stores from dev.
+   `node --require ./scripts/_stubs/server-only-stub.cjs --import tsx scripts/report-queue-worker.ts`
+   This matches the existing HEART production preload convention. Do not run
+   this against shared stores from dev. Provisioning a paid service requires
+   explicit approval of the selected service plan; no service is created here.
 3. Enable REPORTING_QUEUE_WORKER_ENABLED=true on that worker and confirm it is
    healthy. Then set the same flag on the web service and HEART collection worker.
    This disables their report execution, but preserves scheduled refresh
    admission and source collection. Brief overlap uses existing atomic claims;
    do not scale worker replicas as a substitute for query optimization.
+   Inspection on 2026-11-01 found HEART launched by start-with-workers.js inside
+   the main mos-tools web service, not a separate HEART service. Apply the web
+   flag once for both; do not modify the unrelated heart-helper application.
+   Keep the flag service-specific rather than in a shared environment group.
 4. Verify queue delay, completion duration, database load and foreground latency
    with one single-shop and one enterprise report. Compare results, including
    exception counts, against pre-release output. Test cached, saved-version,
@@ -52,8 +57,12 @@ Queue/Tire DOT focused tests: 17 passed. Existing report-run cache smoke and
 subset/revocation checks passed. Disposable PostgreSQL execution/persistence/
 retry/reopen and the 120,000-row date-range fixture passed.
 
-The combined execution script later failed in the unrelated Protractor history
-fixture: it expects `invoice_preview.disposable=yes`, which the script does not
-set. The full TypeScript check exceeded the 120-second local limit without
-diagnostics. Neither is recorded as a passing release gate. No live latency or
-signed-in UI verification has been performed for this change.
+The disposable execution harness explicitly sets
+`invoice_preview.disposable=yes` on its temporary server; the history fixture's
+safety assertion remains intact. On 2026-11-01, full TypeScript checking, the
+custom-report suite, disposable execution suite, and all prebuild checks passed.
+Prebuild was resumed at the printing test after restoring noncredential native
+library paths to the isolated environment; the remaining checks exited zero.
+No full Next production compilation, live worker latency measurement, or
+signed-in UI verification has been performed for this change. No deployment
+or dedicated-worker activation is authorized by these local test results.
