@@ -1,4 +1,28 @@
-# Dedicated reporting queue: local implementation, not activated
+# Dedicated reporting queue rollout
+
+## Production rollout — 2026-11-01
+
+Separately approved reporting-only release `7ce48fb6` is live on `mos-tools`
+and `mos-reporting-worker` (`srv-dbjndh49v7es73akan5g`). The worker uses one
+Standard instance (1 CPU / 2 GB, $25/month at provisioning), Oregon, with a
+300-second graceful shutdown allowance. Both services track GitHub `main`
+with automatic deployment enabled.
+
+The worker receives database credentials directly, not the shared environment
+group containing provider/payment/messaging credentials. Its report flag is
+true, Protractor outbound is disabled, and in-process cron is disabled.
+The web report flag is also true after a separate successful handoff deployment.
+That flag covers the embedded HEART processor; source collection remains intact.
+
+Startup logs from the worker instance showed three reports claimed and completed,
+with processing durations of 2,100, 783 and 982 ms and no processor errors in that
+checked window. These were existing queued reports, not a representative
+large-report benchmark. The final web health response was HTTP 200/status ok,
+and the public landing page rendered. Signed-in report UI, large enterprise
+timings and full before/after result comparisons remain unverified.
+
+No projection population or summary activation was performed. The broader local
+main backlog was deliberately excluded from the pushed release.
 
 ## What this addresses
 
@@ -22,7 +46,7 @@ versions, authorization, coverage exceptions and refresh admission are retained.
    `node --require ./scripts/_stubs/server-only-stub.cjs --import tsx scripts/report-queue-worker.ts`
    This matches the existing HEART production preload convention. Do not run
    this against shared stores from dev. Provisioning a paid service requires
-   explicit approval of the selected service plan; no service is created here.
+    explicit approval of the selected service plan.
 3. Enable REPORTING_QUEUE_WORKER_ENABLED=true on that worker and confirm it is
    healthy. Then set the same flag on the web service and HEART collection worker.
    This disables their report execution, but preserves scheduled refresh
@@ -39,8 +63,10 @@ versions, authorization, coverage exceptions and refresh admission are retained.
 5. Keep a graceful termination allowance for the existing five-minute general
    query bound; shutdown stops new claims, not in-flight database writes.
 
-Rollback: suspend the dedicated worker and unset the flag on the web and HEART
-services. Persisted queue state remains available to the existing processors.
+Rollback: unset the web flag and deploy that configuration, confirming the
+fallback processors are running before suspending the dedicated worker.
+HEART currently inherits the web setting. Persisted queue state remains
+available to the existing processors. Keep the handoff service-specific.
 
 ## Remaining work
 
@@ -65,6 +91,7 @@ Prebuild was resumed at the printing test after restoring noncredential native
 library paths to the isolated environment; the remaining checks exited zero.
 Full Next production compilation subsequently passed in an isolated,
 credential-free, network-denied snapshot: compilation completed, all 256 static
-pages generated, and the post-build TypeScript check exited zero. Live worker
-latency and signed-in UI have not been verified. No deployment or
-dedicated-worker activation is authorized by these local test results.
+pages generated, and the post-build TypeScript check exited zero. The isolated
+reporting-only release subsequently passed its focused tests, disposable
+execution tests, full prebuild/build and post-build type check. Production
+activation followed separate user approval, not these test results alone.
