@@ -55,6 +55,18 @@ raw copies had zero amounts. Selecting the convenient copy would hide conflicts.
 sales entries separate from ordinary tire invoices until their document type
 is established.
 
+Pilot invoice-list evidence may retain vehicleId without VIN or a nested vehicle.
+Do not treat report-wide missing VINs as missing vehicles in Tekmetric.
+
+**Why:** A read-only comparison found VINs in the operational work-order cache
+for most sampled invoices whose pinned pilot payload omitted vehicle information.
+The same operational cache omitted DOT fields even for invoices whose pilot
+evidence contained DOTs, so it is not a wholesale replacement evidence source.
+
+**How to apply:** Any VIN enrichment must verify same-shop, work-order and
+vehicle identity, preserve provenance, and retain the pinned DOT evidence.
+Empty captured DOT arrays still do not prove what the provider UI contains.
+
 Distinguish absent DOT properties from explicit empty arrays and UI evidence.
 
 **Why:** A confirmed HEART tire invoice displays four DOTs in Tekmetric while
