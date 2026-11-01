@@ -1,10 +1,68 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { tireDotDeps as d, requestTireRun, readableTireRun, processNextTireRun, tireRunResponse } from "../lib/tire-dot-report-service";
+import { tireDotDeps as d, requestTireRun, readableTireRun, processNextTireRun, processTireRunBatch, tireRunResponse } from "../lib/tire-dot-report-service";
 import { reportingScopeDependencies as scopeDeps } from "../lib/reporting-scope";
 import { rawInvoice } from "./tire-dot-report.test";
 import type { TireDotRun } from "../lib/data/repositories/tire-dot-report-runs";
 d.findTirePilot = async () => null;
+
+test("report batches preserve pilot scope, sequential checkpoints, budgets, and cancellation", async () => {
+  const original = { ...d };
+  const flag = process.env.REPORTING_TIRE_DOT_ENABLED;
+  try {
+    process.env.REPORTING_TIRE_DOT_ENABLED = "true";
+    let claims = 0, saves = 0, checks = 0, reads = 0, failures = 0, time = 0;
+    let stop = false, idle = false, revoked = false, advance = 0;
+    d.resolveReportingScope = async () => ({ kind: "enterprise", enterpriseId: "pilot",
+      shopIds: [1], shops: [{ shopId: 1, name: "Fixture" }] }) as any;
+    d.listShopsByShopIds = async () => [{ shopId: 1, tekmetric: { shopId: 10 } }] as any;
+    const pilot: any = { generation: "pinned", enterpriseId: "pilot",
+      start: "2026-10-01", end: "2026-10-31", locations: [{ shopId: 1, providerShopId: 10 }],
+      warnings: [] };
+    d.findTirePilot = async () => pilot;
+    d.validateTirePilot = async () => { checks++; if (revoked) throw Error("revoked"); };
+    d.createTireRun = async input => ({ ...input, _id: "fixture", shopIndex: 0, cursor: null }) as any;
+    const run = await requestTireRun({ email: "fixture@example.test" }, {
+      scope: { kind: "enterprise", enterpriseId: "pilot" }, locationIds: [1],
+      dateRange: { start: "2026-10-01", end: "2026-10-31" },
+    });
+    checks = 0;
+    d.claimTireRun = async pilotOnly => {
+      assert.equal(pilotOnly, true, "dedicated worker must not claim generic reports");
+      assert.equal(claims, saves + failures, "previous page must finish before another claim");
+      if (idle) return null;
+      claims++; return run;
+    };
+    d.findReportingRecipient = async () => ({ email: run.requestedBy }) as any;
+    d.readTireSourcePage = async () => { throw Error("raw source forbidden"); };
+    d.readTirePilotPage = async selection => {
+      assert.equal(selection.generation, "pinned");
+      reads++;
+      return Array.from({ length: 25 }, (_, i) => ({ key: `${reads}-${i}`, doc: {} }));
+    };
+    d.saveTireRun = async () => { saves++; time += advance; return {} as any; };
+    d.failTireRun = async () => { failures++; };
+    const options = { pilotOnly: true, now: () => time, shouldStop: () => stop };
+    assert.equal((await processTireRunBatch(options)).length, 10);
+    assert.equal(saves, 10); assert.equal(checks, 10); assert.equal(reads, 10);
+    advance = 8000;
+    assert.equal((await processTireRunBatch(options)).length, 2, "stop starting pages at 15s");
+    stop = true;
+    assert.equal((await processTireRunBatch(options)).length, 0);
+    stop = false; idle = true;
+    assert.equal((await processTireRunBatch(options)).length, 1, "empty queue exits immediately");
+    idle = false; revoked = true;
+    const before = reads;
+    const failed = await processTireRunBatch(options);
+    assert.equal(failed.length, 1); assert.equal(failed[0].status, "failed");
+    assert.equal(reads, before, "revocation blocks the next read");
+    assert.equal(failures, 1);
+  } finally {
+    Object.assign(d, original);
+    if (flag === undefined) delete process.env.REPORTING_TIRE_DOT_ENABLED;
+    else process.env.REPORTING_TIRE_DOT_ENABLED = flag;
+  }
+});
 
 test("pilot generations bypass raw scans but keep scope checks and pinned evidence", async () => {
   const original = { ...d }, flag = process.env.REPORTING_TIRE_DOT_ENABLED;
