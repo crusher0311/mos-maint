@@ -1,13 +1,15 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CustomerReport, ReleaseBranding, ReleaseConcern, ReleaseSelection } from "@/lib/auto-dvi/release/model";
-import { customerReport, pendingRelease, releaseBranding } from "./release-contract";
+import { customerReport, pendingRelease, releaseBranding, releaseClips } from "./release-contract";
 
 export type ReleaseAuthority = {
   enabled: boolean; canPublish: boolean;
+  canRevoke?: boolean; canDeliver?: boolean; canCopy?: boolean;
   current: { version: number; report: CustomerReport } | null;
   concerns: ReleaseConcern[]; branding: ReleaseBranding;
   links: { id: string; expiresAt: string; revokedAt: string | null }[];
+  clips?: {id: string; caption: string; durationSeconds: number; sheet: string; item: string}[];
 };
 export type ReleasePreview = {
   previewId: string; digest: string; report: CustomerReport;
@@ -40,7 +42,8 @@ export function useInspectionRelease(visitId: string, shopId?: number) {
       const data = await response.json() as ReleaseAuthority;
       if (!response.ok || typeof data.enabled !== "boolean" || typeof data.canPublish !== "boolean") throw new Error();
       // Authorized advisors can still inspect existing releases with the gate off.
-      if (data.canPublish && (!Array.isArray(data.links) || !Array.isArray(data.concerns) || !releaseBranding.safeParse(data.branding).success || (data.current !== null && (!Number.isInteger(data.current?.version) || !customerReport.safeParse(data.current?.report).success)))) throw new Error();
+      if ((data.canPublish || data.canRevoke || data.canDeliver) && (!Array.isArray(data.links) || !Array.isArray(data.concerns) || !releaseBranding.safeParse(data.branding).success || (data.current !== null && (!Number.isInteger(data.current?.version) || !customerReport.safeParse(data.current?.report).success)))) throw new Error();
+      if (data.clips !== undefined && !releaseClips.safeParse(data.clips).success) throw new Error();
       setAuthority(data);
     } catch { setAuthority(null); setError("Release permissions and saved releases could not be loaded. Retry to check availability."); }
     finally { setLoading(false); }
@@ -66,7 +69,9 @@ export function useInspectionRelease(visitId: string, shopId?: number) {
   }, [pending, busy]);
   async function send(request: Pending, retry = false) {
     const allowedWithGateOff = request.type === "link" && (request.action === "revoke" || request.action === "copy");
-    if (!ready.current || sending.current || (pendingRef.current && !retry) || !authority?.canPublish || (!authority.enabled && !allowedWithGateOff)) return;
+    const permitted = request.type === "link" && request.action === "revoke" ? authority?.canRevoke ?? authority?.canPublish :
+      request.type === "link" && request.action === "copy" ? authority?.canCopy ?? authority?.canPublish : authority?.canPublish;
+    if (!ready.current || sending.current || (pendingRef.current && !retry) || !permitted || (!authority?.enabled && !allowedWithGateOff)) return;
     // Persist the exact body before the first network attempt. Never persist link tokens.
     try { sessionStorage.setItem(storageKey, JSON.stringify(request)); }
     catch { setError("Cannot retain the request safely in this browser. No request was sent."); return; }

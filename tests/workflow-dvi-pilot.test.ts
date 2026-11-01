@@ -85,6 +85,43 @@ async function enableAllRecords(f: Awaited<ReturnType<typeof fixture>>, imported
   return {guid, order};
 }
 
+test("published URL is frozen into native Notes and confirmed only through exact readback", async () => {
+  const f = await fixture(); await f.ready();
+  const delivery = {version: 2, linkId: "a".repeat(64),
+    url: "https://reports.example.invalid/workflow-report?version=2#synthetic",
+    reportDigest: "b".repeat(64), expiresAt: "2027-01-01T00:00:00.000Z",
+    destination: "inspection-line-notes" as const, clickability: "unverified" as const};
+  f.deps.publishedReport = async () => delivery;
+  const state = await snapshot("visit-one", f.deps);
+  const preview = await executePilot({action: "preview", requestId: randomUUID(), visitId: "visit-one",
+    evidenceRevision: state.inspection!.evidenceRevision, selected: [{sheet: "fixture@1", item: "tire.lf"}],
+    publishedReport: {version: delivery.version, linkId: delivery.linkId}}, f.deps);
+  assert.ok(preview.operation!.lines[0].notes.includes(delivery.url));
+  f.setMode("lost");
+  const result = await executePilot(send(preview.operation!.id), f.deps);
+  assert.equal(result.operation!.state, "confirmed");
+  assert.equal(result.operation!.publishedReport?.clickability, "unverified");
+  assert.equal(f.sends, 1);
+  await executePilot(send(preview.operation!.id), f.deps);
+  assert.equal(f.sends, 1);
+});
+test("revoked or changed published URL fences provider send instead of falling back to findings only", async () => {
+  const f = await fixture(); await f.ready();
+  let revoked = false;
+  f.deps.publishedReport = async () => {
+    if (revoked) throw Error("Published link revoked");
+    return {version: 1, linkId: "a".repeat(64), url: "https://reports.example.invalid/workflow-report?version=1#synthetic",
+      reportDigest: "b".repeat(64), expiresAt: "2027-01-01T00:00:00.000Z", destination: "inspection-line-notes", clickability: "unverified"};
+  };
+  const state = await snapshot("visit-one", f.deps);
+  const preview = await executePilot({action: "preview", requestId: randomUUID(), visitId: "visit-one",
+    evidenceRevision: state.inspection!.evidenceRevision, selected: [{sheet: "fixture@1", item: "tire.lf"}],
+    publishedReport: {version: 1, linkId: "a".repeat(64)}}, f.deps);
+  revoked = true;
+  await assert.rejects(executePilot(send(preview.operation!.id), f.deps), /revoked/);
+  assert.equal(f.sends, 0);
+});
+
 test("all-records scope supports existing imported open tickets and arbitrary test customers", async () => {
   const f = await fixture();
   await enableAllRecords(f);

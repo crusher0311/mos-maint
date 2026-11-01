@@ -6,7 +6,7 @@ import {isolatedStaffDatabase} from "./helpers/staff-inspection-fixture";
 import {STAFF_SHEET_TEMPLATES} from "../lib/auto-dvi/staff/model";
 const Module=require("module"),original=Module._load;
 let db:Db,isolated:Awaited<ReturnType<typeof isolatedStaffDatabase>>;
-let email="sender@example.invalid",cookie:string|undefined="dashboard",shopId=66,enabled=true;
+let email="sender@example.invalid",cookie:string|undefined="dashboard",shopId=66,enabled=true,dvi=true;
 const users=[{email:"sender@example.invalid",shopId:66,role:"advisor",status:"active"},
   {email:"recipient@example.invalid",shopIds:[66],role:"advisor",status:"active"},
   {email:"stranger@example.invalid",shopId:66,role:"advisor",status:"active"},
@@ -19,7 +19,7 @@ Module._load=function(id:string,...args:any[]){
   if(id==="@/lib/data/db"||id==="@/lib/mongo")return {getDb:async()=>db};
   if(id==="@/lib/data/repositories/users")return {listUsers:async(q:any)=>users.filter(u=>u.email===q.email)};
   if(id==="@/lib/enterprise")return {getEnterpriseByShopId:async()=>null};
-  if(id==="@/lib/featureResolver")return {getFeatureEntitlements:async()=>({isFeatureEnabled:()=>enabled})};
+  if(id==="@/lib/featureResolver")return {getFeatureEntitlements:async()=>({isFeatureEnabled:(feature:string)=>enabled&&(feature!=="auto_dvi"||dvi)})};
   if(id==="@/lib/data/repositories/workflow-inspections"){
     const actual=original.call(this,id,...args);
     return {...actual,readStaffConfiguration:async()=>({version:1,enabledShopIds:[66],sheets:[STAFF_SHEET_TEMPLATES[0]],
@@ -51,6 +51,8 @@ test("real transfer routes require cookie authentication, selected current-shop 
   assert.equal((await route.GET(request("?email=outsider@example.invalid"))).status,403);
   assert.equal((await route.POST(request("",{...body(),email:"outsider@example.invalid"}))).status,403);
   enabled=false;assert.equal((await route.POST(request("",body()))).status,403);enabled=true;
+  dvi=false;assert.equal((await route.POST(request("",body()))).status,403,
+    "DVI alone blocks the real staff authority chain even when other products remain enabled");dvi=true;
   assert.equal((await route.GET(request("?email=recipient@example.invalid"))).status,200);
   assert.equal((await route.POST(request("",body()))).status,200);
   row=await repo.read(scope,id);

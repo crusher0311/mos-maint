@@ -4,6 +4,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { canonical } from "../durable/model";
 import { requireThat } from "../../shop-dispatch/model";
 import type { StaffInspection } from "../staff/model";
+import { assertPolicyReleaseReady } from "../staff/model";
 
 export const PILOT_SHOP = 66;
 // Legacy fixture remains the default until an operator opts this test instance in.
@@ -23,9 +24,15 @@ export const pilotConfigurationSchema = z.object({
 export type PilotConfiguration = z.infer<typeof pilotConfigurationSchema>;
 export const connectionHash = (connection: string) => createHash("sha256").update(connection).digest("hex");
 const selection = z.object({sheet: z.string().max(80), item: z.string().max(80)}).strict();
+export const publishedReportReferenceSchema = z.object({version: z.number().int().positive(), linkId: z.string().length(64)}).strict();
+export const publishedReportDeliverySchema = publishedReportReferenceSchema.extend({
+  url: z.string().url().max(2000), reportDigest: z.string().length(64), expiresAt: z.string().datetime(),
+  destination: z.literal("inspection-line-notes"), clickability: z.literal("unverified"),
+}).strict();
 export const pilotRequestSchema = z.discriminatedUnion("action", [
   z.object({action: z.literal("preview"), visitId: z.string().min(1).max(100), requestId: z.string().uuid(),
-    evidenceRevision: z.number().int().nonnegative(), selected: z.array(selection).min(1).max(100)}).strict(),
+    evidenceRevision: z.number().int().nonnegative(), selected: z.array(selection).min(1).max(100),
+    publishedReport: publishedReportReferenceSchema.optional()}).strict(),
   z.object({action: z.literal("send"), visitId: z.string().min(1).max(100), previewId: z.string().uuid(), confirmed: z.literal(true)}).strict(),
   z.object({action: z.literal("reconcile"), visitId: z.string().min(1).max(100)}).strict(),
 ]);
@@ -36,6 +43,7 @@ export const pilotOperationSchema = z.object({
   evidenceHash: z.string(), policyHash: z.string(), createdAt: z.string().datetime(),
   selected: z.array(selection), lines: z.array(z.object({key: z.string(), title: z.string(), result: z.string(), notes: z.string()}).strict()),
   baseline: z.record(z.string(), z.any()), payload: z.record(z.string(), z.any()),
+  publishedReport: publishedReportDeliverySchema.optional(),
   state: z.enum(["preview", "admitted", "pending", "partial", "conflict", "confirmed"]),
   acknowledged: z.boolean(), observedAt: z.string().datetime().nullable(),
   confirmedAt: z.string().datetime().nullable(),
@@ -43,6 +51,7 @@ export const pilotOperationSchema = z.object({
 export type PilotOperation = z.infer<typeof pilotOperationSchema>;
 
 export function project(inspection: StaffInspection, selected: {sheet: string; item: string}[], labels: PilotConfiguration["labels"]) {
+  assertPolicyReleaseReady(inspection);
   const seen = new Set<string>();
   return selected.map(({sheet, item}) => {
     const key = `${sheet}/${item}`;

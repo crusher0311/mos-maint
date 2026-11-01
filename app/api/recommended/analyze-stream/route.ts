@@ -1,5 +1,6 @@
 // app/api/recommended/analyze-stream/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import { analyzerModel, MODEL_POLICY_ERROR } from "@/lib/openai-model-policy";
 import { requireSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
 import { resolveAutoflowConfig, fetchDviWithCache } from "@/lib/integrations/autoflow";
@@ -56,7 +57,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Feature not enabled" }, { status: 403 });
     }
 
-    const { vin, model } = await request.json();
+    const { vin, model: requestedModel } = await request.json();
+    const model = analyzerModel(requestedModel, "gpt-4o");
+    if (!model) return NextResponse.json({ error: MODEL_POLICY_ERROR }, { status: 400 });
     
     if (!vin) {
       return NextResponse.json({ error: "VIN is required" }, { status: 400 });

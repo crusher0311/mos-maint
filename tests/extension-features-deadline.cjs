@@ -7,7 +7,7 @@ const start = source.indexOf('  if (message.action === "GET_SHOP_FEATURES")');
 const end = source.indexOf('// ------ UNDO SNAPSHOTS', start);
 assert.ok(start >= 0 && end > start, 'feature-handler extraction boundaries must exist');
 const branch = `(function() { ${source.slice(start, end)} })()`;
-const flush = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
+const flush = async () => { for (let i = 0; i < 40; i++) await Promise.resolve(); };
 
 async function scenario(overrides = {}) {
   const replies = [];
@@ -20,6 +20,7 @@ async function scenario(overrides = {}) {
     _stateReady: Promise.resolve(), ensureBootstrapBoundToActiveTab: async () => {},
     authEpoch: 1, mosApiToken: 'synthetic-not-a-real-token', mosApiUrl: 'https://synthetic.invalid',
     currentSmsContext: null, console: { warn() {} },
+    sender: {}, activeTabId: 1, mosAuthSource: 'bootstrap',
     chrome: { storage: { local: { get: (_, cb) => cb({mosUser: {role: 'viewer'}}) } } },
     fetch: async () => ({ ok: true, json: async () => ({
       features: {dvi_prefill: true}, buttonVisibility: {tekmetric: {oil_sticker: false}},
@@ -32,6 +33,34 @@ async function scenario(overrides = {}) {
   return { replies, context, timeout: () => deadline() };
 }
 (async () => {
+  const scoped = await scenario({
+    mosAuthSource: 'explicit',
+    message: { action: 'GET_SHOP_FEATURES', shopId: '14245', provider: 'tekmetric',
+      context: { _tabId: 1, shopId: '14245', provider: 'tekmetric' } },
+    stickerLocationRequest: async context => {
+      assert.equal(context.shopId, '14245');
+      return { assertCurrent: async () => {}, request: async endpoint => {
+        assert.equal(endpoint, '/api/extension/features?shopId=14245&provider=tekmetric');
+        return { features: { maintenance: true } };
+      } };
+    },
+    fetch: async () => { throw new Error('Must not use the root credential'); },
+  });
+  assert.equal(scoped.replies[0].success, true);
+  let finishScope;
+  const stale = await scenario({
+    mosAuthSource: 'explicit',
+    message: { action: 'GET_SHOP_FEATURES', shopId: '14245', provider: 'tekmetric',
+      context: { _tabId: 1, shopId: '14245', provider: 'tekmetric' } },
+    stickerLocationRequest: async () => ({
+      assertCurrent: async () => {},
+      request: () => new Promise(resolve => { finishScope = resolve; }),
+    }),
+  });
+  stale.context.activeTabId = 2;
+  finishScope({ features: { maintenance: true } });
+  await flush();
+  assert.equal(stale.replies[0].code, 'CONTEXT_CHANGED');
   const good = await scenario();
   assert.equal(good.replies[0].success, true);
   assert.equal(good.replies[0].canWrite, false);
@@ -42,6 +71,21 @@ async function scenario(overrides = {}) {
     features:{},floatingButtonEnabled:true
   })})});
   assert.equal(visible.replies[0].floatingButtonEnabled,true);
+  for (const expected of ['CONTEXT_CHANGED', 'SHOP_FORBIDDEN', 'SHOP_UNLINKED', 'EXPLICIT_LOGIN_REQUIRED']) {
+    const warnings = [];
+    const failure = await scenario({
+      console: { warn: (...args) => warnings.push(args) },
+      fetch: async () => { throw Object.assign(new Error('PRIVATE credential URL'), { code: expected }); },
+    });
+    assert.equal(failure.replies[0].code, expected);
+    assert.ok(!JSON.stringify([warnings, failure.replies]).includes('PRIVATE'));
+  }
+  const unknown = await scenario({
+    fetch: async () => { throw Object.assign(new Error('PRIVATE'), { code: 'PRIVATE' }); },
+  });
+  assert.equal(unknown.replies[0].code, 'FEATURES_REQUEST_FAILED');
+  const signedOut = await scenario({ mosApiToken: null });
+  assert.equal(signedOut.replies[0].code, 'EXPLICIT_LOGIN_REQUIRED');
   good.timeout();await flush();
   assert.equal(good.replies.length,1,'successful reply settles once');
   for (const overrides of [

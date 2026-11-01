@@ -95,7 +95,7 @@ export async function resolveReportingScope(
   if (shopIds.length > REPORTING_MAX_SHOPS) {
     throw new ReportingScopeError(`Reporting scope exceeds ${REPORTING_MAX_SHOPS} shops`, 400);
   }
-  const shops = await reportingScopeDependencies.listShopsByShopIds(shopIds);
+  const shops = await reportingScopeDependencies.listShopsByShopIds(shopIds, { shopId: 1, name: 1, locationIdentifier: 1 });
   const existingIds = new Set(shops.map((s) => Number(s.shopId)));
   shopIds = shopIds.filter((id) => existingIds.has(id));
   if (!shopIds.length) throw new ReportingScopeError("No reporting shops found", 404);

@@ -10,6 +10,17 @@ Use the matched active account's explicit assignments for modern location exchan
 
 The worker must attach the originating tab identity when forwarding content-script context into the side panel; content-script context alone does not identify its tab.
 
+Shop-bound explicit login is not multi-location authority by itself. Printing,
+VHI, feature reads and labor reads must all use the same checked location context.
+
+**Why:** Successful login/token verification can coexist with feature access
+denials and VHI lookup misses when a read accidentally uses the root shop token.
+Cached shop lists and web Platform Admin visibility do not establish extension access.
+
+**How to apply:** Reproduce the shared read paths, not only printing or a route's
+role check. Distinguish a canonical mapping from the effective session-bound shop
+before attributing an incident to authentication.
+
 **Why:** Tests that hand a tab ID directly to printing miss the real Customize → panel transition. Losing that identity safely blocks printing but makes the user flow unusable.
 
 **How to apply:** Exercise panel opening, settings loading, generation and final print routing together. Display settings errors and recovery instructions, rather than leaving a disabled print button without explanation.

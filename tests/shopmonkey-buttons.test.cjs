@@ -68,6 +68,47 @@ function fixture() {
 }
 const allowed = { success: true, floatingButtonEnabled: true, features: { oil_sticker: true } };
 
+test('temporary permission failure explains automatic retry and recovers without refresh', () => {
+  const f = fixture();
+  f.controller.update();
+  f.requests[0].callback({ success: false, code: 'FEATURES_TIMEOUT' });
+  assert.match(f.document.getElementById('mos-shopmonkey-status').textContent, /timed out.*automatically/);
+  assert.equal(f.group(), undefined);
+  f.tick(2001);
+  f.controller.update();
+  assert.equal(f.requests.length, 2);
+  f.requests[1].callback(allowed);
+  assert.ok(f.group());
+});
+
+test('denied access is not described as a sign-in problem and arbitrary errors stay hidden', () => {
+  const f = fixture();
+  f.controller.update();
+  f.requests[0].callback({ success: false, code: 'SHOP_FORBIDDEN' });
+  assert.match(f.document.getElementById('mos-shopmonkey-status').textContent, /does not have access/);
+  f.tick(10001);
+  f.controller.update();
+  assert.equal(f.requests.length, 1, 'access denial must not trigger rapid retries');
+  f.controller.invalidate();
+  f.requests[1].callback({ success: false, code: 'PRIVATE', error: 'PRIVATE' });
+  assert.ok(!f.document.getElementById('mos-shopmonkey-status').textContent.includes('PRIVATE'));
+});
+
+test('temporary failures back off rather than flooding permission requests', () => {
+  const f = fixture();
+  f.controller.update();
+  for (const delay of [2000, 4000, 8000, 10000]) {
+    f.requests.at(-1).callback({ success: false, code: 'FEATURES_REQUEST_FAILED' });
+    const count = f.requests.length;
+    f.tick(delay - 1);
+    f.controller.update();
+    assert.equal(f.requests.length, count);
+    f.tick(1);
+    f.controller.update();
+    assert.equal(f.requests.length, count + 1);
+  }
+});
+
 test('injects a full-width row below native Print without moving native controls', () => {
   const f = fixture();
   f.controller.update();
@@ -75,6 +116,8 @@ test('injects a full-width row below native Print without moving native controls
   f.requests[0].callback(allowed);
    assert.deepEqual(f.group().children.slice(0, 2).map(e => e.children[0].alt), ['Detect Dog', 'Print']);
   const group = f.group();
+  assert.match(group.children[0].style.cssText, /position:fixed;right:12px/);
+  assert.ok(!group.children[1].style.cssText.includes('position:fixed'));
   assert.deepEqual(f.row().children, [f.toolbar, group]);
   assert.equal(f.row().style.flexWrap, 'wrap');
   assert.match(group.style.cssText, /flex:0 0 100%/);

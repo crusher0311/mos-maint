@@ -14,4 +14,8 @@
 .confirm { display: grid; gap: 12px; margin-top: 16px; }
 .confirm label { align-items: start; line-height: 1.6; }
 .unavailable { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 14px; }
+.report { display: grid; gap: 10px; border: 1px solid var(--line); border-radius: 6px; padding: 12px; margin: 14px 0; min-width: 0; background: var(--panel); }
+.report select { width: 100%; min-height: 44px; color: inherit; background: var(--paper); border: 1px solid var(--line); border-radius: 4px; padding: 8px; }
+.report p { margin: 0; }
+.report code { overflow-wrap: anywhere; white-space: normal; }
 @media (max-width: 767px) { .panel { padding: 14px; } .candidate { align-items: start; } }

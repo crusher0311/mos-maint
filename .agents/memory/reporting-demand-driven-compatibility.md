@@ -14,6 +14,18 @@ are separate causes; reducing one does not establish end-to-end performance.
 freshness/coverage disclosures, and separately approve production summary-store
 activation or worker rollout. Timing goals are targets until measured.
 
+Keep the dedicated reporting worker's configuration limited to database access
+and matching reporting/storage-policy flags, rather than linking the application's
+broad shared credentials group. Keep the processing handoff flag service-local.
+
+**Why:** Reporting consumes stored evidence; it does not need provider, payment
+or messaging credentials. A shared handoff flag could disable existing processors
+before the replacement is ready.
+
+**How to apply:** Synchronize relevant storage-policy changes explicitly, verify
+the replacement completes work before switching the web processor off, and
+restore the web processor before suspending the worker during rollback.
+
 Demand-driven reporting is not only a query-execution change. Preserve immutable saved-version behavior, pinned delivery links, management of existing schedules (including legacy ones), and the full recipient scope identity used during delivery reauthorization.
 
 **Why:** These surfaces are easy to strand when replacing a dashboard-first page or synthesizing background-worker sessions. The report can be technically cached and authorized while still showing the wrong saved version, leaking old run state across selections, or making existing deliveries impossible to manage.

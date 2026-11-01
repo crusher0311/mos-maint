@@ -1,10 +1,8 @@
-- [Starter Keytags](starter-keytags-policy.md) — Starter includes Keytags; preserve billing checks and explicit disabling.
+- [All Shops load policy](platform-shops-load-policy.md) — page optional statistics, preserve fleet bulk scope, and separate cached stats from fresh authority.
 - [AI accounting boundaries](ai-accounting-boundaries.md) — estimated app spend is not the organization bill; preserve unknown coverage, privacy and retry accounting.
 - [Next router roots](next-router-root-compatibility.md) — keep app/pages entrypoints at the same root; validate generated types after builds, without a concurrent dev server.
 - [Shopmonkey integration](shopmonkey-history-ingest.md) — history safety, mileage/query limits, dashboard wiring, API quirks, and extension placement.
 - [Printed label compatibility](printed-label-compatibility.md) — saved sticker wording, keytag validation, printed QR targets, and advisory physical QR sizing.
-- [Sticker viscosity policy](sticker-viscosity-policy.md) — print-only current-RO evidence; no specification/history inference or persistent defaults.
-- [Optional keytag details](keytag-optional-details.md) — print-only identification values; no vehicle-profile persistence, new provider lookups, or prototype changes.
 - [Tekmetric DVI webhook evidence](tekmetric-dvi-webhook-evidence.md) — live messages distinguish inspection views from estimate views; customer prefix is a name; receipt time is not event time.
 - [MyOilSticker legacy data](myoilsticker-legacy-db.md) — legacy platform's data is db `test` on the SAME cluster; user migration tooling is operator-gated, collisions link-only, scraped SMS creds never copied.
 - [Plan-pregen storm](plan-pregen-storm.md) — speeding up a slow cron unleashes its completion-triggered fan-out (web event-loop starvation); clean Mongo + uniform slowness = web CPU, not DB.
@@ -135,8 +133,6 @@
 - [Pilot scope boundaries](pilot-scope-index.md) — tire demo, workflow DVI, durable enrollment, Protractor exports and degraded-readiness authorization.
 - [Workflow shared branding](workflow-shared-branding.md) — inherited display logos stay separate from stricter manual-upload drafts; keep deliberate overrides intact.
 - [Enterprise history sharing boundary](enterprise-history-sharing.md) — shared reads never widen current-shop writes; signed/partner redistribution needs its own grant.
-- [Sticker QR compatibility](sticker-qr-compatibility.md) — preserve printed HoverCode targets; publish cached images and target metadata together.
-- [Sticker QR pilot scope](sticker-qr-pilot-scope.md) — user approved a single-printer pilot and brief written confirmation; broader physical coverage is recommended, not an initial gate.
 - [Cron network fault injection](cron-fault-injection.md) — PostgreSQL parameter descriptions must reach the driver before execution acknowledgments can be lost.
 - [Workflow ticket intake safety](workflow-ticket-intake-safety.md) — explicit ticket writes are approved; appointment writes remain excluded, and timed-out admissions require exact-ID recovery.
 - [Chromium lost-response fixtures](chromium-lost-response-fixtures.md) — drop responses after headers to avoid transparent connection retries obscuring application behavior.
@@ -154,9 +150,10 @@
 - [Appearance scope](appearance-boundaries.md) — local screen preferences never replace shop branding or physical-output palettes.
 - [CARFAX setup policy](carfax-settings-policy.md) — save without Maintenance with a warning; testing means save/reload, not paid upstream validation.
 - [Admin refresh scroll](admin-refresh-scroll.md) — retained rows alone do not preserve scroll when feedback shifts document layout.
-- [Sticker activity estimates](sticker-activity-estimates.md) — varying roll sizes, explicit opt-in estimates, and outreach flags must not imply physical-print proof.
 - [Optional tutorial safety](optional-tutorial-safety.md) — production help stays opt-in; no automatic business-control activation or account-age inference.
 - [Tekmetric maintenance color](tekmetric-maintenance-color-policy.md) — yellow is explicit per-shop opt-in; maintenance timing and inspection condition remain separate.
 - [DVI consolidation boundary](dvi-consolidation-boundary.md) — workflow visit authority; parity before retirement; no live activation or artifact changes.
+- [DVI policy defaults](dvi-policy-default-preservation.md) — explicit policy adoption preserves legacy partial releases; pinned completion is not permanent release authority.
+- [DVI foreground recording](dvi-foreground-recording.md) — independently decodable segments, missing WebM duration, and fail-closed background budgets.
 - [Tire DOT report boundaries](tire-dot-report-policy.md) — preserve repeated raw DOT occurrences; separate invoice reconciliation and production approval.
 - [Overnight reconciliation scope](overnight-reconciliation-scope.md) — complete invoice corrections, including removed lines; fence old writers and respect mixed-store boundaries.

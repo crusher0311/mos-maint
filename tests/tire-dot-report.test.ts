@@ -63,7 +63,7 @@ test("missing fields, zero invoice mileage, no current-vehicle fallback", () => 
   extractTireInvoice(r, 311, doc);
   assert.equal(r.invoices[0].mileage, null);
   assert.equal(r.invoices[0].dotEntries, 0);
-  assert.ok(r.invoices[0].exceptions.includes("Missing DOT"));
+  assert.ok(r.invoices[0].exceptions.includes("No DOT in captured evidence (not verified against Tekmetric UI)"));
   assert.ok(r.invoices[0].exceptions.includes("Missing invoice mileage"));
   doc.data.id = doc.workOrderId = "101"; doc.data.milesIn = 0; doc.data.milesOut = 400;
   extractTireInvoice(r, 311, doc); assert.equal(r.invoices[1].mileage, 0);

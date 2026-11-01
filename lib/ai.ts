@@ -1,11 +1,32 @@
 // lib/ai.ts
 import OpenAI from "openai";
 import { trackApiRequest } from "@/lib/api-usage-tracker";
-import { insertUsageRecords } from "@/lib/data/repositories/api-usage";
-import { boundedUsageWriter, trackedAiFetch, wasAutomaticallyTracked, type AiContext } from "@/lib/openai-usage";
+import { upsertAiUsageRecord } from "@/lib/data/repositories/api-usage";
+import { boundedUsageWriter, trackedAiFetch, wasAutomaticallyTracked, type AiContext, type AiWriter } from "@/lib/openai-usage";
+import { createAiUsageOutbox } from "@/lib/openai-usage-outbox";
 import { getSlowQueryCaller } from "@/lib/slow-query/caller-context";
 
-const writeAiUsage = boundedUsageWriter(async record => { await insertUsageRecords([record]); });
+// Stable IDs mean retrying ambiguous DB acknowledgments cannot duplicate spend.
+let usageWriter: AiWriter | undefined;
+function getUsageWriter(): AiWriter {
+  return usageWriter ??= process.env.OPENAI_USAGE_SPOOL_DIR
+  ? createAiUsageOutbox(process.env.OPENAI_USAGE_SPOOL_DIR, boundedUsageWriter(upsertAiUsageRecord))
+  : boundedUsageWriter(async record => {
+      for (let attempt = 0; ; attempt++) {
+        try { await upsertAiUsageRecord(record); return; }
+        catch {
+          console.error("[OpenAI-Usage]", { event: "database_write_failed", attemptId: record._id, attempt });
+          if (attempt >= 2) throw new Error("AI accounting delivery failed");
+          await new Promise(resolve => setTimeout(resolve, 100 * (attempt + 1)));
+        }
+      }
+    });
+}
+// Do not open journals or start timers merely by importing a module at build time.
+const writeAiUsage: AiWriter = Object.assign(
+  async (record: Parameters<AiWriter>[0]) => { await getUsageWriter()(record); },
+  { prepare: async (record: Parameters<AiWriter>[0]) => { await getUsageWriter().prepare?.(record); } },
+);
 export function getTrackedAiFetch(context?: Partial<AiContext>) {
   return trackedAiFetch({
     feature: context?.feature ?? getSlowQueryCaller() ?? "unattributed-openai",

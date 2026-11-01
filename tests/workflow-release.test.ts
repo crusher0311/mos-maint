@@ -7,18 +7,21 @@ import {mutateStaff} from "../lib/auto-dvi/staff/service";
 import {blankFinding} from "../lib/auto-dvi/staff/model";
 import {attachStaffPhoto} from "../lib/auto-dvi/staff/media";
 import {MongoReleaseStorage} from "../lib/auto-dvi/release/store";
-import {releaseCommand, publicReport, releaseSnapshot, type ReleaseDependencies} from "../lib/auto-dvi/release/service";
+import {releaseCommand, publicReport, releaseSnapshot, publishedInspectionDelivery, preparedReleaseMedia, type ReleaseDependencies} from "../lib/auto-dvi/release/service";
 import type {ReleaseSelection} from "../lib/auto-dvi/release/model";
+import type {InspectionPolicy} from "../lib/auto-dvi/staff/inspection-policy";
 import {VISIT_DVI_RELEASE_ENABLED} from "../lib/auto-dvi/visit-release";
+import {digest} from "../lib/shop-dispatch/service";
 let isolated: Awaited<ReturnType<typeof isolatedStaffDatabase>>;
 before(async () => {isolated = await isolatedStaffDatabase(27819);});
 after(async () => {await isolated.close();});
 const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aXz8AAAAASUVORK5CYII=", "base64");
-async function setup() {
+async function setup(policy?: InspectionPolicy) {
   const f = await staffFixture(isolated.client);
   f.setAccess({actor: "advisor", canReview: true,
     authority: {...f.access.authority, actorId: "advisor", roles: ["advisor"]},
-    config: {...f.access.config!, release: {enabledShopIds: [1], publicPhone: "555-0100", defaultExpiryDays: 7}}});
+    config: {...f.access.config!, ...(policy ? {policies: {"1": policy}} : {}),
+      release: {enabledShopIds: [1], publicPhone: "555-0100", defaultExpiryDays: 7}}});
   await f.initialize();
   const board = await f.deps.board.read(1);
   board.visits[0].intake = {appointmentId: null, checkedInAt: f.deps.now(), checkedInBy: "private",
@@ -50,6 +53,127 @@ async function setup() {
   return {...f, deps, save, selection, preview, publish, publishRequest, link,
     entitlement(value: boolean) {entitled = value;}, branding(name: string) {brand = {...brand, name};}};
 }
+test("silent clips require explicit selection and remain pinned, scoped and revocable", async () => {
+  const f = await setup();
+  f.setAccess({config: {...f.access.config!, recording: {enabledShopIds: [1]}}});
+  const record = (await f.repository.read(1, "visit-one"))!;
+  const clip = {id: "c".repeat(24), caption: "Reviewed tire caption", durationSeconds: 1,
+    sheet: "fixture@1", item: "tire.lf", identityDigest: digest(record.identity),
+    definitionHash: digest((record.results.staff as any).sheets[0].sheet.items.find((i: any) => i.id === "tire.lf"))};
+  f.deps.preparedClips = async () => [clip];
+  const reads: string[] = [];
+  f.deps.readClip = async id => {reads.push(id); return {bytes: Buffer.from("synthetic-silent"), mime: "video/mp4"};};
+  assert.equal((await preparedReleaseMedia("visit-one", clip.id, f.deps)).mime, "video/mp4");
+  await assert.rejects(preparedReleaseMedia("visit-one", "raw-media-id", f.deps), /unavailable/);
+  reads.length = 0;
+  const without = await f.publish();
+  assert.equal(without.report.findings[0].clips, undefined);
+  f.selection.findings[0].clipIds = [clip.id];
+  await f.publish();
+  const link = await f.link();
+  const released = await publicReport({token: link.token, version: 2}, f.deps) as any;
+  assert.deepEqual(released.report.findings[0].clips, [{id: clip.id, caption: clip.caption, durationSeconds: 1}]);
+  assert.equal(JSON.stringify(released).includes("identityDigest"), false);
+  await assert.rejects(publicReport({token: link.token, version: 1, mediaId: clip.id}, f.deps), /unavailable/);
+  await assert.rejects(publicReport({token: link.token, version: 2, mediaId: "d".repeat(24)}, f.deps), /unavailable/);
+  await publicReport({token: link.token, version: 2, mediaId: clip.id}, f.deps);
+  assert.deepEqual(reads, [clip.id]);
+  await releaseCommand({type: "link", visitId: "visit-one", requestId: randomUUID(), action: "revoke", linkId: link.id}, f.deps);
+  await assert.rejects(publicReport({token: link.token, mediaId: clip.id}, f.deps), /unavailable/);
+  f.deps.preparedClips = async () => [{...clip, identityDigest: "wrong"}];
+  await assert.rejects(f.preview(), /prepared/);
+  await assert.rejects(preparedReleaseMedia("visit-one", clip.id, f.deps), /unavailable/);
+});
+test("provider delivery resolves only an existing active published report with exact findings", async () => {
+  const f = await setup();
+  await f.publish(); const link = await f.link();
+  const selected = [{sheet: "fixture@1", item: "tire.lf"}], reference = {version: 1, linkId: link.id};
+  await assert.rejects(publishedInspectionDelivery("visit-one", reference, selected, f.deps), /origin/);
+  f.setAccess({config: {...f.access.config!, release: {...f.access.config!.release!, publicReportOrigin: "https://reports.example.invalid"}}});
+  const delivery = await publishedInspectionDelivery("visit-one", reference, selected, f.deps);
+  const url = new URL(delivery.url);
+  assert.equal(url.origin, "https://reports.example.invalid");
+  assert.equal(url.searchParams.has("token"), false);
+  assert.equal(decodeURIComponent(url.hash.slice(1)), link.token);
+  assert.equal(`${url.pathname}${url.search}`.includes(link.token), false);
+  assert.equal(url.searchParams.get("version"), "1");
+  assert.equal(delivery.clickability, "unverified");
+  await assert.rejects(publishedInspectionDelivery("visit-one", reference, [], f.deps), /exactly/);
+  await f.save("Changed inspection evidence");
+  await assert.rejects(publishedInspectionDelivery("visit-one", reference, selected, f.deps), /changed/);
+});
+test("a publishing freeze preserves link visibility and revocation without granting new publication", async () => {
+  const f = await setup(); await f.publish(); const link = await f.link();
+  const policy: InspectionPolicy = {version: 1, actor: "manager", at: f.deps.staff.now(),
+    completionMode: "required-checks", publishRoles: [], deliverRoles: []};
+  f.setAccess({config: {...f.access.config!, policies: {"1": policy},
+    release: {...f.access.config!.release!, enabledShopIds: []}}});
+  const visible = await releaseSnapshot("visit-one", f.deps);
+  assert.equal(visible.canPublish, false); assert.equal(visible.canRevoke, true);
+  assert.equal(visible.canCopy, false); assert.equal(visible.links[0].id, link.id);
+  await assert.rejects(f.preview(), /permission/);
+  await assert.rejects(f.link(), /permission/);
+  await releaseCommand({type: "link", action: "revoke", visitId: "visit-one", requestId: randomUUID(), linkId: link.id}, f.deps);
+  await assert.rejects(publicReport({token: link.token}, f.deps), /unavailable/);
+});
+test("deliver-only staff can resolve and copy existing reports but cannot publish or create links", async () => {
+  const f = await setup(); await f.publish(); const link = await f.link();
+  const policy: InspectionPolicy = {version: 1, actor: "manager", at: f.deps.staff.now(),
+    completionMode: "required-checks", publishRoles: [], deliverRoles: ["advisor"]};
+  f.setAccess({config: {...f.access.config!, policies: {"1": policy},
+    release: {...f.access.config!.release!, enabledShopIds: [], publicReportOrigin: "https://reports.example.invalid"}}});
+  const status = await releaseSnapshot("visit-one", f.deps);
+  assert.equal(status.canPublish, false); assert.equal(status.canDeliver, true);
+  assert.equal(status.current!.version, 1); assert.equal(status.links[0].id, link.id);
+  const result = await publishedInspectionDelivery("visit-one", {version: 1, linkId: link.id},
+    [{sheet: "fixture@1", item: "tire.lf"}], f.deps);
+  assert.equal(new URL(result.url).searchParams.has("token"), false);
+  assert.equal(decodeURIComponent(new URL(result.url).hash.slice(1)), link.token);
+  const copied = await releaseCommand({type: "link", action: "copy", visitId: "visit-one",
+    requestId: randomUUID(), linkId: link.id}, f.deps) as any;
+  assert.equal(copied.link.token, link.token);
+  await assert.rejects(f.preview(), /permission/);
+  await assert.rejects(f.link(), /permission/);
+  f.setAccess({authority: {...f.access.authority, enterpriseGoverned: ["publish"], enterprise: {publish: "deny"}}});
+  await assert.rejects(publishedInspectionDelivery("visit-one", {version: 1, linkId: link.id},
+    [{sheet: "fixture@1", item: "tire.lf"}], f.deps), /permission/);
+  await assert.rejects(releaseCommand({type: "link", action: "revoke", visitId: "visit-one",
+    requestId: randomUUID(), linkId: link.id}, f.deps), /permission/);
+});
+
+test("pinned completion policy requires review and current role restrictions fence publication and links", async () => {
+  const policy: InspectionPolicy = {version: 1, actor: "manager", at: "2026-10-31T12:00:00.000Z",
+    completionMode: "captured-findings", publishRoles: ["advisor"], deliverRoles: []};
+  const f = await setup(policy);
+  await assert.rejects(f.preview(), /Review/);
+  const record = await f.repository.read(1, "visit-one");
+  await mutateStaff({visitId: "visit-one", requestId: randomUUID(), revision: (record!.results.staff as any).revision,
+    command: {type: "review"}}, f.deps.staff);
+  const preview = await f.preview();
+  const restricted = {...f.access.config!, policies: {"1": {...policy, version: 2, publishRoles: []}}};
+  f.setAccess({config: restricted});
+  assert.equal((await releaseSnapshot("visit-one", f.deps)).canPublish, false);
+  await assert.rejects(releaseCommand(f.publishRequest(preview), f.deps), /permission/);
+  f.setAccess({config: {...restricted, policies: {"1": {...policy, version: 3}}}});
+  await f.publish();
+  const link = await f.link();
+  f.setAccess({config: restricted});
+  await assert.rejects(releaseCommand({type: "link", action: "copy", visitId: "visit-one",
+    requestId: randomUUID(), linkId: link.id}, f.deps), /permission/);
+  // Existing public receipt is not silently rewritten by a staff policy change.
+  const released = await publicReport({token: link.token}, f.deps);
+  assert.ok("report" in released && released.report);
+});
+
+test("policy role checks use both pinned and current lists, never just a newer broader policy", async () => {
+  const f = await setup({version: 1, actor: "manager", at: "2026-10-31T12:00:00.000Z",
+    completionMode: "required-checks", publishRoles: ["manager"], deliverRoles: []});
+  f.setAccess({config: {...f.access.config!, policies: {"1": {version: 2, actor: "manager",
+    at: "2026-10-31T13:00:00.000Z", completionMode: "captured-findings", publishRoles: ["advisor"], deliverRoles: []}}}});
+  assert.equal((await releaseSnapshot("visit-one", f.deps)).canPublish, false);
+  await assert.rejects(f.preview(), /permission/);
+});
+
 test("real storage retains exact snapshot, branding, customer words and latest/pinned versions after restart", async () => {
   const f = await setup();
   await f.publish(); const link = await f.link();

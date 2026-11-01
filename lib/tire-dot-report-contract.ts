@@ -8,6 +8,7 @@ export interface TireDotDefinition {
   version: 1;
   dateRange: TireDotRange;
   locationIds: number[];
+  timeZones?: Record<string, string>;
 }
 export interface TireDotInvoice {
   key: string;
@@ -19,6 +20,7 @@ export interface TireDotInvoice {
   vin: string | null;
   vehicle: string | null;
   mileage: number | null;
+  vinProvenance?: string;
   partLines: number;
   tireQuantity: number;
   dotEntries: number;
@@ -35,6 +37,7 @@ export interface TireDotDetail extends Omit<TireDotInvoice, "partLines" | "tireQ
 }
 export interface TireDotResult {
   generatedAt: string;
+  timeZones?: Record<string, string>;
   dateRange: TireDotRange;
   shopIds: number[];
   locations: Array<{ shopId: number; name: string }>;

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { CATALOG, type Field } from "../visit-model";
 import { requireThat } from "../../shop-dispatch/model";
 import { captureDefinitionErrors, captureErrors } from "./capture";
+import type { InspectionPolicy } from "./inspection-policy";
 
 const text = z.string().trim().max(2000);
 export const fieldSchema = z.object({
@@ -68,6 +69,7 @@ export interface StaffInspection {
   evidenceRevision: number; ready: {revision: number; actor: string; at: string} | null;
   reviewed: {revision: number; actor: string; at: string} | null;
   proposals?: WorkProposal[];
+  policy?: InspectionPolicy;
 }
 export const blankFinding = (): FindingInput => ({rating: null, notes: "", recommendation: "", naReason: "", values: {}});
 export const instanceKey = (s: StaffSheet) => `${s.id}@${s.version}`;
@@ -77,9 +79,10 @@ export function sameInspectionItem(a: StaffItem, b: StaffItem) {
   })).sort((x, y) => x.id.localeCompare(y.id)));
   return a.procedure === b.procedure && a.capture === b.capture && (a.position ?? "") === (b.position ?? "") && fields(a) === fields(b);
 }
-export function initialInspection(sheet: StaffSheet): StaffInspection {
+export function initialInspection(sheet: StaffSheet, policy?: InspectionPolicy): StaffInspection {
   return {version: 1, revision: 0, sheets: [{key: instanceKey(sheet), sheet: structuredClone(sheet),
-    active: true, selection: "default", results: {}}], startedAt: null, evidenceRevision: 0, ready: null, reviewed: null};
+    active: true, selection: "default", results: {}}], startedAt: null, evidenceRevision: 0, ready: null, reviewed: null,
+    ...(policy ? {policy: structuredClone(policy)} : {})};
 }
 export function validateFinding(item: StaffItem, input: unknown): FindingInput {
   const r = findingSchema.parse(input);
@@ -107,8 +110,31 @@ export function missingFor(item: StaffItem, r?: Finding): string[] {
   ];
 }
 export function missingRequirements(s: StaffInspection) {
-  return s.sheets.filter(x => x.active).flatMap(x => x.sheet.items.flatMap(i =>
-    missingFor(i, x.results[i.id]).map(message => ({sheet: x.key, item: i.id, name: i.name, message}))));
+  const captured = s.policy?.completionMode === "captured-findings";
+  const active = s.sheets.filter(x => x.active);
+  const missing = active.flatMap(x => x.sheet.items.flatMap(i => {
+    const result = x.results[i.id];
+    // An untouched check is not good. A partially entered finding still needs
+    // an explicit evaluation, even when the item itself is optional.
+    const touched = result && (result.rating || result.notes || result.recommendation ||
+      Object.keys(result.values).length || result.photos.length);
+    if (captured && !touched) return [];
+    return missingFor(captured ? {...i, required: true} : i, result)
+      .map(message => ({sheet: x.key, item: i.id, name: i.name, message}));
+  }));
+  if (captured && !active.some(x => x.sheet.items.some(i => x.results[i.id]?.rating && x.results[i.id].rating !== "na"))) {
+    missing.push({sheet: active[0]?.key ?? "", item: "", name: "Captured findings",
+      message: "Save at least one evaluated, non-N/A finding"});
+  }
+  return missing;
+}
+/** Opt-in policies require one common evidence/review boundary at every release
+ * sink. Legacy inspections retain the pre-existing partial-release behavior. */
+export function assertPolicyReleaseReady(inspection: StaffInspection) {
+  if (!inspection.policy) return;
+  requireThat(!missingRequirements(inspection).length, "Complete the inspection policy requirements first", 409);
+  requireThat(inspection.reviewed?.revision === inspection.evidenceRevision,
+    "Review the current saved evidence before publication or delivery", 409);
 }
 export const commandSchema = z.discriminatedUnion("type", [
   z.object({type: z.literal("proposal"), id: z.string().min(1).max(170), title: z.string().trim().min(1).max(500),

@@ -1,16 +1,19 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { StaffSheet } from "@/lib/auto-dvi/staff/model";
+import type { InspectionPolicy, PolicyDraft } from "@/lib/auto-dvi/staff/inspection-policy";
 
 export type SheetSnapshot = {
   scope: "shop" | "enterprise"; scopeLabel: string; canManage: boolean; revision: number;
   sheets: StaffSheet[]; archivedSheetIds: string[]; defaultSheet: string;
   templates: StaffSheet[]; inspectionEnabled: boolean;
+  policy?: InspectionPolicy | null;
 };
 export type SheetCommand =
   | { type: "save"; sheet: StaffSheet; makeDefault: boolean }
   | { type: "default"; sheet: string }
-  | { type: "archive"; sheetId: string; archived: boolean };
+  | { type: "archive"; sheetId: string; archived: boolean }
+  | { type: "policy"; policy: PolicyDraft };
 export type SheetRequest = { requestId: string; revision: number; command: SheetCommand };
 const endpoint = "/api/shop-dispatch/inspection/sheets";
 function validSnapshot(value: SheetSnapshot): boolean {
@@ -77,7 +80,9 @@ export function useSheetCatalog(enabled = true) {
       }
       if (response.status === 202 || !validSnapshot(value)) throw new Error("No complete save receipt received. Retry the exact request.");
       pendingRef.current = null; setPending(null); setData(value);
-      setNotice("Saved. Approved versions and existing inspection results are retained.");
+      setNotice(request.command.type === "policy"
+        ? "Inspection policy saved. Completion mode is pinned when an inspection starts. Publishing and delivery require both pinned and current policy permission, so current restrictions also affect existing inspections."
+        : "Saved. Approved versions and existing inspection results are retained.");
       return value as SheetSnapshot;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Save outcome unknown. Retry the exact request.");

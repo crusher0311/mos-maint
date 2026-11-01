@@ -3,11 +3,16 @@ import { requireThat } from "../../shop-dispatch/model";
 import { deriveIdempotentUpstreamId } from "../../idempotent-create-id";
 import { assertBinding, currentVisit, type StaffDependencies } from "../staff/service";
 import type { StaffInspection } from "../staff/model";
+import { assertPolicyReleaseReady, missingRequirements } from "../staff/model";
+import { policyAllows } from "../staff/inspection-policy";
 import { z } from "zod";
 import { checkOrder, classifyPilot, inspectionPayload, PILOT_SHOP, pilotRequestSchema, project, riskNotice,
   SYNTHETIC_CONTACT, SYNTHETIC_VEHICLE, type PilotOperation } from "./model";
 
 export interface PilotDependencies extends StaffDependencies {
+  publishedReport?(visitId: string, reference: {version: number; linkId: string},
+    selected: {sheet: string; item: string}[]): Promise<NonNullable<import("./model").PilotOperation["publishedReport"]>>;
+  reportOptions?(visitId: string): Promise<{version: number; linkId: string; expiresAt: string}[]>;
   provider: {
     connection(): Promise<string>; // hashed identity, never credentials
     read(guid: string, connectionHash: string): Promise<Record<string, any>>;
@@ -38,13 +43,19 @@ async function context(visitId: string, deps: PilotDependencies, write: boolean,
   const inspection = record.results.staff as StaffInspection | undefined;
   requireThat(inspection, "Saved inspection required", 409);
   if (write) requireThat(inspection.reviewed?.revision === inspection.evidenceRevision, "Review the current saved evidence first", 409);
+  if (write) {
+    requireThat(policyAllows("deliver", access.authority.roles, inspection.policy,
+      access.config?.policies?.[String(access.shopId)]), "Inspection delivery policy does not permit this role", 403);
+    assertPolicyReleaseReady(inspection);
+  }
   return {access, record, inspection, guid: visit.sourceId!};
 }
 function publicOperation(op?: PilotOperation) {
   return op ? {id: op.id, visitId: op.visitId, workOrderGuid: op.guid, evidenceRevision: op.evidenceRevision,
     state: op.state, acknowledged: op.acknowledged, observedAt: op.observedAt,
     confirmedAt: op.confirmedAt,
-    lines: op.lines, warning: riskNotice, recoveryAllowed: false} : null;
+    lines: op.lines, ...(op.publishedReport ? {publishedReport: op.publishedReport} : {}),
+    warning: riskNotice, recoveryAllowed: false} : null;
 }
 async function operations(deps: PilotDependencies, visitId: string) {
   return (await deps.repository.persistence.read(PILOT_SHOP)).pilotOperations?.filter(o => o.visitId === visitId) ?? [];
@@ -57,9 +68,12 @@ export async function pilotStatus(visitId: string, deps: PilotDependencies) {
   const {inspection, guid} = await context(visitId, deps, false, access.actor);
   const op = chosen(await operations(deps, visitId));
   return {enabled: access.config.pilot.admissions, canSend: access.canEdit && access.canReview &&
-    access.config.pilot.admissions && inspection.reviewed?.revision === inspection.evidenceRevision,
+    access.config.pilot.admissions && inspection.reviewed?.revision === inspection.evidenceRevision &&
+    policyAllows("deliver", access.authority.roles, inspection.policy, access.config.policies?.[String(access.shopId)]) &&
+    (!inspection.policy || !missingRequirements(inspection).length),
     evidenceRevision: inspection.evidenceRevision, workOrderGuid: guid, warning: riskNotice,
     labelEvidence: access.config.pilot.labelEvidence, operation: publicOperation(op),
+    reportOptions: deps.reportOptions ? await deps.reportOptions(visitId) : [],
     candidates: inspection.sheets.filter(s => s.active).flatMap(s => s.sheet.items.filter(i =>
       s.results[i.id]?.rating && s.results[i.id].rating !== "na").map(i => ({sheet: s.key, item: i.id, name: i.name, rating: s.results[i.id].rating})))};
 }
@@ -96,12 +110,20 @@ export async function executePilot(raw: unknown, deps: PilotDependencies) {
   if (req.action === "preview") {
     requireThat(current.inspection.evidenceRevision === req.evidenceRevision, "Saved evidence changed; reload and review", 409);
     const lines = project(current.inspection, req.selected, policy.labels);
+    requireThat(!req.publishedReport || deps.publishedReport, "Published report delivery is unavailable", 409);
+    const publishedReport = req.publishedReport ? await deps.publishedReport!(req.visitId, req.publishedReport, req.selected) : undefined;
+    if (publishedReport) {
+      // Existing native Notes fields participate in exact nested readback.
+      // This persists a URL, not a claim that Protractor renders it clickable.
+      for (const line of lines) line.notes += `\nPublished inspection report (version ${publishedReport.version}): ${publishedReport.url}`;
+    }
     const baseline = checkOrder(await deps.provider.read(current.guid, policy.connectionHash), current.guid, policy.targetScope);
     const op: PilotOperation = {id: req.requestId, actor: initial.access.actor, visitId: req.visitId,
       targetScope: policy.targetScope ?? "synthetic_fixture",
       guid: current.guid, connectionHash: policy.connectionHash, requestHash: digest(req),
       evidenceRevision: req.evidenceRevision, evidenceHash: digest(current.inspection), policyHash: digest(policy),
       createdAt: deps.now(), selected: req.selected, lines, baseline, payload: inspectionPayload(lines),
+      ...(publishedReport ? {publishedReport} : {}),
       state: "preview", acknowledged: false, observedAt: null, confirmedAt: null};
     await deps.repository.mutatePilot(PILOT_SHOP, authorize, state => {
       const ops = state.pilotOperations ??= [];
@@ -116,6 +138,11 @@ export async function executePilot(raw: unknown, deps: PilotDependencies) {
   requireThat(existing, "Saved preview required", 409);
   requireThat(Date.parse(deps.now()) - Date.parse(existing.createdAt) <= 15 * 60000, "Preview expired; review a new preview", 409);
   requireThat(existing.guid === current.guid && existing.policyHash === digest(policy), "Preview target or policy changed", 409);
+  if (existing.publishedReport) {
+    requireThat(deps.publishedReport, "Published report delivery is unavailable", 409);
+    requireThat(digest(await deps.publishedReport(req.visitId, existing.publishedReport, existing.selected)) === digest(existing.publishedReport),
+      "Published report link changed; prepare a new delivery preview", 409);
+  }
   const before = checkOrder(await deps.provider.read(current.guid, policy.connectionHash), current.guid, existing.targetScope);
   requireThat(digest(before) === digest(existing.baseline), "Provider order changed since preview; preview again", 409);
   // Same aggregate CAS as staff edits: selection cannot race an evidence save.
@@ -130,6 +157,8 @@ export async function executePilot(raw: unknown, deps: PilotDependencies) {
   // Lost CAS acknowledgment exits above, never sends speculatively. An admitted
   // operation is never resumed by another HTTP request or worker.
   await authorize();
+  if (existing.publishedReport) requireThat(digest(await deps.publishedReport!(req.visitId, existing.publishedReport, existing.selected)) === digest(existing.publishedReport),
+    "Published report access changed; delivery was not attempted", 409);
   let acknowledged = false;
   try { acknowledged = await deps.provider.send(existing.guid, existing.payload, existing.connectionHash); } catch { /* ambiguous: never replay */ }
   await recordObservation(existing, deps, acknowledged);

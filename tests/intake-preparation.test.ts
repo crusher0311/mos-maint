@@ -1,0 +1,26 @@
+import test, {before, after} from "node:test";
+import assert from "node:assert/strict";
+import {isolatedStaffDatabase} from "./helpers/staff-inspection-fixture";
+import {IntakePreparation} from "../lib/auto-dvi/staff/intake-preparation";
+import type {CachedPlan} from "../lib/plan-cache";
+let isolated: Awaited<ReturnType<typeof isolatedStaffDatabase>>;
+before(async () => {isolated = await isolatedStaffDatabase(27944);});
+after(async () => {await isolated.close();});
+test("preparation deduplicates exact context, fences claims, and keeps changed mileage separate", async () => {
+  const queue = new IntakePreparation(async () => isolated.client.db("intake-preparation-test"), () => 1_000_000);
+  const input = {vin: "1HGCM82633A004352", mileage: 10000, distanceUnit: "miles" as const};
+  assert.equal((await queue.request(1, "fixture", "fixture@example.invalid", input)).status, "preparing");
+  assert.equal((await queue.request(1, "fixture", "fixture@example.invalid", input)).status, "preparing");
+  let builds = 0;
+  const build = async () => {builds++; return {plan: {buckets: {overdue: [{title: "Check brakes"}], dueSoon: []}}} as unknown as CachedPlan;};
+  await Promise.all([queue.processOne(1, build), queue.processOne(1, build)]);
+  assert.equal(builds, 1);
+  const ready = await queue.request(1, "fixture", "fixture@example.invalid", input);
+  assert.equal(ready.status, "available"); assert.equal(ready.coverage, "unknown");
+  assert.deepEqual(ready.checks, [{title: "Check brakes", timing: "overdue"}]);
+  assert.equal((await queue.request(1, "fixture", "fixture@example.invalid", {...input, mileage: 11000})).status, "preparing");
+  await queue.processOne(1, async () => {throw Error("private upstream failure");});
+  const failed = await queue.request(1, "fixture", "fixture@example.invalid", {...input, mileage: 11000});
+  assert.deepEqual(failed, {status: "unavailable", coverage: "unknown", checks: []});
+  assert.equal(await queue.processOne(2, build), false);
+});

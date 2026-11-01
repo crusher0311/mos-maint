@@ -55,6 +55,29 @@ raw copies had zero amounts. Selecting the convenient copy would hide conflicts.
 sales entries separate from ordinary tire invoices until their document type
 is established.
 
+Pilot invoice-list evidence may retain vehicleId without VIN or a nested vehicle.
+Do not treat report-wide missing VINs as missing vehicles in Tekmetric.
+
+**Why:** A read-only comparison found VINs in the operational work-order cache
+for most sampled invoices whose pinned pilot payload omitted vehicle information.
+The same operational cache omitted DOT fields even for invoices whose pilot
+evidence contained DOTs, so it is not a wholesale replacement evidence source.
+
+**How to apply:** Any VIN enrichment must verify same-shop, work-order and
+vehicle identity, preserve provenance, and retain the pinned DOT evidence.
+Empty captured DOT arrays still do not prove what the provider UI contains.
+
+Shop-local reporting dates must pin each location's IANA timezone and preserve
+legacy UTC executions. Changing the timezone label alone is not a correction.
+
+**Why:** The user expects Central business dates, including CST/CDT transitions.
+The existing October pilot was verified against UTC boundaries; those counts
+cannot establish complete coverage of a shifted local calendar month.
+
+**How to apply:** Resolve new zones from authorized shop settings, distinguish
+local executions in cache identity and exports, and disclose unverified boundary
+coverage until a separately approved collection verifies the local interval.
+
 Distinguish absent DOT properties from explicit empty arrays and UI evidence.
 
 **Why:** A confirmed HEART tire invoice displays four DOTs in Tekmetric while
@@ -93,11 +116,24 @@ the cause of the remaining provider throttling was not established.
 **How to apply:** Honor provider throttling even after a slot grant. Stop the
 operator recovery instead of bypassing coordination or guessing a higher cap.
 
+An off-hours scheduled worker must not repeatedly reschedule shared work that
+an explicitly approved daytime worker is eligible to process.
+
+**Why:** Read-only investigation on 2026-10-31 found both modes sharing the same
+lease and next-eligible time. Normal daytime attempts can push that time forward
+between manual pages. The bounded manual job exited successfully after its time
+budget with incomplete progress; exact attribution of idle time was not logged.
+
+**How to apply:** Check scheduled eligibility before claiming shared provider
+work, while retaining atomic lease ownership, cooldowns and manual budgets.
+Test normal/manual interleaving, and distinguish platform job start, command
+start and first page progress when explaining elapsed time.
+
 Real Tekmetric invoice-list responses can contain `authorized: null` jobs even
 when posted dates, jobs, and parts arrays are present.
 
-**Why:** An approved read-only diagnostic on 2026-10-31 found six such jobs in a
-50-invoice page; boolean-only fixtures had hidden the contract mismatch.
+**Why:** Boolean-only fixtures hide the distinction between missing approval
+evidence and an explicit decline in real provider payloads.
 
 **How to apply:** Preserve null as unknown, never coerce it into approval or
 decline. Keep candidate tire invoices visible as exceptions without counting
@@ -114,3 +150,17 @@ also undo genuine clears or resurrect removed tire lines.
 **How to apply:** Use the same policy for both canonical stores; do not activate
 background enrichment or write isolated recovered evidence into production
 without separate rollout approval.
+
+Treat daytime two-pass failures as possible source changes, not automatically
+worker defects. Retained webhook copies are corroboration, not a substitute for
+the exact second-pass response.
+
+**Why:** A read-only investigation found a newer provider modification timestamp
+on the first unverified invoice after a partially verified page. The cached
+webhook also omitted DOT fields that the list capture included, including on
+other invoices whose verification had passed. That channel difference alone
+cannot explain a list-to-list mismatch.
+
+**How to apply:** Preserve bounded, sanitized mismatch evidence before proposing
+changes to verification. Distinguish padded provider-list totals from invoices
+inside the report date range, and do not certify an abandoned generation.

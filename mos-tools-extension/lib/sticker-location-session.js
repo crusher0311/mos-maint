@@ -1,14 +1,19 @@
 // One immutable credential/context per operation. Never installs a scoped token
 // as the global login; never persists one across worker restarts.
 export async function createStickerLocationRequest(context, deps) {
+  // Optional fixed-stage observer; diagnostics must never affect authorization.
+  const stage = name => { try { deps.onStage?.(name); } catch (_) {} };
   const snapshot = { ...context };
   const identity = deps.identity();
   const revision = deps.revision?.(snapshot._tabId);
+  function changed(message) {
+    return Object.assign(new Error(message), { code: 'CONTEXT_CHANGED' });
+  }
   async function assertCurrent() {
     const current = deps.identity();
-    if (revision !== deps.revision?.(snapshot._tabId)) throw new Error('Provider page changed. Please try again.');
+    if (revision !== deps.revision?.(snapshot._tabId)) throw changed('Provider page changed. Please try again.');
     if (current.token !== identity.token || current.epoch !== identity.epoch ||
-        current.apiUrl !== identity.apiUrl) throw new Error('MOS login changed. Please try again.');
+        current.apiUrl !== identity.apiUrl) throw changed('MOS login changed. Please try again.');
     const tab = await deps.getTab(snapshot._tabId);
     const url = new URL(tab.url);
     if (snapshot.provider === 'shopmonkey') {
@@ -21,42 +26,49 @@ export async function createStickerLocationRequest(context, deps) {
           String(live.roId) !== String(snapshot.roId) ||
           String(live.locationId || '') !== String(snapshot.locationId || '') ||
           String(live.companyId || '') !== String(snapshot.companyId || '')) {
-        throw new Error('Shopmonkey location or order changed. Reopen Print from the current order.');
+        throw changed('Shopmonkey location or order changed. Reopen Print from the current order.');
       }
       return;
     }
     const shop = url.pathname.match(/\/(?:admin\/)?shop\/(\d+)(?:\/|$)/)?.[1];
     if (!/(^|\.)tekmetric\.com$/.test(url.hostname) || String(shop) !== String(snapshot.shopId)) {
-      throw new Error('Tekmetric location changed. Please print again from the current location.');
+      throw changed('Tekmetric location changed. Reopen the intended repair order and retry.');
     }
     if (snapshot.roId) {
       const ro = url.pathname.match(/\/repair-orders\/(\d+)/)?.[1];
-      if (String(ro) !== String(snapshot.roId)) throw new Error('Repair order changed. Please print again.');
+      if (String(ro) !== String(snapshot.roId)) throw changed('Repair order changed. Retry from the current repair order.');
     }
   }
+  stage('context_validation');
   await assertCurrent();
   const send = async (path, options, token) => {
     const response = await deps.fetch(`${identity.apiUrl}${path}`, {
       ...options,
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      signal: AbortSignal.timeout(options.method === 'POST' && path.includes('/sticker') ? 45000 : 8000),
+      signal: AbortSignal.timeout(path.split('?')[0] === '/api/extension/plan' ? 60000 :
+        options.method === 'POST' && path.includes('/sticker') ? 45000 : 8000),
     });
     const data = await response.json();
-    if (!response.ok) throw Object.assign(new Error(data.error || 'Tekmetric location request failed. Please try again.'), { code: data.code });
+    if (!response.ok) throw Object.assign(new Error(data.error || 'Shop access could not be confirmed. Open the intended repair order and retry; if this persists, ask your administrator to verify your shop assignment and provider mapping.'), { code: data.code });
     return data;
   };
+  stage('switch_location');
   const scope = await send('/api/extension/auth/switch-location', {
     method: 'POST', body: JSON.stringify({ provider: snapshot.provider, smsShopId: String(snapshot.shopId) }),
   }, identity.token);
   if (!scope.token || scope.provider !== snapshot.provider || String(scope.smsShopId) !== String(snapshot.shopId)) {
     throw new Error('Tekmetric location could not be confirmed. Nothing was printed.');
   }
+  stage('scope_validation');
   await assertCurrent();
   return {
     assertCurrent,
     async request(path, options = {}) {
+      stage('request_context_validation');
       await assertCurrent();
+      stage('features_request');
       const data = await send(path, options, scope.token);
+      stage('response_context_validation');
       await assertCurrent();
       if (data.sticker) data.sticker.mosPrintContext = snapshot;
       if (data.image) data.mosPrintContext = snapshot;

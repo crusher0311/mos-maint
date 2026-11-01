@@ -54,16 +54,17 @@ export async function findCachedPlanCandidates(
   shopId: number,
   vin: string,
   db?: Db,
+  bounds?: {limit: number; maxTimeMS: number},
 ): Promise<AnyDoc[]> {
   if (isPlanCachePgCanonical()) {
     const row = await pg.pgFindCachedPlan(Number(shopId), vin);
     if (row) return [row];
     if (shouldShadowWriteMongoPlanCache()) {
-      return findCachedPlanCandidatesMongo(shopId, vin, db);
+      return findCachedPlanCandidatesMongo(shopId, vin, db, bounds);
     }
     return [];
   }
-  return findCachedPlanCandidatesMongo(shopId, vin, db);
+  return findCachedPlanCandidatesMongo(shopId, vin, db, bounds);
 }
 
 /**
@@ -125,13 +126,15 @@ async function findCachedPlanCandidatesMongo(
   shopId: number,
   vin: string,
   db?: Db,
+  bounds?: {limit: number; maxTimeMS: number},
 ): Promise<AnyDoc[]> {
   const m = await mongo(db);
-  return m
+  const cursor = m
     .collection("cached_plans")
     .find({ vin: vin.toUpperCase(), shopId: shopIdIn(shopId) })
-    .sort({ createdAt: -1 })
-    .toArray();
+    .sort({ createdAt: -1 });
+  if (bounds) cursor.limit(bounds.limit).maxTimeMS(bounds.maxTimeMS);
+  return cursor.toArray();
 }
 
 /** Latest cached-plan doc regardless of TTL/schema validity (raw read). */

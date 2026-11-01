@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { analyzerModel, MODEL_POLICY_ERROR } from "@/lib/openai-model-policy";
 import { logUsage, estimateTokens, estimateCost } from "@/lib/usage";
 import { trackApiRequest } from "@/lib/api-usage-tracker";
 import { getTrackedAiFetch } from "@/lib/ai";
@@ -128,7 +129,8 @@ export async function POST(req: NextRequest) {
     payload = {};
   }
 
-  const model = (payload?.model as string) || "gpt-4.1";
+  const model = analyzerModel(payload?.model);
+  if (!model) return Response.json({ ok: false, error: MODEL_POLICY_ERROR }, { status: 400 });
   const dviData = payload?.dviData ?? null;
   const carfaxData = payload?.carfaxData ?? null;
   const oemData = payload?.oemData ?? [];

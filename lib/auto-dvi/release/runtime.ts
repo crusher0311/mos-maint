@@ -11,9 +11,13 @@ import { readLogoPalette } from "../../shop-dispatch/logo-palette";
 import { resolveWorkflowBranding } from "../../shop-dispatch/branding";
 import { brandingSchema } from "./model";
 import { requireThat } from "../../shop-dispatch/model";
+import {MongoRecordingPersistence} from "../staff/recording-store";
+import {RecordingMediaStorage} from "../staff/recording-media";
 
 export const releaseDependencies: ReleaseDependencies = {
   staff: staffDependencies, store: new MongoReleaseStorage(), media: new StaffMediaStorage(),
+  preparedClips: (shopId, visitId) => new MongoRecordingPersistence().preparedClips(shopId, visitId),
+  readClip: (id, shopId, visitId) => new RecordingMediaStorage().readReleased(id, shopId, visitId),
   secret: () => process.env.WORKFLOW_REPORT_LINK_SECRET ?? "",
   publicEntitled: async shopId => {
     const entitlements = await getFeatureEntitlements(shopId);

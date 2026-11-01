@@ -211,7 +211,7 @@ test("uncertain ticket intent offers verification only, not another RO creation"
   } finally { await h.close(); }
 });
 
-test("new RO requires explicit creation confirmation; confirmed result exposes DVI without sending or replaying provider writes", async () => {
+test("new RO opens the guided form without creating; confirmed ticket exposes DVI without replaying writes", async () => {
   const h = await harness();
   try {
     const localVisit = { ...visit, provider: "manual", sourceId: null, intake: { details, checkedInAt: "2026-03-16T14:00:00Z", checkedInBy: "advisor@test.invalid", appointmentId: null } };
@@ -223,18 +223,14 @@ test("new RO requires explicit creation confirmation; confirmed result exposes D
     });
     await h.render("VisitIntake", { visit: localVisit, board: localBoard, shopId: 66, manager: true, busy: false, onOpenInspection: () => opened++ });
     assert.equal(h.posts().length, 0);
-    const create = [...document.querySelectorAll("button")].find(node => node.textContent === "Create upstream ticket");
-    assert.equal(create.disabled, true);
-    await act(async () => [...document.querySelectorAll('input[type="checkbox"]')].find(node => node.parentElement.textContent.includes("explicitly confirm creation")).click());
-    await h.click("Create upstream ticket");
-    assert.equal(h.posts().length, 1);
-    const request = JSON.parse(h.posts()[0].body);
-    assert.equal(request.action, "create");
-    assert.equal(request.confirmed, true);
-    assert.equal(request.revision, 17);
+    await h.click("Create New RO");
+    assert.equal(h.posts().length, 0, "Opening the guided form is not creation authorization");
+    const confirmed = {...localVisit, provider: "protractor", sourceId: "confirmed-native-guid"};
+    await h.render("VisitIntake", {key: "confirmed", visit: confirmed, board: {...localBoard, visits: [confirmed]},
+      shopId: 66, manager: true, busy: false, onOpenInspection: () => opened++});
     await h.click("Start DVI");
     assert.equal(opened, 1);
-    assert.equal(h.posts().length, 1, "No automatic second ticket creation or send");
+    assert.equal(h.posts().length, 0, "No automatic ticket creation or send");
     assert.equal([...document.querySelectorAll("button")].some(node => node.textContent === "Create upstream ticket"), false);
   } finally { await h.close(); }
 });
@@ -248,7 +244,7 @@ test("Dispatch exposes check-in/create RO directly and DVI separately from the o
     assert.ok(document.querySelector('[data-testid="dispatch-check-in"]'));
     assert.ok(document.querySelector(`[data-testid="dvi-entry-${visit.id}"]`));
     assert.equal(document.querySelector("button button"), null);
-    await h.click("Check in / create RO");
+    await h.click("Local check-in only");
     assert.ok(document.querySelector('[data-testid="intake-walk-in"]'));
     assert.match(document.body.textContent, /Upstream ticket creation is a separate, explicitly confirmed action/);
     assert.equal(h.posts().length, 0);

@@ -32,6 +32,15 @@ test('VIN and maintenance suggestion never become current mileage', () => {
   assert.equal(adapter('VIN: 1FT8W3BT0BEA08647\nAssignments\n1 of 1\nNext Maintenance\n120,000 mi').raw().mileage, null);
 });
 
+test('flex-header mileage supports same-line and split outgoing placeholders', () => {
+  for (const text of [
+    'VIN: 1FT8W3BT0BEA08647 119,067 / —\nEstimate #1000',
+    'VIN: 1FT8W3BT0BEA08647\n\n119,067\n/\n—\nEstimate #1000',
+    'VIN: 1FT8W3BT0BEA08647\u00a0119,067\u00a0/ —\nEstimate #1000',
+  ]) assert.equal(adapter(text).raw().mileage, 119067);
+  assert.equal(adapter('VIN: 1FT8W3BT0BEA08647\n119,067 km\nEstimate #1000').raw().mileage, null);
+});
+
 test('explicit mileage labels still work without reading VIN prefix', () => {
   assert.equal(adapter('VIN: 1FT8W3BT0BEA08647\nMileage: 119,067').raw().mileage, 119067);
 });

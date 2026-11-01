@@ -42,19 +42,35 @@ export default function WorkflowReportPage() {
       if (interval) clearInterval(interval);
       clearMedia(); currentVersion = null;
       setLoaded(null); setNewVersion(null); setLoading(true); setUnavailable(false);
-      // Fragment stays out of request URLs, referrers, storage, and logs.
-      try { token = decodeURIComponent(window.location.hash.slice(1)); } catch { fail(); return; }
+      // Native delivery may pin a version in the URL. Never turn an invalid pin
+      // into an implicit request for the latest report.
+      let pinnedVersion: number | undefined;
+      try {
+        const query = new URLSearchParams(window.location.search);
+        if (query.getAll("version").length > 1 || query.getAll("token").length > 1) throw Error("Ambiguous link");
+        if (query.has("version")) {
+          const raw = query.get("version")!;
+          if (!/^[1-9][0-9]*$/.test(raw) || !Number.isSafeInteger(Number(raw))) throw Error("Invalid version");
+          pinnedVersion = Number(raw);
+        }
+        // Tokens are passed only in POST bodies, never media request URLs or storage.
+        token = query.has("token") ? query.get("token")! : decodeURIComponent(window.location.hash.slice(1));
+      } catch { fail(); return; }
       if (!token || token.length > 4096) { fail(); return; }
       try {
-        const value = await (await post({ token }, signal)).json() as { version: number; report: CustomerReport };
-        if (!Number.isInteger(value.version) || !customerReport.safeParse(value.report).success) throw new Error("Unavailable");
+        const value = await (await post({ token, ...(pinnedVersion !== undefined ? {version: pinnedVersion} : {}) }, signal)).json() as { version: number; report: CustomerReport };
+        if (!Number.isSafeInteger(value.version) || value.version <= 0 || (pinnedVersion !== undefined && value.version !== pinnedVersion) ||
+          !customerReport.safeParse(value.report).success) throw new Error("Unavailable");
         const mediaUrls: Record<string, string> = {};
-        const ids = [...new Set(value.report.findings.flatMap(finding => finding.photoIds))];
+        const photos = new Set(value.report.findings.flatMap(finding => finding.photoIds));
+        const clips = new Set(value.report.findings.flatMap(finding => (finding.clips ?? []).map(clip => clip.id)));
+        if ([...clips].some(id => photos.has(id))) throw new Error("Ambiguous media type");
+        const ids = [...new Set([...photos, ...clips])];
         // Keep blob URLs owned by this effect and revoke on reload, failure or unmount.
         for (const mediaId of ids) {
           const response = await post({ token, version: value.version, mediaId }, signal);
           const blob = await response.blob();
-          if (!["image/jpeg", "image/png", "image/webp"].includes(blob.type)) throw new Error("Unavailable");
+          if (clips.has(mediaId) ? blob.type !== "video/mp4" : !["image/jpeg", "image/png", "image/webp"].includes(blob.type)) throw new Error("Unavailable");
           if (!active || run !== generation) return;
           const url = URL.createObjectURL(blob); urls.push(url); mediaUrls[mediaId] = url;
         }
@@ -65,8 +81,8 @@ export default function WorkflowReportPage() {
           if (polling || currentVersion === null) return;
           polling = true;
           void post({ token, check: true }, signal).then(response => response.json()).then(value => {
-            if (!Number.isInteger(value.version)) throw new Error("Unavailable");
-            if (active && run === generation && value.version !== currentVersion) setNewVersion(value.version);
+            if (!Number.isSafeInteger(value.version) || value.version <= 0) throw new Error("Unavailable");
+            if (active && run === generation && value.version > currentVersion!) setNewVersion(value.version);
           }).catch(() => { if (active && run === generation) fail(); }).finally(() => { polling = false; });
         }, 30_000);
       } catch { if (active && run === generation) fail(); }
@@ -78,7 +94,11 @@ export default function WorkflowReportPage() {
   return <main className={ui.customer}><div>
     {loading && <><p className={ui.eyebrow}>Private inspection report</p><div className={ui.skeleton} role="status" aria-label="Loading inspection report" /></>}
     {unavailable && <section className={ui.panel} role="alert"><div className={ui.eyebrow}>Inspection report</div><h1>This report is unavailable.</h1><p>The report could not be opened. Contact the shop for help or try again.</p><button onClick={() => setAttempt(value => value + 1)}>Try again</button></section>}
-    {newVersion !== null && <aside className={ui.notice} role="status"><strong>A newer report is available.</strong><p>You are viewing version {loaded?.version}. Reload to see the latest published findings.</p><button onClick={() => setAttempt(value => value + 1)}>Load latest report</button></aside>}
+    {newVersion !== null && <aside className={ui.notice} role="status"><strong>A newer report is available.</strong><p>You are viewing version {loaded?.version}. Choose to load the latest published findings.</p><button onClick={() => {
+      const url = new URL(window.location.href); url.searchParams.delete("version");
+      window.history.replaceState(null, "", url);
+      setAttempt(value => value + 1);
+    }}>Load latest report</button></aside>}
     {loaded && !unavailable && <CustomerInspectionReport report={loaded.report} version={loaded.version} mediaUrls={loaded.mediaUrls} />}
   </div></main>;
 }

@@ -6,7 +6,7 @@ import type { WorkflowInspection } from "@/lib/auto-dvi/workflow-binding-contrac
 export type InspectionRequest = { visitId: string; requestId: string; revision: number; command: StaffCommand | { type: "initialize"; boardRevision: number } };
 type BindingRecovery = { requestId: string; expectedBoardRevision: number; expectedInspectionRevision: number; workflowVisitId: string };
 export type InspectionResponse = {
-  enabled: boolean; record: WorkflowInspection | null; inspection: StaffInspection | null;
+  enabled: boolean; recordingEnabled?: boolean; record: WorkflowInspection | null; inspection: StaffInspection | null;
   catalog: StaffSheet[]; canEdit: boolean; canReview: boolean; boardRevision: number;
   bindingRequest?: BindingRecovery | null; error?: string;
 };

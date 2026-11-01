@@ -9,6 +9,7 @@
 // verification on a real Shopmonkey session (Task #587 / T010 deferred check).
 
 console.log("[MOS Tools] Shopmonkey content script loaded");
+const shopmonkeyStartupAt = globalThis.performance?.now() ?? Date.now();
 
 function safeSendMessage(msg, callback) {
   try {
@@ -43,6 +44,23 @@ try {
 let lastContext = null;
 let contextCheckInterval = null;
 let orderButtons = null;
+let activeSessionContext = null;
+let sessionContextObserved = false;
+try {
+  window.addEventListener('message', event => {
+    if (event.source !== window || event.origin !== window.location.origin ||
+      event.data?.type !== 'MOS_SHOPMONKEY_SESSION_CONTEXT') return;
+    const value = event.data.context;
+    // A null reply before any activity must not suppress legacy discovery.
+    if (!value && !sessionContextObserved && event.data.observed !== true) return;
+    sessionContextObserved = true;
+    activeSessionContext = value && looksLikeShopmonkeyId(value.locationId) &&
+      looksLikeShopmonkeyId(value.companyId) && value.path === window.location.pathname &&
+      Number.isFinite(value.expiresAt) && value.expiresAt > Date.now() &&
+      value.expiresAt <= Date.now() + 1801000 ? value : null;
+    updateContext();
+  });
+} catch (_) {}
 
 // ==================== CONTEXT DETECTION ====================
 // Shopmonkey hides some fields (VIN, mileage) once the user navigates between
@@ -139,6 +157,16 @@ function detectLaunchDarklyContext() {
 // shopmonkey.locationId / shopmonkey.companyId).
 function detectShopIdentifiers() {
   const out = { companyId: null, locationId: null };
+  if (sessionContextObserved) {
+    if (activeSessionContext?.path === window.location.pathname &&
+      activeSessionContext.expiresAt > Date.now()) {
+      return { companyId: activeSessionContext.companyId, locationId: activeSessionContext.locationId };
+    }
+    // Do not fall back to another tab's cached location after session expiry
+    // or SPA navigation. Wait for fresh same-tab activity.
+    activeSessionContext = null;
+    return out;
+  }
   try {
     const url = window.location.href;
     // URL query params (?companyId=...&locationId=...) or path segments.
@@ -278,8 +306,11 @@ function _detectContextRaw() {
     // its own line. Limit the search to that header, never maintenance
     // suggestions ("120,000 mi") or assignments elsewhere on the page.
     if (!context.mileage && vinMatch) {
-      const afterVin = pageText.slice(vinMatch.index + vinMatch[0].length);
-      const headerMileage = afterVin.match(/^[ \t]*\r?\n[ \t]*(\d{1,3}(?:,\d{3})+|\d{2,7})[ \t]*(?:mi|miles|km)?[ \t]*(?:\/[ \t]*[-–—]?)?[ \t]*(?:\r?\n|$)/i);
+      const afterVin = pageText.slice(vinMatch.index + vinMatch[0].length).replace(/\u00a0/g, ' ');
+      // Flex layouts may flatten VIN and odometer onto one line or split
+      // the "/" and missing outgoing mileage onto separate lines.
+      // Stay immediately adjacent to the VIN, never scan arbitrary page numbers.
+      const headerMileage = afterVin.match(/^[ \t\r\n\u00a0]+(\d{1,3}(?:,\d{3})+|\d{2,7})[ \t]*(?:mi|miles)?[ \t]*(?:\r?\n[ \t]*)?(?:\/[ \t\r\n]*[-–—]?)?[ \t]*(?:\r?\n|$)/i);
       if (headerMileage) {
         const miles = Number(headerMileage[1].replace(/,/g, ''));
         if (miles > 0 && miles < 2000000) context.mileage = miles;
@@ -299,7 +330,6 @@ function _detectContextRaw() {
     if (emailMatch) context.customerEmail = emailMatch[0];
   } catch (e) {}
 
-  console.log('[MOS Tools] Shopmonkey context:', context);
   return context;
 }
 
@@ -310,7 +340,7 @@ function updateContext() {
     lastContext = context;
     safeSendMessage({ action: "SET_SMS_CONTEXT", context });
     if (context.shopId) {
-      console.log("[MOS Tools] Shopmonkey context changed:", context.roId ? `Order ${context.roId}` : 'shop-level', context);
+      console.log("[MOS Tools] Shopmonkey context updated");
     } else {
       // No resolvable shop identifier yet — surface as a drop so telemetry can
       // flag shops where the companyId/locationId probe needs live tuning.
@@ -322,6 +352,7 @@ function updateContext() {
 
 // ==================== INIT ====================
 function init() {
+  window.postMessage({ type: 'MOS_REQUEST_SHOPMONKEY_CONTEXT' }, window.location.origin);
   globalThis.MosStickerButtonPreference?.start(detectContext);
   chrome.runtime.onMessage.addListener((message, _sender, reply) => {
     if (message.action === 'GET_PAGE_CONTEXT') { reply(detectContext()); return false; }
@@ -332,6 +363,7 @@ function init() {
     }
   });
   orderButtons = globalThis.MosShopmonkeyButtons?.create({
+    startupAt: shopmonkeyStartupAt,
     document,
     send: safeSendMessage,
     getContext: detectContext,

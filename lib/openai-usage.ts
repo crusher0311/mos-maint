@@ -1,6 +1,14 @@
+import { randomUUID } from "node:crypto";
 /** Privacy-safe accounting. Never persist request/response content. */
 export interface AiContext { feature: string; shopId?: number | null; source?: "direct" | "replit" }
 export type AiRecord = Record<string, any>;
+export type AiWriter = ((r: AiRecord) => Promise<void>) & { prepare?: (r: AiRecord) => Promise<void> };
+const processInstance = randomUUID();
+const safeIdentifier = (value: unknown) => typeof value === "string" && /^[a-zA-Z0-9_.:-]{1,160}$/.test(value) ? value : undefined;
+const processRole = process.argv.some(a => a.includes("protractor-callback-worker")) ? "callback-worker" :
+  process.argv.some(a => a.includes("plan-prefetch-worker")) ? "plan-prefetch-worker" :
+  process.argv.some(a => a.includes("audit-worker")) ? "audit-worker" :
+  process.argv.some(a => /next|start-production/.test(a)) ? "web" : "other";
 // USD per million tokens, standard processing. Unknown models remain unpriced.
 // Source: https://developers.openai.com/api/docs/pricing (2026-10-27).
 const prices: Record<string, [number, number, number]> = {
@@ -14,8 +22,7 @@ const count = (n: unknown): number | null =>
   typeof n === "number" && Number.isSafeInteger(n) && n >= 0 ? n : null;
 export function usageRecord(context: AiContext, requestedModel: unknown, response: any,
   statusCode: number, latencyMs: number, requestId?: string): AiRecord {
-  const model = typeof response?.model === "string" ? response.model :
-    typeof requestedModel === "string" ? requestedModel : "unknown";
+  const model = safeIdentifier(response?.model) ?? safeIdentifier(requestedModel) ?? "unknown";
   const usage = response?.usage;
   const prompt = count(usage?.prompt_tokens ?? usage?.input_tokens);
   const completion = count(usage?.completion_tokens ?? usage?.output_tokens);
@@ -33,7 +40,10 @@ export function usageRecord(context: AiContext, requestedModel: unknown, respons
     provider: "openai", endpoint: context.feature,
     shopId: typeof context.shopId === "number" && Number.isFinite(context.shopId) ? context.shopId : undefined,
     timestamp, minuteBucket: minute.toISOString(), method: "POST", statusCode, isError: statusCode >= 400,
-    isRateLimited: statusCode === 429, latencyMs, requestId,
+    isRateLimited: statusCode === 429, latencyMs, requestId: safeIdentifier(requestId),
+    requestedModel: safeIdentifier(requestedModel) ?? "unknown", returnedModel: safeIdentifier(response?.model) ?? null,
+    aiProcessRole: processRole, aiProcessInstance: processInstance,
+    aiRelease: /^[a-f0-9]{7,64}$/.test(process.env.RENDER_GIT_COMMIT ?? "") ? process.env.RENDER_GIT_COMMIT : undefined,
     model, aiSource: context.source ?? "direct", aiTrackingVersion: 1,
     environment: process.env.NODE_ENV === "production" ? "production" :
       process.env.NODE_ENV === "test" ? "test" : "development",
@@ -45,13 +55,14 @@ export function usageRecord(context: AiContext, requestedModel: unknown, respons
 }
 export function metrics() {
   return { requests: 0, failedRequests: 0, promptTokens: 0, completionTokens: 0,
-    cachedTokens: 0, estimatedCostUsd: 0, unpricedRequests: 0, unknownUsageRequests: 0, legacyRequests: 0 };
+    cachedTokens: 0, estimatedCostUsd: 0, unpricedRequests: 0, unknownUsageRequests: 0, legacyRequests: 0, pendingRequests: 0 };
 }
 export function summarizeAiUsage(rows: AiRecord[]) {
   const totals = metrics();
   const groups = { byFeature: new Map(), byModel: new Map(), byShop: new Map(), byDay: new Map() };
   function add(m: ReturnType<typeof metrics>, r: AiRecord) {
     m.requests++; m.failedRequests += r.isError ? 1 : 0;
+    m.pendingRequests += r.aiOutcome === "pending" ? 1 : 0;
     m.promptTokens += count(r.promptTokens) ?? 0; m.completionTokens += count(r.completionTokens) ?? 0;
     m.cachedTokens += count(r.cachedTokens) ?? 0;
     if (typeof r.estimatedCostUsd === "number" && Number.isFinite(r.estimatedCostUsd) && r.estimatedCostUsd >= 0) m.estimatedCostUsd += r.estimatedCostUsd;
@@ -82,27 +93,38 @@ export function boundedUsageWriter(write: (record: AiRecord) => Promise<void>,
   timeoutMs = 2000, maxConcurrent = 4) {
   let active = 0;
   return async (record: AiRecord) => {
-    if (active >= maxConcurrent) throw new Error("AI accounting capacity unavailable");
+    if (active >= maxConcurrent) {
+      console.error("[OpenAI-Usage]", { event: "capacity_denied" });
+      throw new Error("AI accounting capacity unavailable");
+    }
     active++;
     const operation = Promise.resolve().then(() => write(record)).finally(() => { active--; });
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       await Promise.race([operation, new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error("AI accounting acknowledgment timed out")), timeoutMs);
+        timer = setTimeout(() => {
+          console.error("[OpenAI-Usage]", { event: "acknowledgment_timeout" });
+          reject(new Error("AI accounting acknowledgment timed out"));
+        }, timeoutMs);
       })]);
     } finally { if (timer) clearTimeout(timer); }
   };
 }
 /** Inject fetch/write in offline tests. Each SDK retry is a separate attempt. */
-export function trackedAiFetch(context: AiContext, write: (r: AiRecord) => Promise<void>,
+export function trackedAiFetch(context: AiContext, write: AiWriter,
   transport: typeof fetch = fetch): typeof fetch {
   return async (input, init) => {
     const started = Date.now();
+    const attemptId = randomUUID();
     let model: unknown;
     try {
       if (typeof init?.body === "string") model = JSON.parse(init.body).model;
       else if (init?.body instanceof FormData) model = init.body.get("model");
     } catch { /* Never retain body or parser errors. */ }
+    // Persistent-journal mode refuses inference if the attempt cannot be saved.
+    // A recovered pending record means unknown outcome, not zero spend.
+    await write.prepare?.({ ...usageRecord(context, model, null, 0, 0),
+      _id: attemptId, aiOutcome: "pending" });
     let response: Response;
     try { response = await transport(input, init); }
     catch (error) {
@@ -113,17 +135,23 @@ export function trackedAiFetch(context: AiContext, write: (r: AiRecord) => Promi
     if (response.headers.get("content-type")?.includes("application/json")) {
       try { data = await response.clone().json(); } catch { /* Unknown usage is explicit. */ }
     }
+    await save(usageRecord(context, model, data, response.status, Date.now() - started,
+      response.headers.get("x-request-id") ?? undefined));
+    // The accounting layer owns retries. A legacy insert has a different ID
+    // and would double-count a write that committed after an ACK timeout.
     if (typeof data?.id === "string") {
       for (const [id, expiry] of trackedIds) if (expiry <= Date.now()) trackedIds.delete(id);
       if (trackedIds.size >= 5000) trackedIds.delete(trackedIds.keys().next().value!);
       trackedIds.set(data.id, Date.now() + 10 * 60_000);
     }
-    await save(usageRecord(context, model, data, response.status, Date.now() - started,
-      response.headers.get("x-request-id") ?? undefined));
     return response;
     async function save(record: AiRecord) {
-      try { await write(record); }
-      catch { console.error("[OpenAI-Usage] persistence_unconfirmed", { feature: context.feature }); }
+      record._id = attemptId;
+      record.aiOutcome = "complete";
+      // Independently searchable metadata receipt; never include provider bodies.
+      console.info("[OpenAI-Usage] receipt", record);
+      try { await write(record); return true; }
+      catch { console.error("[OpenAI-Usage] persistence_unconfirmed", { feature: context.feature, attemptId }); return false; }
     }
   };
 }

@@ -18,6 +18,6 @@ export async function getOpenAiUsageRows(from: Date, to: Date): Promise<Record<s
   return db.collection("api_usage").find({ provider: "openai", timestamp: { $gte: from, $lt: to } },
     { projection: { _id: 0, endpoint: 1, shopId: 1, timestamp: 1, isError: 1, model: 1,
       aiTrackingVersion: 1, promptTokens: 1, completionTokens: 1, cachedTokens: 1,
-      usageKnown: 1, estimatedCostUsd: 1 }, maxTimeMS: 5000 })
+      usageKnown: 1, estimatedCostUsd: 1, aiOutcome: 1 }, maxTimeMS: 5000 })
     .sort({ timestamp: -1 }).limit(10001).toArray();
 }

@@ -3,6 +3,35 @@ name: Offline release checks
 description: Interpreting elapsed-time failures and non-exiting smoke tests during release verification.
 ---
 
+Check `/tmp` capacity before starting disposable databases after large builds.
+
+**Why:** This environment uses a 5 GB tmpfs. Two isolated Next build outputs
+exhausted it, crashing disposable Mongo during startup and masking the failure
+behind an exit-listener cleanup race.
+
+**How to apply:** Remove only known disposable outputs from completed builds.
+Consume startup diagnostics and check process exit state before awaiting exit;
+do not treat an unresolved test promise as a pass.
+
+Keep long-running release logs and completion receipts in an ignored workspace
+output directory even when the isolated source checkout lives outside it.
+
+**Why:** A workspace restart killed a release build and removed its temporary
+log, leaving no terminal result from which to resume verification.
+
+**How to apply:** Retain the source revision, explicit exit status and stage
+logs under `generated-artifacts/` (excluded from Git and deployment). A saved
+`running` status without an exit result is interrupted work, never a pass.
+Direct Next compilation does not execute npm's prebuild lifecycle.
+
+**Why:** Compilation and selected extension tests passed, but Render's full
+prebuild chain found a browser-global dependency missing from an older VM fixture.
+
+**How to apply:** Verify the complete npm prebuild chain for the release tree,
+not just Next compilation and focused tests. Browser-handler VM fixtures must
+explicitly supply browser globals used by the real handler; preserve assertions
+and network isolation rather than bypassing the failing fixture.
+
 Treat Render compilation memory separately from the running application's plan.
 
 **Why:** The combined application compiled locally but exhausted a roughly 2 GB V8 heap on Render after regression tests passed; the large web runtime plan did not prevent that build-process limit.

@@ -37,9 +37,11 @@ export async function switchLocation(request: NextRequest, validatedAuth?: Exten
       isPlatformAdmin: auth.accountUser?.role === "platform_admin" || auth.accountUser?.isPlatformAdmin === true,
     });
     if (target.status !== "resolved") {
+      console.info("[Extension Location] resolution", { provider, outcome: target.status,
+        assurance: principal.assurance, boundProviderMatches: principal.provider === provider });
       const failures = {
-        not_found: [404, "SHOP_UNLINKED", "This Tekmetric location isn't linked in MOS. Printing is blocked."],
-        access_denied: [403, "SHOP_FORBIDDEN", "This Tekmetric location is linked in MOS, but your account does not have access."],
+        not_found: [404, "SHOP_UNLINKED", "This Tekmetric location could not be linked to MOS. Ask your administrator to verify the provider mapping. Vehicle history has not been checked."],
+        access_denied: [403, "SHOP_FORBIDDEN", "Your MOS account cannot access this Tekmetric location. Ask your administrator to verify your shop assignment; signing in again will not change that assignment."],
         conflict: [409, "SHOP_MAPPING_CONFLICT", "This Tekmetric location has conflicting MOS mappings. Ask a platform admin to repair them."],
       } as const;
       const [status, code, error] = failures[target.status];
@@ -72,6 +74,6 @@ export async function switchLocation(request: NextRequest, validatedAuth?: Exten
     return reply({ token: issued.token, shopId: target.mosShopId, smsShopId: String(body.smsShopId),
       provider, expiresAt: issued.principal.expiresAt.toISOString() }, 200);
   } catch {
-    return reply({ code: "LOCATION_LOOKUP_FAILED", error: "Location access could not be checked. Please try again; nothing was printed." }, 503);
+    return reply({ code: "LOCATION_LOOKUP_FAILED", error: "Location access is temporarily unavailable. Please retry. Vehicle history has not been checked and no provider action was authorized." }, 503);
   }
 }

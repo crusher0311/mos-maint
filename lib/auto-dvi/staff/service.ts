@@ -47,7 +47,8 @@ export async function snapshot(visitId: string, deps: StaffDependencies) {
   requireThat(latest.shopId === access.shopId && latest.actor === access.actor, "Access changed", 403);
   const unresolved = board.dviAdmissions?.find(a => a.identity.workflowVisitId === visitId &&
     !record?.receipts.some(r => r.requestId === a.requestId && r.digest === a.digest));
-  return {enabled: latest.enabled, record, inspection: (record?.results.staff as StaffInspection) ?? null,
+  return {enabled: latest.enabled, recordingEnabled: !!latest.config?.recording?.enabledShopIds.includes(latest.shopId),
+    record, inspection: (record?.results.staff as StaffInspection) ?? null,
     catalog: latest.config?.sheets ?? [], canEdit: latest.canEdit && !visitClosed(visit) && !unresolved,
     canReview: latest.canReview && latest.canEdit && !visitClosed(visit),
     boardRevision: board.revision,
@@ -110,6 +111,7 @@ export async function mutateStaff(raw: unknown, deps: StaffDependencies) {
     shopId: access.shopId, visitId: req.visitId, requestId: req.requestId, expectedRevision: req.revision,
     actor: access.actor, at: deps.now(), command: req.command.type === "initialize" ? {type: "initialize"} : req.command,
     catalog: context.access.config!.sheets, defaultSheet: context.access.config!.defaultSheet, canReview: context.access.canReview, arrivalPhoto,
+    policy: context.access.config!.policies?.[String(access.shopId)],
     authorize: async () => {
       const latest = await writeContext(req.visitId, deps, {...access, identity: context.record.identity});
       requireThat(digest(latest.access.config) === digest(context.access.config), "Inspection policy changed; reload", 409);

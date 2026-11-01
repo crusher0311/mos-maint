@@ -121,7 +121,7 @@ function vehicleHistoryContextKey(context) {
 }
 
 function vehicleHistoryEligible() {
-  return isAuthenticated && currentTab === 'plan' && document.visibilityState !== 'hidden' &&
+  return canLoadMaintenancePlan() && isAuthenticated && currentTab === 'plan' && document.visibilityState !== 'hidden' &&
     !document.getElementById('main-state')?.classList.contains('hidden') &&
     currentContext?.provider && currentContext?.shopId != null && currentContext?.vin;
 }
@@ -1942,8 +1942,18 @@ function updateContext(context) {
 // a real features payload.
 const FEATURES_RETRY_DELAYS_MS = [800, 2000, 4000, 8000];
 let featuresFetchSeq = 0;
+let maintenanceFeaturesScope = null;
+
+function canLoadMaintenancePlan() {
+  if (shopFeatures.maintenance !== true) return false;
+  // Shopmonkey permissions use a location-scoped session. Do not borrow the
+  // startup default or another location's last-known-good permissions.
+  return currentContext?.provider !== 'shopmonkey' ||
+    maintenanceFeaturesScope === tutorialFeatureScope();
+}
 
 function applyShopFeatures(result) {
+  maintenanceFeaturesScope = tutorialFeatureScope();
   tutorialFeaturesScope = tutorialFeatureScope();
   clearTimeout(featureExpiryTimer);
   shopFeatures = result.features;
@@ -2320,6 +2330,11 @@ async function handleLogout() {
 
 // ---- PLAN ----
 async function loadPlan(forceRefresh = false) {
+  if (!canLoadMaintenancePlan()) {
+    elements.planLoading.classList.add('hidden');
+    elements.planContent.classList.add('hidden');
+    return;
+  }
   // Independent read: never return history from a locally cached plan.
   void fetchVehicleHistory();
   syncVehicleHistoryRefresh();
@@ -2339,6 +2354,14 @@ async function loadPlan(forceRefresh = false) {
   // Task #645: the on-screen RO odometer the advisor entered. Forwarded so the
   // server can anchor the VHI on it instead of falling to a CARFAX estimate.
   const reqOdometer = currentContext.scrapedOdometer || null;
+  const requestContext = { ...currentContext };
+  const requestSession = laborRateSessionDiscriminator;
+  const requestTab = currentContext._tabId ?? currentContext.tabId;
+  const requestStillCurrent = () => isAuthenticated &&
+    requestSession === laborRateSessionDiscriminator &&
+    requestTab === (currentContext?._tabId ?? currentContext?.tabId) &&
+    currentContext?.provider === reqProvider &&
+    currentContext?.shopId === reqShopId && currentContext?.roId === reqRoId;
   const cacheKey = planCacheKey(currentContext);
   const requestMutationVersion = planCache.get(cacheKey)?.mutationVersion || 0;
 
@@ -2383,7 +2406,8 @@ async function loadPlan(forceRefresh = false) {
     for (let attempt = 0; attempt < 2; attempt++) {
       result = await sendMessage({
         action: 'MOS_API_REQUEST',
-        endpoint: `/api/extension/plan?${params}`
+        endpoint: `/api/extension/plan?${params}`,
+        context: requestContext,
       }, 60000);
       
       if (!result.error) break;
@@ -2395,7 +2419,12 @@ async function loadPlan(forceRefresh = false) {
       break;
     }
     
+    if (!requestStillCurrent()) return;
     if (result.error) throw new Error(result.error);
+    if (!canLoadMaintenancePlan() ||
+        currentContext?.provider !== reqProvider ||
+        currentContext?.shopId !== reqShopId ||
+        currentContext?.roId !== reqRoId) return;
 
     // A response that started before a confirmed add is not revalidation of
     // that add. Leave its expired optimistic cache intact for the next read.
@@ -2403,6 +2432,8 @@ async function loadPlan(forceRefresh = false) {
     setPlanCache(cacheKey, result);
     renderPlan(result, reqRoId, reqShopId, reqProvider, reqVin);
   } catch (err) {
+    if (!requestStillCurrent()) return;
+    if (!canLoadMaintenancePlan()) return;
     if ((planCache.get(cacheKey)?.mutationVersion || 0) !== requestMutationVersion) return;
     // The user already moved on to another RO/shop — drop this stale failure.
     if (currentContext?.roId !== reqRoId || currentContext?.shopId !== reqShopId) return;
@@ -3429,7 +3460,7 @@ function createServiceItemHTML(item, type) {
 // ---- COMMON FAILURES ----
 async function loadCommonFailures() {
   // If no vehicle data but we have RO context, try to fetch from Plan API
-  if (currentContext && currentContext.roId && !currentContext.vehicle) {
+  if (canLoadMaintenancePlan() && currentContext && currentContext.roId && !currentContext.vehicle) {
     elements.failuresLoading.classList.remove('hidden');
     elements.failuresEmpty.classList.add('hidden');
     elements.failuresContent.classList.add('hidden');
@@ -3446,7 +3477,8 @@ async function loadCommonFailures() {
       
       const result = await sendMessage({
         action: 'MOS_API_REQUEST',
-        endpoint: `/api/extension/plan?${params}`
+        endpoint: `/api/extension/plan?${params}`,
+        context: { ...currentContext },
       });
       
       // Update context with vehicle data from Plan API
@@ -6557,7 +6589,7 @@ async function loadVehicleSpecs() {
   const specsContent = document.getElementById('specs-content');
 
   let vin = currentContext?.vin;
-  if (!vin && currentContext?.roId && currentContext?.shopId) {
+  if (canLoadMaintenancePlan() && !vin && currentContext?.roId && currentContext?.shopId) {
     specsLoading.classList.remove('hidden');
     specsEmpty.classList.add('hidden');
     specsContent.classList.add('hidden');
@@ -6571,7 +6603,8 @@ async function loadVehicleSpecs() {
       if (currentContext.scrapedOdometer) params.set('odometer', String(currentContext.scrapedOdometer));
       const result = await sendMessage({
         action: 'MOS_API_REQUEST',
-        endpoint: `/api/extension/plan?${params}`
+        endpoint: `/api/extension/plan?${params}`,
+        context: { ...currentContext },
       });
       if (result?.vehicle?.vin) {
         currentContext.vin = result.vehicle.vin.toUpperCase();

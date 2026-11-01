@@ -388,7 +388,9 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
         relayShopId &&
         (now - lastRelay > XAUTH_RELAY_INTERVAL)
       ) {
-        fetch(`${mosApiUrl}/api/extension/auth-token`, {
+        const relayEpoch = authEpoch;
+        const relayProof = tekmetricProofsByTab.get(details.tabId);
+        stickerLocationRequest({ ...tabContext, _tabId: details.tabId }).then(scoped => scoped.request('/api/extension/auth-token', {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${mosApiToken}`,
@@ -399,12 +401,11 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
             smsShopId: relayShopId,
             token: tokenHeader.value
           })
-        }).then(res => {
-          if (res.ok) {
+        })).then(() => {
+          if (relayEpoch === authEpoch && relayProof === tekmetricProofsByTab.get(details.tabId) &&
+              details.tabId === activeTabId && smsContextsByTab.get(details.tabId) === tabContext) {
             xAuthTokenRelayMap[shopRelayKey] = Date.now();
             console.log("[MOS] Relayed x-auth-token for shop", relayShopId);
-          } else {
-            console.warn("[MOS] x-auth-token relay failed:", res.status);
           }
         }).catch(err => {
           console.warn("[MOS] x-auth-token relay error:", err.message);
@@ -814,6 +815,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === "GET_SHOP_FEATURES") {
+    // Request-local, fixed vocabulary only. Never include identity, URLs or errors.
+    const timingNow = () => globalThis.performance?.now() ?? Date.now();
+    const timingStart = timingNow();
+    let timingStage = 'worker_restore';
+    let stageStart = timingStart;
+    const durations = {};
+    const stage = name => {
+      durations[timingStage] = (durations[timingStage] || 0) + Math.max(0, timingNow() - stageStart);
+      timingStage = name;
+      stageStart = timingNow();
+    };
     // Bound the entire message (including worker restore/bootstrap/body read),
     // not only response headers. Settle once; late results cannot revive it.
     const controller = new AbortController();
@@ -822,7 +834,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (settled) return;
       settled = true;
       clearTimeout(deadline);
-      sendResponse(value);
+      stage(timingStage);
+      sendResponse(message.provider === 'shopmonkey' ? { ...value, startupTiming: {
+        durations: { ...durations }, totalMs: Math.max(0, timingNow() - timingStart), lastStage: timingStage,
+      } } : value);
     };
     const deadline = setTimeout(() => {
       controller.abort();
@@ -836,23 +851,37 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         // fetch went to "null/api/..." and failed with "Failed to fetch"
         // on every attempt (Task: AutoFlow v4 feature-fetch loop).
         await _stateReady;
+        if (settled) return;
+        stage('bootstrap_binding');
         await ensureBootstrapBoundToActiveTab();
         if (settled) return;
         const requestEpoch = authEpoch;
         const requestToken = mosApiToken;
         const shopId = message.shopId || currentSmsContext?.shopId;
         if (!requestToken || !shopId) {
-          respond({ success: false, transient: true });
+          respond({ success: false, transient: true,
+            code: !requestToken ? 'EXPLICIT_LOGIN_REQUIRED' : 'CONTEXT_CHANGED' });
           return;
         }
         const apiBase = mosApiUrl || 'https://mos.tools';
         const provider = message.provider || currentSmsContext?.provider || '';
         let data;
-        if (provider === 'shopmonkey' && mosAuthSource === 'explicit') {
+        const requestTabId = sender.tab?.id ?? activeTabId;
+        let scopedRequest;
+        if (['shopmonkey', 'tekmetric'].includes(provider) && mosAuthSource === 'explicit') {
           const context = message.context || smsContextsByTab.get(sender.tab?.id ?? activeTabId);
-          const scoped = await stickerLocationRequest({ ...context, _tabId: sender.tab?.id ?? context?._tabId });
-          data = await scoped.request(`/api/extension/features?shopId=${encodeURIComponent(shopId)}&provider=shopmonkey`);
+          if (!context || context.provider !== provider || String(context.shopId) !== String(shopId)) {
+            throw Object.assign(new Error('Open the intended repair order and retry. Current shop context could not be confirmed.'), { code: 'CONTEXT_CHANGED' });
+          }
+          stage('scope_setup');
+          const scoped = await stickerLocationRequest({ ...context, _tabId: sender.tab?.id ?? context?._tabId },
+            name => { if (!settled) stage(name); });
+          scopedRequest = scoped;
+          if (settled) return;
+          stage('features_request');
+          data = await scoped.request(`/api/extension/features?shopId=${encodeURIComponent(shopId)}&provider=${provider}`);
         } else {
+        stage('features_request');
         const res = await fetch(`${apiBase}/api/extension/features?shopId=${shopId}&provider=${provider}&_token=${encodeURIComponent(requestToken)}`, {
           headers: { 'Authorization': `Bearer ${requestToken}` },
           signal: controller.signal,
@@ -863,6 +892,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
         data = await res.json();
         }
+        if (settled) return;
+        stage('user_storage');
         // Mirror lib/extension-write-guard so the content script can hide
         // the Create RO button for read-only users without an extra round
         // trip. mosUser is populated at login time in chrome.storage.local.
@@ -873,6 +904,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const role = (userRec?.role || '').toString().toLowerCase();
         const isAdmin = userRec?.role === 'platform_admin' || userRec?.isPlatformAdmin === true;
         const canWrite = isAdmin || (!userRec?.readOnly && !READ_ONLY_ROLES.has(role));
+        if (scopedRequest) await scopedRequest.assertCurrent();
+        if (requestTabId !== (sender.tab?.id ?? activeTabId)) {
+          respond({ success: false, transient: true, code: 'CONTEXT_CHANGED' });
+          return;
+        }
         if (requestEpoch !== authEpoch || requestToken !== mosApiToken ||
             !data.features || typeof data.features !== 'object') {
           respond({ success: false, transient: true });
@@ -895,8 +931,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           buttonVisibility: data.buttonVisibility || null,
         });
       } catch (err) {
-        console.warn("[MOS] Feature fetch failed");
-        respond({ success: false, transient: true });
+        // Never log an arbitrary exception message: fetch errors can contain
+        // credential-bearing URLs. Expose only known diagnostic codes.
+        const codes = new Set(['SHOP_UNLINKED', 'SHOP_FORBIDDEN',
+          'SHOP_MAPPING_CONFLICT', 'EXPLICIT_LOGIN_REQUIRED', 'TOKEN_EXPIRED',
+          'LOCATION_LOOKUP_FAILED', 'MOS_REQUEST_TIMEOUT', 'CONTEXT_CHANGED']);
+        const code = codes.has(err?.code) ? err.code :
+          ['TimeoutError', 'AbortError'].includes(err?.name) ? 'FEATURES_TIMEOUT' : 'FEATURES_REQUEST_FAILED';
+        console.warn("[MOS] Feature fetch failed", code);
+        respond({ success: false, transient: true, code });
       }
     })();
     return true;
@@ -3110,14 +3153,13 @@ async function _doMosFetch(endpoint, options, token) {
 async function handleMosApiRequest(endpoint, options = {}) {
   await _stateReady;
   const endpointPath = String(endpoint).split('?')[0];
-  if (['/api/extension/sticker', '/api/extension/keytag', '/api/extension/features', '/api/extension/ro-context'].includes(endpointPath)) {
+  if (['/api/extension/sticker', '/api/extension/keytag', '/api/extension/features', '/api/extension/ro-context', '/api/extension/plan', '/api/extension/vehicle-history', '/api/extension/labor-rates'].includes(endpointPath)) {
     const body = options.body ? JSON.parse(options.body) : {};
     const query = new URL(endpoint, 'https://mos.invalid').searchParams;
     const provider = body.provider || query.get('provider');
-    if (provider === 'shopmonkey' || (provider === 'tekmetric' && mosAuthSource === 'explicit' &&
-        ['/api/extension/sticker', '/api/extension/keytag'].includes(endpointPath))) {
+    if (provider === 'shopmonkey' || (provider === 'tekmetric' && mosAuthSource === 'explicit')) {
       const context = options.context;
-      const shopId = body.smsShopId || query.get('shopId');
+      const shopId = body.smsShopId || query.get('shopId') || query.get('smsShopId');
       if (!context || context.provider !== provider || String(context.shopId) !== String(shopId)) {
         throw new Error('Current provider tab context is required. Please retry from the location page.');
       }
@@ -4257,12 +4299,13 @@ async function createTekmetricJob(shopId, roId, jobData, auditSelection, vehicle
 
 // ------ STICKER PRINTING ------
 const pendingStickerNavigation = new Map();
-async function stickerLocationRequest(context) {
+async function stickerLocationRequest(context, onStage) {
   await _stateReady;
   if (!context?._tabId || !context.shopId || !['tekmetric', 'shopmonkey'].includes(context.provider)) {
     throw new Error('Current Tekmetric tab and location are required to print.');
   }
   return createStickerLocationRequest(context, {
+    onStage,
     identity: () => ({ token: mosApiToken, apiUrl: mosApiUrl, epoch: authEpoch }),
     getTab: (id) => chrome.tabs.get(id),
     getContext: (id) => chrome.tabs.sendMessage(id, { action: 'GET_PAGE_CONTEXT' }),

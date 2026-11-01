@@ -15,6 +15,7 @@ export interface TireDotRun {
   status: "queued" | "running" | "succeeded" | "failed";
   stage: string;
   queuedAt: Date;
+  createdAt?: Date;
   heartbeatAt: Date;
   lease?: string;
   error?: string;
@@ -37,7 +38,7 @@ export async function createTireRun(input: Omit<TireDotRun, "_id" | "status" | "
     const fresh = await runs.findOne({ requestKey, status: "succeeded", heartbeatAt: { $gte: new Date(now.getTime() - 15 * 60_000) } }, { sort: { heartbeatAt: -1 } });
     if (fresh) return fresh;
   }
-  const run: TireDotRun = { ...input, _id: randomUUID(), requestKey, activeKey: requestKey, status: "queued", stage: "queued", queuedAt: now, heartbeatAt: now, shopIndex: 0, cursor: null };
+  const run: TireDotRun = { ...input, _id: randomUUID(), requestKey, activeKey: requestKey, status: "queued", stage: "queued", createdAt: now, queuedAt: now, heartbeatAt: now, shopIndex: 0, cursor: null };
   try { await runs.insertOne(run); }
   catch (error) {
     if ((error as any)?.code !== 11000) throw error;

@@ -312,6 +312,113 @@ test("settings discovery is permission gated, available with admissions off and 
   } finally { await h.close(); }
 });
 
+test("policy defaults, explicit save, empty roles and dirty navigation locks", async () => {
+  const h = await harness();
+  try {
+    const locks = [];
+    await h.render("SheetManager", { onLockChange: value => locks.push(value) });
+    assert.match(document.body.textContent, /Default policy · not explicitly saved/);
+    assert.match(document.body.textContent, /Completion mode is pinned when an inspection starts/);
+    assert.match(document.body.textContent, /both the inspection's pinned policy and the current shop policy/);
+    assert.match(document.body.textContent, /Current role restriction changes therefore also affect existing inspections/);
+    await h.click("Edit inspection policy");
+    assert.equal(h.posts().length, 0);
+    assert.equal(h.labelControl("Completion mode").value, "required-checks");
+    assert.equal(document.querySelectorAll('section[aria-label="Inspection completion policy"] input:checked').length, 6);
+    await h.setValue("Completion mode", "captured-findings");
+    await act(async () => document.querySelectorAll('section[aria-label="Inspection completion policy"] input[type="checkbox"]').forEach(input => input.click()));
+    assert.equal(h.posts().length, 0);
+    assert.equal(locks.at(-1), true);
+    assert.equal(h.button("Refresh catalog").disabled, true);
+    assert.equal(h.button("Edit latest version").disabled, true);
+    assert.equal(h.button("Create sheet").disabled, true);
+    const leave = new h.dom.window.Event("beforeunload", { cancelable: true });
+    h.dom.window.dispatchEvent(leave);
+    assert.equal(leave.defaultPrevented, true);
+    const link = document.createElement("a");
+    link.href = "/other";
+    document.body.append(link);
+    const click = new h.dom.window.MouseEvent("click", { bubbles: true, cancelable: true });
+    assert.equal(link.dispatchEvent(click), false);
+    link.remove();
+    h.respond((url, options) => {
+      const request = JSON.parse(options.body);
+      assert.equal(request.revision, 14);
+      assert.deepEqual(request.command, { type: "policy", policy: { completionMode: "captured-findings", publishRoles: [], deliverRoles: [] } });
+      return reply(snapshot({ revision: 15, policy: { ...request.command.policy, version: 1, actor: "Mara Chen", at: "2026-05-19T10:31:12.000Z" } }));
+    });
+    await h.click("Save inspection policy");
+    assert.equal(h.posts().length, 1);
+    assert.equal(locks.at(-1), false);
+    assert.match(document.body.textContent, /Mara Chen/);
+    assert.match(document.body.textContent, /Policy v1/);
+    assert.match(document.body.textContent, /Disabled — no roles allowed/);
+  } finally { await h.close(); }
+});
+
+test("policy uncertain receipt retains exact payload and draft until retry", async () => {
+  const h = await harness();
+  try {
+    let fail = true;
+    h.respond((url, options) => {
+      if (!options.method) return reply(snapshot());
+      if (fail) throw Error("Receipt lost");
+      const request = JSON.parse(options.body);
+      return reply(snapshot({ revision: 15, policy: { ...request.command.policy, version: 2, actor: "Manager", at: "2026-05-19T10:31:12.000Z" } }));
+    });
+    await h.render();
+    await h.click("Edit inspection policy");
+    await h.setValue("Completion mode", "captured-findings");
+    await h.click("Save inspection policy");
+    assert.equal(h.labelControl("Completion mode").value, "captured-findings");
+    assert.equal(h.labelControl("Completion mode").closest("fieldset").disabled, true);
+    assert.equal(h.button("Discard policy draft").disabled, true);
+    assert.equal(h.button("Save inspection policy").disabled, true);
+    const original = h.posts()[0].body;
+    fail = false;
+    await h.click("Retry exact save");
+    assert.equal(h.posts()[1].body, original);
+    assert.ok(h.button("Edit inspection policy"));
+    assert.match(document.body.textContent, /Policy v2/);
+  } finally { await h.close(); }
+});
+
+test("policy definite rejection preserves edits; conflict requires explicit discard", async () => {
+  const h = await harness();
+  try {
+    let status = 422;
+    h.respond((url, options) => options.method ? reply({ error: "Policy rejected" }, status) : reply(snapshot()));
+    await h.render();
+    await h.click("Edit inspection policy");
+    await h.setValue("Completion mode", "captured-findings");
+    await h.click("Save inspection policy");
+    assert.equal(h.labelControl("Completion mode").value, "captured-findings");
+    assert.equal(h.button("Save inspection policy").disabled, false);
+    status = 409;
+    await h.click("Save inspection policy");
+    assert.equal(h.labelControl("Completion mode").value, "captured-findings");
+    assert.equal(h.button("Save inspection policy").disabled, true);
+    await h.click("Discard draft and reload latest");
+    assert.ok(h.button("Edit inspection policy"));
+    assert.equal(h.button("Refresh catalog").disabled, false);
+  } finally { await h.close(); }
+});
+
+test("read-only policy exposes saved audit without manager controls", async () => {
+  const h = await harness();
+  try {
+    h.respond(() => reply(snapshot({
+      canManage: false,
+      policy: { completionMode: "required-checks", publishRoles: ["manager"], deliverRoles: [], version: 7, actor: "Ravi Patel", at: "2026-05-19T10:31:12.000Z" },
+    })));
+    await h.render();
+    assert.equal(h.button("Edit inspection policy"), undefined);
+    assert.match(document.body.textContent, /Policy v7/);
+    assert.match(document.body.textContent, /Ravi Patel/);
+    assert.equal(h.posts().length, 0);
+  } finally { await h.close(); }
+});
+
 test("explicit draft discard can unlock navigation when DVI permission was revoked", async () => {
   const h = await harness();
   try {

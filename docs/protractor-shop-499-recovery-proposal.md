@@ -1,11 +1,37 @@
 # Babes Auto: same-account recovery review
 
-## Decision — HOLD, not approved for execution
+## Current outcome — approved one-field repair completed
+
+On 2026-10-30 at approximately 19:39 UTC, the operator-approved repair set
+only `protractor.accountBinding` on the existing live shop record. The restored
+original credential pair again matched the retained generation. A bounded,
+`_id`-ordered inventory completed across all 521 current shop records and found
+no conflicting stored account ID or account binding.
+
+Fresh preconditions confirmed a disconnected Protractor record, absent live
+credentials/binding/checkpoint-write marker, and no active backfill flag or
+sampled owner/lease. The majority-acknowledged update used exact whole-document
+BSON equality plus absent binding/writer-token predicates; one record matched
+and one was modified. Readback confirmed that removing the newly added field
+reproduced the pre-write shop document exactly. Backfill progress was unchanged.
+
+No reconnect, provider request, import, lock clearing, deployment, credential
+replacement or restored-copy deletion was performed. This is not a claim of
+global worker quiescence: the change restores proven metadata while keeping
+the shop disconnected. Normal reconnect remains a separate action.
+
+The earlier proposal and findings below are historical preparation, not an
+instruction to rerun the repair. The temporary recovery collection remains
+present and contains sensitive historical configuration; removal requires
+separate approval after recovery verification.
+
+## Original proposal — historical
 
 Prepared 2026-10-30. Scope: MOS shop **499**, same Protractor account, not a
 migration. The operator's confirmation establishes intent; it does not recover
-the historical account identity. No identity can be derived from the retained
-credential-pair fingerprint alone.
+the historical account identity by itself. The 19:37 UTC restored-record review
+below now establishes credential continuity independently of that confirmation.
+No identity was derived from the retained credential-pair fingerprint alone.
 
 The proposed change is **one metadata field only**, subject to the proof and
 approval gates below. There is no recovery writer in this change. Do not run
@@ -74,6 +100,171 @@ These are samples of known ownership keys, not a complete inventory. They do
 not cover unassigned callbacks, differently associated records, archives,
 partner mappings, alternate deployed targets, or every derived-data store.
 They must never justify clearing a binding or resetting history.
+
+## Follow-up bounded read-only review — 2026-10-30, approximately 19:03–19:06 UTC
+
+The decision remains **HOLD**. Existing credentials were consumed only in isolated
+runtime memory for Render control-plane GETs and direct Mongo/PostgreSQL drivers.
+No application modules were initialized. No production mutation, provider request,
+log scan, credential display, deployment, or repair occurred. PostgreSQL sessions
+reported read-only mode; statements had 2-second budgets and 500ms lock timeouts.
+Mongo used one connection, no read/write retries, 2-second operation budgets and
+bounded indexed document reads. Errors were reduced to codes.
+
+### Render evidence, including linked environment groups
+
+- The production web service and dedicated callback worker both reported a live
+  deploy at commit `ff1d065692ef83c6bee3809a1f1df600a3030366`. Their deploy finish
+  times were 18:58:56Z and 18:50:31Z respectively. Both were not suspended.
+- The backfill-drain, export, and legacy background worker services were
+  suspended. This is service configuration evidence, not proof that every
+  previously outstanding operation has settled.
+- Service-local variables and linked environment groups were read. Web had two
+  linked groups; callback worker had one. The web groups had no differing
+  overlapping database/canonical/export configuration values.
+- For web and callback worker, `IDENTITY_PG_CANONICAL`,
+  `PROTRACTOR_OPS_PG_CANONICAL`, `PROTRACTOR_CACHE_PG_CANONICAL`,
+  `WRITE_MONGO_PROTRACTOR_OPS`, `WRITE_MONGO_PROTRACTOR_CACHE`, and
+  `CRON_LOCK_PG_CANONICAL` were unset in the observed combined configuration.
+  Their repository defaults retain Mongo identity/Protractor ops/cache and
+  Mongo scheduler-lock routing. Normalized ingestion is already PG canonical
+  in code, independently of an imagined normalized-canonical flag;
+  `WRITE_MONGO_NORMALIZED` was unset, which leaves its Mongo shadow enabled.
+- Web and callback worker inherited Mongo credentials matching the read runtime
+  and no Mongo database override. The selected ordinary PostgreSQL URL matched
+  the prior external production target. These comparisons returned booleans
+  only. Render configuration is not an attestation of every running replica's
+  loaded environment or all process-local work.
+- Web exports were disabled (`PROTRACTOR_EXPORTS_ENABLED=0`). The callback worker
+  enable flag was true. A dedicated restricted export URL/role was inherited
+  by web and the suspended export worker, even though it was absent from the
+  workspace environment. Thus workspace-only secret availability did not
+  establish the deployed export target.
+
+### Corrected schema interpretation and retained-identity checks
+
+- An indexed numeric/string shop lookup again found exactly one shop: numeric
+  ID, configured false, retained generation, no usable stored credentials or
+  account binding, and no checkpoint-write-token property. No target binding
+  was derived. Indexed backfill sampling again found one incomplete record;
+  the projected in-progress/owner/lease/activity fields were absent.
+- **Correction to the earlier subscription interpretation:** the repository
+  records token, callback URL, registration mode and first/last ensured
+  timestamps. It does not write the previously projected connection ID,
+  `active`, or `verifiedAt` fields. Their absence is not failed verification or
+  historical identity evidence. The live Mongo subscription collection had
+  only its `_id` index; no new shop-filter scan was attempted.
+- Mongo admin audit is keyed logically by `targetShopId`, not `shopId`, but its
+  live indexes lead with `_id`, creation time, or admin email. Legacy audit had
+  only `_id`. Neither had an ownership-leading index, so no broad audit scan
+  was attempted. External PG admin audit did have a target-shop-leading index;
+  an exact target-shop read with limit 3 returned no rows.
+- Scoped backup/archive collection-name metadata discovery returned no
+  candidates. This was not a search of Atlas backup retention, external
+  archives, or every possible audit store; those remain unknown.
+- The live Mongo callback indexes lead with `_id`, object identity, received
+  time, or method, not shop or historical account. No callback scan was
+  repeated. Without trusted prior linkage, callback history remains unknown.
+
+### Restricted exports and leases
+
+- A direct read-only connection to the actual inherited export target
+  succeeded. Schema usage was available, authenticated/session roles matched,
+  and the role was neither superuser nor RLS-bypassing. This is not a complete
+  revalidation of every runtime role restriction.
+- **Correction to earlier export queries:** configs use enterprise ID and
+  `shopIds` (plural); states use enterprise/revision/shop composite identity;
+  hashes use state/entity keys; receipts use delivery IDs; health uses
+  `id='worker'`. A uniform `doc->>'shopId'` query is not valid ownership
+  discovery across these stores. Live primary and expression indexes matched
+  those key shapes, including enterprise/revision-leading state ownership.
+- The exact worker-health key returned no row. The shop projection had no
+  enterprise linkage. No shop-specific config/state/pending/receipt assertion
+  can therefore be made from these checks; no unrestricted config/history
+  scan was attempted and no payload or encrypted secret was read out.
+- Exact Mongo scheduler-lock keys for the eight repository Protractor jobs in
+  database `mos` returned no rows. An exact PG provider drain-lease read also
+  returned no row. One initial PG lease projection used a nonexistent column
+  and failed; the corrected projection used the repository's `owner` column.
+  Neither empty result proves process termination, callback admission
+  settlement, absence of a legacy Mongo drain lease, or completion of an
+  outstanding database operation. The callback worker remains enabled/live.
+
+### Stop condition and smallest next evidence
+
+No trusted historical shop-to-account proof was recovered. Do not repeat
+unindexed callback/audit scans or infer identity from current credentials,
+business name, or the guard screenshot. The smallest next step is for the
+operator to identify **one pre-disconnect backup/audit evidence source and
+timestamp** through a restricted channel, allowing an exact shop-record lookup
+and independent account/location corroboration. Alternatively, securely
+available original credentials may be compared against the retained generation
+with only a match boolean returned. Any enterprise/export linkage must also
+come from a trusted ownership source before keyed pending/receipt reads.
+Worker settlement and fresh snapshot approval remain separate unmet gates.
+The earlier pinned digests have not been refreshed or approved by this review.
+
+## Restored historical record review — 2026-10-30 19:37:40 UTC
+
+The operator reports completing an Atlas selective restore of the October 26,
+2026 15:50 CDT snapshot into `recovery_babes_20261026.shops`, using Create as new
+and restoring only `_id` indexes. This source/time provenance is operator
+supplied; the read runtime did not independently inspect the Atlas restore job.
+
+Using one direct Mongo connection with retries disabled, 2-second operation
+budgets, and no application/provider initialization:
+
+- The current shop was fetched using its actual `shopId` index, checking numeric
+  and string representations with limit 3. Exactly one numeric record matched.
+- Its exact BSON `_id` was used to fetch the historical record through `_id_`.
+  The restored record was found. No restored collection scan or restored
+  `shopId` query was made.
+- The historical and current typed shop ID match; both identify Protractor as
+  provider. The historical record was configured.
+- Historical stored connection IDs and keys were internally consistent.
+  Both ID locations were not populated, so this is agreement among populated
+  fields, not a claim that two independent IDs corroborate each other.
+- The original stored credential pair was normalized and hashed using exactly
+  the existing `connectionBinding` logic: SHA-256 over JSON of the trimmed,
+  lowercase ID and key. **It exactly matches the current retained generation.**
+  It also matches the historical generation. Only match booleans were returned;
+  no credentials, connection ID, generation hash, account-binding digest, or
+  full document was displayed or saved.
+- The historical record had no account binding. Historical and current name
+  values agree, and their retained nonempty location arrays agree exactly.
+  These are corroboration of the restored record association, not independent
+  provider validation; no provider request was made.
+
+**Identity finding:** with the stated Atlas provenance, the restored original
+credential pair supplies the previously missing exact generation-match proof
+under option 2 below. Historical account continuity is established without
+using newly submitted credentials, guessing the fingerprint, or relying on a
+business-name match. The account binding can be derived again inside a secure
+runtime from this proven historical ID; no target digest is retained here.
+
+The fresh live record remains configured exactly false, credentials absent,
+account-binding property absent, retained generation and sync revision present,
+initial sync pending, and checkpoint-write-token property absent. Indexed
+progress sampling found one incomplete record without projected active
+in-progress/owner/lease fields. These observations are not an atomic snapshot
+or a guarantee against subsequent concurrent changes.
+
+Current shop indexes do **not** lead with any historical account ID or account
+binding path. Cross-shop account uniqueness was therefore not queried; no
+unindexed scan or index creation was attempted. This specific check remains
+unverified, rather than asserted unique from empty samples.
+
+No metadata repair, reconnect, provider validation, service pause, restore
+deletion, or processing activation was performed or authorized. For a narrow
+metadata-only decision, the remaining review is the explicit target binding,
+fresh exact-record predicate and drift/concurrency protection, and the
+unresolved cross-shop uniqueness check. The live callback worker is not proof
+that it owns a shop-499 checkpoint; absence of a token is likewise not proof of
+all-worker settlement. This read does not establish a need to stop every
+service or authorize doing so. Broader callback/export/history-processing
+questions remain separate from this new identity evidence and any subsequent
+reconnect or activation approval. The older snapshot digests below were not
+refreshed and must not be silently reused as current approval evidence.
 
 ## Canonical ownership gates still open
 
@@ -222,9 +413,12 @@ After a separately approved application:
 ## Review outcome
 
 The preparation is complete, but recovery is **not execution-ready**. Missing:
-trusted historical account proof, deployed canonical ownership, callback/export
-evidence, worker/DB-operation settlement, and an approved target binding and
-fresh snapshot packet. No production correction has been performed.
+an approved target binding and fresh exact metadata approval packet, including
+resolution of the scoped concurrency/uniqueness questions above. Trusted
+historical account continuity was obtained in the 19:37 UTC restored-record
+review. Earlier callback/export/worker observations retain their stated limits
+for any subsequent processing or reconnect decision; they are not new evidence
+of an active shop-specific writer. No production correction has been performed.
 
 References: `docs/protractor-same-account-reconnect.md`,
 `lib/integrations/protractor/onboarding.ts`,

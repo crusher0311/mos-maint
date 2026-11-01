@@ -57,6 +57,18 @@ async function main() {
     assert.equal(auth.requireExtensionPrincipalScope(result, { shopId: id === 10 ? 11 : 10, provider: "tekmetric" })?.code, "SHOP_FORBIDDEN");
   }
   console.log("✓ A → B → A stays single-shop; submitted MOS shop IDs ignored");
+  for (const representation of [{ role: "platform_admin" }, { role: "user", isPlatformAdmin: true }]) {
+    const originalUser = user;
+    user = { ...user, ...representation };
+    const scope = await (await change("200")).json();
+    const result = await auth.validateExtensionToken(request(scope.token, "/api/extension/plan"));
+    assert.equal(result.authorized, true);
+    assert.equal(auth.requireExtensionPrincipalScope(result, { shopId: 10, provider: "tekmetric" })?.code, "SHOP_FORBIDDEN");
+    user = originalUser;
+  }
+  (shops[1].tekmetric as any).shopId = "200";
+  assert.equal((await change("200")).status, 200);
+  shops[1].tekmetric.shopId = 200;
   const derived = await (await change("200")).json();
   assert.equal((await change("100", derived.token)).status, 403); // cannot chain scopes
   user.shopIds = [10];

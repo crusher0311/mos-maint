@@ -6,7 +6,8 @@ import Link from "next/link";
 const MODEL_OPTIONS = [
   { id: "gpt-4.1", label: "GPT-4.1 (Balanced)" },
   { id: "gpt-4o", label: "GPT-4o (Fastest)" },
-  { id: "gpt-4.1-turbo", label: "GPT-4.1 Turbo (Cheapest)" },
+  { id: "gpt-4.1-mini", label: "GPT-4.1 Mini" },
+  { id: "gpt-4o-mini", label: "GPT-4o Mini" },
 ];
 
 function fmtMiles(m?: number | null) {

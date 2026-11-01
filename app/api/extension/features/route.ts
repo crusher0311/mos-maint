@@ -50,7 +50,11 @@ async function _GET(request: NextRequest) {
     
     if (smsShopId) {
       const provider = searchParams.get("provider") || undefined;
-      shopResult = await findShopBySmsId(smsShopId, { userShopIds, isPlatformAdmin, providerHint: provider });
+      shopResult = await findShopBySmsId(smsShopId, {
+        userShopIds, isPlatformAdmin,
+        providerHint: auth.principal?.provider === "shopmonkey" ? "shopmonkey" : provider,
+        providerHintIsAuthoritative: auth.principal?.provider === "shopmonkey",
+      });
       if (shopResult) {
         mosShopId = shopResult.mosShopId;
         const scopeFailure = requireExtensionPrincipalScope(auth, {

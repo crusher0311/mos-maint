@@ -1,6 +1,15 @@
 // Order-local launchers only. No provider writes or automatic printing.
 (function (root) {
-  function create({ document, send, getContext, print, assetUrl = p => globalThis.chrome?.runtime?.getURL(p) || `/mos-tools-extension/${p}`, now = Date.now }) {
+  function create({ document, send, getContext, print, assetUrl = p => globalThis.chrome?.runtime?.getURL(p) || `/mos-tools-extension/${p}`, now = Date.now,
+    clock = () => globalThis.performance?.now() ?? Date.now(), startupAt = clock(),
+    diagnostic = value => console.info('[MOS Shopmonkey startup]', JSON.stringify(value)) }) {
+    // Local console only; fixed fields, no context objects or arbitrary errors.
+    let contextAt = null;
+    let attempt = 0;
+    let rendered = false;
+    const emit = (stage, durationMs, outcome) => {
+      try { diagnostic({ stage, durationMs: Math.max(0, Math.round(durationMs)), attempt, outcome }); } catch (_) {}
+    };
     const id = 'mos-shopmonkey-actions';
     let scope = null;
     let generation = 0;
@@ -9,10 +18,13 @@
     let pending = false;
     let layoutTarget = null;
     let priorWrap = '';
+    let settingsError = '';
+    let failures = 0;
     const key = c => c?.provider === 'shopmonkey' && c.shopId && c.roId
       ? JSON.stringify([c.shopId, c.roId, c.locationId, c.companyId]) : null;
     const remove = () => {
       document.getElementById(id)?.remove();
+      document.getElementById('mos-shopmonkey-status')?.remove();
       if (layoutTarget) layoutTarget.style.flexWrap = priorWrap;
       layoutTarget = null;
     };
@@ -36,6 +48,27 @@
       const context = getContext();
       const target = anchor(context);
       const existing = document.getElementById(id);
+      let notice = '';
+      if (context?.roId && target && !scope) {
+        notice = 'Detect Dog cannot confirm this Shopmonkey location. Refresh the page; if this persists, sign in to Shopmonkey again. Printing is unavailable until the location is confirmed.';
+      } else if (scope && target && !settings) {
+        notice = settingsError || 'Detect Dog is checking this location’s print permissions…';
+      }
+      if (notice) {
+        const priorNotice = document.getElementById('mos-shopmonkey-status');
+        if (priorNotice?.parentElement === target && priorNotice.textContent === notice) return;
+        remove();
+        const status = document.createElement('span');
+        status.id = 'mos-shopmonkey-status';
+        status.setAttribute('role', 'status');
+        status.style.cssText = 'display:block;flex:0 0 100%;width:100%;font-size:12px;color:#92400e;padding:6px 0';
+        status.textContent = notice;
+        layoutTarget = target;
+        priorWrap = target.style.flexWrap;
+        target.style.flexWrap = 'wrap';
+        target.appendChild(status);
+        return;
+      }
       if (!scope || key(context) !== scope || !target || !settings || now() >= expires) {
         remove();
         return;
@@ -65,6 +98,13 @@
         el.title = action === 'OPEN_STICKER_PANEL' ? 'MOS Oil Sticker\nLeft-click: Print | Right-click: Customize' : 'Open Detect Dog';
         el.setAttribute('aria-label', el.title);
         el.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;min-height:32px;padding:2px;border:0;border-radius:4px;background:transparent;cursor:pointer';
+        if (action === 'OPEN_SIDE_PANEL') {
+          // The launcher opens the browser side panel; it is not an inline
+          // order action. Keep Print in the toolbar and the launcher at the edge.
+          el.id = 'mos-shopmonkey-fab';
+          el.style.cssText = 'position:fixed;right:12px;top:200px;width:48px;height:48px;z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:0;border:1px solid #e0e0e0;border-radius:8px;background:white;box-shadow:0 4px 12px rgba(0,0,0,.2);cursor:pointer';
+          image.style.cssText = 'width:100%;height:100%;object-fit:contain;display:block;border-radius:8px';
+        }
         const mountedScope = scope;
         el.addEventListener('click', event => {
           event.preventDefault();
@@ -104,36 +144,79 @@
       priorWrap = target.style.flexWrap;
       target.style.flexWrap = 'wrap';
       target.appendChild(group);
+      if (!rendered) {
+        rendered = true;
+        emit('controls_visible', clock() - startupAt, 'success');
+      }
     }
     function update() {
       const context = getContext();
       const next = key(context);
       if (next !== scope) {
+        contextAt = next ? clock() : null;
+        rendered = false;
+        if (next) emit('context_ready', contextAt - startupAt, 'ready');
         generation++;
         scope = next;
         settings = null;
         expires = 0;
         pending = false;
+        settingsError = '';
+        failures = 0;
         remove();
       }
       render();
       if (!scope || !anchor(context) || (pending && now() < expires) || now() < expires) return;
+      if (pending) emit('message_round_trip', clock() - requestStarted, 'timeout');
       settings = null;
+      settingsError = '';
       pending = true;
       // Also bounds hung messages. A later update can retry after 10 seconds.
       expires = now() + 10000;
       const request = ++generation;
+      attempt++;
+      requestStarted = clock();
+      const started = requestStarted;
+      emit('context_to_request', started - contextAt, 'ready');
       send({ action: 'GET_SHOP_FEATURES', provider: 'shopmonkey', shopId: context.shopId, context }, response => {
         if (request !== generation || key(getContext()) !== scope) return;
+        emit('message_round_trip', clock() - started, response?.success ? 'success' :
+          response?.code === 'FEATURES_TIMEOUT' ? 'timeout' : 'failure');
+        const timing = response?.startupTiming;
+        for (const name of ['worker_restore', 'bootstrap_binding', 'scope_setup', 'context_validation',
+          'switch_location', 'scope_validation', 'request_context_validation', 'features_request',
+          'response_context_validation', 'user_storage']) {
+          const ms = timing?.durations?.[name];
+          if (Number.isFinite(ms) && ms >= 0) emit(name, ms, timing.lastStage === name && !response.success ? 'incomplete' : 'complete');
+        }
         pending = false;
         settings = response?.success ? response : null;
-        expires = now() + (settings ? 30000 : 10000);
+        const errors = {
+          SHOP_UNLINKED: 'This Shopmonkey location is not linked in Detect Dog.',
+          SHOP_FORBIDDEN: 'Your Detect Dog account does not have access to this location.',
+          SHOP_MAPPING_CONFLICT: 'This location has conflicting mappings. Ask your administrator to review them.',
+          EXPLICIT_LOGIN_REQUIRED: 'Open Detect Dog and sign in to enable location access.',
+          TOKEN_EXPIRED: 'Your Detect Dog session expired. Open the extension and sign in.',
+          CONTEXT_CHANGED: 'The location or order changed while checking permissions. Retrying automatically…',
+          FEATURES_TIMEOUT: 'The permission check timed out. Retrying automatically…',
+        };
+        settingsError = settings ? '' : errors[response?.code] ||
+          'Detect Dog could not load this location’s print permissions. Retrying automatically…';
+        failures = settings ? 0 : failures + 1;
+        const terminal = ['SHOP_UNLINKED', 'SHOP_FORBIDDEN', 'SHOP_MAPPING_CONFLICT',
+          'EXPLICIT_LOGIN_REQUIRED', 'TOKEN_EXPIRED'].includes(response?.code);
+        // Fast recovery from a first-load race, bounded backoff on repeated
+        // failures. Genuine access denials must not become a rapid retry loop.
+        expires = now() + (settings ? 30000 : terminal ? 30000 :
+          Math.min(10000, 2000 * 2 ** Math.min(failures - 1, 3)));
+        if (!settings) emit('retry_wait_scheduled', expires - now(), terminal ? 'denied' : 'retry');
         const eligibilityEnd = Date.parse(settings?.eligibility?.eligibleUntil);
         if (Number.isFinite(eligibilityEnd)) expires = Math.min(expires, eligibilityEnd);
         remove();
         render();
       });
     }
+    let requestStarted = 0;
     function invalidate() {
       generation++;
       settings = null;

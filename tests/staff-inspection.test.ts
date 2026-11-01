@@ -53,6 +53,27 @@ test("persisted technician-to-advisor flow, no auto-green, same VIN/RO separate,
   assert.equal((await f.deps.board.read(1)).jobs.length, 0);
   assert.equal(VISIT_DVI_RELEASE_ENABLED, false);
 });
+test("initialization persists a policy snapshot; later configuration changes only affect new inspections", async () => {
+  const f = await staffFixture(isolated.client);
+  const policy = {version: 1, actor: "manager", at: "2026-10-31T12:00:00.000Z",
+    completionMode: "captured-findings" as const, publishRoles: ["manager" as const], deliverRoles: ["owner" as const]};
+  f.setAccess({config: {...f.access.config!, policies: {"1": policy}}});
+  const first = await f.initialize();
+  assert.deepEqual(first.inspection!.policy, policy);
+  const next = {...policy, version: 2, completionMode: "required-checks" as const};
+  f.setAccess({config: {...f.access.config!, policies: {"1": next}}});
+  const edited = await save(f);
+  assert.deepEqual(edited.inspection!.policy, policy);
+  const second = await f.initialize("visit-two");
+  assert.deepEqual(second.inspection!.policy, next);
+  const reopened = new MongoClient(isolated.uri);
+  await reopened.connect();
+  try {
+    const repo = new StaffRepository(new MongoStaffPersistence(async () => reopened.db(f.db.databaseName)));
+    assert.deepEqual((await repo.read(1, "visit-one"))!.results.staff, edited.inspection);
+    assert.deepEqual((await repo.read(1, "visit-two"))!.results.staff, second.inspection);
+  } finally {await reopened.close();}
+});
 test("lost board acknowledgment, lost inspection acknowledgment and exact actor/digest receipts", async () => {
   const f = await staffFixture(isolated.client), boardSave = f.deps.board.save;
   let once = true;
