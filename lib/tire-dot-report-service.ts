@@ -97,13 +97,20 @@ export async function processNextTireRun(pilotOnly = false) {
   }
 }
 
-export async function processTireRunBatch() {
-  const started = Date.now();
+export async function processTireRunBatch(options: {
+  pilotOnly?: boolean;
+  shouldStop?: () => boolean;
+  now?: () => number;
+} = {}) {
+  const now = options.now ?? Date.now;
+  const started = now();
   const outcomes = [];
-  for (let page = 0; page < 10 && Date.now() - started < 15_000; page++) {
-    const outcome = await processNextTireRun();
+  // The deadline is checked between persisted pages, never by abandoning an
+  // in-flight write. Keep the same per-page authorization and lease fencing.
+  for (let page = 0; page < 10 && now() - started < 15_000 && !options.shouldStop?.(); page++) {
+    const outcome = await processNextTireRun(options.pilotOnly ?? false);
     outcomes.push(outcome);
-    if (!outcome.claimed) break;
+    if (!outcome.claimed || outcome.status === "failed") break;
   }
   return outcomes;
 }

@@ -4,7 +4,7 @@ import { findEnterpriseById } from "../lib/data/repositories/enterprise";
 import { listShopsByShopIds } from "../lib/data/repositories/shops";
 import { tickTirePilot, type PilotLocation } from "../lib/tire-dot-pilot-worker";
 import { fetchTirePilotPage } from "../lib/tire-dot-pilot-transport";
-import { processNextTireRun } from "../lib/tire-dot-report-service";
+import { processTireRunBatch } from "../lib/tire-dot-report-service";
 import { createTirePilotManualBudget } from "../lib/tire-dot-manual-budget";
 
 let stop = false;
@@ -48,8 +48,9 @@ async function main() {
       }
       if (manualBudget && !["idle", "refreshing"].includes(result.status)) break;
       // Completed evidence can be reported in business hours, without HTTP to
-      // Tekmetric. A second worker only claims persisted report pages.
-      if (!manualBudget) await processNextTireRun(true);
+      // Tekmetric. Process up to ten sequential pages before the existing
+      // ten-second pause; manual collection jobs still never claim reports.
+      if (!manualBudget) await processTireRunBatch({ pilotOnly: true, shouldStop: () => stop });
     } catch {
       console.error("[HEART Tire Pilot] Worker unavailable; retrying after bounded pause");
       if (manualBudget) break;
