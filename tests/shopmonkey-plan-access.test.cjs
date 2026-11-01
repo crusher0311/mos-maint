@@ -12,6 +12,7 @@ function fixture() {
   const element = () => ({ classList: { add() {}, remove() {} }, querySelector: () => ({ textContent: '' }) });
   const ctx = {
     console, URLSearchParams, Date,
+    isAuthenticated: true, laborRateSessionDiscriminator: 'fixture-session',
     currentContext: { provider: 'shopmonkey', shopId: 'location-a', roId: 'order-a', _tabId: 4 },
     shopFeatures: { maintenance: true }, maintenanceFeaturesScope: null,
     elements: Object.fromEntries(['planLoading', 'planContent', 'planEmpty', 'refreshBtn'].map(k => [k, element()])),
@@ -86,7 +87,11 @@ test('worker uses scoped Shopmonkey session for plans; missing context cannot fa
 test('plan and features use server principal canonical ownership; server retains scope and entitlement gates', () => {
   for (const file of ['app/api/extension/plan/route-handler.ts', 'app/api/extension/features/route.ts']) {
     const source = fs.readFileSync(file, 'utf8');
-    assert.match(source, /providerHintIsAuthoritative: auth\.principal\?\.provider === "shopmonkey"/);
+    if (file.includes('/plan/')) {
+      assert.match(source, /providerHintIsAuthoritative: \["shopmonkey", "tekmetric"\]\.includes\(auth\.principal\?\.provider \|\| ""\)/);
+    } else {
+      assert.match(source, /providerHintIsAuthoritative: auth\.principal\?\.provider === "shopmonkey"/);
+    }
     assert.match(source, /requireExtensionPrincipalScope\(auth/);
   }
   const source = fs.readFileSync('app/api/extension/plan/route-handler.ts', 'utf8');

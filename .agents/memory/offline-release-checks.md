@@ -12,6 +12,16 @@ behind an exit-listener cleanup race.
 **How to apply:** Remove only known disposable outputs from completed builds.
 Consume startup diagnostics and check process exit state before awaiting exit;
 do not treat an unresolved test promise as a pass.
+
+Keep long-running release logs and completion receipts in an ignored workspace
+output directory even when the isolated source checkout lives outside it.
+
+**Why:** A workspace restart killed a release build and removed its temporary
+log, leaving no terminal result from which to resume verification.
+
+**How to apply:** Retain the source revision, explicit exit status and stage
+logs under `generated-artifacts/` (excluded from Git and deployment). A saved
+`running` status without an exit result is interrupted work, never a pass.
 Direct Next compilation does not execute npm's prebuild lifecycle.
 
 **Why:** Compilation and selected extension tests passed, but Render's full

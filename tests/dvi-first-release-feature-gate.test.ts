@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 const Module = require("module"), original = Module._load;
 let dvi = false, workflow = true, maintenance = true, cacheReads = 0, claims = 0, scans = 0, revokeDuringRead = false;
 Module._load = function(id: string, ...args: any[]) {
+  if (id.endsWith("/auth")) return {getSession: async () => ({shopId: 66, email: "fixture@example.test"})};
   if (id.endsWith("featureResolver")) return {getFeatureEntitlements: async () => ({
     isFeatureEnabled: (feature: string) => feature === "auto_dvi" ? dvi : feature === "shop_workflow" ? workflow : maintenance,
   })};
