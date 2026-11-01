@@ -43,6 +43,8 @@ export function tireCoverageGap(result: TireDotResult, reason: string) {
 export function tireSaleCandidate(part: Raw): boolean {
   const label = [part.name, part.description, part.partType, part.type, part.category?.name, part.category, part.tireSize].filter(v => typeof v === "string").join(" ");
   if (/\b(brake\s*fluid|rotation|rotate|mount(?:ing)?|balanc(?:e|ing)|labor|disposal|repair|sealant|valve|sensor|tpms|warranty)\b/i.test(label)) return false;
+  // A tire's contact patch describes its tread, not a repair material.
+  if (/\b(patch(?:es|ed|ing)?|plug(?:s|ged|ging)?)\b/i.test(label.replace(/\bcontact\s+patch(?:es)?\b/gi, ""))) return false;
   return /\btires?\b/i.test(label) || /\b(?:P|LT)?\d{3}\/\d{2}(?:ZR|R)\d{2}\b/i.test(label)
     || Number(part.width)>=125 && Number(part.width)<=455 && Number(part.ratio)>=20 && Number(part.ratio)<=95 && Number(part.diameter)>=10 && Number(part.diameter)<=30
     || Array.isArray(part.dotNumbers) && part.dotNumbers.some((v: unknown) => typeof v === "string" && v.trim() !== "");

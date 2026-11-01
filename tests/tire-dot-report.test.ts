@@ -56,6 +56,39 @@ test("UTC inclusive bounds and invalid dates", () => {
   assert.throws(() => validateTireDefinition({ ...definition(), dateRange: { start: "2024-02-30", end: "2024-03-01" } }), /valid/);
   assert.throws(() => validateTireDefinition({ ...definition(), dateRange: { start: "2020-01-01", end: "2024-03-01" } }), /366/);
 });
+test("tire patches and plugs are repair materials even with tire categories or DOT values", () => {
+  for (const name of ["TIRE PATCH", "tire patch", "Tire patches", "Tire patching", "Tire plug",
+    "TIRE PLUGS", "Tire plugging", "Patch-plug combination", "Tire repair kit"]) {
+    assert.equal(tireSaleCandidate({ name, partType: "Tire", category: { name: "Tires" },
+      quantity: 1, dotNumbers: ["NOT-A-TIRE"] }), false, name);
+  }
+  assert.equal(tireSaleCandidate({ name: "Patchwork Tire 225/45R18", quantity: 1 }), true,
+    "whole-word exclusions must not reject unrelated product names");
+  assert.equal(tireSaleCandidate({ name: "225/45R18", description: "Wide contact patch for grip", quantity: 1 }), true,
+    "contact-patch tread descriptions do not make a genuine tire a repair material");
+  assert.equal(tireSaleCandidate({ name: "TIRE PATCH", description: "Contact patch repair material", quantity: 1 }), false);
+});
+test("repair-only invoices contribute no tire quantities, DOT exceptions or CSV rows", () => {
+  const doc: any = rawInvoice();
+  doc.data.jobs[0].parts = [{id: 3, name: "TIRE PATCH", quantity: 1, dotNumbers: []},
+    {id: 4, name: "Tire plug", quantity: 2, dotNumbers: []}];
+  const r = result(); extractTireInvoice(r, 311, doc);
+  assert.deepEqual(r.counts, {invoices: 0, partLines: 0, tireQuantity: 0, dotEntries: 0});
+  assert.equal(r.details.length, 0);
+  assert.equal(r.invoices.length, 0);
+  assert.doesNotMatch(tireCsv(r, "details"), /TIRE PATCH|Tire plug|No DOT in captured evidence/);
+});
+test("mixed invoices keep genuine tires and repeated DOTs without counting repair materials", () => {
+  const doc: any = rawInvoice();
+  doc.data.jobs[0].name = "Tire patch and tire replacement";
+  doc.data.jobs[0].parts.push({id: 3, name: "TIRE PATCH", quantity: 1, dotNumbers: []},
+    {id: 4, name: "Tire plug", quantity: 1, dotNumbers: ["NOT-A-TIRE"]});
+  const r = result(); extractTireInvoice(r, 311, doc);
+  assert.deepEqual(r.counts, {invoices: 1, partLines: 2, tireQuantity: 4, dotEntries: 4});
+  assert.equal(r.details.filter(d => d.dot === "UNK1R7420624").length, 2);
+  assert.doesNotMatch(tireCsv(r, "details"), /TIRE PATCH|NOT-A-TIRE|No DOT in captured evidence/);
+  assert.doesNotMatch(tireCsv(r, "invoices"), /No DOT in captured evidence/);
+});
 test("missing fields, zero invoice mileage, no current-vehicle fallback", () => {
   const r = result(); const doc: any = rawInvoice();
   delete doc.data.milesIn; delete doc.data.milesOut; doc.data.vehicle.mileage = 999999;
