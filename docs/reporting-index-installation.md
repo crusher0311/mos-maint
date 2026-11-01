@@ -1,4 +1,18 @@
-# Reporting index package — not installed
+# Reporting index package
+
+## Production installation record — 2026-11-01
+
+All six listed indexes were installed sequentially and verified. The final
+service-job index completed at 16:41:36 UTC after approximately eleven minutes.
+PostgreSQL indexes were checked valid and ready; Mongo definitions were read back.
+Production queue/refresh queryPlanner checks used indexes without COLLSCAN.
+The final health probe returned healthy in 133ms, with 43 PostgreSQL connections,
+zero PostgreSQL lock waiters, zero Mongo queued operations and no remaining
+PostgreSQL index build. Disk/CPU/I/O health was operator-confirmed before starting.
+
+No worker activation, report population, projection activation, or deployment
+was performed. Future installation attempts must still inspect fresh catalogs
+and skip equivalent valid indexes; this record is not current health evidence.
 
 Generate reviewed statements with `node scripts/reporting-index-package.cjs`.
 This command is print-only and has no database imports, credentials or writes.
