@@ -3,6 +3,17 @@ name: Demand-driven reporting compatibility
 description: Product compatibility rules when moving reporting from synchronous dashboards to durable cached runs.
 ---
 
+Reporting performance is a product-wide requirement, not only a Tire DOT fix.
+Do not promise fast reports solely from faster queue polling.
+
+**Why:** The user explicitly rejected multi-minute shop-owner report waits and
+asked for all reporting to be fast. Queue delays and expensive source queries
+are separate causes; reducing one does not establish end-to-end performance.
+
+**How to apply:** Measure realistic single-shop and enterprise workloads, retain
+freshness/coverage disclosures, and separately approve production summary-store
+activation or worker rollout. Timing goals are targets until measured.
+
 Demand-driven reporting is not only a query-execution change. Preserve immutable saved-version behavior, pinned delivery links, management of existing schedules (including legacy ones), and the full recipient scope identity used during delivery reauthorization.
 
 **Why:** These surfaces are easy to strand when replacing a dashboard-first page or synthesizing background-worker sessions. The report can be technically cached and authorized while still showing the wrong saved version, leaking old run state across selections, or making existing deliveries impossible to manage.

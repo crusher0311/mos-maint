@@ -50,7 +50,9 @@ async function main() {
       // Completed evidence can be reported in business hours, without HTTP to
       // Tekmetric. Process up to ten sequential pages before the existing
       // ten-second pause; manual collection jobs still never claim reports.
-      if (!manualBudget) await processTireRunBatch({ pilotOnly: true, shouldStop: () => stop });
+      if (!manualBudget && process.env.REPORTING_QUEUE_WORKER_ENABLED !== "true") {
+        await processTireRunBatch({ pilotOnly: true, shouldStop: () => stop });
+      }
     } catch {
       console.error("[HEART Tire Pilot] Worker unavailable; retrying after bounded pause");
       if (manualBudget) break;

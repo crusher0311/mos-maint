@@ -12,6 +12,11 @@ async function handle(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const refreshed = await refreshActiveReports();
+  // Keep scheduled refresh admission; move execution off the web process only
+  // after an operator has staged the dedicated worker.
+  if (process.env.REPORTING_QUEUE_WORKER_ENABLED === "true") {
+    return NextResponse.json({ ok: true, refreshed, execution: "dedicated-worker" });
+  }
   const tireDot = await processTireRunBatch();
   return NextResponse.json({ ok: true, refreshed, tireDot, ...(await processNextReportRun()) });
 }
