@@ -19,11 +19,17 @@ export interface TireDotInvoice {
   postedDate: string;
   vin: string | null;
   vehicle: string | null;
+  year?: string | null;
+  make?: string | null;
+  model?: string | null;
+  vehicleProvenance?: string;
+  advisor?: import("./tire-dot-advisors").TireAdvisor;
   mileage: number | null;
   vinProvenance?: string;
   partLines: number;
   tireQuantity: number;
   dotEntries: number;
+  usableDotEntries?: number;
   exceptions: string[];
 }
 export interface TireDotDetail extends Omit<TireDotInvoice, "partLines" | "tireQuantity" | "dotEntries"> {
@@ -34,6 +40,7 @@ export interface TireDotDetail extends Omit<TireDotInvoice, "partLines" | "tireQ
   brand: string | null;
   quantity: number;
   dot: string | null;
+  dotQuality?: import("./tire-dot-quality").TireDotQuality;
 }
 export interface TireDotResult {
   generatedAt: string;
@@ -52,4 +59,6 @@ export interface TireDotResult {
   };
   counts: { invoices: number; partLines: number; tireQuantity: number; dotEntries: number };
   limited: boolean;
+  /** Absent on immutable legacy executions; do not infer from recorded counts. */
+  usableDotEntries?: number;
 }

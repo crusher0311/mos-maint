@@ -23,6 +23,7 @@ export function pilotEvidence(raw: any, providerShopId: number) {
     "postedDate", "updatedDate", "deletedDate", "deleted", "isDeleted", "archived",
     "isArchived", "archivedDate", "milesIn", "milesOut", "mileageIn", "mileageOut",
     "vehicleId", "vin", "year", "make", "model",
+    "serviceWriterId", "serviceWriterName", "serviceWriterAccountFirstName", "serviceWriterAccountLastName",
     "laborSales", "partsSales", "subletSales", "feeTotal", "discountTotal", "taxes", "totalSales"]);
   if (raw.jobs !== undefined) {
     if (!Array.isArray(raw.jobs)) throw new Error("Invalid provider jobs collection");
@@ -40,6 +41,8 @@ export function pilotEvidence(raw: any, providerShopId: number) {
     });
   }
   if (raw.vehicle) data.vehicle = pick(raw.vehicle, ["id", "vin", "year", "make", "model"]);
+  if (raw.serviceWriter && typeof raw.serviceWriter === "object")
+    data.serviceWriter = pick(raw.serviceWriter, ["id", "name", "fullName"]);
   if (Buffer.byteLength(JSON.stringify(data)) > 1_000_000) throw Error("provider_invoice_size_limit");
   return data;
 }

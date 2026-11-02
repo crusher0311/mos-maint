@@ -125,10 +125,12 @@ test("offline dashboard: shop-local presets, explicit/custom dates, missing zone
     await page.waitForSelector("tbody");
     assert.equal(posts[0].dateBasis, "shop-local");
     assert.match(await text(), /Executed results.*Shop local time/);
+    assert.match(await text(), /not-assessed/);
+    assert.match(await text(), /Validation was not captured in this saved execution/);
     assert.doesNotMatch(await text(), /Filters differ from this execution/);
-    assert.deepEqual(await page.$$eval("tbody tr", rows => rows.map(row => row.querySelector("td")?.textContent)), ["2024-12-31", "2025-01-01"]);
+    assert.deepEqual(await page.$$eval("table:not([aria-label]) tbody tr", rows => rows.map(row => row.querySelector("td")?.textContent)), ["2024-12-31", "2025-01-01"]);
     await click("Invoice reconciliation");
-    assert.deepEqual(await page.$$eval("tbody tr", rows => rows.map(row => row.querySelector("td")?.textContent)), ["2024-12-31", "2025-01-01"]);
+    assert.deepEqual(await page.$$eval("table:not([aria-label]) tbody tr", rows => rows.map(row => row.querySelector("td")?.textContent)), ["2024-12-31", "2025-01-01"]);
 
     changed = true;
     await refresh();
@@ -142,7 +144,7 @@ test("offline dashboard: shop-local presets, explicit/custom dates, missing zone
     await page.waitForFunction(() => document.body.textContent?.includes("UTC (legacy execution)"));
     assert.match(await text(), /Filters differ from this execution/);
     assert.match(await page.$eval("thead", el => el.textContent ?? ""), /Posted date \(UTC\)/);
-    assert.deepEqual(await page.$$eval("tbody tr", rows => rows.map(row => row.querySelector("td")?.textContent)), ["2025-01-01", "2025-01-01"]);
+    assert.deepEqual(await page.$$eval("table:not([aria-label]) tbody tr", rows => rows.map(row => row.querySelector("td")?.textContent)), ["2025-01-01", "2025-01-01"]);
 
     await page.goto(`${origin}/?initial`);
     await page.waitForSelector('input[type="checkbox"]');

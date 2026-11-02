@@ -1,6 +1,9 @@
 import type { TireDotDefinition, TireDotResult, TireDotDetail, TireDotInvoice } from "./tire-dot-report-contract";
 import { TIRE_DOT_LIMITS } from "./tire-dot-report-contract";
 import { tireLocalDay, validTireTimeZone } from "./tire-dot-dates";
+import { assessTireDot, legacyDotQuality } from "./tire-dot-quality";
+import { tireVehicle } from "./tire-dot-vehicle";
+import { capturedTireAdvisor } from "./tire-dot-advisors";
 
 type Raw = Record<string, any>;
 const text = (v: unknown): string | null => typeof v === "string" && v.trim() ? v : typeof v === "number" && Number.isFinite(v) ? String(v) : null;
@@ -28,7 +31,7 @@ export function emptyTireResult(definition: TireDotDefinition, locations: TireDo
     details: [], invoices: [], counts: { invoices: 0, partLines: 0, tireQuantity: 0, dotEntries: 0 },
     coverage: { status: "stored-evidence-only", scanned: 0, missingRaw: 0, missingPostedDate: 0,
       reasons: ["Retained Tekmetric work-order snapshots only; upstream import completeness and current provider state are not verified. Extraction is not a point-in-time provider snapshot."] },
-    limited: false,
+    limited: false, usableDotEntries: 0,
   };
 }
 export function tireCoverageGap(result: TireDotResult, reason: string) {
@@ -41,12 +44,15 @@ export function tireCoverageGap(result: TireDotResult, reason: string) {
  * A nonempty dotNumbers array is explicit tire-registration evidence unless the
  * part describes a known non-tire product/service. No brand-only inference. */
 export function tireSaleCandidate(part: Raw): boolean {
-  const label = [part.name, part.description, part.partType, part.type, part.category?.name, part.category, part.tireSize].filter(v => typeof v === "string").join(" ");
-  if (/\b(brake\s*fluid|rotation|rotate|mount(?:ing)?|balanc(?:e|ing)|labor|disposal|repair|sealant|valve|sensor|tpms|warranty)\b/i.test(label)) return false;
+  const label = [part.name, part.description, part.partType?.code, part.partType?.name, part.partType, part.type, part.category?.name, part.category, part.tireSize].filter(v => typeof v === "string").join(" ");
+  if (/\b(brake\s*fluid|rotation|rotate|mount(?:ing)?|balanc(?:e|ing)|labor|disposal|repair|sealant|valves?|sensors?|tpms|warrant(?:y|ies))\b/i.test(label)) return false;
+  // These are ancillary services/contracts, even if sold as a part named "tire".
+  if (/\btire\s+(?:protection\s+plans?|shav(?:e|ing))\b/i.test(label)) return false;
   // A tire's contact patch describes its tread, not a repair material.
   if (/\b(patch(?:es|ed|ing)?|plug(?:s|ged|ging)?)\b/i.test(label.replace(/\bcontact\s+patch(?:es)?\b/gi, ""))) return false;
-  return /\btires?\b/i.test(label) || /\b(?:P|LT)?\d{3}\/\d{2}(?:ZR|R)\d{2}\b/i.test(label)
-    || Number(part.width)>=125 && Number(part.width)<=455 && Number(part.ratio)>=20 && Number(part.ratio)<=95 && Number(part.diameter)>=10 && Number(part.diameter)<=30
+  const width = typeof part.width === "string" ? part.width.trim().replace(/^(?:LT|P|ST)(?=\d{3}$)/i, "") : part.width;
+  return /\btires?\b/i.test(label) || /\b(?:P|LT|ST)?\d{3}\/\d{2}(?:ZR|R)\d{2}\b/i.test(label)
+    || Number(width)>=125 && Number(width)<=455 && Number(part.ratio)>=20 && Number(part.ratio)<=95 && Number(part.diameter)>=10 && Number(part.diameter)<=30
     || Array.isArray(part.dotNumbers) && part.dotNumbers.some((v: unknown) => typeof v === "string" && v.trim() !== "");
 }
 
@@ -91,19 +97,23 @@ export function extractTireInvoice(result: TireDotResult, shopId: number, source
     tireCoverageGap(result, "Duplicate retained provider invoice identities encountered; reconcile source coverage before use."); return;
   }
   const mileage = number(raw.milesIn) ?? number(raw.mileageIn) ?? number(raw.milesOut) ?? number(raw.mileageOut);
-  const v = object(raw.vehicle) ? raw.vehicle : {};
+   const vehicle = tireVehicle(doc);
   const common = {
     key, shopId, location: result.locations.find(l => l.shopId === shopId)?.name || `Shop ${shopId}`,
     providerRoId: id, invoiceNumber: text(raw.repairOrderNumber),
-    postedDate, vin: text(v.vin ?? raw.vin ?? doc.vin),
+    postedDate, ...vehicle,
+    advisor: capturedTireAdvisor(raw) ?? doc.tireAdvisor,
     ...(doc.vinProvenance ? { vinProvenance: String(doc.vinProvenance) } : {}),
-    vehicle: [v.year ?? raw.vehicleYear ?? doc.vehicleYear, v.make ?? raw.vehicleMake ?? doc.vehicleMake, v.model ?? raw.vehicleModel ?? doc.vehicleModel].map(text).filter(Boolean).join(" ") || null,
+    ...(doc.vehicleProvenance ? { vehicleProvenance: String(doc.vehicleProvenance) } : {}),
+    vehicle: [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") || null,
     mileage,
   };
   const details: TireDotDetail[] = [];
-  const invoice: TireDotInvoice = { ...common, partLines: 0, tireQuantity: 0, dotEntries: 0, exceptions: [] };
+  const invoice: TireDotInvoice = { ...common, partLines: 0, tireQuantity: 0, dotEntries: 0, usableDotEntries: 0, exceptions: [] };
   for (const [ji, job] of raw.jobs.entries()) {
-    if (!object(job) || removed(job)) continue;
+    // Posted sales can retain authorized archived jobs (confirmed against Parts
+    // Usage). Archive is not deletion. Invoice/part removal gates stay unchanged.
+    if (!object(job) || job.deletedDate || job.deletedAt || job.deleted === true || job.isDeleted === true) continue;
     const state = String(job.status ?? job.jobStatus ?? job.authorizationStatus ?? "").toLowerCase();
     // Provider null means unknown, not approved or declined. Keep candidate
     // invoices visible as exceptions without manufacturing sold-tire totals.
@@ -135,6 +145,12 @@ export function extractTireInvoice(result: TireDotResult, shopId: number, source
       if (!common.vin) exceptions.push("Missing VIN");
       const dots = Array.isArray(part.dotNumbers) ? part.dotNumbers : [];
       const valid = dots.filter((d: unknown) => typeof d === "string" && d.trim() !== "");
+      const usable = dots.filter((d: unknown) => assessTireDot(d).status === "structurally-plausible").length;
+      if (usable !== quantity) exceptions.push("Structurally usable DOT entry count differs from part quantity");
+      for (const dot of dots) {
+        const quality = assessTireDot(dot);
+        if (quality.status !== "structurally-plausible") exceptions.push(`DOT ${quality.status}: ${quality.reason}`);
+      }
       if (!valid.length) exceptions.push("No DOT in captured evidence (not verified against Tekmetric UI)");
       if (!Object.hasOwn(part,"dotNumbers")) {
         exceptions.push("DOT field absent from captured payload");
@@ -146,10 +162,11 @@ export function extractTireInvoice(result: TireDotResult, shopId: number, source
       const partId = text(part.id) ?? `position-${pi}`;
       const base = { ...common, jobId, partId, description: text(part.name ?? part.description), brand: text(part.brand?.name ?? part.brand), quantity, exceptions };
       // Array position, not value, is identity: repeated DOTs are distinct entries.
-      if (!valid.length) details.push({ ...base, key: `${key}:${ji}:${pi}:missing`, dot: null, entryIndex: null });
+      if (!dots.length) details.push({ ...base, key: `${key}:${ji}:${pi}:missing`, dot: null, entryIndex: null, dotQuality: assessTireDot(null) });
       else dots.forEach((dot: unknown, ei: number) => {
-        if (typeof dot === "string" && dot.trim()) details.push({ ...base, key: `${key}:${ji}:${pi}:${ei}`, dot, entryIndex: ei });
+        details.push({ ...base, key: `${key}:${ji}:${pi}:${ei}`, dot: typeof dot === "string" ? dot : null, entryIndex: ei, dotQuality: assessTireDot(dot) });
       });
+      invoice.usableDotEntries! += usable;
       invoice.partLines++; invoice.tireQuantity += quantity; invoice.dotEntries += valid.length;
       invoice.exceptions = [...new Set([...invoice.exceptions, ...exceptions])];
     }
@@ -162,6 +179,7 @@ export function extractTireInvoice(result: TireDotResult, shopId: number, source
   result.details.push(...details); result.invoices.push(invoice);
   result.counts.invoices++; result.counts.partLines += invoice.partLines;
   result.counts.tireQuantity += invoice.tireQuantity; result.counts.dotEntries += invoice.dotEntries;
+  result.usableDotEntries = (result.usableDotEntries ?? 0) + invoice.usableDotEntries!;
 }
 
 /** Apostrophe is intentional spreadsheet text protection, not an Excel formula.
@@ -172,18 +190,23 @@ export function tireCsv(result: TireDotResult, view: "details" | "invoices") {
     if (textual || /^[\s\u0000-\u001f]*[=+\-@]/.test(value) || /[\t\r\n]/.test(value)) value = "'" + value;
     return `"${value.replace(/"/g, '""')}"`;
   };
-  const fields = ["Location", "Shop ID", "Provider RO ID", "Invoice number", "Posted date UTC", "VIN", "Vehicle", "Invoice mileage",
+  const fields = ["Location", "Shop ID", "Provider RO ID", "Invoice number", "Posted date UTC", "VIN", "Year", "Make", "Model", "Vehicle", "Invoice mileage",
     ...(view === "details" ? ["Job ID", "Part ID", "Entry index", "Description", "Brand", "Part quantity (repeated per DOT)", "DOT"] : ["Part lines", "Tire quantity", "DOT entries"]),
-    "Exceptions", "VIN provenance", "Reporting timezone", "Posted local date",
+    ...(view === "details" ? ["DOT validation status", "DOT validation reason"] : ["Structurally usable DOT entries"]),
+    "Service advisor ID", "Service advisor", "Advisor provenance",
+    "Exceptions", "VIN provenance", "Vehicle provenance", "Reporting timezone", "Posted local date",
     `Start ${result.timeZones ? "shop-local" : "UTC"} inclusive: ${result.dateRange.start}`, `End ${result.timeZones ? "shop-local" : "UTC"} inclusive: ${result.dateRange.end}`,
     `Executed shop IDs: ${result.shopIds.join(";")}`, `Generated UTC: ${result.generatedAt}`,
     `Coverage: ${result.coverage.status}`, `Limited: ${result.limited}`, `Coverage notes: ${result.coverage.reasons.join("; ")}`];
   const rows = view === "details" ? result.details : result.invoices;
   return "\uFEFF" + fields.map(v => cell(v)).join(",") + "\r\n" + rows.map(row => {
     const d = row as TireDotDetail; const i = row as TireDotInvoice;
-    return [cell(row.location),cell(row.shopId),cell(row.providerRoId,true),cell(row.invoiceNumber,row.invoiceNumber !== null),cell(row.postedDate),cell(row.vin,true),cell(row.vehicle),cell(row.mileage),
+    return [cell(row.location),cell(row.shopId),cell(row.providerRoId,true),cell(row.invoiceNumber,row.invoiceNumber !== null),cell(row.postedDate),cell(row.vin,true),cell(row.year),cell(row.make),cell(row.model),cell(row.vehicle),cell(row.mileage),
       ...(view === "details" ? [cell(d.jobId,true),cell(d.partId,true),cell(d.entryIndex),cell(d.description),cell(d.brand),cell(d.quantity),cell(d.dot,d.dot !== null)] : [cell(i.partLines),cell(i.tireQuantity),cell(i.dotEntries)]),
+      ...(view === "details" ? [cell((d.dotQuality ?? legacyDotQuality).status), cell((d.dotQuality ?? legacyDotQuality).reason)] : [cell(i.usableDotEntries ?? "Not assessed")]),
+      cell(row.advisor?.id, true),cell(row.advisor?.name ?? "Unavailable"),cell(row.advisor?.provenance ?? "Unavailable"),
       cell(row.exceptions.join("; ") || "None recorded"),cell(row.vinProvenance || (row.vin ? "Captured invoice" : "Unavailable")),
+      cell(row.vehicleProvenance || (row.year || row.make || row.model ? "Captured invoice" : "Unavailable")),
       cell(result.timeZones?.[row.shopId] || "UTC"),cell(tireLocalDay(row.postedDate, result.timeZones?.[row.shopId] || "UTC")),
       cell(result.dateRange.start),cell(result.dateRange.end),cell(result.shopIds.join(";")),cell(result.generatedAt),
       cell(result.coverage.status),cell(result.limited),cell(result.coverage.reasons.join("; "))].join(",");

@@ -27,21 +27,32 @@ test("self-service flow: no auto-run, filters, polling, exceptions, invoices, pa
     assert.equal((await stats()).posts, 0);
     await page.select("select", "7"); assert.equal((await stats()).posts, 0);
     await click("Run report");
-    await page.waitForFunction(() => document.body.textContent?.includes("Executed results"), { timeout: 15000 });
+    await page.waitForFunction(() => document.body.textContent?.includes("Executed results ·"), { timeout: 15000 });
     assert.equal((await stats()).posts, 1);
     assert.ok((await stats()).polls >= 2);
     assert.match(await page.evaluate(() => document.body.textContent), /Stale result/);
+    const columns = async () => {
+      const headings = await page.$$eval("table:not([aria-label]) thead th", cells => cells.map(c => c.textContent));
+      for (const name of ["Year", "Make", "Model"]) assert.ok(headings.includes(name));
+      assert.match(await page.$eval("tbody", el => el.textContent ?? ""), /Grand Touring Car/);
+    };
+    await columns();
+    assert.match(await page.$eval("tbody", el => el.textContent ?? ""), /needs-review/);
     await click("Next");
     assert.match(await page.evaluate(() => document.body.textContent), /Page 2 of/);
     await page.evaluate(() => {
       const b = [...document.querySelectorAll("button")].find(b => b.textContent?.includes("Exceptions")); b?.click();
     });
     await page.waitForFunction(() => document.querySelector("tbody")?.textContent?.includes("Missing invoice mileage"));
+    await columns();
     await page.evaluate(() => {
       const b = [...document.querySelectorAll("button")].find(b => b.textContent?.includes("Invoice reconciliation")); b?.click();
     });
     await page.waitForFunction(() => document.querySelector("table caption")?.textContent?.includes("Invoice reconciliation"));
-    assert.equal(await page.$$eval("tbody tr", rows => rows.length), 50);
+    assert.equal(await page.$$eval("table:not([aria-label]) tbody tr", rows => rows.length), 50);
+    assert.match(await page.$eval('[aria-label="Service advisor quality"]', el => el.textContent ?? ""), /Fixture Advisor/);
+    await columns();
+    assert.match(await page.$eval("thead", el => el.textContent ?? ""), /Structurally usable DOT entries/);
     await page.evaluate(() => {
       const b = [...document.querySelectorAll("button")].find(b => b.textContent?.includes("Invoice CSV")); b?.click();
     });
@@ -52,11 +63,11 @@ test("self-service flow: no auto-run, filters, polling, exceptions, invoices, pa
     assert.equal(csv.split("\r\n").filter(Boolean).length, 53);
     await fetch(`${origin}/fixture/control?deny=true`);
     await page.evaluate(() => window.dispatchEvent(new Event("focus")));
-    await page.waitForFunction(() => !document.body.textContent?.includes("Executed results"));
+    await page.waitForFunction(() => !document.body.textContent?.includes("Executed results ·"));
     assert.equal(await page.$("tbody"), null);
     await fetch(`${origin}/fixture/control?mode=empty`);
     await page.reload(); await page.waitForSelector('input[type="checkbox"]'); await click("Run report");
-    await page.waitForFunction(() => document.body.textContent?.includes("Executed results"), { timeout: 15000 });
+    await page.waitForFunction(() => document.body.textContent?.includes("Executed results ·"), { timeout: 15000 });
     assert.equal(await page.$("tbody"), null);
     assert.match(await page.evaluate(() => document.body.textContent), /not all upstream sales/);
     await fetch(`${origin}/fixture/control?mode=failed`); await click("Run report");

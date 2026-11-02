@@ -11,8 +11,9 @@ export async function createTireFixture() {
     const r = emptyTireResult(definition, [{ shopId: 311, name: "Fixture North" }, { shopId: 32, name: "Fixture South" }]);
     for (let i = 0; i < (mode === "empty" ? 0 : 52); i++) extractTireInvoice(r, i % 2 ? 32 : 311, { workOrderId: String(i), data: {
       id: i, repairOrderNumber: `000${i}`, repairOrderStatus: "Posted", postedDate: "2024-08-14T12:00:00Z",
-      milesIn: i === 0 ? null : 59663, vehicle: { vin: "FIXTUREVIN", year: 2020, make: "Example", model: "Car" },
-      jobs: [{ id: 1, authorized: true, parts: [{ id: 1, name: "Pirelli tire", quantity: 2, dotNumbers: i === 0 ? [] : ["001234", "001234"] }] }],
+      serviceWriter: { id: i % 2 + 1, name: i % 2 ? "Fixture Advisor South" : "Fixture Advisor North" },
+      milesIn: i === 0 ? null : 59663, vehicle: { vin: "FIXTUREVIN", year: 2020, make: "Example Motors", model: "Grand Touring Car" },
+      jobs: [{ id: 1, authorized: true, parts: [{ id: 1, name: "Pirelli tire", quantity: 2, dotNumbers: i === 0 ? [] : i === 1 ? ["1", "2425"] : ["UNK1R7420624", "UNK1R7420624"] }] }],
     } });
     r.generatedAt = "2026-10-30T12:00:00Z"; return r;
   };

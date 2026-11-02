@@ -4,6 +4,7 @@ import { listShopsByShopIds } from "./shops";
 import { PILOT_CONTROL, assertPilotRange, type TirePilotSelection } from "@/lib/tire-dot-pilot";
 import type { TireDotDefinition } from "@/lib/tire-dot-report-contract";
 import { enrichTireVin } from "@/lib/tire-dot-vin";
+import { enrichTireAdvisor } from "@/lib/tire-dot-advisors";
 
 export async function findTirePilot(definition: TireDotDefinition): Promise<TirePilotSelection | null> {
   const db = await getDb();
@@ -48,8 +49,13 @@ export async function readTirePilotPage(selection: TirePilotSelection, shopId: n
   const cached = await db.collection("tekmetric_work_orders").find({
     shopId: { $in: [shopId, String(shopId)] },
     workOrderId: { $in: [...ids, ...ids.map(String)] },
-  }, { projection: { shopId: 1, workOrderId: 1, vin: 1, "data.id": 1, "data.shopId": 1, "data.vehicleId": 1 },
+   }, { projection: { shopId: 1, workOrderId: 1, vin: 1, vehicleYear: 1, vehicleMake: 1, vehicleModel: 1,
+     "data.vehicle": 1, "data.vin": 1, "data.vehicleYear": 1, "data.vehicleMake": 1, "data.vehicleModel": 1,
+     "data.id": 1, "data.shopId": 1, "data.vehicleId": 1, "data.updatedDate": 1,
+     "data.serviceWriter.id": 1, "data.serviceWriter.name": 1, "data.serviceWriter.fullName": 1,
+     "data.serviceWriterId": 1, "data.serviceWriterName": 1,
+     "data.serviceWriterAccountFirstName": 1, "data.serviceWriterAccountLastName": 1 },
     maxTimeMS: 2000 }).hint("shopId_workOrderId").limit(100).toArray();
   // A saturated lookup cannot establish uniqueness; leave VINs unknown.
-  return cached.length === 100 ? rows : rows.map(r => ({ ...r, doc: enrichTireVin(r.doc, cached, shopId) }));
+  return cached.length === 100 ? rows : rows.map(r => ({ ...r, doc: enrichTireAdvisor(enrichTireVin(r.doc, cached, shopId), cached, shopId) }));
 }

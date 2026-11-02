@@ -5,6 +5,9 @@ description: Retained DOT occurrences, reconciliation population and production 
 Tire repair materials, including tire patches and plugs, are not tire sales
 and must not generate missing-DOT requirements merely because they are parts.
 
+The same boundary excludes tire-pressure sensors (including plural labels),
+tire-protection plans and tire-shaving services.
+
 **Why:** The user identified two flagged invoices as tire repairs, not tires
 sold. An empty provider DOT array does not validate the report's classification.
 
@@ -174,3 +177,46 @@ cannot explain a list-to-list mismatch.
 **How to apply:** Preserve bounded, sanitized mismatch evidence before proposing
 changes to verification. Distinguish padded provider-list totals from invoices
 inside the report date range, and do not certify an abandoned generation.
+
+Vehicle and DOT quality improvements must not retrofit immutable historical
+generations with newly fetched evidence.
+
+**Why:** The user explicitly separates new execution enrichment from historical
+evidence and requires recorded-entry counts to remain distinguishable from
+format-based usability, not physical tire verification.
+
+**How to apply:** Keep old execution counts pinned and missing validation unknown;
+never use vehicle-label parsing, VIN decoding or live provider calls to fill gaps
+under the authority of a report presentation change.
+
+Tekmetric Parts Usage can include authorized tire jobs marked `archived: true`;
+that flag alone does not establish that a posted tire sale was cancelled.
+
+**Why:** On 2026-11-02, the supplied October Parts Usage export totaled 1,341
+tires. Exact invoice comparison and read-only replay of the verified retained
+generation explained 21 omitted tires: seven on authorized archived jobs, and
+14 with object-shaped TIRE part types plus P/LT-prefixed widths.
+
+**How to apply:** Distinguish archival from deletion or declined authorization
+when designing posted-sale reconciliation. Preserve the provider's structured
+part type and recognize prefixed tire sizes. Any correction must test the full
+invoice population, not simply add the known shortfall or include all archives.
+
+DOT data-quality accountability should be grouped by service advisor, not technician.
+
+**Why:** The user explicitly identified the service advisor as the relevant role.
+
+**How to apply:** Use the Parts Usage SW assignment for export-based analysis,
+show invoice counts and rates with small-sample caveats, and distinguish assigned
+advisor from proven entry author. Never blame staff for report classification bugs.
+
+Supplemental advisor assignments require a matching provider revision as well as
+invoice/shop/vehicle identity.
+
+**Why:** Unlike vehicle identity, the assigned advisor can change after posting;
+the current cache must not silently assign historical data-quality issues to
+someone who took over later.
+
+**How to apply:** Retain explicitly captured service-writer evidence for new
+generations. If an older pilot omitted it and no exact revision match exists,
+show advisor unavailable rather than guessing or using today's assignment.

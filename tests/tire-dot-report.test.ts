@@ -78,6 +78,26 @@ test("repair-only invoices contribute no tire quantities, DOT exceptions or CSV 
   assert.equal(r.invoices.length, 0);
   assert.doesNotMatch(tireCsv(r, "details"), /TIRE PATCH|Tire plug|No DOT in captured evidence/);
 });
+test("sensor plurals, protection plans and tire shaving are not tire sales", () => {
+  const names = ["TIRE PRESSURE SENSORS", "TIRE PRESSURE MONITORING SENSORS",
+    "TIRE PRESSURE SENSOR", "Tire valves", "Nationwide Tire Protection Plan",
+    "TIRE SHAVE TO 9 /32NDS", "Tire shaving"];
+  for (const name of names) {
+    assert.equal(tireSaleCandidate({ name, category: "Tires", dotNumbers: ["2425"] }), false, name);
+    assert.equal(tireSaleCandidate({ description: name, partType: "Tire" }), false, name);
+  }
+  const doc: any = rawInvoice();
+  doc.data.jobs[0].parts.push(...names.map((name, id) => ({ id: 100 + id, name, quantity: 4, dotNumbers: [] })));
+  const r = result(); extractTireInvoice(r, 311, doc);
+  assert.deepEqual(r.counts, { invoices: 1, partLines: 2, tireQuantity: 4, dotEntries: 4 });
+  assert.equal(r.details.length, 4);
+  assert.equal(r.invoices[0].exceptions.length, 0);
+  assert.doesNotMatch(tireCsv(r, "details"), /SENSORS|Protection Plan|SHAVE/);
+  doc.data.jobs[0].parts = doc.data.jobs[0].parts.slice(2);
+  const excluded = result(); extractTireInvoice(excluded, 311, doc);
+  assert.equal(excluded.counts.invoices, 0);
+  assert.equal(excluded.details.length, 0);
+});
 test("mixed invoices keep genuine tires and repeated DOTs without counting repair materials", () => {
   const doc: any = rawInvoice();
   doc.data.jobs[0].name = "Tire patch and tire replacement";
@@ -109,7 +129,7 @@ test("declined/open/archived/deleted and non-tire work do not contribute", () =>
   for (const patch of [
     (d: any) => d.data.jobs[0].authorized = false,
     (d: any) => d.data.jobs[0].status = "open",
-    (d: any) => d.data.jobs[0].archived = true,
+    (d: any) => d.data.jobs[0].deleted = true,
     (d: any) => d.data.deletedDate = "2024-08-15",
     (d: any) => d.data.repairOrderStatus = "In Progress",
     (d: any) => d.data.jobs[0].parts.forEach((p: any) => p.archived = true),
@@ -124,6 +144,32 @@ test("missing raw and dates are incomplete, not proof of no sales", () => {
   const r = result(); extractTireInvoice(r, 311, {}); extractTireInvoice(r, 311, { data: {} });
   const d: any = rawInvoice(); delete d.data.postedDate; extractTireInvoice(r, 311, d);
   assert.equal(r.coverage.status, "incomplete"); assert.equal(r.coverage.missingRaw, 2); assert.equal(r.coverage.missingPostedDate, 1);
+});
+test("structured tire types and prefixed widths survive absent labels and DOTs", () => {
+  for (const width of ["P205", "LT315", "ST205", "205"]) {
+    assert.equal(tireSaleCandidate({ width, ratio: 55, diameter: 18 }), true);
+  }
+  assert.equal(tireSaleCandidate({ partType: { code: "TIRE", name: "Tire" } }), true);
+  assert.equal(tireSaleCandidate({ width: "garbage205", ratio: 55, diameter: 18 }), false);
+  assert.equal(tireSaleCandidate({ name: "TIRE PRESSURE SENSORS", partType: { code: "TIRE" } }), false);
+  const r = result(), d: any = rawInvoice();
+  d.data.jobs[0].parts = [{ id: 1, partType: { code: "TIRE" }, width: "LT315", quantity: 5, dotNumbers: [] }];
+  extractTireInvoice(r, 311, d);
+  assert.equal(r.counts.tireQuantity, 5);
+  assert.equal(r.counts.dotEntries, 0);
+});
+
+test("posted authorized archived jobs remain sales but deletion and declines still veto", () => {
+  for (const archive of [{ archived: true }, { isArchived: true }, { archivedDate: "2024-08-15" }]) {
+    const d: any = rawInvoice(); Object.assign(d.data.jobs[0], archive);
+    const r = result(); extractTireInvoice(r, 311, d);
+    assert.equal(r.counts.tireQuantity, 4);
+    for (const veto of [{ authorized: false }, { status: "declined" }, { deleted: true }, { deletedAt: "2024-08-15" }, { isDeleted: true }]) {
+      const copy = structuredClone(d); Object.assign(copy.data.jobs[0], veto);
+      const excluded = result(); extractTireInvoice(excluded, 311, copy);
+      assert.equal(excluded.counts.tireQuantity, 0);
+    }
+  }
 });
 test("textual CSV identifiers and formula protection with duplicate entries", () => {
   const r = result(), d = rawInvoice();
