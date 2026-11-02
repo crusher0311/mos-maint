@@ -2,6 +2,15 @@
 name: Tire DOT reporting boundaries
 description: Retained DOT occurrences, reconciliation population and production approval boundary.
 ---
+Detail CSV quantities should appear once per tire part line, with blank cells
+on its additional DOT rows.
+
+**Why:** The user wants the spreadsheet quantity column to sum to tires sold,
+without multiplying quantities by the number of recorded DOT occurrences.
+
+**How to apply:** Preserve every DOT occurrence and immutable saved evidence;
+apply the count-once presentation in exports, including lines with no DOT.
+
 Tire repair materials, including tire patches and plugs, are not tire sales
 and must not generate missing-DOT requirements merely because they are parts.
 

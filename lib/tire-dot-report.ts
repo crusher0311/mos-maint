@@ -191,7 +191,7 @@ export function tireCsv(result: TireDotResult, view: "details" | "invoices") {
     return `"${value.replace(/"/g, '""')}"`;
   };
   const fields = ["Location", "Shop ID", "Provider RO ID", "Invoice number", "Posted date UTC", "VIN", "Year", "Make", "Model", "Vehicle", "Invoice mileage",
-    ...(view === "details" ? ["Job ID", "Part ID", "Entry index", "Description", "Brand", "Part quantity (repeated per DOT)", "DOT"] : ["Part lines", "Tire quantity", "DOT entries"]),
+    ...(view === "details" ? ["Job ID", "Part ID", "Entry index", "Description", "Brand", "Tire quantity (counted once per part line)", "DOT"] : ["Part lines", "Tire quantity", "DOT entries"]),
     ...(view === "details" ? ["DOT validation status", "DOT validation reason"] : ["Structurally usable DOT entries"]),
     "Service advisor ID", "Service advisor", "Advisor provenance",
     "Exceptions", "VIN provenance", "Vehicle provenance", "Reporting timezone", "Posted local date",
@@ -199,10 +199,16 @@ export function tireCsv(result: TireDotResult, view: "details" | "invoices") {
     `Executed shop IDs: ${result.shopIds.join(";")}`, `Generated UTC: ${result.generatedAt}`,
     `Coverage: ${result.coverage.status}`, `Limited: ${result.limited}`, `Coverage notes: ${result.coverage.reasons.join("; ")}`];
   const rows = view === "details" ? result.details : result.invoices;
+  const quantityLines = new Set<string>();
   return "\uFEFF" + fields.map(v => cell(v)).join(",") + "\r\n" + rows.map(row => {
     const d = row as TireDotDetail; const i = row as TireDotInvoice;
+    // Keys retain shop/invoice and job/part positions, even when provider IDs
+    // repeat. Only the final DOT occurrence suffix differs within a part line.
+    const lineKey = row.key.slice(0, row.key.lastIndexOf(":"));
+    const quantity = quantityLines.has(lineKey) ? "" : d.quantity;
+    if (view === "details") quantityLines.add(lineKey);
     return [cell(row.location),cell(row.shopId),cell(row.providerRoId,true),cell(row.invoiceNumber,row.invoiceNumber !== null),cell(row.postedDate),cell(row.vin,true),cell(row.year),cell(row.make),cell(row.model),cell(row.vehicle),cell(row.mileage),
-      ...(view === "details" ? [cell(d.jobId,true),cell(d.partId,true),cell(d.entryIndex),cell(d.description),cell(d.brand),cell(d.quantity),cell(d.dot,d.dot !== null)] : [cell(i.partLines),cell(i.tireQuantity),cell(i.dotEntries)]),
+      ...(view === "details" ? [cell(d.jobId,true),cell(d.partId,true),cell(d.entryIndex),cell(d.description),cell(d.brand),cell(quantity),cell(d.dot,d.dot !== null)] : [cell(i.partLines),cell(i.tireQuantity),cell(i.dotEntries)]),
       ...(view === "details" ? [cell((d.dotQuality ?? legacyDotQuality).status), cell((d.dotQuality ?? legacyDotQuality).reason)] : [cell(i.usableDotEntries ?? "Not assessed")]),
       cell(row.advisor?.id, true),cell(row.advisor?.name ?? "Unavailable"),cell(row.advisor?.provenance ?? "Unavailable"),
       cell(row.exceptions.join("; ") || "None recorded"),cell(row.vinProvenance || (row.vin ? "Captured invoice" : "Unavailable")),

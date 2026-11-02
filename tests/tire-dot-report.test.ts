@@ -171,6 +171,30 @@ test("posted authorized archived jobs remain sales but deletion and declines sti
     }
   }
 });
+test("detail CSV counts quantity once with blank continuation rows, preserving all DOTs", () => {
+  const r = result();
+  const doc = rawInvoice();
+  // Same provider part ID in different positions must not collapse quantities.
+  doc.data.jobs[0].parts[1].id = 1;
+  extractTireInvoice(r, 311, doc);
+  const missing = rawInvoice("101");
+  missing.data.jobs[0].parts = [{ ...missing.data.jobs[0].parts[0], quantity: 3, dotNumbers: [] }];
+  extractTireInvoice(r, 311, missing);
+  extractTireInvoice(r, 32, doc);
+  const before = JSON.stringify(r);
+  const csv = tireCsv(r, "details");
+  // CSV fields here contain no embedded commas; parse quoted cells including empty strings.
+  const lines = csv.trim().split("\r\n").map(line =>
+    [...line.matchAll(/"((?:[^"]|"")*)"(?:,|$)/g)].map(m => m[1].replace(/""/g, '"')));
+  assert.equal(lines[0][16], "Tire quantity (counted once per part line)");
+  assert.deepEqual(lines.slice(1).map(row => row[16]), ["2", "", "2", "", "3", "2", "", "2", ""]);
+  assert.equal(lines.slice(1).reduce((sum, row) => sum + Number(row[16]), 0), r.counts.tireQuantity);
+  assert.equal(lines.length - 1, r.details.length);
+  assert.equal((csv.match(/'UNK1R7420624/g) || []).length, 4);
+  assert.equal(JSON.stringify(r), before, "CSV formatting must not rewrite saved results");
+  assert.match(tireCsv(r, "invoices"), /"Tire quantity"/);
+});
+
 test("textual CSV identifiers and formula protection with duplicate entries", () => {
   const r = result(), d = rawInvoice();
   d.data.repairOrderNumber = "00049";
