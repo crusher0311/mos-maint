@@ -1292,7 +1292,11 @@ function TekmetricSection({ status, onUpdate }: {
       const res = await fetch("/api/tekmetric/sync", { method: "POST" });
       const data = await res.json();
       if (res.ok) {
-        setMessage({ type: "success", text: `Synced ${data.imported || 0} vehicles` });
+        const stats = data.stats;
+        setMessage({
+          type: data.partial ? "error" : "success",
+          text: `${data.partial ? "Partial sync" : "Sync complete"}: ${stats.fetched} repair orders fetched, ${stats.imported} saved, ${stats.incomplete} incomplete, ${stats.failed} failed, ${stats.superseded} superseded by newer updates.${!stats.listingComplete ? " Listing coverage is incomplete; unseen repair orders were not closed." : ""}`,
+        });
       } else {
         setMessage({ type: "error", text: data.error || "Sync failed" });
       }

@@ -1,3 +1,7 @@
+import { writePolledSnapshot } from "./snapshot-write";
+import { canonicalTerminalStatus } from "./terminal-reconciliation";
+import { recoverPendingContexts } from "./context-recovery";
+import { bumpDashboardUpdate } from "@/lib/dashboard-updates";
 import { getDb } from "@/lib/mongo";
 import { 
   getRepairOrders, 
@@ -8,8 +12,7 @@ import {
   TekmetricVehicle,
   TekmetricCustomer
 } from ".";
-import { getRepairOrderInspectionsWithXAuth } from "./client";
-import { dotPreservingUpdate } from "./dot-preserving-update";
+import { getRepairOrder, getRepairOrderInspectionsWithXAuth } from "./client";
 import { captureMissingTireDots } from "./tire-dot-capture";
 import { tekmetricRequest } from "./client";
 import {
@@ -307,6 +310,11 @@ export async function syncShopIncremental(
   }
 
   try {
+    if (!deadline || Date.now() < deadline) {
+      const recovered = await recoverPendingContexts(db, shopId, tekmetricShopId,
+        { getRepairOrder, getVehicle, getCustomer }, Math.min(10_000, deadline ? Math.max(1, deadline - Date.now()) : 10_000));
+      if (recovered) await bumpDashboardUpdate(db, "tekmetric-context-recovery", shopId);
+    }
     const updatedDateStart = state.lastSyncCursor 
       ? new Date(state.lastSyncCursor.getTime() - 30000).toISOString()
       : new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
@@ -321,6 +329,7 @@ export async function syncShopIncremental(
       console.log(`[Tekmetric Incremental] Shop ${shopId}: Processing overflow page ${pageToFetch}`);
     }
 
+    const listingStartedAt = new Date();
     const response = await getRepairOrders(tekmetricShopId, {
       repairOrderStatusId: ACTIVE_STATUS_IDS,
       page: pageToFetch,
@@ -363,6 +372,7 @@ export async function syncShopIncremental(
         // Recently failed (rate budget denial or upstream error) — skip the
         // live fetch until the backoff expires instead of retrying every tick.
         result.negativeCacheHits.vehicles++;
+        await retainIncompleteRO(db, shopId, tekmetricShopId, ro, listingStartedAt);
         continue;
       } else {
         try {
@@ -372,6 +382,7 @@ export async function syncShopIncremental(
         } catch (err) {
           console.log(`[Tekmetric Incremental] Failed to fetch vehicle ${ro.vehicleId} (backing off)`);
           await recordFetchFailure(db, "tekmetric_vehicle_cache", { vehicleId: ro.vehicleId });
+          await retainIncompleteRO(db, shopId, tekmetricShopId, ro, listingStartedAt);
           continue;
         }
       }
@@ -393,8 +404,10 @@ export async function syncShopIncremental(
       }
 
       if (vehicle?.vin) {
-        await upsertWorkOrder(db, shopId, tekmetricShopId, ro, vehicle, customer, xAuthToken || state.xAuthToken);
+        await upsertWorkOrder(db, shopId, tekmetricShopId, ro, vehicle, customer, xAuthToken || state.xAuthToken, listingStartedAt);
         result.synced++;
+      } else {
+        await retainIncompleteRO(db, shopId, tekmetricShopId, ro, listingStartedAt);
       }
     }
 
@@ -439,6 +452,15 @@ export async function syncShopIncremental(
 
 let tireDotCaptureWindow = 0;
 let tireDotCaptureUsed = 0;
+async function retainIncompleteRO(db: any, shopId: number, tekmetricShopId: number, ro: any, startedAt: Date) {
+  await writePolledSnapshot(db, shopId, ro.id, startedAt, {
+    tekmetricShopId, workOrderNumber: ro.repairOrderNumber,
+    vehicleId: ro.vehicleId, customerId: ro.customerId,
+    status: ro.repairOrderStatus?.name || "Unknown", data: ro,
+    updatedDate: ro.updatedDate, fetchedAt: new Date(), contextRecoveryNeeded: true,
+    odometer: ro.milesIn || ro.milesOut,
+  });
+}
 async function upsertWorkOrder(
   db: any,
   shopId: number,
@@ -446,7 +468,8 @@ async function upsertWorkOrder(
   ro: TekmetricRepairOrderFull,
   vehicle: TekmetricVehicle,
   customer?: TekmetricCustomer | null,
-  xAuthToken?: string | null
+  xAuthToken?: string | null,
+  listingStartedAt: Date = new Date()
 ): Promise<void> {
   const vin = vehicle.vin?.toUpperCase();
   if (!vin) return;
@@ -520,13 +543,8 @@ async function upsertWorkOrder(
 
   const odometer = ro.milesOut || ro.milesIn || vehicle.mileageOut || vehicle.mileageIn || null;
 
-  await db.collection("tekmetric_work_orders").updateOne(
-    { 
-      shopId: { $in: [String(shopId), Number(shopId)] },
-      workOrderId: String(ro.id)
-    },
-    dotPreservingUpdate({
-      $set: {
+  await writePolledSnapshot(db, shopId, ro.id, listingStartedAt, {
+        tekmetricShopId,
         shopId,
         workOrderId: String(ro.id),
         workOrderNumber: ro.repairOrderNumber,
@@ -543,6 +561,7 @@ async function upsertWorkOrder(
         vehicleModel: vehicle.model,
         vehicleEngine: vehicle.engine,
         odometer,
+        contextRecoveryNeeded: !(odometer && vin),
         createdDate: ro.createdDate,
         updatedDate: ro.updatedDate,
         completedDate: ro.completedDate,
@@ -553,11 +572,7 @@ async function upsertWorkOrder(
         inspectionUrl,
         inspectionShareDate,
         inspections: inspectionsToStore,
-      },
-      $setOnInsert: { dviCompletedAt: null, lastInspection: null }
-    }),
-    { upsert: true }
-  );
+      }, { dviCompletedAt: null, lastInspection: null });
 
   // If this RO is terminal (Posted/Invoiced/Completed) and we haven't already
   // indexed its jobs into job_index, do it now. job_index is the authoritative
@@ -630,20 +645,22 @@ async function sweepTerminalStatuses(
   
   for (const cached of cachedWOs) {
     try {
-      const status = await getTekmetricWorkOrderStatus(tekmetricShopId, cached.workOrderId);
+      const status = canonicalTerminalStatus(await getTekmetricWorkOrderStatus(tekmetricShopId, cached.workOrderId));
       
-      if (!status || TERMINAL_STATUSES.includes(status)) {
-        await db.collection("tekmetric_work_orders").updateOne(
-          { _id: cached._id },
+      if (status) {
+        const result = await db.collection("tekmetric_work_orders").updateOne(
+          { _id: cached._id, shopId: cached.shopId, status: cached.status,
+            fetchedAt: cached.fetchedAt,
+            updatedAt: cached.updatedAt === undefined ? { $exists: false } : cached.updatedAt },
           {
             $set: {
-              status: status || "Invoiced",
+              status,
               closedAt: new Date(),
               updatedAt: new Date()
             }
           }
         );
-        removedCount++;
+        if (result.matchedCount === 1) removedCount++;
       }
     } catch (err) {
     }

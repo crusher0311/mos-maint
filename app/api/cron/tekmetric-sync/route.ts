@@ -15,6 +15,9 @@ import {
   checkAndRunBackfillForNewShops 
 } from "@/lib/integrations/tekmetric/job-index";
 import { NormalizedIngestionService } from "@/lib/integrations/core/normalized-ingestion";
+import { writePolledSnapshot } from "@/lib/integrations/tekmetric/snapshot-write";
+import { getTekmetricWorkOrderStatus } from "@/lib/integrations/tekmetric";
+import { canonicalTerminalStatus, absentReconciliationCandidates } from "@/lib/integrations/tekmetric/terminal-reconciliation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -113,7 +116,8 @@ async function upsertTekmetricWorkOrderSnapshot(
   vehicle: TekmetricVehicle,
   customer?: TekmetricCustomer,
   inspections?: any[] | null,
-  inspectionStatus?: InspectionStatusFromRO
+  inspectionStatus?: InspectionStatusFromRO,
+  startedAt: Date = new Date()
 ) {
   const vin = vehicle.vin?.toUpperCase();
   if (!vin) return;
@@ -185,17 +189,8 @@ async function upsertTekmetricWorkOrderSnapshot(
     snapshot.dviComplete = true;
   }
   
-  await db.collection("tekmetric_work_orders").updateOne(
-    { 
-      shopId: { $in: [String(shopId), Number(shopId)] },
-      workOrderId: String(ro.id)
-    },
-    { 
-      $set: snapshot,
-      $setOnInsert: { dviCompletedAt: null, lastInspection: null }
-    },
-    { upsert: true }
-  );
+  await writePolledSnapshot(db, shopId, ro.id, startedAt, { ...snapshot, tekmetricShopId: ro.shopId },
+    { dviCompletedAt: null, lastInspection: null });
 }
 
 // Task: cron/backfill Tekmetric traffic must yield to advisor-facing
@@ -249,6 +244,7 @@ async function _GETImpl(req: NextRequest) {
       if (!tekmetricShopId) continue;
 
       try {
+        const listingStartedAt = new Date();
         const activeWOs: TekmetricRepairOrderFull[] = [];
         const vehicleCache = new Map<number, TekmetricVehicle>();
         const customerCache = new Map<number, TekmetricCustomer>();
@@ -338,7 +334,7 @@ async function _GETImpl(req: NextRequest) {
               inspectionShared,
               inspectionShareDate: (ro as any).inspectionShareDate || null,
               inspectionUrl: (ro as any).inspectionUrl || null,
-            });
+            }, listingStartedAt);
             shopSyncedVins.push(vehicle.vin.toUpperCase());
           }
         }
@@ -352,18 +348,17 @@ async function _GETImpl(req: NextRequest) {
 
         let removedCount = 0;
         let indexedJobsCount = 0;
-        for (const cached of cachedWOs) {
-          if (!activeWoIds.has(cached.workOrderId)) {
-            await db.collection("tekmetric_work_orders").updateOne(
-              { _id: cached._id },
-              {
-                $set: {
-                  status: "Invoiced",
-                  closedAt: new Date(),
-                  updatedAt: new Date()
-                }
-              }
-            );
+        // A capped listing cannot establish absence. Even a complete listing
+        // requires an exact provider terminal status; 404/null is not a closure.
+        for (const cached of absentReconciliationCandidates(cachedWOs, activeWoIds, !hasMore)) {
+          if (!activeWoIds.has(String(cached.workOrderId))) {
+            const confirmed = canonicalTerminalStatus(await getTekmetricWorkOrderStatus(tekmetricShopId, String(cached.workOrderId)));
+            if (!confirmed) continue;
+            const wrote = await writePolledSnapshot(db, shopId, cached.workOrderId, listingStartedAt, {
+              status: confirmed, closedAt: new Date(), updatedAt: new Date(),
+              updatedDate: cached.updatedDate,
+            });
+            if (!wrote) continue;
             removedCount++;
             
             const retryCount = cached.jobIndexRetryCount || 0;

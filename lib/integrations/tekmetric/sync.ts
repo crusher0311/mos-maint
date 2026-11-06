@@ -1,5 +1,5 @@
 import { getDb } from "@/lib/mongo";
-import { dotPreservingUpdate } from "./dot-preserving-update";
+import { writePolledSnapshot } from "./snapshot-write";
 import {
   getRepairOrders, 
   getVehicle, 
@@ -107,6 +107,7 @@ async function runInitialSync(
 ): Promise<SyncResult> {
   try {
     console.log(`[Tekmetric Sync] Starting initial sync for shop ${shopId} (Tekmetric: ${tekmetricShopId})`);
+    const startedAt = new Date();
     
     const activeWOs: TekmetricRepairOrderFull[] = [];
     const vehicleCache = new Map<number, TekmetricVehicle>();
@@ -144,6 +145,11 @@ async function runInitialSync(
           vehicleCache.set(ro.vehicleId, vehicle);
         } catch (err) {
           console.log(`[Tekmetric Sync] Failed to fetch vehicle ${ro.vehicleId}`);
+          await writePolledSnapshot(db, numericShopId, ro.id, startedAt, {
+            tekmetricShopId, workOrderNumber: ro.repairOrderNumber, vehicleId: ro.vehicleId,
+            customerId: ro.customerId, status: ro.repairOrderStatus?.name || "Unknown",
+            data: ro, updatedDate: ro.updatedDate, fetchedAt: new Date(), contextRecoveryNeeded: true,
+          });
           continue;
         }
       }
@@ -180,13 +186,8 @@ async function runInitialSync(
         // Readers that sort or date-gate must therefore check BOTH families,
         // e.g. sort { updatedAt: -1, updatedDate: -1, createdAt: -1, createdDate: -1 }
         // and read roDate as updatedAt ?? updatedDate ?? completedDate ?? createdAt ?? createdDate.
-        await db.collection("tekmetric_work_orders").updateOne(
-          { 
-            shopId: { $in: [String(numericShopId), numericShopId] },
-            workOrderId: String(ro.id)
-          },
-          dotPreservingUpdate({
-            $set: {
+        await writePolledSnapshot(db, numericShopId, ro.id, startedAt, {
+              tekmetricShopId,
               shopId: numericShopId,
               workOrderId: String(ro.id),
               workOrderNumber: ro.repairOrderNumber,
@@ -203,17 +204,14 @@ async function runInitialSync(
               vehicleModel: vehicle.model,
               vehicleEngine: vehicle.engine,
               odometer: ro.milesIn || ro.milesOut || vehicle.mileageIn || vehicle.mileageOut,
+              contextRecoveryNeeded: !(ro.milesIn || ro.milesOut || vehicle.mileageIn || vehicle.mileageOut),
               createdDate: ro.createdDate,
               updatedDate: ro.updatedDate,
               completedDate: ro.completedDate,
               fetchedAt: new Date(),
               data: ro,
               dviDone: dviDetected || (existing?.dviDone === true),
-            },
-            $setOnInsert: { dviCompletedAt: null, lastInspection: null }
-          }),
-          { upsert: true }
-        );
+            }, { dviCompletedAt: null, lastInspection: null });
       }
     }
 
@@ -225,8 +223,9 @@ async function runInitialSync(
     console.log(`[Tekmetric Sync] Completed initial sync for shop ${shopId}: ${activeWOs.length} ROs synced`);
     
     return {
-      success: true,
-      synced: activeWOs.length
+      success: !hasMore,
+      synced: activeWOs.length,
+      ...(hasMore ? { error: "Active listing capped; coverage is partial" } : {})
     };
   } catch (err: any) {
     console.error(`[Tekmetric Sync] Error syncing shop ${shopId}:`, err.message);

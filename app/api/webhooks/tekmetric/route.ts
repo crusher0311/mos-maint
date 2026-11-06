@@ -15,6 +15,8 @@ import { getRepairOrderInspectionsWithXAuth } from "@/lib/integrations/tekmetric
 import { tekmetricShopIdFilter } from "@/lib/integrations/tekmetric/shop-lookup";
 import { insertWebhookLog as insertTekmetricWebhookLog } from "@/lib/data/repositories/tekmetric-ops";
 import { mayScheduleVerifiedWebhookAudit } from "@/lib/integrations/core/webhook-audit-admission";
+import { bumpDashboardUpdate } from "@/lib/dashboard-updates";
+import { attachLegacySnapshotIdentity } from "@/lib/integrations/tekmetric/legacy-snapshot-identity";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -259,6 +261,10 @@ export async function POST(req: NextRequest) {
       const tekmetricShopId = repairOrder.shopId;
       const statusName = repairOrder.repairOrderStatus?.name || "";
       const statusCode = repairOrder.repairOrderStatus?.code || "";
+      const identityShop = await db.collection("shops").findOne(tekmetricShopIdFilter(tekmetricShopId));
+      if (identityShop?.shopId != null) {
+        await attachLegacySnapshotIdentity(db, Number(identityShop.shopId), Number(tekmetricShopId), roId);
+      }
       
       // Task #519 — per-RO lifecycle marker (received → enriched → normalized →
       // dashboard-bumped) mirroring the Protractor webhook so a single RO can be
@@ -306,7 +312,7 @@ export async function POST(req: NextRequest) {
           { tekmetricShopId, workOrderId: String(roId) },
           dotPreservingUpdate({
             $set: terminalUpdate,
-            $setOnInsert: { workOrderId: String(roId), createdAt: new Date() },
+            $setOnInsert: { _id: `tekmetric:${tekmetricShopId}:${String(roId)}`, workOrderId: String(roId), createdAt: new Date() },
           }),
           { upsert: true }
         );
@@ -497,6 +503,7 @@ export async function POST(req: NextRequest) {
         // a missing vehicle/customer never leaves us with no row at all. Vehicle/customer
         // enrichment runs after the upsert and patches in whatever it can fetch.
         const existingWO = await db.collection("tekmetric_work_orders").findOne({
+          tekmetricShopId,
           workOrderId: String(roId)
         });
 
@@ -523,6 +530,7 @@ export async function POST(req: NextRequest) {
           labelColor: repairOrder.color || null,
           updatedAt: new Date(),
           fetchedAt: new Date(),
+          contextRecoveryNeeded: !(existingWO?.vin && (newOdometer > 0 || existingWO?.odometer > 0)),
         };
         if (shop?.shopId != null) setFields.shopId = String(shop.shopId);
         if (newOdometer && newOdometer > 0) setFields.odometer = newOdometer;
@@ -539,12 +547,13 @@ export async function POST(req: NextRequest) {
         if (repairOrder.vehicleId != null) setFields.vehicleId = repairOrder.vehicleId;
 
         const setOnInsert: any = {
+          _id: `tekmetric:${tekmetricShopId}:${String(roId)}`,
           workOrderId: String(roId),
           createdAt: new Date(),
         };
 
         const upsertResult = await db.collection("tekmetric_work_orders").updateOne(
-          { workOrderId: String(roId) },
+          { tekmetricShopId, workOrderId: String(roId) },
           dotPreservingUpdate({ $set: setFields, $setOnInsert: setOnInsert }),
           { upsert: true }
         );
@@ -593,7 +602,8 @@ export async function POST(req: NextRequest) {
             existingWO?.vin &&
             existingWO?.vehicleYear &&
             existingWO?.vehicleMake &&
-            existingWO?.vehicleModel
+            existingWO?.vehicleModel &&
+            (newOdometer > 0 || existingWO?.odometer > 0)
           );
         const needsCustomer =
           !!repairOrder.customerId &&
@@ -605,15 +615,16 @@ export async function POST(req: NextRequest) {
           // in parallel; partial failures still preserve whatever data did come back.
           if (shop && (needsVehicle || needsCustomer)) {
             const [vehicleResult, customerResult] = await Promise.allSettled([
-              needsVehicle ? getVehicle(repairOrder.vehicleId) : Promise.resolve(null),
-              needsCustomer ? getCustomer(repairOrder.customerId, shop?.shopId ? Number(shop.shopId) : undefined) : Promise.resolve(null),
+              needsVehicle ? getVehicle(repairOrder.vehicleId, tekmetricShopId) : Promise.resolve(null),
+              needsCustomer ? getCustomer(repairOrder.customerId, tekmetricShopId) : Promise.resolve(null),
             ]);
 
             const enrichFields: any = {};
             let enrichedVin: string | null = null;
             let enrichedMileage: number | null = null;
 
-            if (vehicleResult.status === 'fulfilled' && vehicleResult.value) {
+            if (vehicleResult.status === 'fulfilled' && vehicleResult.value &&
+                (vehicleResult.value.shopId == null || Number(vehicleResult.value.shopId) === Number(tekmetricShopId))) {
               const vehicle: any = vehicleResult.value;
               if (vehicle.vin) {
                 enrichedVin = String(vehicle.vin).toUpperCase();
@@ -624,7 +635,7 @@ export async function POST(req: NextRequest) {
               if (vehicle.model) enrichFields.vehicleModel = vehicle.model;
               if (vehicle.engine) enrichFields.vehicleEngine = vehicle.engine;
               const vehicleMileage = vehicle.mileageIn || vehicle.mileageOut;
-              if (!enrichFields.odometer && !setFields.odometer && vehicleMileage > 0) {
+              if (!existingWO?.odometer && !setFields.odometer && vehicleMileage > 0) {
                 enrichFields.odometer = vehicleMileage;
                 enrichedMileage = vehicleMileage;
               }
@@ -632,7 +643,8 @@ export async function POST(req: NextRequest) {
               console.error(`[Tekmetric Webhook] Vehicle enrichment failed for RO #${roNumber}, vehicleId=${repairOrder.vehicleId}:`, (vehicleResult.reason as any)?.message);
             }
 
-            if (customerResult.status === 'fulfilled' && customerResult.value) {
+            if (customerResult.status === 'fulfilled' && customerResult.value &&
+                (customerResult.value.shopId == null || Number(customerResult.value.shopId) === Number(tekmetricShopId))) {
               const customer: any = customerResult.value;
               const fullName = `${customer.firstName || ''} ${customer.lastName || ''}`.trim();
               if (fullName) enrichFields.customerName = fullName;
@@ -642,10 +654,16 @@ export async function POST(req: NextRequest) {
 
             if (Object.keys(enrichFields).length > 0) {
               enrichFields.updatedAt = new Date();
+              enrichFields.contextRecoveryNeeded = !(
+                (enrichedVin || existingWO?.vin) &&
+                (newOdometer > 0 || enrichedMileage || existingWO?.odometer > 0)
+              );
               await db.collection("tekmetric_work_orders").updateOne(
-                { workOrderId: String(roId) },
+                { tekmetricShopId, workOrderId: String(roId), vehicleId: repairOrder.vehicleId,
+                  updatedAt: setFields.updatedAt },
                 { $set: enrichFields }
               );
+              await bumpDashboardUpdate(db, "tekmetric-enriched", shop.shopId);
               console.log(`[Tekmetric Webhook] Enriched RO #${roNumber} with: ${Object.keys(enrichFields).filter(k => k !== 'updatedAt').join(', ')}`);
             }
 
@@ -653,14 +671,14 @@ export async function POST(req: NextRequest) {
             // structural fields (Tekmetric has no make/model/vin for this vehicle),
             // stamp a backoff marker so future webhooks don't re-fetch it endlessly.
             // Clear the marker if the row is now complete.
-            if (needsVehicle) {
+            if (needsVehicle && vehicleResult.status === "fulfilled" && vehicleResult.value) {
               const finalYear = enrichFields.vehicleYear ?? existingWO?.vehicleYear;
               const finalMake = enrichFields.vehicleMake ?? existingWO?.vehicleMake;
               const finalModel = enrichFields.vehicleModel ?? existingWO?.vehicleModel;
               const finalVinForCheck = enrichFields.vin ?? existingWO?.vin;
               const nowComplete = !!(finalVinForCheck && finalYear && finalMake && finalModel);
               await db.collection("tekmetric_work_orders").updateOne(
-                { workOrderId: String(roId) },
+                { tekmetricShopId, workOrderId: String(roId), vehicleId: repairOrder.vehicleId },
                 nowComplete
                   ? { $unset: { vehicleEnrichUnfillableAt: "", vehicleEnrichVehicleId: "" } }
                   : { $set: { vehicleEnrichUnfillableAt: new Date(), vehicleEnrichVehicleId: repairOrder.vehicleId } }
@@ -702,7 +720,7 @@ export async function POST(req: NextRequest) {
           // Phase B: dual-write to normalized tables. Re-read the cache row so any
           // enrichment we just performed (vin/year/make/model) is reflected.
           const refreshedCached = await db.collection("tekmetric_work_orders").findOne(
-            { workOrderId: String(roId) }
+            { tekmetricShopId, workOrderId: String(roId) }
           );
           await runWebhookNormalizedIngestion(
             db,

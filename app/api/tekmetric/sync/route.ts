@@ -1,250 +1,42 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
-import { getRepairOrders, getVehicle, getCustomer, TekmetricRepairOrderFull, TekmetricVehicle, TekmetricCustomer } from "@/lib/integrations/tekmetric";
+import { getRepairOrders, getVehicle, getCustomer } from "@/lib/integrations/tekmetric";
+import { refreshActiveRepairOrders } from "@/lib/integrations/tekmetric/active-sync";
+import { acquireInitialSyncLock, releaseInitialSyncLock } from "@/lib/integrations/tekmetric/initial-sync-lock";
+import { bumpDashboardUpdate } from "@/lib/dashboard-updates";
 
-async function getUserShopId(): Promise<string | null> {
-  const store = await cookies();
-  const sid = store.get("sid")?.value ?? store.get("session_token")?.value;
-  if (!sid) return null;
-
-  const db = await getDb();
-  const now = new Date();
-  const sess = await db.collection("sessions").findOne({ token: sid, expiresAt: { $gt: now } });
-  if (!sess) return null;
-
-  const user = await db.collection("users").findOne({ _id: sess.userId });
-  return user?.shopId ? String(user.shopId) : null;
-}
-
-export async function POST(request: NextRequest) {
+export async function POST(_request: NextRequest) {
   try {
+    // Same authority as connection settings, including switched and ghost sessions.
+    // Request bodies cannot override the authorized shop.
+    const session = await getSession();
+    if (!session?.shopId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const shopId = Number(session.shopId);
     const db = await getDb();
-
-    const userShopId = await getUserShopId();
-    if (!userShopId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const filter = { shopId: { $in: [shopId, String(shopId)] } };
+    const shop = await db.collection("shops").findOne(filter);
+    const providerShopId = Number(shop?.tekmetric?.shopId);
+    if (!Number.isSafeInteger(providerShopId) || providerShopId <= 0) {
+      return NextResponse.json({ error: "Tekmetric not configured for your shop", shopId }, { status: 400 });
     }
-
-    const shop = await db.collection("shops").findOne({
-      shopId: { $in: [userShopId, Number(userShopId)] }
-    });
-    if (!shop?.tekmetric?.shopId) {
-      return NextResponse.json(
-        { error: "Tekmetric not configured for your shop" },
-        { status: 400 }
-      );
-    }
-
-    const shopId = shop.tekmetric.shopId;
-    console.log(`[Tekmetric Sync] Starting sync for shop ${userShopId}, Tekmetric shopId: ${shopId}`);
-    
-    const stats = {
-      repairOrdersFound: 0,
-      vehiclesImported: 0,
-      vehiclesUpdated: 0,
-      errors: [] as string[],
-    };
-
-    const activeStatuses = ['Estimate', 'Pending', 'In Progress', 'Complete'];
-    const vehicleMap = new Map<number, { vehicle: TekmetricVehicle; ro: TekmetricRepairOrderFull; customer?: TekmetricCustomer }>();
-
-    for (const status of activeStatuses) {
-      let roPage = 0;
-      let hasMore = true;
-
-      while (hasMore) {
-        try {
-          const roResponse = await getRepairOrders(shopId, { 
-            status, 
-            page: roPage, 
-            size: 100,
-            sortDirection: 'DESC'
-          });
-          
-          stats.repairOrdersFound += roResponse.content.length;
-
-          for (const ro of roResponse.content) {
-            if (!vehicleMap.has(ro.vehicleId)) {
-              try {
-                const vehicle = await getVehicle(ro.vehicleId);
-                if (vehicle.vin) {
-                  let customer: TekmetricCustomer | undefined;
-                  try {
-                    customer = await getCustomer(ro.customerId, shopId);
-                  } catch (e) {
-                  }
-                  vehicleMap.set(ro.vehicleId, { vehicle, ro, customer });
-                }
-              } catch (error: any) {
-                stats.errors.push(`Error fetching vehicle ${ro.vehicleId}: ${error.message}`);
-              }
-            }
-          }
-
-          hasMore = !roResponse.last;
-          roPage++;
-        } catch (error: any) {
-          stats.errors.push(`Error fetching ${status} ROs page ${roPage}: ${error.message}`);
-          hasMore = false;
-        }
+    const lock = await acquireInitialSyncLock(db, shopId);
+    if (!lock.acquired) return NextResponse.json({ error: "A sync is already running for this shop", shopId }, { status: 409 });
+    try {
+      const current = await db.collection("shops").findOne(filter);
+      if (Number(current?.tekmetric?.shopId) !== providerShopId) {
+        return NextResponse.json({ error: "Connection changed. Reload before syncing.", shopId }, { status: 409 });
       }
-    }
-
-    for (const { vehicle, ro, customer } of vehicleMap.values()) {
-      const vin = vehicle.vin!.toUpperCase();
-      const existing = await db.collection("vehicles").findOne({ vin });
-      
-      // Get status and label from the full repair order structure
-      const roStatus = ro.repairOrderStatus?.name || "Work-In-Progress";
-      const roLabel = ro.repairOrderCustomLabel?.name || ro.repairOrderLabel?.name || null;
-      const roLabelColor = ro.color || null;
-      const roMileage = ro.milesIn || ro.milesOut || vehicle.mileageIn || vehicle.mileageOut;
-      
-      // Log first few for debugging
-      if (vehicleMap.size <= 3) {
-        console.log(`[Tekmetric Sync] Sample RO #${ro.repairOrderNumber}: status="${roStatus}", vin=${vin}, mileage=${roMileage}`);
-      }
-      
-      // Build the active source entry for this work order
-      const workOrderSource = {
-        provider: "tekmetric",
-        workOrderId: String(ro.id),
-        workOrderNumber: ro.repairOrderNumber,
-        status: roStatus,
-        addedAt: new Date(),
-      };
-      
-      // Also upsert into tekmetric_work_orders (this is what the dashboard queries)
-      const customerName = customer 
-        ? `${customer.firstName || ''} ${customer.lastName || ''}`.trim() || "Unknown Customer"
-        : "Unknown Customer";
-      
-      await db.collection("tekmetric_work_orders").updateOne(
-        { workOrderId: String(ro.id) },
-        {
-          $set: {
-            workOrderId: String(ro.id),
-            workOrderNumber: ro.repairOrderNumber,
-            shopId: String(userShopId),
-            tekmetricShopId: shopId,
-            vin,
-            vehicleYear: vehicle.year,
-            vehicleMake: vehicle.make,
-            vehicleModel: vehicle.model,
-            vehicleEngine: vehicle.engine,
-            customerName,
-            customerId: ro.customerId,
-            odometer: roMileage,
-            status: roStatus,
-            label: roLabel,
-            labelColor: roLabelColor,
-            fetchedAt: new Date(),
-            updatedAt: new Date(),
-          },
-          $setOnInsert: {
-            createdAt: new Date(),
-          }
-        },
-        { upsert: true }
-      );
-      
-      const vehicleData: Record<string, any> = {
-        vin,
-        year: vehicle.year,
-        make: vehicle.make,
-        model: vehicle.model,
-        subModel: vehicle.subModel,
-        engine: vehicle.engine,
-        transmission: vehicle.transmission,
-        drivetrain: vehicle.drivetrain,
-        licensePlate: vehicle.licensePlate,
-        licensePlateState: vehicle.licensePlateState,
-        color: vehicle.color,
-        mileage: roMileage,
-        customer: customer ? {
-          firstName: customer.firstName,
-          lastName: customer.lastName,
-          email: customer.email,
-          phone: customer.phone?.find(p => p.primary)?.number || customer.phone?.[0]?.number,
-        } : undefined,
-        tekmetric: {
-          vehicleId: vehicle.id,
-          customerId: vehicle.customerId,
-          shopId: vehicle.shopId,
-          repairOrderId: ro.id,
-          repairOrderNumber: ro.repairOrderNumber,
-          roStatus: roStatus,
-          roLabel: roLabel,
-          roLabelColor: roLabelColor,
-          lastSynced: new Date(),
-        },
-        updatedAt: new Date(),
-      };
-      
-      if (existing) {
-        // Update existing vehicle, add/update this work order source
-        const existingSources = existing.status?.sources || [];
-        const sourceIndex = existingSources.findIndex(
-          (s: any) => s.provider === "tekmetric" && s.workOrderId === String(ro.id)
-        );
-        
-        let updatedSources;
-        if (sourceIndex >= 0) {
-          // Update existing source
-          updatedSources = [...existingSources];
-          updatedSources[sourceIndex] = workOrderSource;
-        } else {
-          // Add new source
-          updatedSources = [...existingSources, workOrderSource];
-        }
-
-        await db.collection("vehicles").updateOne(
-          { vin },
-          { 
-            $set: {
-              ...vehicleData,
-              "status.active": true,
-              "status.sources": updatedSources,
-              "status.updatedAt": new Date(),
-            }
-          }
-        );
-        stats.vehiclesUpdated++;
-      } else {
-        await db.collection("vehicles").insertOne({
-          ...vehicleData,
-          shopId: shop._id,
-          status: {
-            active: true,
-            sources: [workOrderSource],
-            updatedAt: new Date(),
-          },
-          createdAt: new Date(),
-        });
-        stats.vehiclesImported++;
-      }
-    }
-
-    await db.collection("shops").updateOne(
-      { shopId: { $in: [userShopId, Number(userShopId)] } },
-      { $set: { "tekmetric.lastSync": new Date() } }
-    );
-
-    console.log(`[Tekmetric Sync] Complete - ROs: ${stats.repairOrdersFound}, Imported: ${stats.vehiclesImported}, Updated: ${stats.vehiclesUpdated}, Errors: ${stats.errors.length}`);
-    if (stats.errors.length > 0) {
-      console.log(`[Tekmetric Sync] Errors:`, stats.errors.slice(0, 5));
-    }
-
-    return NextResponse.json({
-      success: true,
-      stats,
-    });
-  } catch (error: any) {
-    console.error("Tekmetric sync error:", error);
-    return NextResponse.json(
-      { error: error.message || "Sync failed" },
-      { status: 500 }
-    );
+      const stats = await refreshActiveRepairOrders(db, shopId, providerShopId, { getRepairOrders, getVehicle, getCustomer });
+      await db.collection("shops").updateOne({ ...filter, "tekmetric.shopId": current!.tekmetric.shopId }, {
+        $set: { "tekmetric.lastSyncAttempt": new Date(), "tekmetric.lastActiveSyncOutcome": stats,
+          ...(!stats.partial ? { "tekmetric.lastSync": new Date() } : {}) },
+      });
+      if (stats.imported) await bumpDashboardUpdate(db, "tekmetric-manual-sync", shopId);
+      return NextResponse.json({ success: !stats.partial, partial: stats.partial, shopId, stats });
+    } finally { await releaseInitialSyncLock(db, shopId, lock.owner); }
+  } catch (error) {
+    console.error("Tekmetric active sync failed", error);
+    return NextResponse.json({ error: "Sync could not finish. Some repair orders may have been updated." }, { status: 500 });
   }
 }

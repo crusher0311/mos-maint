@@ -1,4 +1,5 @@
 import { stickerViscosity } from "@/lib/sticker-viscosity";
+import { tekmetricDashboardMatch } from "@/lib/integrations/tekmetric/visibility";
 // app/api/dashboard/data/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
@@ -735,14 +736,9 @@ export async function GET(request: NextRequest) {
 
     // Fetch Tekmetric work orders from synced collection (like Protractor)
     // Terminal statuses that indicate vehicle has left the shop
-    const TEKMETRIC_ALLOWED_STATUSES = ["Estimate", "Estimates", "Work-In-Progress", "Complete", "Completed"];
     
     // Build Tekmetric match criteria with optional label filtering
-    const tekmetricMatch: any = {
-      shopId: { $in: [String(user.shopId), Number(user.shopId)] },
-      vin: { $ne: null, $type: "string" },
-      status: { $in: TEKMETRIC_ALLOWED_STATUSES }
-    };
+    const tekmetricMatch: any = tekmetricDashboardMatch(user.shopId);
     
     // Apply label filter if preferences are set (empty array = show all)
     const tekmetricLabelFilter = shopPrefs?.preferences?.tekmetricLabels || [];
