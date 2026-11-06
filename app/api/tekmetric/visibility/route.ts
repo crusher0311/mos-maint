@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getDb } from "@/lib/mongo";
+import { readTekmetricVisibilitySample } from "@/lib/data/repositories/tekmetric-visibility";
 import { explainVisibility } from "@/lib/integrations/tekmetric/visibility";
 
 /** Read-only, bounded snapshot diagnostic. Does not fetch provider or CARFAX. */
@@ -11,12 +11,7 @@ export async function GET(request: NextRequest) {
   if (numbers.length > 10 || numbers.some(n => !/^\d{1,12}$/.test(n))) {
     return NextResponse.json({ error: "Supply at most ten RO numbers" }, { status: 400 });
   }
-  const db = await getDb();
-  const scope = { shopId: { $in: [session.shopId, String(session.shopId)] } };
-  const shop = await db.collection("shops").findOne(scope, { projection: { preferences: 1, "tekmetric.shopId": 1, "tekmetric.lastActiveSyncOutcome": 1 }, maxTimeMS: 2000 });
-  const rows = await db.collection("tekmetric_work_orders").find({
-    ...scope, ...(numbers.length ? { workOrderNumber: { $in: numbers.flatMap(n => [n, Number(n)]) } } : {}),
-  }, { projection: { workOrderNumber: 1, status: 1, vin: 1, odometer: 1, label: 1, contextRecoveryNeeded: 1 }, maxTimeMS: 3000 }).limit(2001).toArray();
+  const { shop, rows } = await readTekmetricVisibilitySample(session.shopId, numbers);
   const counts: Record<string, number> = {};
   for (const row of rows.slice(0, 2000)) {
     const reason = explainVisibility(row, shop?.preferences);
