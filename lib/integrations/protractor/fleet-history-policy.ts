@@ -1,4 +1,5 @@
 import { resolveHistorySchedule, type ShopHistorySchedule } from "./history-schedule";
+import { HISTORY_INVOICE_PAGE_SIZE } from "./history-invoice-pages";
 export interface HistoryDay { day: number; open: string; close: string; closed: boolean }
 export interface FleetHistoryConfig {
   revision: string; enabled: boolean; maxShopsPerTick: number; horizonYears: number;
@@ -85,7 +86,8 @@ export function fleetHistoryEndpointAllowed(endpoint: string, method: string, bo
   const start = p.get("startDate")!, end = p.get("endDate")!;
   return /^\d{4}-\d{2}-\d{2}$/.test(start) && /^\d{4}-\d{2}-\d{2}$/.test(end) &&
     Number.isFinite(Date.parse(start)) && Number.isFinite(Date.parse(end)) && start < end &&
-    p.get("take") === "100" && /^\d+$/.test(p.get("skip")!) && Number(p.get("skip")) <= 10000;
+    ["100", String(HISTORY_INVOICE_PAGE_SIZE)].includes(p.get("take")!) &&
+    /^\d+$/.test(p.get("skip")!) && Number(p.get("skip")) <= 10000;
 }
 /** Must be included as a mandatory AND, never a fallback permission. */
 export function fleetHistoryAdmission(p: FleetHistoryPermit): object {

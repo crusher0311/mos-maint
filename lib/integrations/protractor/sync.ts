@@ -1,5 +1,6 @@
 import { getDb } from "@/lib/mongo";
 import { getFleetHistoryContext } from "./fleet-history-context";
+import { collectHistoryInvoicePages, historyChunkCursor } from "./history-invoice-pages";
 import {
   resolveProtractorConfig,
   protractorFetch,
@@ -11,7 +12,7 @@ import {
 } from "./client";
 import { extractJobIndexFromWorkOrder, updatePartCrossReferences, computeJobHash } from "@/lib/job-index";
 import { createIngestionService } from "@/lib/integrations/core/normalized-ingestion";
-import { getPaceConfig, midpoint, describePace, getBackfillYears, reopenCompletedShopsForHorizon } from "@/lib/integrations/backfill-pace";
+import { getPaceConfig, describePace, getBackfillYears, reopenCompletedShopsForHorizon } from "@/lib/integrations/backfill-pace";
 import { prepareQuietWindowGate, applyQuietWindowGate } from "@/lib/data/repositories/activity-profiles";
 import {
   findServiceItem,
@@ -38,17 +39,8 @@ async function fetchInvoicesForDateRange(
   maxPages: number = 50
 ): Promise<{ invoices: any[]; hitPageCap: boolean; hadError: boolean }> {
   const config = await resolveProtractorConfig(shopId);
-  if (!config.configured) return { invoices: [], hitPageCap: false, hadError: false };
-
-  const allInvoices: any[] = [];
-  const pageSize = 100;
-  let skip = 0;
-  const seenIds = new Set<string>();
-  let pageCount = 0;
-  let hadError = false;
-  let lastPageWasFull = false;
-
-  while (pageCount < maxPages) {
+  if (!config.configured) return { invoices: [], hitPageCap: false, hadError: true };
+  return collectHistoryInvoicePages(async (pageSize, skip) => {
     const params = new URLSearchParams();
     params.set("startDate", startDate);
     params.set("endDate", endDate);
@@ -66,32 +58,9 @@ async function fetchInvoicesForDateRange(
     if (!result.ok) {
       await assertBackgroundSyncAllowed();
       console.error(`[Backfill] Shop ${shopId} Invoice error at skip=${skip}:`, result.error);
-      hadError = true;
-      break;
     }
-
-    const pageItems = result.data?.ItemCollection || [];
-    let newItems = 0;
-
-    for (const item of pageItems) {
-      if (item.ID && !seenIds.has(item.ID)) {
-        seenIds.add(item.ID);
-        allInvoices.push(item);
-        newItems++;
-      }
-    }
-
-    lastPageWasFull = pageItems.length >= pageSize;
-    if (newItems === 0 || pageItems.length === 0) break;
-    if (!lastPageWasFull) break;
-
-    skip += pageSize;
-    pageCount++;
-    await new Promise(r => setTimeout(r, 30));
-  }
-
-  const hitPageCap = pageCount >= maxPages && lastPageWasFull;
-  return { invoices: allInvoices, hitPageCap, hadError };
+    return result;
+  }, maxPages);
 }
 
 async function getOrFetchVehicle(
@@ -400,14 +369,17 @@ async function backfillShopChunk(
 
   const fetchResult = await fetchInvoicesForDateRange(shopId, startStr, endStr, pace.maxPagesPerChunk);
   const invoices = fetchResult.invoices;
-  let chunkHadError = fetchResult.hadError;
+  // A capped page set is incomplete, not evidence that any date subrange is
+  // exhausted. Keep the cursor and pending-attempt shrink marker for retry.
+  let chunkHadError = fetchResult.hadError || fetchResult.hitPageCap;
   const hitPageCap = fetchResult.hitPageCap;
   console.log(`[Backfill] Shop ${shopId}: ${invoices.length} invoices ${describePace(pace)} ${hitPageCap ? "[HIT PAGE CAP]" : ""}${chunkHadError ? " [HAD ERROR]" : ""}`);
 
   if (invoices.length === 0) {
+    _metricOutcome = chunkHadError ? "error" : "empty";
     // Empty chunk: if it was empty due to error, hold cursor; else advance.
-    const nextChunkEnd = chunkHadError ? chunkEnd : chunkStart;
-    const isComplete = !chunkHadError && nextChunkEnd <= oldestDate;
+    const decision = historyChunkCursor(chunkStart, chunkEnd, oldestDate, chunkHadError, hitPageCap);
+    const { nextChunkEnd, complete: isComplete } = decision;
     const emptyChunkMetrics = buildProtractorChunkMetrics({
       now: new Date(),
       durationMs: Date.now() - chunkStartedAt,
@@ -448,7 +420,7 @@ async function backfillShopChunk(
       },
       // Chunk committed its cursor decision — clear the interrupted-attempt
       // marker so the next chunk isn't treated as a re-walk (task #946).
-      unset: ["pendingAttempt"],
+      unset: decision.clearPendingAttempt ? ["pendingAttempt"] : [],
     });
     if (isComplete) {
       await markProtractorBackfillComplete(db, shopId);
@@ -692,19 +664,9 @@ async function backfillShopChunk(
     console.error(`[Backfill] Shop ${shopId}: Normalized ingestion error:`, normalizedError);
   }
 
-  let nextChunkEnd: Date;
-  let advanceMode: string;
-  if (chunkHadError) {
-    nextChunkEnd = chunkEnd;
-    advanceMode = "HOLD (error in chunk)";
-  } else if (hitPageCap) {
-    nextChunkEnd = midpoint(chunkStart, chunkEnd);
-    advanceMode = `SPLIT (page cap hit, advancing only to ${nextChunkEnd.toISOString().split('T')[0]})`;
-  } else {
-    nextChunkEnd = chunkStart;
-    advanceMode = "FULL";
-  }
-  const isComplete = !chunkHadError && !hitPageCap && nextChunkEnd <= oldestDate;
+  const decision = historyChunkCursor(chunkStart, chunkEnd, oldestDate, chunkHadError, hitPageCap);
+  const { nextChunkEnd, complete: isComplete } = decision;
+  const advanceMode = chunkHadError ? "HOLD (error or incomplete chunk)" : "FULL";
 
   console.log(`[Backfill] Shop ${shopId}: ${advanceMode} — currentChunkEnd ${chunkEnd.toISOString().split('T')[0]} -> ${nextChunkEnd.toISOString().split('T')[0]}`);
 
@@ -764,9 +726,9 @@ async function backfillShopChunk(
       recentChunkMetrics: nextRecentChunkMetrics,
     },
     inc: { totalJobsIndexed: jobsIndexed },
-    // Chunk committed its cursor decision — clear the interrupted-attempt
-    // marker so the next chunk isn't treated as a re-walk (task #946).
-    unset: ["pendingAttempt"],
+    // Capped results do not cover the date range. Retain the existing attempt
+    // marker so the next pass shrinks the window at the SAME cursor.
+    unset: decision.clearPendingAttempt ? ["pendingAttempt"] : [],
   });
 
   if (isComplete) {
