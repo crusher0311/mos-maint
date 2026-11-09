@@ -10,6 +10,7 @@ env -i PATH="$PATH" HOME="$HOME" \
     set -e
     node --import tsx tests/protractor-fleet-history.smoke.ts
     node --import tsx tests/protractor-history-admin.smoke.ts
+    node --import tsx --test tests/protractor-history-loader.test.cjs
     node --import tsx tests/protractor-fleet-history.mongo.ts
     node --import tsx --test app/platform-admin/protractor-history/history-client.test.ts
   '

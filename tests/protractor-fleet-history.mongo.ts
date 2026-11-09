@@ -48,10 +48,26 @@ async function main() {
     const saved = await saveFleetHistoryConfig(config, true, true);
     await assert.rejects(() => saveFleetHistoryConfig(config, true, true)); // stale revision
     let calls = 0;
+    const nativeBoundary = await require("./helpers/protractor-history-native-boundary.cjs").loadBoundary(db);
     __fleetHistoryDeps.runBackfill = async (id) => {
       calls++;
       await assertFleetHistoryContext(id, "original-account");
+      await nativeBoundary.allowed(id);
       const permit = getFleetHistoryContext()!;
+      // The real dynamically loaded onboarding boundary must still fail closed
+      // when any live authorization prerequisite changes.
+      for (const [path, invalid, original] of [
+        ["operatorStop.active", true, false],
+        ["fleetHistoryConfig.revision", "superseded", permit.revision],
+        ["fleetHistoryGrant.expiresAt", new Date(0), new Date(Date.now() + 60000)],
+        ["fleetHistoryGrant.binding", "f".repeat(64), permit.binding],
+        ["fleetHistoryGrant.consumed", 500, 0],
+      ] as const) {
+        await rates.updateOne({ _id: key }, { $set: { [path]: invalid } });
+        await nativeBoundary.denied(id);
+        await rates.updateOne({ _id: key }, { $set: { [path]: original } });
+      }
+      await nativeBoundary.allowed(id);
       const resetAdmission = async () => rates.updateOne({ _id: key }, { $set: {
         ownerToken: "physical", ownerCanaryGeneration: "g", leaseExpiresAt: new Date(Date.now() + 60000),
       }, $unset: { physicalAdmissionOwnerToken: "" } });
@@ -64,6 +80,7 @@ async function main() {
       assert.equal(await confirmProtractorPhysicalTransportLease("physical", { fleetHistory: permit, environment: "production", transport: "direct" }), false);
       await controlFleetHistory(id, "pause");
       await assert.rejects(() => assertFleetHistoryContext(id));
+      await nativeBoundary.denied(id);
       assert.equal(await confirmProtractorPhysicalTransportLease("physical", { fleetHistory: permit, environment: "production", transport: "relay" }), false);
       return { chunksProcessed: 1, totalJobsIndexed: 0, complete: false };
     };
@@ -75,6 +92,7 @@ async function main() {
     assert.equal((await runFleetHistoryTick()).processed, 1);
     if (runFailure) throw runFailure;
     assert.equal(calls, 1);
+    assert.equal(nativeBoundary.getContext(), undefined, "no permit leaks after the pass");
     assert.equal((await fleetHistoryStatus()).shops[0].paused, true);
     assert.equal((await runFleetHistoryTick()).processed, 0);
     await controlFleetHistory(1, "retry");

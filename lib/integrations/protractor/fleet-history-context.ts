@@ -4,7 +4,22 @@ import { connectionBinding, storedAccountBinding } from "./connection-identity";
 import { isProtractorShopRecord } from "./shop-eligibility";
 import { fleetHistoryWindow, validateFleetHistoryConfig, type FleetHistoryPermit } from "./fleet-history-policy";
 export const FLEET_HISTORY_KEY = "protractor-physical-transport-v1";
-const storage = new AsyncLocalStorage<FleetHistoryPermit & { active: boolean }>();
+type ActiveFleetPermit = FleetHistoryPermit & { readonly active: boolean };
+// tsx can load this module through both CommonJS and native import(). Share the
+// ALS container, not a permit: each run still has its own async scope and the
+// permit is revoked in finally. Module-local storage loses authority across the
+// real dynamically loaded sync/onboarding boundary.
+const storageKey = Symbol.for("mos.protractor.fleet-history.async-context.v1");
+const registry = globalThis as typeof globalThis & {
+  [key: symbol]: AsyncLocalStorage<ActiveFleetPermit> | undefined;
+};
+if (!registry[storageKey]) {
+  Object.defineProperty(registry, storageKey, {
+    value: new AsyncLocalStorage<ActiveFleetPermit>(),
+    enumerable: false, writable: false, configurable: false,
+  });
+}
+const storage = registry[storageKey]!;
 export const getFleetHistoryContext = () => storage.getStore();
 export function fleetShopBinding(shop: any): string {
   storedAccountBinding(shop);
