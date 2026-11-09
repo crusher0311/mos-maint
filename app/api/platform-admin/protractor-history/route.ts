@@ -21,8 +21,8 @@ export async function PUT(req: NextRequest) {
   const failure = await denied(req); if (failure) return failure;
   try {
     const body = await req.json();
-    return NextResponse.json({ config: await saveFleetHistoryConfig(body.config, body.confirmedHours) });
-  } catch { return NextResponse.json({ error: "Settings were invalid or changed concurrently. Reload and review before saving." }, { status: 409 }); }
+    return NextResponse.json({ config: await saveFleetHistoryConfig(body.config, body.confirmedHours, body.confirmedActivation) });
+  } catch { return NextResponse.json({ error: "Settings could not be saved. Check worker readiness, transport, shop timezone and activation confirmation, then reload the latest configuration." }, { status: 409 }); }
 }
 export async function POST(req: NextRequest) {
   const failure = await denied(req); if (failure) return failure;

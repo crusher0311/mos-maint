@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import net from "node:net";
 import { MongoClient } from "mongodb";
 import { fleetHistoryDefaults, type FleetHistoryPermit } from "../lib/integrations/protractor/fleet-history-policy";
-import { __fleetHistoryDeps, fleetHistoryStatus, saveFleetHistoryConfig, controlFleetHistory, runFleetHistoryTick } from "../lib/integrations/protractor/fleet-history";
+import { __fleetHistoryDeps, fleetHistoryStatus, saveFleetHistoryConfig, controlFleetHistory, runFleetHistoryTick, reportFleetHistoryWorker } from "../lib/integrations/protractor/fleet-history";
 import { assertFleetHistoryContext, getFleetHistoryContext } from "../lib/integrations/protractor/fleet-history-context";
 import { connectionBinding } from "../lib/integrations/protractor/connection-identity";
 import { __protractorPhysicalTransportTestHooks, confirmProtractorPhysicalTransportLease } from "../lib/data/repositories/api-usage";
@@ -35,11 +35,18 @@ async function main() {
     config.enabled = true; config.defaultTimezone = "UTC";
     config.week.forEach(d => { d.closed = true; });
     await assert.rejects(() => saveFleetHistoryConfig(config, false));
-    const saved = await saveFleetHistoryConfig(config, true);
-    await assert.rejects(() => saveFleetHistoryConfig(config, true)); // stale revision
     const binding = connectionBinding("original-account", "fixture-key");
     await shops.insertOne({ shopId: 1, integrationProvider: "protractor", protractorConnectionId: "original-account",
       protractorApiKey: "fixture-key", protractor: { configured: true, connectionGeneration: binding } });
+    await assert.rejects(() => saveFleetHistoryConfig(config, true, true)); // no worker
+    await reportFleetHistoryWorker("fixture-worker", false, "idle", "a".repeat(40));
+    assert.equal((await fleetHistoryStatus()).runtime.worker.status, "readiness_only");
+    await assert.rejects(() => saveFleetHistoryConfig(config, true, true)); // cannot activate readiness-only
+    await reportFleetHistoryWorker("fixture-worker", true, "idle", "a".repeat(40));
+    await assert.rejects(() => reportFleetHistoryWorker("other-worker", true, "idle", "b".repeat(40)));
+    await assert.rejects(() => saveFleetHistoryConfig(config, true)); // confirmation required on server
+    const saved = await saveFleetHistoryConfig(config, true, true);
+    await assert.rejects(() => saveFleetHistoryConfig(config, true, true)); // stale revision
     let calls = 0;
     __fleetHistoryDeps.runBackfill = async (id) => {
       calls++;
@@ -82,7 +89,16 @@ async function main() {
     await shops.updateOne({ shopId: 1 }, { $set: { "protractor.checkpointWriteToken": "still-owned" } });
     assert.equal((await runFleetHistoryTick()).processed, 0);
     assert.equal(calls, 2, "checkpoint mutex must never be cleared based on age");
-    await saveFleetHistoryConfig({ ...saved, enabled: false }, true);
+    const perShop = { ...saved, shopSchedules: [{ shopId: 1, timezone: "America/Chicago", week: config.week }] };
+    const overrideSaved = await saveFleetHistoryConfig(perShop, true);
+    assert.deepEqual((await fleetHistoryStatus()).config.shopSchedules, perShop.shopSchedules);
+    assert.equal((await fleetHistoryStatus()).shops[0].schedule.source, "history_override");
+    await assert.rejects(() => saveFleetHistoryConfig({ ...overrideSaved, rolloutShopIds: [999] }, true, true));
+    await reportFleetHistoryWorker("fixture-worker", true, "stopped", "a".repeat(40));
+    assert.equal((await runFleetHistoryTick()).processed, 0);
+    await assert.rejects(() => saveFleetHistoryConfig(overrideSaved, true, true));
+    await saveFleetHistoryConfig({ ...overrideSaved, enabled: false, shopSchedules: [] }, true);
+    assert.deepEqual((await fleetHistoryStatus()).config.shopSchedules, []);
     assert.equal((await runFleetHistoryTick()).processed, 0);
     console.log("Real Mongo fleet controls, revision CAS, worker admission, isolation, relay boundary, pause and active-progress safety passed");
   } finally {

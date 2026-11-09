@@ -4,9 +4,10 @@ import React, { useCallback, useEffect, useRef, useState, type FormEvent } from 
 import Link from "next/link";
 import { Clock3, RefreshCw, ShieldCheck } from "lucide-react";
 import {
-  historyRequest, HistoryRequestError, needsExpansionConfirmation, statusLabel, validateConfig,
+  historyRequest, HistoryRequestError, needsExpansionConfirmation, statusLabel, validateConfig, scheduleSource, shopTime,
   type HistoryConfig, type HistoryShop, type HistorySnapshot, type ShopAction,
 } from "./history-client";
+import { ShopScheduleEditor } from "./ShopScheduleEditor";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const inputClass = "w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 disabled:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-[#3c81c3]";
@@ -88,7 +89,7 @@ export default function ProtractorHistoryClient() {
     } catch (caught) {
       if (caught instanceof HistoryRequestError && caught.status === 409) {
         setConflict(true);
-        setError("Configuration changed on the server. Your draft is preserved. Reload the latest configuration, review it, and confirm again. Nothing was retried.");
+        setError("The server could not accept this change. Check worker readiness, transport, timezone and configuration revision below. Your draft is preserved; reload and review before retrying. Nothing was retried.");
         try { await refresh(false); } catch { /* Explicit reload remains available. */ }
       } else {
         // The write may have reached the server. Do not automatically repeat it.
@@ -105,12 +106,16 @@ export default function ProtractorHistoryClient() {
     if (!draft || !snapshot || busy || conflict) return;
     const validation = validateConfig(draft);
     if (validation) { setError(validation); return; }
+    if (draft.enabled && !snapshot.runtime.worker?.ready) {
+      setError("The dedicated worker is not ready. You can save a disabled configuration; activation requires a current compatible worker heartbeat.");
+      return;
+    }
     if (!hoursConfirmed || (draft.defaultTimezone && !timezoneConfirmed) ||
       (needsExpansionConfirmation(snapshot.config, draft) && !expansionConfirmed)) {
       setError("Review and complete the confirmations before saving.");
       return;
     }
-    void mutate("PUT", { config: draft, confirmedHours: true });
+    void mutate("PUT", { config: draft, confirmedHours: true, confirmedActivation: expansionConfirmed });
   }
 
   const dirty = !!draft && !!snapshot && JSON.stringify(draft) !== JSON.stringify(snapshot.config);
@@ -150,9 +155,11 @@ export default function ProtractorHistoryClient() {
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex items-start gap-3">
               <div className="rounded-lg bg-[rgba(60,129,195,0.12)] p-2 text-[#3c81c3]"><ShieldCheck className="h-5 w-5" /></div>
-              <div><h2 className="font-semibold">{snapshot.runtime.active ? "History worker active" : "History worker idle"}</h2>
-                <p className="mt-1 text-sm text-gray-600">{snapshot.runtime.active ? (activeShop?.name || "Connected shop") : "Waiting for eligible, off-hours work."}</p>
+              <div><h2 className="font-semibold">{statusLabel(snapshot.runtime.worker?.status || "not_reported")}</h2>
+                <p className="mt-1 text-sm text-gray-600">{snapshot.runtime.active ? (activeShop?.name || "Connected shop") : "No active history grant. This alone does not prove worker health."}</p>
                 <p className="mt-1 text-xs text-gray-500">Last outcome: {statusLabel(snapshot.runtime.lastOutcome)}</p>
+                <p className="mt-1 text-xs text-gray-500">Worker last seen: {shopTime(snapshot.runtime.worker?.lastSeenAt)} · Revision: {snapshot.runtime.worker?.revision?.slice(0, 8) || "Unverified"}</p>
+                {!snapshot.runtime.worker?.ready && <p className="mt-2 text-sm text-amber-800">Activation blocked. Infrastructure setup or worker recovery is required; saving disabled settings is still available.</p>}
               </div>
             </div>
             <div className="text-right text-xs text-gray-500">
@@ -197,7 +204,7 @@ export default function ProtractorHistoryClient() {
               <div className="mt-5 max-w-xl">
                 <label className="text-sm font-medium" htmlFor="fallback-timezone">Fallback timezone (optional)</label>
                 <input id="fallback-timezone" type="text" autoComplete="off" placeholder="America/Chicago" value={draft.defaultTimezone || ""} className={`${inputClass} mt-2`} onChange={e => change({ defaultTimezone: e.target.value.trim() || null })} />
-                <p className="mt-2 text-xs text-gray-500">Shop timezone always takes precedence. Without a known shop timezone or confirmed fallback, that shop is blocked. Missing hours also block scheduling.</p>
+                <p className="mt-2 text-xs text-gray-500">Order: history override, saved shop timezone, verified Protractor location, confirmed fallback. Ambiguous or invalid provider timezones require review rather than a guessed fallback.</p>
               </div>
             </section>
 
@@ -217,18 +224,25 @@ export default function ProtractorHistoryClient() {
               </div>}
             </section>
 
+            <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-5">
+              <h2 className="text-lg font-semibold">Per-shop business hours and timezone</h2>
+              <p className="text-sm text-gray-600">The shared policy remains the default. Review location-specific hours before enabling history; Protractor business hours have not been verified.</p>
+              {snapshot.shops.filter(shop => !scoped || draft.rolloutShopIds.includes(shop.shopId)).map(shop =>
+                <ShopScheduleEditor key={shop.shopId} shop={shop} draft={draft} change={change} />)}
+            </section>
+
             <section className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
               <h2 className="font-semibold">Review before saving</h2>
-              <label className="flex items-start gap-2"><input className="mt-1 accent-[#3c81c3]" type="checkbox" checked={hoursConfirmed} onChange={e => setHoursConfirmed(e.target.checked)} />I confirm the seven-day business-hours schedule is correct and history must not run during business hours.</label>
+              <label className="flex items-start gap-2"><input className="mt-1 accent-[#3c81c3]" type="checkbox" checked={hoursConfirmed} onChange={e => setHoursConfirmed(e.target.checked)} />I confirm the seven-day business-hours schedules, including shop-specific overrides, are correct and history must not run during business hours.</label>
               {draft.defaultTimezone && <label className="flex items-start gap-2"><input className="mt-1 accent-[#3c81c3]" type="checkbox" checked={timezoneConfirmed} onChange={e => setTimezoneConfirmed(e.target.checked)} />I explicitly confirm {draft.defaultTimezone} as the fallback for shops without a known timezone.</label>}
-              {expansion && <label className="flex items-start gap-2"><input className="mt-1 accent-[#3c81c3]" type="checkbox" checked={expansionConfirmed} onChange={e => setExpansionConfirmed(e.target.checked)} />I confirm enabling or expanding history scheduling for {scoped ? `${draft.rolloutShopIds.length} selected shop(s)` : "ALL eligible connected shops, including future connections"}.</label>}
+              {expansion && <label className="flex items-start gap-2"><input className="mt-1 accent-[#3c81c3]" type="checkbox" checked={expansionConfirmed} onChange={e => setExpansionConfirmed(e.target.checked)} />I confirm enabling or expanding history scheduling to {draft.horizonYears} years for {scoped ? `${draft.rolloutShopIds.length} selected shop(s)` : "ALL eligible connected shops, including future connections"}.</label>}
             </section>
           </fieldset>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm text-gray-500">{conflict ? "Reload required before further changes." : dirty ? "Unsaved changes. Nothing has been scheduled from this draft." : "No unsaved changes."}</p>
             <div className="flex gap-2">
               <button type="button" className={buttonClass} disabled={busy || (!dirty && !conflict)} onClick={() => void reload(true)}>Reload configuration</button>
-              <button type="submit" className={primaryClass} disabled={busy || conflict || !dirty || !hoursConfirmed || (!!draft.defaultTimezone && !timezoneConfirmed) || (expansion && !expansionConfirmed)}>{busy ? "Saving / refreshing…" : "Save configuration"}</button>
+              <button type="submit" className={primaryClass} disabled={busy || conflict || !dirty || !hoursConfirmed || (!!draft.defaultTimezone && !timezoneConfirmed) || (expansion && !expansionConfirmed) || (draft.enabled && !snapshot.runtime.worker?.ready)}>{busy ? "Saving / refreshing…" : "Save configuration"}</button>
             </div>
           </div>
         </form>
@@ -247,6 +261,9 @@ export default function ProtractorHistoryClient() {
           {!visibleShops.length ? <div className="py-12 text-center"><h3 className="font-medium">{snapshot.shops.length ? "No matching shops" : "No connected shops reported"}</h3><p className="mt-1 text-sm text-gray-500">{snapshot.shops.length ? "Try another shop name." : "Connected eligible shops will appear here when reported by the history service."}</p></div> :
             <ul className="mt-4 divide-y divide-gray-100">{visibleShops.map(shop => <li key={shop.shopId} className="flex flex-col justify-between gap-3 py-4 lg:flex-row lg:items-center">
               <div><h3 className="text-sm font-semibold">{shop.name}</h3><p className="mt-1 text-sm text-gray-600">{statusLabel(shop.status)} · {statusLabel(shop.reason)}</p>
+                <p className="mt-1 text-xs text-gray-600">{shop.schedule?.timezone || "Timezone needs review"} · {scheduleSource(shop.schedule?.source)} · {scheduleSource(shop.schedule?.hoursSource)}</p>
+                <p className="mt-1 text-xs text-gray-600">Next eligible window: {shopTime(shop.nextEligibleAt, shop.schedule?.timezone)}. Eligibility is not a promised start time.</p>
+                <p className="mt-1 text-xs text-gray-600">History cursor: {shopTime(shop.progress?.oldestCursorAt, shop.schedule?.timezone)} · Last attempt: {shopTime(shop.progress?.lastAttemptAt, shop.schedule?.timezone)}</p>
                 {shop.paused && <span className="mr-2 text-xs font-medium text-amber-800">Paused</span>}
                 {shop.completed && <span className="text-xs font-medium text-green-800">History complete</span>}
                 {shop.lastError && <p className="mt-1 text-xs text-red-700">Last attempt reported an error. Review restricted server diagnostics before retrying.</p>}

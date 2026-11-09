@@ -3,4 +3,5 @@
 export {
   __fleetHistoryDeps, fleetHistorySnapshot, fleetHistoryStatus,
   saveFleetHistoryConfig, controlFleetHistory, runFleetHistoryTick,
+  reportFleetHistoryWorker,
 } from "@/lib/data/repositories/protractor-fleet-history";

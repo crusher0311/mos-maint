@@ -10,7 +10,7 @@ const shop = { shopId: 1 };
 assert.equal(fleetHistoryWindow(c, shop, new Date("2026-10-30T19:00:00Z")).allowed, false);
 assert.equal(fleetHistoryWindow(c, shop, new Date("2026-10-31T00:00:00Z")).allowed, true);
 assert.equal(fleetHistoryWindow(c, shop, new Date("2026-10-30T12:56:00Z")).allowed, false);
-assert.equal(fleetHistoryWindow(c, { ...shop, timezone: "invalid" }).reason, "missing_timezone");
+assert.equal(fleetHistoryWindow(c, { ...shop, timezone: "invalid" }).reason, "invalid_timezone");
 assert.equal(fleetHistoryWindow(c, { ...shop, status: "cancelled" }).reason, "cancelled");
 assert.equal(fleetHistoryWindow(c, { ...shop, protractor: { historyControl: { paused: true } } }).reason, "paused");
 c.rolloutShopIds = [2];

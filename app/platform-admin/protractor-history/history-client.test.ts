@@ -49,7 +49,7 @@ test("enabling or expanding requires confirmation, including empty scope = fleet
   assert.equal(needsExpansionConfirmation(scoped, { ...scoped, rolloutShopIds: [11, 22] }), true);
   assert.equal(needsExpansionConfirmation(scoped, { ...scoped, enabled: false, rolloutShopIds: [] }), false);
   assert.equal(needsExpansionConfirmation(config({ enabled: true }), scoped), false);
-  assert.equal(needsExpansionConfirmation(scoped, { ...scoped, horizonYears: 4 }), false);
+  assert.equal(needsExpansionConfirmation(scoped, { ...scoped, horizonYears: 4 }), true);
 });
 
 test("GET is read-only; explicit writes use the contract and same-origin credentials", async () => {
@@ -116,7 +116,8 @@ test("operator confirms fleet enable; conflict preserves draft and requires expl
     }
     return new Response(JSON.stringify({
       config: liveConfig,
-      runtime: { active: false, shopId: null, lastOutcome: null },
+      runtime: { active: false, shopId: null, lastOutcome: null,
+        worker: { status: "idle", ready: true, lastSeenAt: new Date().toISOString(), revision: "a".repeat(40) } },
       shops: [{ shopId: 11, name: "Cedar Auto", status: "waiting_off_hours", reason: "disabled", paused: false, completed: false, lastError: null }],
     }));
   }) as typeof fetch;

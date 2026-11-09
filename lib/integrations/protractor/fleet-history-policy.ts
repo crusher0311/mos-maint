@@ -1,7 +1,9 @@
+import { resolveHistorySchedule, type ShopHistorySchedule } from "./history-schedule";
 export interface HistoryDay { day: number; open: string; close: string; closed: boolean }
 export interface FleetHistoryConfig {
   revision: string; enabled: boolean; maxShopsPerTick: number; horizonYears: number;
   defaultTimezone: string | null; week: HistoryDay[]; rolloutShopIds: number[];
+  shopSchedules?: ShopHistorySchedule[];
 }
 export const fleetHistoryDefaults = (): FleetHistoryConfig => ({
   revision: "initial", enabled: false, maxShopsPerTick: 1, horizonYears: 2,
@@ -28,10 +30,23 @@ export function validateFleetHistoryConfig(value: any): FleetHistoryConfig {
       throw new Error("Specify seven valid business-hour days");
     days.add(row.day);
   }
+  let shopSchedules: ShopHistorySchedule[] | undefined;
+  if (value.shopSchedules !== undefined) {
+    if (!Array.isArray(value.shopSchedules) || value.shopSchedules.length > 2000 ||
+      new Set(value.shopSchedules.map((s: any) => s?.shopId)).size !== value.shopSchedules.length)
+      throw new Error("Invalid shop schedules");
+    shopSchedules = value.shopSchedules.map((schedule: any) => {
+      if (!Number.isSafeInteger(schedule?.shopId) || schedule.shopId < 1 ||
+        !(schedule.timezone === null || validTimezone(schedule.timezone))) throw new Error("Invalid shop schedule");
+      const checked = validateFleetHistoryConfig({ ...value, shopSchedules: undefined, week: schedule.week });
+      return { shopId: schedule.shopId, timezone: schedule.timezone, week: checked.week };
+    });
+  }
   return { revision: value.revision, enabled: value.enabled, maxShopsPerTick: value.maxShopsPerTick,
     horizonYears: value.horizonYears, defaultTimezone: value.defaultTimezone,
     rolloutShopIds: [...new Set<number>(value.rolloutShopIds)],
-    week: value.week.map((r: HistoryDay) => ({ day: r.day, open: r.open, close: r.close, closed: r.closed })) };
+    week: value.week.map((r: HistoryDay) => ({ day: r.day, open: r.open, close: r.close, closed: r.closed })),
+    ...(shopSchedules ? { shopSchedules } : {}) };
 }
 const minutes = (s: string) => Number(s.slice(0, 2)) * 60 + Number(s.slice(3));
 function openAt(week: HistoryDay[], tz: string, now: Date): boolean {
@@ -51,9 +66,10 @@ export function fleetHistoryWindow(config: FleetHistoryConfig, shop: any, now = 
   if (config.rolloutShopIds.length && !config.rolloutShopIds.includes(Number(shop.shopId))) return { allowed: false, reason: "outside_rollout" };
   if (shop.protractor?.historyControl?.paused) return { allowed: false, reason: "paused" };
   if ([shop.status, shop.billing?.status].some(s => /^(cancelled|canceled)$/i.test(String(s ?? "")))) return { allowed: false, reason: "cancelled" };
-  const tz = shop.timezone || config.defaultTimezone;
-  if (!validTimezone(tz)) return { allowed: false, reason: "missing_timezone" };
-  for (let i = 0; i <= 5; i++) if (openAt(config.week, tz, new Date(+now + i * 60000))) return { allowed: false, reason: "waiting_off_hours" };
+  const schedule = resolveHistorySchedule(config, shop);
+  const tz = schedule.timezone;
+  if (!validTimezone(tz)) return { allowed: false, reason: schedule.issue || "missing_timezone" };
+  for (let i = 0; i <= 5; i++) if (openAt(schedule.week, tz, new Date(+now + i * 60000))) return { allowed: false, reason: "waiting_off_hours" };
   const retry = shop.protractor?.historyControl?.retryAfter;
   if (retry && +new Date(retry) > +now) return { allowed: false, reason: "retry_backoff" };
   return { allowed: true, reason: "queued" };

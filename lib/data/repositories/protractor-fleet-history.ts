@@ -4,11 +4,14 @@ import * as progressRepo from "@/lib/data/repositories/protractor-backfill-progr
 import { isProtractorShopRecord } from "@/lib/integrations/protractor/shop-eligibility";
 import { FLEET_HISTORY_KEY, fleetShopBinding, withFleetHistory } from "@/lib/integrations/protractor/fleet-history-context";
 import { fleetHistoryDefaults, fleetHistoryWindow, validateFleetHistoryConfig, type FleetHistoryConfig, type FleetHistoryPermit } from "@/lib/integrations/protractor/fleet-history-policy";
+import { nextOffHours, resolveHistorySchedule } from "@/lib/integrations/protractor/history-schedule";
+import { historyWorkerHealth, HISTORY_WORKER_PROTOCOL, HISTORY_WORKER_FRESH_MS } from "@/lib/integrations/protractor/history-worker-health";
 
 const project = { shopId: 1, name: 1, timezone: 1, status: 1, billing: 1, integrationProvider: 1,
   "protractor.configured": 1, "protractor.connectionGeneration": 1,
   "protractor.accountBinding": 1, "protractor.connectionId": 1, "protractor.apiKey": 1,
   "protractor.historyControl": 1, "protractor.checkpointWriteToken": 1,
+  "protractor.locations.TimeZone": 1, "protractor.locations.Address.Country": 1,
   protractorApiKey: 1, protractorConnectionId: 1 };
 export const __fleetHistoryDeps = {
   getDb, findProgressForShops: progressRepo.findProgressForShops, findByShop: progressRepo.findByShop,
@@ -56,37 +59,96 @@ function completeFor(shop: any, progress: any, config: FleetHistoryConfig): bool
 }
 export async function fleetHistoryStatus() {
   const { state, shops, config, progress } = await fleetHistorySnapshot();
+  const worker = historyWorkerHealth(state);
+  const now = new Date();
+  const nextCache = new Map<string, string | null>();
   return {
     config,
     runtime: { active: !!state?.fleetHistoryGrant && +new Date(state.fleetHistoryGrant.expiresAt) > Date.now(),
-      shopId: state?.fleetHistoryGrant?.shopId ?? null, lastOutcome: state?.fleetHistoryLastOutcome ?? null },
+      shopId: state?.fleetHistoryGrant?.shopId ?? null, lastOutcome: state?.fleetHistoryLastOutcome ?? null, worker },
     shops: shops.filter(isProtractorShopRecord).map(shop => {
       const p = progress.find((p: any) => Number(p.shopId) === Number(shop.shopId));
       const completed = completeFor(shop, p, config);
       const window = fleetHistoryWindow(config, shop);
+      const schedule = resolveHistorySchedule(config, shop);
       let identityReady = true;
       try { identityReady = fleetShopBinding(shop) === shop.protractor?.connectionGeneration; } catch { identityReady = false; }
       const reason = !identityReady ? "connection_review_required" : state?.operatorStop?.active ? "emergency_stop" :
         state?.canary?.mode !== "live" || state?.canary?.endedBy ? "transport_unavailable" :
-        !window.allowed ? window.reason : completed ? "complete" :
+        !window.allowed ? window.reason : completed ? "complete" : !worker.ready ? "worker_unavailable" :
         state?.fleetHistoryGrant?.shopId === Number(shop.shopId) && +new Date(state.fleetHistoryGrant.expiresAt) > Date.now() ? "running" : "queued";
+      let nextEligibleAt: string | null = null;
+      if (schedule.timezone && worker.ready && ["queued", "running", "waiting_off_hours", "retry_backoff"].includes(reason)) {
+        const retry = +new Date(shop.protractor?.historyControl?.retryAfter || 0);
+        const from = new Date(Math.max(+now, Number.isFinite(retry) ? retry : 0));
+        const cacheKey = JSON.stringify([schedule.timezone, schedule.week, +from]);
+        if (!nextCache.has(cacheKey)) nextCache.set(cacheKey,
+          nextOffHours(schedule.timezone, schedule.week, from, at => fleetHistoryWindow(config, shop, at).allowed));
+        nextEligibleAt = nextCache.get(cacheKey)!;
+      }
+      const safeDate = (value: unknown) => {
+        const time = value ? +new Date(value as string) : NaN;
+        return Number.isFinite(time) ? new Date(time).toISOString() : null;
+      };
       return { shopId: Number(shop.shopId), name: shop.name || String(shop.shopId), status: reason, reason,
-        completed, paused: !!shop.protractor?.historyControl?.paused, lastError: shop.protractor?.historyControl?.lastError ?? null };
+        completed, paused: !!shop.protractor?.historyControl?.paused, lastError: shop.protractor?.historyControl?.lastError ? "History attempt needs review" : null,
+        schedule, nextEligibleAt,
+        progress: { oldestCursorAt: safeDate(p?.currentChunkEnd), lastAttemptAt: safeDate(shop.protractor?.historyControl?.lastAttemptAt) },
+      };
     }),
   };
 }
-export async function saveFleetHistoryConfig(input: unknown, confirmedHours: boolean) {
+export async function saveFleetHistoryConfig(input: unknown, confirmedHours: boolean, confirmedActivation = false) {
   const config = validateFleetHistoryConfig(input);
   if (confirmedHours !== true) throw new Error("Business hours must be explicitly confirmed");
   const db = await __fleetHistoryDeps.getDb();
+  if (config.enabled) {
+    const snapshot = await fleetHistorySnapshot();
+    const previous = snapshot.config;
+    const expanded = !previous.enabled || config.horizonYears > previous.horizonYears || (previous.rolloutShopIds.length > 0 &&
+      (!config.rolloutShopIds.length || config.rolloutShopIds.some(id => !previous.rolloutShopIds.includes(id))));
+    if (expanded && confirmedActivation !== true) throw new Error("Confirm activation or scope expansion");
+    if (!historyWorkerHealth(snapshot.state).ready) throw new Error("Dedicated worker is not ready");
+    if (snapshot.state?.operatorStop?.active !== false || snapshot.state?.canary?.mode !== "live" || snapshot.state?.canary?.endedBy)
+      throw new Error("Transport readiness is blocked");
+    const targets = snapshot.shops.filter(isProtractorShopRecord).filter(s =>
+      !config.rolloutShopIds.length || config.rolloutShopIds.includes(Number(s.shopId)));
+    if (!targets.length || (config.rolloutShopIds.length && targets.length !== config.rolloutShopIds.length))
+      throw new Error("Selected shop identity is unavailable");
+    for (const shop of targets) {
+      if (!resolveHistorySchedule(config, shop).timezone || fleetShopBinding(shop) !== shop.protractor?.connectionGeneration)
+        throw new Error("Selected shop requires timezone or connection review");
+    }
+  }
   const revision = randomUUID();
   const result = await db.collection<any>("api_rate_limits").updateOne({
     _id: FLEET_HISTORY_KEY,
     ...(config.revision === "initial" ? { fleetHistoryConfig: { $exists: false } } : { "fleetHistoryConfig.revision": config.revision }),
+    ...(config.enabled ? {
+      "fleetHistoryWorker.protocol": HISTORY_WORKER_PROTOCOL,
+      "fleetHistoryWorker.revision": { $regex: "^[a-f0-9]{40}$" },
+      "fleetHistoryWorker.importsEnabled": true,
+      "fleetHistoryWorker.status": { $in: ["idle", "running", "blocked"] },
+      "fleetHistoryWorker.seenAt": { $gt: new Date(Date.now() - HISTORY_WORKER_FRESH_MS), $lte: new Date(Date.now() + 5000) },
+      "operatorStop.active": false, "canary.mode": "live", "canary.endedBy": { $exists: false },
+    } : {}),
   }, { $set: { fleetHistoryConfig: { ...config, revision }, fleetHistoryConfiguredAt: new Date() },
     $unset: { fleetHistoryGrant: "" } }, { upsert: false });
   if (result.matchedCount !== 1) throw new Error("Settings changed or transport is not initialized; reload before saving");
   return { ...config, revision };
+}
+
+/** Worker-only liveness. No upsert: never creates or resets physical authority. */
+export async function reportFleetHistoryWorker(owner: string, importsEnabled: boolean, status: "idle" | "running" | "blocked" | "failed" | "stopped", revision: string | null) {
+  const db = await __fleetHistoryDeps.getDb();
+  const result = await db.collection<any>("api_rate_limits").updateOne({
+    _id: FLEET_HISTORY_KEY,
+    $or: [{ "fleetHistoryWorker.owner": owner }, { fleetHistoryWorker: { $exists: false } },
+      { "fleetHistoryWorker.seenAt": { $lt: new Date(Date.now() - HISTORY_WORKER_FRESH_MS) } },
+      { "fleetHistoryWorker.status": "stopped" }],
+  }, { $set: { fleetHistoryWorker: { owner, protocol: HISTORY_WORKER_PROTOCOL, importsEnabled, status,
+    revision: revision && /^[a-f0-9]{40}$/.test(revision) ? revision : null, seenAt: new Date() } } });
+  if (!result.matchedCount) throw new Error("Worker heartbeat ownership unavailable");
 }
 export async function controlFleetHistory(shopId: number, action: string) {
   if (!Number.isSafeInteger(shopId) || shopId < 1 || !["pause", "resume", "queue", "retry"].includes(action)) throw new Error("Invalid history action");
@@ -112,6 +174,7 @@ export async function runFleetHistoryTick() {
   const { db, state, config, progress } = snap;
   if (!config.enabled || state?.operatorStop?.active !== false || state?.canary?.mode !== "live" || state?.canary?.endedBy)
     return { processed: 0, reason: "disabled_or_transport_unavailable" };
+  if (!historyWorkerHealth(state).ready) return { processed: 0, reason: "worker_unavailable" };
   const rates = db.collection<any>("api_rate_limits");
   const owner = randomUUID();
   const lease = await rates.updateOne({ _id: FLEET_HISTORY_KEY, $or: [

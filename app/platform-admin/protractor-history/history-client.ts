@@ -1,3 +1,5 @@
+import { validateFleetHistoryConfig } from "@/lib/integrations/protractor/fleet-history-policy";
+import type { ShopHistorySchedule } from "@/lib/integrations/protractor/history-schedule";
 export type HistoryConfig = {
   revision: string;
   enabled: boolean;
@@ -6,6 +8,7 @@ export type HistoryConfig = {
   defaultTimezone: string | null;
   week: Array<{ day: number; open: string; close: string; closed: boolean }>;
   rolloutShopIds: number[];
+  shopSchedules?: ShopHistorySchedule[];
 };
 
 export type HistoryShop = {
@@ -16,11 +19,16 @@ export type HistoryShop = {
   paused: boolean;
   completed: boolean;
   lastError: string | null;
+  schedule?: { timezone: string | null; source: string; issue: string | null;
+    hoursSource: string; week: HistoryConfig["week"] };
+  nextEligibleAt?: string | null;
+  progress?: { oldestCursorAt: string | null; lastAttemptAt: string | null };
 };
 
 export type HistorySnapshot = {
   config: HistoryConfig;
-  runtime: { active: boolean; shopId: number | null; lastOutcome: string | null };
+  runtime: { active: boolean; shopId: number | null; lastOutcome: string | null;
+    worker?: { status: string; ready: boolean; lastSeenAt: string | null; revision: string | null } };
   shops: HistoryShop[];
 };
 
@@ -77,12 +85,17 @@ export function validateConfig(config: HistoryConfig): string | null {
     try { new Intl.DateTimeFormat("en-US", { timeZone: config.defaultTimezone }); }
     catch { return "Enter a valid IANA timezone, such as America/Chicago, or leave the fallback blank."; }
   }
+  try {
+    validateFleetHistoryConfig({ ...config, week: config.week.map(row => row.closed
+      ? { ...row, open: row.open || "00:00", close: row.close || "00:00" } : row) });
+  } catch { return "Check each shop override: seven valid days, a valid timezone, and no duplicate shops are required."; }
   return null;
 }
 
 export function needsExpansionConfirmation(saved: HistoryConfig, next: HistoryConfig): boolean {
   if (!next.enabled) return false;
   if (!saved.enabled) return true;
+  if (next.horizonYears > saved.horizonYears) return true;
   if (!saved.rolloutShopIds.length) return false;
   return !next.rolloutShopIds.length ||
     next.rolloutShopIds.some(id => !saved.rolloutShopIds.includes(id));
@@ -115,7 +128,30 @@ const labels: Record<string, string> = {
   error: "Needs attention",
   failed: "Needs attention",
   blocked: "Blocked",
+  worker_unavailable: "Dedicated worker is not ready",
+  not_reported: "No worker heartbeat — provisioning unverified",
+  stale: "Worker heartbeat stale",
+  stopped: "Worker stopped",
+  readiness_only: "Readiness-only worker — imports disabled",
+  upgrade_required: "Worker upgrade required",
+  invalid_timezone: "Invalid saved timezone",
+  ambiguous_location: "Provider location needs review",
+  unsupported_provider_timezone: "Provider timezone needs mapping",
 };
+export function scheduleSource(value?: string): string {
+  return ({ protractor: "Protractor location", shop_setting: "Saved shop setting",
+    history_override: "History scheduling override", confirmed_fallback: "Confirmed fallback",
+    unknown: "Not available", shared_policy: "Shared business-hours policy", shop_override: "Shop-specific business hours",
+  } as Record<string, string>)[value || ""] || "Not available";
+}
+export function shopTime(value: string | null | undefined, timezone?: string | null) {
+  if (!value) return "Not available";
+  const date = new Date(value);
+  if (!Number.isFinite(+date)) return "Not available";
+  try { return new Intl.DateTimeFormat("en-US", { timeZone: timezone || "UTC",
+    dateStyle: "medium", timeStyle: "short" }).format(date) + ` (${timezone || "UTC"})`; }
+  catch { return "Not available"; }
+}
 export function statusLabel(value: string | null): string {
   return labels[(value || "").toLowerCase().replace(/[\s-]+/g, "_")] || "Not reported";
 }
