@@ -82,6 +82,12 @@ the detail fetch is the only source of packages/lines for open/in-progress ROs.
 
 ## Recommendation for the rewrite (follow-up task)
 
+**Pagination qualification (2026-11-09):** The retained probe source requested
+`take=100&skip=0`, while the reported invoice list contains 1,446 records.
+The probe established list/detail richness, not that `take`/`skip` are honored.
+The pagination claim below must not be used as a response-size or completeness
+guarantee. See `docs/runbooks/protractor-history-date-windows.md`.
+
 The current backfill (`lib/integrations/protractor/sync.ts`) is **invoice-based**:
 it pages `/Invoice/?…`, then for each invoice does a cache-first
 `/Invoice/{id}` detail fetch (`fetchInvoiceById`) before extraction. That

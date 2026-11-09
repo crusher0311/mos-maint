@@ -1,12 +1,23 @@
 // Smaller payloads do not authorize additional requests or relaxed byte limits.
 export const HISTORY_INVOICE_PAGE_SIZE = 25;
+export const FLEET_HISTORY_MAX_WINDOW_DAYS = 7;
+/** Applies only inside an approved dedicated-worker permit, not other syncs. */
+export function fleetHistoryWindowDays(chunkEnd: Date, pending?: { chunkEnd?: unknown; days?: unknown }): number {
+  if (!Number.isFinite(chunkEnd.getTime())) throw new Error("Invalid history cursor");
+  if (!pending?.chunkEnd || new Date(pending.chunkEnd as string).getTime() !== chunkEnd.getTime())
+    return FLEET_HISTORY_MAX_WINDOW_DAYS;
+  const prior = Number(pending.days);
+  if (!Number.isSafeInteger(prior) || prior < 1) return FLEET_HISTORY_MAX_WINDOW_DAYS;
+  return Math.max(1, Math.floor(Math.min(FLEET_HISTORY_MAX_WINDOW_DAYS, prior) / 2));
+}
 export function historyChunkCursor(
   chunkStart: Date, chunkEnd: Date, oldestDate: Date, hadError: boolean, hitPageCap: boolean,
+  retainFailedFetch = false,
 ) {
-  const hold = hadError || hitPageCap;
+  const hold = hadError || hitPageCap || retainFailedFetch;
   const nextChunkEnd = hold ? chunkEnd : chunkStart;
   return { nextChunkEnd, complete: !hold && nextChunkEnd <= oldestDate,
-    clearPendingAttempt: !hitPageCap };
+    clearPendingAttempt: !hitPageCap && !retainFailedFetch };
 }
 type PageResult = { ok: boolean; data?: { ItemCollection?: unknown }; error?: string };
 export async function collectHistoryInvoicePages(

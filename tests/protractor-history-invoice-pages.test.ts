@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
-import { collectHistoryInvoicePages, historyChunkCursor, HISTORY_INVOICE_PAGE_SIZE } from "../lib/integrations/protractor/history-invoice-pages";
+import { collectHistoryInvoicePages, historyChunkCursor, HISTORY_INVOICE_PAGE_SIZE, fleetHistoryWindowDays } from "../lib/integrations/protractor/history-invoice-pages";
 import { fleetHistoryEndpointAllowed } from "../lib/integrations/protractor/fleet-history-policy";
 const page = (offset: number, count = 25) => Array.from({ length: count }, (_, i) => ({ ID: `invoice-${offset + i}` }));
 
@@ -101,4 +101,79 @@ test("partial/error chunks never advance or complete; capped retries retain shri
   assert.equal(result.nextChunkEnd, start);
   assert.equal(result.complete, true);
   assert.equal(result.clearPendingAttempt, true);
+});
+
+test("dedicated-worker windows start bounded and shrink only at the same cursor", () => {
+  const end = new Date("2026-11-09T23:59:59.999Z");
+  assert.equal(fleetHistoryWindowDays(end), 7);
+  for (const [prior, expected] of [[120, 3], [7, 3], [3, 1], [1, 1]]) {
+    assert.equal(fleetHistoryWindowDays(end, { chunkEnd: end.toISOString(), days: prior }), expected);
+  }
+  assert.equal(fleetHistoryWindowDays(end, { chunkEnd: "2026-11-08", days: 1 }), 7);
+  for (const days of [0, -1, NaN, Infinity, 1.2, "invalid"]) {
+    assert.equal(fleetHistoryWindowDays(end, { chunkEnd: end.toISOString(), days }), 7);
+  }
+  assert.throws(() => fleetHistoryWindowDays(new Date("invalid")));
+});
+
+test("failed fleet list retains shrink state; successful range clears it", () => {
+  const end = new Date("2026-11-09T23:59:59.999Z");
+  const start = new Date("2026-11-02T23:59:59.999Z");
+  const failed = historyChunkCursor(start, end, start, true, false, true);
+  assert.equal(failed.nextChunkEnd, end);
+  assert.equal(failed.clearPendingAttempt, false);
+  assert.equal(failed.complete, false);
+  const success = historyChunkCursor(start, end, start, false, false);
+  assert.equal(success.nextChunkEnd, start);
+  assert.equal(success.clearPendingAttempt, true);
+  assert.equal(success.complete, true);
+  // Non-fleet fetch/ingestion error behavior is unchanged.
+  assert.equal(historyChunkCursor(start, end, start, true, false).clearPendingAttempt, true);
+});
+
+test("oversized and ignored-pagination responses shrink across separate passes, not immediate retries", async () => {
+  const end = new Date("2026-11-09T23:59:59.999Z");
+  let pending: { chunkEnd: string; days: number } | undefined;
+  const windows: number[] = [];
+  for (const failure of ["oversized", "overfull", "oversized", "oversized"]) {
+    const days = fleetHistoryWindowDays(end, pending);
+    windows.push(days);
+    let requests = 0;
+    const result = await collectHistoryInvoicePages(async () => {
+      requests++;
+      return failure === "overfull" ? { ok: true, data: { ItemCollection: page(0, 1446) } } :
+        { ok: false, error: "upstream_response_too_large" };
+    }, 50);
+    assert.equal(requests, 1);
+    const start = new Date(end); start.setUTCDate(start.getUTCDate() - days);
+    const decision = historyChunkCursor(start, end, start, result.hadError, result.hitPageCap, result.hadError);
+    assert.equal(decision.nextChunkEnd, end);
+    assert.equal(decision.complete, false);
+    assert.equal(decision.clearPendingAttempt, false);
+    pending = { chunkEnd: end.toISOString(), days };
+  }
+  assert.deepEqual(windows, [7, 3, 1, 1]);
+});
+
+test("date-boundary traversal retains adjacency and clamps at horizon", () => {
+  for (const iso of ["2026-11-09T23:59:59.999Z", "2026-03-09T23:59:59.999Z", "2024-03-02T23:59:59.999Z", "2026-01-03T23:59:59.999Z"]) {
+    let end = new Date(iso);
+    const horizon = new Date(end); horizon.setUTCDate(horizon.getUTCDate() - 10);
+    let passes = 0;
+    while (end > horizon) {
+      const start = new Date(end); start.setUTCDate(start.getUTCDate() - fleetHistoryWindowDays(end));
+      if (start < horizon) start.setTime(horizon.getTime());
+      const decision = historyChunkCursor(start, end, horizon, false, false);
+      assert.ok(start < end && end.getTime() - start.getTime() <= 7 * 86400000);
+      assert.equal(decision.nextChunkEnd, start);
+      end = decision.nextChunkEnd;
+      assert.ok(++passes < 3);
+    }
+    assert.equal(end.getTime(), horizon.getTime());
+  }
+  const source = readFileSync("lib/integrations/protractor/sync.ts", "utf8");
+  assert.match(source, /if \(fleetHistory\) daysToProcess = fleetHistoryWindowDays\(chunkEnd, pendingAttempt\)/);
+  assert.match(source, /if \(fleetHistory\) chunkStart.setUTCDate/);
+  assert.match(source, /retainFailedFetch = fleetHistory && fetchResult.hadError/);
+  assert.equal(source.match(/hitPageCap, retainFailedFetch\)/g)?.length, 2);
 });

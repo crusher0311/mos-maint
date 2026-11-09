@@ -1,6 +1,6 @@
 import { getDb } from "@/lib/mongo";
 import { getFleetHistoryContext } from "./fleet-history-context";
-import { collectHistoryInvoicePages, historyChunkCursor } from "./history-invoice-pages";
+import { collectHistoryInvoicePages, historyChunkCursor, fleetHistoryWindowDays } from "./history-invoice-pages";
 import {
   resolveProtractorConfig,
   protractorFetch,
@@ -318,8 +318,10 @@ async function backfillShopChunk(
   // mid-chunk and we halve the window (floored at 7 days, and never larger
   // than what the dead attempt tried) so each retry walks a strictly smaller
   // window until one fits inside the budget and the cursor finally advances.
+  const fleetHistory = !!getFleetHistoryContext();
   const pendingAttempt = progress?.pendingAttempt;
   if (
+    !fleetHistory &&
     pendingAttempt?.chunkEnd &&
     new Date(pendingAttempt.chunkEnd).getTime() === chunkEnd.getTime()
   ) {
@@ -334,6 +336,9 @@ async function backfillShopChunk(
     }
     daysToProcess = shrunk;
   }
+  // Dedicated-worker lists cannot rely on record-count paging to bound bytes.
+  // Apply this AFTER density/time heuristics so they cannot grow the window.
+  if (fleetHistory) daysToProcess = fleetHistoryWindowDays(chunkEnd, pendingAttempt);
   await writeProtractorCheckpoint(shopId, {
     set: {
       pendingAttempt: {
@@ -345,7 +350,8 @@ async function backfillShopChunk(
   });
   
   const chunkStart = new Date(chunkEnd);
-  chunkStart.setDate(chunkStart.getDate() - daysToProcess);
+  if (fleetHistory) chunkStart.setUTCDate(chunkStart.getUTCDate() - daysToProcess);
+  else chunkStart.setDate(chunkStart.getDate() - daysToProcess);
   if (chunkStart < oldestDate) {
     chunkStart.setTime(oldestDate.getTime());
   }
@@ -373,12 +379,16 @@ async function backfillShopChunk(
   // exhausted. Keep the cursor and pending-attempt shrink marker for retry.
   let chunkHadError = fetchResult.hadError || fetchResult.hitPageCap;
   const hitPageCap = fetchResult.hitPageCap;
+  // Preserve the same-cursor shrink marker after any failed fleet list fetch,
+  // including malformed/overfull pages. Shrinking happens on a later admitted
+  // pass only; no immediate retry, extra request allowance, or circuit reset.
+  const retainFailedFetch = fleetHistory && fetchResult.hadError;
   console.log(`[Backfill] Shop ${shopId}: ${invoices.length} invoices ${describePace(pace)} ${hitPageCap ? "[HIT PAGE CAP]" : ""}${chunkHadError ? " [HAD ERROR]" : ""}`);
 
   if (invoices.length === 0) {
     _metricOutcome = chunkHadError ? "error" : "empty";
     // Empty chunk: if it was empty due to error, hold cursor; else advance.
-    const decision = historyChunkCursor(chunkStart, chunkEnd, oldestDate, chunkHadError, hitPageCap);
+    const decision = historyChunkCursor(chunkStart, chunkEnd, oldestDate, chunkHadError, hitPageCap, retainFailedFetch);
     const { nextChunkEnd, complete: isComplete } = decision;
     const emptyChunkMetrics = buildProtractorChunkMetrics({
       now: new Date(),
@@ -396,7 +406,7 @@ async function backfillShopChunk(
       vehiclesCacheMisses: vehicleCacheCounters.misses,
       backoffDeltaMs: chunkBackoffCounter.ms,
       chunkHadError,
-      hitPageCap: false,
+      hitPageCap,
     });
     const priorEmptyMetrics: any[] = Array.isArray(progress?.recentChunkMetrics)
       ? progress.recentChunkMetrics
@@ -664,7 +674,7 @@ async function backfillShopChunk(
     console.error(`[Backfill] Shop ${shopId}: Normalized ingestion error:`, normalizedError);
   }
 
-  const decision = historyChunkCursor(chunkStart, chunkEnd, oldestDate, chunkHadError, hitPageCap);
+  const decision = historyChunkCursor(chunkStart, chunkEnd, oldestDate, chunkHadError, hitPageCap, retainFailedFetch);
   const { nextChunkEnd, complete: isComplete } = decision;
   const advanceMode = chunkHadError ? "HOLD (error or incomplete chunk)" : "FULL";
 
