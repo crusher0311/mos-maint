@@ -39,7 +39,7 @@ async function ingest(raw: any, prior: any, expected: any, conflict = false) {
   }, adapter);
   (service as any).supabaseDualWriter = {
     findWorkOrderByNaturalKey: async () => prior,
-    upsertWorkOrder: async (doc: any) => { pg.push(doc); },
+    upsertWorkOrder: async (doc: any) => { pg.push(doc); return doc._id; },
   };
   const result = await service.ingestWorkOrder(raw);
   if (conflict) {

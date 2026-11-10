@@ -217,7 +217,7 @@ function makeRuntime(
     },
     upsertVehicle: async () => calls.push({ kind: "pg.write.vehicle" }),
     upsertCustomer: async () => calls.push({ kind: "pg.write.customer" }),
-    upsertWorkOrder: async () => calls.push({ kind: "pg.write.work_order" }),
+    upsertWorkOrder: async (doc: any) => { calls.push({ kind: "pg.write.work_order" }); return doc._id; },
     upsertServiceJob: async (doc: AnyDoc) => {
       const source = String(doc.provenance?.sourceIds?.[0]?.idValue || "unknown");
       calls.push({ kind: "pg.write.service_job.start", source });

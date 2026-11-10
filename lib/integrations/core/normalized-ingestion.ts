@@ -696,8 +696,9 @@ export class NormalizedIngestionService {
           // row already exists, so this backfill is redundant — and `existing`
           // is only a partial projection, so spreading it would clobber the
           // real row. Only backfill when the hit came from the Mongo fallback.
+          let canonicalId = existing._id;
           if (!existing.__fromPg) {
-            await this.dualWriteToSupabase('work_order', existing._id, 'skip-fk-backfill', () =>
+            canonicalId = await this.dualWriteToSupabase('work_order', existing._id, 'skip-fk-backfill', () =>
               this.supabaseDualWriter!.upsertWorkOrder({
                 ...existing,
                 shopId: this.shopId,
@@ -707,10 +708,21 @@ export class NormalizedIngestionService {
               })
             );
           }
+          if (canonicalId !== existing._id) {
+            await this.shadowWriteMongo('work_order', () => collection.updateOne(
+              { _id: canonicalId },
+              { $setOnInsert: {
+                ...existing, _id: canonicalId, shopId: this.shopId,
+                vehicleId: vehicleId || existing.vehicleId,
+                customerId: customerId || existing.customerId,
+              } },
+              { upsert: true },
+            ));
+          }
           return {
             success: true,
             entityType: 'work_order',
-            entityId: existing._id,
+            entityId: canonicalId,
             action: 'skipped',
             message: 'Content unchanged',
             contentHash,
@@ -730,7 +742,7 @@ export class NormalizedIngestionService {
         // job_index / repair_patterns / audit are SEPARATE Mongo
         // collections with their own future migrations — they continue
         // to write regardless of the WRITE_MONGO_NORMALIZED flag.
-        await this.dualWriteToSupabase('work_order', existing._id, 'update', () =>
+        const canonicalId = await this.dualWriteToSupabase('work_order', existing._id, 'update', () =>
           this.supabaseDualWriter!.upsertWorkOrder({
             ...mapped, _id: existing._id, shopId: this.shopId, enterpriseId: this.enterpriseId,
             vehicleId: vehicleId || existing.vehicleId, customerId: customerId || existing.customerId,
@@ -742,8 +754,24 @@ export class NormalizedIngestionService {
           })
         );
         await this.shadowWriteMongo('work_order', async () => {
+          if (canonicalId !== existing._id) {
+            await collection.updateOne(
+              { _id: canonicalId },
+              { $setOnInsert: {
+                ...existing, ...mapped, _id: canonicalId, shopId: this.shopId,
+                vehicleId: vehicleId || existing.vehicleId,
+                customerId: customerId || existing.customerId,
+                provenance: updatedProvenance,
+                version: existing.version + 1, updatedAt: new Date(),
+                rawPayload: this.sanitizeRawPayload(sourceData.rawPayload || sourceData),
+              } },
+              { upsert: true },
+            );
+            await this._stampIngestionVia(canonicalId);
+            return;
+          }
           const result = await collection.updateOne(
-            { _id: existing._id, ...(this.adapter.sourceSystem==="protractor"
+            { _id: canonicalId, ...(this.adapter.sourceSystem==="protractor"
               ?protractorMongoIdentityFilter(existing.provenance,{sourceIds}):{}) },
             {
               $set: {
@@ -760,7 +788,7 @@ export class NormalizedIngestionService {
           );
           if(this.adapter.sourceSystem==="protractor"&&result.matchedCount!==1)
             throw new ProtractorIdentityConflict();
-          await this._stampIngestionVia(existing._id);
+          await this._stampIngestionVia(canonicalId);
         });
 
         if (this.options.dualWriteToJobIndex && serviceJobs.length > 0) {
@@ -772,13 +800,13 @@ export class NormalizedIngestionService {
         }
         
         if (this.options.createAuditLog) {
-          await this.createAuditEntry('work_order', existing._id, 'update', mapped);
+          await this.createAuditEntry('work_order', canonicalId, 'update', mapped);
         }
         
         return {
           success: true,
           entityType: 'work_order',
-          entityId: existing._id,
+          entityId: canonicalId,
           action: 'updated',
           contentHash,
         };
@@ -833,12 +861,23 @@ export class NormalizedIngestionService {
       } as NormalizedWorkOrder;
       
       // task #344 (W3a): PG canonical first; Mongo shadow after.
-      await this.dualWriteToSupabase('work_order', newId, 'create', () =>
+      const canonicalId = await this.dualWriteToSupabase('work_order', newId, 'create', () =>
         this.supabaseDualWriter!.upsertWorkOrder(newWorkOrder)
       );
+      newWorkOrder._id = canonicalId;
       await this.shadowWriteMongo('work_order', async () => {
-        await collection.insertOne(newWorkOrder);
-        await this._stampIngestionVia(newId);
+        if (this.adapter.sourceSystem === 'protractor') {
+          await collection.insertOne(newWorkOrder);
+        } else {
+          // Either concurrent writer may reach the mirror first. Never insert
+          // the losing ID, or overwrite a winning shadow with a stale snapshot.
+          await collection.updateOne(
+            { _id: canonicalId },
+            { $setOnInsert: newWorkOrder },
+            { upsert: true },
+          );
+        }
+        await this._stampIngestionVia(canonicalId);
       });
 
       if (this.options.dualWriteToJobIndex && serviceJobs.length > 0) {
@@ -850,14 +889,14 @@ export class NormalizedIngestionService {
       }
       
       if (this.options.createAuditLog) {
-        await this.createAuditEntry('work_order', newId, 'create', mapped);
+        await this.createAuditEntry('work_order', canonicalId, 'create', mapped);
       }
       
       return {
         success: true,
         entityType: 'work_order',
-        entityId: newId,
-        action: 'created',
+        entityId: canonicalId,
+        action: canonicalId === newId ? 'created' : 'updated',
         contentHash,
       };
     } catch (error) {
@@ -2412,13 +2451,13 @@ export class NormalizedIngestionService {
    * The legacy method name is retained so call-site diffs stay small;
    * see `docs/db-migration-map.md` §10 for the cutover log.
    */
-  private async dualWriteToSupabase(
+  private async dualWriteToSupabase<T>(
     entityType: string,
     entityId: string,
     action: string,
-    upsertFn: () => Promise<void>
-  ): Promise<void> {
-    await this.timed(
+    upsertFn: () => Promise<T>
+  ): Promise<T> {
+    return this.timed(
       this.writeTimingOperation(entityType, 'canonical'),
       async () => {
         if (!this.supabaseDualWriter) {
@@ -2427,12 +2466,13 @@ export class NormalizedIngestionService {
           );
         }
         try {
-          await upsertFn();
+          const result = await upsertFn();
           // Task #460: per-chunk PG write fan-out. AsyncLocalStorage-scoped,
           // so it only counts when the call chain originated inside a
           // `withChunkWriteCounters` wrapper (i.e. the backfill chunk path).
           // Live/webhook ingestion paths are unaffected.
           bumpPgWrites();
+          return result;
         } catch (err) {
           if (this.options.localNormalizationWriter) {
             // Drizzle errors can contain the full bound customer payload.

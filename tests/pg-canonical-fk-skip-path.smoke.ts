@@ -139,6 +139,7 @@ async function probeContentHash(kind: "wo" | "sj"): Promise<string> {
   const probeWriter: MockWriter = {
     upsertWorkOrder: async (d) => {
       if (kind === "wo") captured = d.provenance?.contentHash ?? "";
+      return d._id;
     },
     upsertServiceJob: async (d) => {
       if (kind === "sj") captured = d.provenance?.contentHash ?? "";
@@ -214,6 +215,7 @@ async function main() {
   const mongoFallbackWriter: MockWriter = {
     upsertWorkOrder: async (d) => {
       upsertCalls.push({ kind: "wo", doc: d });
+      return d._id;
     },
     upsertServiceJob: async (d) => {
       upsertCalls.push({ kind: "sj", doc: d });
@@ -298,6 +300,7 @@ async function main() {
   const pgCanonicalWriter: MockWriter = {
     upsertWorkOrder: async (d) => {
       upsertCalls.push({ kind: "wo", doc: d });
+      return d._id;
     },
     upsertServiceJob: async (d) => {
       upsertCalls.push({ kind: "sj", doc: d });

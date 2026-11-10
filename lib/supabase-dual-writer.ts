@@ -32,6 +32,7 @@ import {
 import { enrichVinWithAces } from "./job-index-aces";
 import { assertSameProtractorWorkOrder, protractorWorkOrderIdentity, ProtractorIdentityConflict } from "./protractor-work-order-identity";
 import { protractorSnapshotFreshness, ProtractorSnapshotWriteConflict } from "./protractor-snapshot-freshness";
+import { assertSameWorkOrderOwner } from "./normalized-work-order-owner";
 
 type DrizzleDb = ReturnType<typeof import("./db/drizzle").getDb>;
 
@@ -223,7 +224,7 @@ export class SupabaseDualWriter {
       });
   }
 
-  async upsertWorkOrder(doc: any): Promise<void> {
+  async upsertWorkOrder(doc: any): Promise<string> {
     const protractor=doc.provenance?.sourceSystem==="protractor";
     const providerId=protractor?protractorWorkOrderIdentity(doc.provenance):null;
     // task #344 (W3a): vehicle_id / vehicle are now nullable in PG
@@ -311,6 +312,7 @@ export class SupabaseDualWriter {
         const written=await statement.returning({id:normalizedWorkOrders.id});
         if(written.length!==1)throw new ProtractorSnapshotWriteConflict();
       } else await statement;
+      return row.id;
     } catch (e: any) {
       // The insert only reconciles conflicts on the primary key `id`
       // (onConflictDoUpdate target above). The table ALSO has the unique
@@ -328,7 +330,10 @@ export class SupabaseDualWriter {
       if(protractor)throw new ProtractorIdentityConflict();
 
       const existing = await (this.db as any)
-        .select({ id: normalizedWorkOrders.id })
+        .select({
+          id: normalizedWorkOrders.id,
+          provenance: normalizedWorkOrders.provenance,
+        })
         .from(normalizedWorkOrders)
         .where(
           and(
@@ -339,11 +344,24 @@ export class SupabaseDualWriter {
         .limit(1);
       const existingId = existing[0]?.id;
       if (!existingId) throw e;
+      assertSameWorkOrderOwner(existing[0].provenance, doc.provenance);
 
-      await (this.db as any)
+      const written = await (this.db as any)
         .update(normalizedWorkOrders)
-        .set(updateSet)
-        .where(eq(normalizedWorkOrders.id, existingId));
+        .set({
+          ...updateSet,
+          rawData: this.sanitizeForJson({ ...doc, _id: existingId }),
+        })
+        .where(and(
+          eq(normalizedWorkOrders.id, existingId),
+          eq(normalizedWorkOrders.shopId, row.shopId),
+          eq(normalizedWorkOrders.workOrderNumber, row.workOrderNumber),
+          // Recheck the ownership evidence atomically, not just in the read above.
+          sql`${normalizedWorkOrders.provenance} = ${JSON.stringify(existing[0].provenance)}::jsonb`,
+        ))
+        .returning({ id: normalizedWorkOrders.id });
+      if (written.length !== 1) throw new Error("Work order ownership changed during collision recovery");
+      return written[0].id;
     }
   }
 

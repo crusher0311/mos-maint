@@ -114,7 +114,7 @@ const COLLECTIONS: CollectionSpec[] = [
     key: "work_orders",
     mongoName: "normalized_work_orders",
     pgTable: normalizedWorkOrders,
-    upsert: (w, d) => w.upsertWorkOrder(d),
+    upsert: async (w, d) => { await w.upsertWorkOrder(d); },
   },
   {
     key: "service_jobs",

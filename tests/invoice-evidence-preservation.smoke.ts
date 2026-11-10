@@ -24,7 +24,7 @@ async function ingest(existing: any, next: any, raw: any = partial, expectConfli
   },adapter);
   (service as any).supabaseDualWriter = {
     findWorkOrderByNaturalKey:async()=>existing,
-    upsertWorkOrder:async(d:any)=>writes.push(d),
+    upsertWorkOrder:async(d:any)=>{writes.push(d);return d._id;},
   };
   const result = await service.ingestWorkOrder(raw);
   if(expectConflict){
