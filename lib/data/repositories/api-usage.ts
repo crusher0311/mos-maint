@@ -1326,8 +1326,8 @@ export async function confirmProtractorPhysicalTransportLease(
         ...(context.overnightRequest ? jwtOvernightConsumptionFields(context.overnightRequest) : {}),
         ...(context.fleetHistory ? { "fleetHistoryGrant.consumed": { $add: ["$fleetHistoryGrant.consumed", 1] } } : {}),
         ...(context.historyRequest ? {
-          [`${context.historyRequest.pilot==="invoiceRecovery"?"invoiceRecovery":context.historyRequest.pilot==="weekend"?"weekendHistory":context.historyRequest.pilot==="avid"?"avidHistory":context.historyRequest.pilot==="afton"?"aftonPilot":"shopHistory"}.consumedRequests`]:
-            {$add:[`$${context.historyRequest.pilot==="invoiceRecovery"?"invoiceRecovery":context.historyRequest.pilot==="weekend"?"weekendHistory":context.historyRequest.pilot==="avid"?"avidHistory":context.historyRequest.pilot==="afton"?"aftonPilot":"shopHistory"}.consumedRequests`,1]},
+          [`${context.historyRequest.pilot==="telleRecovery"?"telleRecovery":context.historyRequest.pilot==="invoiceRecovery"?"invoiceRecovery":context.historyRequest.pilot==="weekend"?"weekendHistory":context.historyRequest.pilot==="avid"?"avidHistory":context.historyRequest.pilot==="afton"?"aftonPilot":"shopHistory"}.consumedRequests`]:
+            {$add:[`$${context.historyRequest.pilot==="telleRecovery"?"telleRecovery":context.historyRequest.pilot==="invoiceRecovery"?"invoiceRecovery":context.historyRequest.pilot==="weekend"?"weekendHistory":context.historyRequest.pilot==="avid"?"avidHistory":context.historyRequest.pilot==="afton"?"aftonPilot":"shopHistory"}.consumedRequests`,1]},
         } : {}),
         physicalAdmissionStartedAt: "$$NOW",
         physicalAdmissionOwnerToken: { $literal: ownerToken },
