@@ -48,6 +48,12 @@ const nextConfig = {
     // Bound build-time page workers: several Node heaps exceeded Render's
     // aggregate 8 GiB builder limit. This does not limit runtime concurrency.
     cpus: 1,
+    // Custom webpack hooks disable Next's compiler workers by default. Run each
+    // compiler in a fresh, sequential worker so its heap is released afterward.
+    webpackBuildWorker: true,
+    webpackMemoryOptimizations: true,
+    parallelServerCompiles: false,
+    parallelServerBuildTraces: false,
     serverActions: {
       allowedOrigins: ['*'],
     },
