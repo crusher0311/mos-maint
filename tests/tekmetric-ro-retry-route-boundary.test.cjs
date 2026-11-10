@@ -12,8 +12,8 @@ const marker='// Task: cron/backfill Tekmetric traffic';
 assert.equal(helper.slice(helper.indexOf('const MAX_SHOPS_PER_RUN')),original.slice(original.indexOf('const MAX_SHOPS_PER_RUN'),original.indexOf(marker)));
 assert.equal(current.slice(current.indexOf(marker)),original.slice(original.indexOf(marker)));
 assert.equal(fs.readFileSync(admin,'utf8'),execFileSync('git',['show',`${baseline}:${admin}`],{encoding:'utf8'}).replace('@/app/api/cron/tekmetric-ro-retry/route','@/lib/integrations/tekmetric/ro-retry-service'));
-const exports=[...current.matchAll(/^export (?:async function|const) (\w+)/gm)].map(m=>m[1]);
-assert.deepEqual(exports,['runtime','dynamic','maxDuration','GET','POST']);
+const routeExports=[...current.matchAll(/^export (?:async function|const) (\w+)/gm)].map(m=>m[1]);
+assert.deepEqual(routeExports,['runtime','dynamic','maxDuration','GET','POST']);
 for(const setting of ['runtime','dynamic','maxDuration']){
  const expression=new RegExp(`export const ${setting} = ([^;]+);`);
  assert.equal(current.match(expression)[1],original.match(expression)[1]);
