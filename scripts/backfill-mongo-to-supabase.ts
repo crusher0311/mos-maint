@@ -126,7 +126,7 @@ const COLLECTIONS: CollectionSpec[] = [
     key: "line_items",
     mongoName: "normalized_line_items",
     pgTable: normalizedLineItems,
-    upsert: (w, d) => w.upsertLineItem(d),
+    upsert: async (w, d) => { await w.upsertLineItem(d); },
   },
   {
     key: "payments",

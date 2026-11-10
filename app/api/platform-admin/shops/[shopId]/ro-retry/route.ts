@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDb } from "@/lib/mongo";
-import { retryShopSkippedRos } from "@/app/api/cron/tekmetric-ro-retry/route";
+import { retryShopSkippedRos } from "@/lib/integrations/tekmetric/ro-retry-service";
 import { runWithTekmetricApiCallTracking } from "@/lib/integrations/tekmetric/client";
 
 export const runtime = "nodejs";

@@ -231,6 +231,7 @@ function makeRuntime(
     upsertLineItem: async (doc: AnyDoc) => {
       const source = String(doc.provenance?.sourceIds?.[0]?.idValue || "unknown");
       calls.push({ kind: "pg.write.line_item", source });
+      return doc._id;
     },
     upsertPayment: async () => calls.push({ kind: "pg.write.payment" }),
   };
