@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
-import { collectHistoryInvoicePages, historyChunkCursor, HISTORY_INVOICE_PAGE_SIZE, fleetHistoryWindowDays } from "../lib/integrations/protractor/history-invoice-pages";
+import { collectHistoryInvoicePages, historyChunkCursor, HISTORY_INVOICE_PAGE_SIZE, fleetHistoryWindowDays, reportHistoryInvoicePageDiagnostic } from "../lib/integrations/protractor/history-invoice-pages";
 import { fleetHistoryEndpointAllowed } from "../lib/integrations/protractor/fleet-history-policy";
 const page = (offset: number, count = 25) => Array.from({ length: count }, (_, i) => ({ ID: `invoice-${offset + i}` }));
 
@@ -82,12 +82,86 @@ test("only reviewed sizes pass the existing invoice read boundary", () => {
 });
 test("canonical sync wiring holds partial ranges, shrinks capped retries and reports empty errors", () => {
   const source = readFileSync("lib/integrations/protractor/sync.ts", "utf8");
-  assert.match(source, /return collectHistoryInvoicePages\(async/);
+  assert.match(source, /const pages = await collectHistoryInvoicePages\(async/);
+  assert.match(source, /if \(pages.diagnostic\) reportHistoryInvoicePageDiagnostic\(shopId, pages.diagnostic\);\s*return pages;/);
+  assert.doesNotMatch(source.slice(source.indexOf("async function fetchInvoicesForDateRange"), source.indexOf("async function getOrFetchVehicle")), /console\.(?:error|warn).*result\.error/);
   assert.match(source, /chunkHadError = fetchResult.hadError \|\| fetchResult.hitPageCap/);
   assert.equal(source.match(/const decision = historyChunkCursor\(/g)?.length, 2, "empty and nonempty chunks use the tested cursor policy");
   assert.doesNotMatch(source, /nextChunkEnd = midpoint/);
   assert.equal(source.match(/unset: decision.clearPendingAttempt \? \["pendingAttempt"\] : \[\]/g)?.length, 2);
   assert.match(source, /_metricOutcome = chunkHadError \? "error" : "empty"/);
+});
+
+test("rejection diagnostics distinguish shape, size and identity without retaining provider data", async () => {
+  const secret = "PRIVATE_CUSTOMER_VIN_URL_TOKEN";
+  const cases: Array<[any, string, number | null, number | null]> = [
+    [{ ok: false, error: secret }, "upstream_request_failed", null, null],
+    [{ ok: true }, "missing_item_collection", null, null],
+    [{ ok: true, data: { ItemCollection: null } }, "non_array_item_collection", null, null],
+    [{ ok: true, data: { ItemCollection: secret } }, "non_array_item_collection", null, null],
+    [{ ok: true, data: { ItemCollection: { secret } } }, "non_array_item_collection", null, null],
+    [{ ok: true, data: { ItemCollection: page(0, 1446) } }, "overfull_page", 1446, null],
+    [{ ok: true, data: { ItemCollection: [{ ID: " ", name: secret }, null, { ID: 7 }, { ID: secret }] } }, "invalid_invoice_id", 4, 3],
+    [{ ok: true, data: { ItemCollection: [{ ID: secret }, { ID: secret }] } }, "duplicate_invoice_id", 2, null],
+  ];
+  for (const [response, reason, receivedCount, invalidIdCount] of cases) {
+    let calls = 0;
+    const result = await collectHistoryInvoicePages(async () => { calls++; return response; }, 3);
+    assert.equal(calls, 1);
+    assert.equal(result.hadError, true);
+    assert.equal(result.hitPageCap, false);
+    assert.deepEqual(result.diagnostic, {
+      reason, receivedCount, invalidIdCount, pageNumber: 1, skip: 0, requestedTake: 25,
+      acceptedCount: reason === "duplicate_invoice_id" ? 1 : 0,
+    });
+    const lines: string[] = [];
+    const warn = console.warn;
+    console.warn = value => lines.push(value);
+    try {
+      // Exercise the actual log sink; additional payload fields must not escape.
+      reportHistoryInvoicePageDiagnostic(635, { ...result.diagnostic!, payload: secret } as any);
+    } finally { console.warn = warn; }
+    assert.equal(lines.length, 1);
+    assert.ok(!lines[0].includes(secret));
+    assert.deepEqual(JSON.parse(lines[0]), {
+      event: "protractor_history_invoice_page_rejected", shopId: 635, ...result.diagnostic,
+    });
+    const end = new Date("2026-11-09T23:59:59.999Z"), start = new Date("2026-11-02T23:59:59.999Z");
+    const decision = historyChunkCursor(start, end, start, result.hadError, result.hitPageCap, true);
+    assert.equal(decision.nextChunkEnd, end);
+    assert.equal(decision.clearPendingAttempt, false);
+  }
+});
+
+test("diagnostics preserve prior pages, request budgets, and successful responses", async () => {
+  const result = await collectHistoryInvoicePages(async (_, skip) => ({
+    ok: true, data: { ItemCollection: skip ? [{ ID: null }] : page(0) },
+  }), 3);
+  assert.equal(result.invoices.length, 25);
+  assert.deepEqual(result.diagnostic, { reason: "invalid_invoice_id", pageNumber: 2, skip: 25,
+    requestedTake: 25, receivedCount: 1, acceptedCount: 25, invalidIdCount: 1 });
+  const duplicate = await collectHistoryInvoicePages(async () => ({ ok: true, data: { ItemCollection: page(0) } }), 2);
+  assert.equal(duplicate.diagnostic?.reason, "duplicate_invoice_id");
+  assert.equal(duplicate.diagnostic?.pageNumber, 2);
+  const invalid = await collectHistoryInvoicePages(async () => { throw Error("must not fetch"); }, 0);
+  assert.equal(invalid.diagnostic?.reason, "invalid_page_budget");
+  assert.equal(invalid.diagnostic?.pageNumber, 0);
+  const capped = await collectHistoryInvoicePages(async () => ({ ok: true, data: { ItemCollection: page(0) } }), 1);
+  assert.equal(capped.diagnostic?.reason, "page_budget_exhausted");
+  assert.equal(capped.hadError, false);
+  assert.equal(capped.hitPageCap, true);
+  const offset = await collectHistoryInvoicePages(async (_, skip) => ({ ok: true, data: { ItemCollection: page(skip) } }), 500);
+  assert.equal(offset.diagnostic?.reason, "offset_limit");
+  assert.equal(offset.diagnostic?.pageNumber, 401);
+  assert.equal(offset.diagnostic?.skip, 10025);
+  assert.equal(offset.hadError, false);
+  assert.equal(offset.hitPageCap, true);
+  for (const items of [[], page(0, 3)]) {
+    const success = await collectHistoryInvoicePages(async () => ({ ok: true, data: { ItemCollection: items } }), 1);
+    assert.equal(success.diagnostic, undefined);
+    assert.equal(success.hadError, false);
+    assert.equal(success.hitPageCap, false);
+  }
 });
 test("partial/error chunks never advance or complete; capped retries retain shrink marker", () => {
   const start = new Date("2024-01-01"), end = new Date("2024-04-01"), oldest = start;

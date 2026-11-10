@@ -1,6 +1,6 @@
 import { getDb } from "@/lib/mongo";
 import { getFleetHistoryContext } from "./fleet-history-context";
-import { collectHistoryInvoicePages, historyChunkCursor, fleetHistoryWindowDays } from "./history-invoice-pages";
+import { collectHistoryInvoicePages, historyChunkCursor, fleetHistoryWindowDays, reportHistoryInvoicePageDiagnostic } from "./history-invoice-pages";
 import {
   resolveProtractorConfig,
   protractorFetch,
@@ -40,7 +40,7 @@ async function fetchInvoicesForDateRange(
 ): Promise<{ invoices: any[]; hitPageCap: boolean; hadError: boolean }> {
   const config = await resolveProtractorConfig(shopId);
   if (!config.configured) return { invoices: [], hitPageCap: false, hadError: true };
-  return collectHistoryInvoicePages(async (pageSize, skip) => {
+  const pages = await collectHistoryInvoicePages(async (pageSize, skip) => {
     const params = new URLSearchParams();
     params.set("startDate", startDate);
     params.set("endDate", endDate);
@@ -57,10 +57,12 @@ async function fetchInvoicesForDateRange(
 
     if (!result.ok) {
       await assertBackgroundSyncAllowed();
-      console.error(`[Backfill] Shop ${shopId} Invoice error at skip=${skip}:`, result.error);
+      console.error(`[Backfill] Shop ${shopId} Invoice request failed at skip=${skip}`);
     }
     return result;
   }, maxPages);
+  if (pages.diagnostic) reportHistoryInvoicePageDiagnostic(shopId, pages.diagnostic);
+  return pages;
 }
 
 async function getOrFetchVehicle(
