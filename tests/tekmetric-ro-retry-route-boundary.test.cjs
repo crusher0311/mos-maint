@@ -9,7 +9,7 @@ const original=execFileSync('git',['show',`${baseline}:${route}`],{encoding:'utf
 const current=fs.readFileSync(route,'utf8');
 const helper=fs.readFileSync('lib/integrations/tekmetric/ro-retry-service.ts','utf8');
 const marker='// Task: cron/backfill Tekmetric traffic';
-assert.equal(helper.slice(helper.indexOf('const MAX_SHOPS_PER_RUN')),original.slice(original.indexOf('const MAX_SHOPS_PER_RUN'),original.indexOf(marker)));
+assert.equal(helper.slice(helper.indexOf('const MAX_SHOPS_PER_RUN')).trimEnd(),original.slice(original.indexOf('const MAX_SHOPS_PER_RUN'),original.indexOf(marker)).trimEnd());
 assert.equal(current.slice(current.indexOf(marker)),original.slice(original.indexOf(marker)));
 for(const admin of ['app/api/platform-admin/shops/[shopId]/ro-retry/route.ts','app/api/platform-admin/tekmetric-ro-retry/route.ts']) {
 assert.equal(fs.readFileSync(admin,'utf8'),execFileSync('git',['show',`${baseline}:${admin}`],{encoding:'utf8'}).replace('@/app/api/cron/tekmetric-ro-retry/route','@/lib/integrations/tekmetric/ro-retry-service'));
