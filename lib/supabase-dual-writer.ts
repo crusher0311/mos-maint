@@ -1,3 +1,4 @@
+import { findTekmetricLine, writeTekmetricLine, type TekmetricLineScope } from "./tekmetric-line-identity";
 /**
  * **Pending rename: this file is the Postgres-canonical writer for the
  * six normalized entities, not a dual-writer.**
@@ -423,7 +424,14 @@ export class SupabaseDualWriter {
       });
   }
 
-  async upsertLineItem(doc: any): Promise<void> {
+  async upsertLineItem(doc: any): Promise<string> {
+    if (doc.provenance?.sourceSystem === 'tekmetric' || doc.provenance?.sourceIds?.some((id: any) => id.system === 'tekmetric')) {
+      return writeTekmetricLine(this.db, doc, (tx, resolved, existing) => new SupabaseDualWriter(tx).writeLineItem(resolved, existing));
+    }
+    return this.writeLineItem(doc);
+  }
+
+  private async writeLineItem(doc: any, allowUpdate = true): Promise<string> {
     const row = {
       id: doc._id,
       shopId: doc.shopId,
@@ -461,6 +469,12 @@ export class SupabaseDualWriter {
       updatedAt: doc.updatedAt || new Date(),
     };
 
+    if (!allowUpdate) {
+      const inserted = await (this.db as any).insert(normalizedLineItems).values(row)
+        .onConflictDoNothing().returning({ id: normalizedLineItems.id });
+      if (inserted.length !== 1) throw new Error('Tekmetric line insert identity conflict');
+      return inserted[0].id;
+    }
     await (this.db as any)
       .insert(normalizedLineItems)
       .values(row)
@@ -472,6 +486,7 @@ export class SupabaseDualWriter {
           createdAt: undefined,
         },
       });
+    return doc._id;
   }
 
   async upsertPayment(doc: any): Promise<void> {
@@ -674,7 +689,8 @@ export class SupabaseDualWriter {
     return rows[0] ? { ...rows[0], __fromPg: true } : null;
   }
 
-  async findLineItemByNaturalKey(serviceJobId: string, sourceIdValue: any): Promise<any | null> {
+  async findLineItemByNaturalKey(serviceJobId: string, sourceIdValue: any, scope?: TekmetricLineScope): Promise<any | null> {
+    if (scope) return findTekmetricLine(this.db, scope, sourceIdValue);
     const rows = await (this.db as any)
       .select({
         _id: normalizedLineItems.id,

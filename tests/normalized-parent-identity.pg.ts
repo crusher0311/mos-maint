@@ -97,6 +97,7 @@ async function main() {
         return {
           async findOne() { return null; },
           async updateOne(filter: any, update: any) {
+            if (name === "normalized_line_items" && update.$setOnInsert?.workOrderId) childParents.push(update.$setOnInsert.workOrderId);
             if (name === "normalized_work_orders" && update.$setOnInsert) {
               const value = update.$setOnInsert;
               assert.equal(filter._id, value._id);

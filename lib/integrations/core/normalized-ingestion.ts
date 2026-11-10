@@ -1,3 +1,4 @@
+import { lineAliases } from "../../tekmetric-line-identity";
 /**
  * MOS Normalized Data Ingestion Service
  * 
@@ -1101,7 +1102,8 @@ export class NormalizedIngestionService {
 
       const collection = this.db.collection<NormalizedLineItem>(NORMALIZED_COLLECTIONS.lineItems);
 
-      const sourceId = sourceData.ID || sourceData.id || sourceData._sourceId;
+      const tekmetric = this.adapter.sourceSystem === 'tekmetric';
+      const sourceId = tekmetric ? (sourceData._sourceId || sourceData.ID || sourceData.id) : (sourceData.ID || sourceData.id || sourceData._sourceId);
       if (!sourceId) {
         return {
           success: false,
@@ -1113,7 +1115,8 @@ export class NormalizedIngestionService {
 
       const existingQuery = {
         serviceJobId,
-        'provenance.sourceIds.idValue': String(sourceId),
+        'provenance.sourceIds.idValue': tekmetric ? { $in: lineAliases(sourceId, mapped.lineType!) } : String(sourceId),
+        ...(tekmetric ? { shopId: this.shopId, workOrderId, lineType: mapped.lineType } : {}),
       };
 
       // task #552 (W3a cutover): PG-canonical change-detection, Mongo fallback
@@ -1125,6 +1128,7 @@ export class NormalizedIngestionService {
             () => this.supabaseDualWriter!.findLineItemByNaturalKey(
               serviceJobId,
               sourceId,
+              tekmetric ? { shopId: this.shopId, workOrderId, serviceJobId, lineType: mapped.lineType! } : undefined,
             ),
           )
           : null) ??
@@ -1138,7 +1142,7 @@ export class NormalizedIngestionService {
       const contentHash = generateContentHash(mapped);
 
       if (existing) {
-        if (!this.options.forceUpdate && existing.provenance.contentHash === contentHash) {
+        if (!this.options.forceUpdate && (!tekmetric || existing.__fromPg) && existing.provenance.contentHash === contentHash) {
           return {
             success: true,
             entityType: 'line_item',
@@ -1150,14 +1154,21 @@ export class NormalizedIngestionService {
         }
 
         // task #344 (W3a): PG canonical first; Mongo shadow after.
-        await this.dualWriteToSupabase('line_item', existing._id, 'update', () =>
-          this.supabaseDualWriter!.upsertLineItem({ ...mapped, _id: existing._id, shopId: this.shopId, enterpriseId: this.enterpriseId, workOrderId, serviceJobId, provenance: existing.provenance, softDelete: existing.softDelete, version: existing.version + 1, createdAt: existing.createdAt, updatedAt: new Date() })
+        const canonicalId = await this.dualWriteToSupabase('line_item', existing._id, 'update', () =>
+          this.supabaseDualWriter!.upsertLineItem({ ...mapped, _id: existing._id, shopId: this.shopId, enterpriseId: this.enterpriseId, workOrderId, serviceJobId, provenance: tekmetric ? { ...existing.provenance, sourceSystem: 'tekmetric', contentHash } : existing.provenance, softDelete: existing.softDelete, version: existing.version + 1, createdAt: existing.createdAt, updatedAt: new Date() })
         );
-        await this.shadowWriteMongo('line_item', () => collection.updateOne(
-          { _id: existing._id },
+        await this.shadowWriteMongo('line_item', () => canonicalId !== existing._id
+          ? collection.updateOne({ _id: canonicalId }, { $setOnInsert: {
+              ...mapped, _id: canonicalId, shopId: this.shopId, workOrderId, serviceJobId,
+              provenance: { ...existing.provenance, contentHash },
+              createdAt: existing.createdAt, updatedAt: new Date(), version: existing.version + 1,
+            } }, { upsert: true })
+          : collection.updateOne(
+          { _id: canonicalId },
           {
             $set: {
               ...mapped,
+              ...(tekmetric ? { provenance: { ...existing.provenance, contentHash } } : {}),
               updatedAt: new Date(),
               version: existing.version + 1,
             },
@@ -1167,7 +1178,7 @@ export class NormalizedIngestionService {
         return {
           success: true,
           entityType: 'line_item',
-          entityId: existing._id,
+          entityId: canonicalId,
           action: 'updated',
           contentHash,
         };
@@ -1207,16 +1218,19 @@ export class NormalizedIngestionService {
       } as NormalizedLineItem;
 
       // task #344 (W3a): PG canonical first; Mongo shadow after.
-      await this.dualWriteToSupabase('line_item', newId, 'create', () =>
+      const canonicalId = await this.dualWriteToSupabase('line_item', newId, 'create', () =>
         this.supabaseDualWriter!.upsertLineItem(newLineItem)
       );
-      await this.shadowWriteMongo('line_item', () => collection.insertOne(newLineItem));
+      newLineItem._id = canonicalId;
+      await this.shadowWriteMongo('line_item', () => tekmetric
+        ? collection.updateOne({ _id: canonicalId }, { $setOnInsert: newLineItem }, { upsert: true })
+        : collection.insertOne(newLineItem));
 
       return {
         success: true,
         entityType: 'line_item',
-        entityId: newId,
-        action: 'created',
+        entityId: canonicalId,
+        action: canonicalId === newId ? 'created' : 'updated',
         contentHash,
       };
     } catch (error) {
