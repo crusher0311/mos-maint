@@ -228,6 +228,17 @@ async function run() {
 
   // 1. Shop id detection
   {
+    setPage("https://app.autoflow.com/shop/743/dvi/30754722", "Ticket 215617", [
+      makeInput({ value: "1HGCM82633A004352", cellLabel: "Vin" }),
+      makeInput({ value: "50,000", cellLabel: "Mileage" }),
+    ]);
+    const ctx = g.detectContext();
+    ok("incident URL preserves AutoFlow namespace and displayed ticket",
+      ctx.provider === "autoflow" && ctx.shopId === "743" && ctx.roId === "215617");
+    ok("incident URL supplies detected VIN and entered mileage",
+      ctx.vin === "1HGCM82633A004352" && ctx.scrapedOdometer === 50000);
+  }
+  {
     ok("v3 subdomain detected", g.detectAutoflowShopId("harrells-nc87.autotext.me", "/") === "harrells-nc87");
     ok("v4 path number detected", g.detectAutoflowShopId("app.autoflow.com", "/shop/1360/dvi/98765") === "1360");
     ok("generic 'app' host without path yields null", g.detectAutoflowShopId("app.autoflow.com", "/") === null);

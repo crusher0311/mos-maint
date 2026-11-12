@@ -7,6 +7,11 @@ import { requireExtensionPrincipalScope, getAuthErrorStatus, buildAuthErrorBody 
 import { makeFakeDb } from "./utils/fake-mongo";
 import { createStickerQrTarget } from "../lib/sticker-qr-target";
 import { getStickerRedirectUrl } from "../lib/sticker-utils";
+import { validatePrintIntent } from "../lib/sticker-activity";
+import { AppFueledQrUnavailable } from "../lib/appfueled-qr-destination";
+import { stickerPersonalization } from "../lib/sticker-personalization";
+import { stickerViscosity } from "../lib/sticker-viscosity";
+import { getStickerSizeInches } from "../lib/sticker-print-dimensions";
 
 process.env.NEXT_PUBLIC_BASE_URL = "https://fixture.test";
 
@@ -29,6 +34,10 @@ async function main() {
   let failDb = false;
   const sandbox: any = {
     console, Buffer, findShopBySmsIdDetailed, findAutoflowStickerShop,
+    validatePrintIntent, AppFueledQrUnavailable,
+    stickerPersonalization, stickerViscosity, getStickerSizeInches,
+    readStickerSupply: async () => null,
+    styleStickerQr: async (image: string) => image,
     getDb: async () => fake.db,
     validateExtensionToken: async () => auth,
     requireExtensionPrincipalScope, getAuthErrorStatus, buildAuthErrorBody,

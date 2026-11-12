@@ -16,7 +16,7 @@ import {
   upsertReportApprovedItemsDoc,
   deleteReportApprovedItemsDoc,
 } from "@/lib/data/repositories/plan-cache-store";
-import { findShopBySmsId } from "@/lib/extension-shop-lookup";
+import { findShopBySmsId, findAutoflowInteractiveShop } from "@/lib/extension-shop-lookup";
 import { isComplimentaryItem } from "@/lib/complimentary-classification";
 import { computeIntervalProgress } from "@/lib/vhi-progress";
 import {
@@ -1560,7 +1560,7 @@ async function _GET(request: NextRequest) {
     const smsShopId = searchParams.get("shopId");
     let vin = searchParams.get("vin");
     const roId = searchParams.get("roId");
-    const providerHint = searchParams.get("provider"); // Optional hint, we verify against actual config
+    const providerHint = searchParams.get("provider")?.trim().toLowerCase().replace(/^shop[-_]ware$/, "shopware"); // Page namespace, never replaced by an unrelated session provider
     const forceRefresh = searchParams.get("refresh") === "true";
     const refreshRo = forceRefresh || searchParams.get("refreshRo") === "true";
     // Task #645: the odometer the advisor typed on the open RO, scraped from
@@ -1590,28 +1590,42 @@ async function _GET(request: NextRequest) {
       return NextResponse.json(buildAuthErrorBody(auth), { status: getAuthErrorStatus(auth), headers: corsHeaders });
     }
 
-    const db = await getDb();
+    const principal = auth.principal ?? auth.user.extensionPrincipal;
+    // Reject incompatible page/session namespaces BEFORE interpreting any shop
+    // number. A Tekmetric number can collide with an unrelated AutoFlow shop.
+    if (principal && !principal.isLegacy && providerHint &&
+        String(principal.provider).toLowerCase() !== providerHint) {
+      return NextResponse.json(
+        { code: "SESSION_CONTEXT_MISMATCH", error: "This Detect Dog session is for a different provider. Sign out of Detect Dog and explicitly sign in from the intended provider page with an account authorized for this shop. This does not repair shop mappings or assignments. Vehicle history has not been checked." },
+        { status: 403, headers: corsHeaders }
+      );
+    }
+    const pageProvider = providerHint || (!principal?.isLegacy ? principal?.provider : undefined);
     const userShopIds = getUserShopIds(auth.user).map(id => parseInt(id));
     const isPlatformAdmin = auth.user.role === "platform_admin";
 
     const maskedEmail = auth.user.email ? auth.user.email.replace(/(.{2}).*(@.*)/, '$1***$2') : 'unknown';
     console.log(`[Extension Plan] Auth OK: user=${maskedEmail}, shopIds=${userShopIds.join(',')}, smsShopId=${smsShopId}, elapsed=${Date.now() - reqStart}ms`);
 
-    const shopResult = await findShopBySmsId(smsShopId, { 
+    const autoflowResult = pageProvider === "autoflow"
+      ? await findAutoflowInteractiveShop(smsShopId, { userShopIds, isPlatformAdmin })
+      : null;
+    const shopResult = pageProvider === "autoflow"
+      ? (autoflowResult?.status === "resolved" ? autoflowResult : null)
+      : await findShopBySmsId(smsShopId, {
       userShopIds, 
       isPlatformAdmin, 
-      providerHint: ["shopmonkey", "tekmetric"].includes(auth.principal?.provider || "")
-        ? auth.principal!.provider : providerHint || undefined,
+      providerHint: pageProvider,
       // First-class location reads must use canonical, read-only ownership.
       // Never discover/learn a mapping while handling a plan request.
-      providerHintIsAuthoritative: ["shopmonkey", "tekmetric"].includes(auth.principal?.provider || ""),
+      providerHintIsAuthoritative: ["shopmonkey", "tekmetric"].includes(principal?.provider || ""),
     });
 
     if (!shopResult) {
       console.log(`[Extension Plan] SHOP FAIL: No shop found for SMS shop ${smsShopId}, userShopIds: ${userShopIds.join(',')}, elapsed=${Date.now() - reqStart}ms`);
       return NextResponse.json(
-        { code: "SHOP_CONTEXT_UNAVAILABLE", error: "VHI shop access could not be confirmed. Open the intended repair order and retry. If this persists, ask your administrator to verify your shop assignment and Tekmetric mapping. Signing in again does not repair a shop mapping or assignment. Vehicle history has not been checked." },
-        { status: 404, headers: corsHeaders }
+        { code: "SHOP_CONTEXT_UNAVAILABLE", error: "VHI shop access could not be confirmed. Open the intended repair order and retry. If this persists, ask your administrator to verify your shop assignment and the page provider's shop mapping, including duplicate links. Signing in again does not repair a shop mapping or assignment. Vehicle history has not been checked." },
+        { status: autoflowResult?.status === "conflict" ? 409 : autoflowResult?.status === "access_denied" ? 403 : 404, headers: corsHeaders }
       );
     }
 
@@ -1625,7 +1639,7 @@ async function _GET(request: NextRequest) {
     });
     if (scopeFailure) {
       return NextResponse.json(
-        buildAuthErrorBody(scopeFailure),
+        { code: "SESSION_CONTEXT_MISMATCH", error: "This Detect Dog session is scoped to a different shop or provider. Open the intended shop page and explicitly sign in to Detect Dog with an account authorized for that shop. This does not repair shop mappings or assignments. Vehicle history has not been checked." },
         { status: getAuthErrorStatus(scopeFailure), headers: corsHeaders }
       );
     }
@@ -1637,6 +1651,7 @@ async function _GET(request: NextRequest) {
       corsHeaders,
     });
     if (denied) return denied;
+    const db = await getDb();
     
     console.log(`[Extension] Found shop ${mosShopId} (${shopDoc.name}), provider: ${provider}`);
     

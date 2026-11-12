@@ -146,11 +146,11 @@ async function recordUnresolvedAutoflowIdentifier(
 }
 
 /**
- * Interactive AutoFlow stickers accept already-associated numeric v4 aliases.
+ * Interactive AutoFlow reads accept already-associated numeric v4 aliases.
  * Unlike compatibility lookup this never learns associations, and unlike exact
  * partner validation it accepts stored aliases after global canonical ownership.
  */
-export async function findAutoflowStickerShop(
+export async function findAutoflowInteractiveShop(
   identifier: string,
   options: { userShopIds?: number[]; isPlatformAdmin?: boolean } = {},
 ): Promise<ShopLookupOutcome> {
@@ -180,6 +180,9 @@ export async function findAutoflowStickerShop(
   }
   return resolvedShop(owner, "autoflow");
 }
+
+// Preserve the existing sticker API; VHI uses the same read-only ownership rules.
+export const findAutoflowStickerShop = findAutoflowInteractiveShop;
 
 export async function findShopBySmsIdDetailed(
   smsShopId: string,
