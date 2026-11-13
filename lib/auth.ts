@@ -394,6 +394,26 @@ export async function requirePlatformAdmin(): Promise<SessionInfo> {
   return s; // Non-null since redirect throws
 }
 
+// Ghost actions must retain the real administrator's authority and attribution.
+export async function verifiedGhostAdminEmail(session: SessionInfo): Promise<string | null> {
+  if (!session.isImpersonation || !session.impersonatedBy) return null;
+  const token = (await cookies()).get("admin_session_token")?.value;
+  if (!token) return null;
+  const pg = isIdentityPgCanonical();
+  const db = pg ? null : await getDb();
+  const adminSession = pg
+    ? await pgFindActiveSession(token)
+    : await db!.collection("sessions").findOne({ token, expiresAt: { $gt: new Date() } });
+  if (!adminSession || adminSession.isImpersonation || adminSession.mustChangePassword || !adminSession.userId) return null;
+  const admin = pg
+    ? await pgFindUserById(String(adminSession.userId))
+    : await db!.collection("users").findOne({ _id: new ObjectId(String(adminSession.userId)) });
+  if (!admin || !admin.isPlatformAdmin || admin.mustChangePassword ||
+      typeof admin.email !== "string" ||
+      admin.email.toLowerCase() !== session.impersonatedBy.toLowerCase()) return null;
+  return admin.email;
+}
+
 export async function requireSession(): Promise<SessionInfo> {
   const s = await getSession();
   if (!s) redirect("/login");

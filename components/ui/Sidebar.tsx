@@ -340,6 +340,7 @@ export function Sidebar({ shopName = "My Shop", shopLogo, locationIdentifier, us
           children: [
             { name: "Shop Branding", href: "/dashboard/settings/branding" },
             { name: "Oil Stickers", href: "/dashboard/settings/stickers", featureId: "oil_sticker" },
+            { name: "Printing", href: "/dashboard/settings/printing", featureId: "oil_sticker" },
             { name: "Keytags", href: "/dashboard/settings/keytags", featureId: "keytags" },
             { name: "Labor Rate Rules", href: "/dashboard/settings/labor-rates", featureId: "labor_rates" },
             { name: "Auto Booking", href: "/dashboard/settings/auto-booking", featureId: "auto_booking" },

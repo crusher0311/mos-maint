@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireSession } from "@/lib/auth";
+import { requireSession, verifiedGhostAdminEmail } from "@/lib/auth";
 import { checkShopFeatureGate } from "@/lib/extension-route-guard";
 import { findShopByShopId } from "@/lib/data/repositories/shops";
 import { installerRelease, installerBytes } from "@/lib/data/repositories/print-setup";
@@ -10,15 +10,16 @@ const headers = { "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" 
 const json = (value: unknown, status = 200) => NextResponse.json(value, { status, headers });
 async function manager(req: NextRequest, write = false) {
   const user = await requireSession();
-  if (!Number.isSafeInteger(user.shopId) || user.shopId <= 0 || user.isImpersonation ||
-      !(user.isPlatformAdmin || ["owner", "admin", "manager"].includes(user.role)))
+  const ghostAdmin = user.isImpersonation ? await verifiedGhostAdminEmail(user) : null;
+  if (!Number.isSafeInteger(user.shopId) || user.shopId <= 0 ||
+      (user.isImpersonation ? !ghostAdmin : !(user.isPlatformAdmin || ["owner", "admin", "manager"].includes(user.role))))
     throw new Error("Manager access required");
   if (write && req.headers.get("origin") !== req.nextUrl.origin) throw new Error("Same-origin approval required");
   // Only the explicitly approved pilot location may install/connect this build.
   if (user.shopId !== 63) throw new Error("Computer setup is not enabled for this pilot location");
   const gate = await checkShopFeatureGate(user.shopId, ["oil_sticker"]);
   if (gate) throw new Error("Sticker printing is not available for this shop");
-  return user;
+  return { ...user, setupActorEmail: ghostAdmin || user.email };
 }
 export async function setupInfo(req: NextRequest) {
   try {
@@ -51,7 +52,7 @@ export async function approveSetup(req: NextRequest) {
     if (!shop || typeof shop.name !== "string" || !shop.name.trim()) return json({ error: "Shop identity unavailable" }, 404);
     const rl = await rateLimit({ id: `print-setup-approve:${user.shopId}:${user.userId}`, limit: 10, windowSeconds: 600 });
     if (!rl.allowed) return json({ error: "Too many setup attempts. Wait before retrying." }, 429);
-    return json(await approvePairing(body.pairingToken, { shopId: user.shopId, name: shop.name }, user.email));
+    return json(await approvePairing(body.pairingToken, { shopId: user.shopId, name: shop.name }, user.setupActorEmail));
   } catch { return json({ error: "Connection not approved. Check manager access, shop, and setup expiration before trying again." }, 403); }
 }
 // Intentionally unauthenticated device bootstrap. A random device capability,

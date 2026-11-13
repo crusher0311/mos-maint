@@ -19,6 +19,50 @@ test("agent routes reach their own authentication without opening browser setup 
   } finally { if (oldEnv === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = oldEnv; }
 });
 
+test("Ghost setup verifies retained admin session and current identity in either store", async () => {
+  const Module = require("node:module");
+  const original = Module._load;
+  let canonical = false;
+  let token = "retained-admin";
+  let retained = { userId: "507f1f77bcf86cd799439011" };
+  let admin = { email: "admin@example.test", isPlatformAdmin: true };
+  Module._load = function (request, ...args) {
+    if (request === "server-only") return {};
+    if (request === "next/headers") return { cookies: async () => ({ get: () => token ? { value: token } : undefined }) };
+    if (request === "@/lib/db/wave4-write-mode") return { isIdentityPgCanonical: () => canonical };
+    if (request === "@/lib/mongo") return { getDb: async () => ({ collection: name => ({
+      findOne: async query => {
+        if (name === "sessions") {
+          assert.equal(query.token, token);
+          assert(query.expiresAt.$gt instanceof Date);
+          return retained;
+        }
+        return admin;
+      }
+    }) }) };
+    if (request === "@/lib/data/repositories/pg/identity") return {
+      findActiveSessionByToken: async () => retained, findUserById: async () => admin,
+    };
+    if (request === "@/lib/extension-session") return {};
+    return original.call(this, request, ...args);
+  };
+  try {
+    const { verifiedGhostAdminEmail } = require("../lib/auth");
+    const ghost = { isImpersonation: true, impersonatedBy: "admin@example.test" };
+    for (canonical of [false, true]) {
+      assert.equal(await verifiedGhostAdminEmail(ghost), admin.email);
+      token = ""; assert.equal(await verifiedGhostAdminEmail(ghost), null); token = "retained-admin";
+      const saved = retained;
+      retained = null; assert.equal(await verifiedGhostAdminEmail(ghost), null); retained = saved;
+      retained.isImpersonation = true; assert.equal(await verifiedGhostAdminEmail(ghost), null); delete retained.isImpersonation;
+      admin.isPlatformAdmin = false; assert.equal(await verifiedGhostAdminEmail(ghost), null); admin.isPlatformAdmin = true;
+      admin.mustChangePassword = true; assert.equal(await verifiedGhostAdminEmail(ghost), null); delete admin.mustChangePassword;
+      assert.equal(await verifiedGhostAdminEmail({ ...ghost, impersonatedBy: "other@example.test" }), null);
+      assert.equal(await verifiedGhostAdminEmail({ ...ghost, isImpersonation: false }), null);
+    }
+  } finally { Module._load = original; }
+});
+
 test("in-app setup requires explicit approval, survives StrictMode and clears URL token", async () => {
   const { JSDOM } = require("jsdom");
   const React = require("react");
@@ -56,12 +100,14 @@ test("setup approval rejects wrong roles, shops, origins and stale browser shop"
   const load = Module._load;
   let session = { shopId: 63, role: "manager", email: "fixture", userId: "fixture" };
   let approvals = 0;
+  let ghostAdmin = null;
+  let actor;
   Module._load = function (request, ...args) {
-    if (request === "@/lib/auth") return { requireSession: async () => { if (!session) throw Error("unauthorized"); return session; } };
+    if (request === "@/lib/auth") return { requireSession: async () => { if (!session) throw Error("unauthorized"); return session; }, verifiedGhostAdminEmail: async () => ghostAdmin };
     if (request === "@/lib/extension-route-guard") return { checkShopFeatureGate: async () => null };
     if (request === "@/lib/data/repositories/shops") return { findShopByShopId: async () => ({ name: "Pilot" }) };
     if (request === "@/lib/data/repositories/print-setup") return { installerRelease: async () => null };
-    if (request === "./setup-pairing") return { approvePairing: async () => { approvals++; return { approved: true }; } };
+    if (request === "./setup-pairing") return { approvePairing: async (_token, _shop, email) => { actor = email; approvals++; return { approved: true }; } };
     if (request === "@/lib/rate") return { rateLimit: async () => ({ allowed: true }) };
     return load.call(this, request, ...args);
   };
@@ -77,7 +123,15 @@ test("setup approval rejects wrong roles, shops, origins and stale browser shop"
     session.role = "technician"; assert.equal((await approveSetup(req())).status, 403);
     session.role = "manager"; session.shopId = 64; assert.equal((await approveSetup(req(64))).status, 403);
     session.shopId = 63; session.isImpersonation = true; assert.equal((await approveSetup(req())).status, 403);
+    ghostAdmin = "admin@example.test"; session.role = "technician";
+    assert.equal((await approveSetup(req())).status, 200);
+    assert.equal(actor, ghostAdmin);
+    assert.equal((await approveSetup(req(64))).status, 409);
+    assert.equal((await approveSetup(req(63, "https://other.example"))).status, 403);
+    session.shopId = 64; assert.equal((await approveSetup(req(64))).status, 403);
+    session.shopId = 63; session.role = "manager";
     session.isImpersonation = false; assert.equal((await approveSetup(req())).status, 200);
-    assert.equal(approvals, 1);
+    assert.equal(actor, "fixture");
+    assert.equal(approvals, 2);
   } finally { Module._load = load; }
 });
