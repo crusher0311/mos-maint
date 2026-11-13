@@ -356,6 +356,14 @@ function init() {
   globalThis.MosStickerButtonPreference?.start(detectContext);
   chrome.runtime.onMessage.addListener((message, _sender, reply) => {
     if (message.action === 'GET_PAGE_CONTEXT') { reply(detectContext()); return false; }
+    if (message.action === 'SHOW_TOAST') {
+      const notice = document.createElement('div');
+      notice.setAttribute('role', 'status');
+      notice.textContent = String(message.message || '');
+      notice.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:2147483647;max-width:360px;padding:14px 18px;border:1px solid #d1d5db;border-radius:8px;background:#f9fafb;color:#374151;font:14px system-ui;box-shadow:0 4px 16px rgba(17,24,39,.15);';
+      document.body.append(notice); setTimeout(() => notice.remove(), 12000);
+      reply({ success: true }); return false;
+    }
     if (['PRINT_STICKER_FROM_PANEL', 'PRINT_KEYTAG_FROM_PANEL'].includes(message.action)) {
       printShopmonkeySticker(message.sticker, message.action === 'PRINT_KEYTAG_FROM_PANEL').then(() => reply({ success: true }),
         error => reply({ success: false, error: error.message }));
@@ -371,6 +379,7 @@ function init() {
       if (globalThis.MosStickerButtonPreference?.route(context, notify)) return;
       safeSendMessage({ action: 'PRINT_STICKER_IMMEDIATE', context }, result => {
         if (!result?.success) { notify(result?.error || 'Sign in to Detect Dog and try again.'); return; }
+        if (result.sticker?.ippJob) { notify(result.sticker.error || result.sticker.message || 'Saved print submitted. Check the printer before printing again.'); return; }
         printShopmonkeySticker(result.sticker).catch(error => notify(error.message));
       });
     },

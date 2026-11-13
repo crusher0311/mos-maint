@@ -34,6 +34,8 @@ import {
   type ZinkPrintOptions,
 } from "@/lib/print-queue/types";
 import { readPrintJsonBody } from "@/lib/print-queue/request-body";
+import { enqueueIpp } from "@/lib/print-queue/ipp-repository";
+import { ippError } from "@/lib/print-queue/ipp-http";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -87,12 +89,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const gate = await checkShopFeatureGate(session.shopId, ["oil_sticker"], {
-    isPlatformAdmin: session.isPlatformAdmin,
-    featureLabel: "ZINK Print",
-  });
-  if (gate) return gate;
-
   let body: any;
   try {
     body = await readPrintJsonBody(req);
@@ -106,6 +102,15 @@ export async function POST(req: NextRequest) {
       },
       { status: error instanceof PrintPayloadTooLargeError ? 413 : 400 },
     );
+  }
+
+  const gate = await checkShopFeatureGate(session.shopId, [body?.type === "keytag" ? "keytags" : "oil_sticker"], {
+    isPlatformAdmin: session.isPlatformAdmin, featureLabel: "Saved printing",
+  });
+  if (gate) return gate;
+  if (body?.transport === "ipp") {
+    try { return NextResponse.json(await enqueueIpp(session.shopId, body), { status: 201 }); }
+    catch (error) { return ippError(error); }
   }
 
   if (typeof body?.imageBase64 !== "string" || body.imageBase64.trim() === "") {

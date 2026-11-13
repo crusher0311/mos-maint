@@ -131,6 +131,7 @@ export async function claimNextJob(
 
   const filter: Document = {
     shopId,
+    protocol: { $exists: false },
     ...routeMatch,
     $and: [
       {
@@ -218,8 +219,8 @@ export async function ackJob(
   else set.failedAt = now;
 
   const col = await jobsCol();
-  await col.updateOne({ _id: oid, shopId, status: { $nin: ["done", "failed"] } }, { $set: set });
-  const job = await col.findOne({ _id: oid, shopId });
+  await col.updateOne({ _id: oid, shopId, protocol: { $exists: false }, status: { $nin: ["done", "failed"] } }, { $set: set });
+  const job = await col.findOne({ _id: oid, shopId, protocol: { $exists: false } });
   if (!job) return "not_found";
   // Repeated acknowledgments also repair a previously interrupted accounting
   // write, but can never turn a terminal failure into successful consumption.
@@ -404,7 +405,7 @@ export async function requeueJob(
   const now = new Date();
   const col = await jobsCol();
   const res = await col.updateOne(
-    { _id: oid, shopId },
+    { _id: oid, shopId, protocol: { $exists: false } },
     {
       $set: {
         status: "pending",
@@ -432,7 +433,7 @@ export async function clearJob(
     return "not_found";
   }
   const col = await jobsCol();
-  const res = await col.deleteOne({ _id: oid, shopId });
+  const res = await col.deleteOne({ _id: oid, shopId, protocol: { $exists: false } });
   return res.deletedCount && res.deletedCount > 0 ? "cleared" : "not_found";
 }
 

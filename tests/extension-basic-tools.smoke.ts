@@ -1,3 +1,6 @@
+// This Node-only fixture imports server routes; keep its setup explicit rather
+// than depending on a developer's global NODE_OPTIONS preload.
+import "../scripts/_stubs/server-only-stub.cjs";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
 import {

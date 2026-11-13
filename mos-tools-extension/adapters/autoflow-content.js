@@ -1772,6 +1772,10 @@ function checkAndInjectCreateRoButton() {
 }
 
 function printStickerFromContentScript(sticker) {
+  if (sticker?.ippJob) {
+    showToast(sticker.error || sticker.message || 'Saved print submitted. Check the printer before printing again.', sticker.success ? 'success' : 'error');
+    return;
+  }
   if (globalThis.MosStickerButtonPreference?.isCurrent(sticker, detectContext()) === false) {
     showToast('Work order changed. Please print again from the current order.', 'error');
     return;

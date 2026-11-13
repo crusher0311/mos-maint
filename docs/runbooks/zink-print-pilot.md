@@ -1,5 +1,10 @@
 # ZINK Print Agent – Windows Pilot Rollout Runbook
 
+> Saved IPP printing uses a separate, explicit configuration in the same agent. See
+> [the IPP compatibility findings and pilot instructions](saved-ipp-contract.md).
+> The rollout instructions below apply to the existing TCP agent only; they do
+> not authorize an IPP rollout or establish IPP hardware support.
+
 > **Canonical production URL:** `https://mos.tools`  
 > **Agent repo path:** `zink-print-agent/`  
 > **Scope:** First-shop Windows x64 pilot distribution

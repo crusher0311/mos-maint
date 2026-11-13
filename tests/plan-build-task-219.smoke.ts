@@ -209,7 +209,17 @@ ok(
     const handlePrintIdx = modalSrc.indexOf("function handlePrint");
     if (handlePrintIdx < 0) return false;
     const after = modalSrc.slice(handlePrintIdx);
-    const openIdx = after.indexOf("placeholderWindow: Window | null = window.open");
+    const directOpenIdx = after.indexOf("placeholderWindow: Window | null = window.open");
+    // Saved printing reserves the window synchronously inside choose(), or
+    // inside the picker button's gesture, before resolving its choice promise.
+    const hook = fs.readFileSync(path.join(process.cwd(), "components/printing/useSavedPrinting.tsx"), "utf8");
+    const chooseIdx = after.indexOf('await savedPrinting.choose("sticker", false, true)');
+    const reservesSynchronously = hook.includes("function choose(") &&
+      !hook.includes("async function choose(") &&
+      hook.includes('return Promise.resolve({ transport: "browser", mobileWindow: isMobilePrintBrowser() || reserveDesktopWindow ? openMobilePlaceholderWindow(labelKind) : null })') &&
+      hook.includes('onClick={() => finish({ transport: "browser", mobileWindow: isMobilePrintBrowser() || reserveDesktop ? openMobilePlaceholderWindow(kind) : null })}');
+    const openIdx = directOpenIdx >= 0 ? directOpenIdx :
+      reservesSynchronously && after.includes('choice.mobileWindow || window.open(') ? chooseIdx : -1;
     const awaitFetchIdx = after.indexOf('await fetch("/api/sticker/generate"');
     return openIdx > -1 && awaitFetchIdx > -1 && openIdx < awaitFetchIdx;
   })(),

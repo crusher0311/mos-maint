@@ -179,6 +179,8 @@ async function main() {
   elements.stickerInterval.value = "synthetic";
   elements.stickerUnit.value = "mi";
   const panel: any = {
+    savedPanelPrintBusy: false,
+    openSavedPrintPicker: async () => ({}), // Explicit browser choice for this messaging fixture.
     console, elements, currentContext: null, stickerConfig: null,
     crypto: webcrypto, pendingStickerPrint: null,
     stickerDraftContext: null, stickerDraftEdited: false, viscosityDraft: null,

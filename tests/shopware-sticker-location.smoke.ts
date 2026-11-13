@@ -168,6 +168,10 @@ async function checkCustomizedPrintFlow() {
   vm.runInContext(`function onMessage(message, sender, sendResponse) { ${messageBranch} }`, worker);
   const element = (value = "") => ({ value, disabled: false, textContent: "", classList: { add() {}, remove() {} } });
   const panel: any = {
+    // This fixture checks explicit browser printing; saved IPP routing has its
+    // own integration suite. Supply the picker state used by the real handler.
+    savedPanelPrintBusy: false,
+    openSavedPrintPicker: async () => ({}),
     updateStickerSupply() {}, syncStickerDraft() {},
     stickerDraftEdited: false, pendingStickerPrint: null,
     stickerDraftContext: null, viscosityDraft: null,

@@ -22,6 +22,14 @@ Object.defineProperty(globalThis, "navigator", { value: dom.window.navigator, co
 const originalLoad = (Module as any)._load;
 const emptyPanel = () => null;
 (Module as any)._load = function(request: string, parent: any, isMain: boolean) {
+  if (request === "@/components/printing/useSavedPrinting") {
+    return { useSavedPrinting: () => ({
+      dialog: null, controls: emptyPanel,
+      choose() { throw new Error("Printing is outside this dashboard lifecycle fixture"); },
+      submit() { throw new Error("Printing is outside this dashboard lifecycle fixture"); },
+      cancelPreparation() {},
+    }) };
+  }
   // Keep hook lifecycle real; a panel-only stub cannot stand in for a hook.
   if (request === "@/components/keytag-designer/useKeytagPrintDetails") {
     return originalLoad.call(this, request, parent, isMain);
