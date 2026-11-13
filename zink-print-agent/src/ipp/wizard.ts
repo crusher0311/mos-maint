@@ -5,6 +5,7 @@ import { EnrollmentStore } from "./enrollment";
 import { discoverPrinters } from "./discovery";
 import { parseConfig } from "../config";
 import { beginDeviceConnection, checkDeviceConnection } from "./pairing";
+import { diagnosePrinter } from "./diagnostic";
 
 export async function verifySetupKey(key: string, fetchImpl: typeof fetch = fetch) {
   if (!key || key.length > 4096 || /[\r\n]/.test(key)) throw new Error("Enter a valid dedicated print agent key");
@@ -51,6 +52,7 @@ export function configForSetup(directory: string, key: string, existing?: unknow
 // Called only by the elevated native wizard. Secrets enter through stdin,
 // never command arguments, a local HTTP listener, or diagnostic output.
 export async function wizardOperation(input: any, directory: string) {
+  if (input.action === "diagnose") return diagnosePrinter(input.uri, { width: input.width, height: input.height });
   const configPath = path.join(directory, "config.json");
   const existing = fs.existsSync(configPath) ? JSON.parse(fs.readFileSync(configPath, "utf8").replace(/^\uFEFF/, "")) : undefined;
   if (input.action === "discover") return { candidates: await discoverPrinters() };

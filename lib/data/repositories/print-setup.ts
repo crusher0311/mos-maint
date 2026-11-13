@@ -6,7 +6,7 @@ export const printSetupStore = { getDb: getDb as () => Promise<Db> };
 export async function pairingCollection() {
   return (await printSetupStore.getDb()).collection<any>("print_setup_pairings");
 }
-export const INSTALLER_RELEASE = "windows-x64-pairing-v1";
+export const INSTALLER_RELEASE = "windows-x64-pairing-diagnostic-v1";
 export async function installerRelease() {
   return (await printSetupStore.getDb()).collection("print_installer_releases").findOne({ _id: INSTALLER_RELEASE as any });
 }

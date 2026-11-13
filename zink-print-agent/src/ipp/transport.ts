@@ -7,6 +7,9 @@ export interface Exchange {
   (uri: string, operation: number, groups: { tag: number; values: Attributes }[],
     document?: Buffer): Promise<Reply>;
 }
+export class IppDiagnosticError extends Error {
+  constructor(public readonly code: string) { super(code); }
+}
 
 /** Only local enrollment supplies this URI. Cloud payloads must never supply it. */
 export function printerUrl(uri: string): URL {
@@ -25,7 +28,9 @@ export function createExchange(timeoutMs = 10000): Exchange {
   return async (uri, operation, groups, document) => {
     const url = printerUrl(uri);
     const hostname = url.hostname.replace(/^\[|\]$/g, "");
-    const host = await resolveAddress(hostname, { timeoutMs: Math.min(timeoutMs, 5000) });
+    let host: string;
+    try { host = await resolveAddress(hostname, { timeoutMs: Math.min(timeoutMs, 5000) }); }
+    catch { throw new IppDiagnosticError("name_resolution_failed"); }
     requestId = requestId % 0x7ffffffe + 1;
     const id = requestId;
     const body = encodeRequest(operation, id, groups, document);
@@ -64,7 +69,10 @@ export function createExchange(timeoutMs = 10000): Exchange {
       const timer = setTimeout(() => {
         req.destroy(); finish(new Error("IPP exchange timed out"));
       }, timeoutMs);
-      req.on("error", () => finish(new Error("IPP connection failed")));
+      req.on("error", (error: NodeJS.ErrnoException) => finish(new IppDiagnosticError(
+        ["DEPTH_ZERO_SELF_SIGNED_CERT", "SELF_SIGNED_CERT_IN_CHAIN", "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+          "CERT_HAS_EXPIRED", "ERR_TLS_CERT_ALTNAME_INVALID", "UNABLE_TO_GET_ISSUER_CERT_LOCALLY"].includes(error.code ?? "")
+          ? "certificate_rejected" : "connection_failed")));
       req.end(body);
     });
   };

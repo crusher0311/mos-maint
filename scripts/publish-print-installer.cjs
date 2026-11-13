@@ -7,12 +7,14 @@ const { MongoClient, GridFSBucket } = require("mongodb");
 const { Readable } = require("node:stream");
 const { pipeline } = require("node:stream/promises");
 async function main() {
-  if (process.argv.slice(2).some(a => a !== "--execute")) throw Error("Only --execute is supported");
-  const dir = path.resolve(__dirname, "../generated-artifacts/mos-print-installer");
+  if (process.argv.slice(2).some(a => !["--execute", "--diagnostic"].includes(a))) throw Error("Unsupported argument");
+  const diagnostic = process.argv.includes("--diagnostic");
+  const expectedRelease = diagnostic ? "windows-x64-pairing-diagnostic-v1" : "windows-x64-pairing-v1";
+  const dir = path.resolve(__dirname, diagnostic ? "../generated-artifacts/mos-print-diagnostic-installer" : "../generated-artifacts/mos-print-installer");
   const manifest = JSON.parse(fs.readFileSync(path.join(dir, "pairing-release.json")));
   const bytes = fs.readFileSync(path.join(dir, "MOS-Print-Setup-pilot.exe"));
   const digest = crypto.createHash("sha256").update(bytes).digest("hex");
-  if (manifest.release !== "windows-x64-pairing-v1" || digest !== manifest.sha256 ||
+  if (manifest.release !== expectedRelease || digest !== manifest.sha256 ||
       bytes.length > 32 * 1024 * 1024 || bytes.toString("ascii", 0, 2) !== "MZ")
     throw Error("Installer artifact verification failed");
   console.log(JSON.stringify({ event: "installer_verified", sha256: digest, bytes: bytes.length, execute: process.argv.includes("--execute") }));

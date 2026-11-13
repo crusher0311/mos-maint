@@ -3,7 +3,10 @@ Unicode True
 !include "LogicLib.nsh"
 !include "x64.nsh"
 Name "MOS Print Setup"
-OutFile "..\..\generated-artifacts\mos-print-installer\MOS-Print-Setup-pilot.exe"
+!ifndef MOS_INSTALLER_OUTPUT
+!define MOS_INSTALLER_OUTPUT "..\..\generated-artifacts\mos-print-installer\MOS-Print-Setup-pilot.exe"
+!endif
+OutFile "${MOS_INSTALLER_OUTPUT}"
 InstallDir "C:\ZinkPrintAgent"
 RequestExecutionLevel admin
 SetCompressor /SOLID lzma

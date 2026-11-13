@@ -133,6 +133,16 @@ foreach ($c in @($width, $height)) {
 $width.Location = New-Object Drawing.Point(24, 405)
 $height.Location = New-Object Drawing.Point(200, 405)
 Label 'Sticker printers only. Keytag IPP hardware is not qualified yet.' 443
+$diagnose = Button 'Check printer' 250 480 {
+  Work {
+    $result = Invoke-Agent @{
+      action = 'diagnose'; uri = $printers.Text
+      width = [int]($width.Value * 100); height = [int]($height.Value * 100)
+    }
+    $status.Text = "[$($result.diagnostic)] $($result.message)"
+    [Windows.Forms.MessageBox]::Show($status.Text, 'Read-only printer diagnostic') | Out-Null
+  }
+}
 $save = Button 'Enroll selected printer' 24 480 {
   Work {
     if (-not $script:verified -or -not $confirm.Checked) { throw 'Verify and confirm the correct shop first.' }
