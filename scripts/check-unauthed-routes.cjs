@@ -240,6 +240,9 @@ const AUTH_PATTERNS = [
 // fix the route instead.
 // ---------------------------------------------------------------------------
 const PUBLIC_ALLOWLIST = new Set([
+  // Rate-limited device bootstrap; only encrypted credentials after explicit
+  // manager approval, protected by random capability and device private key.
+  "app/api/print-agent/pair/route.ts",
   // Health / liveness probes — return connection status, never customer data
   "app/api/ping/route.ts",
   "app/api/health/route.ts",

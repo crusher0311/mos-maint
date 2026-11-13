@@ -21,7 +21,12 @@ async function main() {
       const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : {};
       const kind = body.kind ?? url.searchParams.get("kind") ?? "sticker";
       if (req.method === "PUT") defaults[kind] = body.destinationId;
-      if (url.pathname === "/api/print/destinations") {
+      if (url.pathname === "/api/print/setup") {
+        res.end(JSON.stringify({ shopId: 999, shopName: "Offline test shop", canManage: true,
+          installer: { available: false, downloadUrl: null, version: "pairing-v1", sha256: null } }));
+      } else if (url.pathname === "/api/print/setup/approve") {
+        res.end(JSON.stringify({ shopId: 999, shopName: "Offline test shop", approved: true }));
+      } else if (url.pathname === "/api/print/destinations") {
         res.end(JSON.stringify({ shopId: 999, kind, canManage: true, defaultDestinationId: defaults[kind],
           destinations: kind === "sticker" ? ["front", "back"].map(id => ({ id, agentId: "offline-agent",
             printerId: id, kind, name: id === "front" ? "Front counter" : "Back counter", model: "ZINK hAppy",

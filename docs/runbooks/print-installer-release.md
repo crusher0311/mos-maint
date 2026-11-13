@@ -29,10 +29,14 @@ Node, manually extract a ZIP, edit JSON, or type enrollment commands.
 1. Run the approved installer on Windows x64 and approve administrator access.
 2. Open the setup wizard from the finish page or **MOS Print → Shop Setup**
    in the Start menu (administrator approval required).
-3. Create a dedicated `print:agent` key in the correct shop's MOS API Keys
-   settings. Paste it into the masked wizard field. Click **Verify shop** and
-   explicitly confirm the returned shop name and ID. Existing IPP installations
-   reuse their saved key rather than allowing implicit shop reassignment.
+3. Start from **MOS → Settings → Printing → Set up this computer** and download
+   the installer directly (no ZIP). In the wizard click **Connect this computer**.
+   It opens MOS in the default browser; sign in as a manager if necessary,
+   verify the selected shop, and click **Confirm connection**. Return to the
+   wizard and click **Check connection**, then explicitly confirm the returned
+   shop name and ID. If signing in lost the link, click **Connect this computer**
+   again; the same unexpired request is reused. No API key is copied or shown.
+   Existing IPP installations reuse their saved key, never silently reassign shops.
 4. Click **Find printers**, select a discovered address (or enter a known IPP
    address), name the printer, and enter exact loaded stock dimensions in mm.
    Click **Enroll selected printer**. No calibration print is sent by enrollment.
@@ -50,6 +54,43 @@ Node, manually extract a ZIP, edit JSON, or type enrollment commands.
 The Windows agent computer must stay on and connected. Unknown outcomes require
 inspection, not repeated clicks or automatic browser fallback. Keytag hardware
 is still unsupported.
+
+## In-app distribution and connection
+
+The updated web routes and updated installer must both ship. The old standalone
+installer is not compatible with this browser-pairing flow. Until the release
+artifact is distributed, the app explicitly displays that no download is available.
+
+Only Service Solutions Garage (shop 63), the user-approved pilot, can download
+or approve computer setup. Other locations are rejected server-side, including
+platform administrators viewing them. Impersonated sessions cannot approve.
+No new production deployment, artifact upload, or enrollment was performed
+while implementing this flow.
+
+Packaging creates `pairing-release.json` beside the executable. After separate
+release approval, run `node scripts/publish-print-installer.cjs` for local
+checksum validation; `--execute` uploads the immutable executable to the
+existing external Mongo GridFS store and installs the pairing-expiry TTL index.
+Do not run `--execute` as a test. It changes production storage. It does not
+deploy the web code or activate/start any printer. It refuses to overwrite
+different contents for the same release. No executable belongs in Git.
+
+The web download requires manager access, is checksum-verified and capped at
+32 MiB. Device requests have rate and size limits. A ten-minute random pairing
+capability travels in a browser fragment, not a server URL/query string.
+The UI removes the fragment and requires explicit same-origin, current-shop
+approval. Only one concurrent approval may mint a dedicated `print:agent` key.
+The credential is encrypted to the device's RSA key; Mongo stores neither its
+plaintext nor the raw pairing capability. Repeated status checks return the
+same ciphertext until expiry, allowing lost-response recovery without minting
+another key. The private key stays in the protected installation directory.
+The wizard validates the credential's shop before atomically retaining config.
+
+If approval stops after its claim, it is not automatically replayed. A known
+new credential is revoked on failure; an indeterminate key-creation outcome
+requires reviewing/revoking the unused “MOS Print computer setup” key in normal
+API-key settings. Reboot, real Windows ACLs and hardware still require pilot
+qualification. Do not bypass SmartScreen or enterprise policy.
 
 ## Updates, cancellation, and removal
 

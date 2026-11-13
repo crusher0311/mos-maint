@@ -10,6 +10,7 @@ import { randomUUID } from "node:crypto";
 import * as ipp from "../lib/print-queue/ipp-repository";
 import * as legacy from "../lib/print-queue/repository";
 import { IPP_PROTOCOL } from "../lib/print-queue/ipp-contract";
+import { checkPrintSetup } from "./helpers/print-setup-scenario";
 
 const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 const printer = { id: "ipp-" + "a".repeat(32), name: "Front", model: "ZINK hAppy",
@@ -39,6 +40,7 @@ test("isolated real Mongo: IPP scoped routing, immutable claims, deduplication a
       }
     }
     const db = client.db("isolated_ipp");
+    await checkPrintSetup(db);
     ipp.__ippDeps.getDb = async () => db;
     legacy.__deps.getDb = (async () => db) as any;
     const agent = ipp.agentIdentity(1, "key-a", "installation-a");

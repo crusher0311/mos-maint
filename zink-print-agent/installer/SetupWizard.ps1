@@ -72,14 +72,32 @@ $form.BackColor = [Drawing.Color]::FromArgb(240, 246, 249)
 $form.FormBorderStyle = 'FixedDialog'
 $form.MaximizeBox = $false
 Label '1. Connect your shop' 18
-Label 'Paste a dedicated print:agent key from MOS Settings → API Keys.' 45
+Label 'Connect in your MOS browser. No API key copying is needed.' 45
 $key = Field 73
 $key.UseSystemPasswordChar = $true
+$key.Visible = $false
 $existing = Test-Path "$Dir\config.json"
 if ($existing) { $key.Enabled = $false }
-$verify = Button 'Verify shop' 24 110 {
+$connect = Button 'Connect this computer' 24 73 {
   Work {
-    $result = Invoke-Agent @{ action = 'verify'; key = $key.Text }
+    $result = Invoke-Agent @{ action = 'pair-begin' }
+    if ($result.approvalUrl) {
+      if ($result.approvalUrl -notmatch '^https://mos\.tools/dashboard/settings/printing#pair=[a-f0-9]{64}$') {
+        throw 'Unexpected connection URL. Setup stopped.'
+      }
+      Start-Process $result.approvalUrl
+      $status.Text = 'Sign in to MOS, confirm the correct shop, then click Check connection here.'
+    } else {
+      $script:verified = $result.shop
+      $confirm.Text = "I confirm: $($result.shop.name) (shop $($result.shop.shopId))"
+      $confirm.Checked = $false
+      $status.Text = 'Existing shop connection retained. Confirm this location.'
+    }
+  }
+}
+$verify = Button 'Check connection' 24 110 {
+  Work {
+    $result = Invoke-Agent @{ action = 'pair-check' }
     $script:verified = $result.shop
     $confirm.Text = "I confirm: $($result.shop.name) (shop $($result.shop.shopId))"
     $confirm.Checked = $false

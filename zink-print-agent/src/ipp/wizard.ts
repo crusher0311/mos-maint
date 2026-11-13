@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { EnrollmentStore } from "./enrollment";
 import { discoverPrinters } from "./discovery";
 import { parseConfig } from "../config";
+import { beginDeviceConnection, checkDeviceConnection } from "./pairing";
 
 export async function verifySetupKey(key: string, fetchImpl: typeof fetch = fetch) {
   if (!key || key.length > 4096 || /[\r\n]/.test(key)) throw new Error("Enter a valid dedicated print agent key");
@@ -53,10 +54,26 @@ export async function wizardOperation(input: any, directory: string) {
   const configPath = path.join(directory, "config.json");
   const existing = fs.existsSync(configPath) ? JSON.parse(fs.readFileSync(configPath, "utf8").replace(/^\uFEFF/, "")) : undefined;
   if (input.action === "discover") return { candidates: await discoverPrinters() };
+  if (input.action === "pair-begin" && !existing) return beginDeviceConnection(directory);
+  if (input.action === "pair-check" && !existing) {
+    const connection = await checkDeviceConnection(directory);
+    const shop = await verifySetupKey(connection.key);
+    if (shop.shopId !== connection.shopId) throw new Error("Connected shop changed");
+    const config = configForSetup(directory, connection.key);
+    // Save before acknowledging so a lost native response reuses this installation.
+    const temp = `${configPath}.${process.pid}.pairing.tmp`;
+    const fd = fs.openSync(temp, "wx", 0o600);
+    try { fs.writeFileSync(fd, JSON.stringify(config, null, 2)); fs.fsyncSync(fd); }
+    finally { fs.closeSync(fd); }
+    // Atomically create without replacing an existing installation.
+    try { fs.linkSync(temp, configPath); } finally { fs.unlinkSync(temp); }
+    fs.unlinkSync(path.join(directory, "setup-pairing.json"));
+    return { shop, existing: false };
+  }
   const key = existing?.shopApiKey ?? input.key;
   const config = configForSetup(directory, key, existing);
   const shop = await verifySetupKey(config.shopApiKey);
-  if (input.action === "verify") return { shop, existing: !!existing };
+  if (["verify", "pair-begin", "pair-check"].includes(input.action)) return { shop, existing: !!existing };
   if (input.action !== "save" || input.confirmedShopId !== shop.shopId)
     throw new Error("Confirm the verified shop before continuing");
   const store = new EnrollmentStore(config.ipp!.enrollmentFile);

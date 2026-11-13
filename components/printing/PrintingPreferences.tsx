@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { DestinationSettings, LabelKind } from "@/lib/print-queue/ipp-contract";
 import { printJson, readBrowserDefault, resolvedDefault, writeBrowserDefault } from "./saved-print-client";
 import { useSavedPrinting } from "./useSavedPrinting";
+import ComputerSetup from "./ComputerSetup";
 
 const button = "rounded-lg border px-3 py-2 text-sm font-medium hover:bg-gray-50 disabled:opacity-50";
 
@@ -82,6 +83,7 @@ function PreferencesCard({ kind }: { kind: LabelKind }) {
 export default function PrintingPreferences() {
   return <div className="mx-auto max-w-4xl space-y-6 p-4 sm:p-6">
     <div><h1 className="text-2xl font-bold text-gray-900">Printing preferences</h1><p className="mt-2 text-sm text-gray-600">Set separate defaults for stickers and keytags. One-print overrides never change your defaults.</p></div>
+    <ComputerSetup />
     <PreferencesCard kind="sticker" />
     <PreferencesCard kind="keytag" />
     <div className="rounded-xl border bg-gray-50 p-5 text-sm text-gray-600"><p>Browser Print always remains available. Existing TCP printing is unchanged. Saved IPP jobs are never automatically retried or sent to a different printer when an outcome is unknown.</p><Link href="/dashboard/settings/stickers" className="mt-3 inline-block text-blue-600 underline">Sticker rendering settings</Link><span className="mx-3">·</span><Link href="/dashboard/settings/keytags" className="text-blue-600 underline">Keytag rendering settings</Link></div>

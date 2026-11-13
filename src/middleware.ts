@@ -318,6 +318,9 @@ export const config = {
 function isPrintAgentPath(pathname: string): boolean {
   return (
     pathname === "/api/print-agent/jobs" ||
+    pathname === "/api/print-agent/setup" ||
+    pathname === "/api/print-agent/ipp" ||
+    pathname === "/api/print-agent/pair" ||
     PRINT_AGENT_ACK_PATH_RE.test(pathname)
   );
 }
