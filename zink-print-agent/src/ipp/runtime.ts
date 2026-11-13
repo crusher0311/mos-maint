@@ -4,6 +4,7 @@ import { IppClient, type EnrolledPrinter } from "./client";
 import { createExchange } from "./transport";
 import { IppJournal, IppWorker, type IppJob } from "./journal";
 import type { AgentConfig } from "../config";
+import { inspectionFailure, printerReadiness } from "./readiness";
 const PROTOCOL = "mos-ipp-png-v1";
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 export function revision(printer: EnrolledPrinter) {
@@ -16,10 +17,12 @@ export class IppRuntime {
   private inventory: { id: string; name: string; model: string; kind: string; stock: { width: number; height: number }; online: boolean }[] = [];
   private refreshedAt = 0;
   private enrollmentHash = "";
+  private statuses = new Map<string, string>();
   private readonly store: EnrollmentStore;
   private readonly journal: IppJournal;
   constructor(private readonly config: AgentConfig, private readonly cloud: IppCloud,
-    private readonly client = new IppClient(createExchange(2000))) {
+    private readonly client = new IppClient(createExchange(2000)),
+    private readonly report: (status: { printerNumber: number; reason: string }) => void = () => {}) {
     if (!config.ipp) throw new Error("IPP configuration required");
     this.store = new EnrollmentStore(config.ipp.enrollmentFile);
     this.journal = new IppJournal(config.ipp.journalDirectory,
@@ -32,17 +35,21 @@ export class IppRuntime {
       const inventory: typeof this.inventory = [];
       // At most four bounded two-operation inspections run concurrently.
       for (let i = 0; i < printers.length; i += 4) {
-        inventory.push(...await Promise.all(printers.slice(i, i + 4).map(async p => {
-          let online = false;
+        inventory.push(...await Promise.all(printers.slice(i, i + 4).map(async (p, offset) => {
+          let reason: string;
           try {
             const attrs = await this.client.inspect(p.uri);
-            online = attrs["printer-uuid"]?.[0]?.toString().toLowerCase() === p.uuid &&
-              attrs["printer-is-accepting-jobs"]?.[0] === true && attrs["printer-state"]?.[0] !== 5;
-          } catch { /* Explicit offline status; never another printer. */ }
-          return { id: p.id, name: p.name, kind: p.kind, model: p.model, stock: p.stock, online };
+            reason = printerReadiness(attrs, p.uuid);
+          } catch (error) { reason = inspectionFailure(error); }
+          if (this.statuses.get(p.id) !== reason) {
+            this.report({ printerNumber: i + offset + 1, reason });
+            this.statuses.set(p.id, reason);
+          }
+          return { id: p.id, name: p.name, kind: p.kind, model: p.model, stock: p.stock, online: reason === "ready" };
         })));
       }
       this.inventory = inventory; this.enrollmentHash = fingerprint; this.refreshedAt = Date.now();
+      for (const id of this.statuses.keys()) if (!printers.some(p => p.id === id)) this.statuses.delete(id);
     }
     const identity = { installationId: this.config.ipp!.installationId };
     const response = await this.cloud.ippControl({ ...identity, action: "poll", printers: this.inventory }, true);

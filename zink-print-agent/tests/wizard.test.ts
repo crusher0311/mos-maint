@@ -43,3 +43,11 @@ test("installer preserves state and wizard does not put secrets into arguments",
   assert(wizard.includes("Stop-ScheduledTask"));
   assert(wizard.includes("Outcome") || wizard.includes("outcome"));
 });
+
+test("scheduled launch preserves cmd outer quotes and protected log redirection", () => {
+  const { buildRegisterPs1 } = require("../scripts/assemble-pilot.js");
+  const script = buildRegisterPs1();
+  assert(script.includes(`$CmdArgs = '/d /s /c ""{0}" >> "{1}" 2>&1"' -f $ExePath, $LogFile`));
+  assert(script.includes('-Argument $CmdArgs -WorkingDirectory $AgentDir'));
+  assert(!script.includes('$CmdArgs = "/c'));
+});

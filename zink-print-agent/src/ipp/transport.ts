@@ -67,7 +67,7 @@ export function createExchange(timeoutMs = 10000): Exchange {
         });
       });
       const timer = setTimeout(() => {
-        req.destroy(); finish(new Error("IPP exchange timed out"));
+        finish(new IppDiagnosticError("inspection_timeout")); req.destroy();
       }, timeoutMs);
       req.on("error", (error: NodeJS.ErrnoException) => finish(new IppDiagnosticError(
         ["DEPTH_ZERO_SELF_SIGNED_CERT", "SELF_SIGNED_CERT_IN_CHAIN", "UNABLE_TO_VERIFY_LEAF_SIGNATURE",

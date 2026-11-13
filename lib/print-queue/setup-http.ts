@@ -35,7 +35,7 @@ export async function setupInfo(req: NextRequest) {
     const release = await installerRelease();
     return json({ shopId: user.shopId, shopName: shop.name, canManage: true, installer: {
       available: !!release, downloadUrl: release ? "/api/print/setup/installer" : null,
-      version: "pairing-diagnostic-v1", sha256: release?.sha256 ?? null,
+      version: "pairing-readiness-v1", sha256: release?.sha256 ?? null,
     } });
   } catch { return json({ error: "Setup unavailable. Sign in as a shop manager with sticker printing access." }, 403); }
 }

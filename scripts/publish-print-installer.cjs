@@ -7,10 +7,12 @@ const { MongoClient, GridFSBucket } = require("mongodb");
 const { Readable } = require("node:stream");
 const { pipeline } = require("node:stream/promises");
 async function main() {
-  if (process.argv.slice(2).some(a => !["--execute", "--diagnostic"].includes(a))) throw Error("Unsupported argument");
+  if (process.argv.slice(2).some(a => !["--execute", "--diagnostic", "--readiness"].includes(a))) throw Error("Unsupported argument");
   const diagnostic = process.argv.includes("--diagnostic");
-  const expectedRelease = diagnostic ? "windows-x64-pairing-diagnostic-v1" : "windows-x64-pairing-v1";
-  const dir = path.resolve(__dirname, diagnostic ? "../generated-artifacts/mos-print-diagnostic-installer" : "../generated-artifacts/mos-print-installer");
+  const readiness = process.argv.includes("--readiness");
+  if (diagnostic && readiness) throw Error("Choose one installer release");
+  const expectedRelease = readiness ? "windows-x64-pairing-readiness-v1" : diagnostic ? "windows-x64-pairing-diagnostic-v1" : "windows-x64-pairing-v1";
+  const dir = path.resolve(__dirname, readiness ? "../generated-artifacts/mos-print-readiness-installer" : diagnostic ? "../generated-artifacts/mos-print-diagnostic-installer" : "../generated-artifacts/mos-print-installer");
   const manifest = JSON.parse(fs.readFileSync(path.join(dir, "pairing-release.json")));
   const bytes = fs.readFileSync(path.join(dir, "MOS-Print-Setup-pilot.exe"));
   const digest = crypto.createHash("sha256").update(bytes).digest("hex");

@@ -230,8 +230,9 @@ function buildRegisterPs1() {
     "# Build the task action",
     "# Wrap in cmd /c so stdout+stderr are redirectable to the log file",
     "# ------------------------------------------------------------------",
-    // PowerShell: $CmdArgs = "/c `"$ExePath`" >> `"$LogFile`" 2>&1"
-    "$CmdArgs = \"/c " + BT + "\"$ExePath" + BT + "\" >> " + BT + "\"$LogFile" + BT + "\" 2>&1\"",
+    // /s strips the enclosing pair, leaving executable and redirect-path quotes.
+    // /d prevents cmd AutoRun entries from changing this unattended launch.
+    "$CmdArgs = '/d /s /c \"\"{0}\" >> \"{1}\" 2>&1\"' -f $ExePath, $LogFile",
     "$Action  = New-ScheduledTaskAction -Execute \"cmd.exe\" -Argument $CmdArgs -WorkingDirectory $AgentDir",
     "",
     "# ------------------------------------------------------------------",

@@ -6,7 +6,7 @@ import { wizardOperation } from "../src/ipp/wizard";
 import { IppClient } from "../src/ipp/client";
 
 test("diagnostics expose only safe failure labels and never enroll or print", async () => {
-  for (const code of ["name_resolution_failed", "certificate_rejected", "connection_failed", "unknown"]) {
+  for (const code of ["name_resolution_failed", "certificate_rejected", "connection_failed", "inspection_timeout", "unknown"]) {
     let reads = 0;
     const client = { inspect: async () => { reads++; throw new IppDiagnosticError(code); } } as unknown as IppClient;
     const result = await diagnosePrinter("ipps://happy.local:631/ipp/print", { width: 5000, height: 5000 }, client);
@@ -39,6 +39,13 @@ test("diagnostics distinguish unsupported model and missing capabilities", async
     "media-size": [{ "x-dimension": [5000], "y-dimension": [{ range: [1000, 10000] }] }],
     "media-top-margin": [0], "media-bottom-margin": [0], "media-left-margin": [0], "media-right-margin": [0],
   }];
+  assert.equal((await run()).diagnostic, "accepting_jobs_missing");
+  attrs["printer-is-accepting-jobs"] = [false];
+  assert.equal((await run()).diagnostic, "not_accepting_jobs");
+  attrs["printer-is-accepting-jobs"] = [true];
+  attrs["printer-state"] = [5];
+  assert.equal((await run()).diagnostic, "printer_stopped");
+  attrs["printer-state"] = [3];
   assert.equal((await run()).diagnostic, "ready");
 });
 

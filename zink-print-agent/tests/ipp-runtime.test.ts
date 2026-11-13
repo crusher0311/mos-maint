@@ -38,6 +38,18 @@ test("cloud response loss reconciles after restart without physical resubmission
       reconcileOnly: polls > 1, imageBase64: "cG5n" }] };
   } };
   try {
+    const reported: any[] = [];
+    const noJobs = { async ippControl(body: any) {
+      assert.equal(body.printers[0].online, false);
+      assert.equal(body.printers[0].reason, undefined);
+      return { jobs: [] };
+    } };
+    const unavailable = { inspect: async () => { throw Error("private printer address"); } } as unknown as IppClient;
+    const offline = new IppRuntime(config, noJobs, unavailable, status => reported.push(status));
+    await offline.runOnce();
+    await offline.runOnce();
+    assert.deepEqual(reported, [{ printerNumber: 1, reason: "attributes_failed" }]);
+    assert(!JSON.stringify(reported).includes("private"));
     await assert.rejects(new IppRuntime(config, cloud, client).runOnce(), /lost ack/);
     await new IppRuntime(config, cloud, client).runOnce();
     assert.equal(sends, 1); assert.equal(acknowledgments, 2);

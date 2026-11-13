@@ -85,7 +85,8 @@ async function main(): Promise<void> {
       connectTimeoutMs: config.connectTimeoutMs,
       agentVersion: AGENT_VERSION,
     },
-    { cloud, logger: log, ...(config.ipp ? { ipp: new IppRuntime(config, cloud) } : {}) },
+    { cloud, logger: log, ...(config.ipp ? { ipp: new IppRuntime(config, cloud, undefined,
+      status => log.info("saved printer readiness", status)) } : {}) },
   );
 
   const shutdown = (signal: string) => {
