@@ -48,6 +48,8 @@ export interface PrinterPort {
 }
 
 export interface AgentDeps {
+  /** Explicitly configured IPP lane replaces legacy claiming, not the executable. */
+  ipp?: { runOnce(): Promise<number> };
   cloud: CloudPort;
   printer?: PrinterPort;
   logger?: Logger;
@@ -84,8 +86,10 @@ export class PrintAgent {
 
   private running = false;
   private consecutivePollFailures = 0;
+  private readonly ipp?: AgentDeps["ipp"];
 
   constructor(cfg: AgentRuntimeConfig, deps: AgentDeps) {
+    this.ipp = deps.ipp;
     this.cfg = cfg;
     this.cloud = deps.cloud;
     this.printer = deps.printer ?? makeDefaultPrinterPort(deps.mdnsResolver);
@@ -175,6 +179,7 @@ export class PrintAgent {
    * (the caller translates that into backoff).
    */
   async runOnce(): Promise<number> {
+    if (this.ipp) return this.ipp.runOnce();
     const jobs = await this.cloud.pollJobs();
     if (jobs.length === 0) {
       this.log.debug("no pending jobs");

@@ -10,6 +10,9 @@ import { loadConfig } from "./config";
 import { CloudClient } from "./cloud";
 import { PrintAgent } from "./agent";
 import { createLogger } from "./logger";
+import { IPP_SETUP_HELP, runIppSetup } from "./ipp/setup";
+import { IppRuntime } from "./ipp/runtime";
+import { runWizardCommand } from "./ipp/wizard";
 
 // Kept in sync with package.json "version".
 export const AGENT_VERSION = "1.1.0";
@@ -29,11 +32,14 @@ function printHelp(): void {
       "  2. ZINK_AGENT_CONFIG environment variable",
       "  3. config.json in the current working directory",
       "",
+      IPP_SETUP_HELP,
+      "",
     ].join("\n"),
   );
 }
 
 async function main(): Promise<void> {
+  if (process.argv.includes("--setup-json")) { await runWizardCommand(); return; }
   if (process.argv.includes("--help") || process.argv.includes("-h")) {
     printHelp();
     return;
@@ -42,6 +48,7 @@ async function main(): Promise<void> {
     process.stdout.write(`${AGENT_VERSION}\n`);
     return;
   }
+  if (await runIppSetup(process.argv.slice(2))) return;
 
   const log = createLogger();
   let config;
@@ -78,7 +85,7 @@ async function main(): Promise<void> {
       connectTimeoutMs: config.connectTimeoutMs,
       agentVersion: AGENT_VERSION,
     },
-    { cloud, logger: log },
+    { cloud, logger: log, ...(config.ipp ? { ipp: new IppRuntime(config, cloud) } : {}) },
   );
 
   const shutdown = (signal: string) => {

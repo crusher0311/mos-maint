@@ -18,6 +18,9 @@ done
 # (auth-lint patterns 2026-08-22, extension-route-policy POLICY_MAP
 # 2026-08-24). A failure here fails post-merge setup loudly, naming the
 # gate, while the merging agent's context is still fresh.
+# Keep shared-handler inspection fail-closed as new delegated routes are added.
+node scripts/test-ipp-route-auth-source.cjs
+
 RELEASE_GATES=(
   "lint:unauthed-routes"
   "lint:extension-gates"

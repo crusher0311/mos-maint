@@ -1287,6 +1287,10 @@ function openStickerPanel() {
 }
 
 function printStickerFromContentScript(sticker) {
+  if (sticker?.ippJob) {
+    showToast(sticker.error || sticker.message || 'Saved print submitted. Check the printer before printing again.', sticker.success ? 'success' : 'error');
+    return;
+  }
   let html;
   try { html = MosStickerPrintCore.buildHtml(sticker); }
   catch (error) { showToast(error.message, 'error'); return; }

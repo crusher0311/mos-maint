@@ -221,6 +221,15 @@ const POLICY_MAP: Record<string, PolicyTier[]> = {
   // ── print ────────────────────────────────────────────────────────────────
   "/api/extension/print|POST": ["shop_tool"],
   "/api/extension/print|OPTIONS": ["preflight"],
+  // Saved destinations/status are scoped reads; defaults and calibration
+  // require write capability plus manager checks in the shared IPP handlers.
+  "/api/extension/print/destinations|GET": ["read"],
+  "/api/extension/print/destinations|PUT": ["write"],
+  "/api/extension/print/destinations|OPTIONS": ["preflight"],
+  "/api/extension/print/status|GET": ["read"],
+  "/api/extension/print/status|OPTIONS": ["preflight"],
+  "/api/extension/print/test|POST": ["write"],
+  "/api/extension/print/test|OPTIONS": ["preflight"],
 
   // ── print/config ─────────────────────────────────────────────────────────
   "/api/extension/print/config|GET": ["read"],

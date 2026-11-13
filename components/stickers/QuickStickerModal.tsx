@@ -1,6 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSavedPrinting } from "@/components/printing/useSavedPrinting";
+import { inchesToStock } from "@/components/printing/saved-print-client";
+import { getStickerSizeInches } from "@/lib/sticker-print-dimensions";
 import { OilViscosityInput } from "./OilViscosityInput";
 import { X, Loader2, Printer, Wifi, Check, AlertCircle } from "lucide-react";
 import {
@@ -30,6 +33,7 @@ interface QuickStickerModalProps {
 }
 
 export default function QuickStickerModal({ isOpen, onClose, vin }: QuickStickerModalProps) {
+  const savedPrinting = useSavedPrinting();
   const [loading, setLoading] = useState(false);
   const [oilViscosity, setOilViscosity] = useState("");
   useEffect(() => { setOilViscosity(""); }, [isOpen, vin]);
@@ -147,12 +151,14 @@ export default function QuickStickerModal({ isOpen, onClose, vin }: QuickSticker
       return;
     }
 
+    const choice = await savedPrinting.choose("sticker", false, true);
+    if (!choice) return;
     setError(null);
     setGenerating(true);
     const actionKey = JSON.stringify(["quick", vin, currentMileage, intervalType, customMonths, customMileage, stickerSize, unit, oilViscosity]);
-    const printActionId = stickerPrintAction(actionKey);
+    const printActionId = choice.transport === "ipp" ? choice.printActionId : stickerPrintAction(actionKey);
 
-    let useMobilePdfPath = isMobileBrowser();
+    let useMobilePdfPath = choice.transport === "browser" && isMobileBrowser();
 
     // CRITICAL: open the destination tab synchronously *off the user's tap*,
     // before any await. iOS Safari blocks `window.open` once a microtask
@@ -170,10 +176,10 @@ export default function QuickStickerModal({ isOpen, onClose, vin }: QuickSticker
     // fixing. The popup is same-origin and we control its content, so this
     // is safe.
     const printWindowFeatures = useMobilePdfPath ? "" : "width=600,height=800";
-    const placeholderWindow: Window | null = window.open("", "_blank", printWindowFeatures);
+    const placeholderWindow: Window | null = choice.transport === "ipp" ? null : choice.mobileWindow || window.open("", "_blank", printWindowFeatures);
     // A blocked popup is known before rendering: request PDF directly rather
     // than performing a second side-effectful PNG + PDF generation.
-    if (!placeholderWindow) useMobilePdfPath = true;
+    if (!placeholderWindow && choice.transport === "browser") useMobilePdfPath = true;
     if (placeholderWindow) {
       try {
         placeholderWindow.document.open();
@@ -218,6 +224,11 @@ export default function QuickStickerModal({ isOpen, onClose, vin }: QuickSticker
       }
 
       const blob = await res.blob();
+      if (choice.transport === "ipp") {
+        const physical = getStickerSizeInches(stickerSize);
+        await savedPrinting.submit(choice, blob, inchesToStock(physical.width, physical.height));
+        return;
+      }
 
       if (useMobilePdfPath) {
         const pdfUrl = URL.createObjectURL(blob);
@@ -299,6 +310,7 @@ export default function QuickStickerModal({ isOpen, onClose, vin }: QuickSticker
       }
       setError("Failed to generate sticker. Please try again.");
     } finally {
+      savedPrinting.cancelPreparation();
       setGenerating(false);
     }
   }
@@ -402,6 +414,7 @@ export default function QuickStickerModal({ isOpen, onClose, vin }: QuickSticker
         <div className="p-6 space-y-5">
           <StickerSupply />
           <TutorialLink />
+          {savedPrinting.controls("sticker")}
           {loading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
@@ -520,7 +533,7 @@ export default function QuickStickerModal({ isOpen, onClose, vin }: QuickSticker
           {zinkConfigured && (
             <button
               onClick={handleQueueToPrinter}
-              disabled={zinkStatus === "queuing" || loading || !currentMileage}
+              disabled={zinkStatus === "queuing" || generating || loading || !currentMileage}
               title={
                 zinkOnline
                   ? "Send to your shop's ZINK printer"
@@ -546,7 +559,7 @@ export default function QuickStickerModal({ isOpen, onClose, vin }: QuickSticker
               ) : (
                 <>
                   <Wifi className="w-4 h-4" />
-                  Send to Shop Printer
+                  Send to TCP (ZINK)
                 </>
               )}
             </button>
@@ -559,7 +572,7 @@ export default function QuickStickerModal({ isOpen, onClose, vin }: QuickSticker
           </button>
           <button
             onClick={handlePrint}
-            disabled={generating || loading || !currentMileage}
+            disabled={generating || zinkStatus === "queuing" || loading || !currentMileage}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             {generating ? (
@@ -570,12 +583,13 @@ export default function QuickStickerModal({ isOpen, onClose, vin }: QuickSticker
             ) : (
               <>
                 <Printer className="w-4 h-4" />
-                Print Now
+                Print
               </>
             )}
           </button>
         </div>
       </div>
+      {savedPrinting.dialog}
     </div>
   );
 }

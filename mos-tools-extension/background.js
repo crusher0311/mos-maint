@@ -2,6 +2,7 @@
 // Manages SMS session tokens, MOS authentication, and message routing
 
 import { createStickerConfigCache } from './lib/sticker-config-cache.js';
+import { signInDiagnostic } from './lib/sign-in-diagnostics.js';
 import './sticker-viscosity-core.js';
 import { createStickerLocationRequest } from './lib/sticker-location-session.js';
 // Side-effect import: sets globalThis.MosUndoCore (pure undo-snapshot logic,
@@ -2117,6 +2118,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   // -------------------- Sticker Printing --------------------
+  if (message.action === "SAVED_IPP_PRINT" || message.action === "SAVED_IPP_TEST") {
+    (async () => {
+      await _stateReady;
+      const printTabId = sender.tab?.id ?? message.context?._tabId;
+      const context = { ...message.context, _tabId: printTabId,
+        laborRateSessionDiscriminator: message.context?.laborRateSessionDiscriminator || laborRateSessionDiscriminatorForTab(printTabId) };
+      assertSavedPrintContext(context);
+      return enqueueSavedIpp(message.payload, context, message.action === "SAVED_IPP_TEST");
+    })().then(sendResponse).catch(err => sendResponse({ success: false, error: err.message }));
+    return true;
+  }
   if (message.action === "PRINT_STICKER_IMMEDIATE") {
     handleImmediateStickerPrint(message.context, sender.tab?.id, message.overrideInterval)
       .then(result => sendResponse(result))
@@ -2511,6 +2523,8 @@ async function handleMosLogin(email, password, apiUrl, rememberMe = true, loginC
     const activeTabId = activeTabs[0]?.id;
     const loginContext = smsContextsByTab.get(activeTabId) ||
       (currentSmsContext?._tabId === activeTabId ? currentSmsContext : null);
+    // Numeric shop identities only; never log credentials, tokens or full objects.
+    console.log('[MOS Sign-in Context]', JSON.stringify(signInDiagnostic('request', loginContext)));
     // Remove trailing slash from API URL
     mosApiUrl = (apiUrl || 'https://mos.tools').replace(/\/+$/, '');
     
@@ -2531,10 +2545,12 @@ async function handleMosLogin(email, password, apiUrl, rememberMe = true, loginC
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
+      console.log('[MOS Sign-in Context]', JSON.stringify(signInDiagnostic('rejected', loginContext, null, response.status)));
       throw new Error(errorData.error || `Login failed: ${response.status}`);
     }
 
     const data = await response.json();
+    console.log('[MOS Sign-in Context]', JSON.stringify(signInDiagnostic('response', loginContext, data.session, response.status)));
     if (authEpoch !== loginEpoch) {
       await revokeExtensionBearer(data.token, mosApiUrl);
       throw new Error('Login was superseded by a newer authentication action');
@@ -3153,7 +3169,10 @@ async function _doMosFetch(endpoint, options, token) {
 async function handleMosApiRequest(endpoint, options = {}) {
   await _stateReady;
   const endpointPath = String(endpoint).split('?')[0];
-  if (['/api/extension/sticker', '/api/extension/keytag', '/api/extension/features', '/api/extension/ro-context', '/api/extension/plan', '/api/extension/vehicle-history', '/api/extension/labor-rates'].includes(endpointPath)) {
+  if (['/api/extension/print', '/api/extension/print/test', '/api/extension/print/destinations', '/api/extension/print/status'].includes(endpointPath)) {
+    assertSavedPrintContext({ ...options.context, _tabId: options.sourceTabId ?? options.context?._tabId });
+  }
+  if (['/api/extension/print', '/api/extension/print/test', '/api/extension/print/destinations', '/api/extension/print/status', '/api/extension/sticker', '/api/extension/keytag', '/api/extension/features', '/api/extension/ro-context', '/api/extension/plan', '/api/extension/vehicle-history', '/api/extension/labor-rates'].includes(endpointPath)) {
     const body = options.body ? JSON.parse(options.body) : {};
     const query = new URL(endpoint, 'https://mos.invalid').searchParams;
     const provider = body.provider || query.get('provider');
@@ -4432,9 +4451,140 @@ function invalidateStickerConfigCache(shopId, provider) {
 }
 
 const pendingImmediateStickerActions = new Map();
+function assertSavedPrintContext(context) {
+  const tabId = context?._tabId;
+  const live = smsContextsByTab.get(tabId);
+  if (tabId == null || tabId !== activeTabId || !live ||
+      live.provider !== context.provider || String(live.shopId) !== String(context.shopId) ||
+      String(live.roId ?? '') !== String(context.roId ?? '') ||
+      (context.laborRateSessionDiscriminator && context.laborRateSessionDiscriminator !== laborRateSessionDiscriminatorForTab(tabId))) {
+    throw new Error('The originating shop or work order changed. Reopen Print from the current work order.');
+  }
+}
+function savedPrintParams(context, kind) {
+  return new URLSearchParams({ kind, smsShopId: String(context.shopId), provider: context.provider });
+}
+const savedPrintStatusLabels = {
+  queued: 'Accepted by cloud queue — not yet confirmed printed',
+  claimed: 'Sending to printer — completion not confirmed',
+  'printer-accepted': 'Accepted by printer — completion not confirmed',
+  completed: 'Printer confirmed completion',
+  failed: 'Print failed — check printer before printing again',
+  unknown: 'Outcome unknown — check printer before printing again. No automatic reprint.',
+};
+const savedIppActions = new Map();
+async function enqueueSavedIpp(payload, context, calibration = false) {
+  assertSavedPrintContext(context);
+  if (!payload || !['sticker', 'keytag'].includes(payload.type) || payload.transport !== 'ipp' ||
+      !/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(payload.printActionId || '')) throw new Error('Invalid saved-printer action.');
+  // Basic never uploads arbitrary images, even if a caller claims a keytag type.
+  if (calibration && mosSessionTier?.canAdmin === false) throw new Error('Manager verification is required for test labels.');
+  if (!calibration && mosSessionTier?.canMutate === false && (payload.imageBase64 || payload.type !== 'keytag' || !payload.keytag)) {
+    throw new Error('Verify your session to send image labels. Basic supports only shop-rendered keytags.');
+  }
+  const key = JSON.stringify([context.provider, context.shopId, payload.type, payload.printActionId, calibration]);
+  if (savedIppActions.has(key)) return savedIppActions.get(key);
+  const task = (async () => {
+    let posted = false;
+    try {
+      const settings = await handleMosApiRequest(`/api/extension/print/destinations?${savedPrintParams(context, payload.type)}`, { context });
+      assertSavedPrintContext(context);
+      const destination = settings?.destinations?.find(item => item.id === payload.destinationId && item.kind === payload.type);
+      if (!destination || !destination.supported || !destination.online || destination.revision !== payload.revision) {
+        throw new Error('Selected printer is unavailable or changed. Nothing was redirected. Review Printing preferences.');
+      }
+      if (!Number.isInteger(payload.stock?.width) || !Number.isInteger(payload.stock?.height) ||
+          payload.stock.width !== destination.stock.width || payload.stock.height !== destination.stock.height) {
+        throw new Error('Rendered label dimensions do not match printer stock. Nothing was sent. Use matching stock or Browser Print.');
+      }
+      posted = true;
+      const result = await handleMosApiRequest(calibration ? '/api/extension/print/test' : '/api/extension/print', {
+        context, method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(calibration
+          ? { kind: payload.type, destinationId: payload.destinationId, revision: payload.revision, stock: payload.stock,
+            printActionId: payload.printActionId, smsShopId: context.shopId, provider: context.provider }
+          : { ...payload, smsShopId: context.shopId, provider: context.provider }),
+      });
+      if (!result?.success || !result.jobId) throw new Error(result?.error || 'Queue acknowledgement unavailable.');
+      return { ...result, status: 'queued', message: savedPrintStatusLabels.queued };
+    } catch (error) {
+      return { success: false, status: posted ? 'unknown' : 'failed', printActionId: payload.printActionId,
+        error: posted ? `${savedPrintStatusLabels.unknown} Action ${payload.printActionId}. ${error.message}` : error.message };
+    }
+  })();
+  // Pin before the first await: duplicate clicks and ambiguous responses reuse
+  // the same action/result, never issue another POST.
+  savedIppActions.set(key, task);
+  return task;
+}
+function renderedStickerStock(sticker) {
+  const sizes = { '1.5x2.25': [1.5, 2.25], '2x2': [2, 2], '2x2.5': [2, 2.5], '2x3': [2, 3], '2x3.5': [2, 3.5] };
+  const size = sizes[sticker?.size];
+  if (!size) throw new Error('Rendered sticker dimensions are unavailable. Nothing was sent.');
+  return { width: Math.round(size[0] * 2540), height: Math.round(size[1] * 2540) };
+}
+const immediateIppLocks = new Map();
+async function pollImmediateSavedPrint(marker, context, lockKey, epoch) {
+  try {
+    for (let attempt = 0; attempt < 24; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 2500));
+      if (epoch !== authEpoch) return;
+      assertSavedPrintContext(context);
+      const params = savedPrintParams(context, 'sticker');
+      params.set('jobId', marker.jobId);
+      const view = await handleMosApiRequest(`/api/extension/print/status?${params}`, { context });
+      if (epoch !== authEpoch) return;
+      assertSavedPrintContext(context);
+      if (view?.jobId !== marker.jobId || view.destinationId !== marker.destinationId || !savedPrintStatusLabels[view.status]) throw new Error('Print status unavailable.');
+      marker.status = view.status;
+      marker.message = savedPrintStatusLabels[view.status];
+      if (['completed', 'failed', 'unknown'].includes(view.status)) {
+        if (view.status === 'completed') {
+          immediateIppLocks.delete(lockKey);
+          for (const [key, id] of pendingImmediateStickerActions) {
+            if (id === marker.printActionId) pendingImmediateStickerActions.delete(key);
+          }
+        }
+        await chrome.tabs.sendMessage(context._tabId, { action: 'SHOW_TOAST', message: marker.message, type: view.status === 'completed' ? 'success' : 'error' }).catch(() => {});
+        return;
+      }
+    }
+    marker.message = 'Status checking stopped — completion not confirmed. Check printer before printing again. Use the Print panel for a new explicit action.';
+  } catch {
+    marker.status = 'unknown';
+    marker.message = savedPrintStatusLabels.unknown;
+  }
+  try {
+    if (epoch !== authEpoch) return;
+    assertSavedPrintContext(context);
+    await chrome.tabs.sendMessage(context._tabId, { action: 'SHOW_TOAST', message: marker.message, type: 'error' }).catch(() => {});
+  } catch { /* never notify a different RO or provider session */ }
+}
 async function handleImmediateStickerPrint(context, tabId, overrideInterval = null) {
+  const printTabId = tabId ?? context?._tabId;
+  context = { ...context, _tabId: printTabId,
+    laborRateSessionDiscriminator: context?.laborRateSessionDiscriminator || laborRateSessionDiscriminatorForTab(printTabId) };
+  const epoch = authEpoch;
+  const lockKey = JSON.stringify([printTabId, context.provider, context.shopId, context.roId, context.laborRateSessionDiscriminator, overrideInterval]);
+  if (immediateIppLocks.has(lockKey)) return immediateIppLocks.get(lockKey);
+  const task = runImmediateStickerPrint(context, tabId, overrideInterval);
+  immediateIppLocks.set(lockKey, task);
+  try {
+    const result = await task;
+    // Queue/unknown outcomes stay pinned. An intentional new copy can be
+    // requested in the panel; repeated immediate clicks cannot duplicate it.
+    if (!result?.sticker?.ippJob) immediateIppLocks.delete(lockKey);
+    else if (result.sticker.success && result.sticker.jobId) {
+      void pollImmediateSavedPrint(result.sticker, context, lockKey, epoch);
+    }
+    return result;
+  } catch (error) { immediateIppLocks.delete(lockKey); throw error; }
+}
+async function runImmediateStickerPrint(context, tabId, overrideInterval = null) {
   await _stateReady;
-  context = { ...context, _tabId: tabId ?? context?._tabId };
+  const printTabId = tabId ?? context?._tabId;
+  context = { ...context, _tabId: printTabId,
+    laborRateSessionDiscriminator: context?.laborRateSessionDiscriminator || laborRateSessionDiscriminatorForTab(printTabId) };
   const scoped = ['tekmetric', 'shopmonkey'].includes(context.provider) && mosAuthSource === 'explicit'
     ? await stickerLocationRequest(context) : null;
   if (!mosApiToken) {
@@ -4443,6 +4593,29 @@ async function handleImmediateStickerPrint(context, tabId, overrideInterval = nu
   
   if (!context || !context.shopId) {
     throw new Error("No shop context available");
+  }
+  assertSavedPrintContext(context);
+  const settings = await handleMosApiRequest(`/api/extension/print/destinations?${savedPrintParams(context, 'sticker')}`, { context });
+  assertSavedPrintContext(context);
+  if (!settings || settings.kind !== 'sticker' || !Number.isInteger(settings.shopId) || !Array.isArray(settings.destinations)) {
+    throw new Error('Could not verify printing preferences. Use the Print panel to choose Browser Print explicitly.');
+  }
+  const preferenceKey = `mos:printing:v1:${settings.shopId}:sticker`;
+  const overrides = await chrome.storage.local.get(preferenceKey);
+  const destinationId = Object.hasOwn(overrides, preferenceKey) ? overrides[preferenceKey] : settings.defaultDestinationId;
+  const destination = destinationId ? settings.destinations.find(item => item.id === destinationId) : null;
+  if (destinationId && (!destination || !destination.online || !destination.supported)) {
+    throw new Error('Saved sticker printer is unavailable. Open Print to choose a one-print override. No fallback was attempted.');
+  }
+  if (destination && mosSessionTier?.canMutate === false) {
+    throw new Error('Verify your session for saved sticker printing, or explicitly choose Browser Print in the Print panel.');
+  }
+  async function deliver(sticker, printActionId) {
+    assertSavedPrintContext(context);
+    if (!destination) return { success: true, sticker: { ...sticker, mosPrintContext: context }, oilType: overrideInterval ? 'custom' : requestBody.intervalType };
+    const result = await enqueueSavedIpp({ transport: 'ipp', type: 'sticker', destinationId: destination.id, revision: destination.revision,
+      stock: renderedStickerStock(sticker), printActionId, imageBase64: sticker.dataUrl }, context);
+    return { success: true, sticker: { ippJob: true, printActionId, destinationId: destination.id, ...result }, oilType: overrideInterval ? 'custom' : requestBody.intervalType };
   }
   
   const mileage = context.mileage;
@@ -4533,8 +4706,9 @@ async function handleImmediateStickerPrint(context, tabId, overrideInterval = nu
       method: 'POST', body: JSON.stringify(requestBody),
     });
     if (!data.success || !data.sticker) throw new Error('Failed to generate sticker');
-    pendingImmediateStickerActions.delete(actionKey);
-    return { success: true, sticker: data.sticker, oilType: overrideInterval ? 'custom' : requestBody.intervalType };
+    const delivered = await deliver(data.sticker, requestBody.printActionId);
+    if (!delivered.sticker?.ippJob) pendingImmediateStickerActions.delete(actionKey);
+    return delivered;
   }
   try {
     response = await fetch(`${mosApiUrl}/api/extension/sticker?_token=${encodeURIComponent(mosApiToken)}`, {
@@ -4565,13 +4739,9 @@ async function handleImmediateStickerPrint(context, tabId, overrideInterval = nu
   if (!data.success || !data.sticker) {
     throw new Error("Failed to generate sticker");
   }
-  pendingImmediateStickerActions.delete(actionKey);
-  
-  return {
-    success: true,
-    sticker: { ...data.sticker, mosPrintContext: context },
-    oilType: overrideInterval ? 'custom' : requestBody.intervalType
-  };
+  const delivered = await deliver(data.sticker, requestBody.printActionId);
+  if (!delivered.sticker?.ippJob) pendingImmediateStickerActions.delete(actionKey);
+  return delivered;
 }
 
 // ==================== LABOR RATE RULES ====================
