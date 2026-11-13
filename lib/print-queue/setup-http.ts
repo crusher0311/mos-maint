@@ -8,13 +8,24 @@ import { readPrintJsonBody } from "./request-body";
 import { clientIp, rateLimit } from "@/lib/rate";
 const headers = { "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" };
 const json = (value: unknown, status = 200) => NextResponse.json(value, { status, headers });
+class SetupOriginError extends Error {}
+function requireSetupOrigin(req: NextRequest) {
+  const origin = req.headers.get("origin");
+  // The native installer opens this fixed production origin. Next can construct
+  // nextUrl using Render's internal bind address, which is not browser authority.
+  // Never derive an allowlist from client-controlled forwarded/Host headers.
+  if (origin === "https://mos.tools") return;
+  if (process.env.NODE_ENV !== "production" && origin === req.nextUrl.origin &&
+      ["localhost", "127.0.0.1", "[::1]"].includes(req.nextUrl.hostname)) return;
+  throw new SetupOriginError("Setup origin rejected");
+}
 async function manager(req: NextRequest, write = false) {
   const user = await requireSession();
   const ghostAdmin = user.isImpersonation ? await verifiedGhostAdminEmail(user) : null;
   if (!Number.isSafeInteger(user.shopId) || user.shopId <= 0 ||
       (user.isImpersonation ? !ghostAdmin : !(user.isPlatformAdmin || ["owner", "admin", "manager"].includes(user.role))))
     throw new Error("Manager access required");
-  if (write && req.headers.get("origin") !== req.nextUrl.origin) throw new Error("Same-origin approval required");
+  if (write) requireSetupOrigin(req);
   // Only the explicitly approved pilot location may install/connect this build.
   if (user.shopId !== 63) throw new Error("Computer setup is not enabled for this pilot location");
   const gate = await checkShopFeatureGate(user.shopId, ["oil_sticker"]);
@@ -44,16 +55,29 @@ export async function downloadInstaller(req: NextRequest) {
   } catch { return json({ error: "Installer unavailable. Check your access or contact support." }, 503); }
 }
 export async function approveSetup(req: NextRequest) {
+  let stage = "access";
   try {
     const user = await manager(req, true);
+    stage = "body";
     const body = await readPrintJsonBody(req, 4096);
     if (body.shopId !== user.shopId) return json({ error: "Your selected shop changed. Reload setup before approving." }, 409);
+    stage = "shop";
     const shop = await findShopByShopId(user.shopId);
     if (!shop || typeof shop.name !== "string" || !shop.name.trim()) return json({ error: "Shop identity unavailable" }, 404);
+    stage = "rate_limit";
     const rl = await rateLimit({ id: `print-setup-approve:${user.shopId}:${user.userId}`, limit: 10, windowSeconds: 600 });
     if (!rl.allowed) return json({ error: "Too many setup attempts. Wait before retrying." }, 429);
+    stage = "pairing";
     return json(await approvePairing(body.pairingToken, { shopId: user.shopId, name: shop.name }, user.setupActorEmail));
-  } catch { return json({ error: "Connection not approved. Check manager access, shop, and setup expiration before trying again." }, 403); }
+  } catch (error) {
+    // Only bounded internal labels: never log tokens, credentials, request data,
+    // email addresses, database errors, or user-supplied header values.
+    const code = error instanceof SetupOriginError ? "origin_rejected" : `${stage}_failed`;
+    console.warn("[PrintSetup] approval_rejected", { code });
+    return json({ code, error: error instanceof SetupOriginError
+      ? "Connection approval must be opened from https://mos.tools. Return to the setup wizard and choose Connect this computer."
+      : "Connection not approved. Check manager access, shop, and setup expiration before trying again." }, 403);
+  }
 }
 // Intentionally unauthenticated device bootstrap. A random device capability,
 // RSA private-key possession, and an explicit manager approval are all required.

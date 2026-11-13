@@ -133,5 +133,23 @@ test("setup approval rejects wrong roles, shops, origins and stale browser shop"
     session.isImpersonation = false; assert.equal((await approveSetup(req())).status, 200);
     assert.equal(actor, "fixture");
     assert.equal(approvals, 2);
+    // Next's production server builds nextUrl from its internal bind address,
+    // not the public Host/Origin forwarded by the reverse proxy.
+    const previousEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    try {
+      const proxyReq = origin => new NextRequest("https://0.0.0.0:5000/api/print/setup/approve", {
+        method: "POST",
+        headers: { "content-type": "application/json", origin, host: "mos.tools", "x-forwarded-host": "mos.tools" },
+        body: JSON.stringify({ shopId: 63, pairingToken: "a".repeat(64) }),
+      });
+      assert.equal((await approveSetup(proxyReq("https://mos.tools"))).status, 200);
+      for (const origin of ["https://evil.example", "null", "http://mos.tools", "https://mos.tools.evil.example", "https://0.0.0.0:5000"]) {
+        assert.equal((await approveSetup(proxyReq(origin))).status, 403);
+      }
+    } finally {
+      if (previousEnv === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = previousEnv;
+    }
   } finally { Module._load = load; }
 });
