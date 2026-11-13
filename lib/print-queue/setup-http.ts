@@ -6,17 +6,12 @@ import { installerRelease, installerBytes } from "@/lib/data/repositories/print-
 import { beginPairing, pairingStatus, approvePairing } from "./setup-pairing";
 import { readPrintJsonBody } from "./request-body";
 import { clientIp, rateLimit } from "@/lib/rate";
+import { isPrintBrowserOrigin } from "./browser-origin";
 const headers = { "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" };
 const json = (value: unknown, status = 200) => NextResponse.json(value, { status, headers });
 class SetupOriginError extends Error {}
 function requireSetupOrigin(req: NextRequest) {
-  const origin = req.headers.get("origin");
-  // The native installer opens this fixed production origin. Next can construct
-  // nextUrl using Render's internal bind address, which is not browser authority.
-  // Never derive an allowlist from client-controlled forwarded/Host headers.
-  if (origin === "https://mos.tools") return;
-  if (process.env.NODE_ENV !== "production" && origin === req.nextUrl.origin &&
-      ["localhost", "127.0.0.1", "[::1]"].includes(req.nextUrl.hostname)) return;
+  if (isPrintBrowserOrigin(req)) return;
   throw new SetupOriginError("Setup origin rejected");
 }
 async function manager(req: NextRequest, write = false) {

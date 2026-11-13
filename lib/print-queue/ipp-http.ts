@@ -5,6 +5,7 @@ import { readPrintJsonBody } from "./request-body";
 import { getDestinationSettings, setDefaultDestination, getIppStatus, labelKind, IppRequestError, enqueueIpp } from "./ipp-repository";
 import { validateStock } from "@/zink-print-agent/src/ipp/media";
 import { PrintPayloadTooLargeError } from "./types";
+import { isPrintBrowserOrigin } from "./browser-origin";
 
 export const ippCors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Content-Type, Authorization",
   "Access-Control-Allow-Methods": "GET, POST, PUT, OPTIONS" };
@@ -31,7 +32,7 @@ export async function webDestinations(req: NextRequest) {
     if (req.method === "PUT") {
       if (!canManage) throw new IppRequestError("Only shop managers can save shop defaults", 403);
       const origin = req.headers.get("origin");
-      if (origin && origin !== req.nextUrl.origin) throw new IppRequestError("Cross-origin settings write denied", 403);
+      if (origin && !isPrintBrowserOrigin(req)) throw new IppRequestError("Cross-origin settings write denied", 403);
       await setDefaultDestination(session.shopId, kind, body.destinationId);
     }
     return NextResponse.json(await getDestinationSettings(session.shopId, kind, canManage), { headers: { "Cache-Control": "no-store" } });
@@ -96,7 +97,7 @@ export async function webTest(req: NextRequest) {
   try {
     if (!manager(session)) throw new IppRequestError("Only shop managers can send test labels", 403);
     const origin = req.headers.get("origin");
-    if (origin && origin !== req.nextUrl.origin) throw new IppRequestError("Cross-origin print denied", 403);
+    if (origin && !isPrintBrowserOrigin(req)) throw new IppRequestError("Cross-origin print denied", 403);
     const body = await readPrintJsonBody(req, 4096), kind = labelKind(body.kind);
     const gate = await checkShopFeatureGate(session.shopId, [kind === "keytag" ? "keytags" : "oil_sticker"],
       { isPlatformAdmin: session.isPlatformAdmin, featureLabel: "Saved printing" });
