@@ -203,6 +203,20 @@ function buildRegisterPs1() {
     "Set-PrivateAgentAcl $AgentDir $true",
     "Set-PrivateAgentAcl $ExePath $false",
     "Set-PrivateAgentAcl $ConfigPath $false",
+    "# Preserve and secure IPP identity and durable send evidence during updates.",
+    "if ($cfg.ipp) {",
+    "    if ($cfg.ipp.installationId -like 'REPLACE_*') { throw 'Set a unique installationId before registration' }",
+    "    foreach ($PrivatePath in @($cfg.ipp.enrollmentFile, $cfg.ipp.journalDirectory)) {",
+    "        $Full = [IO.Path]::GetFullPath($PrivatePath)",
+    "        if (-not $Full.StartsWith($AgentDir + '\\', [StringComparison]::OrdinalIgnoreCase)) { throw 'IPP files must be inside the protected agent directory' }",
+    "    }",
+    "    if (-not (Test-Path $cfg.ipp.enrollmentFile)) { throw 'Enroll a printer locally before registering IPP mode' }",
+    "    New-Item -ItemType Directory -Path $cfg.ipp.journalDirectory -Force | Out-Null",
+    "}",
+    "# Reject junctions/symlinks before recursively securing existing pilot files.",
+    "$Children = @(Get-ChildItem -LiteralPath $AgentDir -Recurse -Force)",
+    "if ($Children | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }) { throw 'Reparse points are not allowed in the agent directory' }",
+    "foreach ($Child in $Children) { Set-PrivateAgentAcl $Child.FullName $Child.PSIsContainer }",
     "",
     "# ------------------------------------------------------------------",
     "# Ensure log directory exists",
@@ -393,6 +407,8 @@ function assemblePilot() {
 
   // 2. Config example
   copy(configExampleSrc, path.join(PILOT_DIR, "config.example.json"));
+  copy(path.join(ROOT, "config.ipp.example.json"), path.join(PILOT_DIR, "config.ipp.example.json"));
+  copy(path.join(ROOT, "../docs/runbooks/saved-ipp-contract.md"), path.join(PILOT_DIR, "SAVED-IPP-RUNBOOK.md"));
 
   // 3. PowerShell startup script
   write(path.join(STARTUP_DIR, "Register-ZinkAgent.ps1"), buildRegisterPs1());

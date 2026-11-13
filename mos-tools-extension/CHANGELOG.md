@@ -1,3 +1,19 @@
+# 1.35.16
+
+- Add saved-printer selection and print status to Detect Dog.
+- Preserve explicit browser printing and stop automatic fallback when a saved
+  printer is unavailable or the print outcome is uncertain.
+- Physical printer qualification and agent installation remain separate.
+
+# 1.35.15
+
+- Add local sign-in diagnostics showing the requested provider and numeric shop
+  context alongside the returned session context and HTTP status.
+- Diagnostic fields exclude passwords, tokens, email addresses, login codes,
+  and nonnumeric identifiers. No new permissions or telemetry endpoints.
+- This update helps investigate provider mismatches; it does not change
+  authentication, account assignments, or shop mappings.
+
 # 1.35.11
 
 - Place Shopmonkey Detect Dog controls on a dedicated row below the native

@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import { useSavedPrinting } from "@/components/printing/useSavedPrinting";
+import { inchesToStock } from "@/components/printing/saved-print-client";
+import { getStickerSizeInches } from "@/lib/sticker-print-dimensions";
 import Link from "next/link";
 import { StickerSupply } from "@/components/stickers/StickerSupply";
 import { OilViscosityInput } from "@/components/stickers/OilViscosityInput";
@@ -17,7 +20,7 @@ import ConcernAssistantModal from "@/components/ConcernAssistantModal";
 import NewWorkOrderModal from "@/components/NewWorkOrderModal";
 import { ReactNode } from "react";
 import { queueMultiplePrefetch, queuePrefetch } from "@/lib/plan-prefetch";
-import { isMobilePrintBrowser, openMobilePlaceholderWindow, navigateWindowToPdfBlob } from "@/lib/print-mobile";
+import { isMobilePrintBrowser, navigateWindowToPdfBlob } from "@/lib/print-mobile";
 import { buildStickerPrintHtml } from "@/lib/print-sticker";
 import { getOELogoUrl } from "@/lib/oe-logos";
 import {
@@ -151,6 +154,7 @@ async function fetchDashboardData(
 }
 
 export default function DashboardClient({ initialData }: { initialData: DashboardData }) {
+  const savedPrinting = useSavedPrinting();
   const [data, setData] = useState(initialData);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -508,8 +512,10 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     // iOS Safari/AirPrint ignores CSS `@page { size }`. Open a placeholder
     // tab synchronously off the user's tap (before any await), then
     // navigate it to a real-sized PDF once we have it. See lib/print-mobile.
-    const useMobilePdfPath = isMobilePrintBrowser();
-    const mobilePrintWindow = useMobilePdfPath ? openMobilePlaceholderWindow("sticker") : null;
+    const choice = await savedPrinting.choose("sticker");
+    if (!choice) return;
+    const useMobilePdfPath = choice.transport === "browser" && isMobilePrintBrowser();
+    const mobilePrintWindow = choice.transport === "browser" ? choice.mobileWindow : null;
 
     setPrintingSticker(vin);
     try {
@@ -533,7 +539,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          printActionId: stickerPrintAction(stickerActionKey),
+          printActionId: choice.transport === "ipp" ? choice.printActionId : stickerPrintAction(stickerActionKey),
           oilViscosity,
           printIntent: "print",
           vin,
@@ -556,6 +562,11 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       }
       
       const blob = await response.blob();
+      if (choice.transport === "ipp") {
+        const physical = getStickerSizeInches(stickerSize);
+        await savedPrinting.submit(choice, blob, inchesToStock(physical.width, physical.height));
+        return;
+      }
       completeStickerPrintAction(stickerActionKey);
 
       if (useMobilePdfPath) {
@@ -603,6 +614,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       }
       alert(error instanceof Error ? error.message : 'Failed to generate sticker.');
     } finally {
+      savedPrinting.cancelPreparation();
       setPrintingSticker(null);
     }
   };
@@ -618,8 +630,10 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     // iOS Safari/AirPrint ignores CSS `@page { size }`. Open a placeholder
     // tab synchronously off the user's tap (before any await), then
     // navigate it to a real-sized PDF once we have it. See lib/print-mobile.
-    const useMobilePdfPath = isMobilePrintBrowser();
-    const mobilePrintWindow = useMobilePdfPath ? openMobilePlaceholderWindow("key tag") : null;
+    const choice = await savedPrinting.choose("keytag");
+    if (!choice) return;
+    const useMobilePdfPath = choice.transport === "browser" && isMobilePrintBrowser();
+    const mobilePrintWindow = choice.transport === "browser" ? choice.mobileWindow : null;
     const operation = keytagPrintDetails.begin(mobilePrintWindow);
 
     setPrintingKeytag(vin);
@@ -649,6 +663,10 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
 
       const blob = await res.blob();
       if (!operation.isCurrent()) return;
+      if (choice.transport === "ipp") {
+        await savedPrinting.submit(choice, blob, inchesToStock(res.headers.get("X-Keytag-Width") || "", res.headers.get("X-Keytag-Height") || ""));
+        return;
+      }
 
       if (useMobilePdfPath) {
         navigateWindowToPdfBlob(mobilePrintWindow, blob);
@@ -710,6 +728,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       }
       alert(error instanceof Error ? error.message : 'Failed to generate keytag.');
     } finally {
+      savedPrinting.cancelPreparation();
       if (operation.isCurrent()) setPrintingKeytag(null);
     }
   };
@@ -731,8 +750,10 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
     // iOS Safari/AirPrint ignores CSS `@page { size }`. Open a placeholder
     // tab synchronously off the user's tap (before any await), then
     // navigate it to a real-sized PDF once we have it. See lib/print-mobile.
-    const useMobilePdfPath = isMobilePrintBrowser();
-    const mobilePrintWindow = useMobilePdfPath ? openMobilePlaceholderWindow("sticker") : null;
+    const choice = await savedPrinting.choose("sticker");
+    if (!choice) return;
+    const useMobilePdfPath = choice.transport === "browser" && isMobilePrintBrowser();
+    const mobilePrintWindow = choice.transport === "browser" ? choice.mobileWindow : null;
 
     setPrintingSticker(vin);
     try {
@@ -829,7 +850,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          printActionId: stickerPrintAction(stickerActionKey),
+          printActionId: choice.transport === "ipp" ? choice.printActionId : stickerPrintAction(stickerActionKey),
           printIntent: "print",
           oilViscosity,
           vin,
@@ -853,6 +874,11 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       
       // Get the image blob and convert to data URL
       const blob = await response.blob();
+      if (choice.transport === "ipp") {
+        const physical = getStickerSizeInches(stickerSize);
+        await savedPrinting.submit(choice, blob, inchesToStock(physical.width, physical.height));
+        return;
+      }
       completeStickerPrintAction(stickerActionKey);
 
       if (useMobilePdfPath) {
@@ -901,6 +927,7 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
       }
       alert(error instanceof Error ? error.message : 'Failed to generate sticker. Please check your sticker settings.');
     } finally {
+      savedPrinting.cancelPreparation();
       setPrintingSticker(null);
     }
   };
@@ -1200,7 +1227,12 @@ export default function DashboardClient({ initialData }: { initialData: Dashboar
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {keytagPrintDetails.dialog}
+      {savedPrinting.dialog}
       <StickerSupply />
+      <div className="space-y-1 border-b bg-gray-50 px-4 py-2 sm:px-6">
+        {savedPrinting.controls("sticker")}
+        {savedPrinting.controls("keytag")}
+      </div>
       <header className="bg-white border-b border-gray-200 px-4 sm:px-6 py-3 sm:py-4">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">

@@ -20,6 +20,7 @@ import path from "node:path";
 import { DEFAULT_PRINTER_PORT } from "./printer";
 
 export interface AgentConfig {
+  ipp?: { installationId: string; enrollmentFile: string; journalDirectory: string };
   cloudBaseUrl: string;
   shopApiKey: string;
   printer: {
@@ -60,6 +61,15 @@ export function parseConfig(raw: unknown): AgentConfig {
     throw new Error("config must be a JSON object");
   }
   const obj = raw as Record<string, unknown>;
+  let ipp: AgentConfig["ipp"];
+  if (obj.ipp !== undefined) {
+    const value = obj.ipp as Record<string, unknown>;
+    if (!value || typeof value.installationId !== "string" || !/^[a-zA-Z0-9_-]{8,64}$/.test(value.installationId) ||
+        typeof value.enrollmentFile !== "string" || !value.enrollmentFile.trim() ||
+        typeof value.journalDirectory !== "string" || !value.journalDirectory.trim())
+      throw new Error("IPP requires installationId, enrollmentFile and journalDirectory");
+    ipp = { installationId: value.installationId, enrollmentFile: value.enrollmentFile, journalDirectory: value.journalDirectory };
+  }
 
   const cloudBaseUrl = obj.cloudBaseUrl;
   if (typeof cloudBaseUrl !== "string" || cloudBaseUrl.trim() === "") {
@@ -71,6 +81,8 @@ export function parseConfig(raw: unknown): AgentConfig {
   } catch {
     throw new Error(`config "cloudBaseUrl" is not a valid URL: ${cloudBaseUrl}`);
   }
+  if (ipp && new URL(cloudBaseUrl).protocol !== "https:")
+    throw new Error("IPP requires an HTTPS cloudBaseUrl");
 
   const shopApiKey = obj.shopApiKey;
   if (typeof shopApiKey !== "string" || shopApiKey.trim() === "") {
@@ -131,6 +143,7 @@ export function parseConfig(raw: unknown): AgentConfig {
   }
 
   return {
+    ipp,
     cloudBaseUrl: cloudBaseUrl.replace(/\/+$/, ""),
     shopApiKey,
     printer: { address, port },

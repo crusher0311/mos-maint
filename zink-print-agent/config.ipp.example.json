@@ -1,0 +1,11 @@
+{
+  "cloudBaseUrl": "https://mos.tools",
+  "shopApiKey": "REPLACE_WITH_DEDICATED_PRINT_AGENT_KEY",
+  "printer": { "address": "zink.local", "port": 9100 },
+  "pollIntervalMs": 5000,
+  "ipp": {
+    "installationId": "REPLACE_WITH_UNIQUE_INSTALLATION_UUID",
+    "enrollmentFile": "C:\\ZinkPrintAgent\\printers.json",
+    "journalDirectory": "C:\\ZinkPrintAgent\\ipp-journal"
+  }
+}

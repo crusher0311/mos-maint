@@ -38,6 +38,9 @@ import {
 } from "@/lib/print-queue/types";
 import { readPrintJsonBody } from "@/lib/print-queue/request-body";
 import { printRequestRequiresWrite } from "@/lib/extension-basic-tools";
+import { enqueueIpp, IppRequestError } from "@/lib/print-queue/ipp-repository";
+import { ippError } from "@/lib/print-queue/ipp-http";
+import { resolvePaperSize } from "@/lib/keytag-paper-sizes";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -106,6 +109,28 @@ async function _POST(req: NextRequest) {
   if (!guard.ok) return guard.response;
 
   const shopId = guard.mosShopId;
+  if (body?.transport === "ipp") {
+    try {
+      if (!body.imageBase64 && type === "keytag" && body.keytag) {
+        const shop = await findShopByExactShopId<any>(shopId, { keytagConfig: 1 });
+        const paper = resolvePaperSize(shop?.keytagConfig?.designerLayout?.paperSize);
+        const stock = { width: Math.round(paper.widthIn * 2540), height: Math.round(paper.heightIn * 2540) };
+        if (stock.width !== body.stock?.width || stock.height !== body.stock?.height)
+          throw new IppRequestError("Configured keytag artwork size differs from selected stock", 409);
+        const k = body.keytag;
+        for (const field of ["customerName", "vehicleInfo", "roNumber", "vin"]) {
+          if (k[field] !== undefined && (typeof k[field] !== "string" || k[field].length > 256))
+            throw new IppRequestError("Invalid keytag details");
+        }
+        const png = await renderKeytagBuffer(shop?.keytagConfig, {
+          customerName: k.customerName ?? "", vehicleInfo: k.vehicleInfo ?? "", roNumber: k.roNumber ?? "",
+          vin: k.vin, mileage: k.mileage ?? "", extraValues: k.extraValues,
+        });
+        body.imageBase64 = png.toString("base64");
+      }
+      return NextResponse.json(await enqueueIpp(shopId, body), { status: 201, headers: corsHeaders });
+    } catch (error) { return ippError(error, corsHeaders); }
+  }
   if (body.printActionId !== undefined && !validPrintAction(body.printActionId)) {
     return NextResponse.json({ error: "Invalid print action" }, { status: 400, headers: corsHeaders });
   }

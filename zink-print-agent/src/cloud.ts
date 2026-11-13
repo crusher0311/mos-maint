@@ -97,6 +97,7 @@ export class CloudClient {
     try {
       const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
         ...init,
+        redirect: "error",
         signal: controller.signal,
         headers: { ...this.authHeaders(), ...(init.headers || {}) },
       });
@@ -181,5 +182,16 @@ export class CloudClient {
       return this.throwResponseError("ack", res, bodyText);
     }
     return JSON.parse(bodyText) as AckJobResponse;
+  }
+
+  /** Explicit versioned capability; old agents never call or receive this path. */
+  async ippControl(body: Record<string, unknown>, poll = false): Promise<any> {
+    if (new URL(this.baseUrl).protocol !== "https:") throw new Error("Saved IPP cloud transport requires HTTPS");
+    const { response, bodyText } = await this.request("/api/print-agent/ipp", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...body, protocol: "mos-ipp-png-v1" }),
+    }, poll ? this.maxPollResponseBytes : MAX_CONTROL_RESPONSE_BYTES);
+    if (!response.ok) throw new Error(`Saved IPP cloud request failed: HTTP ${response.status}`);
+    return JSON.parse(bodyText);
   }
 }

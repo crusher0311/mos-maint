@@ -6015,11 +6015,14 @@ function updateKeytagFields() {
 }
 
 async function handleKeytagPrint() {
+  if (savedPanelPrintBusy) return;
+  savedPanelPrintBusy = true;
   const printContext = { ...currentContext };
   const printContextKey = keytagExtraContextKey(currentContext);
   if (currentContext?.provider === 'shopmonkey' && shopFeatures.maintenance !== true &&
       (!currentContext.roId || printContextKey !== keytagManualContextKey || shopFeatures.keytags !== true)) {
     recomputeKeytagPrintLock();
+    savedPanelPrintBusy = false;
     return;
   }
   const customerName = elements.keytagCustomer?.value?.trim() || '';
@@ -6032,6 +6035,7 @@ async function handleKeytagPrint() {
       elements.keytagError.textContent = 'Please enter a customer name';
       elements.keytagError.classList.remove('hidden');
     }
+    savedPanelPrintBusy = false;
     return;
   }
   
@@ -6040,6 +6044,8 @@ async function handleKeytagPrint() {
   if (elements.keytagPrintBtn) elements.keytagPrintBtn.disabled = true;
   
   try {
+    const printChoice = await openSavedPrintPicker('keytag', printContext);
+    if (!printChoice) return;
     // Re-read definitions for this shop; a stale form must not print removed fields.
     await loadKeytagExtras();
     if (printContextKey !== keytagExtraContextKey(currentContext) || keytagExtrasKey !== printContextKey) {
@@ -6085,6 +6091,12 @@ async function handleKeytagPrint() {
       widthInches: result.dimensions?.width || '3.45in',
       heightInches: result.dimensions?.height || '1.11in'
     };
+    if (printChoice.destination) {
+      await submitPanelIpp(printChoice, printContext, 'keytag', {
+        ...keytagData, widthInches: result.dimensions?.width, heightInches: result.dimensions?.height,
+      }, body);
+      return;
+    }
     printKeytagImage(keytagData);
     keytagExtrasValues = {};
     keytagExtrasEdited = new Set();
@@ -6099,6 +6111,7 @@ async function handleKeytagPrint() {
       elements.keytagError.classList.remove('hidden');
     }
   } finally {
+    savedPanelPrintBusy = false;
     elements.stickerLoading.classList.add('hidden');
     // Restore the lock state owned by enrichment, not a blanket re-enable.
     // If the RO is still ready, this re-enables Print; otherwise it stays locked.
@@ -6176,6 +6189,7 @@ function printKeytagViaWindow(keytag) {
 
 let pendingStickerPrint = null;
 async function handleStickerPrint() {
+  if (savedPanelPrintBusy) return;
   const printContextKey = MosStickerPersonalization.contextKey(currentContext);
   if (['tekmetric', 'shopmonkey'].includes(currentContext?.provider) &&
       (!stickerConfig || stickerConfigContextKey !== stickerContextKey(currentContext))) {
@@ -6191,12 +6205,17 @@ async function handleStickerPrint() {
     elements.stickerError.classList.remove('hidden');
     return;
   }
+  savedPanelPrintBusy = true;
+  const printContext = currentContext ? { ...currentContext } : null;
   
   elements.stickerError.classList.add('hidden');
   elements.stickerLoading.classList.remove('hidden');
   elements.stickerPrintBtn.disabled = true;
   
   try {
+    const printChoice = await openSavedPrintPicker('sticker', printContext);
+    if (!printChoice) return;
+    if (printContextKey !== MosStickerPersonalization.contextKey(currentContext)) throw new Error('Work order changed. Review Print before printing.');
     const intervalType = elements.stickerInterval.value;
     const unit = elements.stickerUnit.value;
     
@@ -6260,7 +6279,7 @@ async function handleStickerPrint() {
     const result = await sendMessage({
       action: 'MOS_API_REQUEST',
       endpoint: '/api/extension/sticker',
-      context: currentContext ? { ...currentContext } : null,
+      context: printContext,
       options: {
         method: 'POST',
         body: JSON.stringify(body)
@@ -6277,6 +6296,12 @@ async function handleStickerPrint() {
     if (!result.success || !result.sticker) {
       throw new Error('Failed to generate sticker');
     }
+    if (printChoice.destination) {
+      updateStickerSupply(result.supply);
+      await submitPanelIpp(printChoice, printContext, 'sticker', result.sticker, null, body.printActionId);
+      pendingStickerPrint = null;
+      return;
+    }
     pendingStickerPrint = null;
     
     // Print the sticker using an iframe
@@ -6291,6 +6316,7 @@ async function handleStickerPrint() {
     elements.stickerError.textContent = err.message || 'Failed to generate sticker';
     elements.stickerError.classList.remove('hidden');
   } finally {
+    savedPanelPrintBusy = false;
     elements.stickerLoading.classList.add('hidden');
     elements.stickerPrintBtn.disabled = false;
   }
@@ -10728,3 +10754,295 @@ function estimateAuditVehicle(context = currentContext) {
     model: vehicle.model || undefined,
   };
 }
+
+// Saved IPP controls use the worker's authorized transport. Local overrides
+// are keyed ONLY after the API resolves the SMS/provider pair to a MOS shop.
+let savedPanelPrintBusy = false;
+let savedPrintPickerOpen = false;
+const savedPanelActions = new Map();
+const savedPanelOverrideNext = {};
+const savedPanelBrowserNext = {};
+function savedPanelScope(context) {
+  return JSON.stringify([context?.provider, context?.shopId, context?.roId, context?.vin,
+    context?._tabId ?? context?.tabId, context?.laborRateSessionDiscriminator]);
+}
+function assertSavedPanelScope(context) {
+  if (!isAuthenticated || savedPanelScope(context) !== savedPanelScope(currentContext)) {
+    throw new Error('Shop or work order changed. Reopen Print from the current work order.');
+  }
+}
+async function savedPanelRequest(context, kind, path, options) {
+  assertSavedPanelScope(context);
+  const params = new URLSearchParams({ kind, smsShopId: String(context.shopId), provider: context.provider });
+  const result = await sendMessage({ action: 'MOS_API_REQUEST', endpoint: `/api/extension/print/${path}?${params}`,
+    context, options: { cache: 'no-store', ...options } }, 20000);
+  assertSavedPanelScope(context);
+  if (!result || result.error || result.success === false) throw new Error(result?.error || 'Printing request unavailable.');
+  return result;
+}
+function createSavedPrintDialog(title) {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(17,24,39,.55);display:flex;align-items:center;justify-content:center;padding:12px;';
+  const panel = document.createElement('section');
+  panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-modal', 'true'); panel.setAttribute('aria-label', title);
+  panel.style.cssText = 'background:#fff;color:#374151;border-radius:12px;padding:20px;max-width:460px;width:100%;max-height:90dvh;overflow:auto;font-size:12px;line-height:1.6;box-shadow:0 12px 30px rgba(17,24,39,.2);';
+  const heading = document.createElement('h3'); heading.textContent = title;
+  heading.style.cssText = 'margin:0 0 12px;font-size:16px;color:#111827;';
+  panel.append(heading); overlay.append(panel); document.body.append(overlay);
+  overlay.addEventListener('keydown', event => {
+    if (event.key !== 'Tab') return;
+    const nodes = [...panel.querySelectorAll('button:not([disabled]):not([hidden]),select:not([disabled]),a[href]')];
+    const first = nodes[0], last = nodes[nodes.length - 1];
+    if (!first) { event.preventDefault(); return; }
+    if (event.shiftKey && (document.activeElement === first || document.activeElement === panel)) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && (document.activeElement === last || document.activeElement === panel)) { event.preventDefault(); first.focus(); }
+  });
+  const focusBefore = document.activeElement;
+  panel.tabIndex = -1; panel.focus();
+  return { panel, close() { overlay.remove(); if (focusBefore?.isConnected) focusBefore.focus(); } };
+}
+function savedPrintText(parent, text, role) {
+  const paragraph = document.createElement('p'); paragraph.textContent = text;
+  paragraph.style.cssText = 'margin:10px 0;overflow-wrap:anywhere;';
+  if (role) paragraph.setAttribute('role', role);
+  parent.append(paragraph); return paragraph;
+}
+function savedPrintButton(parent, label, action) {
+  const button = document.createElement('button'); button.type = 'button'; button.textContent = label;
+  button.className = 'support-action-btn';
+  button.style.cssText = 'margin:6px 6px 0 0;padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;';
+  button.addEventListener('click', action); parent.append(button); return button;
+}
+async function openSavedPrintPicker(kind, context, preferencesOnly = false, calibration = false) {
+  if (savedPrintPickerOpen) return null;
+  if (!preferencesOnly && !calibration) {
+    const browser = savedPanelBrowserNext[kind];
+    savedPanelBrowserNext[kind] = false;
+    const force = savedPanelOverrideNext[kind];
+    savedPanelOverrideNext[kind] = false;
+    document.querySelector(`[data-print-override="${kind}"]`)?.setAttribute('aria-pressed', 'false');
+    document.querySelector(`[data-print-browser="${kind}"]`)?.setAttribute('aria-pressed', 'false');
+    if (browser) { assertSavedPanelScope(context); return { destination: null }; }
+    if (!force) {
+      try {
+        const settings = await savedPanelRequest(context, kind, 'destinations');
+        if (settings.kind !== kind || !Number.isInteger(settings.shopId) || !Array.isArray(settings.destinations)) throw new Error('Invalid printing preferences.');
+        const key = `mos:printing:v1:${settings.shopId}:${kind}`;
+        let override;
+        try { const raw = localStorage.getItem(key); override = raw === null ? undefined : JSON.parse(raw); } catch {}
+        const id = override === undefined ? settings.defaultDestinationId : override;
+        const destination = settings.destinations.find(item => item.id === id);
+        const status = document.getElementById(`saved-${kind}-printer-status`);
+        if (status) status.textContent = !id ? 'Browser Print' : destination
+          ? `${destination.name} · ${destination.stock.width / 100} × ${destination.stock.height / 100} mm · ${destination.supported ? 'Supported' : 'Unsupported'} · ${destination.online ? 'Online' : 'Offline'}`
+          : 'Saved destination unavailable';
+        if (!id) return { destination: null };
+        if (destination?.online && destination.supported && (kind === 'keytag' || (currentUserCanWrite && sessionCanMutate))) return { destination, settings };
+      } catch { /* No implicit fallback. Offer an explicit override picker. */ }
+    }
+  }
+  savedPrintPickerOpen = true;
+  const dialog = createSavedPrintDialog(`${kind === 'sticker' ? 'Sticker' : 'Keytag'} printing`);
+  savedPrintText(dialog.panel, calibration ? 'Print a non-customer calibration label rendered by MOS. Manager permission is required.' : 'One-print override does not change defaults. Save browser or shop defaults explicitly.');
+  const status = savedPrintText(dialog.panel, 'Loading saved printers…', 'status');
+  status.style.background = '#f3f4f6'; status.style.minHeight = '32px';
+  const select = document.createElement('select'); select.className = 'select-modern';
+  select.style.cssText = 'width:100%;margin:8px 0;padding:8px;';
+  select.setAttribute('aria-label', 'One-print override');
+  select.add(new Option('Browser Print', ''));
+  dialog.panel.append(select);
+  let settings = null;
+  let saving = false;
+  let live = true;
+  let resolveChoice;
+  const choice = new Promise(resolve => { resolveChoice = resolve; });
+  const done = value => { if (!live) return; live = false; savedPrintPickerOpen = false; dialog.close(); resolveChoice(value); };
+  const selected = () => settings?.destinations.find(item => item.id === select.value);
+  const invalid = () => !!select.value && (!selected() || !selected().online || !selected().supported);
+  const canUpload = () => currentUserCanWrite && sessionCanMutate;
+  const canSend = () => !invalid() && !!selected() && (calibration ? settings?.canManage && sessionCanAdmin && currentUserCanWrite : kind === 'keytag' ? sessionTier?.canUseShopTools !== false : canUpload());
+  const buttons = document.createElement('div'); dialog.panel.append(buttons);
+  const browserSave = savedPrintButton(buttons, 'Save browser default', () => void save(false));
+  const shopSave = savedPrintButton(buttons, 'Save shop default', () => void save(true));
+  const clear = savedPrintButton(buttons, 'Use shop default', async () => {
+    if (!settings || saving) return;
+    try {
+      assertSavedPanelScope(context);
+      const key = `mos:printing:v1:${settings.shopId}:${kind}`;
+      localStorage.removeItem(key); await chrome.storage.local.remove(key);
+      select.value = settings.defaultDestinationId || ''; status.textContent = 'Browser now uses the shop default.'; sync();
+    } catch (error) { status.textContent = error.message; }
+  });
+  const prefs = savedPrintButton(buttons, 'Open web preferences', async () => {
+    const auth = await sendMessage({ action: 'GET_MOS_AUTH' });
+    try {
+      const url = new URL('/dashboard/settings/printing', auth?.apiUrl || 'https://mos.tools');
+      if (url.protocol !== 'https:' && !['localhost', '127.0.0.1'].includes(url.hostname)) throw new Error('Invalid MOS address');
+      chrome.tabs.create({ url: url.href });
+    } catch { status.textContent = 'Open MOS settings, then Printing preferences.'; }
+  });
+  const send = savedPrintButton(buttons, preferencesOnly ? 'Done' : 'Send to saved printer', () => {
+    try {
+      assertSavedPanelScope(context);
+      if (preferencesOnly) { done(null); return; }
+      if (!canSend()) return;
+      done({ destination: selected(), settings });
+    } catch (error) { status.textContent = error.message; }
+  });
+  const browser = savedPrintButton(buttons, 'Browser Print', () => {
+    try { assertSavedPanelScope(context); done({ destination: null }); }
+    catch (error) { status.textContent = error.message; }
+  });
+  if (preferencesOnly || calibration) browser.hidden = true;
+  savedPrintButton(buttons, 'Cancel', () => done(null));
+  function sync() {
+    browserSave.disabled = saving || !settings || invalid();
+    shopSave.disabled = saving || !settings?.canManage || !sessionCanAdmin || !currentUserCanWrite || invalid();
+    clear.disabled = saving || !settings;
+    send.disabled = saving || (!preferencesOnly && !canSend());
+    browser.disabled = saving;
+    prefs.disabled = saving;
+  }
+  select.addEventListener('change', () => {
+    sync();
+    status.textContent = invalid() ? 'Selected printer unavailable. Nothing will be redirected.' :
+      kind === 'sticker' && !canUpload() && select.value ? 'Verify your account to send image labels, or use Browser Print explicitly.' : 'Selection applies to this print only until saved.';
+  });
+  async function save(shop) {
+    if (!settings || saving || invalid()) return;
+    saving = true; sync();
+    try {
+      assertSavedPanelScope(context);
+      if (shop) {
+        await savedPanelRequest(context, kind, 'destinations', { method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ kind, destinationId: select.value || null, smsShopId: context.shopId, provider: context.provider }) });
+        settings.defaultDestinationId = select.value || null;
+      } else {
+        const key = `mos:printing:v1:${settings.shopId}:${kind}`;
+        const value = select.value || null;
+        // The worker has no localStorage. Mirror this browser preference so
+        // immediate-print clicks use the same resolved MOS-shop/kind override.
+        await chrome.storage.local.set({ [key]: value });
+        localStorage.setItem(key, JSON.stringify(value));
+      }
+      status.textContent = shop ? 'Shop default saved.' : 'Browser default saved for this shop and label type.';
+    } catch (error) { status.textContent = error.message; }
+    finally { saving = false; sync(); }
+  }
+  async function load() {
+    status.textContent = 'Loading saved printers…';
+    try {
+      const result = await savedPanelRequest(context, kind, 'destinations');
+      if (!live) return;
+      if (!Number.isInteger(result.shopId) || result.kind !== kind || !Array.isArray(result.destinations)) throw new Error('Printing settings did not match this shop.');
+      settings = result;
+      select.replaceChildren(new Option('Browser Print', ''));
+      for (const item of settings.destinations) select.add(new Option(`${item.name} · ${item.stock.width / 100} × ${item.stock.height / 100} mm · ${item.supported ? 'Supported' : 'Unsupported'} · ${item.online ? 'Online' : 'Offline'}`, item.id));
+      const key = `mos:printing:v1:${settings.shopId}:${kind}`;
+      let override;
+      try { const raw = localStorage.getItem(key); override = raw === null ? undefined : JSON.parse(raw); } catch {}
+      const id = override === undefined ? settings.defaultDestinationId : override;
+      if (id && !settings.destinations.some(item => item.id === id)) select.add(new Option('Saved selection unavailable — choose explicitly', id));
+      select.value = id || '';
+      status.textContent = invalid() ? 'Saved printer unavailable. Choose another destination explicitly.' :
+        settings.destinations.length ? 'Printer status checked. Labels must match the rendered physical size.' : 'No saved printers for this label type. Browser Print remains available.';
+    } catch (error) { if (live) status.textContent = error.message; }
+    finally { if (live) sync(); }
+  }
+  savedPrintButton(buttons, 'Refresh printers', () => void load());
+  sync(); void load();
+  return choice;
+}
+function panelRenderedStock(kind, rendered) {
+  let width, height;
+  if (kind === 'sticker') {
+    const size = MosStickerPrintCore.sizes[rendered?.size];
+    if (size) [width, height] = size;
+  } else {
+    const parse = value => /^\d+(\.\d+)?in$/.test(String(value)) ? Number(String(value).slice(0, -2)) : NaN;
+    width = parse(rendered.widthInches); height = parse(rendered.heightInches);
+  }
+  if (![width, height].every(value => Number.isFinite(value) && value > 0)) throw new Error('Rendered physical dimensions unavailable. Nothing was sent.');
+  return { width: Math.round(width * 2540), height: Math.round(height * 2540) };
+}
+async function submitPanelIpp(choice, context, kind, rendered, keytag, actionId, calibration = false) {
+  assertSavedPanelScope(context);
+  const stock = calibration ? choice.destination.stock : panelRenderedStock(kind, rendered);
+  if (stock.width !== choice.destination.stock.width || stock.height !== choice.destination.stock.height) {
+    throw new Error('Rendered label size does not match selected printer stock. Nothing was sent. Choose matching stock or Browser Print.');
+  }
+  const basic = !sessionCanMutate || !currentUserCanWrite;
+  if (!calibration && basic && (kind !== 'keytag' || !keytag)) throw new Error('Verified write permission is required to send image labels.');
+  const actionKey = JSON.stringify([savedPanelScope(context), kind, choice.destination.id, calibration ? 'calibration' : keytag || rendered.dataUrl]);
+  const printActionId = savedPanelActions.get(actionKey) || actionId || crypto.randomUUID();
+  savedPanelActions.set(actionKey, printActionId);
+  const payload = { transport: 'ipp', type: kind, destinationId: choice.destination.id, revision: choice.destination.revision, stock, printActionId,
+    ...(calibration ? {} : basic ? { keytag } : { imageBase64: rendered.dataUrl }) };
+  const dialog = createSavedPrintDialog('Saved printer status');
+  const status = savedPrintText(dialog.panel, 'Sending one print action…', 'status');
+  savedPrintText(dialog.panel, 'No automatic fallback or reprint. A queued job does not confirm a physical label.');
+  let result;
+  try {
+    result = await sendMessage({ action: calibration ? 'SAVED_IPP_TEST' : 'SAVED_IPP_PRINT', context, payload }, 60000);
+    assertSavedPanelScope(context);
+    if (!result?.success || !result.jobId) throw new Error(result?.error || 'Queue acknowledgement unavailable.');
+    status.textContent = 'Accepted by cloud queue — completion not confirmed.';
+    savedPrintText(dialog.panel, `Job ${result.jobId}`);
+    const labels = { queued: 'Accepted by cloud queue', claimed: 'Sending to printer — completion not confirmed',
+      'printer-accepted': 'Accepted by printer — completion not confirmed', completed: 'Printer confirmed completion',
+      failed: 'Print failed — check printer before printing again', unknown: 'Outcome unknown — check printer; do not automatically reprint' };
+    for (let count = 0; count < 24; count++) {
+      await new Promise(resolve => setTimeout(resolve, 2500));
+      assertSavedPanelScope(context);
+      const params = new URLSearchParams({ jobId: result.jobId, kind, smsShopId: String(context.shopId), provider: context.provider });
+      const view = await sendMessage({ action: 'MOS_API_REQUEST', context, endpoint: `/api/extension/print/status?${params}`, options: { cache: 'no-store' } }, 20000);
+      assertSavedPanelScope(context);
+      if (view?.jobId !== result.jobId || view.destinationId !== choice.destination.id || !labels[view.status]) throw new Error(view?.error || 'Print status unavailable.');
+      status.textContent = `${labels[view.status]}${view.error ? ` — ${view.error}` : ''}`;
+      if (['completed', 'failed', 'unknown'].includes(view.status)) {
+        if (view.status === 'completed') savedPanelActions.delete(actionKey);
+        return;
+      }
+    }
+    status.textContent += '. Status checking stopped. Check the printer before printing again.';
+  } catch (error) {
+    status.textContent = `Outcome unknown. Check the printer before printing again. No fallback or resubmission was attempted. Action ${printActionId}. ${error.message}`;
+  } finally {
+    await new Promise(resolve => savedPrintButton(dialog.panel, 'Close — check printer before reprinting', () => {
+      // A later explicit Print click is a new user action after acknowledgement.
+      // Closing never retries or resubmits this action.
+      savedPanelActions.delete(actionKey);
+      dialog.close(); resolve();
+    }));
+  }
+}
+document.addEventListener('click', event => {
+  const override = event.target.closest?.('[data-print-override]');
+  const browser = event.target.closest?.('[data-print-browser]');
+  if ((override || browser) && !savedPanelPrintBusy) {
+    const kind = override?.dataset.printOverride || browser.dataset.printBrowser;
+    savedPanelOverrideNext[kind] = !!override && !savedPanelOverrideNext[kind];
+    savedPanelBrowserNext[kind] = !!browser && !savedPanelBrowserNext[kind];
+    override?.setAttribute('aria-pressed', String(savedPanelOverrideNext[kind]));
+    browser?.setAttribute('aria-pressed', String(savedPanelBrowserNext[kind]));
+    const status = document.getElementById(`saved-${kind}-printer-status`);
+    if (status) status.textContent = savedPanelOverrideNext[kind] ? 'One-print override ready. Click Print to choose a destination.' :
+      savedPanelBrowserNext[kind] ? 'Browser Print selected for the next print only.' : 'Next print will use your saved default.';
+  }
+  const preference = event.target.closest?.('[data-print-preferences]');
+  if (preference && !savedPanelPrintBusy) void openSavedPrintPicker(preference.dataset.printPreferences, { ...currentContext }, true);
+  const test = event.target.closest?.('[data-print-test]');
+  if (test && !savedPanelPrintBusy) {
+    void (async () => {
+      savedPanelPrintBusy = true;
+      try {
+        const context = { ...currentContext };
+        const kind = test.dataset.printTest;
+        const choice = await openSavedPrintPicker(kind, context, false, true);
+        if (choice?.destination) await submitPanelIpp(choice, context, kind, null, null, undefined, true);
+      } catch (error) { showNotification(error.message, 'error'); }
+      finally { savedPanelPrintBusy = false; }
+    })();
+  }
+});
