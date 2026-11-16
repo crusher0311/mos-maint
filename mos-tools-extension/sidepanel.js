@@ -84,7 +84,7 @@ let currentTab = 'plan';
 let tutorialScopeGeneration = 0;
 let tutorialFeaturesScope = null;
 function tutorialFeatureScope() {
-  return JSON.stringify([currentContext?.provider, currentContext?.shopId]);
+  return JSON.stringify([currentContext?.provider, currentContext?.shopId, currentContext?.swShopId]);
 }
 function syncTutorials() {
   const link = document.getElementById('tutorial-context-btn');
@@ -117,7 +117,7 @@ let vehicleHistoryTimer = null;
 let vehicleHistoryActiveKey = null;
 
 function vehicleHistoryContextKey(context) {
-  return JSON.stringify([context?.provider || '', context?.shopId ?? '', String(context?.vin || '').trim().toUpperCase(), context?.roId ?? '']);
+  return JSON.stringify([context?.provider || '', context?.shopId ?? '', context?.swShopId ?? '', String(context?.vin || '').trim().toUpperCase(), context?.roId ?? '']);
 }
 
 function vehicleHistoryEligible() {
@@ -148,7 +148,8 @@ function renderVehicleHistory(payload, error) {
   const escape = value => escEstimate(String(value ?? ''));
   const readOnly = '<p style="padding:8px;border:1px solid #dbeafe;border-radius:6px;background:#eff6ff;color:#1e40af;font-size:11px;line-height:1.5;">Read-only evidence. Other locations’ jobs cannot be added, edited, or resolved here. Existing RO actions are unchanged.</p>';
   if (error) {
-    body.innerHTML = `${readOnly}<p role="alert" style="padding:10px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;font-size:12px;">Vehicle history unavailable. Coverage could not be verified; this does not mean no work exists. Refresh history to retry.</p>`;
+    const detail = typeof error === 'string' ? ` ${escape(error)}` : '';
+    body.innerHTML = `${readOnly}<p role="alert" style="padding:10px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;font-size:12px;">Vehicle history unavailable. Coverage could not be verified; this does not mean no work exists.${detail} Refresh history to retry.</p>`;
     return;
   }
   if (!payload) {
@@ -179,6 +180,10 @@ async function fetchVehicleHistory() {
   renderVehicleHistory(null); // Remove old evidence before every read, even cached-plan views.
   const vin = String(context.vin).trim().toUpperCase();
   const params = new URLSearchParams({ vin, shopId: String(context.shopId), provider: context.provider });
+  if (context.provider === 'shopware') {
+    if (context.swShopId != null) params.set('swShopId', String(context.swShopId));
+    if (context.roId != null) params.set('roId', String(context.roId));
+  }
   try {
     const payload = await sendMessage({
       action: 'MOS_API_REQUEST',
@@ -187,6 +192,10 @@ async function fetchVehicleHistory() {
       options: { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } },
     }, 20000);
     if (sequence !== vehicleHistorySequence || key !== vehicleHistoryContextKey(currentContext) || !vehicleHistoryEligible()) return;
+    if (payload?.error && /^SHOPWARE_/.test(payload.code || '')) {
+      renderVehicleHistory(null, payload.error);
+      return;
+    }
     if (payload?.error || payload?.success === false || typeof payload?.enabled !== 'boolean' ||
         !Array.isArray(payload.locations) || !Array.isArray(payload.events) ||
         (payload.vin !== vin && !(payload.enabled === false && payload.vin === null)) ||
@@ -243,6 +252,7 @@ function estimateAuditContextKey(context) {
   return JSON.stringify([
     context.provider || '',
     context.shopId ?? '',
+    context.swShopId ?? '',
     context.roId ?? '',
     context.tabId ?? context._tabId ?? '',
   ]);
@@ -498,7 +508,7 @@ function normalizeEstimateTitle(value) {
 }
 function planCacheKey(ctx) {
   if (!ctx || !ctx.roId) return null;
-  return JSON.stringify([ctx.provider || '', ctx.shopId ?? '', String(ctx.roId)]);
+  return JSON.stringify([ctx.provider || '', ctx.shopId ?? '', ctx.swShopId ?? '', String(ctx.roId)]);
 }
 function setPlanCache(key, data) {
   if (!key) return;
@@ -1796,6 +1806,17 @@ function updateContext(context) {
   }
   
   const prevContext = currentContext;
+  const shopwareLocationChanged = prevContext?.provider === 'shopware' &&
+    (context?.provider !== 'shopware' || prevContext.shopId !== context?.shopId ||
+      prevContext.swShopId !== context?.swShopId);
+  if (shopwareLocationChanged) {
+    // Remove old branding immediately, including when verification of the new
+    // location fails. A hidden stale plan must not be re-used as evidence.
+    elements.planContent?.classList.add('hidden');
+    maintenanceFeaturesScope = null;
+    tutorialFeaturesScope = null;
+    resolvedMosShopId = null;
+  }
   if (planCacheKey(prevContext) !== planCacheKey(context)) recommendationSearchOrigin = null;
   const historyContextChanged =
     vehicleHistoryContextKey(prevContext) !== vehicleHistoryContextKey(context);
@@ -1823,7 +1844,7 @@ function updateContext(context) {
     invalidateLaborRateState('shop, tab, or repair-order context changed');
   }
   
-  if (!prevContext || !context || prevContext.roId !== context.roId || prevContext.shopId !== context.shopId) {
+  if (!prevContext || !context || prevContext.roId !== context.roId || prevContext.shopId !== context.shopId || prevContext.swShopId !== context.swShopId) {
     keytagContextEnriched = false;
     keytagStatus = 'idle';
     keytagInFlightKey = null;
@@ -1835,7 +1856,7 @@ function updateContext(context) {
     if (shareBtn) shareBtn.classList.add('hidden');
   }
   
-  if (prevContext && context && prevContext.provider === context.provider && prevContext.roId === context.roId && prevContext.shopId === context.shopId) {
+  if (prevContext && context && prevContext.provider === context.provider && prevContext.roId === context.roId && prevContext.shopId === context.shopId && prevContext.swShopId === context.swShopId) {
     if (prevContext.vehicle && !context.vehicle) currentContext.vehicle = prevContext.vehicle;
     if (prevContext.vehicleDisplay && !context.vehicleDisplay) currentContext.vehicleDisplay = prevContext.vehicleDisplay;
     if (prevContext.vin && !context.vin) currentContext.vin = prevContext.vin;
@@ -1894,7 +1915,7 @@ function updateContext(context) {
     
     fetchShopFeatures();
     
-    const roChanged = !prevContext || prevContext.roId !== context.roId;
+    const roChanged = !prevContext || planCacheKey(prevContext) !== planCacheKey(context);
     // Task #1094: repaint the undo bar for the (possibly new) RO.
     refreshUndoBar();
     if (context.roId && roChanged) {
@@ -1948,7 +1969,7 @@ function canLoadMaintenancePlan() {
   if (shopFeatures.maintenance !== true) return false;
   // Shopmonkey permissions use a location-scoped session. Do not borrow the
   // startup default or another location's last-known-good permissions.
-  return currentContext?.provider !== 'shopmonkey' ||
+  return !['shopmonkey', 'shopware'].includes(currentContext?.provider) ||
     maintenanceFeaturesScope === tutorialFeatureScope();
 }
 
@@ -2361,6 +2382,7 @@ async function loadPlan(forceRefresh = false) {
     requestSession === laborRateSessionDiscriminator &&
     requestTab === (currentContext?._tabId ?? currentContext?.tabId) &&
     currentContext?.provider === reqProvider &&
+    currentContext?.swShopId === requestContext.swShopId &&
     currentContext?.shopId === reqShopId && currentContext?.roId === reqRoId;
   const cacheKey = planCacheKey(currentContext);
   const requestMutationVersion = planCache.get(cacheKey)?.mutationVersion || 0;
@@ -5723,7 +5745,7 @@ let keytagExtrasValues = {};
 let keytagExtrasEdited = new Set();
 function keytagExtraContextKey(ctx) {
   if (!ctx?.shopId) return null;
-  return JSON.stringify([ctx.provider || '', ctx.shopId, ctx.roId || '', ctx.vin || '', ctx._tabId || '',
+  return JSON.stringify([ctx.provider || '', ctx.shopId, ctx.swShopId ?? '', ctx.roId || '', ctx.vin || '', ctx._tabId || '',
     ctx.laborRateSessionDiscriminator || '']);
 }
 function resetKeytagExtras() {

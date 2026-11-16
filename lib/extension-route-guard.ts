@@ -11,13 +11,15 @@ import type {
   ExtensionCapability,
   ExtensionSessionPrincipal,
 } from "@/lib/extension-session";
-import { findShopBySmsId } from "@/lib/extension-shop-lookup";
+import { findShopBySmsId, findShopBySmsIdDetailed } from "@/lib/extension-shop-lookup";
+import { shopwareNumericId } from "@/lib/shopware-sticker-location";
 import { getFeatureEntitlements, type FeatureKey } from "@/lib/featureResolver";
 import { resolveGuardProvider } from "@/lib/extension-basic-tools";
 
 /** Test seam for entitlement behavior without a live database. */
 export const __deps = {
   getFeatureEntitlements,
+  validateExtensionToken,
 };
 
 /**
@@ -50,6 +52,8 @@ export interface ExtensionGuardOptions {
   smsShopId: unknown;
   /** Provider hint for the shop lookup (e.g. "tekmetric"). Defaults to "tekmetric". */
   provider?: string | null;
+  shopwareLocationId?: unknown;
+  shopwareRepairOrderId?: unknown;
   /** Required feature flags. ALL listed flags must be enabled for the shop. Empty = no feature gate. */
   requiredFeatures?: FeatureKey[];
   /** CORS headers to attach to error responses. Defaults to the standard extension set. */
@@ -81,7 +85,7 @@ export async function guardExtensionShopRequest(
 ): Promise<ExtensionGuardResult> {
   const corsHeaders = options.corsHeaders ?? DEFAULT_CORS_HEADERS;
 
-  const auth = await validateExtensionToken(request);
+  const auth = await __deps.validateExtensionToken(request);
   if (!auth.authorized || !auth.user) {
     return {
       ok: false,
@@ -135,12 +139,41 @@ export async function guardExtensionShopRequest(
     };
   }
 
-  const shopResult = await findShopBySmsId(String(options.smsShopId), {
+  const lookupOptions = {
     isPlatformAdmin,
     userShopIds: userShopIds as any,
     providerHint: providerResolution.provider || "tekmetric",
     providerHintIsAuthoritative: providerResolution.authoritative,
-  });
+  };
+  let shopResult;
+  if (providerResolution.provider === "shopware") {
+    const locationId = options.shopwareLocationId ?? request.nextUrl.searchParams.get("swShopId");
+    const repairOrderId = options.shopwareRepairOrderId ?? request.nextUrl.searchParams.get("roId");
+    const fail = (status: number, code: string, error: string): ExtensionGuardResult => ({
+      ok: false, response: NextResponse.json({ error, code }, { status, headers: corsHeaders }),
+    });
+    if (locationId == null && repairOrderId == null) {
+      return fail(409, "SHOPWARE_LOCATION_REQUIRED", "Open the intended Shop-Ware location or repair order and retry. The tenant alone does not identify a location.");
+    }
+    if ((locationId != null && !shopwareNumericId(locationId)) ||
+        (repairOrderId != null && !shopwareNumericId(repairOrderId))) {
+      return fail(400, "SHOPWARE_CONTEXT_INVALID", "Shop-Ware location or repair order is invalid. Reopen the intended page and retry.");
+    }
+    try {
+      const result = await findShopBySmsIdDetailed(String(options.smsShopId), {
+        ...lookupOptions, providerHintIsAuthoritative: true,
+        shopwareLocationId: locationId, shopwareRepairOrderId: repairOrderId,
+      });
+      if (result.status === "conflict") return fail(409, "SHOPWARE_MAPPING_CONFLICT", "Shop-Ware location ownership is ambiguous. Ask support to verify the tenant/location mappings.");
+      if (result.status === "access_denied") return fail(403, "SHOPWARE_ACCESS_DENIED", "You do not have access to this Shop-Ware location. Ask your administrator to verify your shop assignment.");
+      if (result.status !== "resolved") return fail(404, "SHOPWARE_LOCATION_NOT_FOUND", "No matching Shop-Ware location was verified. Reopen the intended repair order; if this persists, ask support to verify its mapping.");
+      shopResult = result;
+    } catch {
+      return fail(503, "SHOPWARE_VERIFICATION_UNAVAILABLE", "Shop-Ware location verification is temporarily unavailable. Retry shortly; no other location was selected.");
+    }
+  } else {
+    shopResult = await findShopBySmsId(String(options.smsShopId), lookupOptions);
+  }
 
   if (!shopResult) {
     return {

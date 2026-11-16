@@ -738,7 +738,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     incomingContext = decorateLaborRateContext(incomingContext, incomingContext._tabId);
     if (incomingContext._tabId != null) {
       const prior = smsContextsByTab.get(incomingContext._tabId);
-      const key = c => JSON.stringify([c?.provider, c?.shopId, c?.roId, c?.locationId, c?.companyId]);
+      const key = c => JSON.stringify([c?.provider, c?.shopId, c?.roId, c?.swShopId, c?.locationId, c?.companyId]);
       if (key(prior) !== key(incomingContext)) {
         stickerTabRevisions.set(incomingContext._tabId, (stickerTabRevisions.get(incomingContext._tabId) || 0) + 1);
       }
@@ -869,7 +869,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         let data;
         const requestTabId = sender.tab?.id ?? activeTabId;
         let scopedRequest;
-        if (['shopmonkey', 'tekmetric'].includes(provider) && mosAuthSource === 'explicit') {
+        if (provider === 'shopware') {
+          const context = { ...message.context, _tabId: sender.tab?.id };
+          const revision = stickerTabRevisions.get(context._tabId) || 0;
+          scopedRequest = { assertCurrent: async () => {
+            if (requestEpoch !== authEpoch || revision !== (stickerTabRevisions.get(context._tabId) || 0)) {
+              throw Object.assign(new Error('Shop-Ware location changed. Retry from the current page.'), { code: 'CONTEXT_CHANGED' });
+            }
+          } };
+          data = await handleMosApiRequest(`/api/extension/features?shopId=${encodeURIComponent(shopId)}&provider=shopware`, {
+            context, sourceTabId: sender.tab?.id,
+          });
+        } else if (['shopmonkey', 'tekmetric'].includes(provider) && mosAuthSource === 'explicit') {
           const context = message.context || smsContextsByTab.get(sender.tab?.id ?? activeTabId);
           if (!context || context.provider !== provider || String(context.shopId) !== String(shopId)) {
             throw Object.assign(new Error('Open the intended repair order and retry. Current shop context could not be confirmed.'), { code: 'CONTEXT_CHANGED' });
@@ -3168,6 +3179,45 @@ async function _doMosFetch(endpoint, options, token) {
 
 async function handleMosApiRequest(endpoint, options = {}) {
   await _stateReady;
+  // Bind general Shop-Ware reads to the same immutable location as the panel.
+  // Do not switch/elevate the session: the server still enforces its principal.
+  const swContext = options.context;
+  if (swContext?.provider === 'shopware' &&
+      ['/api/extension/vehicle-history', '/api/extension/ro-context', '/api/extension/plan', '/api/extension/features'].includes(String(endpoint).split('?')[0])) {
+    const snapshot = { ...swContext };
+    const tabId = options.sourceTabId ?? snapshot._tabId ?? snapshot.tabId;
+    const revision = stickerTabRevisions.get(tabId) || 0;
+    const epoch = authEpoch;
+    const key = c => JSON.stringify([c?.provider, c?.shopId, c?.swShopId, c?.roId]);
+    const assertCurrent = () => {
+      if (tabId == null || epoch !== authEpoch ||
+          revision !== (stickerTabRevisions.get(tabId) || 0) ||
+          key(snapshot) !== key(smsContextsByTab.get(tabId))) {
+        throw Object.assign(new Error('Shop-Ware location changed. Retry from the current page.'), { code: 'CONTEXT_CHANGED' });
+      }
+    };
+    assertCurrent();
+    const url = new URL(endpoint, 'https://mos.invalid');
+    if (url.origin !== 'https://mos.invalid' || !url.pathname.startsWith('/api/extension/')) {
+      throw new Error('Invalid extension endpoint');
+    }
+    if (url.searchParams.get('provider') !== 'shopware' ||
+        url.searchParams.get('shopId') !== String(snapshot.shopId)) {
+      throw new Error('Shop-Ware request context mismatch');
+    }
+    for (const [field, value] of [['swShopId', snapshot.swShopId], ['roId', snapshot.roId]]) {
+      const supplied = url.searchParams.get(field);
+      if (supplied != null && supplied !== String(value ?? '')) throw new Error('Shop-Ware request context mismatch');
+      if (value != null) url.searchParams.set(field, String(value));
+    }
+    endpoint = `${url.pathname}${url.search}`;
+    await ensureBootstrapBoundToActiveTab();
+    assertCurrent();
+    if (!mosApiToken) throw new Error('Not authenticated with MOS');
+    const result = await _handleMosApiRequestTimed(endpoint, options, Date.now(), snapshot);
+    assertCurrent();
+    return result;
+  }
   const endpointPath = String(endpoint).split('?')[0];
   if (['/api/extension/print', '/api/extension/print/test', '/api/extension/print/destinations', '/api/extension/print/status'].includes(endpointPath)) {
     assertSavedPrintContext({ ...options.context, _tabId: options.sourceTabId ?? options.context?._tabId });

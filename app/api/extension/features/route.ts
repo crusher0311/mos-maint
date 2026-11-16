@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { validateExtensionToken, getUserShopIds, getAuthErrorStatus, buildAuthErrorBody, requireExtensionPrincipalScope } from "@/lib/extension-auth";
 import { getFeatureEntitlements, ShopEntitlementsUnavailableError } from "@/lib/featureResolver";
 import { findShopBySmsId } from "@/lib/extension-shop-lookup";
+import { guardExtensionShopRequest } from "@/lib/extension-route-guard";
 import { resolveInjectedButtonVisibility, INJECTED_BUTTON_PROVIDERS } from "@/lib/extension-button-visibility";
 import { resolveFloatingDetectDog } from "@/lib/floating-detect-dog";
 
@@ -50,7 +51,11 @@ async function _GET(request: NextRequest) {
     
     if (smsShopId) {
       const provider = searchParams.get("provider") || undefined;
-      shopResult = await findShopBySmsId(smsShopId, {
+      if (provider?.toLowerCase().replace(/^shop[-_]ware$/, "shopware") === "shopware" || auth.principal?.provider === "shopware") {
+        const guard = await guardExtensionShopRequest(request, { smsShopId, provider, corsHeaders });
+        if (!guard.ok) return guard.response;
+        shopResult = { status: "resolved", mosShopId: guard.mosShopId, shopDoc: guard.shopDoc, provider: guard.provider };
+      } else shopResult = await findShopBySmsId(smsShopId, {
         userShopIds, isPlatformAdmin,
         providerHint: auth.principal?.provider === "shopmonkey" ? "shopmonkey" : provider,
         providerHintIsAuthoritative: auth.principal?.provider === "shopmonkey",

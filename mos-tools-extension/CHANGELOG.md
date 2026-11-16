@@ -1,3 +1,9 @@
+# 1.35.17
+
+- Send Shop-Ware location and repair-order context with general tool requests.
+- Keep location-specific responses from appearing after a shop switch.
+- Preserve ownership checks when a shared tenant has multiple locations.
+
 # 1.35.16
 
 - Add saved-printer selection and print status to Detect Dog.

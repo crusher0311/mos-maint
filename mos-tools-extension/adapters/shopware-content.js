@@ -1024,7 +1024,20 @@ function applyFloatingToFab() {
 
 let swFeatureRefreshAt = 0;
 let swFeatureDeadline = Infinity;
+let swFeatureContextKey = null;
+const shopwareFeatureKey = context => JSON.stringify([context?.shopId, context?.swShopId, context?.roId]);
 function refreshFloatingSetting() {
+  const context = detectContext();
+  const key = shopwareFeatureKey(context);
+  if (swFeatureContextKey !== key) {
+    swFeatureContextKey = key;
+    swFeatureRefreshAt = 0;
+    swFeatureDeadline = Infinity;
+    // Never display a sibling's controls while the new location is unverified.
+    cachedFloatingEnabled = false;
+    cachedSwButtonVis = { oil_sticker: false };
+    floatingFetchInFlight = false;
+  }
   if (Date.now() >= swFeatureDeadline) {
     cachedFloatingEnabled = false;
     cachedSwButtonVis = { oil_sticker: false };
@@ -1034,14 +1047,14 @@ function refreshFloatingSetting() {
     if (Date.now() < swFeatureRefreshAt) return;
   }
   if (floatingFetchInFlight) return;
-  const context = detectContext();
   const shopId = context.shopId;
   if (!shopId) return;
   floatingFetchInFlight = true;
   try {
     chrome.runtime.sendMessage(
-      { action: 'GET_SHOP_FEATURES', shopId, provider: 'shopware' },
+      { action: 'GET_SHOP_FEATURES', shopId, provider: 'shopware', context },
       (resp) => {
+        if (key !== swFeatureContextKey || key !== shopwareFeatureKey(detectContext())) return;
         floatingFetchInFlight = false;
         if (chrome.runtime.lastError) return;
         if (resp && resp.success) {
@@ -1064,6 +1077,10 @@ function refreshFloatingSetting() {
 let cachedSwButtonVis = null;
 
 function checkAndInjectButton() {
+  // The periodic check also catches location-selector changes without a URL
+  // change. Publish context before requesting location-bound feature settings.
+  updateContext();
+  refreshFloatingSetting();
   const context = detectContext();
   if (cachedSwButtonVis && cachedSwButtonVis.oil_sticker === false) {
     const ex = document.getElementById('mos-print-btn-sw');

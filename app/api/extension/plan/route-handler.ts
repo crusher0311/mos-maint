@@ -4,7 +4,7 @@ import { getDb } from "@/lib/mongo";
 import { findEnrichedCannedJobs } from "@/lib/data/repositories/canned-jobs";
 import { findDviResultByRo } from "@/lib/data/repositories/dvi";
 import { validateExtensionToken, getUserShopIds, getAuthErrorStatus, buildAuthErrorBody, requireExtensionPrincipalScope } from "@/lib/extension-auth";
-import { checkShopFeatureGate } from "@/lib/extension-route-guard";
+import { checkShopFeatureGate, guardExtensionShopRequest } from "@/lib/extension-route-guard";
 import { resolveCarfaxConfig, fetchCarfaxWithCache, estimateMileageFromCarfax } from "@/lib/integrations/carfax";
 import { withUpstreamTimeout } from "@/lib/with-upstream-timeout";
 import { getMaintenanceScheduleCached } from "@/lib/integrations/dataone-api";
@@ -1610,7 +1610,13 @@ async function _GET(request: NextRequest) {
     const autoflowResult = pageProvider === "autoflow"
       ? await findAutoflowInteractiveShop(smsShopId, { userShopIds, isPlatformAdmin })
       : null;
-    const shopResult = pageProvider === "autoflow"
+    const shopwareGuard = pageProvider === "shopware"
+      ? await guardExtensionShopRequest(request, { smsShopId, provider: pageProvider, corsHeaders, requiredFeatures: ["maintenance"] })
+      : null;
+    if (shopwareGuard && !shopwareGuard.ok) return shopwareGuard.response;
+    const shopResult = shopwareGuard?.ok
+      ? { status: "resolved" as const, mosShopId: shopwareGuard.mosShopId, shopDoc: shopwareGuard.shopDoc, provider: shopwareGuard.provider }
+      : pageProvider === "autoflow"
       ? (autoflowResult?.status === "resolved" ? autoflowResult : null)
       : await findShopBySmsId(smsShopId, {
       userShopIds, 
